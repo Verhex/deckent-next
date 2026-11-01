@@ -183,6 +183,18 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     } } : {}),
     async inspect() {
       const notes: string[] = [];
+      // Reuse doctor's bounded, read-only custody check; authorization still rechecks at connect.
+      let signInBlocked: string | null = null;
+      if (host.siwc && host.inspectSecretStore) {
+        const store: Readonly<{ backend: string; personalCustody?: Readonly<{ status: 'ready' | 'store' | 'untested' | 'refused'; reason?: string; path?: string; mode?: string; folder?: 'root' | 'parent' }> }> | null = await host.inspectSecretStore(root, options).catch(error => { notes.push(errorText(error)); return null; });
+        const custody = store?.personalCustody;
+        if (custody?.status === 'refused' || custody?.status === 'store') {
+          const { status, ...params } = custody;
+          signInBlocked = ErrorRegistry.createError(status === 'store' ? 'OAUTH_CONNECTION_STORE_REQUIRED' : 'SIWC_STORE_NOT_PERSONAL',
+            { locale, params }).message;
+          notes.push(signInBlocked);
+        }
+      }
       let names: readonly string[] | null = null;
       if (host.listSecretNames) {
         try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
@@ -240,7 +252,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
         return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail: kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
-          blocked: !kind.available ? t('tui.provider.unavailable', {}, locale) : kind.headlessLogin && isolation ? t('tui.provider.isolation.blocked', {}, locale) : null, keyName, keyStored: stored, grantRequired,
+          blocked: !kind.available ? t('tui.provider.unavailable', {}, locale) : kind.id === host.siwc?.connection && signInBlocked ? signInBlocked : kind.headlessLogin && isolation ? t('tui.provider.isolation.blocked', {}, locale) : null, keyName, keyStored: stored, grantRequired,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).

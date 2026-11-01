@@ -1,3 +1,4 @@
+import { ErrorRegistry } from '#platform/index.js';
 import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
 const SiwcWindow = lazy(loadSiwcWindow);
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -46,7 +47,7 @@ const grantRefusal = (error: unknown): Readonly<{ name: string; project: string 
   const { code, params } = (error ?? {}) as { code?: unknown; params?: Record<string, unknown> };
   return code === 'SECRET_GRANT_REQUIRED' && typeof params?.['name'] === 'string' && typeof params['project'] === 'string' ? { name: params['name'], project: params['project'] } : null;
 };
-const BUDGET = ':budget', CACHE = ':cache';
+const BUDGET = ':budget', CACHE = ':cache', LATER = ':later';
 
 /**
  * `/provider` as a window: connect a kind (its address chosen from a list when it takes one — a typed address only as the list's last row,
@@ -54,14 +55,16 @@ const BUDGET = ':budget', CACHE = ':cache';
  * key, through the runtime service), or disconnect it (the stored key is removed). Results stay in the window (owner 2026-10-08: slash output
  * only in a window); the key lives only in the entry and the one connect call: it is never drawn, pushed to scrollback or kept here.
  */
-export function ProviderPanel({ port, labels, push, openApproval, onError, onClose }: { readonly port: ProviderWindowPort; readonly labels: PanelLabels;
+export function ProviderPanel({ port, labels, push, openApproval, onError, onClose, errorText, laterLabel }: { readonly port: ProviderWindowPort; readonly labels: PanelLabels;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval?: (approvalId: string) => void; readonly onError: (error: unknown) => void;
-  readonly onClose: () => void }) {
+  readonly onClose: () => void; readonly errorText?: (error: unknown) => string; readonly laterLabel?: string }) {
   const words = labels.provider;
   const [view, setView] = useState<ProviderPanelView | null>(null);
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
+  const [problem, setProblem] = useState<string | null>(null), [refusals, setRefusals] = useState<Readonly<Record<string, string>>>({});
+  const connecting = useRef<string | null>(null);
   // Stage 1: the scope budget row (create / change) above the kinds; a budget read failure only hides the row.
   const [budget, setBudget] = useState<BudgetPanelView | null>(null);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice); a read failure only hides the row.
@@ -72,11 +75,21 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   exits.current = { onError, onClose };
   useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };
+  // A refused connection belongs beside the alternatives, not in the onboarding host's fatal-error path.
+  const failed = (error: unknown) => {
+    const typed = error as { code?: string; params?: Readonly<Record<string, string | number>> }, locale = port.siwc?.locale;
+    const message = (locale && typed?.code ? ErrorRegistry.get(typed.code, locale, typed.params)?.message : null) ?? errorText?.(error)
+      ?? (error instanceof Error ? error.message : String(error));
+    setProblem(message);
+    const id = connecting.current;
+    if (id) setRefusals(previous => ({ ...previous, [id]: message }));
+    back();
+  };
   /**
    * PRE-8 v2: runs one step; a typed `SECRET_GRANT_REQUIRED` opens the SAME first-use card (only where the composition offers it: solo, attested
    * terminal). Yes records the governed grant and runs the step once more; no, a refused offer, a failed grant or a second refusal end at `refused`.
    */
-  const granting = <T,>(work: () => Promise<T>, done: (value: T) => void, refused: (error: unknown) => void = error => { onError(error); back(); }) => {
+  const granting = <T,>(work: () => Promise<T>, done: (value: T) => void, refused: (error: unknown) => void = failed) => {
     work().then(done, async (error: unknown) => {
       const asked = grantRefusal(error), card = port.secretGrant;
       if (!asked || !card || !await card.offer().catch(() => false)) { refused(error); return; }
@@ -90,11 +103,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const beginKey = (target: ProviderPanelKind, endpoint: string | null) => {
     if (!port.prepareKey) { setStep({ kind: 'key', target, endpoint }); return; }
     setStep({ kind: 'busy' });
-    port.prepareKey(target.id, endpoint).then(prepared => setStep({ kind: 'key-consent', target, endpoint, ...prepared }), error => { onError(error); back(); });
+    port.prepareKey(target.id, endpoint).then(prepared => setStep({ kind: 'key-consent', target, endpoint, ...prepared }), failed);
   };
   const withoutKey = (target: ProviderPanelKind, endpoint: string | null) => {
     setStep({ kind: 'busy' });
-    port.connect({ kind: target.id, endpoint, key: null }).then(outcome => setStep(outcome.workspaces ? { kind: 'workspace', target, endpoint, workspaces: outcome.workspaces } : { kind: 'result', outcome }), error => { onError(error); back(); });
+    port.connect({ kind: target.id, endpoint, key: null }).then(outcome => setStep(outcome.workspaces ? { kind: 'workspace', target, endpoint, workspaces: outcome.workspaces } : { kind: 'result', outcome }), failed);
   };
   const beginConnection = (target: ProviderPanelKind, endpoint: string | null) => {
     if (!port.prepareKey || target.keyRequired) { beginKey(target, endpoint); return; }
@@ -107,7 +120,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     granting(() => port.listModels!(target.id, endpoint), models => setStep({ kind: 'model', target: { ...target, models }, endpoint }));
   };
   const title = (text: string) => [span(text, { bold: true })];
-  if (step.kind === 'siwc' && port.siwc) return <Suspense fallback={null}><SiwcWindow port={port.siwc} onClose={back} onError={onError} /></Suspense>;
+  if (step.kind === 'siwc' && port.siwc) return <Suspense fallback={null}><SiwcWindow port={port.siwc} onClose={back} onError={failed} /></Suspense>;
   if (!view || step.kind === 'busy') return <PickerWindow title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} bodyRows={BODY_ROWS} tree={null}
     labels={labels.picker} listHints={words.hints} position={labels.position} onResult={() => undefined} />;
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
@@ -159,7 +172,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       setStep({ kind: 'busy' });
       // The answer stays in the window too (no scrollback line).
       port.disconnect(step.target.id).then(lines => setStep({ kind: 'result', outcome: { stored: false, title: step.target.label, lines: lines.map(text => ({ label: '', text })) } }),
-        error => { onError(error); back(); });
+        failed);
     }} />;
   if (step.kind === 'endpoint') {
     const target = step.target;
@@ -205,16 +218,18 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
           const name = outcome.stored ? outcome.keyName ?? null : null, check = port.secretGrant?.check;
           if (port.prepareKey || !name || !check) { setStep({ kind: 'result', outcome }); return; }
           granting(() => check(name), () => setStep({ kind: 'result', outcome }), error => { onError(error); setStep({ kind: 'result', outcome }); });
-        }, error => { onError(error); back(); });
+        }, failed);
         return null;
       }} />;
   }
   const chosen = (result: PickerResult, at: PickerState) => {
     if (result.kind !== 'selected') { onClose(); return; }
+    if (result.id === LATER) { onClose(); return; }
     if (result.id === BUDGET) { setState(at); setStep({ kind: 'budget' }); return; }
     if (result.id === CACHE) { setState(at); setStep({ kind: 'cache' }); return; }
     const [id, action] = result.path, target = view.kinds.find(kind => kind.id === id);
     if (!target || !action) { setState(at); back(); return; }
+    connecting.current = target.id;
     setState({ ...PICKER_INITIAL, pos: at.trail[0]?.pos ?? 0 });
     if (action === 'grant' && target.keyName && port.secretGrant?.check) {
       setStep({ kind: 'busy' }); granting(() => port.secretGrant!.check!(target.keyName!), () => back()); return;
@@ -228,11 +243,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     }
     if (target.endpointEditable) setStep({ kind: 'endpoint', target }); else beginConnection(target, null);
   };
-  const body = [...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
+  const body = [...(problem ? [{ spans: [span(problem, { role: 'warning' as const })] }] : []), ...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
-  const tree = withRows(providerPanelTree(view, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
+  const tree = withRows(providerPanelTree({ ...view, kinds: view.kinds.map(kind => refusals[kind.id] ? { ...kind, blocked: refusals[kind.id]! } : kind) }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
     budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache));
   // PV 2a: Enter on a CLI subscription this host cannot run opens its refusal card, which lists the rows that can be used here.
   const refused = (outcome: PickerOutcome) => {
@@ -240,11 +255,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!row || !card?.kinds.includes(row.id)) return;
     setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
   };
-  return <PickerWindow title={title(view.title)} body={body} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
-    tree={tree} onResult={result => chosen(result, state)} onOutcome={refused} />;
+  return <PickerWindow title={title(view.title)} body={body} bodyRows={problem || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
+    tree={laterLabel ? { ...tree, items: [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] } : tree} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
-const BODY_ROWS = 1;
+const BODY_ROWS = 1, REFUSAL_BODY_ROWS = 6;
 /** Stage 1: the budget row first, when the window offers a budget action; then (CACHE-SLICE1) the cache migration row when one is offered. */
 function withRows(tree: PickerTree, entry: ReturnType<typeof budgetEntry>, cacheRow: ReturnType<typeof cacheEntry>): PickerTree {
   return { ...tree, items: [...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail }] : []),
