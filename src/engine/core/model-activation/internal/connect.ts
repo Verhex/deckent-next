@@ -121,6 +121,19 @@ export class ModelConnectApplication {
     await this.ports.authorizeDelegation();
   }
 
+  private async delegationDiscovery(command: ModelConnectCommand, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>, principal: VerifiedPrincipal) {
+    if (!command.delegate?.length) return;
+    const profiles = [layers.global, layers.project].flatMap(layer =>
+      (layer['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles ?? []);
+    const definitions = profiles.filter(item => {
+      const reference = item['reference'] as ModelReference | undefined;
+      return item['scopeId'] === command.scopeId && reference && item['id'] ===
+        [command.connection, reference.providerId, reference.modelId, String(reference.modelVersion)].join('.');
+    }).map(item => (item['adapter'] as { definition?: JsonObject } | undefined)?.definition ?? null);
+    // Discovery can authorize OAuth and write secrets; only this connection's existing owner consent can bypass the early witness.
+    await this.delegation(command, definitions.length ? definitions : [null], principal);
+  }
+
   private async delegationLayers(command: ModelConnectCommand, targets: readonly Target[], layers: Awaited<ReturnType<ModelConnectPorts['layers']>>,
     profiled: boolean, principal: VerifiedPrincipal) {
     const authored = { global: layers.global['provider_invocation_profiles'] !== undefined, project: layers.project['provider_invocation_profiles'] !== undefined };
@@ -167,6 +180,7 @@ export class ModelConnectApplication {
       await ports.preflight(scopeId, principal);
     }
     let layers = await ports.layers();
+    await this.delegationDiscovery(command, layers, principal);
     const effective = (): ProviderCatalog | null => layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
     const models: NonNullable<ModelConnectResult['models']>[number][] = [];
     const commands: ModelConnectCommand[] = [];

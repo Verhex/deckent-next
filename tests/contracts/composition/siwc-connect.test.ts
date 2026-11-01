@@ -1,9 +1,20 @@
 import { expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ records: [] as { connectionId: string; state: string; planUse: boolean }[], connect: vi.fn() }));
+const state = vi.hoisted(() => ({ records: [] as { connectionId: string; state: string; planUse: boolean }[], connect: vi.fn(),
+  models: vi.fn(), custody: vi.fn(), catalog: vi.fn() }));
+vi.mock('../../../src/composition/core/siwc/internal/connect.js', async original => {
+  const real = await original<typeof import('../../../src/composition/core/siwc/internal/connect.js')>();
+  return { ...real, configuredSiwcConnect: (...args: Parameters<typeof real.configuredSiwcConnect>) => {
+    const ports = real.configuredSiwcConnect(...args);
+    return { ...ports, models: () => { state.models(); return ports.models(); } };
+  } };
+});
 vi.mock('../../../src/composition/core/siwc/internal/connection.js', () => ({
   withConfiguredSiwc: async (_root: string, _scope: string, _options: unknown, _operation: string,
-    work: (app: unknown, caller: unknown) => Promise<unknown>) => work({ list: async () => state.records, connect: state.connect },
-      { principal: { id: 'person', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['scope'] } }),
+    work: (app: unknown, caller: unknown) => Promise<unknown>) => {
+    state.custody(_operation);
+    return work({ list: async () => state.records, connect: state.connect },
+      { principal: { id: 'person', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['scope'] } });
+  },
 }));
 vi.mock('#composition/core/scoped-request/index.js', async original => {
   const real = await original<typeof import('#composition/core/scoped-request/index.js')>();
@@ -13,7 +24,7 @@ vi.mock('#composition/core/scoped-request/index.js', async original => {
 const host = vi.hoisted(() => ({ available: true, root: '', witness: true }));
 vi.mock('#adapters/index.js', async original => {
   const real = await original<typeof import('#adapters/index.js')>();
-  return { ...real, attestLocalInteractiveTerminal: async () => host.witness, installationSecretRoot: () => host.root, PROVIDER_CONNECT_REGISTRY: { ...real.PROVIDER_CONNECT_REGISTRY,
+  return { ...real, listSiwcModels: state.catalog, attestLocalInteractiveTerminal: async () => host.witness, installationSecretRoot: () => host.root, PROVIDER_CONNECT_REGISTRY: { ...real.PROVIDER_CONNECT_REGISTRY,
     kinds: real.PROVIDER_CONNECT_REGISTRY.kinds.map(kind => kind.connect?.adapter === real.SIWC_INFERENCE.adapter.id ? { ...kind, get available() { return host.available; } } : kind) } };
 });
 import { chmod, mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -45,28 +56,44 @@ it('requires an explicit disconnected old account for new authorization and writ
   const document = { provider_catalog: { schemaVersion: 1, revision: 'fixture', providers: [{ id: reference.providerId, version: 1,
     models: [{ id: reference.modelId, version: 1, nativeId: 'fixture', protocols: [{ ...profile.protocol, capabilities: [] }] }] }] } };
   const adapter = vi.fn(() => configuredSiwcConnect('/fixture', command, {}).adapter());
+  const discovery = vi.fn(() => configuredSiwcConnect('/fixture', command, {}).models());
   const ports = { kind: () => ({ id: 'chatgpt-login', available: true, keyRequired: false, endpoint: { default: null, editable: false },
     connect: { chatPath: null, seed: null, personOnly: true } }), defaults: { maxOutputTokens: 1 },
     principal: async () => ({ id: 'person', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['scope'] }),
-    layers: async () => ({ global: {}, project: document, effective: document }), adapter,
+    layers: async () => ({ global: {}, project: document, effective: document }), adapter, available: discovery, discover: discovery,
     authorizeDelegation: () => assertAuthorityWitness('models.connect.delegate', undefined, { attest: async () => false }) } as unknown as ModelConnectPorts;
-  await expect(new ModelConnectApplication(ports).connect({ ...command, connection: 'chatgpt-login', model: { reference }, delegate: ['ai', 'system'] }))
-    .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
-  expect(adapter).not.toHaveBeenCalled();
+  const untouched = () => {
+    expect(discovery).not.toHaveBeenCalled(); expect(adapter).not.toHaveBeenCalled(); expect(state.models).not.toHaveBeenCalled();
+    expect(state.custody).not.toHaveBeenCalled(); expect(state.connect).not.toHaveBeenCalled(); expect(state.catalog).not.toHaveBeenCalled();
+  };
+  state.connect.mockClear(); state.models.mockClear(); state.custody.mockClear(); state.catalog.mockReset();
+  state.records = []; state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
+  for (const model of [{ reference }, { pull: 'available' }, { nativeId: 'fixture' }]) {
+    await expect(new ModelConnectApplication(ports).connect({ ...command, connection: 'chatgpt-login', model, delegate: ['ai', 'system'] }))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    untouched();
+  }
   if (process.platform === 'win32') {
     console.info('verify-not-run:', JSON.stringify({ file: 'tests/contracts/composition/siwc-connect.test.ts', surface: 'native SIWC composition fixture',
       reason: 'managed POSIX private ledgers unsupported; shared delegation refusal verified above' }));
     return;
   }
   const f = await runtime({ noServer: true }), path = join(f.project, '.deckent/config.json'), before = await readFile(path, 'utf8');
-  const current = JSON.parse(before) as { provider_catalog: { providers: { id: string; version: number; models: { id: string; version: number }[] }[] } };
-  const provider = current.provider_catalog.providers[0]!, model = provider.models[0]!;
-  state.connect.mockClear(); host.witness = false;
+  // A controlling terminal alone is insufficient: the same synthetic TTY must refuse AI markers before SIWC models -> ensure -> OAuth.
+  host.witness = true;
   try {
-    await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'siwc-unwitnessed-delegation', scopeId: 'scope', connection: 'chatgpt-login',
-      model: { reference: { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version } }, delegate: ['ai', 'system'] }, { env: f.env }))
-      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
-    expect(await readFile(path, 'utf8')).toBe(before); expect(state.connect).not.toHaveBeenCalled();
+    for (const model of [{ pull: 'available' }, { nativeId: 'fixture' }]) {
+      const request = { ...command, commandId: 'siwc-unwitnessed-delegation', connection: 'chatgpt-login', model, delegate: ['ai', 'system'] };
+      await expect(connectConfiguredModel(f.project, request, { env: { ...f.env, CLAUDECODE: '1' } }))
+        .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      expect(await readFile(path, 'utf8')).toBe(before); untouched();
+      // A person witness reaches real models/ensure and the synthetic OAuth port; stop at the local model-list fixture, with no network call.
+      await expect(connectConfiguredModel(f.project, request, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['connect'], ['lease']]);
+      expect(state.connect).toHaveBeenCalledTimes(1); expect(state.catalog).toHaveBeenCalledTimes(1);
+      expect(await readFile(path, 'utf8')).toBe(before);
+      state.models.mockClear(); state.custody.mockClear(); state.connect.mockClear(); state.catalog.mockClear();
+    }
   } finally { host.witness = true; }
 });
 
