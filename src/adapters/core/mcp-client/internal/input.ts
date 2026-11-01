@@ -13,7 +13,7 @@ export function boundedMcpTransport<T extends Transport>(transport: T, maxBytes:
   Object.defineProperty(transport, 'onmessage', { get: () => receive, set: (handler: typeof receive) => {
     receive = (message, extra) => {
       if (rejected) return;
-      if (!inputWithinValidationLimit(message, INPUT_VALIDATION_LIMITS.mcp) || Buffer.byteLength(JSON.stringify(message)) > maxBytes) {
+      if (!inputWithinValidationLimit(message, INPUT_VALIDATION_LIMITS.mcpClient) || Buffer.byteLength(JSON.stringify(message)) > maxBytes) {
         rejected = true; const error = new McpInputLimitError(); refused(error);
         transport.onerror?.(error); void transport.close().catch(() => undefined); return;
       }

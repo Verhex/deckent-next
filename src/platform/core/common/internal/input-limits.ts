@@ -1,5 +1,5 @@
 import limits from './input-limits.json' with { type: 'json' };
-export const INPUT_VALIDATION_LIMITS = Object.freeze({ ...limits, mcp: Object.freeze(limits.mcp), ipc: Object.freeze(limits.ipc),
+export const INPUT_VALIDATION_LIMITS = Object.freeze({ ...limits, mcp: Object.freeze(limits.mcp), mcpClient: Object.freeze(limits.mcpClient), ipc: Object.freeze(limits.ipc),
   hub: Object.freeze(limits.hub), hubService: Object.freeze(limits.hubService), revocations: Object.freeze(limits.revocations), graph: Object.freeze(limits.graph), worker: Object.freeze(limits.worker) });
 /** Admission may narrow the measured graph envelope. Depth bounds DAG edges, never JSON nesting.
  * Per-task fields mirror graph v5/work-input v2; shared criteria/proposal metadata use envelopeNodes. */

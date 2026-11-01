@@ -320,7 +320,7 @@ export class McpClientPool implements McpPoolView {
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
     const [{ Client, StreamableHTTPClientTransport }, { StdioClientTransport }] = await loadClientSdk();
     delete state.inputRefusal;
-    const maxBytes = Math.min(settings.inputMaxBytes, INPUT_VALIDATION_LIMITS.mcp.maxBytes);
+    const maxBytes = Math.min(settings.inputMaxBytes, INPUT_VALIDATION_LIMITS.mcpClient.maxBytes);
     const bound = <T extends import('@modelcontextprotocol/client').Transport>(value: T) => boundedMcpTransport(value, maxBytes,
       error => { state.inputRefusal = error.code; void transport.close().catch(() => undefined); });
     // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.

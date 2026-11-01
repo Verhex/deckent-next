@@ -1,3 +1,4 @@
+import { largeMcpTools } from '../../fixtures/mcp-large-tools.js';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -136,12 +137,18 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
 
   it('MCP-VISIBILITY: a hyphenated server name is added, approved and offered to the model as mcp__<name with _>__<tool>', async () => {
     const m = mcpFixture();
-    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    const f = await runtime({ extraGrants: mcpGrants(), windowTokens: 262_144 }); await f.start();
     registry(f.project, { 'my-fx': m.entry() }); await approve(f.project, f.env, 'my-fx');
-    f.state.script = [{ content: 'Hyphen.' }];
-    await answered(f, 'turn-hyphen', 'allow');
+    f.state.script = [{ content: 'Hyphen.' }, { content: 'Large catalog.' }];
+    const { result } = await answered(f, 'turn-hyphen', 'allow');
+    expect(result, JSON.stringify(result)).toMatchObject({ finish: 'stop' });
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(expect.arrayContaining(['mcp__my_fx__echo']));
     expect(systemOf(f.state.requests.at(-1)!)).toContain('mcp:my-fx/echo');
+    m.setTools([echo, slow, ...largeMcpTools(10).slice(0, 104)]);
+    await approve(f.project, f.env, 'my-fx');
+    expect((await answered(f, 'turn-hyphen-large', 'allow')).result).toMatchObject({ finish: 'stop' });
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__my_fx__repository_tool_'))).toHaveLength(104);
+    expect(systemOf(f.state.requests.at(-1)!)).toContain('106 tools');
   }, 60_000);
 
   // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, by a typed notice of
