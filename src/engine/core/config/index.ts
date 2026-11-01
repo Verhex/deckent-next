@@ -8,3 +8,4 @@ export { authorizeConfigWrite, evaluateConfigWrite } from './internal/policy.js'
 export { configServiceState } from './internal/service-state.js';
 export type { ConfigServiceState, DescribeService } from './internal/service-state.js';
 export { restartConfigDigest, runtimeConfigFreshness } from './internal/restart-digest.js';
+export { publishedConfigProgress } from './internal/publication-progress.js';

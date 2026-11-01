@@ -1539,6 +1539,7 @@
     },
     "src/composition/core/installation": {
       "dependencies": [
+        "src/engine/core/config",
         "src/adapters/core/contract",
         "src/engine/core/runtime",
         "src/adapters/core/secret-store",
@@ -2963,6 +2964,7 @@
     },
     "src/engine/core/config": {
       "dependencies": [
+        "src/engine/core/audit",
         "src/domain/core/provider-catalog",
         "src/domain/core/model-invocation",
         "src/platform/core/config",

@@ -122,6 +122,7 @@ function canonical(input: unknown): string {
 }
 const digestOf = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
+
 export interface PreparePolicyTemplateInput {
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   readonly paths: { readonly policy: string; readonly bindings: string };
