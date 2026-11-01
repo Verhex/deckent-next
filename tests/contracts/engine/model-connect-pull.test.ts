@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { workerConnectionModelIds, ModelConnectApplication, type ModelConnectPorts } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { parseProviderCatalogDocument, type AuditEvent } from '#domain/index.js';
@@ -39,22 +39,29 @@ it('pull intersects a fresh key list with active priced seed rows, writes each l
   expect(writes).toEqual(['register', 'provider_catalog', 'provider_invocation_profiles']); expect(activations).toEqual(['a']); expect(audits).toHaveLength(1);
   const saved = structuredClone(project), profile = (project['provider_invocation_profiles'] as { profiles: Record<string, unknown>[] }).profiles[0]!;
   let witnessed = 0;
-  const unwitnessed = new ModelConnectApplication({ ...ports, authorizeDelegation: async () => { witnessed++; throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED'); } });
+  const available = vi.fn(ports.available!), discover = vi.fn(async () => seed);
+  const unwitnessed = new ModelConnectApplication({ ...ports, available, discover,
+    authorizeDelegation: async () => { witnessed++; throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED'); } });
   const consent = (classes: string[]) => ({ delegatedUse: { consentedBy: { issuer: 'host', subject: 'alice' }, atMs: 1, classes } });
-  for (const scenario of ['new', 'layer', 'pull', 'owner'] as const) {
+  for (const scenario of ['new', 'layer', 'pull', 'owner', 'connection', 'scope'] as const) {
     Object.assign(project, structuredClone(saved)); delete global['provider_invocation_profiles'];
-    const copy = structuredClone(profile) as { adapter: { definition: Record<string, unknown> } };
+    const copy = structuredClone(profile) as { id: string; scopeId: string; adapter: { definition: Record<string, unknown> } };
     copy.adapter.definition = consent(['ai']);
     (project['provider_invocation_profiles'] as { profiles: unknown[] }).profiles = scenario === 'new' ? [] : [copy];
     if (scenario === 'layer') global['provider_invocation_profiles'] = { schemaVersion: 1, profiles: [{ ...copy, adapter: { ...copy.adapter, definition: consent(['ai', 'system']) } }] };
     if (scenario === 'owner') copy.adapter.definition = { delegatedUse: { consentedBy: { issuer: 'other', subject: 'alice' }, atMs: 1, classes: ['ai', 'system'] } };
+    if (scenario === 'connection') copy.id = 'vendor.other.vendor.a.1'; // A connection sharing the prefix cannot authorize this one.
+    if (scenario === 'scope') copy.scopeId = 'other';
+    available.mockClear(); discover.mockClear();
     const snapshot = JSON.stringify({ global, project, writes, activations, audits });
-    const guarded = scenario === 'pull' ? new ModelConnectApplication({ ...ports, available: async () => ['a', 'b'], priced: () => true,
+    if (scenario === 'pull') available.mockResolvedValueOnce(['a', 'b']);
+    const guarded = scenario === 'pull' ? new ModelConnectApplication({ ...ports, available, discover, priced: () => true,
       authorizeDelegation: async () => { throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED'); } }) : unwitnessed;
     await expect(guarded.connect({ ...command, delegate: scenario === 'layer' ? ['ai', 'system'] : ['ai'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(available).toHaveBeenCalledTimes(scenario === 'pull' ? 1 : 0); expect(discover).not.toHaveBeenCalled();
     expect(JSON.stringify({ global, project, writes, activations, audits })).toBe(snapshot);
   }
-  expect(witnessed).toBe(3);
+  expect(witnessed).toBe(5);
   Object.assign(project, structuredClone(saved)); delete global['provider_invocation_profiles'];
   await expect(app.connect({ ...command, delegate: ['ai'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); // Missing trusted witness fails closed too.
   const before = JSON.stringify({ global, project, writes, activations, audits });
