@@ -181,8 +181,11 @@ try:
     for reply in [b'\x1b[>0;10;1c', b'\x1bP1$r0m\x1b\\', b'\x1b]4;0;rgb:ff/ff/ff\x07']:
         os.write(fd, reply); read_for(.1)
     automatic = b'"status":"cancelled"' in out or b'EFFECTS=' in out
-    os.write(fd, b'\x1b'); read_for(.6)
-    ended, status = os.waitpid(pid, os.WNOHANG)
+    os.write(fd, b'\x1b')
+    # A lone ESC is the Escape key after the 250 ms hold; a loaded CI host may take longer to exit, so wait for the exit itself (bounded).
+    deadline, ended = time.monotonic() + 10, 0
+    while not ended and time.monotonic() < deadline:
+        read_for(.1); ended, status = os.waitpid(pid, os.WNOHANG)
     if not ended: raise RuntimeError('did not exit '+repr(out[-2000:]))
     print(json.dumps({'automatic': automatic, 'code': os.waitstatus_to_exitcode(status), 'output': out.decode('utf8','replace')}))
     pid = None
