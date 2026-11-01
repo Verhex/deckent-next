@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1, "maxDepth": 32,
   "mcp": { "maxNodes": 4096, "maxBytes": 1048576, "heapMaxBytes": 33554432 }, "ipc": { "maxNodes": 4096, "maxBytes": 1048576, "heapMaxBytes": 33554432 },
+  "mcpClient": { "maxNodes": 16384, "maxBytes": 1048576, "heapMaxBytes": 67108864, "note": "F6: Deckent 78 tools = 5970 nodes/113283 bytes; representative 128 tools x 20 fields = 9093 nodes/250943 bytes. Node headroom 2.74x/1.80x; byte cap stays 1 MiB, narrowed by mcp.inputMaxBytes. Heap evidence: F6/measure-heap-codecs.log; maxDepth unchanged." },
   "graph": { "maxTasks": 256, "maxEdges": 1024, "maxDepth": 64, "envelopeNodes": 4096, "taskFixedNodes": 32, "resourceNodes": 3, "edgeNodes": 4, "resourcesPerTask": 64, "scopePathsPerTask": 64, "auxiliaryModelsPerTask": 8, "heapMaxBytes": 536870912 },
   "hub": { "maxNodes": 16384, "heapMaxBytes": 33554432 }, "hubService": { "maxNodes": 4096, "heapMaxBytes": 33554432 },
   "revocations": { "maxNodes": 8192, "heapMaxBytes": 33554432 }, "worker": { "maxNodes": 16384, "heapMaxBytes": 33554432 }

@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeMcpApproval, describeMcpResult, describeMcpTrustCard, expandMcpEntry, loadMcpRegistry, mcpClientSettings, MCP_CLIENT_IDENTITY, McpClientPool, mcpEndpointRefusal, mcpTurnTools,
   openMcpAgentTools, openTurnMcp, resolveMcpRegistry, runMcpCommand, type McpCommandContext, type McpCommandRequest, type McpTrustCard } from '#adapters/index.js';
+import { largeMcpTools } from '../../fixtures/mcp-large-tools.js';
+import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
 import { agentToolApprovalFacts } from '#engine/index.js';
 import { mcpCommand, type CommandContext } from '#surfaces/core/cli/index.js';
@@ -141,19 +143,22 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     }) as HttpFixture;
     closers.push(() => hostile.close());
     const live = settings.servers[0]!, nested = (depth: number) => { let value: unknown = false; for (let i = 2; i < depth; i++) value = { child: value }; return value; };
+    const nodes = INPUT_VALIDATION_LIMITS.mcpClient.maxNodes;
     for (const [method, result, accepted] of [
-      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(4_086).fill(false) }, true], // 9 nodes with modern resultType/cache fields + 4086 = 4095.
-      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(4_087).fill(false) }, false],
-      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(4_085).fill(false) }, true], // 10 + 4085 = 4095.
-      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(4_086).fill(false) }, false],
-      ['tools/call', { content: Array(4_096).fill({ type: 'invalid', text: false }) }, false],
+      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(nodes - 10).fill(false) }, true], // 9 nodes with modern resultType/cache fields: limit - 1.
+      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(nodes - 9).fill(false) }, false],
+      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(nodes - 8).fill(false) }, false], // limit + 1.
+      ['tools/list', { tools: largeMcpTools(), ttlMs: 0, cacheScope: 'private' }, true],
+      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(nodes - 11).fill(false) }, true], // 10 envelope/content nodes: limit - 1.
+      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(nodes - 10).fill(false) }, false],
+      ['tools/call', { content: Array(nodes).fill({ type: 'invalid', text: false }) }, false],
       ['tools/call', { content: [], padding: nested(32) }, true],
       ['tools/call', { content: [], padding: nested(33) }, false],
-      ['server/discover', { padding: Array(4_096).fill(false) }, false],
+      ['server/discover', { padding: Array(nodes).fill(false) }, false],
     ] as const) {
       rewrite = method === 'server/discover' ? { method, result } : null;
       const guarded = new McpClientPool(new AbortController().signal); closers.push(() => guarded.close());
-      const target = { ...live, url: hostile.url }, cfg = { ...settings, servers: [target] };
+      const target = { ...live, url: hostile.url }, cfg = { ...settings, inputMaxBytes: INPUT_VALIDATION_LIMITS.mcpClient.maxBytes, servers: [target] };
       const opened = await guarded.open(target, cfg, { cwd: w.project, environment: w.env, sandboxes: [] });
       if (method === 'server/discover') { expect(opened).toMatchObject({ ok: false, reason: 'start-failed', detail: 'MCP_INPUT_LIMIT' }); continue; }
       expect(opened).toMatchObject({ ok: true }); rewrite = { method, result };
