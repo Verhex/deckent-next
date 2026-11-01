@@ -1,3 +1,4 @@
+import { filterSearchEntries } from '#surfaces/core/terminal-kit/index.js';
 /**
  * Pure selection core of the terminal pickers (no React, no I/O, no side effects): a filterable, paged, multi-level list
  * (section -> key -> value) with an optional scope step (project / user) and rows that are blocked with a reason (shown, never selectable).
@@ -120,18 +121,9 @@ export function pickerLevel(tree: PickerTree, trail: PickerState['trail']): Read
   return { title, nodes, titles };
 }
 
-function fold(text: string): string {
-  return text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('en');
-}
-
-/** Typing filters: every whitespace-separated word must appear in the label, id, detail or a keyword (case and accents folded). */
+/** Typing filters the shared label/id/detail/keyword search used by command help. */
 export function filterPickerNodes(nodes: readonly PickerNode[], query: string): readonly PickerNode[] {
-  const words = fold(query.trim()).split(/\s+/u).filter(Boolean);
-  if (!words.length) return nodes;
-  return nodes.filter(node => {
-    const haystack = fold([node.label, node.id, node.detail ?? '', ...(node.keywords ?? [])].join(' '));
-    return words.every(word => haystack.includes(word));
-  });
+  return filterSearchEntries(nodes, query);
 }
 
 export type PickerView = Readonly<{

@@ -76,7 +76,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = context.locale ?? resolveLocale(undefined, context.env), shell: import('#surfaces/core/terminal-host/index.js').TerminalShell | null = null;
   try {
     assertErrorRegistry();
-    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams);
+    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams, async (locale, query) => (await import('#surfaces/core/terminal-labels/index.js')).terminalCommandHelp(locale, query));
     if (help) {
       locale = help.locale; context.onLocale?.(locale);
       emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });

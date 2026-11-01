@@ -6,7 +6,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION } from '#platform/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { terminalAdminPorts, type TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
-import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
+import { terminalComposerLabels, worklineLabels, slashWindowLabels } from '#surfaces/core/terminal-labels/index.js';
 import { EMPTY_SESSION_USAGE, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { infoModelText, type InfoSurfaceLabels } from '#surfaces/core/terminal-window/index.js';
 import type { WorklineProps } from '#surfaces/core/terminal/index.js';
@@ -68,18 +68,43 @@ describe('information windows on the real workline (SW-1)', () => {
     const root = await project();
     const view = await open({ info: admin(root, running).info });
     await type(view, '/help\r');
-    await until(() => view.stdout.frame.includes('› /status'), 'help window');
-    expect(view.stdout.frame).toContain('▸ Info'); expect(view.stdout.frame).toContain('Enter opens');
+    await until(() => view.stdout.frame.includes('>   /status'), 'help window');
+    expect(view.stdout.frame).toContain('Info');
+    for (const key of ['\u001b[6~', '\u001b[5~', '\u001b[F', '\u001b[H', DOWN, '\u001b[A']) {
+      view.stdin.write(key); await settle(40);
+      const selected = view.stdout.frame.split('\n').filter(line => /[│|] > {3}\//u.test(line));
+      expect(selected.length).toBe(1); expect(selected[0]).toMatch(/> {3}\/[a-z-]+/u);
+      expect(view.stdout.frame).not.toMatch(/[│|] > +(Info|Jobs|Approvals|Settings|Session) +[│|]/u);
+    }
+    view.stdin.write('uninstall'); await settle(40);
+    await until(() => view.stdout.frame.includes('>   /uninstall'), 'type to filter');
+    view.stdin.write('zzz'); await settle(40);
+    expect(view.stdout.frame).toContain('No match');
+    await type(view, '\r'); expect(view.stdout.frame).toContain('No match');
+    view.stdin.write('\u007f\u007f\u007f'); await settle(40);
+    await until(() => view.stdout.frame.includes('>   /uninstall'), 'backspace widens filter');
+    await type(view, ESC); await until(() => view.stdout.frame.includes('>   /status'), 'Esc clears filter');
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Help: ${WORKLINE_SLASH_COMMANDS.length} commands`), 'help summary');
-    await type(view, '/help\r'); await until(() => view.stdout.frame.includes('› /status'), 'help again');
-    await type(view, DOWN); await until(() => view.stdout.frame.includes('› /context'), 'second row');
+    await type(view, '/help context\r'); await until(() => view.stdout.frame.includes('>   /context'), 'argument seeds the filter');
     await type(view, '\r');
     await until(() => view.stdout.frame.includes('▸ Window'), 'context window opened from help');
     await type(view, 'q');
     await until(() => view.stdout.frame.includes(`${MARK} · Context: not measured yet · 0 messages`), 'context summary');
     // The help window that ran a command leaves no line of its own: one help summary (the first Esc) and one context summary.
     expect(count(view.stdout.frame, MARK)).toBe(2);
+    const tr = mountWorkline({ info: admin(root, running).info, labels: { ...worklineLabels('tr', 'TR-STATUS'), windows: slashWindowLabels('tr') } }); views.push(tr);
+    await until(() => tr.stdout.frame.includes('Hazır'), 'TR ready');
+    await type(tr, '/help kaldır\r');
+    await until(() => tr.stdout.frame.includes('>   /uninstall'), 'localized help argument');
+    expect(tr.stdout.frame).not.toContain('Terminalde argüman kullanılmaz');
+    await type(tr, '\r'); await until(() => tr.stdout.frame.includes('deckent uninstall'), 'help opens existing shell-command card');
+    await type(tr, ESC); await settle(50);
+    await type(tr, '/kaldır \r');
+    await until(() => tr.stdout.frame.includes('>   /uninstall'), 'localized unknown-command suggestion');
+    expect(tr.stdout.frame).not.toContain('Yakın bir eşleşme yok');
+    await type(tr, '\r'); await until(() => tr.stdout.frame.includes('deckent uninstall'), 'suggestion opens existing shell-command card');
+    await type(tr, ESC);
   });
 
   it('/usage picks a budget from the scope configuration (no typed id or revision) and reads its account through the typed query', async () => {

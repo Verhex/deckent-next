@@ -1,3 +1,4 @@
+import { filterSearchEntries, foldSearchText } from './search.js';
 import SUGGEST from './slash-suggest.json' with { type: 'json' };
 
 /** Slash command registry — behavior contract; full catalog ports from legacy repl incrementally. Names are English only (owner S4). */
@@ -73,7 +74,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'uninstall', group: 'settings', descriptionKey: 'terminal.slash.uninstall', shellCommand: 'deckent uninstall' },
   { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', group: 'session', descriptionKey: 'terminal.slash.exit' },
-  { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
+  { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help', typedArgument: true },
 ]);
 
 /**
@@ -138,11 +139,22 @@ export function slashCommandRow(command: SlashCommand, labels: Readonly<Record<s
   return { name: `/${command.name}${argument ? ` ${argument}` : ''}`, detail: labels[command.descriptionKey] ?? '' };
 }
 
+/** Localized names/synonyms live in the same catalog for Terminal, CLI help and unknown-command suggestions. */
+export const slashSearchKey = (name: string): string => `command.search.${name}`;
+export function slashSearchEntries(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS) {
+  return commands.map(command => ({ id: command.name, label: `/${command.name}`, detail: labels[command.descriptionKey] ?? '',
+    keywords: (labels[slashSearchKey(command.name)] ?? '').split('|').map(word => word.trim()).filter(Boolean) }));
+}
+export function searchSlashCommands(query: string, labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): readonly SlashCommand[] {
+  return filterSearchEntries(slashSearchEntries(labels, commands), query).map(row => commands.find(command => command.name === row.id)!);
+}
+
 /** The catalog key of the first `/help` line (a title, so a level word such as `Info:` never sits in front of a group heading). */
 export const SLASH_HELP_TITLE_KEY = 'terminal.slash.helpTitle';
 
 /** `/help`: a title, then the registry rows under their group headings (one line per command), so the palette and the help share the same row text. */
-export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): string {
+export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS, query = ''): string {
+  commands = searchSlashCommands(query, labels, commands);
   const groups = SLASH_GROUPS.flatMap(group => {
     const members = commands.filter(command => (command.group ?? 'other') === group.id);
     if (members.length === 0) return [];
@@ -166,9 +178,14 @@ function editDistance(a: string, b: string): number {
 /**
  * The one command an unknown typed name most likely meant (git/npm "did you mean"): the shortest command it begins, else the closest within
  * `maxDistance` edits and one edit per `lettersPerEdit` letters (registry data `slash-suggest.json`). A tie, a name in another alphabet
- * (`/kaldır`: commands are English, it is no typo) or nothing near gives null — never a wrong confident suggestion.
+ * or nothing near gives null. Localized catalog matches precede typo matching; this suggests a name, never dispatches an alias.
  */
-export function nearestSlashCommand(name: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): SlashCommand | null {
+export function nearestSlashCommand(name: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS, labels: Readonly<Record<string, string>> = {}): SlashCommand | null {
+  const matches = searchSlashCommands(name, labels, commands);
+  const exact = slashSearchEntries(labels, matches).filter(row => [row.id, ...row.keywords].some(word => foldSearchText(word) === foldSearchText(name)));
+  if (exact.length === 1) return matches.find(command => command.name === exact[0]!.id)!;
+  if (exact.length > 1) return null;
+  if (matches.length === 1) return matches[0]!;
   const typed = name.toLowerCase();
   if (!/^[a-z0-9-]+$/u.test(typed)) return null;
   const prefixed = commands.filter(command => command.name.startsWith(typed)).sort((a, b) => a.name.length - b.name.length);

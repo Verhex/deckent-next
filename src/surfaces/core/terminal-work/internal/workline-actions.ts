@@ -131,11 +131,11 @@ export interface WorklineActionContext {
 export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
 
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
-export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
+export function immediateSlashAction(command: string, context: WorklineActionContext, args = ''): WorklineActionResult | null {
   const { labels, watch, ledger } = context;
   if (command === 'beuser') return { entries: [notice('error', fillTemplate(labels.commandUnavailable ?? labels.ledgerUnavailable, { part: command }))] };
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
-  if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
+  if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS, args))] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
   if (command === 'tasks') {
     if (!ledger || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
