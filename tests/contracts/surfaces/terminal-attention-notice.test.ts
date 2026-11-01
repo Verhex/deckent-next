@@ -176,13 +176,14 @@ async function kittyOpening() {
       })) });
     try {
       await host.flushed(); await until(() => output.includes('READY') && output.includes('\u001b[?u'), 'first frame and negotiation');
+      if (variant === 'typed') { stdin.write('a'); await settle(30); expect(typed.join('')).toBe('a'); }
       if (variant === 'whole') stdin.write(reply);
       else for (const part of ['\u001b', '[?', '0', 'u']) { stdin.write(part); await settle(2); }
       await until(() => output.includes('\u001b[>1u'), 'Ink enabled kitty');
       // Every split, including a repeated late report after negotiation, stays out of every useInput subscriber.
       for (let at = 1; at < reply.length; at++) { stdin.write(reply.slice(0, at)); stdin.write(reply.slice(at)); }
       if (variant === 'typed') stdin.write(`x${reply}y`);
-      await settle(30); expect(typed.join(''), `${fullscreen}/${variant}`).toBe(variant === 'typed' ? 'xy' : '');
+      await settle(230); expect(typed.join(''), `${fullscreen}/${variant}`).toBe(variant === 'typed' ? 'axy' : '');
       prepared({ total: 1, notice: null, show: async () => { shown.push('card'); return { intent: null, notice: { level: 'info', text: 'OPENED' } }; } });
       await until(() => output.includes(variant === 'typed' ? 'WAITING' : 'OPENED'), 'automatic setup decision');
       expect(shown).toEqual(variant === 'typed' ? [] : ['card']);

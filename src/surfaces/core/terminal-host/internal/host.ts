@@ -1,5 +1,6 @@
 import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
+import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { terminalPalette, WorklinePaletteProvider, type ColorTier, type TerminalThemeSetting, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, resolveRenderGlyphs, TerminalHandoverContext } from '#surfaces/core/terminal-render/index.js';
 import type { TerminalHandover } from './handoff.js';
@@ -86,6 +87,15 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const realInput = stdin ?? process.stdin, request = options.theme;
   const probing = request !== undefined && request.capability !== 'none' && out.isTTY === true && realInput.isTTY === true;
   const mouse = realInput.isTTY === true && out.isTTY === true ? mouseFilteredInput(realInput) : null;
+  if (mouse) {
+    // Ink's auto negotiation replays every `data` byte after 200ms, although App already reads keys on `readable`.
+    // Only complete kitty replies go to that listener; ordinary keys stay in the readable queue exactly once.
+    const input = mouse.input, on = input.on.bind(input), remove = input.removeListener.bind(input), emit = input.emit.bind(input);
+    const replyEvent = 'deckent:kitty-reply';
+    input.on = ((event, listener) => on(event === 'data' ? replyEvent : event, listener)) as typeof input.on;
+    input.removeListener = ((event, listener) => remove(event === 'data' ? replyEvent : event, listener)) as typeof input.removeListener;
+    input.emit = ((event, ...args: unknown[]) => emit(event === 'data' && String(args[0]).startsWith('\u001b[?') && String(args[0]).endsWith('u') ? replyEvent : event, ...args)) as typeof input.emit;
+  }
   // The probe reads the answer in raw mode (no echo, no line buffering); keys typed meanwhile wait in order for Ink, Ctrl+C ends the wait.
   const ask = () => mouse!.background.ask(query => { try { out.write(query); } catch { /* the terminal is gone */ } }, LIMITS.backgroundProbeMs);
   if (probing && reported === undefined) { try { realInput.setRawMode(true); } catch { /* not a raw-capable TTY */ } reported = await ask(); }
@@ -140,6 +150,6 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
     try { if (input.isTTY && input.isRaw) input.setRawMode(false); } catch { /* already restored */ }
     input.unref?.();
   } })();
-  return { context, get palette() { return palette; }, open: () => open, flushed: () => instance.waitUntilRenderFlush(), wait: () => done,
+  return { context, get palette() { return palette; }, open: () => open, flushed: async () => { await yieldToInput(); await instance.waitUntilRenderFlush(); }, wait: () => done,
     setView: (next, colors) => { view = next; if (colors) palette = colors; if (open) instance.rerender(tree(view, palette)); }, close: () => { if (open) instance.unmount(); return done; } };
 }

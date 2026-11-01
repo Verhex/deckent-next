@@ -29,7 +29,7 @@ export interface CommandContext extends BeuserCommandContext, InstallationComman
   runMcpCommand?: McpCommandHandler;
   initialize?: () => void;
   /** COLDSTART: the host's operations, loaded only when a command or the terminal runs (never for help, `--version` or an unknown command). */
-  loadHost?: () => Promise<CommandContext>;
+  loadHost?: (yieldToInput?: () => Promise<void>) => Promise<CommandContext>;
   // The terminal launch context names these with its own narrower types; the CLI commands' types win here, as before the unit split.
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;

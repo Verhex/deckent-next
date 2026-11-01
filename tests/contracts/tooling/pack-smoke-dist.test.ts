@@ -18,7 +18,7 @@ import { buildDist } from '../../../scripts/build-dist.mjs';
 // type-check) stays in `npm run smoke:dist <tarball>` before a release. Linux only: the terminal checks drive a pseudo-TTY through util-linux
 // `script`; bubblewrap staging depends on the host (build-bwrap output), so only its gaps are tolerated here.
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const FAST_CHECKS = ['version', 'mcp', 'native', 'lazy', 'imports', 'bootstrap', 'terminal'];
+const FAST_CHECKS = ['version', 'mcp', 'native', 'lazy', 'imports', 'bootstrap', 'terminal', 'extensions'];
 // PACKAGED-WORKER-BOOTSTRAP (dogfood D3-1, 2026-10-01): the docker supervisor mounts this one file alone as /run/deckent-bootstrap.mjs; the
 // split bundle gave it `import "../../../../vendor/chunk-*.js"` and every native worker died with ERR_MODULE_NOT_FOUND.
 const BOOTSTRAP = 'dist/adapters/core/native-connection/internal/worker.js';
