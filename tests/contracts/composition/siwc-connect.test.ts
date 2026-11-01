@@ -129,8 +129,8 @@ it('requires an explicit disconnected old account for new authorization and writ
       state.connect.mockClear(); state.models.mockClear(); state.custody.mockClear(); state.catalog.mockClear();
       storeSet.mockClear(); audit.mockClear(); browser.mockClear();
       const stored = new Map(values), request = { ...command, subscription: undefined, commandId: 'siwc-unwitnessed-delegation', connection: 'chatgpt-login', model, delegate: ['ai'] };
-      const sameTarget = 'nativeId' in model && model.nativeId === 'a';
-      if (!sameTarget) {
+      // Astra 2955: SIWC has no seed, so even the consented A's nativeId is resolved only by discovery and cannot skip the early witness.
+      {
         state.catalog.mockResolvedValue([{ slug: 'a' }, { slug: 'b' }]); // This list would add B if discovery were reached.
         await expect(connectConfiguredModel(f.project, request, { env: { ...f.env, CLAUDECODE: '1' } }))
           .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
@@ -141,11 +141,11 @@ it('requires an explicit disconnected old account for new authorization and writ
       }
       // Person witness reaches real SIWC models/ensure and real OAuth effects; only network/model listing is synthetic.
       state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
-      await expect(connectConfiguredModel(f.project, request, { env: sameTarget ? { ...f.env, CLAUDECODE: '1' } : f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+      await expect(connectConfiguredModel(f.project, request, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
       expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['connect'], ['lease']]);
       expect(state.connect).toHaveBeenCalledTimes(1); expect(state.catalog).toHaveBeenCalledTimes(1);
       expect(storeSet).toHaveBeenCalled(); expect(audit).toHaveBeenCalled(); expect(browser).toHaveBeenCalledTimes(1);
-      console.info('F11-R3 local OAuth positive:', JSON.stringify({ model, sameTarget, storeSet: storeSet.mock.calls.length, audit: audit.mock.calls.length, browser: browser.mock.calls.length }));
+      console.info('F11-R3 local OAuth positive:', JSON.stringify({ model, storeSet: storeSet.mock.calls.length, audit: audit.mock.calls.length, browser: browser.mock.calls.length }));
       expect(await readFile(path, 'utf8')).toBe(before);
     }
   } finally { host.witness = true; state.oauth = null; state.owner = null; }

@@ -121,13 +121,14 @@ export class ModelConnectApplication {
     await this.ports.authorizeDelegation();
   }
 
-  private async delegationDiscovery(command: ModelConnectCommand, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>, principal: VerifiedPrincipal) {
+  private async delegationDiscovery(kind: ModelConnectKind, command: ModelConnectCommand, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>, principal: VerifiedPrincipal) {
     if (!command.delegate?.length) return;
-    const model = command.model, catalog = layers.effective['provider_catalog'];
-    const references = 'reference' in model ? [model.reference] : 'nativeId' in model && catalog !== undefined
-      ? parseProviderCatalog(catalog).providers.flatMap(provider => provider.models.filter(item => item.nativeId === model.nativeId)
-        .map(item => ({ providerId: provider.id, providerVersion: provider.version, modelId: item.id, modelVersion: item.version }))) : [];
-    // Discovery can authorize OAuth and write secrets. Pull/unknown/ambiguous targets cannot borrow another model's consent.
+    const model = command.model, seedName = kind.connect?.seed ?? null;
+    // Discovery can authorize OAuth and write secrets. The early bypass names the exact target `target()` will use without discovery: a reference,
+    // or a seeded kind's nativeId resolved from the same seed (Astra 2955). Pull and a discovered nativeId cannot borrow another model's consent.
+    const seeded = 'nativeId' in model && seedName ? (await this.ports.seed(seedName)).providers.flatMap(provider => provider.models
+      .filter(item => item.nativeId === model.nativeId).map(item => ({ providerId: provider.id, providerVersion: provider.version, modelId: item.id, modelVersion: item.version }))) : [];
+    const references = 'reference' in model ? [model.reference] : seeded;
     const reference = references.length === 1 ? references[0] : undefined;
     const authored = [layers.global, layers.project].filter(layer => layer['provider_invocation_profiles'] !== undefined);
     await this.delegation(command, reference && authored.length ? authored.map(layer => {
@@ -184,7 +185,7 @@ export class ModelConnectApplication {
       await ports.preflight(scopeId, principal);
     }
     let layers = await ports.layers();
-    await this.delegationDiscovery(command, layers, principal);
+    await this.delegationDiscovery(kind, command, layers, principal);
     const effective = (): ProviderCatalog | null => layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
     const models: NonNullable<ModelConnectResult['models']>[number][] = [];
     const commands: ModelConnectCommand[] = [];
