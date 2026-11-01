@@ -524,8 +524,8 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     // The banner is on the first row of the cleared screen; the status row names the careful stop.
     expect(banner.split('\n')[0]).toMatch(/^╭──╮ +Deckent /u);
     expect(banner).toContain(words.careful);
-    // /help (SW-1 window): the title, then the group headings with the commands to pick (L3).
-    expect(help).toContain(words.help); expect(help).toContain(`▸ ${words.heading}`); expect(help).toContain('› /status');
+    // /help (SW-1 window): the title, then the group headings (plain rows, never a stop: F12) with the commands to pick (L3).
+    expect(help).toContain(words.help); expect(help).toMatch(new RegExp(`│ ${words.heading} +│`, 'u')); expect(help).toMatch(/│ > +\/status /u);
     // /status (SW-1 window): the human state first; the full service instance id is never on screen.
     const chips = status.indexOf('[✓ '), statusWindow = status.slice(status.lastIndexOf('╭', chips), status.indexOf('╰', chips));
     expect(statusWindow).toContain(words.status); expect(statusWindow).toContain('▸ '); expect(statusWindow).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
