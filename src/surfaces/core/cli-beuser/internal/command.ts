@@ -52,7 +52,7 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
     const recommended = journeys.find(row => row.recommended)?.id;
     const picked = await card({ title: t('beuser.walk.journey', {}, locale), body: [], ...(recommended ? { initial: recommended } : {}),
       options: journeys.map(row => ({ id: row.id, label: row.recommended ? t('beuser.walk.recommended', { model: row.id }, locale) : row.id })) });
-    if (picked === null) { emit(t('beuser.walk.cancelled', {}, locale), sinks); return; }
+    if (picked === null) { emit(args.json ? JSON.stringify({ status: 'cancelled' }) : t('beuser.walk.cancelled', {}, locale), sinks); return; }
     args.journey = picked;
   }
   if (oneCommand) return walkOneCommand(args.journey!, args.candidate, args.json, context, card, locale, sinks, options);
@@ -89,7 +89,7 @@ async function walkOneCommand(journey: string, candidate: string | undefined, js
   if (!context.setupBeuser || !context.walkBeuser) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
   // The controller comes from the person's global state root, never from the current folder.
   const input = { journey, candidate, apply: false }, step = await context.setupBeuser('', input, options), models = step.models ?? [], controller = step.controller;
-  const at = { controller: terminalSafeText(controller?.root ?? '') }, cancelled = () => emit(t('beuser.walk.cancelled', {}, locale), sinks);
+  const at = { controller: terminalSafeText(controller?.root ?? '') }, cancelled = () => emit(json ? JSON.stringify({ status: 'cancelled' }) : t('beuser.walk.cancelled', {}, locale), sinks);
   if (!controller?.scopeId || !models.length) { emit(t('beuser.walk.connect', at, locale), { ...sinks, level: 'warning' }); throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE'); }
   const label = (model: Model) => terminalSafeText(`${model.channelId} / ${model.modelId}`);
   const selected = new Set(models.flatMap((model, index) => model.recommended ? [index] : []));

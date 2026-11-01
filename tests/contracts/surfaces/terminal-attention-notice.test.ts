@@ -53,15 +53,26 @@ describe('focus reports', () => {
     for (let at = 1; at < 11; at++) { read('\u001b[?997;1n'.slice(0, at)); read('\u001b[?997;1n'.slice(at)); }
     await settle(20);
     expect(seen.join('')).toBe('xyabc\u0003de'); expect(notices).toBe(11);
-    // A lone ESC is the Escape key, held at most `answerHoldMs` (50) with or without a probe; a following key in time joins it (Alt+key, as terminals do).
-    seen.length = 0; read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(60); expect(seen.join('')).toBe('\u001b');
-    seen.length = 0; probe = ask(1_000); read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(60); expect(seen.join('')).toBe('\u001b');
-    // Astra 2882 R2: an unterminated answer never keeps keys — a byte outside the answer grammar (Enter, Ctrl+C) releases it as input at once,
-    // Ctrl+C (also kitty's CSI 99;5u) still ends the probe, and what stays inside the grammar is released after the window or past `answerMaxBytes`.
+    // A lone ESC is the Escape key, held at most `answerHoldMs` (250) with or without a probe; a following key in time joins it (Alt+key, as terminals do).
+    seen.length = 0; read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(270); expect(seen.join('')).toBe('\u001b');
+    seen.length = 0; probe = ask(1_000); read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(270); expect(seen.join('')).toBe('\u001b');
+    // F13: a recognised control frame never becomes keys at its size/time bound; Enter/Ctrl+C still break malformed frames immediately.
     seen.length = 0; read('\u001b]11;rgb:ff'); read('ab\r'); read('\u001b]11;rgb:f'); read('\u0003'); expect(await probe).toBeNull();
     probe = ask(1_000); read('\u001b['); read('99;5u'); expect(await probe).toBeNull();
-    read('\u001b]11;rgb:ff/'); await settle(80); read('z'); read(`\u001b]11;rgb:${'f'.repeat(70)}`); await settle(10);
-    expect(seen.join('')).toBe(`\u001b]11;rgb:ffab\r\u001b]11;rgb:f\u0003\u001b[99;5u\u001b]11;rgb:ff/z\u001b]11;rgb:${'f'.repeat(70)}`);
+    read('\u001b]11;rgb:ff/'); await settle(280); read('ff/ff\u001b\\z');
+    read(`\u001b]11;rgb:${'f'.repeat(70)}`); read('y\u0007');
+    expect(seen.join('')).toBe('\r\u0003\u001b[99;5uz');
+    // All OSC/DCS and CSI replies, including secondary DA, are consumed at every split. Navigation, Alt keys and coalesced bursts survive.
+    for (const reply of ['\u001b]4;0;rgb:ff/ff/ff\u0007', '\u001bP1$r0m\u001b\\', '\u001b[>0;10;1c', '\u001b[0n', '\u001b[12;34R', '\u001b[4;600;800t', '\u001b[?2031;1$y']) {
+      seen.length = 0;
+      for (let at = 1; at < reply.length; at++) { read(reply.slice(0, at)); read(reply.slice(at)); }
+      for (const char of reply) read(char);
+      expect(seen.join(''), JSON.stringify(reply)).toBe('');
+    }
+    seen.length = 0; read('a\u001b[B\u001b[1;5A\u001b[200~paste\u001b[201~\u001bx\u001b\r');
+    expect(seen).toEqual(['a\u001b[B\u001b[1;5A\u001b[200~paste\u001b[201~\u001bx\u001b\r']);
+    // A delayed split after the initial ESC is the F13 PTY failure (80 ms). No response byte becomes Escape.
+    seen.length = 0; read('\u001b'); await settle(80); read(']11;rgb:f0/ec/e5\u001b\\'); expect(seen.join('')).toBe('');
     // Astra 2886 R1: a new cut answer after a completed one gets its own window (t0 ESC, t40 answer + new cut answer, t60 its end: nothing leaks).
     seen.length = 0; read('\u001b[?62c'); probe = ask(1_000); read('\u001b'); await settle(40);
     read('\u001b]11;rgb:f0/ec/e5\u0007\u001b]11;rgb:1e/1e/'.slice(1)); await settle(20); read('1e\u0007\u001b[?62c');

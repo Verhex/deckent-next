@@ -1,4 +1,4 @@
 {
-  "answerHoldMs": 50,
+  "answerHoldMs": 250,
   "answerMaxBytes": 64
 }
