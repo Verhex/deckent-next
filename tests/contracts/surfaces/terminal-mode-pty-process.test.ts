@@ -332,7 +332,7 @@ describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-term
   it('U5-S5: --full-access on a closed mode asks the owner, then opens the banner without running a tool', async () => {
     const f = await modeProject('no-set-grant');
     await startRuntime(f.projectRoot, f.env);
-    const run = await inPty(f.projectRoot, f.env, ['--full-access'], [['Open full access', 'y'], ['Deckent workline', '/exit\r']]);
+    const run = await inPty(f.projectRoot, f.env, ['--full-access'], [['Open full access', 'y'], ["Let's start", '\u001b'], ['Deckent workline', '/exit\r', 'fresh']]);
     expect(run.timeout, run.output).toBeUndefined(); expect(run.status, run.output).toBe(0);
     expect(plain(run.output)).toContain('W3-SANDBOX');
     expect(plain(run.output)).toContain('full access');

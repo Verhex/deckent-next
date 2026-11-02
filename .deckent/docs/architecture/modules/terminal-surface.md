@@ -120,6 +120,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   through the runtime model client in the caller's `--scope` (same path as `models invoke`), so principal,
   policy, activation and spending apply. Abort (Esc, or Ctrl+C while busy) stops the wait and requests
   cancellation of that invocation. There is no direct/unmanaged HTTP backend and no silent fallback.
+  Registered terminal failures retain their localized message and a separate localized code line in both rich and line-mode output.
   **Streaming (S-STREAM, implemented end to end 2026-09-24):** runtime protocol `invokeModelStream` (since v11; the unwired
   composition driver `streamTerminalChatTurn` was removed 2026-10-18, the service, client and e2e tests remain): the same governed invocation as `invokeModel`
   (authorization, activation, reservation before send, settlement, durable command replay), answered by ordered delta

@@ -12,7 +12,7 @@ Komutlar (deckent <komut> --help her eylemi ve seçeneklerini gösterir):
 
 Başlarken:
   terminal    Etkileşimli terminali aç
-      workline | session | status | chat-plan | snapshot
+      attach | workline | session | status | chat-plan | snapshot
       [--scope <id>] [--full-access]
   init        Kurulumu hazırla
       preview | inspect | apply | resume | identity | policy | pool | registry

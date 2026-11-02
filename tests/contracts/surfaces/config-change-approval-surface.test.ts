@@ -117,6 +117,7 @@ describe('the model cannot reach a config write', () => {
       // before anything is read, and only the human CLI host names the write (asserted below).
       'src/composition/core/model-activation/internal/model-roles.ts',
       'src/composition/core/model-connect/internal/connect.ts',
+      'src/composition/core/model-use-grant/internal/configured.ts', // ONCE: person-witnessed attachment, same governed config writer.
       'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
       // alpha.56 U4E (G2): the install permission carrier saves a missing identity profile through the same governed writer after the
       // `policyPermissionModes` person witness; reached from init and terminal onboarding only, never from the SDK, MCP or an agent unit.

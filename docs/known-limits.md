@@ -12,6 +12,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-journey BeUser re-walk and the owner terminal test are still open and run before beta. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
+Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and retains typed terminal error codes. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
+
 ## BeUser B1 journey walks (alpha.57)
 
 Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.

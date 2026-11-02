@@ -55,6 +55,14 @@ describe('configuration binding and schema 4 migration', () => {
         expect.objectContaining({ code: 'CONFIG_FIELD_RETIRED', path: 'providers' })]));
       expect(second).toEqual(first); expect(JSON.stringify(first)).not.toContain('SECRET_FIXTURE');
       expect(await readFile(path, 'utf8')).toBe(bytes);
+      // ONCE keeps valid older configs readable without rewriting their version or terminal section.
+      for (const version of [4, 5, 6]) {
+        const authored = JSON.stringify({ schema_version: version, projectName: 'kept', terminal: { scopeId: 'existing' } });
+        await writeFile(path, authored);
+        const loaded = await loadConfig(root, { env, force: true });
+        expect(loaded.schema_version).toBe(version); expect(loaded['terminal']).toMatchObject({ scopeId: 'existing' });
+        expect(await readFile(path, 'utf8')).toBe(authored);
+      }
     } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
   });
 

@@ -1,4 +1,5 @@
-import { persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
+import { persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
@@ -28,26 +29,25 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }
-/** ID-1C before any effect of an owned init mutation: the configured identity, by the CLI preflight's own observe-only read (also under a pending policy-template journal,
- * which leaves config settled). A pending config-publishing transaction reads its target layout under the journal; `publicationGuarded` (apply/resume): invalid config is never published over. */
+/** ID-1C: observe the composed identity before effects; config-publishing recovery owns its target layout and publication refuses existing invalid config. */
 export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false, options: ConfigLoadOptions = {}) {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
-  if (publicationGuarded && (await loadConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
-  await loadConfiguredInstallationIdentity(projectRoot, { ...options, pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
+  try {
+    if (publicationGuarded && (await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
+    await loadConfiguredInstallationIdentity(projectRoot, { ...options, pendingBootstrap: 'config-settled' });
+  } catch (error) { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; }
 }
-/** The binding settings an owned init identity write uses: the settled configuration, or registry defaults while a config-publishing transaction is pending. */
+/** Settled binding settings, or defaults while config publication is pending. */
 export async function configuredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}) {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return getConfigFieldDefault('installation');
-  return (await loadConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation;
+  return (await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation;
 }
-/** Explicit local operator action. No model, worker, or supplied profile can grant consent. */
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); // Snapshot and validate before the lock or bootstrap directory.
   const initial = await prepareSuppliedInstallation(projectRoot, supplied, operator); await assertSuppliedAuthority(initial); await preflightEvidence(initial, operator);
   await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite(); // before the journal or any bootstrap directory
   return executeInstallation(projectRoot, operator, lockTimeout(initial), initial.material.authoredProfile);
 }
-/** Recovery requires the local operator, exact proposal, custom-mode consent and host executable; no profile file. */
 export async function resumeInstallation(projectRoot: string, input: InstallationApplyChoices) {
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); const recovery = retained(await observeBootstrapState(projectRoot));
   if (!recovery) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
