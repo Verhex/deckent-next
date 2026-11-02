@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
 import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
 import { planSetup, SetupStageRegistry, type SetupStage } from '#engine/index.js';
+import { until, settle } from '../support/workline-harness.js';
+/** Selection starts only after the visible card's registry-defined input guard. */
+async function waitForCard(frame: () => string, text: string) {
+  const { default: presentation } = await import('../../../src/surfaces/core/terminal-onboarding/internal/presentation.json', { with: { type: 'json' } });
+  await until(() => frame().includes(text), text);
+  await settle(presentation.cardInputGuardMs + 30);
+}
 const observation = { schemaVersion: 2 as const, environment: { platform: 'linux' as const, node: 'supported' as const },
   language: { configured: 'en' as const, requested: null, system: null }, folder: { installation: 'present' as const, homeRoot: false, configuredScope: 's', suggestedScope: null },
   profile: { available: [], selected: null }, policy: { state: 'current' as const }, sandbox: { realm: 'bubblewrap' as const, selfTest: 'ok' as const, usernsRestricted: false },
@@ -64,7 +71,7 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   expect(await runOnboardingSession(counting, { observed: (row: OnboardingSnapshot) => shared.push(row) } as never, { locale: 'en' } as never)).toBeNull();
   expect(observes).toBe(1); expect(settledIds).toEqual(['permissions:start-mode']); expect(shared.map(row => row.deferred)).toEqual([['onboarding:budget', 'onboarding:first-task:done']]);
   // After a person's answer (Esc · Later on the budget card) nothing is shared: the opener observes again.
-  const { PassThrough, Writable } = await import('node:stream'), { until } = await import('../support/workline-harness.js');
+  const { PassThrough, Writable } = await import('node:stream');
   let frame = ''; current = { ...snapshot, deferred: ['onboarding:first-task:done'] }; deferred.length = 0;
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 120, rows: 40 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
@@ -77,7 +84,7 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const secondIn = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return secondIn; }, ref() { return secondIn; }, unref() { return secondIn; } });
   const choosing = runOnboardingSession(counting, { locale: 'en', provider: async () => { providers++; } } as never,
     { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: secondIn as never, stdout: secondOut as never }, true, 'model');
-  try { await until(() => frame.includes('Enter · Continue'), 'model choice'); secondIn.write('\r'); expect(await choosing).toBeNull(); }
+  try { await waitForCard(() => frame, 'Enter · Continue'); secondIn.write('\r'); expect(await choosing).toBeNull(); }
   finally { secondIn.destroy(); secondOut.destroy(); }
   expect(providers).toBe(1); expect(deferred).toEqual(['core:model']);
 
@@ -173,9 +180,9 @@ it('FIX9: an empty repository explains that there is nothing to commit and Enter
   const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const port = { previewFirstCommit: async () => ({ state: 'ready', total: 0, selected: 0, more: 0, rows: [], identity: true, sign: false, digest: 'd' }),
     firstCommit: async () => { throw new Error('must not commit'); }, firstCommitRecovery: async () => ({ state: 'none' }) } as unknown as OnboardingPort;
-  setTimeout(() => stdin.write('\r'), 300);
-  const result = await firstCommitScreen(port, { completed: 0, total: 3 } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
-  expect(result).toBe('later');
+  const result = firstCommitScreen(port, { completed: 0, total: 3 } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
+  try { await waitForCard(() => frame, 'Skip for now'); stdin.write('\r'); expect(await result).toBe('later'); }
+  finally { stdin.destroy(); stdout.destroy(); }
   expect(frame).toContain('no files to commit yet'); expect(frame).toContain('Skip for now'); expect(frame).not.toMatch(/0 of 0|of 0 files/u);
 });
 it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and applies only the previewed digest; permission cards show their work and replace each other', async () => {
@@ -188,21 +195,25 @@ it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and ap
   expect(question.body.join('\n')).toContain('pause and resume them in an emergency'); expect(question.body.join('\n')).not.toMatch(/rules|deckent init|owner-baseline/u); expect(question.choices.map(row => row.id)).toEqual(['apply']);
   // walk19R: the profile card stays up while its preview runs and says so; Enter pressed then is visibly not used and never answers the next
   // card (whose Enter would apply); the next card replaces it in one live region, and an answered card leaves no frame behind.
-  const { PassThrough, Writable } = await import('node:stream'), { until, settle } = await import('../support/workline-harness.js'), { terminalBuffers } = await import('../../fixtures/terminal-screen.js');
+  const { PassThrough, Writable } = await import('node:stream'), { terminalBuffers } = await import('../../fixtures/terminal-screen.js');
   const { guideScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/guides.js');
-  let frame = '', release = () => {}; const applied: string[] = [], profiles = [{ id: 'core:solo', version: 1 }];
+  let frame = '', release = () => {}, previews = 0; const applied: string[] = [], profiles = [{ id: 'core:solo', version: 1 }];
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 30 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const port = { assertPerson: async () => {}, permissions: async (digest: string) => { applied.push(digest); },
-    previewPermissions: () => new Promise(resolve => { release = () => resolve({ state: 'needs-confirmation', reason: 'onboarding.permissions.guided', digest: 'p'.repeat(64), selectedProfile: profiles[0] }); }) } as unknown as OnboardingPort;
+    previewPermissions: () => { previews++; return new Promise(resolve => { release = () => resolve({ state: 'needs-confirmation', reason: 'onboarding.permissions.guided', digest: 'p'.repeat(64), selectedProfile: profiles[0] }); }); } } as unknown as OnboardingPort;
   const picking = { ...snapshot, permissions: { state: 'needs-profile' as const, reason: '', profiles } };
   const result = guideScreen({ schemaVersion: 1, steps: [], completed: 0, total: 2, snapshot: picking }, 'permissions', port, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
   const main = () => terminalBuffers(frame.replace(/\n/gu, '\r\n'), 100, 30).main; // the TTY's ONLCR, as a real terminal receives it
   try {
-    await until(() => frame.includes('Esc · Later'), 'profile card'); stdin.write('\r');
+    await until(() => frame.includes('Esc · Later'), 'profile card');
+    stdin.write('\r'); await settle(80); expect(previews).toBe(0); expect(applied).toEqual([]); expect(main()).toContain('Choose a profile');
+    await waitForCard(() => frame, 'Choose a profile'); stdin.write('\r');
     await until(() => frame.includes('Preparing…'), 'preparing'); stdin.write('\r'); await until(() => frame.includes('keys ignored'), 'ignored key note');
-    release(); await until(() => frame.includes('> Enter · Continue'), 'permission card'); await settle(200);
+    expect(previews).toBe(1);
+    release(); await until(() => frame.includes('> Enter · Continue'), 'permission card'); stdin.write('\r'); await settle(80);
     expect(applied).toEqual([]); expect(main().split('Step 1/2').length - 1).toBe(1); expect(main()).not.toContain('Choose a profile');
+    await waitForCard(() => frame, '> Enter · Continue');
     for (const modified of ['\u001b[13;5u', '\u001b\r']) { stdin.write(modified); await settle(60); expect(applied).toEqual([]); }
     stdin.write('\r'); expect(await result).toBe('applied'); expect(applied).toEqual(['p'.repeat(64)]); expect(main()).not.toContain('Step 1/2');
   } finally { stdin.destroy(); stdout.destroy(); }
@@ -215,7 +226,7 @@ it('A62: first work is never a setup step; the separate welcome routes describe,
   expect(deferredOnboardingNotice({ ...done, deferred: [...done.deferred, 'onboarding:first-task'] }, 'en')).toBeNull(); // AYSE-R2-04: Esc on Ready! after a first task
   expect(onboardingSteps({ ...done, deferred: [] }).some(row => row.kind === 'first-task')).toBe(false);
   const { welcomeScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-task.js');
-  const { PassThrough, Writable } = await import('node:stream'), { until, settle } = await import('../support/workline-harness.js');
+  const { PassThrough, Writable } = await import('node:stream');
   const { t } = await import('#platform/index.js');
   const model = { schemaVersion: 1 as const, completed: 0, total: 0, steps: [], snapshot };
   expect(await welcomeScreen({ ...model, snapshot: { ...snapshot, modelUsable: false } }, { locale: 'tr' })).toBeNull();
@@ -242,12 +253,11 @@ it('A62: first work is never a setup step; the separate welcome routes describe,
         let answered = false; void answer.then(() => { answered = true; });
         stdin.write('\u001b[B'); stdin.write('\r'); await settle(80); expect(answered).toBe(false);
       }
-      const { default: presentation } = await import('../../../src/surfaces/core/terminal-onboarding/internal/presentation.json', { with: { type: 'json' } });
-      await settle(presentation.welcomeInputGuardMs + 30);
+      await waitForCard(() => frame, 'Başlayalım');
       if (choice === 'empty') { expect(frame).not.toContain('Projeyi tara'); stdin.write('\u001b'); expect(await answer).toBeNull(); continue; }
       for (let at = 0; at < ['describe', 'scan', 'first'].indexOf(choice); at++) { stdin.write('\u001b[B'); await settle(20); }
       stdin.write('\r');
-      if (choice === 'first') { await until(() => frame.includes('İlk işinizi kendiniz yazın'), 'first work input'); await settle(80); stdin.write('\r'); await until(() => frame.includes('Enter’dan önce bir iş yazın'), 'empty input refused'); stdin.write('Faturaları özetle'); await until(() => frame.includes('Faturaları özetle'), 'typed first work'); await settle(30); stdin.write('\r'); }
+      if (choice === 'first') { await waitForCard(() => frame, 'İlk işinizi kendiniz yazın'); stdin.write('\r'); await until(() => frame.includes('Enter’dan önce bir iş yazın'), 'empty input refused'); stdin.write('Faturaları özetle'); await until(() => frame.includes('Faturaları özetle'), 'typed first work'); await settle(30); stdin.write('\r'); }
       const intent = await answer;
       expect(intent).toMatchObject({ destination: 'chat', scopeId: 's', folder: 'orders', intent: choice === 'first' ? 'Faturaları özetle' : t(choice === 'scan' ? 'onboarding.welcome.scanPrompt' : 'onboarding.welcome.describePrompt', {}, 'tr') });
     } finally { stdin.destroy(); stdout.destroy(); }
@@ -274,7 +284,6 @@ it('A62: onboarding follows the exact scoped billingAxis; subscription/local nee
 it('A62: separate welcome shows the conversation return, excludes the step count, and copies no secrets or typed input', async () => {
   const { PassThrough, Writable } = await import('node:stream');
   const { welcomeScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-task.js');
-  const { until, settle } = await import('../support/workline-harness.js');
   const { snapshotKnownSecrets } = await import('#platform/index.js');
   // Astra 2834 R1: a body line carrying a credential-shaped value and a known secret (as a Git file name or an error message can).
   const KNOWN = 'known-canary-7f3e9d2a', TOKEN = 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', TYPED = 'typed-canary-41c0';
@@ -297,8 +306,7 @@ it('A62: separate welcome shows the conversation return, excludes the step count
     expect(copies()[0]).toContain('Saved conversation: use /resume'); expect(copies()[0]).toContain('[REDACTED]');
     expect(copies()[0]).not.toContain(TOKEN); expect(copies()[0]).not.toContain(KNOWN); expect(copies()[0]).not.toMatch(/sk-ant-|known-canary/u);
     await settle(50); expect(decided).toBe(false);
-    const { default: presentation } = await import('../../../src/surfaces/core/terminal-onboarding/internal/presentation.json', { with: { type: 'json' } });
-    await settle(presentation.welcomeInputGuardMs);
+    await waitForCard(() => frame, "Let's start");
     // The free-text card: what the person types in its input never reaches the copy.
     for (let index = 0; index < 2; index++) { stdin.write('\u001b[B'); await settle(15); }
     stdin.write('\r'); await settle(400); stdin.write(TYPED); await settle(60); stdin.write('\u0019');

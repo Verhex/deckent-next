@@ -3,7 +3,6 @@ import type { CliCardIo } from '#surfaces/core/cli-human/index.js';
 import { firstTaskIntent } from './first-tasks.js';
 import { askOnboardingQuestion } from './question.js';
 import type { FirstTaskIntent, OnboardingPresentation } from './contract.js';
-import presentation from './presentation.json' with { type: 'json' };
 import { welcomeInput } from './welcome-input.js';
 /** Separate from setup: these prompts enter the normal governed chat turn, never a new effect path. */
 export async function welcomeScreen(model: OnboardingPresentation, io: CliCardIo, conversationNotice?: string): Promise<FirstTaskIntent | null> {
@@ -15,7 +14,7 @@ export async function welcomeScreen(model: OnboardingPresentation, io: CliCardIo
       { id: 'first', label: t('onboarding.welcome.first', {}, locale) }] };
   const input = welcomeInput((io.stdin ?? process.stdin) as NodeJS.ReadStream);
   const picked = await (async () => {
-    try { return await askOnboardingQuestion(question, { ...io, stdin: input.stdin }, undefined, 'applying', { guardMs: presentation.welcomeInputGuardMs, typed: input.typed }); }
+    try { return await askOnboardingQuestion(question, { ...io, stdin: input.stdin }, undefined, 'applying', { typed: input.typed }); }
     finally { input.close(); }
   })();
   if (!['describe', 'scan', 'first'].includes(picked.id) || io.signal?.aborted) return null;

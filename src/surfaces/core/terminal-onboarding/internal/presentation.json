@@ -4,5 +4,5 @@
   "guideAfter": "core:model",
   "observationOnly": ["coding:hosts"],
   "firstTask": "onboarding:first-task",
-  "welcomeInputGuardMs": 500
+  "cardInputGuardMs": 500
 }
