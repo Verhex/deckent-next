@@ -1073,3 +1073,9 @@ Kaynak: dış `proof/ALPHA60/PAKET-2/PLAN.md` (owner satırları; saatler lead'i
   - 2026-10-23 "MVP yok / kod betadan sonraya kalmaz" kuralına owner'ın açık istisnasıdır.
   - Kanun denetimi r1 HOLD, r2 PASS.
 
+
+## Owner kararları — 2026-11-02: CI hızı
+
+- **CI-LINT-SPLIT:** lint kontrolleri `prepare` dışında, Node başına ayrı işte paralel; `required verify` lint başarısızlığını da reddeder; hosted `npm ci --prefer-offline --no-audit --no-fund` (PR #134, `e87212381`; ölçülen toplam 8:00–8:20 → 7:05, tek koşu 41442223301).
+- **CI-WEIGHTS:** ağırlık sapma işi yalnız main push, gece ve elle koşularda; sapma uyarıdır, iş kırmızı olmaz; ağırlıklar o koşunun makbuzlarından otomatik yenilenip Actions cache'e yazılır, her `prepare` en yenisini okur. CI commit/push yapmaz; işlenmiş dosya tohumdur. 2026-10-29 sürüm adımındaki "kırmızı sapma sürüm PR'ını tutar" kuralının yerini alır.
+- **Node matrisi:** PR'larda Node 24 ve 26 birlikte koşmaya devam eder.
