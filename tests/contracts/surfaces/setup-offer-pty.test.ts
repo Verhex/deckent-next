@@ -203,6 +203,8 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     await access(cli);
     const f = await fixture();
     const run = await f.pty(`card-${label}`, [[card, key]], { LANG: lang });
+    if (label === 'esc') { const eof = await f.pty('card-eof', [[card, '\u0004']], { LANG: lang });
+      expect(eof.timeout, eof.output.slice(-2000)).toBeUndefined(); expect(eof.status).toBe(2); expect(await f.empty()).toEqual({ root: [], home: [] }); }
     expect(run.timeout, run.output.slice(-2000)).toBeUndefined();
     expect(run.output).toContain(card);
     // alpha.59 L3: a main-screen card never takes mouse reports, so the terminal's own selection works on it; Ctrl+Y is the quick copy.

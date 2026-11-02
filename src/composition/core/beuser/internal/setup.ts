@@ -69,7 +69,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
     return available.map(({ channelId, modelId }) => {
       const reference = roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], scopeId, { channelId, modelId });
       const profile = profiles.find(row => row.scopeId === scopeId && isDeepStrictEqual(row.reference, reference, { skipPrototype: true }));
-      return { channelId, modelId, recommended: suggestions.has(JSON.stringify([channelId, modelId])), subscription: profile?.schemaVersion === 2 && profile.billingAxis === 'subscription' };
+      return { channelId, modelId, recommended: suggestions.has(JSON.stringify([channelId, modelId])), subscription: !!profile && profile.schemaVersion !== 1 && profile.billingAxis === 'subscription' };
     });
   });
   const ceiling = Math.min(controllerData.pool.executionSlots, controllerData.pool.inFlightSlots);

@@ -47,3 +47,4 @@ export { createModelInvocationPlanUsage, verifyModelInvocationPlanUsage, modelIn
 export type { SubscriptionUsageSummary } from './internal/inspection.js';
 export { subscriptionActor, prepareSubscriptionConsent, readSubscriptionRejection } from './internal/delegation.js';
 export { textOnlyModelInvocationRequest } from './internal/text-request.js';
+export { invocationEffectAuthority } from './internal/effect-authority.js';

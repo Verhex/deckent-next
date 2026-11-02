@@ -68,7 +68,7 @@ export function loadInvocationRecord(db: DatabaseSync, scopeInput: unknown, invo
   return readSnapshot(db, () => {
     const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
     const record = decodeInvocationRecord(invocationRow(db, scopeId, invocationId), scopeId, invocationId, 'invocation_id');
-    if (record?.receipt.profile.schemaVersion === 2) readInvocationPlanUsage(db, requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION), record);
+    if (record && record.receipt.profile.schemaVersion !== 1) readInvocationPlanUsage(db, requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION), record);
     return record;
   });
 }
@@ -76,7 +76,7 @@ export function loadInvocationCommandRecord(db: DatabaseSync, scopeInput: string
   return readSnapshot(db, () => {
     const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
     const record = decodeInvocationRecord(invocationCommandRow(db, scopeId, commandId), scopeId, commandId, 'command_id');
-    if (record?.receipt.profile.schemaVersion === 2) readInvocationPlanUsage(db, requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION), record);
+    if (record && record.receipt.profile.schemaVersion !== 1) readInvocationPlanUsage(db, requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION), record);
     return record;
   });
 }

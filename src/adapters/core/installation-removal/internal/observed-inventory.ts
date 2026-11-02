@@ -1,9 +1,9 @@
+import { attachmentLifecycle } from '#adapters/core/project-attachment/index.js';
 import { lstat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { InstallationCacheRemovalTarget } from './cache.js';
-import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapters/core/worker-image/index.js';
-import { ErrorRegistry, packageRemovalCommand, pathWithin as inside, sha256, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
+import { packageRemovalCommand, pathWithin as inside, sha256, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
 import { extendUninstallInventory, assertNativeUninstallSupport, removalRegistry, restorable } from './inventory.js';
 import { observeUninstallWork } from './quiescence.js';
 import { configuredTracking } from './vcs.js';
@@ -15,9 +15,7 @@ const hash = (value: unknown) => sha256(JSON.stringify(value));
  * tier: work is counted item by item from the ledger without creating sidecars; the runtime service is observed by composition (describe). */
 export async function observeUninstallInventory(config: ResolvedConfig, policyRevision: string, scopeIds: readonly string[], options: ConfigLoadOptions) {
   assertNativeUninstallSupport(options.platform ?? process.platform);
-  const layout = config.productLayout, identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
-  if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
-  const installationId = identity.value.installationId, globalRoot = dirname(await resolveGlobalConfigReadPath(options.env, options.platform));
+  const layout = config.productLayout, installationId = await attachmentLifecycle(config, options).identityId(), globalRoot = dirname(await resolveGlobalConfigReadPath(options.env, options.platform));
   const projectData = join(config.projectRoot, DECKENT_DIR), bounds = config.installation.packageMeasurement;
   const rooted = layout.root === globalRoot || layout.root === projectData, env = options.env ?? process.env;
   const candidates = (['scratch', 'treeScanCache', 'compileCache'] as const).filter(resource => rooted

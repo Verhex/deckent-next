@@ -183,7 +183,7 @@ describe('I-S4 bare deckent init', () => {
     const run = harness({ apply: () => 'applied', observation: round => after[Math.min(round, 1)]! });
     await setupInitCommand(['init', '--yes', '--scope', 'my-erp'], run.context);
     expect(run.applied.map(stage => [stage.id, stage.operation!.id])).toEqual([['core:policy', 'installation.policy-template'], ['core:language', 'config.set']]);
-    expect(run.applied.find(stage => stage.id === 'core:language')!.operation!.input).toEqual({ keyPath: 'language', value: 'tr', layer: 'project' });
+    expect(run.applied.find(stage => stage.id === 'core:language')!.operation!.input).toEqual({ keyPath: 'language', value: 'tr', layer: 'global' });
     expect(run.observed()).toBe(3);
     expect(run.applied.some(stage => NEVER_UNATTENDED.includes(stage.operation!.id))).toBe(false);
   });

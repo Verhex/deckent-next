@@ -73,6 +73,7 @@ export const CLI_CATALOG = [
     action('restore', 'setup', 'cli.help.action.backup.restore', 'cli.help.backup', { requires: ['--target <project>'], picks: true }),
   ] },
   { name: 'terminal', group: 'start', summary: 'cli.help.summary.terminal', detail: 'cli.help.terminal', args: '[--scope <id>] [--full-access]', bare: 'handler', children: [
+    { name: 'attach', group: 'setup', summary: 'setup.attach.title', detail: 'setup.attachment.help', installation: 'owned' },
     action('workline', 'start', 'cli.help.action.workline', 'cli.help.terminal'),
     action('session', 'start', 'cli.help.action.session', 'cli.help.terminal'),
     action('status', 'start', 'cli.help.action.terminal.status', 'cli.help.terminal'),

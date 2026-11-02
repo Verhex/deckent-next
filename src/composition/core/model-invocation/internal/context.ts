@@ -4,7 +4,6 @@ import { ModelInvocationStoreError, type PolicySource, type ScopeAccess } from '
 import type { LocalPeerIdentity } from '#adapters/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-
 export async function loadInvocationContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) {
   const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, access);
   return withFreshPolicy(projectRoot, options, context);

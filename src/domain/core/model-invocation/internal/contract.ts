@@ -69,6 +69,8 @@ export type ModelInvocationBillingAxis = z.infer<typeof modelInvocationBillingAx
 export const modelInvocationProfileSchema = z.discriminatedUnion('schemaVersion', [
   z.strictObject({ get schemaVersion() { return z.literal(1); }, ...profileShape.unwrap().shape }),
   z.strictObject({ get schemaVersion() { return z.literal(2); }, billingAxis: modelInvocationBillingAxisSchema, ...profileShape.unwrap().shape }),
+  z.strictObject({ schemaVersion: z.literal(3), billingAxis: modelInvocationBillingAxisSchema,
+    useLeaseId: identitySchema, ...profileShape.unwrap().shape }),
 ]).readonly();
 export const modelInvocationRequestEvidenceSchema = modelInvocationCommandSchema.unwrap().omit({ nativeRequest: true })
   .extend({ requestDigest: digest }).strict().readonly();

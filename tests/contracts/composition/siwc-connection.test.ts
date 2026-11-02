@@ -33,6 +33,37 @@ vi.mock('#adapters/index.js', async original => {
     createSiwcConnectionLock: () => async (_id: string, work: () => Promise<unknown>) => work(),
   };
 });
+// The custody factory now lives behind its adapter; mock the same owner seams, preserving every actor and token assertion below.
+vi.mock('#adapters/core/local-principal/index.js', async original => ({ ...await original<object>(),
+  localPrincipalChannel: () => state.channel, localPrincipalPeer: () => undefined,
+  withLocalPrincipalChannel: async (channel: 'mcp' | undefined, work: () => Promise<unknown>) => {
+    const before = state.channel; state.channel = channel; try { return await work(); } finally { state.channel = before; }
+  },
+}));
+vi.mock('#adapters/core/installation-files/index.js', async original => ({ ...await original<object>(),
+  localInstallationBindingSource: () => ({ capture: async () => ({ schemaVersion: 2, strength: 'weak', source: 'location', canonicalRoot: '/fixture', device: '1', inode: '1' }) }),
+}));
+vi.mock('#adapters/core/provider-siwc/index.js', async original => ({ ...await original<object>(),
+  createSiwcConnectionLock: () => async (_id: string, work: () => Promise<unknown>) => work(),
+}));
+vi.mock('#adapters/core/contract/index.js', async original => {
+  const actual = await original<object>(), { SIWC_PROTOCOL: protocol } = await import('#adapters/core/provider-siwc/index.js');
+  return { ...actual,
+    createInstallationSecretCustody: (_env: unknown, _platform: unknown, _wait: unknown, trusted: { snapshot(): Promise<{ actor: { issuer: string } }> }) => ({
+      exclusive: async (work: () => Promise<unknown>) => work(), selected: async () => protocol.encryptedStoreId,
+      assertPersonal: async (_store: unknown, owner: unknown) => {
+        const snapshot = await trusted.snapshot(); state.seenActors.push(snapshot.actor.issuer);
+        return { schemaVersion: 1, producer: 'local-os-store', owner,
+          os: { uid: 1000, assurance: 'os-user', peerPid: null, connectionWitness: null }, profile: { id: 'core:solo', version: 1, digest: 'a'.repeat(64) },
+          store: { backendId: protocol.encryptedStoreId, instanceBindingId: '00000000-0000-4000-8000-000000000002', generation: 1, role: 'personal-main', selectionDigest: null },
+          host: { locationDigest: 'b'.repeat(64), keyIdentityDigest: 'c'.repeat(64), mountEvidenceDigest: 'd'.repeat(64), locality: 'local', control: 'os-account-exclusive' },
+          cleanup: { state: 'complete', revision: 1 }, observedAtMs: Date.now() };
+      },
+    }),
+    openConfiguredSecretStore: () => ({ descriptor: { id: protocol.encryptedStoreId, writable: true, enumerable: true, encryptedAtRest: true },
+      get: async (name: string) => state.values.get(name), set: vi.fn(), delete: vi.fn(), listNames: async () => [...state.values.keys()] }),
+  };
+});
 import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { SIWC_PROTOCOL } from '#adapters/core/provider-siwc/index.js';
 

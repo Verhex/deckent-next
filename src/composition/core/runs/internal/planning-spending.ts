@@ -17,10 +17,10 @@ export async function withPlanningSpending(root: string, result: RunPlanningResu
     if (receipt?.request.commandId === source.commandId && receipt.outcome?.state === 'responded' && receipt.outcome.content.digest === source.responseDigest
       && receipt.actor.id === proposal.proposer.id && receipt.actor.issuer === proposal.proposer.issuer && receipt.actor.subject === proposal.proposer.subject) {
       const spending = view.spending, state = spending?.disposition;
-      const free = receipt.profile.schemaVersion === 2 ? receipt.profile.billingAxis !== 'metered' : spending ? providerSpendHasZeroTariff(spending.descriptor.quote) : classifyWorkSpending({ kind: 'model', profile: receipt.profile }) === 'not-metered';
+      const free = 'billingAxis' in receipt.profile ? receipt.profile.billingAxis !== 'metered' : spending ? providerSpendHasZeroTariff(spending.descriptor.quote) : classifyWorkSpending({ kind: 'model', profile: receipt.profile }) === 'not-metered';
       const settled = state && (state.state === 'settled-measured-tariff' || state.state === 'settled-provider-reported' || state.state === 'settled-local');
       planningSpending = { class: free ? 'not-metered' : spending ? 'metered' : 'unknown', currency: spending?.descriptor.quote.currency ?? null, amountMinorUnits: settled && 'amountMinorUnits' in state ? state.amountMinorUnits : null,
-        ...(receipt.profile.schemaVersion === 2 ? { billingAxis: modelInvocationBillingAxis(receipt.profile) } : {}),
+        ...('billingAxis' in receipt.profile ? { billingAxis: modelInvocationBillingAxis(receipt.profile) } : {}),
         evidence: view.planUsage ? 'plan-usage' : settled ? spending?.measurement?.basis === 'measured-tariff' && spending.measurement.source.tier === 'upper-bound'
           ? 'measured-tariff-upper-bound' : spending?.measurement?.basis ?? 'settled-local' : state?.state === 'held' ? 'held' : 'unknown' };
     }

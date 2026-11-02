@@ -1,12 +1,11 @@
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
 import { isDeepStrictEqual } from 'node:util';
-import { t } from '#platform/index.js';
+import { t, SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 import { randomUUID } from 'node:crypto';
 import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, ModelActivationApplication, ModelActivationPolicyAuthorization, assessModelInvocationProfileDeliveries, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, openSqliteModelActivationStore, type LocalPeerIdentity } from '#adapters/index.js';
-import { SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 import { createConfiguredModelInvocationNative } from './native.js';
@@ -89,7 +88,6 @@ export function application(context: Awaited<ReturnType<typeof loadInvocationCon
         { profiles: config['provider_invocation_profiles'], surfaces: configuredModelInvocationDeliverySurfaces(config), assess: assessModelInvocationProfileDeliveries }).admit(command);
     }, entry);
 }
-
 /** Connected application features only; no wire field selects this path. */
 export async function invokeConfiguredFeatureModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, undefined, undefined, undefined, 'feature');

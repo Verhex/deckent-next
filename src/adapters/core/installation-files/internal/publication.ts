@@ -169,3 +169,10 @@ export async function publishInstallationFile(request: InstallationFilePublishRe
     throw new InstallationFileError('INSTALLATION_FILE_OUTCOME_UNKNOWN'); }
   return { digest: targetDigest, status: 'published' };
 }
+
+/** Bounded, no-follow, stable bytes under the same custody as installer preimages; never heals or creates. */
+export async function readInstallationFile(request: InstallationFileRequest): Promise<string | null> {
+  const checked = inputs(request);
+  if (!await directories(checked.root, dirname(checked.path), checked.uid, false)) return null;
+  return (await readStable(checked.path, checked.maxBytes, checked.uid, [1n]))?.bytes.toString('utf8') ?? null;
+}

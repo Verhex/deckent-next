@@ -95,7 +95,7 @@ export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentit
 export const SKIPPED_SERVICE_IDENTITY: FirstRunServiceIdentityResult = Object.freeze({ status: 'skipped', identity: null });
 
 /** `gitignore` (G2-1, analysis 2026-10-18): the new data root's ignore file, so `git add -A` never commits the product state; first-session material. */
-export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger' | 'gitignore';
+export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger' | 'gitignore' | 'projectAttachment';
 export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplateResource; readonly path: string; readonly content: string; readonly digest: string }
 export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';

@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { configuredSecretResolver, ErrorRegistry, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
-import { admitProjectVault, attestLocalInteractiveTerminal, directoryLocation, FileInstallationIdentityStore, FileProjectIdentityStore, handOverProjectVault, installationSecretRoot,
+import { admitProjectVault, attestLocalInteractiveTerminal, directoryLocation, FileProjectIdentityStore, handOverProjectVault, installationSecretRoot,
   localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openProjectVaultStore, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readProjectDeck } from '#adapters/index.js';
 import { assertPublicSecretName, assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
   deckDeclaration, findSecretGrant, parseDeckDeclarations, policySecretChangeAuthorization, projectVaultAnchorSchema, projectVaultClaimed, type AuthorityWitness,
   type CredentialSource, type ProjectCredentialResolver, type ProjectVaultAnchor } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 /** What the project credential path needs of a verified scope context (the invocation and scoped-request contexts both carry it). */
@@ -30,7 +30,7 @@ export async function resolveProjectVaultAnchor(context: ProjectSecretContext, o
   let installationId = context.installationId, projectId = context.projectId, dataRoot = context.layout.root, anchorRoot = projectRoot;
   if (repository.kind === 'linked' && repository.mainWorkTree !== null && repository.mainWorkTree !== projectRoot) {
     const main = await loadComposedConfig(repository.mainWorkTree, { ...options, heal: false });
-    const installation = await new FileInstallationIdentityStore(main.productLayout, main.configFile.writeLockTimeoutMs, undefined, main.installation).read();
+    const installation = await loadConfiguredInstallationIdentity(main.projectRoot, options);
     const project = await new FileProjectIdentityStore(main.projectRoot, main.configFile.writeLockTimeoutMs).read();
     installationId = installation.status === 'available' ? installation.value.installationId : null;
     projectId = project.status === 'available' ? project.value.projectId : null;

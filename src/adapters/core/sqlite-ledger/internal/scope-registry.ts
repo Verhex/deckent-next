@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { openReadOnlySqlite } from '#adapters/core/sqlite-read-view/index.js';
 import { lstatSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError } from '#engine/index.js';
@@ -20,9 +20,8 @@ export interface ScopeRegistration {
 export function readScopeCompanies(path: string, busyTimeoutMs: number, scopeIds: readonly string[]): ReadonlyMap<string, string> {
   try { if (!lstatSync(path).isFile()) return new Map(); } catch { return new Map(); }
   assertSqliteEngineSupported(process.versions.sqlite);
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let db: DatabaseSync;
-  try { db = new NativeDatabase(path, { timeout: busyTimeoutMs, readOnly: true }); } catch (error) { throw sqliteFailure(error); }
+  try { db = openReadOnlySqlite(path, busyTimeoutMs); } catch (error) { throw sqliteFailure(error); }
   try {
     const version = db.prepare('PRAGMA user_version').get()?.user_version;
     if (version === 0) return new Map();

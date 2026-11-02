@@ -3,13 +3,18 @@ import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
 import { openSiwcWorkerRelay, siwcWorkerConnections, type SiwcWorkerConnection } from '#adapters/index.js';
 import { DECKENT_VERSION, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { withConfiguredSiwc } from './connection.js';
+import { withConfiguredSiwcModel } from './model-use.js';
+import { configuredModelProfiles } from '#composition/core/model-use/index.js';
+const modelProfile = (config: Readonly<Record<string, unknown>>, scopeId: string, id: string) => {
+  const profile = configuredModelProfiles(config).find(item => item.scopeId === scopeId && item.adapter.definition['connectionId'] === id);
+  if (!profile) throw ErrorRegistry.createError('OAUTH_CONNECTION_DENIED'); return profile;
+};
 
 type Context = Readonly<{ config: Readonly<Record<string, unknown>>; principal: VerifiedPrincipal }>;
 /** U9-7 producer input at Run admission: the admitting person's consented connections whose personal custody holds now (U9-1 lease check). */
 export const configuredSiwcWorkerConnections = (root: string, context: Context, options: ConfigLoadOptions) => siwcWorkerConnections({ profiles: context.config['provider_invocation_profiles'],
-  scopeIds: context.principal.scopeIds, actor: context.principal, custody: (scopeId, id) => withConfiguredSiwc(root, scopeId, options, 'inspect',
-    async (app, caller) => !!await app.inspectForLease(id, caller), {}, context.principal) });
+  scopeIds: context.principal.scopeIds, actor: context.principal, custody: (scopeId, id) => withConfiguredSiwcModel(root, modelProfile(context.config, scopeId, id), context.principal, options, 'inspect',
+    async (app, caller) => !!await app.inspectForLease(id, caller)) });
 /**
  * U9-7 launch of one relay worker: the frozen connection must still be this person's, consented, in personal custody and at the generation seen at
  * launch, and the Attempt fence must hold — re-read before C is issued, before every upstream send and before every native effect. The bearer is
@@ -22,7 +27,7 @@ export async function openConfiguredSiwcWorker(root: string, options: ConfigLoad
   directory: string; fence: () => Promise<boolean>; policyRevision: string; audit: (event: unknown) => Promise<void> }>) {
   const { scopeId } = input.identity, { connectionId, owner } = input.connection;
   const current = async () => { const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
-    const view = await withConfiguredSiwc(root, scopeId, options, 'inspect', (app, caller) => app.inspectForLease(connectionId, caller), {}, input.principal);
+    const view = await withConfiguredSiwcModel(root, modelProfile(context.config, scopeId, connectionId), input.principal, options, 'inspect', (app, caller) => app.inspectForLease(connectionId, caller));
     const row = (await siwcWorkerConnections({ profiles: context.config['provider_invocation_profiles'], scopeIds: [scopeId], actor: owner, custody: async (_, id) => id === connectionId }))
       .find(entry => entry.connectionId === connectionId && entry.modelId === input.model);
     return row && context.installationId ? { context, installationId: context.installationId, generation: view.generation, consent: row.consentAtMs } : null; };
@@ -34,5 +39,5 @@ export async function openConfiguredSiwcWorker(root: string, options: ConfigLoad
     audit: subject => input.audit({ schemaVersion: 1, eventId: randomUUID(), scopeId, principal, policyRevision: input.policyRevision, atMs: Date.now(), subject }),
     binding: { schemaVersion: 1, connectionId, installationId: start.installationId, companyId: start.context.config.company.id, person: owner, attempt: input.identity,
       model: input.model, imageId: input.imageId, codexVersion: input.codexVersion, generations: { connection: start.generation, custody: start.generation, consent: start.consent } },
-    lease: (id, signal) => withConfiguredSiwc(root, scopeId, options, 'lease', (app, caller) => app.lease(id, caller, signal), {}, input.principal) });
+    lease: (id, signal) => withConfiguredSiwcModel(root, modelProfile(start.context.config, scopeId, id), input.principal, options, 'lease', (app, caller) => app.lease(id, caller, signal)) });
 }

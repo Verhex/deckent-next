@@ -78,6 +78,8 @@ export class FileEffectStore implements EffectStore {
     await this.directory(); const lock = acquireLedgerLock(join(this.root, 'effects.lock'));
     try { return await work(await this.read()); } finally { lock.release(); }
   }
+  /** Lifecycle restart may release an unstarted hold only after authenticating the whole retained store. Missing/corrupt is never empty. */
+  async assertUnclaimed(): Promise<void> { await this.transaction(async body => { if (body.records.length) throw new EffectError('EFFECT_TARGET_BUSY'); }); }
   async loadEffect(scopeId: string, commandId: string) {
     return this.transaction(async body => body.records.find(record => record.intent.command.scopeId === scopeId && record.intent.command.commandId === commandId) ?? null);
   }

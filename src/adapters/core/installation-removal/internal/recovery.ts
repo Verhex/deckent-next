@@ -53,7 +53,7 @@ export class UninstallRecovery {
       || planDigest !== digest || sha256(JSON.stringify(planBody)) !== digest) fail();
     return body.plan;
   }
-  async admit(plan: UninstallPlan) {
+  async admit(plan: UninstallPlan, assertUnclaimed?: (location: string) => Promise<void>) {
     await this.safeDirectory(this.root);
     if (dirname(this.directory) !== this.root) { await mkdir(dirname(this.directory), { mode: 0o700, recursive: true }); await this.safeDirectory(dirname(this.directory)); }
     await mkdir(this.directory, { mode: 0o700 }).catch(error => { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; });
@@ -65,8 +65,16 @@ export class UninstallRecovery {
     });
     const hold = await this.read(this.hold);
     const expected = { schemaVersion: 1, installationId: this.installationId, actor: this.actor(), planDigest: plan.planDigest };
-    if (hold && JSON.stringify(hold) !== JSON.stringify(expected)) fail();
-    if (!hold) await this.publish(this.hold, expected);
+    if (hold && JSON.stringify(hold) !== JSON.stringify(expected)) {
+      const previous = hold as { schemaVersion?: unknown; installationId?: unknown; actor?: unknown; planDigest?: unknown };
+      if (!assertUnclaimed || previous.schemaVersion !== 1 || previous.installationId !== this.installationId
+        || JSON.stringify(previous.actor) !== JSON.stringify(this.actor()) || typeof previous.planDigest !== 'string') return fail();
+      const old = await this.retained(previous.planDigest); if (!old) return fail();
+      await assertUnclaimed(join(this.directory, old.planDigest));
+      await this.finish({ schemaVersion: 2, planDigest: old.planDigest, status: 'cancelled', items: old.items.map(item => ({ resourceId: item.resourceId, state: null })),
+        recoveryLocation: join(this.directory, old.planDigest), backup: old.backup, packageRemoval: old.packageRemoval, uncertain: old.work.uncertain });
+      await this.publish(this.hold, expected);
+    } else if (!hold) await this.publish(this.hold, expected);
     return join(this.directory, plan.planDigest);
   }
   async finish(result: UninstallResult) {

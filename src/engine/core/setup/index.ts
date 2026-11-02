@@ -9,3 +9,6 @@ export { ExecutionEnvironmentInstallApplication, policyExecutionInstallAuthoriza
 export type { ExecutionInstallDecision, ExecutionInstallOutcome, ExecutionInstallRequest, ExecutionInstallSource } from './internal/install.js';
 export { SETUP_PERMISSIONS_FAMILY } from './internal/permissions.js';
 export type { SetupPermissionPreview } from './internal/permissions.js';
+export { onboardingNeedsBudget } from './internal/onboarding-budget.js';
+export type { OnboardingBillingProfile } from './internal/onboarding-budget.js';
+export { selectSetupPermissionProfile, finishSetupPermissionPreview } from './internal/permission-preview.js';

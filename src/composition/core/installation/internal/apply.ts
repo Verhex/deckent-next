@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
+import { persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
@@ -30,14 +30,15 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
 }
 /** ID-1C before any effect of an owned init mutation: the configured identity, by the CLI preflight's own observe-only read (also under a pending policy-template journal,
  * which leaves config settled). A pending config-publishing transaction reads its target layout under the journal; `publicationGuarded` (apply/resume): invalid config is never published over. */
-export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false) {
+export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false, options: ConfigLoadOptions = {}) {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
-  await loadConfiguredInstallationIdentity(projectRoot, { pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
+  if (publicationGuarded && (await loadConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
+  await loadConfiguredInstallationIdentity(projectRoot, { ...options, pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
 }
 /** The binding settings an owned init identity write uses: the settled configuration, or registry defaults while a config-publishing transaction is pending. */
-export async function configuredInstallationBinding(projectRoot: string) {
+export async function configuredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}) {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return getConfigFieldDefault('installation');
-  return (await loadConfig(projectRoot, { pendingBootstrap: 'config-settled', heal: false })).installation;
+  return (await loadConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation;
 }
 /** Explicit local operator action. No model, worker, or supplied profile can grant consent. */
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {

@@ -3,6 +3,31 @@
 Layer/package listing, startup cost, entries and hardcode ratchet (ARCHITECTURE.md "Packages (current implementation)" taşındı 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 565–617, 843–854, 1649–1662; the original text below is verbatim; later dated additions are marked separately.
 
+**A62-ONCE bağlam temeli (2026-11-02; tam yolculuk henüz tamamlanmadı).** Kurulum dili mevcut `ConfigApplication`
+ile global kaydedilir; eski proje dili override olarak kalır. Ayrı bir global kayıt, açık seçilmiş legacy kaynağın kimlik,
+şirket, kişi ve fiziksel konumunu tutar. Proje bağlantısı ayrı projectId, scope, policy, ledger, runtime ve audit kullanır;
+kimlik/token kopyalanmaz. Her kullanım kaynak kimliğini, hedefin fiziksel konumunu ve envanterdeki active/revoked durumunu okur.
+`terminal attach --register --scope <id> --preview|--apply` kaynak seçer; `terminal attach --scope <id> --preview|--apply`
+hedef bağlar. Apply, önizleme digest'i ve command-id ile aynı installer journal'ında koşullu ve kurtarılabilirdir.
+`--revoke <project-id> --apply` bağlantıyı geri alır. Bu hazırlık CLI'si model/abonelik kullanım izni sağlamaz.
+Bağlantılı eski config v5; legacy v3/v4 okunur. Layout registry v5'te registration ve attachment sabit kaynaklardır.
+Bağlantılı config v6, profiller v3 ve global envanter v2 ayrı model kullanım izni taşır; eski config v5 ve envanter v1 okunur.
+Her kullanım hedef proje/scope/actor, kaynak owner, iki tarafın policy'si, etkin bağlantı ve imza özetlerini yeniden denetler.
+OAuth owner.scopeId korunur; token kopyalanmaz. Kaynakta etkin bağlantı yoksa kart bunu açıkça gösterir, bağlantı yaratmaz.
+API bütçe şablonu mevcut provider-spend sahibinde ayrı sıfır hareketli hesap açar; mevcut hesap korunur, abonelik/yerel bağlantı para kapısı açmaz.
+Argümansız terminal sağlıklı kayıtlı kaynakta canonical yol/scope/bağlantı/maliyet/yazı alanı kartını gösterir. Esc/Hayır/EOF kalıcı bayt yazmaz.
+Kaynak SQLite okumaları, WAL dahil yapılandırılmış boyut sınırındaki özel geçici görünümden yapılır; bozuk/yarışan dosya ve rollback journal reddedilir.
+`--lease-revoke <projectId> --apply` yalnız model iznini, `--detach <projectId> --apply` proje bağını ve model iznini geri alır; veri silmez.
+`--unregister --apply` yalnız bütün projeler ayrıldıktan sonra kaynak kaydını kapatır; kayıt kurtarma için saklanır.
+`--relocate --scope <id> --apply` mevcut kimlikleri korur, eski klasör hâlâ varsa kopya olarak reddeder.
+Bağlı proje backup v3 fiziksel kaynak kimliğini ve global config'i taşımaz. Tam kaldırma yalnız hedefin kayıtlı dosyalarını siler ve envanter/izni geri alır.
+Varsayılan layout yedekten dönüşte taşınabilir kalır; eski konumlu bir yedek yalnız aynı yetki kimlikleriyle, güncel envanter yolu üzerinden uzlaştırılır.
+Başlamadan kesilmiş kaldırma, yeni kişi onayından sonra yalnız doğrulanmış eski etki deposu tamamen boşsa iptal edilip yeni plana geçebilir; eksik/bozuk/claimed/unknown kayıt kilidi tutar.
+Şifreli yedek geri yükleme yetkiyi geri açmaz: kaynak kayıtlı olmalı; hedefte `--scope <id> --preview` ardından
+`--restore <projectId> --expect <digest> --apply` güncel policy ve bağlantılara yeni izin verir. Eski restore komutu sonraki geri almayı aşamaz.
+Kayıtlı kaynağın yedeği alınabilir; kaynak kaldırma önce bağımlılıkların ayrılmasını/kaydın kaldırılmasını gerektirir; gerçek kaynak taşıması aynı kimlikle kayıt konumunu uzlaştırır.
+Başvuru: ARCHITECTURE Product data layout.
+
 
 ```text
 src/platform/       config, errors/i18n, identity/host, product paths, bootstrap state and shared metadata

@@ -44,3 +44,4 @@ export { workerBillingAxis } from './internal/work-spending.js';
 export { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from './internal/period.js';
 
 export { ProviderSpendPeriodRegistry, providerSpendPeriodRegistry, registerProviderSpendPeriod } from './internal/period.js';
+export { applyProviderSpendTemplate } from './internal/template.js';

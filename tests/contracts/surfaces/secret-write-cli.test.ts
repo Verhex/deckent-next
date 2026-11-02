@@ -114,6 +114,9 @@ it('a terminal gets a no-echo prompt on stderr: raw mode on, backspace edits, En
   expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope'], { root: f.root, env: f.env, stdin: cancelled, stdout: screen().sink, stderr: cancelErr.sink, ...handlers(calls) })).not.toBe(0);
   expect(cancelled.modes).toEqual([true, false]); expect(calls).toHaveLength(2);
   expect(cancelErr.text()).toContain('SECRET_INPUT_CANCELLED'); expect(cancelErr.text()).not.toContain('abc');
+  const ended = tty([]), endErr = capture(); setImmediate(() => ended.end());
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope'], { root: f.root, env: f.env, stdin: ended, stdout: screen().sink, stderr: endErr.sink, ...handlers(calls) })).not.toBe(0);
+  expect(calls).toHaveLength(2); expect(endErr.text()).toContain('SECRET_INPUT_CANCELLED');
 });
 
 it('PRE-8 v2: grant/revoke/handover need a person terminal before any handler; set --project goes to the project vault; list renders the one inventory', async () => {

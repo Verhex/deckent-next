@@ -28,7 +28,8 @@
     "bindings": "",
     "policy": "",
     "installationIdentity": "identity.json",
-    "approvals": "{keyFile}"
+    "approvals": "{keyFile}",
+    "projectAttachment": ""
   },
   "treeMembers": {
     "audit": {

@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
+import { loadConfigLanguage } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
 import { createSetupController, setupInitCommand, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 
@@ -39,17 +40,24 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
   it('--yes --scope in a pipe: fresh policy and language through their owners; a second run applies nothing', async () => {
     await access(cli);
     const f = await fixture();
-    const first = await f.run(['init', '--yes', '--scope', 'erp-demo', '--json']);
+    const first = await f.run(['init', '--yes', '--scope', 'erp-demo', '--lang', 'tr', '--json']);
     expect(first.code, first.stderr).toBe(0);
     const one = f.document(first.stdout);
     expect(one.apply.results.map(result => [result.stage, result.operation, result.status])).toEqual([['core:policy', 'installation.policy-template', 'applied'],
       ['core:language', 'config.set', 'applied']]);
     const state = (doc: Document, id: string) => doc.stages.find(stage => stage.id === id)?.state;
     expect([state(one, 'core:policy'), state(one, 'core:language'), state(one, 'core:folder')]).toEqual(['done', 'done', 'done']);
-    // No hand-written JSON: the installation's documents exist and name the scope; the language is the detected one.
+    // A62-ONCE: the selected personal language belongs to the global layer; opening B only observes it.
     const policy = join(f.root, '.deckent', 'policy.json');
     expect(await readFile(policy, 'utf8')).toContain('erp-demo');
-    expect(await readFile(join(f.root, '.deckent', 'config.json'), 'utf8')).toMatch(/"language":\s*"en"/u);
+    const projectConfig = join(f.root, '.deckent', 'config.json'), globalConfig = join(f.home, '.deckent', 'config.json');
+    expect(JSON.parse(await readFile(globalConfig, 'utf8'))).toMatchObject({ language: 'tr' });
+    expect(JSON.parse(await readFile(projectConfig, 'utf8'))).not.toHaveProperty('language');
+    const sibling = join(f.base, 'second-project'); await mkdir(sibling);
+    const globalBefore = await digest(globalConfig);
+    expect(await loadConfigLanguage(sibling, { env: f.env })).toBe('tr');
+    expect(await readdir(sibling)).toEqual([]);
+    expect(await digest(globalConfig)).toBe(globalBefore);
     // Never anything but the two eligible operations, never the Docker install (no person answers in a pipe).
     expect(one.apply.results.every(result => ELIGIBLE.includes(result.operation))).toBe(true);
     expect(one.stages.some(stage => stage.operation?.id === 'execution-environment.install')).toBe(false);
@@ -61,6 +69,18 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     expect([state(two, 'core:policy'), state(two, 'core:language')]).toEqual(['done', 'done']);
     expect(two.apply.results).toEqual([]);
     expect(await digest(policy)).toBe(before);
+    expect(await digest(globalConfig)).toBe(globalBefore);
+    // Legacy project overrides are read as authored, never promoted to the user's other projects on a rerun.
+    const authored = JSON.parse(await readFile(projectConfig, 'utf8')) as Record<string, unknown>;
+    await writeFile(projectConfig, JSON.stringify({ ...authored, language: 'en' }));
+    const legacyBefore = await digest(projectConfig);
+    const legacy = await f.run(['init', '--yes', '--scope', 'erp-demo', '--json']);
+    expect(legacy.code, legacy.stderr).toBe(0);
+    expect(f.document(legacy.stdout).apply.results).toEqual([]);
+    expect(await loadConfigLanguage(f.root, { env: f.env })).toBe('en');
+    expect(await digest(projectConfig)).toBe(legacyBefore);
+    expect(await digest(globalConfig)).toBe(globalBefore);
+    expect(await loadConfigLanguage(sibling, { env: f.env })).toBe('tr');
   }, 180_000);
 
   it('SOLO-PROFILE: the solo selection goes through the same governed writer as team (global layer, never --yes); the next observation reads it done', async () => {

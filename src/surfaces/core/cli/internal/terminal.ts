@@ -9,6 +9,7 @@ import { runKernelCommand, type CommandContext } from './kernel-commands.js';
  * needs from the CLI — `doctor`, `/mcp` (only when MCP commands are wired) and the `run cancel` text — over the same command context.
  */
 export async function terminalCommand(argv: readonly string[], context: CommandContext = {}): Promise<void> {
+  if (argv[1] === 'attach') return (await import('./project-attachment.js')).projectAttachmentCommand(argv.slice(2), context);
   await launchTerminal(argv, context, {
     runKernelCommand: (args, overrides) => runKernelCommand(args, { ...context, ...overrides }),
     ...(context.runMcpCommand ? { mcpSlash: (root: string, args: string, options: Parameters<typeof mcpSlash>[3], locale: Locale) => mcpSlash(root, args, context, options, locale),

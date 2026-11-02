@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+import { configuredModelProfiles, resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
 import { modelActivationQuerySchema, type ModelActivationQuery } from '#domain/index.js';
 import { ModelActivationInspectionApplication, ModelActivationPolicyAuthorization } from '#engine/index.js';
 import { openSqliteModelActivationReader } from '#adapters/index.js';
@@ -10,6 +12,8 @@ export async function inspectConfiguredModelActivation(projectRoot: string, inpu
   try {
     const query = modelActivationQuerySchema.parse(input);
     const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
+    const profile = configuredModelProfiles(config).find(item => item.scopeId === query.scopeId && isDeepStrictEqual(item.reference, query.reference));
+    if (profile) await resolveConfiguredModelUse(projectRoot, profile, principal, options);
     const app = new ModelActivationInspectionApplication({ async verify() { return principal; } },
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),
       async () => openSqliteModelActivationReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }));

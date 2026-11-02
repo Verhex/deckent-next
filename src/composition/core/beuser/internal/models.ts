@@ -49,9 +49,9 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       if (tokens > remaining.tokens) throw new BeuserContractError('BEUSER_CALL_BUDGET_EXCEEDED');
       if (profile.limits.timeoutMs > ctx.limits.maxWallMs || profile.limits.responseMaxBytes > ctx.limits.maxArtifactBytes)
         throw new BeuserContractError('BEUSER_MODEL_PROFILE_LIMIT');
-      const local = profile.schemaVersion === 2 && profile.billingAxis === 'local' && providerSpendLocalZeroTariffProfile(profile)
+      const local = profile.schemaVersion !== 1 && profile.billingAxis === 'local' && providerSpendLocalZeroTariffProfile(profile)
         && !spending?.budget && (!spending?.quote || providerSpendLocalZeroTariff(profile, spending.quote));
-      if ((!spending?.quote && !local && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription'))
+      if ((!spending?.quote && !local && !(profile.schemaVersion !== 1 && profile.billingAxis === 'subscription'))
         || spending?.quote && spending.quote.currency !== remaining.currency) throw new BeuserContractError('BEUSER_SPEND_UNAVAILABLE');
       const cost = spending?.quote ? Number(currencyAmountText(spending.quote.maxChargeMinorUnits, remaining.currency, 'en', false).replaceAll(',', '')) : 0;
       pins.set(prepared.command.commandId, pinned);

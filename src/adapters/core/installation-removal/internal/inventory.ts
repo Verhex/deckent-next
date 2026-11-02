@@ -48,6 +48,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   if (!base.deletionRoots.includes(layout.root)) blockers.push(`authority-relocated:${layout.root}`);
   else {
     for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
+      if (name === 'projectAttachment' && !config.installation.sharedRegistrationId) continue;
       const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
       if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path)) { blockers.push(`authority-relocated:${path}`); continue; }
       try { if (await memberStat(path) && !kept(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null, archivePath: relative(resourcePath, path).split(sep).join('/') }); }

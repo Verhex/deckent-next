@@ -1,3 +1,4 @@
+import { settleAttachmentRemoval } from '#adapters/core/project-attachment/index.js';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, open, readFile, realpath, rename, unlink } from 'node:fs/promises';
@@ -108,6 +109,7 @@ export async function completeUninstall(config: ResolvedConfig, plan: UninstallP
   else if (own) await forgetFolderLegacyTrust(config.projectRoot, instructionTrustDirectory(env));
   const lock = held ?? (plan.purge && own ? custody(config, true) : undefined);
   try {
+    if (plan.purge) await settleAttachmentRemoval(config, plan.installation.id, env);
     await release();
     if (!plan.purge || !own || !lock) return;
     if (!plan.items.some(item => item.locator === path) && !(await configuredTracking(config))(path)) await lock.remove();
