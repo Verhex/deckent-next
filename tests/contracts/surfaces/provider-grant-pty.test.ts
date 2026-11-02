@@ -62,7 +62,7 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     const failure = locale === 'en' ? 'session credentials must stay on' : 'oturum bilgileri bu bilgisayarın';
     const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: join(home, 'global'), XDG_CONFIG_HOME: join(home, '.config'), TERM: 'xterm-256color', NO_COLOR: '1' };
     const sign = words((await inPty(loginFixture, home, env, `chatgpt-${locale}`, [
-      [signIn, `ChatGPT\r`], [choose, '\r', 'next'], [keys, '\r', 'next'], [noApi, '\r', 'next'],
+      [signIn, 'ChatGPT'], [`${locale === 'en' ? 'filter' : 'filtre'}: ChatGPT`, '\r', 'fresh'], [choose, '\r', 'next'], [keys, '\r', 'next'], [noApi, '\r', 'next'],
       ['FIXTURE-OAUTH-CONNECT-REACHED', ''], [failure, '\r'],
       [api, api], [`${locale === 'en' ? 'filter' : 'filtre'}: ${api}`, '\r', 'fresh'], [locale === 'en' ? 'API providers' : 'API sağlayıcıları', '\r', 'fresh'],
       [locale === 'en' ? 'Connect (enter the key' : 'Bağlan (anahtarı girin', '\r', 'next'],
@@ -72,7 +72,7 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     expect(sign).toContain(locale === 'en' ? 'Sign in with Claude' : 'Claude ile giriş');
     expect(sign).toContain(locale === 'en' ? 'Beta' : 'Betada');
     const claude = words((await inPty(loginFixture, home, env, `claude-${locale}`, [
-      [signIn, 'Claude\r'], [locale === 'en' ? 'Sign in with its CLI and connect…' : "CLI'ıyla giriş yap ve bağla…", '\r', 'next'],
+      [signIn, 'Claude'], [`${locale === 'en' ? 'filter' : 'filtre'}: Claude`, '\r', 'fresh'], [locale === 'en' ? 'Sign in with its CLI and connect…' : "CLI'ıyla giriş yap ve bağla…", '\r', 'next'],
       [locale === 'en' ? 'Login directory' : 'Giriş dizini', '\r', 'next'],
       ['FIXTURE-CLI-LOGIN: completed', ''], [locale === 'en' ? 'Who may use this login now:' : 'Bu girişi şu an kim kullanabilir:', '\u0003']])).output);
     expect(claude).toContain('FIXTURE-CLI-LOGIN: completed');
