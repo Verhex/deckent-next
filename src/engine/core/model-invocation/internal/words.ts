@@ -21,6 +21,7 @@ export function modelInvocabilityText(state: ModelInvocability, locale: Locale):
     case 'budget': return `${state.reason.reservation ? `${t('tui.model.reason.reservation', { amount: reservationAmountText(state.reason.reservation.requestedMinorUnits, state.reason.reservation.currency, locale), currency: state.reason.reservation.currency }, locale)} ` : ''}${t('model.invocable.budget', { code }, locale)}`;
     case 'policy': return t('model.invocable.policy', { code }, locale);
     case 'protocol': return t('model.invocable.protocol', { code }, locale);
-    case 'unavailable': return `${t('model.invocable.unavailable', { code }, locale)} ${t('model.invocable.unavailableNext', {}, locale)}`;
+    case 'unavailable': if (code === 'MODEL_INVOCATION_UNAVAILABLE') return t('model.invocable.unsupported', {}, locale);
+      return `${t('model.invocable.unavailable', { code }, locale)} ${t('model.invocable.unavailableNext', {}, locale)}`;
   }
 }

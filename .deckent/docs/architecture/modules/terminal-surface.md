@@ -534,3 +534,14 @@ read-class calls (`toolClass` from `builtinAgentToolClass`; MCP tools never grou
 click on it shows or hides its calls, the inline layout lists them under it, and errors, approvals and writes keep their own line (presentation
 only). Busy cards: the guided setup window and onboarding cards show "Applying…"/"Preparing…" while an answer is applied, keys then are visibly
 not used, and each onboarding card erases its own frame so the next one draws in its place.
+
+**A62 provider sign-in projection (owner 2026-11-02).** The provider-connect registry's optional `presentation` metadata
+(listed, hidden, beta) controls the menu projection without renaming or migrating a connection. The subscription rows are
+Sign in with Claude and Sign in with ChatGPT; the existing Codex CLI kind stays readable and callable through the CLI,
+while its duplicate menu row is hidden. Cursor is labelled beta. ChatGPT's consent card explicitly names chat, AI workers
+(`ai`) and Brain/background features (`system`); extra-use choices remain off by default and the existing person witness,
+policy and delegated-use validation still decide authorization. Worker readiness, including the SIWC activation hold, is
+separate from sign-in. The API-continuation step explicitly offers ChatGPT sign-in with continuation off; it also offers
+an API-key provider picker. The same API-key picker remains reachable from `/provider` after a custody or connection refusal.
+It lists metered registry kinds and reuses the masked key, custody and grant flow. Claude's terminal-chat limitation is
+worded from EN/TR catalogs in `/model`, without exposing the generic invocation code as its explanation.

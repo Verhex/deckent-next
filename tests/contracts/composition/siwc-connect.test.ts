@@ -134,6 +134,10 @@ it('requires an explicit disconnected old account for new authorization and writ
         state.catalog.mockResolvedValue([{ slug: 'a' }, { slug: 'b' }]); // This list would add B if discovery were reached.
         await expect(connectConfiguredModel(f.project, request, { env: { ...f.env, CLAUDECODE: '1' } }))
           .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+        for (const delegate of [['system'], ['ai', 'system']]) {
+          await expect(connectConfiguredModel(f.project, { ...request, delegate }, { env: { ...f.env, CLAUDECODE: '1' } }))
+            .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+        }
         expect(await readFile(path, 'utf8')).toBe(before); untouched();
         expect(storeSet).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled(); expect(browser).not.toHaveBeenCalled(); expect(values).toEqual(stored);
         console.info('F11-R3 refused before effects:', JSON.stringify({ model, models: state.models.mock.calls.length, ensure: state.custody.mock.calls.length,

@@ -47,7 +47,36 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     [...OPEN, ['Use the main key DECKENT_FIXTURE_KEY in this project?', ''], ['y yes, grant', 'y', 'next'], ['FIXTURE-MODEL-AFTER-GRANT', '\u0003', 'fresh']])).output);
   expect(out).toContain(`FIXTURE-MODEL-AFTER-GRANT len=${MAIN_VALUE.length}`); expect(out).not.toContain(MAIN_VALUE);
   expect(await grants(where.env)).toEqual([expect.objectContaining({ name: 'DECKENT_FIXTURE_KEY', source: 'card' })]);
-});
+  // A62: the shipped registry + compiled provider/SIWC windows on a clean HOME under the checkout's home filesystem.
+  // Fixture ports stop before OAuth/network I/O; existing native-headless tests exercise the CLI adapter separately.
+  for (const locale of ['en', 'tr'] as const) {
+    const home = await mkdtemp(join(resolve('.'), '.login-pty-')); roots.push(home);
+    const loginFixture = resolve('tests/contracts/surfaces/provider-login-pty.fixture.mjs');
+    const api = locale === 'en' ? 'Connect with an API key' : 'API anahtarıyla bağlan';
+    const signIn = locale === 'en' ? 'Sign in with ChatGPT' : 'ChatGPT ile giriş';
+    const keys = locale === 'en' ? '↑/↓ select · Enter continue · Esc cancel' : '↑/↓ seç · Enter devam · Esc vazgeç';
+    const noApi = locale === 'en' ? 'Sign in with ChatGPT (keep automatic API continuation off)' : 'ChatGPT ile giriş yap (otomatik API geçişi kapalı kalsın)';
+    const choose = locale === 'en' ? 'Continue with ChatGPT' : 'ChatGPT ile devam et';
+    const failure = locale === 'en' ? 'session credentials must stay on' : 'oturum bilgileri bu bilgisayarın';
+    const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: join(home, 'global'), XDG_CONFIG_HOME: join(home, '.config'), TERM: 'xterm-256color', NO_COLOR: '1' };
+    const sign = words((await inPty(loginFixture, home, env, `chatgpt-${locale}`, [
+      [signIn, `ChatGPT\r`], [choose, '\r', 'next'], [keys, '\r', 'next'], [noApi, '\r', 'next'],
+      ['FIXTURE-OAUTH-CONNECT-REACHED', ''], [failure, '\r'],
+      [api, api], [`${locale === 'en' ? 'filter' : 'filtre'}: ${api}`, '\r', 'fresh'], [locale === 'en' ? 'API providers' : 'API sağlayıcıları', '\r', 'fresh'],
+      [locale === 'en' ? 'Connect (enter the key' : 'Bağlan (anahtarı girin', '\r', 'next'],
+      [locale === 'en' ? 'Masked' : 'Gizlenerek', '\u0003', 'fresh']])).output);
+    expect(sign.match(/FIXTURE-OAUTH-CONNECT-REACHED/gu)).toHaveLength(1);
+    expect(sign).not.toContain('Codex subscription workers'); expect(sign).not.toContain('Codex abonelik işçileri');
+    expect(sign).toContain(locale === 'en' ? 'Sign in with Claude' : 'Claude ile giriş');
+    expect(sign).toContain(locale === 'en' ? 'Beta' : 'Betada');
+    const claude = words((await inPty(loginFixture, home, env, `claude-${locale}`, [
+      [signIn, 'Claude\r'], [locale === 'en' ? 'Sign in with its CLI and connect…' : "CLI'ıyla giriş yap ve bağla…", '\r', 'next'],
+      [locale === 'en' ? 'Login directory' : 'Giriş dizini', '\r', 'next'],
+      ['FIXTURE-CLI-LOGIN: completed', ''], [locale === 'en' ? 'Who may use this login now:' : 'Bu girişi şu an kim kullanabilir:', '\u0003']])).output);
+    expect(claude).toContain('FIXTURE-CLI-LOGIN: completed');
+  }
+
+}, 120_000);
 it('solo: n records nothing; the window names the command', async () => {
   const where = await installation(null);
   const out = words((await inPty(fixture, join(where.root, 'project'), { PRE8_E2E_ROOT: where.root, TERM: 'xterm-256color', NO_COLOR: '1', ...where.env }, 'en',

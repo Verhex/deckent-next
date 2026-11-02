@@ -961,6 +961,28 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     await armed(view.frame, keys); await view.press(key, 80);
     expect(closed).toBe(1);
   }
+  // A62: the four choices retain the existing delegatedUse classes; chat alone is the default.
+  for (const [moves, expected] of [[0, []], [1, ['ai', 'system']], [2, ['ai']], [3, ['system']]] as const) {
+    const delegated: unknown[] = [];
+    const port = { locale: 'en' as const, connection: 'fixture-plan', execute: async (request: { operation: string; delegate?: unknown }) => {
+      if (request.operation === 'prepare') return { apiTargets: [] };
+      delegated.push(request.delegate); return { state: 'connected' };
+    } };
+    const ui = mount(createElement(SiwcWindow, { port: port as never, onClose: () => {}, onError: error => { throw error; } }));
+    const keys = t('siwc.card.keys', {}, 'en');
+    await armed(ui.frame, keys); await ui.press(`${DOWN.repeat(moves)}${ENTER}`, 80);
+    await armed(ui.frame, keys); await ui.press(ENTER, 80);
+    await until(() => ui.frame().includes(t('siwc.welcome.ready', {}, 'en')), 'connection result');
+    expect(delegated).toEqual([expected]);
+  }
+  let apiChosen = 0, connected = 0;
+  const apiWindow = mount(createElement(SiwcWindow, { port: { locale: 'en', connection: 'fixture-plan', execute: async (request: { operation: string }) => {
+    if (request.operation === 'prepare') return { apiTargets: [] }; connected++; return {};
+  } } as never, onApi: () => { apiChosen++; }, onClose: () => {}, onError: error => { throw error; } }));
+  await armed(apiWindow.frame, t('siwc.card.keys', {}, 'en')); await apiWindow.press(ENTER, 80);
+  await armed(apiWindow.frame, t('siwc.card.keys', {}, 'en')); await apiWindow.press(`${DOWN}${ENTER}`, 80);
+  expect(apiChosen).toBe(1); expect(connected).toBe(0);
+
   // F8: a late refusal returns to the same provider choice, with a cause and a usable alternative, without ending onboarding.
   for (const locale of ['en', 'tr'] as const) {
     const { port: base, requests } = providerPort(); let attempts = 0;

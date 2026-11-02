@@ -96,7 +96,7 @@ describe('/provider port', () => {
     const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connect }, options, 'en', errorText);
     const view = await port.inspect();
     expect(view.kinds.map(kind => [kind.label, kind.detail, kind.blocked])).toEqual([['Anthropic API', 'not connected', null],
-      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['ChatGPT subscription (Sign in with ChatGPT)', '', 'Not available yet.']]);
+      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['Sign in with ChatGPT', '', 'Not available yet. Connect with an API key']]);
     const outcome = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY });
     expect(connect.probes).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY }]);
     expect(store.sets).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_ANTHROPIC_KEY', value: CANARY }]);
@@ -484,7 +484,7 @@ describe('/model source', () => {
   it('missing shared inspection locks every declared model even when legacy hosts claim it is active', async () => {
     const { root, options } = await project({});
     const view = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', catalog }) }, options, 'en').inspect();
-    expect(view.choices).toHaveLength(4); expect(view.choices.every(choice => choice.blocked?.includes('MODEL_INVOCATION_UNAVAILABLE'))).toBe(true);
+    expect(view.choices).toHaveLength(4); expect(view.choices.every(choice => choice.blocked === t('model.invocable.unsupported', {}, 'en'))).toBe(true);
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});
@@ -709,7 +709,7 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
     connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher' } }),
     loginDir: async () => ({ owned: '/x' }), login: async () => null } };
   const blocked = providerPanelPort(root, 'scope', host, options, 'en', errorText), listed = await blocked.inspect();
-  expect(listed.kinds[0]).toMatchObject({ blocked: t('tui.provider.isolation.blocked', {}, 'en') }); expect(listed.kinds[0]!.detail).toMatch(/^subscription: no API key, uses your plan's usage quota · /u);
+  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.HEADLESS_ISOLATION_UNAVAILABLE', {}, 'en') }); expect(listed.kinds[0]!.detail).toMatch(/^subscription: no API key, uses your plan's usage quota · /u);
   expect(listed.kinds[1]!.blocked).toBeNull();
   const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
   expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);

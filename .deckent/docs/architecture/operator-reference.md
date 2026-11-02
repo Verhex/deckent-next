@@ -97,7 +97,9 @@ one section; other sections link to it.
 - **Subscriptions today:** a Claude Code worker runs with your own Claude login; a subscription-backed Brain (the planner
   behind `/do`) is available through `claude-cli-subscription` or `codex-cli-subscription` (see
   [Core layers](#core-layers-memory-agents-model-roles-recovery)); terminal chat with a Claude subscription is still not
-  supported, so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet.
+  supported, so use an Anthropic API key for chat. The subscription rows in `/provider` are Sign in with Claude and Sign in with ChatGPT; Cursor is labelled beta.
+  The older Codex CLI connection remains available through its CLI commands and existing profiles. ChatGPT sign-in retains
+  the local encrypted-store checks and offers API-key provider selection if it cannot proceed.
 - **Cursor workers:** register the packaged Cursor subscription catalog with `deckent models catalog register --scope <id>
   --command-id <id> --seed cursor-cli-subscription`, then switch models on with `models catalog activate`. A Cursor attempt
   reports turns, tokens, duration and tool calls and ends with its report JSON; the model it really used is read from its
