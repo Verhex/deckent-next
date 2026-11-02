@@ -219,15 +219,31 @@ it('A62: first work is never a setup step; the separate welcome routes describe,
   const { t } = await import('#platform/index.js');
   const model = { schemaVersion: 1 as const, completed: 0, total: 0, steps: [], snapshot };
   expect(await welcomeScreen({ ...model, snapshot: { ...snapshot, modelUsable: false } }, { locale: 'tr' })).toBeNull();
-  for (const choice of ['describe', 'scan', 'first', 'empty'] as const) {
+  for (const choice of ['describe', 'scan', 'first', 'empty', 'typing', 'late-typing', 'burst', 'paste', 'fragmented-paste', 'kitty', 'guard'] as const) {
     let frame = '';
     const stdout = Object.assign(new Writable({ write(chunk, _encoding, next) { frame += String(chunk); next(); } }), { isTTY: true, columns: 140, rows: 40 });
     const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
     const selected = choice === 'empty' ? { ...model, snapshot: { ...snapshot, folderFacts: { kind: 'empty' as const, entries: [] } } } : model;
     const answer = welcomeScreen(selected, { locale: 'tr', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
     try {
-      await until(() => frame.includes('Başlayalım'), `separate welcome ${choice}`); await settle(80);
+      await until(() => frame.includes('Başlayalım'), `separate welcome ${choice}`);
       expect(frame).not.toMatch(/Adım \d/u);
+      if (['typing', 'late-typing', 'burst', 'paste', 'fragmented-paste', 'kitty'].includes(choice)) {
+        if (choice === 'late-typing') await settle(600);
+        const chunks = choice === 'typing' || choice === 'late-typing' ? ['/mo', 'de', '\r'] : choice === 'paste' ? ['\u001b[200~Merhaba 👋\n/mode\u001b[201~']
+          : choice === 'fragmented-paste' ? ['\u001b[20', '0~Merhaba 👋', '\n/mode\u001b[20', '1~'] : choice === 'kitty' ? ['\u001b[9', '7u'] : ['/mode\r'];
+        for (const chunk of chunks) { stdin.write(chunk); await settle(10); }
+        expect(await answer).toBeNull();
+        const replayed: string[] = []; let chunk: Buffer | string | null;
+        while ((chunk = stdin.read() as Buffer | string | null) !== null) replayed.push(String(chunk));
+        expect(replayed.join('')).toBe(chunks.join('')); continue;
+      }
+      if (choice === 'guard') {
+        let answered = false; void answer.then(() => { answered = true; });
+        stdin.write('\u001b[B'); stdin.write('\r'); await settle(80); expect(answered).toBe(false);
+      }
+      const { default: presentation } = await import('../../../src/surfaces/core/terminal-onboarding/internal/presentation.json', { with: { type: 'json' } });
+      await settle(presentation.welcomeInputGuardMs + 30);
       if (choice === 'empty') { expect(frame).not.toContain('Projeyi tara'); stdin.write('\u001b'); expect(await answer).toBeNull(); continue; }
       for (let at = 0; at < ['describe', 'scan', 'first'].indexOf(choice); at++) { stdin.write('\u001b[B'); await settle(20); }
       stdin.write('\r');
@@ -281,6 +297,8 @@ it('A62: separate welcome shows the conversation return, excludes the step count
     expect(copies()[0]).toContain('Saved conversation: use /resume'); expect(copies()[0]).toContain('[REDACTED]');
     expect(copies()[0]).not.toContain(TOKEN); expect(copies()[0]).not.toContain(KNOWN); expect(copies()[0]).not.toMatch(/sk-ant-|known-canary/u);
     await settle(50); expect(decided).toBe(false);
+    const { default: presentation } = await import('../../../src/surfaces/core/terminal-onboarding/internal/presentation.json', { with: { type: 'json' } });
+    await settle(presentation.welcomeInputGuardMs);
     // The free-text card: what the person types in its input never reaches the copy.
     for (let index = 0; index < 2; index++) { stdin.write('\u001b[B'); await settle(15); }
     stdin.write('\r'); await settle(400); stdin.write(TYPED); await settle(60); stdin.write('\u0019');

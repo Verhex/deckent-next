@@ -582,7 +582,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   --tool-call-parser <parser>` stays without tools, and the terminal says so.
 - **First work is separate from setup (owner 2026-11-02).** With a connected chat model the post-setup welcome offers a project
   description, a scan for suggested configuration when files exist, or a typed first task. Suggestions use ordinary chat and create
-  no new write authority. Without a model, connect one with `/provider`; unsent messages stay as drafts. Subscription and local
+  no new write authority. Typing or pasting on this welcome closes it as Later and preserves the input in the chat line;
+  arrows and Enter select after a short registry-defined guard (initially 500 ms). Esc still means Later. Permission and security
+  cards keep their existing rules. This is targeted author evidence; native-platform and assembled-release acceptance remain open.
+  Without a model, connect one with `/provider`; unsent messages stay as drafts. Subscription and local
   connections need no setup budget; metered API calls keep their budget and spending rules. A `/do` refused solely because nothing
   is set up can run directly in the terminal when the host's policy, profile and pool-pause checks permit it. Changes go straight to
   the folder, without background delivery or rollback; normal sandbox, mode and tool approvals remain. Other refusals keep their own

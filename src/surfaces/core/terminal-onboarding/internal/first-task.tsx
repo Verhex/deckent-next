@@ -3,6 +3,8 @@ import type { CliCardIo } from '#surfaces/core/cli-human/index.js';
 import { firstTaskIntent } from './first-tasks.js';
 import { askOnboardingQuestion } from './question.js';
 import type { FirstTaskIntent, OnboardingPresentation } from './contract.js';
+import presentation from './presentation.json' with { type: 'json' };
+import { welcomeInput } from './welcome-input.js';
 /** Separate from setup: these prompts enter the normal governed chat turn, never a new effect path. */
 export async function welcomeScreen(model: OnboardingPresentation, io: CliCardIo, conversationNotice?: string): Promise<FirstTaskIntent | null> {
   if (!model.snapshot.modelUsable) return null;
@@ -11,7 +13,11 @@ export async function welcomeScreen(model: OnboardingPresentation, io: CliCardIo
       { id: 'describe', label: t('onboarding.welcome.describe', {}, locale) },
       ...(model.snapshot.folderFacts.entries.length ? [{ id: 'scan', label: t('onboarding.welcome.scan', {}, locale) }] : []),
       { id: 'first', label: t('onboarding.welcome.first', {}, locale) }] };
-  const picked = await askOnboardingQuestion(question, io);
+  const input = welcomeInput((io.stdin ?? process.stdin) as NodeJS.ReadStream);
+  const picked = await (async () => {
+    try { return await askOnboardingQuestion(question, { ...io, stdin: input.stdin }, undefined, 'applying', { guardMs: presentation.welcomeInputGuardMs, typed: input.typed }); }
+    finally { input.close(); }
+  })();
   if (!['describe', 'scan', 'first'].includes(picked.id) || io.signal?.aborted) return null;
   const free = picked.id === 'first' ? await askOnboardingQuestion({ ...question, title: t('onboarding.welcome.first', {}, locale), choices: [], text: true }, io) : null;
   if (free && free.id !== 'submit' || io.signal?.aborted) return null;

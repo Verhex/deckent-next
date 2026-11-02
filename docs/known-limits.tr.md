@@ -578,6 +578,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   olmadan başlatılan bir vLLM araçsız kalır ve terminal bunu söyler.
 - **İlk iş kurulumdan ayrıdır (owner 2026-11-02).** Sohbet modeli bağlıysa kurulum sonrası karşılama projeyi anlatmayı, dosyalar
   varsa önerilen yapılandırma için taramayı veya ilk işi yazmayı sunar. Öneriler normal sohbetten ilerler, yeni yazma yetkisi vermez.
+  Bu karşılamada yazmak veya yapıştırmak kartı Sonra ile kapatır ve girdiyi sohbet satırına koruyarak aktarır. Ok/Enter seçimi
+  registry’den gelen kısa korumadan (başlangıçta 500 ms) sonra çalışır; Esc yine Sonra’dır. İzin ve güvenlik kartlarının
+  kuralları değişmez. Bu hedefli yazar kanıtıdır; native platform ve montajlı sürüm kabulü açıktır.
   Model yoksa `/provider` ile bağlayın; gönderilmeyen mesajlar taslakta kalır. Abonelik ve yerel bağlantıda kurulum bütçesi gerekmez;
   API tarifeli çağrılar mevcut bütçe ve harcama kurallarını korur. Yalnız hiçbir şey kurulmadığı için reddedilen `/do`, host politikası,
   profil ve havuzun bekletme denetimi izin verirse doğrudan terminalde çalışabilir. Değişiklikler klasöre yazılır; arka plan teslimi ve

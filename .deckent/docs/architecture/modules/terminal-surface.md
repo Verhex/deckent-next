@@ -296,6 +296,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   EN/TR catalog prompts and enter the ordinary chat queue; they propose configuration, with no new write authority. A model-less
   opening names `/provider` in one line. An unsent normal message remains a draft; no model card opens automatically. A historical
   first-task marker also suppresses the new welcome on later opens. A welcome alone is never counted as a pending `/setup` step.
+  **Welcome input (owner 2026-11-02, A62-FIX3):** only this choice card yields to a printable key or paste: it closes as Later and
+  returns the triggering input and subsequent keys to the composer in order. Its choices, prompts and seen-marker owner stay the same.
+  Arrow/Enter selection is guarded for `presentation.json` `welcomeInputGuardMs` (initially 500 ms); Esc still means Later.
+  The typed-first-task input and every permission, security and person-witness card keep their existing input rules.
   Worker setup and Git are not prerequisites for ordinary terminal turns. A `/do` refusal may use the normal turn directly only when
   the existing `localRunOffer` predicate permits that exact refusal, with fresh policy/profile/pool-pause recheck before the turn.
   Missing model: a single `/provider` direction; other refusals keep their own path. Mode, sandbox, tool approvals and invocation

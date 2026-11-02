@@ -191,4 +191,6 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   expect(await inspectSdk(project, env, [query('invocation-held', reference, 'foreign'), query('invocation-held', { ...reference, modelId: 'foreign' })]))
     .toEqual([{ ok: false, code: 'POLICY_DENIED' }, { ok: false, code: 'POLICY_DENIED' }]);
   expect(ledgerSnapshot(ledger)).toBe(before);
-});
+// Eleven compiled process starts: hosted alpha.61 took 28,752 ms and alpha.62 exceeded 30 s; CPU-pinned medians were 10.62/10.38 s.
+// Bound this cross-surface test only; the 10 s child/connect/call limits remain unchanged.
+}, 60_000);
