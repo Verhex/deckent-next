@@ -68,7 +68,7 @@ and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes
 PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
 activate/change a remote merge queue or ruleset. Main push runs the same full sharded suite
 (owner 2026-10-06): admin merges bypass the PR gate, so this is main's post-merge full signal; on this public repository
-standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 48 (2 prepare, 2 lint, 40 test shards, 2 duration-drift, 2 required verify; 36 before CI-DRIFT); lint finishes beside prepare, so peak concurrency stays 44. Native macOS/Windows full suites stay in a separate daily/manual
+standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and a PR run opens 46 (2 prepare, 2 lint, 40 test shards, 2 required verify) and a main push, nightly or manual run 47 (plus 1 weights refresh); lint finishes beside prepare, so peak concurrency stays 44. Native macOS/Windows full suites stay in a separate daily/manual
 workflow with visible failures; this scheduling does not resolve existing platform debt or claim platform acceptance.
 The full author scan exposed a genuine first integrity-key creation race during concurrent secret changes.
 Write-mode key custody now holds the existing bounded configuration path lock through create/read/fsync/close;
@@ -220,19 +220,26 @@ summed per-file time, while shard 1's extra cost is wall time, so reserve = post
 "Duration" line to the artifact upload step) × 1.574 (median of summed reporter time / Vitest duration over the same 64 jobs,
 range 1.479–1.634) = 106.9 s.
 
-Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29). `scripts/ci-test-durations.json` is generated, not hand-edited:
+Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29; automatic refresh CI-WEIGHTS, owner 2026-11-02).
+`scripts/ci-test-durations.json` is generated, not hand-edited, and the committed copy is only the seed. Each prepare restores the
+newest `ci-weights-v1-*` Actions cache over it (a miss keeps the seed) and packs the file into the Node build artifact, so every
+shard of one Node partitions with identical weights. The `duration weights refresh` job runs only on main push, nightly
+(`schedule`) and manual runs: `check` reports drift as a `::warning` and step-summary line without failing the job, then, when
+every shard passed, `refresh` over both Nodes' receipts of that run saves a new cache entry. CI never commits or pushes; PR-scoped
+caches are not readable from main, and `validateShards` still enforces complete coverage whatever the weights. Weights are now
+single-run maxima. A run with a cut shard does not refresh (the red tests job is the signal); a test that always overruns its
+shard still needs the manual path below. Manual seed refresh:
 `gh run download <run> -p 'shard-*' -D <dir>` per hosted run, then `node scripts/ci-test-weights.mjs refresh <dir>...` writes the
 per-file maximum of the shard `receipt.json` reporter durations across every given run, Node job and shard (rounded up to ms)
 and refuses receipts that do not cover one complete inventory. All-skipped zero-duration files keep the median fallback.
-The separate `duration weight drift (node N)` job runs `node scripts/ci-test-weights.mjs check` on every shard receipt of the
-run (`durationDrift`, thresholds in `durationDrift` of `ci-test-config.json`): a file at or above `minObservedMs` that ran over
+`check` runs on every shard receipt of the run (`durationDrift`, thresholds in `durationDrift` of `ci-test-config.json`): a file at or above `minObservedMs` that ran over
 `maxRatio` × its weight (median fallback when unweighted), or more than `maxUnweightedFiles` files that ran without a weight,
-becomes a `::warning` annotation, a step-summary line and a red job. The job runs whenever prepare succeeded, also when a shard
+becomes a `::warning` annotation and a step-summary line (the CLI exits 1). The job runs whenever prepare succeeded, also when a shard
 was cut at the job limit (the case the guard exists for: shard artifacts upload under `if: always()`, and `check` accepts an
 incomplete receipt set; a job cut mid-Vitest has no receipt). It is not a required check and the required collector is unchanged:
 a new heavy test cannot be weighted before its first hosted run. The same command runs offline (exit 1 on drift).
-Release step: a red drift job, or drift from `check` on the shard artifacts, blocks the release PR until `refresh` from that
-run's artifacts (both Nodes; add the previous main run when available), commit the weights and rerun hosted CI.
+The 2026-10-29 release step (a red drift job blocks the release PR until a committed refresh) is replaced: PR runs no longer
+run the drift job and take the newest main-refreshed weights automatically.
 Proof (external `proof/ANALIZ-2026-10-29/LANES-STEP1/A/`): the a57 weights flagged 15 slow files (terminal-onboarding-pty
 148.3 s vs 45.1 s, uninstall 48.5 vs 11.9 s, toolchain-refresh 41.6 vs 15.5 s) and 21 unweighted files on the a57 runs;
 weights from either run passed on the other; the old plan's predicted jobs over 360 s were exactly the cancelled shards

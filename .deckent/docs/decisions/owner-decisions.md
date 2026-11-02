@@ -1053,3 +1053,9 @@ Kaynak: dış `proof/ALPHA60/PAKET-2/PLAN.md` (owner satırları; saatler lead'i
 - **Z1 sınırı:** düğüm sınırı araç başına; plan araçları config admission.graph'tan hesaplanan sınır (~51k), diğerleri 4096; heap ölçülüp kayıtlı tavan.
 - **Bağımlılık:** fast-uri kabul edilmiş riski MCP SDK 2.4.0 taşıyıcılarına aynı bitişle (2026-11-21) taşındı; gerçek MCP istemci dumanı GREEN (2026-11-01), SDK 2.4.0 kalır.
 - **Kapsam (2026-11-01):** F11 (delegatedUse kişi şahidi) alpha.60'a; WALK22 sonrası ürün hataları (F12 `/help`, F13 beuser-self kartı) alpha.60'a; F14 Codex abonelik tek seferlik çağrı hatası ürün hatasıdır: önce hata metni kaydı, sonra owner onaylı tek kontrollü çağrı, sonra düzeltme (allowlist genişletmesi ayrı güvenlik kararı). 23:00: alpha.60 kapsamı dondu (yalnız güvenlik/veri kaybı istisna); owner terminal testi ve dört yolculuk yeniden yürüyüşü betadan önceye. 23:20: alpha.60 hemen canlı, alpha.61 3 saat içinde; alpha.61 kapsamı BeUser bitiş sinyali, değerlendirici girdi kırpma + hata kodu bölme, O-B1 yolculuğu; açılış/zod perf ve TL üreticileri alpha.61'e sığmazsa beta listesine.
+
+## Owner kararları — 2026-11-02: CI hızı
+
+- **CI-LINT-SPLIT:** lint kontrolleri `prepare` dışında, Node başına ayrı işte paralel; `required verify` lint başarısızlığını da reddeder; hosted `npm ci --prefer-offline --no-audit --no-fund` (PR #134, `e87212381`; ölçülen toplam 8:00–8:20 → 7:05, tek koşu 41442223301).
+- **CI-WEIGHTS:** ağırlık sapma işi yalnız main push, gece ve elle koşularda; sapma uyarıdır, iş kırmızı olmaz; ağırlıklar o koşunun makbuzlarından otomatik yenilenip Actions cache'e yazılır, her `prepare` en yenisini okur. CI commit/push yapmaz; işlenmiş dosya tohumdur. 2026-10-29 sürüm adımındaki "kırmızı sapma sürüm PR'ını tutar" kuralının yerini alır.
+- **Node matrisi:** PR'larda Node 24 ve 26 birlikte koşmaya devam eder.

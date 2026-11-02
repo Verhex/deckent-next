@@ -4,10 +4,14 @@ on:
   merge_group:
   push: { branches: [main] }
   workflow_dispatch:
+  schedule:
+    # Nightly main run: full suite plus a scheduling-weight refresh when main had no push that day.
+    - cron: '23 2 * * *'
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  # Event in the group: a nightly run and a main push never cancel each other.
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 jobs:
   prepare:
@@ -48,6 +52,12 @@ jobs:
         with:
           path: .pack/bwrap/cache
           key: ${{ steps.bwrap_cache.outputs.cache-primary-key }}
+      - name: Use the newest main-refreshed scheduling weights (committed file is the seed)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: scripts/ci-test-durations.json
+          key: ci-weights-v1-seed
+          restore-keys: ci-weights-v1-
       - run: npm run build
       - run: npm run smoke
       - name: Record complete Vitest inventory and Node-specific build
@@ -126,26 +136,39 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   weights:
-    # Runs even when a shard was cut at the job limit: that is when drift matters. Not a required check; red on drift.
-    name: duration weight drift (node ${{ matrix.node }})
-    if: always() && needs.prepare.result == 'success'
+    # Main push, nightly and manual runs only (owner 2026-11-02): report drift as a warning, then refresh the weights from this
+    # run's receipts into the cache every later run's prepare restores. Never commits; not a required check.
+    name: duration weights refresh
+    if: always() && needs.prepare.result == 'success' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
     needs: [prepare, tests]
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['24', '26']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with: { node-version: '${{ matrix.node }}', check-latest: true }
+        with: { node-version: '26', check-latest: true }
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: shard-node${{ matrix.node }}-*-${{ github.run_attempt }}
+          pattern: shard-node*-*-${{ github.run_attempt }}
           path: .pack/shards
-      - run: node scripts/ci-test-weights.mjs check .pack/shards
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-node26-${{ github.run_attempt }}
+          path: .pack/download
+      - name: Report drift against the weights this run used
+        continue-on-error: true
+        run: |
+          tar -xzf .pack/download/ci-build.tar.gz scripts/ci-test-durations.json
+          node scripts/ci-test-weights.mjs check .pack/shards
+      # Refresh needs every file observed; a cut shard leaves the previous weights in place and the red tests job is the signal.
+      - if: needs.tests.result == 'success'
+        run: node scripts/ci-test-weights.mjs refresh .pack/shards
+      - if: needs.tests.result == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: scripts/ci-test-durations.json
+          key: ci-weights-v1-${{ github.run_id }}-${{ github.run_attempt }}
 
   verify:
     name: required verify (ubuntu-latest, node ${{ matrix.node }})
