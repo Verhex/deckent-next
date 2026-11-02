@@ -29,6 +29,7 @@ import { CODEX_FAMILY, writeFakeCodexCli } from '../../fixtures/native-headless/
 import { initLine, assistantLine, resultLine, rateLimitLine, writeFakeCli } from '../../fixtures/native-headless/stream.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
 
 // The MCP actor holds the same grants, so the refusal below is the person-only rule itself, not a missing grant.
 const both = [...me, { issuer: `${me[0]!.issuer}/mcp`, subject: me[0]!.subject }];
@@ -109,6 +110,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
         complete('CLAUDE-CHAT-SECOND'), [{ line: initLine({ model: nativeId }) }, { line: rateLimitLine('rejected') }],
       ] });
       expect((await inspectConfiguredInvocableModels(h.f.project, 'scope', { env: h.f.env })).models.find(model => model.reference.providerId === reference.providerId && model.reference.modelId === reference.modelId)?.availability).toEqual({ invocable: true, reason: null });
+      // Not a first-run test: onboarding is settled through the product's deferral store, so no setup or welcome card takes the steps' keys.
+      await settleOnboarding(platform.resolveProductLayout({ projectRoot: h.f.project, root: h.f.data }));
       await h.f.start();
       const cli = resolve('dist/composition/core/cli/internal/entry.js');
       const steps = [['Deckent workline', '/model\r'], ['Models · scope', '\r'], ['Subscription text chat', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
