@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfigLanguage, resolveLocale, t, terminalSafeText } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, loadConfigLanguage, resolveLocale, t, terminalSafeText, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import { projectAttachmentCommandSchema } from '#domain/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -13,17 +13,21 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
     } else if (['--preview', '--apply', '--register', '--unregister', '--relocate', '--json', '--no-color'].includes(flag) && !switches.has(flag)) switches.add(flag);
     else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  const root = context.root ?? process.cwd(), options = { ...(context.env ? { env: context.env } : {}), heal: false }, scopeId = values.get('--scope');
+  const root = context.root ?? process.cwd(), options = { ...(context.env ? { env: context.env } : {}), heal: false }, requestedScope = values.get('--scope');
   const locale = resolveLocale(values.get('--lang'), context.env, await loadConfigLanguage(root, options)); context.onLocale?.(locale);
   const apply = switches.has('--apply'), preview = switches.has('--preview'), revoke = values.get('--revoke') ?? values.get('--lease-revoke') ?? values.get('--detach') ?? values.get('--restore');
   const lifecycle = switches.has('--unregister') || switches.has('--relocate') || !!revoke;
   if ([values.has('--revoke'), values.has('--lease-revoke'), values.has('--detach'), values.has('--restore'), switches.has('--unregister'), switches.has('--relocate')].filter(Boolean).length > 1) throw ErrorRegistry.createError('CLI_USAGE');
   if (apply === preview || !apply && (values.has('--expect') || values.has('--command-id'))
-    || switches.has('--register') && values.has('--command-id') || !context.projectAttachment || revoke && (switches.has('--register') || preview || scopeId)) throw ErrorRegistry.createError('CLI_USAGE');
-  if (lifecycle && (!apply || preview || switches.has('--register') || !values.has('--restore') && values.has('--expect') || values.has('--command-id') || switches.has('--unregister') && scopeId)) throw ErrorRegistry.createError('CLI_USAGE');
+    || switches.has('--register') && values.has('--command-id') || !context.projectAttachment || revoke && (switches.has('--register') || preview || requestedScope)) throw ErrorRegistry.createError('CLI_USAGE');
+  if (lifecycle && (!apply || preview || switches.has('--register') || !values.has('--restore') && values.has('--expect') || values.has('--command-id') || switches.has('--unregister') && requestedScope)) throw ErrorRegistry.createError('CLI_USAGE');
+  const terminal = switches.has('--register') && !requestedScope ? (await loadConfig(root, options))['terminal'] as { scopeId?: unknown } | undefined : undefined;
+  const scopeId = requestedScope ?? TERMINAL_SCOPE_ID_SCHEMA.safeParse(terminal?.scopeId).data;
+  const registration = switches.has('--register') && apply && !values.has('--expect') && scopeId
+    ? await context.projectAttachment(root, { action: 'register-preview', scopeId }, options) as { planDigest: string } : null;
   const parsed = projectAttachmentCommandSchema.safeParse(switches.has('--unregister') ? { action: 'unregister' } : switches.has('--relocate') ? { action: 'relocate', scopeId } : revoke ? { action: values.has('--restore') ? 'restore' : values.has('--detach') ? 'detach' : values.has('--lease-revoke') ? 'lease-revoke' : 'revoke', projectId: revoke, ...(values.has('--restore') ? { expect: values.get('--expect') } : {}) }
     : { action: switches.has('--register') ? apply ? 'register' : 'register-preview' : apply ? 'apply' : 'preview', scopeId,
-      ...(apply ? { expect: values.get('--expect'), ...(!switches.has('--register') ? { commandId: values.get('--command-id') } : {}) } : {}) });
+      ...(apply ? { expect: values.get('--expect') ?? registration?.planDigest, ...(!switches.has('--register') ? { commandId: values.get('--command-id') } : {}) } : {}) });
   if (!parsed.success) throw ErrorRegistry.createError('CLI_USAGE');
   if (apply) {
     if (cliMode(context).reason !== 'tty') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'project.attach' } });

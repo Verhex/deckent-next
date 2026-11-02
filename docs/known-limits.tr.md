@@ -275,7 +275,12 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 - **Claude aboneliğiyle metin sohbeti (A62):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. Native CLI araçları ve MCP kapalıdır; bu bağlantı sohbetten dosya yazamaz veya komut çalıştıramaz. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
 
-- **Sağlayıcı giriş menüsü (A62):** abonelik satırları **Claude ile giriş** ve **ChatGPT ile giriş**; Cursor betada notuyla görünür.
+- **ChatGPT girişi bu sürümde betada; Claude ve ChatGPT aboneliklerinin Deckent içinde tam ajan olarak (araçlı sohbet, işçi, Brain, ajan/skill)
+  çalışması alpha.63 için planlanmıştır.** Mevcut ChatGPT girişi betada notuyla seçilebilir kalır.
+- **İlk kurulum ve yeni klasörler (A62):** kişinin tanığıyla tamamlanan sıfır kurulum, global kayıt yoksa kaynak olur. Eski kurulum otomatik
+  kaydedilmez. Kurulu klasörde `deckent terminal attach --register --apply` çalıştırıp kaynağı onaylayın; sonra yeni klasörde `deckent` açın.
+  Var olan kaynak kaydı korunur.
+- **Sağlayıcı giriş menüsü (A62):** abonelik satırları **Claude ile giriş** ve **ChatGPT ile giriş**; ChatGPT ve Cursor betada notuyla görünür.
   Eski Codex CLI bağlantısı ve profilleri aynı CLI komutlarıyla okunur; yinelenen menü satırını gizlemek kimlik bilgilerini taşımaz,
   işçiyi hazır hâle getirmez. ChatGPT onayı sohbeti, AI işçileri (`ai`) ve Brain/arka plan özelliklerini (`system`) adlandırır; ek kullanım
   başlangıçta kapalıdır. Otomatik API geçişini kapalı tutarak ChatGPT'yi seçmek yine girişi başlatır. **API anahtarıyla bağlan** ret sonrasında
@@ -301,10 +306,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   (alpha.60): önce giriş dizinini gösterir, terminali CLI'ın kendi girişine devreder (Ctrl+C durdurur; kayıttaki süre sınırı bitirir),
   bağlar, sonra sizden başka kimin bu girişi kullanabileceğini sorar (ilk bağlantıda system ve ai işaretsiz, yeniden bağlantıda geçerli onay işaretli; MCP asla). Yalnız Deckent'in bubblewrap
   korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar); yoksa `/provider` Claude
-  giriş satırını bu nedenle devre dışı gösterir ve yerine kullanılabilecek sağlayıcıları listeler. Claude aboneliğiyle terminal
-  sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
-- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Aboneliklerden yalnız ChatGPT ile giriş terminal
-  sohbetine hizmet eder (aşağıda); kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde ChatGPT ile giriş
+  giriş satırını bu nedenle devre dışı gösterir ve yerine kullanılabilecek sağlayıcıları listeler. Alpha.62 bu yalıtılmış bağlantıya
+  metin sohbetini ekler; native CLI araçları ve MCP kapalıdır. *Korumalı alan yoksa yol:* Anthropic API anahtarı kullanın.
+- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT abonelikleri metin sohbeti sağlar;
+  kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.

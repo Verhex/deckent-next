@@ -7,6 +7,10 @@ Kaynak/Source: ARCHITECTURE.md @58537c7f lines 565–617, 843–854, 1649–1662
 ile global kaydedilir; eski proje dili override olarak kalır. Ayrı bir global kayıt, açık seçilmiş legacy kaynağın kimlik,
 şirket, kişi ve fiziksel konumunu tutar. Proje bağlantısı ayrı projectId, scope, policy, ledger, runtime ve audit kullanır;
 kimlik/token kopyalanmaz. Her kullanım kaynak kimliğini, hedefin fiziksel konumunu ve envanterdeki active/revoked durumunu okur.
+İlk sıfır policy/kimlik kurulumu kişinin tanığıyla tamamlanınca, global kayıt yoksa aynı typed register sahibi kurulum ve scope'u kaynak kaydeder;
+onboarding ve `init` aynı installation uygulamasını kullanır. Var olan kayıt değiştirilmez; eski kurulum otomatik kaydedilmez.
+Eski kurulumun klasöründe `deckent terminal attach --register --apply` config'teki terminal scope'unu ve güncel preview digest'ini kullanır,
+yine kişi kartı ve register tanığı ister. Açık `--scope <id>` / `--expect <digest>` yolu korunur.
 `terminal attach --register --scope <id> --preview|--apply` kaynak seçer; `terminal attach --scope <id> --preview|--apply`
 hedef bağlar. Apply, önizleme digest'i ve command-id ile aynı installer journal'ında koşullu ve kurtarılabilirdir.
 `--revoke <project-id> --apply` bağlantıyı geri alır. Bu hazırlık CLI'si model/abonelik kullanım izni sağlamaz.

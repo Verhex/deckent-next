@@ -279,7 +279,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
   Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
 
-- **Provider sign-in menu (A62):** the subscription rows are **Sign in with Claude** and **Sign in with ChatGPT**; Cursor is labelled beta.
+- **ChatGPT sign-in is beta in this release.** Full Claude and ChatGPT subscriptions as agents inside Deckent (tool-enabled chat, workers,
+  Brain, agents/skills) are planned for alpha.63. The current ChatGPT sign-in remains selectable with its beta note.
+- **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global
+  source is registered. Existing installations are not registered automatically. From the installed folder, run
+  `deckent terminal attach --register --apply`, confirm the source, then open `deckent` in the new folder. An existing source is kept.
+- **Provider sign-in menu (A62):** the subscription rows are **Sign in with Claude** and **Sign in with ChatGPT**; ChatGPT and Cursor are labelled beta.
   The older Codex CLI connection and profiles remain readable through the same CLI commands; hiding its duplicate menu row does not move
   credentials or make a worker ready. ChatGPT consent names chat, AI workers (`ai`) and Brain/background features (`system`), with extra use
   off by default. Choosing ChatGPT with automatic API continuation off still starts sign-in. **Connect with an API key** opens API-provider
@@ -305,10 +310,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (alpha.60): it shows the login directory first, hands the terminal to the CLI's own sign-in (Ctrl+C stops it; the registry time
   bound ends it), connects, then asks who besides you may use the login (system and ai unticked on a first connect, the consent in force ticked on a reconnect; MCP never). It runs only where
   Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
-  sign-in row disabled with that reason and lists the providers usable instead. Terminal chat with a Claude subscription is not
-  supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
-- **Terminal chat needs a model connection and, for a paid API, a budget.** Of the subscriptions only Sign in with ChatGPT serves
-  terminal chat (below); a paid API turn without a scope budget is refused. *Workaround:* sign in with ChatGPT in `/provider`, or
+  sign-in row disabled with that reason and lists the providers usable instead. Alpha.62 adds text-only terminal chat through this
+  isolated connection; native CLI tools and MCP remain disabled. *Workaround where the sandbox is missing:* use an Anthropic API key.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT subscriptions support text chat;
+  a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.

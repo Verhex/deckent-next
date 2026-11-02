@@ -12,7 +12,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile }
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyPolicyTemplateInstallation, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle } from '#adapters/index.js';
@@ -133,7 +133,41 @@ async function exerciseAttachedLifecycle(input: { f: AttachmentFixture; target: 
   await expect(attachmentLifecycle(await loadComposedConfig(f.a, f.options), f.options).assert()).resolves.toBeUndefined();
   expect(await attachmentLifecycle(await loadComposedConfig(f.b, f.options), f.options).identityId()).toBe(installationId);
 }
+it.skipIf(process.platform !== 'linux')('registers only a fresh witnessed first install, keeps an existing source and leaves legacy installs explicit', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'deckent-first-registration-')); roots.push(base);
+  const env = { HOME: join(base, 'home'), DECKENT_GLOBAL_HOME: join(base, 'global') }, options = { env };
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+  const a = join(base, 'A'), b = join(base, 'B'), c = join(base, 'C');
+  for (const root of [a, b, c]) await mkdir(root, { mode: 0o700 });
+  for (const key of [...(await loadComposedConfig(a, options)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  vi.spyOn(localPrincipal, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  await applyPolicyTemplateInstallationWithSecretDefault(a, 'source', options);
+  const config = await loadComposedConfig(a, options), store = configuredAttachmentStore(config, options);
+  const registered = await store.registration();
+  expect(registered?.source).toMatchObject({ projectRoot: a, scopeId: 'source' });
+  expect((await executeConfiguredProjectAttachment(b, { action: 'offer', scopeId: 'target' }, options)).kind).toBe('ready');
+  const before = await snapshotBytes(env.DECKENT_GLOBAL_HOME);
+  await applyPolicyTemplateInstallationWithSecretDefault(c, 'third', options);
+  expect(await snapshotBytes(env.DECKENT_GLOBAL_HOME)).toEqual(before);
+  expect(await store.registration()).toEqual(registered);
+  // Existing installation + no registration remains explicit even on a person's later witnessed init.
+  const legacy = join(base, 'legacy'); await mkdir(legacy, { mode: 0o700 });
+  const legacyOptions = { env: { ...env, DECKENT_GLOBAL_HOME: join(base, 'legacy-global') } };
+  await applyPolicyTemplateInstallation(legacy, 'legacy', legacyOptions);
+  vi.stubEnv('DECKENT_GLOBAL_HOME', legacyOptions.env.DECKENT_GLOBAL_HOME);
+  await applyPolicyTemplateInstallationWithSecretDefault(legacy, 'legacy', legacyOptions);
+  expect(await configuredAttachmentStore(await loadComposedConfig(legacy, legacyOptions), legacyOptions).registration()).toBeNull();
+  // Headless init can initialize its own policy but cannot choose a global source without the register witness.
+  const headless = join(base, 'headless'); await mkdir(headless, { mode: 0o700 });
+  const headlessOptions = { env: { ...env, DECKENT_GLOBAL_HOME: join(base, 'headless-global') } };
+  vi.stubEnv('DECKENT_GLOBAL_HOME', headlessOptions.env.DECKENT_GLOBAL_HOME);
+  vi.mocked(localPrincipal.attestLocalInteractiveTerminal).mockResolvedValue(false);
+  await applyPolicyTemplateInstallationWithSecretDefault(headless, 'headless', headlessOptions);
+  expect(await configuredAttachmentStore(await loadComposedConfig(headless, headlessOptions), headlessOptions).registration()).toBeNull();
+});
+
 describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {
+
   it('registers explicitly, journals one attachment, replays, revokes and never creates a missing source identity', async () => {
     const f = await fixture(), original = await loadConfiguredInstallationIdentity(f.a, f.options), target = await f.make(f.b);
     const preview = await target.app.preview('target'), commandId = randomUUID();

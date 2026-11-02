@@ -70,7 +70,8 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     expect(sign.match(/FIXTURE-OAUTH-CONNECT-REACHED/gu)).toHaveLength(1);
     expect(sign).not.toContain('Codex subscription workers'); expect(sign).not.toContain('Codex abonelik işçileri');
     expect(sign).toContain(locale === 'en' ? 'Sign in with Claude' : 'Claude ile giriş');
-    expect(sign).toContain(locale === 'en' ? 'Beta' : 'Betada');
+    // Assert ChatGPT's own row; Cursor's independent beta badge is not evidence for this one.
+    expect(sign).toMatch(locale === 'en' ? /Sign in with ChatGPT\s+Beta/u : /ChatGPT ile giriş\s+Betada/u);
     const claude = words((await inPty(loginFixture, home, env, `claude-${locale}`, [
       [signIn, 'Claude'], [`${locale === 'en' ? 'filter' : 'filtre'}: Claude`, '\r', 'fresh'], [locale === 'en' ? 'Sign in with its CLI and connect…' : "CLI'ıyla giriş yap ve bağla…", '\r', 'next'],
       [locale === 'en' ? 'Login directory' : 'Giriş dizini', '\r', 'next'],

@@ -23,7 +23,7 @@ export async function offerSetup(refusal: unknown, context: CommandContext, loca
   if (cliMode(context).reason !== 'tty' || !(await installationMissing(context, root, env))) throw refusal;
   if (await offerAttachedSession(context, locale, launch)) return;
   const target = offerTarget(context.rootResolution?.found ?? false, context.rootResolution?.gitTop ?? null, root);
-  const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale)],
+  const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale), t('setup.session.registerHint', {}, locale)],
     options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), role: 'yes' },
       ...(target === root ? [] : [{ id: 'here', label: t('setup.offer.here', { path: terminalSafeText(root) }, locale), key: 'h' }]),
       { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'yes' },

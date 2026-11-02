@@ -41,3 +41,13 @@ export async function executeConfiguredProjectAttachment(root: string, input: un
     case 'relocate': return relocateConfiguredProjectAttachment(root, command.scopeId, options);
   }
 }
+/** First witnessed installation only; legacy sources still require the explicit register command. */
+export async function registerFreshInstallation(root: string, scopeId: string, options: ConfigLoadOptions) {
+  const config = await readAttachmentBootstrapConfig(root, options);
+  if (await configuredAttachmentStore(config, options).registration()) return { status: 'kept' as const };
+  try {
+    const app = await configuredProjectAttachment(root, options), preview = await app.registrationPreview(root, scopeId);
+    await app.register(root, scopeId, preview.planDigest);
+    return { status: 'registered' as const };
+  } catch (error) { if ((error as { code?: unknown }).code === 'AUTHORITY_WITNESS_REQUIRED') return { status: 'witness-required' as const }; throw error; }
+}

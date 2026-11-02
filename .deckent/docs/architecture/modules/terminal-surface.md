@@ -291,6 +291,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   A literal zero tariff whose every declared endpoint is a literal loopback address runs without a money budget (owner 2026-10-09);
   a frozen scope account still refuses it, and a zero tariff on any other host keeps the budget gate. A responded call settles
   `settled-local 0` in the spend ledger. Positive chargeback rates need a separate measurement basis.
+- **First installation and later folders (owner 2026-11-03, A62-FIX6):** a fresh witnessed policy/identity installation registers its source
+  through the existing typed register application when no global source record exists. Guided `init` and onboarding share this owner.
+  Later folders offer the session card and revocable model use. Existing installations remain explicit: the setup offer names
+  `deckent terminal attach --register --apply`, run in the installed folder; it resolves the configured scope, previews and asks for person confirmation.
+  ChatGPT's selectable provider row carries the registry's beta presentation; full Claude/ChatGPT agent parity is planned for alpha.63.
 - **First work after setup (owner 2026-11-02, A62-FIRSTTASK):** first work is not an onboarding stage. A separate, unnumbered welcome
   offers a project description, scanning existing visible files for suggested configuration, or a typed first task. The first two use
   EN/TR catalog prompts and enter the ordinary chat queue; they propose configuration, with no new write authority. A model-less

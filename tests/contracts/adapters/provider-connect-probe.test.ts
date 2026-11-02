@@ -183,7 +183,8 @@ it('reads v2 overlays as v4 and orders billing classes from registry data with a
   const legacy = parseProviderConnectRegistry(registry);
   expect(legacy.schemaVersion).toBe(4); expect(legacy.kinds.every(kind => kind.billing === 'metered')).toBe(true);
   expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.billing === 'subscription' && kind.presentation === 'listed').map(kind => kind.id))
-    .toEqual(['claude-cli-subscription', 'chatgpt-login']);
+    .toEqual(['claude-cli-subscription']);
+  expect(providerConnectKind('chatgpt-login')).toMatchObject({ available: true, presentation: 'beta' });
   expect(providerConnectKind('codex-cli-subscription')).toMatchObject({ available: true, presentation: 'hidden' });
   expect(providerConnectKind('cursor-cli-subscription')).toMatchObject({ available: true, presentation: 'beta' });
   const swapped = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, billingOrder: ['metered', 'local', 'subscription'] });
