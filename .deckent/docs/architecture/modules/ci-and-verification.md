@@ -47,7 +47,10 @@ The complete inventory comes from Vitest itself, not a changed-file filter. New 
 The required collector rejects missing/duplicate shards or files, wrong SHA/Node/run/attempt, failed/cancelled/pending
 execution, collection/unhandled errors and missing native/host/smoke success. Native binaries and dist are bound to
 Node major, platform, source/build-input hashes and artifact bytes; they are never shared across Node24 and Node26.
-Preparation runs lint checks; the installed compiler's normal build performs strict source typechecking once.
+Lint checks run in their own per-Node job beside preparation (CI-LINT-SPLIT 2026-11-02: removes the ~48 s lint step from the
+prepare → shards critical path; required verify also refuses a failed lint job). Preparation's normal build performs strict source
+typechecking once. Hosted `npm ci` uses `--prefer-offline --no-audit --no-fund` against the restored npm cache; dependency audit stays
+with the dependency security process, not the per-job install.
 `npm run lint` still includes explicit typecheck; standalone `npm run verify` builds once and keeps every test pack.
 The local mirror validates its sealed build before `verify:built` and never rebuilds during a suite.
 Explicit older refs retain their own original verification protocol; current helpers are not overlaid onto old source.
@@ -65,7 +68,7 @@ and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes
 PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
 activate/change a remote merge queue or ruleset. Main push runs the same full sharded suite
 (owner 2026-10-06): admin merges bypass the PR gate, so this is main's post-merge full signal; on this public repository
-standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 46 (2 prepare, 40 test shards, 2 duration-drift, 2 required verify; 36 before CI-DRIFT). Native macOS/Windows full suites stay in a separate daily/manual
+standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 48 (2 prepare, 2 lint, 40 test shards, 2 duration-drift, 2 required verify; 36 before CI-DRIFT); lint finishes beside prepare, so peak concurrency stays 44. Native macOS/Windows full suites stay in a separate daily/manual
 workflow with visible failures; this scheduling does not resolve existing platform debt or claim platform acceptance.
 The full author scan exposed a genuine first integrity-key creation race during concurrent secret changes.
 Write-mode key custody now holds the existing bounded configuration path lock through create/read/fsync/close;
