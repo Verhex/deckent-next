@@ -111,7 +111,20 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   Son kontrol yalnız kurulum aşamalarını bekler; ölçülmüş uyarılar görünür kalırken tamam sayılabilir. Tekrar `--yes`, bitmiş işi uygulamaz.
   Doctor iş yönlendirmesini kurulum aşamalarının değerlendiricilerinden türetir; ilk iş için `deckent` / `/setup` yolunu gösterir.
   Kurulum dili global kişisel varsayılan olarak kaydedilir; eski proje dil tercihleri önceliğini korur ve taşınmaz.
-  Bu tercih yeni klasörü kuruluma bağlamaz veya başka projenin model bağlantısına izin vermez; bunlar ayrı uygulama işleridir.
+  Dil tercihi tek başına bağlantı yetkisi vermez.
+- **Kayıtlı kaynak ve yeni klasör.** Argümansız `deckent`, açıkça kaydedilmiş sağlıklı bir kaynak varsa TR/EN oturum kartı sunar;
+  kabul ayrı proje policy/ledger oluşturur ve güncel kaynak bağlantılarına geri alınabilir kullanım izni verir. Token kopyalanmaz.
+  Eski projeler otomatik taşınmaz. Bir kişisel global kayıtta tek kaynak vardır; bozuk/kayıp kaynak yeni kimlikle değiştirilmez.
+  Kaynak salt okunur SQLite görünümü WAL dahil yapılandırılmış toplam dosya sınırına tabidir; sınırda veya rollback journal'da kurtarma gerekir.
+  `terminal attach --lease-revoke <proje> --apply` model iznini, `--detach <proje> --apply` bağ ve izni kapatır; veriyi tutar.
+  Kaynakta `--unregister --apply` bütün bağlı projeler ayrılmadan reddedilir. Kaynak yedeği alınabilir.
+  Tam hedef kaldırma envanteri geri alır; şifreli yedekten dönüş bunu yeniden açmaz. Hedefte `--scope <id> --preview` ve
+  `--restore <proje> --expect <özet> --apply` ile güncel policy üzerinden yeni izin gerekir.
+  `--relocate --scope <id> --apply` yalnız gerçek taşımayı uzlaştırır; eski klasör varsa kopya reddedilir.
+  Varsayılan layout yedekten sonra taşınabilir kalır; özel layout yolları aynen korunur. Başlamadan kesilmiş kaldırma yalnız yeni kişi
+  onayı ve bütünüyle doğrulanmış boş etki deposuyla yeniden planlanır; eksik, bozuk veya etkisi başlamış kayıt kapalı kalır.
+  API şablonu ayrı, sıfır hareketli scope hesabı açar; mevcut hesap sıfırlanmaz. Abonelik/yerel bağlantı için para kapısı yoktur.
+  Bu yazar kanıtı Linux/WSL sentetik PTY ve yerel sahte modelle sınırlıdır; gerçek sağlayıcı, diğer platformlar ve monte sürüm kabulü ayrıdır.
 - **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; ilk açılış aşamasıdır, `deckent init` dışında, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel

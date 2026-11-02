@@ -111,7 +111,20 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   The final check settles only over install stages; a completed check with warnings can be done, with warnings visible. A repeat `--yes`
   applies no already-settled work. Doctor derives work guidance from the setup stage evaluators and points onboarding work to `deckent` / `/setup`.
   The setup language is saved as a global personal default; existing project language overrides keep precedence and are not migrated.
-  This preference does not attach a new folder to an installation or grant access to another project's model connection; those remain separate work.
+  Language preference alone grants no connection authority.
+- **Registered source and new folder.** Bare `deckent` offers a TR/EN session card when a healthy source is explicitly registered;
+  acceptance creates separate project policy/ledger and revocable use of current source connections. Tokens are not copied.
+  Existing projects are not migrated. One personal global registry selects one source; a lost/broken source is never replaced with a new identity.
+  Read-only SQLite views include WAL and obey the configured aggregate file limit; exceeding it or finding a rollback journal requires recovery.
+  `terminal attach --lease-revoke <project> --apply` withdraws model use; `--detach <project> --apply` withdraws attachment and use, retaining data.
+  Source `--unregister --apply` refuses until every dependent project is detached. Source backup remains available.
+  Full target removal revokes inventory; encrypted restore does not reauthorize it. On the target, `--scope <id> --preview` then
+  `--restore <project> --expect <digest> --apply` grants new use through current policy.
+  `--relocate --scope <id> --apply` reconciles a move, refusing a copy while the old folder survives.
+  Default layouts stay portable after restore; explicit custom roots retain their exact paths. An interrupted uninstall with no started
+  effects can replan only after fresh person confirmation and authentication of the whole empty effect store; missing, corrupt or started records stay held.
+  API templates create separate empty scope accounts without resetting existing accounts. Subscription/local connections have no monetary gate.
+  Author evidence is limited to Linux/WSL synthetic PTY and a local fake model; real providers, other platforms and assembled-release acceptance remain separate.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
   lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
