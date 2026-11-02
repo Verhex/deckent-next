@@ -221,8 +221,9 @@ summed per-file time, while shard 1's extra cost is wall time, so reserve = post
 range 1.479–1.634) = 106.9 s.
 
 Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29; automatic refresh CI-WEIGHTS, owner 2026-11-02).
-`scripts/ci-test-durations.json` is generated, not hand-edited, and the committed copy is only the seed. Each prepare restores the
-newest `ci-weights-v1-*` Actions cache over it (a miss keeps the seed) and packs the file into the Node build artifact, so every
+`scripts/ci-test-durations.json` is generated, not hand-edited, and the committed copy is only the seed. Each prepare (`actions: read`) looks up the
+newest `ci-weights-v1-*` cache entry scoped to `refs/heads/main` and restores that exact key over it (none keeps the seed; no prefix
+`restore-keys`, which the bwrap cache test forbids workflow-wide) and packs the file into the Node build artifact, so every
 shard of one Node partitions with identical weights. The `duration weights refresh` job runs only on main push, nightly
 (`schedule`) and manual runs: `check` reports drift as a `::warning` and step-summary line without failing the job, then, when
 every shard passed, `refresh` over both Nodes' receipts of that run saves a new cache entry. CI never commits or pushes; PR-scoped

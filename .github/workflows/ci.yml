@@ -18,6 +18,7 @@ jobs:
     name: prepare (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    permissions: { contents: read, actions: read }
     outputs:
       shards: ${{ steps.test_config.outputs.shards }}
       shard-count: ${{ steps.test_config.outputs.shard-count }}
@@ -52,12 +53,20 @@ jobs:
         with:
           path: .pack/bwrap/cache
           key: ${{ steps.bwrap_cache.outputs.cache-primary-key }}
-      - name: Use the newest main-refreshed scheduling weights (committed file is the seed)
+      # Exact-key restore only (no prefix restore-keys in this workflow): look up the newest main-scoped weights entry, else keep the committed seed.
+      - name: Find the newest main-refreshed scheduling weights
+        id: weights
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          key=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key ci-weights-v1- --sort created_at --order desc --limit 1 --json key --jq '.[0].key // ""')
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "Scheduling weights: ${key:-committed seed}"
+      - if: steps.weights.outputs.key != ''
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: scripts/ci-test-durations.json
-          key: ci-weights-v1-seed
-          restore-keys: ci-weights-v1-
+          key: ${{ steps.weights.outputs.key }}
+          fail-on-cache-miss: true
       - run: npm run build
       - run: npm run smoke
       - name: Record complete Vitest inventory and Node-specific build
