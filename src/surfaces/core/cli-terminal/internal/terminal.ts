@@ -54,7 +54,7 @@ function ttyState(context: TerminalLaunchContext) {
 /** Typed errors render through the catalog; untyped failures never echo provider or transport detail. */
 function errorText(error: unknown, locale: Locale): string {
   if (error instanceof DeckentError && ErrorRegistry.has(error.code)) {
-    return `${ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? t('terminal.chat.failed', {}, locale)}\n${t('terminal.error.code', { code: error.code }, locale)}`;
+    return ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? t('terminal.chat.failed', {}, locale);
   }
   return t('terminal.chat.failed', {}, locale);
 }
