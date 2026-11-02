@@ -4,3 +4,6 @@ export type { BackupCommand, BackupResult, BackupDecision, BackupAuthority, Back
 
 export { backupCoverageManifestSchema, backupCoverageResourceSchema, assertBackupCoverage } from './internal/coverage.js';
 export type { BackupCoverageManifest, BackupCoverageResource, BackupContributionOwner } from './internal/coverage.js';
+export { BACKUP_RESOURCES, packBackupState, backupStateSchema, unpackBackupState } from './internal/archive-contract.js';
+export type { BackupState, BackupLimits } from './internal/archive-contract.js';
+export { splitArchivedConfig, archivedConfigDocument } from './internal/archive-contract.js';

@@ -4,7 +4,7 @@ import { PROVIDER_CONNECT_REGISTRY, SIWC_INFERENCE } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { siwcConnectionView, withConfiguredSiwc } from '#composition/core/siwc/index.js';
+import { siwcConnectionView, withConfiguredSiwcModel } from '#composition/core/siwc/index.js';
 /** Doctor projection only: no browser, renewal, profile change or email. Each row retains the caller's inspect authority. */
 export async function inspectConfiguredSiwcConnections(root: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<readonly SubscriptionConnectionInspection[]> {
   const config = await loadComposedConfig(root, { ...options, heal: false });
@@ -20,11 +20,11 @@ export async function inspectConfiguredSiwcConnections(root: string, scopeId: st
     try { await authorization.authorize('inspect', profile, context.principal); } catch { continue; }
     const base = { reference: profile.reference, connection: kind.id };
     try {
-      const view = await withConfiguredSiwc(root, scopeId, options, 'inspect', async app => {
+      const view = await withConfiguredSiwcModel(root, profile, context.principal, options, 'inspect', async app => {
         const connectionId = profile.adapter.definition['connectionId'];
         if (typeof connectionId !== 'string') throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
         return siwcConnectionView(await app.inspect(connectionId), 'json');
-      }, {}, context.principal);
+      });
       rows.push({ ...base, state: view.state, planUse: view.planUse, generation: view.generation, remoteRevocation: view.remoteRevocation });
     } catch (error) {
       const known = error instanceof OAuthConnectionError;

@@ -18,7 +18,7 @@ export async function installConfiguredExecutionPool(projectRoot: string, scopeI
   if (!(await owns(productResourcePath(layout, 'policy')) && await owns(productResourcePath(layout, 'bindings')))) return unavailable('not-owner');
   const pool = configuredInstallationPool(config.admission);
   if (!pool) return unavailable('invalid-admission');
-  if (apply) await assertConfiguredInstallationIdentity(projectRoot);
+  if (apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   let path: string;
   try { path = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { return { ...unavailable((error as { code?: string }).code === 'MANAGED_FILE_MISSING' ? 'ledger-missing' : 'ledger-unavailable'), configured: pool }; }

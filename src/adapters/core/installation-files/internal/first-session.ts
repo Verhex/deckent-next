@@ -21,7 +21,7 @@ export async function firstSessionTargets(layout: ProductLayout, scopeId: string
     return targets;
   }
   const ignore = productDataRootIgnorePath(layout), targets: PolicyTemplatePublishTarget[] = await lstat(ignore).then(() => [], (error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID'); return [Object.freeze({ resource: 'gitignore' as const, path: ignore, content: IGNORE, digest: digest(IGNORE) })]; }); // an existing entry is never written over
-  const config = { schema_version: attachment ? 5 : 4, ...(attachment ? { installation: { sharedRegistrationId: attachment.registrationId }, company: { id: attachment.companyId } } : {}), cancellation: { maxConcurrentDeliveries: getConfigFieldDefault('service').maxConcurrentExecutions },
+  const config = { schema_version: attachment ? 6 : 4, ...(attachment ? { installation: { sharedRegistrationId: attachment.registrationId }, company: { id: attachment.companyId } } : {}), cancellation: { maxConcurrentDeliveries: getConfigFieldDefault('service').maxConcurrentExecutions },
     cancellationRuntime: { scopeIds: [scopeId] }, terminal: { scopeId, chat: { schemaVersion: 1 } }, ...(service ? { service: { identity: { scopeId: service.scopeId, serviceId: service.serviceId } } } : {}) };
   validateConfig(config);
   for (const resource of ['ledger', 'config'] as const) {

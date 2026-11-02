@@ -34,8 +34,8 @@ async function prepare(projectRoot: string, scopeId: string, options: ConfigLoad
 }
 export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) { const { prepared, service } = await prepare(projectRoot, scopeId, options); return Object.freeze({ ...prepared.preview, serviceIdentity: await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, false) }); }
 export async function applyPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}, shared?: AttachmentInstall) {
-  if (!shared) await assertConfiguredInstallationIdentity(projectRoot); const { prepared, service, configured, layout, maxBytes, timeoutMs } = await prepare(projectRoot, scopeId, options, undefined, shared), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
-  const installationIdentity = shared ? { admitWrite: shared.identity, loadOrCreate: shared.identity } : new FileInstallationIdentityStore(layout, timeoutMs, undefined, await configuredInstallationBinding(projectRoot)), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
+  if (!shared) await assertConfiguredInstallationIdentity(projectRoot, true, options); const { prepared, service, configured, layout, maxBytes, timeoutMs } = await prepare(projectRoot, scopeId, options, undefined, shared), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
+  const installationIdentity = shared ? { admitWrite: shared.identity, loadOrCreate: shared.identity } : new FileInstallationIdentityStore(layout, timeoutMs, undefined, await configuredInstallationBinding(projectRoot, options)), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
   // Identity write admission (relocation, configured source, required machine binding) before the journal or any target is written.
   await installationIdentity.admitWrite(); await projectIdentity.read();
   // The first-session config is the project's bootstrap file: its own directory is its root, also when the data root moved.
@@ -84,7 +84,7 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   if (apply) await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), witness);
   // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
-  if (apply) await assertConfiguredInstallationIdentity(projectRoot);
+  if (apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   // Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the same custody the policy source enforces on every read);
   // missing, foreign or unreadable documents fail closed as `not-owner`.
   const owner = await ownsAuthority(layout, callerUid);
@@ -115,7 +115,7 @@ export async function openPermissionModesInstallation(projectRoot: string, scope
   witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
   if (input.apply) await assertAuthorityWitness('policyPermissionModes', localPrincipalChannel(), witness);
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
-  if (input.apply) await assertConfiguredInstallationIdentity(projectRoot);
+  if (input.apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   const owner = await ownsAuthority(layout, callerUid), clock = new SystemTrustedClock();
   return setInstallerPermissionModes(createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes), { scopeId,
     principal: { issuer: identity.issuer, subject: identity.subject }, ...(input.person === undefined ? {} : { person: input.person }), modes: input.modes, apply: input.apply,
@@ -126,7 +126,7 @@ export async function openOwnerBaselineInstallation(projectRoot: string, scopeId
   witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
   if (input.apply) await assertAuthorityWitness('policyPermissionModes', localPrincipalChannel(), witness);
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
-  if (input.apply) await assertConfiguredInstallationIdentity(projectRoot);
+  if (input.apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   const owner = await ownsAuthority(layout, callerUid), clock = new SystemTrustedClock();
   return setInstallerOwnerBaseline(createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes), { scopeId,
     principal: { issuer: identity.issuer, subject: identity.subject }, ...(input.person === undefined ? {} : { person: input.person }), families: input.families, candidates: ownerBaselineCells(mcpCapabilityRegistry.list(), await describeConfiguredOperationTools(projectRoot, options)), apply: input.apply,

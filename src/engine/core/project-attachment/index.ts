@@ -2,3 +2,7 @@ export { ProjectAttachmentError, attachmentFailure, sameAttachmentPerson, resolv
 export type { ProjectAttachmentErrorCode, InstallationContextPorts, InstallationProjectContext } from './internal/context.js';
 export { ProjectAttachmentApplication } from './internal/application.js';
 export type { ProjectAttachmentPorts, AttachmentRegistryPort } from './internal/application.js';
+export { ProjectAttachmentRelocationApplication } from './internal/relocation.js';
+export type { AttachmentRelocationPorts } from './internal/relocation.js';
+export { attachmentLifecycleIdentity, settleRemovedAttachment } from './internal/lifecycle.js';
+export { verifySharedAttachmentRestore } from './internal/restore.js';

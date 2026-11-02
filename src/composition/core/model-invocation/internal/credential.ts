@@ -1,3 +1,4 @@
+import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { ModelInvocationStoreError } from '#engine/index.js';
 import type { NativeJsonHttpAuthentication } from '#adapters/index.js';
@@ -17,9 +18,10 @@ export function scopedInvocationCredentialResolver(context: Awaited<ReturnType<t
     await revalidate(signal);
     // PRE-8 v2: the one provider credential entry point (`.deck`, project vault, main vault through a grant); the main read stays SECRET-K1's
     // configured resolver (explicit > selected backend > environment); a refusal stays typed.
-    const value = await projectCredentialResolver(context, profile.scopeId, options).resolve(reference);
+    const use = await resolveConfiguredModelUse(context.config.projectRoot, profile, context.principal, options);
+    const value = await projectCredentialResolver(use?.source ?? context, use?.sourceProfile.scopeId ?? profile.scopeId, options).resolve(reference);
     // A backend may finish after revocation or deadline. It never authorizes a socket by itself.
-    guard(signal); await revalidate(signal);
+    guard(signal); await revalidate(signal); await resolveConfiguredModelUse(context.config.projectRoot, profile, context.principal, options);
     return value;
   };
 }
@@ -27,5 +29,6 @@ export function scopedInvocationCredentialResolver(context: Awaited<ReturnType<t
 export async function admitInvocationCredential(context: Awaited<ReturnType<typeof loadInvocationContext>>, profile: ModelInvocationProfile, options: ConfigLoadOptions) {
   const definition = profile.adapter.definition as { authentication?: NativeJsonHttpAuthentication; transport?: { authentication?: NativeJsonHttpAuthentication } };
   const authentication = definition.authentication ?? definition.transport?.authentication;
-  if (authentication && authentication.type !== 'none') await assertProjectCredential(context, profile.scopeId, authentication.credentialRef, options);
+  if (authentication && authentication.type !== 'none') { const use = await resolveConfiguredModelUse(context.config.projectRoot, profile, context.principal, options);
+    await assertProjectCredential(use?.source ?? context, use?.sourceProfile.scopeId ?? profile.scopeId, authentication.credentialRef, options); }
 }

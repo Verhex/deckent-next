@@ -1,5 +1,6 @@
+import { resolveConfiguredModelUse, modelUseNative } from '#composition/core/model-use/index.js';
 import { createSiwcResponsesPort, SIWC_INFERENCE, siwcResponsesDefinitionSchema } from '#adapters/index.js';
-import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
+import { withConfiguredSiwcModel } from '#composition/core/siwc/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CONNECT_REGISTRY, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
@@ -43,17 +44,17 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
   let selected: { profile: ModelInvocationProfile; priced: OpenRouterPricedNative | ReturnType<typeof createOpenRouterOpenAiPricedNative>; cell: { observation?: OpenRouterMetadataObservation } } | undefined;
   let anthropic: { profile: ModelInvocationProfile; priced: AnthropicMessagesPricedNative } | undefined;
   let openai: ReturnType<typeof createOpenAiChatPricedNative> | undefined;
-  const natives = Object.freeze({
+  const originals = new WeakMap<ModelInvocationNativePort, ModelInvocationNativePort>();
+  const rawNatives = Object.freeze({
     resolve(profileInput: ModelInvocationProfile): ModelInvocationNativePort | null {
       const profile = modelInvocationProfileSchema.parse(profileInput);
       if (profile.adapter.id === SIWC_INFERENCE.adapter.id && profile.adapter.version === SIWC_INFERENCE.adapter.version) {
         const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
         if (!isDeepStrictEqual(definition.owner, subscriptionActor(context.principal).owner)) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
-        return createSiwcResponsesPort({ now, lease: (id, signal) => withConfiguredSiwc(context.config.projectRoot, profile.scopeId, options, 'lease',
-          (app, caller) => app.lease(id, caller, signal), {}, context.principal) });
+        return createSiwcResponsesPort({ now, lease: (id, signal) => withConfiguredSiwcModel(context.config.projectRoot, profile, context.principal, options, 'lease',
+          (app, caller) => app.lease(id, caller, signal)) });
       }
-      // S3-2: the person's own CLI login as one tool-less turn; an older release resolves this adapter id to null (MODEL_INVOCATION_UNAVAILABLE).
-      // 1b: the call's known secrets also redact a CLI's stderr summary (the evidence of an incomplete turn).
+          // 1b: the call's known secrets also redact a CLI's stderr summary (the evidence of an incomplete turn).
       if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation, knownSecrets: getConfigKnownSecrets(context.config) });
       if(profile.adapter.id===decisionHttpAdapter.id&&profile.adapter.version===decisionHttpAdapter.version){
         const definition=parseDecisionHttpDefinition(profile.adapter.definition); return createDecisionHttpNativePort({resolveCredential:scopedInvocationCredentialResolver(context,profile,definition.authentication,options)});
@@ -85,9 +86,10 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     // PRE-8 v2 credential-source decision: for the headless CLI it is the preflight (version, flags, login kind; no model call), typed and before
     // any claim; read-only views never spawn it.
     admit: async (profile: ModelInvocationProfile, signal?: AbortSignal) => {
+      await resolveConfiguredModelUse(context.config.projectRoot, profile, context.principal, options);
       if (profile.adapter.id === SIWC_INFERENCE.adapter.id) {
         const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
-        return withConfiguredSiwc(context.config.projectRoot, profile.scopeId, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); }, {}, context.principal);
+        return withConfiguredSiwcModel(context.config.projectRoot, profile, context.principal, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); });
       }
       return isNativeCliHeadlessAdapter(profile.adapter)
         ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options);
@@ -97,7 +99,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       const metadataTariff = openaiDefinition?.tariff.kind === 'openrouter-endpoint' ? openaiDefinition.tariff : null;
       if (input.profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID && !metadataTariff) return;
       const current = selected;
-      if (!current || input.native !== current.priced.native || !isDeepStrictEqual(input.profile, current.profile)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+      if (!current || (originals.get(input.native) ?? input.native) !== current.priced.native || !isDeepStrictEqual(input.profile, current.profile)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
       // Reject absent/revoked scope authority before the metadata network effect.
       providerSpendingBudgetFor(await invocationEffectAuthority(context, input.profile)(signal), input.profile.scopeId);
       const definition = metadataTariff ? { ...metadataTariff, transport: openaiDefinition! } : parseOpenRouterChatDefinition(input.profile.adapter.definition);
@@ -136,5 +138,6 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       const budget = await budgetFor(input.command.scopeId); return Object.freeze({ budget, quote: current.priced.quote(input) });
     },
   });
+  const natives = { ...rawNatives, resolve(profile: ModelInvocationProfile) { const port = rawNatives.resolve(profile); if (!port) return null; const guarded = modelUseNative(context.config.projectRoot, profile, context.principal, options, port); originals.set(guarded, port); return guarded; } };
   return Object.freeze({ natives, spending });
 }

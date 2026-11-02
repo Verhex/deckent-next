@@ -89,7 +89,6 @@ export function application(context: Awaited<ReturnType<typeof loadInvocationCon
         { profiles: config['provider_invocation_profiles'], surfaces: configuredModelInvocationDeliverySurfaces(config), assess: assessModelInvocationProfileDeliveries }).admit(command);
     }, entry);
 }
-
 /** Connected application features only; no wire field selects this path. */
 export async function invokeConfiguredFeatureModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, undefined, undefined, undefined, 'feature');

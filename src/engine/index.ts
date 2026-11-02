@@ -113,3 +113,4 @@ export * from '#engine/core/beuser/index.js';
 export * from '#engine/core/beuser-evidence/index.js';
 
 export * from '#engine/core/project-attachment/index.js';
+export * from '#engine/core/model-use/index.js';

@@ -1245,5 +1245,7 @@
   "error.PROJECT_ATTACHMENT_DENIED": "This installation, company, project or person is not authorized for this attachment. Ask the installation owner.",
   "error.PROJECT_ATTACHMENT_REVOKED": "This project attachment has been revoked. Ask the installation owner before using it again.",
   "error.PROJECT_ATTACHMENT_INCOMPLETE": "The attachment is unfinished. Resume the same attach command with its original command ID and preview digest.",
-  "error.PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED": "This installation has registered project references. Detach and reconcile them before backup, restore, relocation or uninstall."
+  "error.PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED": "This installation has registered project references. Detach and reconcile them before backup, restore, relocation or uninstall.",
+  "error.PROJECT_ATTACHMENT_READ_LIMIT": "The source ledger exceeds the installation preview limit of {limit} bytes. Increase installation.packageMeasurement.maxTotalBytes in your user configuration and preview again. No project was attached.",
+  "error.PROJECT_ATTACHMENT_SOURCE_REGISTERED": "The source is registered or has dependent projects. Detach each dependent project with `terminal attach --detach <projectId> --apply`, then run `terminal attach --unregister --apply` on the source before removing it. Backup and identity-preserving relocation remain available."
 }

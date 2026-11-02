@@ -10,7 +10,6 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { inspectConfiguredModelCatalog, applyConfiguredModelCatalogOnly } from './catalog.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
-
 /** Explicit local activation admission, not provider invocation. Store path is resolved only after the gate. */
 export async function admitConfiguredChatActivation(projectRoot: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) {
   try {

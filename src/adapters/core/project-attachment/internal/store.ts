@@ -6,7 +6,6 @@ import { attachmentFailure } from '#engine/index.js';
 import { readInstallationFile } from '#adapters/core/installation-files/index.js';
 import { inspectProductFile, prepareProductFile, prepareProductCompanionPath, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout,
   serializeJsonDocument, withConfigWriteLock, writeJsonAtomic, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-
 const heldRegistries = new AsyncLocalStorage<ReadonlySet<string>>();
 /** No-follow ancestry, local owner and location evidence; reads create neither locks nor directories. */
 export async function captureAttachmentLocation(root: string): Promise<AttachmentLocation> {

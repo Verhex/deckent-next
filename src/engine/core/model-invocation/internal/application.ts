@@ -164,7 +164,7 @@ export class ModelInvocationApplication {
         && protocol.version === profile.protocol.version)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     const native = preparedNative ?? this.natives.resolve(profile);
     if (!native) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
-    if ((profile.schemaVersion === 2 && profile.billingAxis === 'subscription') !== (native.billingAxis === 'subscription'))
+    if ((profile.schemaVersion !== 1 && profile.billingAxis === 'subscription') !== (native.billingAxis === 'subscription'))
       throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     return { binding, activation, profile, native };
   }
@@ -248,7 +248,7 @@ export class ModelInvocationApplication {
       const { binding, activation, profile, native } = await this.admittedTarget(command);
       assertSubscriptionRawUse(principal, profile, this.entry);
       assertSubscriptionDelegation(principal, profile);
-      if (!this.spending && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription')) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+      if (!this.spending && !(profile.schemaVersion !== 1 && profile.billingAxis === 'subscription')) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
       await this.natives.admit?.(profile, signal);
       await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
       const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);

@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { policySchema } from '#domain/index.js';
-import { UninstallRecovery, attachmentLifecycle, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
+import { UninstallRecovery, attachmentLifecycle, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, openLocalIntegrityAuthority,
   uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, nativeUserUnitLinks, acquireLedgerLock, type LedgerLock, selectWorkTarget, resolveGitWorkTarget, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, DispatchPolicyAuthorization, workTargetAttemptAuthorization, resolvePolicyScopeMembership, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, prepareProductCompanionPath, recordedProcessState, type ConfigLoadOptions } from '#platform/index.js';
@@ -19,13 +19,12 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env; let shutdownSeenMs: number | undefined;
   await attachmentLifecycle(config, options).assert();
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
-  const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, options);
+  const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, { ...options, heal: false, uninstallHold: 'admit' });
   // Lane J P1: an unsafe policy or bindings file decides no tier: a typed refusal naming it, never an untyped crash and never a repair.
   const policy = () => source.load().catch((error: unknown) => { const refusal = policyFileRefusal(layout, error); throw refusal ? ErrorRegistry.createError('UNINSTALL_POLICY_UNREADABLE', { params: refusal }) : error; });
   const scopes = (document: unknown) => uninstallAffectedScopes(document, [scopeId,
     ...(config.service.identity ? [config.service.identity.scopeId] : []), ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])]);
-  const installationId = async () => { const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
-    if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE'); return identity.value.installationId; };
+  const installationId = () => attachmentLifecycle(config, options).identityId();
   const person = async () => ({ ...readLocalOsIdentity(), scopeIds: scopes(await policy()) }), exec = nativeServiceExec(config.installation.identityProbe, env);
   const links = nativeUserUnitLinks(config.installation.identityProbe, env);
   let stoppedLock: LedgerLock | undefined;

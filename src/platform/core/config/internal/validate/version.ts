@@ -14,7 +14,7 @@ export function assertNoRetiredConfigFields(input: JsonRecord, locale: Locale = 
 export function versionedConfig(input: JsonRecord, onWarning?: (warning: ConfigWarning) => void, locale: Locale = resolveLocale()): JsonRecord {
   assertSafeKeys(input);
   const version = Object.hasOwn(input, 'schema_version') ? input['schema_version'] : CONFIG_SCHEMA_VERSION;
-  if (version !== CONFIG_SCHEMA_VERSION && version !== 3 && version !== 5) throw ErrorRegistry.createError('CONFIG_VERSION_UNSUPPORTED', { params: { version: String(version) } });
+  if (version !== CONFIG_SCHEMA_VERSION && version !== 3 && version !== 5 && version !== 6) throw ErrorRegistry.createError('CONFIG_VERSION_UNSUPPORTED', { params: { version: String(version) } });
   const next = structuredClone(input);
   if (version === 3) {
     for (const key of RETIRED_CONFIG_FIELDS) if (Object.hasOwn(next, key)) {
@@ -23,5 +23,5 @@ export function versionedConfig(input: JsonRecord, onWarning?: (warning: ConfigW
       onWarning?.({ code: 'CONFIG_FIELD_RETIRED', path: key, message: t('config.surface.fieldRetired', { key }, locale) });
     }
   } else assertNoRetiredConfigFields(next, locale);
-  return { ...next, schema_version: version === 5 ? 5 : CONFIG_SCHEMA_VERSION };
+  return { ...next, schema_version: version === 5 || version === 6 ? version : CONFIG_SCHEMA_VERSION };
 }

@@ -34,7 +34,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     const affected = installationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopeIds);
     const decided = await policy.load();
     for (const action of plan.tier !== 'keep-data' ? ['uninstall', 'purge'] as const : ['uninstall'] as const) authorizeUninstall(decided, { ...principal, scopeIds: affected }, plan.installation.id, affected, action);
-    const recoveryLocation = await recovery.admit(plan);
+    const recoveryLocation = await recovery.admit(plan, location => new FileEffectStore(location, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords }).assertUnclaimed());
     const store = new FileEffectStore(recoveryLocation, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords });
     await store.initialize();
     const approvals = openSqliteApprovalStore(path, config.storage.sqlite);

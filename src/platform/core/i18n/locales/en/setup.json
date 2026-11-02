@@ -335,5 +335,18 @@
   "setup.attach.body": "Folder: {path}\nScope / project: {scope}\nThis prepares an isolated project context. Model access is configured separately.",
   "setup.attach.saved": "Project connection record saved.",
   "setup.attach.preview": "Project connection preview (nothing written).",
-  "setup.attach.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <digest>] [--command-id <id>] [--json]\nSelect an existing installation explicitly with --register from its folder. Apply requires a person at a terminal and the unchanged preview digest. --revoke <project-id> --apply revokes a project connection."
+  "setup.attach.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <digest>] [--command-id <id>] [--json]\nSelect an existing installation explicitly with --register from its folder. Apply requires a person at a terminal and the unchanged preview digest. --revoke <project-id> --apply revokes a project connection.",
+  "setup.session.title": "Open a session in this folder?",
+  "setup.session.body": "Folder: {path}\nScope: {scope}\nConnection: {connections}\nCost type: {costs}\nWrites to: {writeRoot}\nCreates separate project policy, ledger and session state with revocable connection use. Tokens are not copied.",
+  "setup.session.noConnection": "Not configured yet",
+  "setup.attachment.register": "Register this source installation",
+  "setup.attachment.apply": "Attach this project and grant revocable connection use",
+  "setup.attachment.revoke": "Revoke this project attachment",
+  "setup.attachment.leaseRevoke": "Revoke model use; retain the project attachment",
+  "setup.attachment.detach": "Detach the project and revoke model use; keep local data",
+  "setup.attachment.unregister": "Unregister the source after all projects are detached",
+  "setup.attachment.relocate": "Reconcile the moved project or source, keeping its identity",
+  "setup.attachment.restore": "Restore the project attachment and grant a new model-use lease",
+  "setup.attachment.body": "Action: {action}\nFolder: {path}\nScope / project: {scope}\nThe operation uses current policy and the exact preview where required.",
+  "setup.attachment.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <digest>] [--command-id <uuid>] [--json]\nRegister a verified source in its folder, then preview and attach a new project. --lease-revoke <projectId> --apply withdraws only model use. --detach <projectId> --apply withdraws both attachment and use without deleting data. --unregister --apply on the source requires detached dependencies. --relocate --scope <id> --apply reconciles a real move. After encrypted restore, preview the retained scope and use --restore <projectId> --expect <digest> --apply to grant new use. Every apply needs a person at a terminal."
 }

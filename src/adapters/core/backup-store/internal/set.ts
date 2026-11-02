@@ -55,6 +55,10 @@ export async function verifyBackupSet(set: string, passphrase: string, limits: B
     const resources = Object.fromEntries(Object.entries(state.resources).filter(([name]) => !PRODUCT_LAYOUT_REGISTRY.fixedResources.includes(name)));
     resolveProductLayout({ projectRoot: state.projectRoot, root: state.layoutRoot, resources });
     const identity = state.entries.find(item => item.resource === 'installationIdentity' && item.path === 'identity.json');
+    if (state.schemaVersion === 3) {
+      if (identity) return refuse('BACKUP_SET_INVALID');
+      return new VerifiedBackup(resolve(set), state, expected.get('ledger.db')!, key);
+    }
     if (!identity) return refuse('BACKUP_SET_INVALID');
     const record: unknown = JSON.parse(Buffer.from(identity.content, 'base64').toString('utf8'));
     assertUnsealedInstallation(record);

@@ -68,7 +68,7 @@ export class ModelInvocationInspectionApplication {
       const planUsage = verifyModelInvocationPlanUsage(stored.planUsage ?? null, record);
       if (planUsage && spending) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       return checkInvocationResultDelivery(Object.freeze({ ...identity, invocation: receipt, control, spending,
-        ...(receipt.profile.schemaVersion === 2 ? { planUsage } : {}),
+        ...(receipt.profile.schemaVersion !== 1 ? { planUsage } : {}),
         contentStatus: record.purge ? 'purged' : record.content === null ? 'not-captured' : 'retained', purge: record.purge,
         ...(query.includeResponseContent === true ? { responseContent: record.content } : {}) }), delivery);
     } finally { reader.close(); }

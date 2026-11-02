@@ -124,7 +124,7 @@ export class FileBackupStorage implements BackupStoragePort {
           };
           // S1 D1: the project layer is published as the project config; the global layer only fills the per-user global config below.
           const layers = splitArchivedConfig(state), config = relocate(layers.project, '') as Record<string, unknown>;
-          config['layout'] = { ...(config['layout'] as Record<string, unknown> | undefined), root: layout.root, resources: targetResources };
+          config['layout'] = { ...(config['layout'] as Record<string, unknown> | undefined), root: layout.root === resolveProductLayout({ projectRoot: target }).root ? null : layout.root, resources: targetResources };
           // A restored scheduler must be re-enabled deliberately after identity keep and credential provisioning.
           config['backup'] = { ...(config['backup'] as Record<string, unknown> | undefined), schedule: getConfigFieldDefault('backup').schedule };
           // Astra 2475 R1: before any write, check the TARGET's effective config (its loaded global layer under this project layer, normalized like loading); bind the published key to the name it opens (project layer; the global stays).
@@ -167,7 +167,7 @@ export class FileBackupStorage implements BackupStoragePort {
         if (!await lstat(from).catch(() => null)) {
           // A set taken before the project identity existed carries no record: publish nothing, so the target keeps its own identity or stays
           // not-created; an empty directory would read as a lost record and refuse every scoped operation (CI-KARARLILIK 2026-10-14).
-          if (resource === 'projectIdentity') continue;
+          if (resource === 'projectIdentity' || resource === 'projectAttachment' && state.schemaVersion !== 3 || resource === 'installationIdentity' && state.schemaVersion === 3) continue;
           if (directoryResources.has(resource)) await privateDirectory(from); else return refuse('BACKUP_SET_INVALID');
         }
         await publish(from, productResourcePath(layout, resource));
@@ -183,7 +183,7 @@ export class FileBackupStorage implements BackupStoragePort {
       // Astra 2475 R1: the hold stays unless the key the effective config opens is the set's key (same derivation as the keyring's key id).
       if (sha256((await readPrivate(join(approvals, restoredConfig!.approvals.keyFile), 32)).toString('hex')) !== verified.integrity().keyId) return refuse('BACKUP_RESTORE_INCOMPLETE');
       let required = false;
-      try { await new FileInstallationIdentityStore(layout, restoredConfig!.configFile.writeLockTimeoutMs, undefined, restoredConfig!.installation).read(); }
+      try { if (state.schemaVersion === 3) required = target !== state.projectRoot; else await new FileInstallationIdentityStore(layout, restoredConfig!.configFile.writeLockTimeoutMs, undefined, restoredConfig!.installation).read(); }
       catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'INSTALLATION_IDENTITY_RELOCATED') required = true; else throw error; }
       await rm(stage, { recursive: true, force: true });
       // S1 D4: an earlier interrupted attempt's stage (also alpha.18's project-root location) and pending key/hold files go with this success.

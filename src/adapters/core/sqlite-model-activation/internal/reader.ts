@@ -1,5 +1,5 @@
 import { persistedInteger } from '#domain/index.js';
-import { createRequire } from 'node:module';
+import { openReadOnlySqlite } from '#adapters/core/sqlite-read-view/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import type { ModelReference } from '#domain/index.js';
@@ -19,8 +19,7 @@ export function openSqliteModelActivationReader(path: string, options: { readonl
   let db: DatabaseSync | undefined;
   try {
     assertSqliteEngineSupported(process.versions.sqlite);
-    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
+      db = openReadOnlySqlite(path, parsed.data.busyTimeoutMs);
     requireLedgerVersion(db, MODEL_ACTIVATION_LEDGER_VERSION);
     return new SqliteModelActivationReader(db);
   } catch (error) {

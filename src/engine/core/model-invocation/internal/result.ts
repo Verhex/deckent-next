@@ -76,7 +76,7 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     } else if (purge) {
       verifyModelInvocationRecord({ receipt, content: null, purge });
     }
-    return Object.freeze({ ...identity, invocation: receipt, control, spending, ...(receipt.profile.schemaVersion === 2 ? { planUsage } : {}), contentStatus: parsed.data.contentStatus, purge,
+    return Object.freeze({ ...identity, invocation: receipt, control, spending, ...(receipt.profile.schemaVersion !== 1 ? { planUsage } : {}), contentStatus: parsed.data.contentStatus, purge,
       ...(wantsContent ? { responseContent } : {}) });
   } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
 }

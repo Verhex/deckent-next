@@ -17,7 +17,9 @@ it('keeps a generic unknown intent outside a deleted ledger, fences CAS/replay a
     const ledger = join(root, 'ledger.db'); await writeFile(ledger, 'temporary-ledger');
     const integrity = createHmacIntegrity('fixture', new Uint8Array(32).fill(7)), directory = join(root, 'recovery');
     const store = () => new FileEffectStore(directory, integrity, { maxBytes: 65536, maxRecords: 10 });
+    await expect(store().assertUnclaimed()).rejects.toBeDefined();
     await store().initialize();
+    await expect(store().assertUnclaimed()).resolves.toBeUndefined();
     const descriptor = { schemaVersion: 1, operation: { id: 'record.remove', version: 1 }, targetKind: 'record', effectClass: 'irreversible',
       approval: 'required', precondition: 'record-version', compensation: null, inputMaxBytes: 4096, surface: 'authority' };
     const input = effectIntentSchema.parse({ schemaVersion: 1, descriptor,
@@ -29,7 +31,9 @@ it('keeps a generic unknown intent outside a deleted ledger, fences CAS/replay a
     await rm(ledger); effects++;
     // Crash after the target effect and before settlement: a fresh instance sees the old claimed record.
     expect(await store().loadEffect('s', 'remove')).toEqual(claim);
+    await expect(store().assertUnclaimed()).rejects.toMatchObject({ code: 'EFFECT_TARGET_BUSY' });
     const unknown = await store().saveEffect(claim, markEffectUnknown(claim));
+    await expect(store().assertUnclaimed()).rejects.toMatchObject({ code: 'EFFECT_TARGET_BUSY' });
     expect(await store().claimEffect(input)).toEqual(unknown); expect(effects).toBe(1);
     await expect(store().claimEffect({ ...input, command: { ...input.command, commandId: 'other' }, idempotencyKeyHash: 'd'.repeat(64) })).rejects.toMatchObject({ code: 'EFFECT_TARGET_BUSY' });
     await expect(store().saveEffect(claim, settleEffect(claim, { kind: 'fence', version: null, observedAt: 2 }))).rejects.toMatchObject({ code: 'EFFECT_CONFLICT' });
@@ -41,5 +45,6 @@ it('keeps a generic unknown intent outside a deleted ledger, fences CAS/replay a
     const file = join(directory, 'effects.json'), text = await readFile(file, 'utf8');
     await writeFile(file, text.replace('"state":"settled"', '"state":"unknown"'));
     await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' });
+    await expect(store().assertUnclaimed()).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' });
   } finally { await rm(root, { recursive: true, force: true }); }
 });

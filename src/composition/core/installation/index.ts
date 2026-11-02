@@ -9,3 +9,4 @@ export { openOwnPermissionMode } from './internal/own-permission-mode.js';
 export { previewConfiguredUninstall, applyConfiguredUninstall } from './internal/uninstall.js';
 
 export { configuredProjectAttachment, executeConfiguredProjectAttachment } from './internal/attachment.js';
+export { relocateConfiguredProjectAttachment } from '#composition/core/attachment-lifecycle/index.js';

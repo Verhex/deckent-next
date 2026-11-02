@@ -1,11 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { parseProviderSpendBudget, providerSpendBudgetSchema } from '#domain/index.js';
+import { parseProviderSpendBudget, providerSpendBudgetSchema, identitySchema, counterSchema } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
 import { ProviderSpendError, providerSpendPeriodRegistry } from '#engine/index.js';
-
-export const providerSpendingSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]),
-  budgets: z.array(providerSpendBudgetSchema).readonly() });
+const templateSchema = z.strictObject({ budgetId: identitySchema, currency: z.string().regex(/^[A-Z]{3}$/),
+  limitMinorUnits: counterSchema, period: identitySchema.optional() }).readonly();
+export const providerSpendingSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  budgets: z.array(providerSpendBudgetSchema).readonly(), template: templateSchema.optional() }).refine(value => !value.template || value.schemaVersion === 3);
 
 function invalid(): never {
   throw new ConfigValidationError([{ path: 'provider_spending', reason: 'POLICY_AUTHORITY_INVALID' }]);
@@ -13,6 +14,7 @@ function invalid(): never {
 function validate(input: unknown) {
   const parsed = providerSpendingSchema.safeParse(input);
   if (!parsed.success) return invalid();
+  if (parsed.data.template?.period) { try { providerSpendPeriodRegistry.get(parsed.data.template.period); } catch { return invalid(); } }
   const scopes = new Set<string>();
   for (const raw of parsed.data.budgets) {
     let budget;
@@ -29,6 +31,7 @@ export function validateProviderSpendingLayers(global: unknown, project: unknown
   if (project === undefined) return;
   const child = validate(project);
   if (!parent) return;
+  if (child.template && !isDeepStrictEqual(child.template, parent.template)) invalid();
   for (const budget of child.budgets) {
     if (!parent.budgets.some(candidate => isDeepStrictEqual(candidate, budget))) invalid();
   }
@@ -56,4 +59,12 @@ export function providerSpendingConfiguredBudget(config: Record<string, unknown>
   const parsed = providerSpendingSchema.safeParse(config['provider_spending']);
   if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
   return parsed.data.budgets.find(candidate => candidate.scopeId === scopeId) ?? null;
+}
+
+/** The authored default is a template, never the source ledger's remaining balance. */
+export function providerSpendingTemplate(config: Record<string, unknown>, scopeId: string) {
+  const section = config['provider_spending']; if (section === undefined) return null;
+  const parsed = providerSpendingSchema.parse(section), budget = parsed.budgets.find(item => item.scopeId === scopeId);
+  return parsed.template ?? (budget ? { budgetId: budget.budgetId, currency: budget.currency, limitMinorUnits: budget.limitMinorUnits,
+    ...(budget.period ? { period: budget.period } : {}) } : null);
 }

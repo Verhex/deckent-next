@@ -1,9 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
 import { installationRegistrationSchema, projectAttachmentSchema, type AttachmentPerson, type InstallationRegistration, type InstallationSource,
   type ProjectAttachment, type InstallationIdentity } from '#domain/index.js';
 import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/index.js';
 
 export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
-  | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED';
+  | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED';
 export class ProjectAttachmentError extends Error {
   constructor(readonly code: ProjectAttachmentErrorCode) { super(code); this.name = 'ProjectAttachmentError'; }
 }
@@ -30,7 +31,7 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   }
   if (!raw) return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
   const attachment = projectAttachmentSchema.parse(raw), registry = await ports.registration();
-  if (!registry) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
+  if (!registry || registry.unregistered) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
   const registration = installationRegistrationSchema.parse(registry);
   if (registration.registrationId !== request.registrationId || attachment.registrationId !== registration.registrationId
     || request.companyId !== registration.source.companyId || attachment.companyId !== request.companyId
@@ -53,4 +54,9 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
 export function existingSharedIdentity(identity: InstallationIdentityRead): InstallationIdentity {
   if (identity.status !== 'available' || identity.pendingWrite || identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
   return identity.value;
+}
+
+/** Location changes only through witnessed relocation; every authority identity remains exact. */
+export function sameProjectAttachmentAuthority(left: ProjectAttachment, right: ProjectAttachment) {
+  const { location: ignoredLeft, ...a } = left, { location: ignoredRight, ...b } = right; void ignoredLeft; void ignoredRight; return isDeepStrictEqual(a, b);
 }

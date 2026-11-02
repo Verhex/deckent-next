@@ -14,7 +14,7 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
   assertNoRetiredConfigFields(input, locale);
   const issues: ConfigIssue[] = [], warnings: ConfigWarning[] = [];
   const installation = input['installation'];
-  if (isRecord(installation) && installation['sharedRegistrationId'] != null && input['schema_version'] !== 5) {
+  if (isRecord(installation) && installation['sharedRegistrationId'] != null && ![5, 6].includes(Number(input['schema_version']))) {
     issues.push({ path: 'schema_version', reason: 'CONFIG_VERSION_UNSUPPORTED' });
   }
   const core = Object.fromEntries(Object.entries(input).filter(([key]) => Object.hasOwn(CORE_SCHEMA.shape, key)));
