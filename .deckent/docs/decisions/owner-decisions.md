@@ -1053,3 +1053,23 @@ Kaynak: dış `proof/ALPHA60/PAKET-2/PLAN.md` (owner satırları; saatler lead'i
 - **Z1 sınırı:** düğüm sınırı araç başına; plan araçları config admission.graph'tan hesaplanan sınır (~51k), diğerleri 4096; heap ölçülüp kayıtlı tavan.
 - **Bağımlılık:** fast-uri kabul edilmiş riski MCP SDK 2.4.0 taşıyıcılarına aynı bitişle (2026-11-21) taşındı; gerçek MCP istemci dumanı GREEN (2026-11-01), SDK 2.4.0 kalır.
 - **Kapsam (2026-11-01):** F11 (delegatedUse kişi şahidi) alpha.60'a; WALK22 sonrası ürün hataları (F12 `/help`, F13 beuser-self kartı) alpha.60'a; F14 Codex abonelik tek seferlik çağrı hatası ürün hatasıdır: önce hata metni kaydı, sonra owner onaylı tek kontrollü çağrı, sonra düzeltme (allowlist genişletmesi ayrı güvenlik kararı). 23:00: alpha.60 kapsamı dondu (yalnız güvenlik/veri kaybı istisna); owner terminal testi ve dört yolculuk yeniden yürüyüşü betadan önceye. 23:20: alpha.60 hemen canlı, alpha.61 3 saat içinde; alpha.61 kapsamı BeUser bitiş sinyali, değerlendirici girdi kırpma + hata kodu bölme, O-B1 yolculuğu; açılış/zod perf ve TL üreticileri alpha.61'e sığmazsa beta listesine.
+
+<a id="owner-kararlari-2026-11-02"></a>
+## Owner kararları 2026-11-02
+
+- **alpha.62 kapsamı (owner terminal testi sonrası):** abonelik girişi düzeltilir. /provider'da yalnız "Claude ile giriş" ve "ChatGPT ile giriş" kalır; Codex işçi kullanımı ChatGPT girişinin bir kullanımıdır. Cursor betada düzelir.
+- **İlk iş:** kurulumdan çıkarıldı; kurulumdan sonra ayrı karşılama gelir. Bütçe yalnız API bağlantısında sorulur; abonelik ve yerel bağlantıda para bütçesi kapısı yoktur.
+- **Bir kez kurulum (ONCE):** D1–D4 önerildiği gibi kabul edildi; uygulama alpha.62'de.
+  - Ortak doğrulanmış kurulum kimliği; proje scope, policy, ledger ve runtime kayıtları ayrı.
+  - Eski kurulumlar yerinde kalır; kişi tek kaynağı açıkça seçer.
+  - Projeye geri alınabilir model kullanım izni (lease).
+  - Scope başına API bütçe şablonu.
+  - ARCHITECTURE proje/kurulum kökü tarifi bu kararla uzlaştırılır.
+  - Kanun denetimi PASS (yalnız MINOR).
+- **Claude aboneliğiyle terminal sohbeti:** alpha.62'ye eklendi. Sınırı Anthropic legal-and-compliance koşullarıdır: değiştirilmemiş binary, kişinin kendi girişi, Deckent token'a dokunmaz. İlk teslim yalnız metin; araçlı sohbet ayrı tasarım ister.
+- **Codex analiz devri (ekosistem ve operasyon):** plana işlenir; uygulama her madde için ayrı owner kabulü ister → [ekosistem-ops](../plan/ecosystem-ops-2026-11-02.md).
+- **SUPERAGENT-FIKIRLER (SA-1…SA-5):** beta opsiyonel olarak plana eklenir.
+  - Sırası verilmedi; beta kapısı değildir ve beta.1'i bekletmez.
+  - 2026-10-23 "MVP yok / kod betadan sonraya kalmaz" kuralına owner'ın açık istisnasıdır.
+  - Kanun denetimi r1 HOLD, r2 PASS.
+
