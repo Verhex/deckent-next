@@ -32,6 +32,8 @@ const kindSchema = z.strictObject({
   /** The catalog key of the kind's name (a surface resolves it in the person's language). */
   labelKey: z.string().regex(/^tui\.provider\.kind\.[A-Za-z]+$/u),
   available: z.boolean(),
+  /** Menu projection only: connection ids and persisted profiles are unchanged. */
+  presentation: z.enum(['listed', 'hidden', 'beta']).prefault('listed'),
   /** İ-12 (owner 2026-10-25, v3): what using the kind costs — a subscription, a local server, or metered API money. Surfaces list the no-spend
    * classes first (`PROVIDER_CONNECT_BILLING` order). A row that names none is treated as metered (the class that needs a budget). */
   billing: z.enum(PROVIDER_CONNECT_BILLING).prefault('metered'),

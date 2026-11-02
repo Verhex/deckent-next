@@ -239,8 +239,10 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
       // PV 2a: a CLI subscription that runs only isolated is disabled with its reason on a host without usable isolation (refusal card on Enter).
       isolation = connect.isolationRefusal && connect.kinds.some(kind => kind.headlessLogin) ? await connect.isolationRefusal(options).catch((error: unknown) => error) : null;
+      const isolationReason = isolation instanceof DeckentError ? ErrorRegistry.get(isolation.code, locale, isolation.params)?.message ?? t('tui.provider.isolation.blocked', {}, locale)
+        : t('tui.provider.isolation.blocked', {}, locale);
       const reading = await host.inspectInvocableModels?.(root, scopeId, options), catalogView = await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null); // M-28 tail: a keyless CLI channel's count
-      const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.map(async kind => {
+      const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.filter(kind => kind.presentation !== 'hidden').map(async kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
         const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
@@ -253,8 +255,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
-        return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail: kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
-          blocked: !kind.available ? t('tui.provider.unavailable', {}, locale) : kind.headlessLogin && isolation ? t('tui.provider.isolation.blocked', {}, locale) : null, keyName, keyStored: stored, grantRequired,
+        return { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.presentation === 'beta' ? `${t('tui.provider.beta', {}, locale)} · ${detail}` : kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
+          blocked: !kind.available ? `${t('tui.provider.unavailable', {}, locale)} ${t('siwc.card.apiKey', {}, locale)}` : kind.headlessLogin && isolation ? isolationReason : null, keyName, keyStored: stored, grantRequired,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).

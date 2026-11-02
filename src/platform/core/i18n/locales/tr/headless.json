@@ -19,7 +19,7 @@
   "error.HEADLESS_GUARD_FAILED": "Abonelik CLI'ı izin verilenden farklı başladı ({field}), bu yüzden sonucu kullanılmadan durduruldu. Hiçbir şey kabul edilmedi, başka bir model seçilmedi; kanal denetimi bir sonraki çağrıda yeniden koşar.",
   "error.HEADLESS_CREDITS_REQUIRED": "Abonelik bu istek için ek kredi istiyor. Deckent hiçbir zaman kullanım satın almaz: hiçbir şey kabul edilmedi, başka bir model seçilmedi. Sağlayıcı hesabınızda karar verip yeniden deneyin.",
   "error.HEADLESS_QUOTA_EXHAUSTED": "Aboneliğin kullanım sınırı doldu, bu adım çalışmadı. Başka bir model seçilmedi ve hiçbir şey kendiliğinden yeniden denenmiyor; sıfırlanmadan sonra yeni bir istek gönderin.",
-  "tui.provider.kind.claudeCliSubscription": "Claude aboneliği (kendi claude CLI'ınız, yalıtılmış)",
+  "tui.provider.kind.claudeCliSubscription": "Claude ile giriş",
   "headless.connect.login": "Kullanılan CLI girişi: {dir} (CLI onu kendisi okur; Deckent hiçbir zaman açmaz).",
   "headless.connect.delegated": "Sizin dışınızda, onayınızla bu girişi şunlar kullanabilir: {classes}.",
   "headless.connect.personOnly": "Bu girişi yalnız siz kullanabilirsiniz: --delegate ile onay verene kadar AI/MCP aktörleri ve arka plan rolleri reddedilir.",

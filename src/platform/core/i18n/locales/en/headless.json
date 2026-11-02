@@ -19,7 +19,7 @@
   "error.HEADLESS_GUARD_FAILED": "The subscription CLI started differently than allowed ({field}), so it was stopped before using the result. Nothing was accepted and no other model was chosen; the channel check runs again on the next call.",
   "error.HEADLESS_CREDITS_REQUIRED": "The subscription asks for extra credits for this request. Deckent never buys usage: nothing was accepted and no other model was chosen. Decide in your provider account, then try again.",
   "error.HEADLESS_QUOTA_EXHAUSTED": "The subscription's usage limit is reached, so this step did not run. No other model was chosen and nothing is retried on its own; send a new request after the reset.",
-  "tui.provider.kind.claudeCliSubscription": "Claude subscription (your own claude CLI, isolated)",
+  "tui.provider.kind.claudeCliSubscription": "Sign in with Claude",
   "headless.connect.login": "CLI login used: {dir} (the CLI reads it itself; Deckent never opens it).",
   "headless.connect.delegated": "Besides you, these may use this login after your consent: {classes}.",
   "headless.connect.personOnly": "Only you may use this login: AI/MCP actors and background roles are refused until you consent with --delegate.",

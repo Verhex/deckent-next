@@ -255,6 +255,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Providers and subscriptions
 
+- **Provider sign-in menu (A62):** the subscription rows are **Sign in with Claude** and **Sign in with ChatGPT**; Cursor is labelled beta.
+  The older Codex CLI connection and profiles remain readable through the same CLI commands; hiding its duplicate menu row does not move
+  credentials or make a worker ready. ChatGPT consent names chat, AI workers (`ai`) and Brain/background features (`system`), with extra use
+  off by default. Choosing ChatGPT with automatic API continuation off still starts sign-in. **Connect with an API key** opens API-provider
+  selection, including after a refusal; masked entry, custody, grants and budget requirements remain in force. Real account login and
+  Windows Terminal acceptance still need the assembled release walk.
 - **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
   `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
   codex-cli-subscription` (it runs `codex login` into its own Deckent-owned directory, `headless/logins/codex`; `--config-dir` and
@@ -274,8 +280,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. The terminal's `/provider` does the same
   (alpha.60): it shows the login directory first, hands the terminal to the CLI's own sign-in (Ctrl+C stops it; the registry time
   bound ends it), connects, then asks who besides you may use the login (system and ai unticked on a first connect, the consent in force ticked on a reconnect; MCP never). It runs only where
-  Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude and Codex
-  subscription rows disabled with that reason and lists the providers usable instead. Terminal chat with a Claude subscription is not
+  Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
+  sign-in row disabled with that reason and lists the providers usable instead. Terminal chat with a Claude subscription is not
   supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Of the subscriptions only Sign in with ChatGPT serves
   terminal chat (below); a paid API turn without a scope budget is refused. *Workaround:* sign in with ChatGPT in `/provider`, or
