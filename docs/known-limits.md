@@ -255,6 +255,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Providers and subscriptions
 
+- **Claude subscription text chat (A62):** `/model` can use the existing isolated Claude CLI connection for streamed text replies,
+  conversation history and cancellation without an API budget. Native CLI tools and MCP remain disabled; this connection cannot write files
+  or run commands in chat. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
+  store or intermediate OAuth/session tokens, share the profile with another principal, resell usage or bill on others' behalf.
+  Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
+  Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
+
 - **Provider sign-in menu (A62):** the subscription rows are **Sign in with Claude** and **Sign in with ChatGPT**; Cursor is labelled beta.
   The older Codex CLI connection and profiles remain readable through the same CLI commands; hiding its duplicate menu row does not move
   credentials or make a worker ready. ChatGPT consent names chat, AI workers (`ai`) and Brain/background features (`system`), with extra use

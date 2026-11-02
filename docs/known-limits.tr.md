@@ -256,6 +256,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Sağlayıcılar ve abonelikler
 
+- **Claude aboneliğiyle metin sohbeti (A62):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. Native CLI araçları ve MCP kapalıdır; bu bağlantı sohbetten dosya yazamaz veya komut çalıştıramaz. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
+
 - **Sağlayıcı giriş menüsü (A62):** abonelik satırları **Claude ile giriş** ve **ChatGPT ile giriş**; Cursor betada notuyla görünür.
   Eski Codex CLI bağlantısı ve profilleri aynı CLI komutlarıyla okunur; yinelenen menü satırını gizlemek kimlik bilgilerini taşımaz,
   işçiyi hazır hâle getirmez. ChatGPT onayı sohbeti, AI işçileri (`ai`) ve Brain/arka plan özelliklerini (`system`) adlandırır; ek kullanım

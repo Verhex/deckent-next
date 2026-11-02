@@ -11,3 +11,4 @@ export { discoverProviderModels, discoveredProviderCatalog, probeLocalToolCalls,
 
 export type { ProviderDiscoveryCause } from './internal/failure.js';
 export { providerConnectHelpKinds } from './help.js';
+export { terminalTextChatFamilies } from './internal/registry.js';

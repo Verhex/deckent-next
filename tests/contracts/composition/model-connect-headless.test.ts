@@ -18,20 +18,22 @@ import * as catalog from '#composition/core/provider-catalog/index.js';
 import * as configComposition from '#composition/core/config/index.js';
 import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
-import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
+import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import seed from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
 import codexSeed from '../../../assets/model-catalog/codex-cli-subscription.json' with { type: 'json' };
-import { roleModelInvocationReference } from '#engine/index.js';
+import { textOnlyModelInvocationRequest, roleModelInvocationReference } from '#engine/index.js';
 import { CODEX_FAMILY, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
-import { writeFakeCli } from '../../fixtures/native-headless/stream.js';
+import { initLine, assistantLine, resultLine, rateLimitLine, writeFakeCli } from '../../fixtures/native-headless/stream.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // The MCP actor holds the same grants, so the refusal below is the person-only rule itself, not a missing grant.
 const both = [...me, { issuer: `${me[0]!.issuer}/mcp`, subject: me[0]!.subject }];
-const grants = [{ id: 'config', effect: 'allow', actions: ['write'], scopes: 'all', principals: both, resource: { kind: 'config', ids: 'all' } },
+const grants = [{ id: 'chat', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: 'all', principals: both, resource: { kind: 'model-invocation', ids: 'all' } },
+  { id: 'config', effect: 'allow', actions: ['write'], scopes: 'all', principals: both, resource: { kind: 'config', ids: 'all' } },
   { id: 'activation', effect: 'allow', actions: ['activate', 'deactivate', 'inspect'], scopes: 'all', principals: both, resource: { kind: 'model-activation', ids: 'all' } }];
 const nativeId = seed.recommendedActivations[0]!.modelIds[0]!;
 type Profile = { schemaVersion: number; billingAxis?: string; adapter: { id: string; definition: Record<string, unknown> } };
@@ -83,13 +85,54 @@ afterEach(() => vi.restoreAllMocks());
 const platformPrune = platform.pruneConfigBackups;
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
-  it('S3-5: the kind needs no preview switch any more: it connects wherever its isolation realm works, the retired key set or not', async () => {
+  it('S3-5/A62: connects without a preview switch; subscription text chat streams, carries history and Esc cancels in the built terminal', async () => {
+    expect(textOnlyModelInvocationRequest({ model: 'fixture', max_completion_tokens: 1, messages: [{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }] })['messages']).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }]);
+    expect(adapters.terminalTextChatFamilies).toContain(seed.providers[0]!.channel.protocolFamily);
+    expect(adapters.terminalTextChatFamilies).not.toContain(CODEX_FAMILY);
     for (const preview of [null, false]) {
       const h = await harness(preview);
       await expect(h.connect('c-1')).resolves.toMatchObject({ status: 'connected' });
       expect(await h.spawns()).toEqual(expect.arrayContaining(['version', 'help', 'auth'])); expect(await h.profile()).toBeDefined();
+      const reference = { providerId: seed.providers[0]!.id, providerVersion: seed.providers[0]!.version,
+        modelId: seed.providers[0]!.models.find(model => model.nativeId === nativeId)!.id, modelVersion: 1 };
+      await expect(inspectConfiguredModelReadiness(h.f.project, 'scope', reference, { env: h.f.env })).resolves.toMatchObject({ refreshRequired: false, command: { nativeRequest: { stream: false, messages: [{ role: 'system', content: '' }, { role: 'user', content: ' ' }] } } });
+      if (preview !== null) continue;
+      const configPath = join(h.f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+      delete config.provider_spending;
+      config.terminal.chat.reference = reference;
+      config.provider_invocation_profiles.profiles = config.provider_invocation_profiles.profiles.filter((profile: Profile) => profile.adapter.id === 'native-cli-headless');
+      await writeFile(configPath, JSON.stringify(config)); platform.clearConfigCache();
+      const complete = (text: string) => [{ line: initLine({ model: nativeId }) }, { line: assistantLine(text, nativeId) },
+        { line: rateLimitLine() }, { line: resultLine(text, {}, nativeId) }];
+      await writeFakeCli(join(h.f.data, 'bin'), { logPath: join(h.configDir, '.claude.json'), initCwd: 'actual', stepsByCall: [
+        complete('CLAUDE-CHAT-FIRST'), [{ line: initLine({ model: nativeId }) }, { line: assistantLine('CLAUDE-CHAT-WAIT', nativeId) }, { hang: true }],
+        complete('CLAUDE-CHAT-SECOND'), [{ line: initLine({ model: nativeId }) }, { line: rateLimitLine('rejected') }],
+      ] });
+      expect((await inspectConfiguredInvocableModels(h.f.project, 'scope', { env: h.f.env })).models.find(model => model.reference.providerId === reference.providerId && model.reference.modelId === reference.modelId)?.availability).toEqual({ invocable: true, reason: null });
+      await h.f.start();
+      const cli = resolve('dist/composition/core/cli/internal/entry.js');
+      const steps = [['Deckent workline', '/model\r'], ['Models · scope', '\r'], ['Subscription text chat', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
+        ['Ready', '/provider\r', 'fresh'], ['no login-token handling, sharing or resale.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
+        ['CLAUDE-CHAT-WAIT', '\u001b'], ['cancelled (model response)', 'remember first hello\r'],
+        ['CLAUDE-CHAT-SECOND', 'quota please\r'], ['Your subscription usage limit', '/exit\r', 'fresh']];
+      const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 'scope']),
+        JSON.stringify(steps), 'tty', 'until-exit'], { cwd: h.f.project, env: { ...h.f.env, TERM: 'xterm-256color', NO_COLOR: '1', DECKENT_LANGUAGE: 'en' },
+        timeout: 120_000, maxBuffer: 8 * 1024 * 1024 });
+      const result = JSON.parse(stdout) as { status?: number; timeout?: string; output: string };
+      console.info('A62 Claude text chat PTY:', JSON.stringify(result));
+      expect(result.timeout, result.output).toBeUndefined(); expect(result.status, result.output).toBe(0);
+      expect(result.output).not.toContain('Set a budget');
+      const calls = (await readFile(join(h.configDir, '.claude.json'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+        .filter(entry => entry.mode === 'call') as { stdin: string; argv: string[] }[];
+      expect(calls).toHaveLength(4);
+      expect(calls[2]!.stdin).toContain('first hello'); expect(calls[2]!.stdin).toContain('CLAUDE-CHAT-FIRST');
+      expect(calls[2]!.stdin).toContain('remember first hello');
+      for (const call of calls) { expect(call.argv[call.argv.indexOf('--tools') + 1]).toBe(''); expect(call.argv).toContain('--strict-mcp-config'); }
+      expect(h.f.rows('SELECT count(*) AS count FROM model_invocation_spend_reservations')).toEqual([{ count: 0 }]);
+      const turns = h.f.rows('SELECT record FROM agent_turns').map(row => JSON.parse(row.record as string));
+      expect(turns.map(turn => turn.outcome?.finish)).toEqual(expect.arrayContaining(['stop', 'cancelled', 'error']));
     }
-  });
+  }, 120_000);
   it('N19: an MCP actor can neither connect the person\'s login nor change its consent', async () => {
     const h = await harness(true);
     const path = join(h.f.project, '.deckent/config.json'), before = await readFile(path, 'utf8');

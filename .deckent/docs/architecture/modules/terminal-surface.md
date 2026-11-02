@@ -558,3 +558,14 @@ separate from sign-in. The API-continuation step explicitly offers ChatGPT sign-
 an API-key provider picker. The same API-key picker remains reachable from `/provider` after a custody or connection refusal.
 It lists metered registry kinds and reuses the masked key, custody and grant flow. Claude's terminal-chat limitation is
 worded from EN/TR catalogs in `/model`, without exposing the generic invocation code as its explanation.
+
+### Claude subscription text chat (A62)
+
+The provider connection registry explicitly admits terminal text chat per headless family. Readiness and model switching adapt their preview to the
+same two-message request used by terminal turns. Multi-message history passes as a role-tagged JSON transcript in the user message; existing single-user role prompts keep their contents.
+System messages stay in the system prompt. No CLI session or credential is imported. The existing native-cli-headless port owns version,
+flag, auth, UID, delegated-use, bubblewrap, egress and resource checks; native tools and MCP remain off. Existing durable chat turns and
+model invocations own streaming, cancellation, usage, quota refusal and replay; subscription billing has no API budget gate. The connection
+is text-only; it offers no file or shell tools. Other headless families retain their existing admission until explicitly opted in by registry.
+The account belongs to the person using Anthropic's unmodified binary and sign-in; Deckent never handles the OAuth/session token or resells
+or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.

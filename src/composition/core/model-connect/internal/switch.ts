@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ModelReference } from '#domain/index.js';
-import { inspectModelSwitch, prepareModelSwitch, type ModelSwitchPorts } from '#engine/index.js';
-import { effectiveTerminalOutputCap, readTerminalChatConfig, WORKSPACE_READ_TOOL_SPECS, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY } from '#adapters/index.js';
+import { textOnlyModelInvocationRequest, inspectModelSwitch, prepareModelSwitch, type ModelSwitchPorts } from '#engine/index.js';
+import { terminalTextChatFamilies, effectiveTerminalOutputCap, readTerminalChatConfig, WORKSPACE_READ_TOOL_SPECS, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -9,7 +9,8 @@ import { previewConfiguredModel } from '#composition/core/model-invocation/index
 import { admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 // Readiness previews the same effective output cap a turn reserves (SPEND-HOLDS), not the raw terminal chat cap.
 const ports = (root: string, scopeId: string, options: ConfigLoadOptions): ModelSwitchPorts => ({
-  commandId: randomUUID, families: [OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY], tools: WORKSPACE_READ_TOOL_SPECS,
+  commandId: randomUUID, families: [OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY, ...terminalTextChatFamilies], tools: WORKSPACE_READ_TOOL_SPECS,
+  shapeRequest: (request, definition) => definition.model.protocols.some(protocol => terminalTextChatFamilies.includes(protocol.family)) ? textOnlyModelInvocationRequest(request) : request,
   async snapshot(reference) {
     const config = await loadComposedConfig(root, options) as Record<string, unknown>;
     if (!readTerminalChatConfig(config)) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');

@@ -1,4 +1,4 @@
-import type { AgentToolSpec, JsonObject, ModelActivationCommand, ModelActivationRecord, ModelInvocationCommand, ModelReference } from '#domain/index.js';
+import type { AgentToolSpec, JsonObject, ModelBindingDefinition, ModelActivationCommand, ModelActivationRecord, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { ModelInvocationError } from '#domain/index.js';
 import { ModelInvocationStoreError } from './port.js';
 import type { ModelBindingInspection } from '#engine/core/provider-catalog/index.js';
@@ -11,6 +11,7 @@ export interface ModelSwitchPorts {
   commandId(): string;
   readonly families: readonly string[];
   readonly tools: readonly AgentToolSpec[];
+  readonly shapeRequest?: (request: JsonObject, definition: ModelBindingDefinition) => JsonObject;
 }
 
 /** Non-sending readiness: declared tool capability determines its native shape; adapters retain protocol and price authority.
@@ -23,10 +24,11 @@ export async function inspectModelSwitch(scopeId: string, reference: ModelRefere
   if (reasoning === 'off' && !protocols.some(protocol => protocol.capabilities.some(capability => capability.id === 'chat-template-enable-thinking'
     && capability.version === 1 && capability.state === 'supported'))) throw new ModelInvocationStoreError('MODEL_INVOCATION_REASONING_UNSUPPORTED');
   const tools = protocols.some(protocol => protocol.capabilities.some(capability => capability.id === 'tool-calls' && capability.version === 1 && capability.state === 'supported')) ? ports.tools : [];
+  const nativeRequest = { model: binding.definition.model.nativeId, messages: [{ role: 'user', content: ' ' }], max_completion_tokens: outputTokens,
+    stream: true, stream_options: { include_usage: true }, ...(reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {}), ...(tools.length ? { tools: tools.map(tool => ({ type: 'function', function: {
+      name: tool.name, description: tool.description, parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject;
   const command: ModelInvocationCommand = { schemaVersion: 1, commandId: ports.commandId(), scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-    nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'user', content: ' ' }], max_completion_tokens: outputTokens,
-      stream: true, stream_options: { include_usage: true }, ...(reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {}), ...(tools.length ? { tools: tools.map(tool => ({ type: 'function', function: {
-        name: tool.name, description: tool.description, parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject };
+    nativeRequest: ports.shapeRequest ? ports.shapeRequest(nativeRequest, binding.definition) : nativeRequest };
   return { command, ...await ports.preview(command) };
 }
 
