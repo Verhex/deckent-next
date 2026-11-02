@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { openConfiguredTerminalSessions } from '#composition/core/cli/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
-/** Lead-only: requires a fresh dist binary. No author-lane build/PTY execution. No model or external command is admitted. */
+/** Requires a fresh dist binary; synthetic-person PTYs use only their own disposable installs. No paid calls. */
 const execute = promisify(execFile), roots: string[] = [], cli = resolve('dist/composition/core/cli/internal/entry.js');
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const DRIVER = String.raw`
@@ -56,17 +56,17 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
   config.language = locale; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline', notify: 'off' };
   await writeFile(configPath, JSON.stringify(config)); const before = await readFile(configPath, 'utf8');
-  const step = locale === 'tr' ? 'Adım 1/' : 'Step 1/', permission = locale === 'tr' ? 'İzin ayarları' : 'Permission settings', ready = locale === 'tr' ? 'Hazır!' : 'Ready!', hint = locale === 'tr' ? 'Enter gönder' : 'Enter send';
+  const step = locale === 'tr' ? 'Adım 1/' : 'Step 1/', permission = locale === 'tr' ? 'İzin ayarları' : 'Permission settings', next = locale === 'tr' ? 'Başlamak için /provider' : 'Connect a model with /provider', hint = locale === 'tr' ? 'Enter gönder' : 'Enter send';
   // A fresh non-Git folder installed without a person (no saved profile, as after `init --yes`): U4E G2 puts the pending profile/permission
   // screen first, before the model step (Esc = later, nothing written), then model, project instructions (no DECKENT.md yet), then Ready.
   const instructions = locale === 'tr' ? 'Proje yönergeleri' : 'Project instructions', second = locale === 'tr' ? 'Adım 2/' : 'Step 2/', third = locale === 'tr' ? 'Adım 3/' : 'Step 3/';
   // Waits name the step counter: the Workline's deferred note also names the screen titles. BeUser ZEY-02: step 2 is the person's management rights.
   const rights = locale === 'tr' ? 'Yönetim haklarınız' : 'Your management rights';
-  const steps = [[step, '\u001b'], [rights, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [step, '\u001b'],
-    [rights, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/exit\r']];
+  const steps = [[step, '\u001b'], [rights, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [next, '/setup\r'], [step, '\u001b'],
+    [rights, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [hint, '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };
-  expect(run.code).toBe(0); expect(run.output.indexOf(step)).toBeLessThan(run.output.indexOf(ready));
+  expect(run.code).toBe(0); expect(run.output.indexOf(step)).toBeLessThan(run.output.indexOf(next));
   expect(run.output.indexOf(step)).toBeLessThan(run.output.indexOf(permission)); expect(run.output.indexOf(permission)).toBeLessThan(run.output.indexOf(second));
   expect(run.output).not.toContain('^['); expect(await readFile(configPath, 'utf8')).toBe(before);
   const history = JSON.parse(await readFile(join(root, '.deckent/state/onboarding.json'), 'utf8'));
@@ -101,16 +101,16 @@ it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window o
   // Attention notices stay on (the default): the Workline then reads the TTY through the filtered input the leak went through.
   config.language = 'en'; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline' };
   await writeFile(configPath, JSON.stringify(config));
-  const steps = [['Step 1/', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '/setup\r'],
-    ['Step 1/', 'abc'], ['', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
+  const steps = [['Step 1/', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Connect a model with /provider', '/setup\r'],
+    ['Step 1/', 'abc'], ['', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };
   expect(run.code).toBe(0);
   // Everything after the reopened window closed is the Workline: the typed text is not in its composer and no turn was sent.
-  expect(run.output.slice(run.output.lastIndexOf('Ready!'))).not.toContain('abc');
+  expect(run.output.slice(run.output.lastIndexOf('Project instructions'))).not.toContain('abc');
 }, 180_000);
 
-it.skipIf(process.platform !== 'linux')('AYSE-18/22/23 PTY: empty first-task input stays open; saved conversations have a working return path in EN/TR', async () => {
+it.skipIf(process.platform !== 'linux')('A62 PTY: models absent get /provider without first work in setup; saved conversations retain their return path in EN/TR', async () => {
   for (const locale of ['en', 'tr'] as const) {
     const base = await mkdtemp(join(tmpdir(), 'onboarding-return-')); roots.push(base);
     const root = join(base, 'customer'), home = join(base, 'home'); await mkdir(root); await mkdir(home);
@@ -119,15 +119,12 @@ it.skipIf(process.platform !== 'linux')('AYSE-18/22/23 PTY: empty first-task inp
     const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.language = locale; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline', notify: 'off' };
     await writeFile(configPath, JSON.stringify(config));
-    const tr = locale === 'tr', hint = tr ? 'Enter gönder' : 'Enter send', first = tr ? 'Adım 1/' : 'Step 1/', second = tr ? 'Adım 2/' : 'Step 2/', third = tr ? 'Adım 3/' : 'Step 3/';
-    const ready = tr ? 'Hazır!' : 'Ready!', instructions = tr ? 'Proje yönergeleri' : 'Project instructions';
-    const free = tr ? 'İlk işinizi kendiniz yazın' : 'Write your own first task';
-    const empty = tr ? 'Enter’dan önce bir iş yazın' : 'Write a task before pressing Enter';
-    const steps = [[first, '\u001b'], [second, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [ready, '\u001b[B'.repeat(20)], ['', '\r'],
-      ['> ', '\r'], [empty, '\u001b'], [hint, '/exit\r']];
+    const tr = locale === 'tr', first = tr ? 'Adım 1/' : 'Step 1/', second = tr ? 'Adım 2/' : 'Step 2/', third = tr ? 'Adım 3/' : 'Step 3/';
+    const next = tr ? 'Başlamak için /provider' : 'Connect a model with /provider', instructions = tr ? 'Proje yönergeleri' : 'Project instructions';
+    const steps = [[first, '\u001b'], [second, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [next, '/exit\r']];
     const run = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root],
       { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
-    expect(run.code).toBe(0); expect(run.output).toContain(empty); expect(run.output).toContain(free);
+    expect(run.code).toBe(0); expect(run.output).toContain(next); expect(run.output).not.toMatch(/Ready!|Hazır!|RUN_ADMISSION_NOT_CONFIGURED/u);
     expect(run.output).not.toContain(tr ? 'Bu klasörde kayıtlı bir konuşmanız var' : 'A saved conversation is available');
     expect(run.output).toContain(tr ? 'Geri dönmek için' : 'To come back');
     const store = await openConfiguredTerminalSessions(root, { env }); expect(store).not.toBeNull();

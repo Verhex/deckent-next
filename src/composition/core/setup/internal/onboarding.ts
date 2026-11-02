@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { userInfo } from 'node:os';
+import { onboardingNeedsBudget, type OnboardingBillingProfile } from './onboarding-budget.js';
 import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
@@ -49,15 +50,17 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     try { const dir = await opendir(directory); inspected = true; for await (const entry of dir) { if (names.length >= 64) break; if (entry.isFile() || entry.isDirectory()) names.push(entry.name); } } catch { /* unknown remains explicit */ }
     const visible = names.filter(name => !name.startsWith('.'));
     const kind = eligible ? 'coding' as const : !inspected ? 'unknown' as const : !visible.length ? 'empty' as const : 'documents' as const;
+    // Billing comes from the connected model's exact scoped profile, never its provider name.
+    signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options);
+    // Connection is distinct from permission/budget: the normal turn still enforces every invocation gate.
+    const modelUsable = chat?.status === 'ready' && chat.reference !== null;
+    const profiles = config['provider_invocation_profiles'] as { profiles?: readonly OnboardingBillingProfile[] } | undefined;
+    const legacyMetered = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId)?.billing === 'metered';
+    const needsAccount = onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, null);
     let budgetReason: string | undefined; const { SCOPE_BUDGET_CHOICES } = await loadModelsSurface();
-    const account = terminal.inspectProviderSpendAccount ? await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options)
+    const account = needsAccount && terminal.inspectProviderSpendAccount ? await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options)
       .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; budgetReason = typeof code === 'string' && ErrorRegistry.has(code) ? code : 'INVENTORY_UNAVAILABLE'; return null; }) : null;
     const currentUsd = budgetReason ? null : account?.checkpoint ? account.checkpoint.account.budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd : 0;
-    // Billing comes from the connected model's registry/profile, not a provider-name list.
-    signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options);
-    // İ-2 is about a usable model (the same read as the /model window), not only the worker catalog; an unreadable answer counts as none.
-    const modelUsable = (await terminal.inspectInvocableModels?.(root, scopeId, options).catch(() => null))?.models.some(row => row.availability.invocable) ?? false;
-    const binding = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId);
     signal?.throwIfAborted(); const pending: RunIntentRecord[] = [];
     const reader = await openSqliteRunProposalReader(await context.path(), config.storage.sqlite);
     try {
@@ -72,7 +75,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       modelUsable, localRun: await terminal.localRunOffer?.(root, scopeId, options).catch(() => false) ?? false, folder, folderFacts: { kind, entries: visible }, scopeId,
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
-      hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
+      hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
         presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending, ...await rights() };
   };
   const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: ['mcp-delegable'], apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card

@@ -96,67 +96,50 @@ it.each(['BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_N
   await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown'); await settle(80);
   expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?'); expect(view.stdout.text).not.toContain('RUNS HERE');
 });
-it('owner option A (K4/K5): "nothing set up" asks before any effect every time; Esc cancels with nothing run; y runs here and says so', async () => {
+it('A62: nothing set up runs directly in the terminal every time, with no worker card or raw admission error', async () => {
   const asked: string[] = [];
   const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
     doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
-  await settle(40); view.stdin.write('/do First\r');
-  await until(() => view.stdout.frame.includes('RUN HERE?'), 'card'); expect(view.stdout.frame).toContain('NO DELIVERY CARD'); expect(asked).toEqual([]);
-  expect(view.stdout.frame).toContain('RUN-HERE-ROW'); expect(view.stdout.frame).toContain('CANCEL-ROW');
-  await settle(40); view.stdin.write('\u001b[B'); await until(() => view.stdout.frame.includes('NEEDS GIT'), 'disabled setup reason'); // no Git project: shown disabled with its reason
-  view.stdin.write('\r'); await settle(80); expect(asked).toEqual([]); expect(view.stdout.frame).toContain('RUN HERE?'); // a disabled choice does nothing
-  view.stdin.write('\u001b'); await until(() => view.stdout.text.includes('NOT RUN'), 'cancelled'); await settle(60); expect(asked).toEqual([]);
-  view.stdin.write('/do Second\r'); await until(() => view.stdout.frame.includes('RUN HERE?'), 'card again');
-  await settle(40); view.stdin.write('\r'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn');
-  expect(asked).toEqual(['Second']); expect(view.stdout.text).toContain('RUNS HERE');
-  await until(() => view.stdout.text.includes('UNREAD'), 'no tree port: the changed files are unread, never "nothing changed"');
-  view.stdin.write('/do Third\r'); await until(() => asked.length === 1 && view.stdout.frame.includes('RUN HERE?'), 'card every time');
+  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'direct local turn');
+  expect(asked).toEqual(['First']); expect(view.stdout.text).not.toContain('RUN HERE?'); expect(view.stdout.text).not.toContain('RUN_ADMISSION_NOT_CONFIGURED');
+  expect(view.stdout.text).toContain('NO DELIVERY CARD'); expect(view.stdout.text).toContain('RUNS HERE');
+  await until(() => view.stdout.text.includes('UNREAD'), 'honest folder observation');
+  view.stdin.write('/do Second\r'); await until(() => asked.length === 2, 'second direct turn'); expect(asked).toEqual(['First', 'Second']);
 });
-it('owner option A K5 + AYSE-R3-01: one title, one hint row, the whole consent at 80 columns, PgDn never moves the choice; the turn ends with the files that changed', async () => {
+it('A62: direct terminal work preserves the effect explanation and reports the observed changed paths', async () => {
   const asked: string[] = [], trees = [{ state: 'present', files: new Map([['a.txt', '1:1']]) }, { state: 'present', files: new Map([['a.txt', '2:2'], ['b.txt', '3:3']]) }];
   const effect = 'Changes are written to this folder directly: no background Run, no delivery card and no rollback. Your mode, the sandbox and approvals still apply.';
-  const view = mountWorkline({ ...windowLabels, errorText: () => 'Nothing is set up for this scope yet. Background workers do coding work in a Git project.',
-    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
+  const view = mountWorkline({ ...windowLabels, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
     doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: { ...HERE, effect }, tree: async () => trees.shift()!, lines: () => [],
       plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }, 80, { rows: 24 }); mounted.push(view);
-  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('RUN HERE?'), 'card');
-  const flat = view.stdout.frame.replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' ');
-  expect(flat).toContain(effect); expect(flat.split('RUN HERE?').length).toBe(2); expect(flat.split('choose').length).toBe(2); expect(flat).not.toMatch(/rows? \d/u);
-  view.stdin.write('\u001b[6~'); await settle(60); view.stdin.write('\r'); // PgDn scrolls the body (nothing to scroll), the choice stays on Run here
-  await until(() => view.stdout.text.includes('CHANGED a.txt, b.txt'), 'changed files from the two tree reads'); expect(asked).toEqual(['First']);
+  await settle(40); view.stdin.write('/do First\r');
+  await until(() => view.stdout.text.includes('CHANGED a.txt, b.txt'), 'two tree reads'); expect(asked).toEqual(['First']);
+  expect(view.stdout.text.replace(/\s+/gu, ' ')).toContain(effect); expect(view.stdout.text).not.toContain('RUN HERE?');
 });
-it('BeUser DR3-01: with no chat model the card disables Run here with its reason and next step; Enter runs nothing', async () => {
+it('A62: no chat model gives one next step without a card, admission code or effect', async () => {
   const asked: string[] = [];
   const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
     doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, chatReady: async () => false, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
-  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('NO MODEL: use /model'), 'disabled with its reason');
-  view.stdin.write('\r'); await settle(80); expect(asked).toEqual([]); expect(view.stdout.frame).toContain('RUN HERE?');
-  view.stdin.write('\u001b'); await until(() => view.stdout.text.includes('NOT RUN'), 'cancelled'); expect(asked).toEqual([]);
+  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.text.includes('NO MODEL: use /model'), 'next step');
+  expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?'); expect(view.stdout.text).not.toContain('RUN_ADMISSION_NOT_CONFIGURED');
 });
-it('AYSE-R3-02: Esc on the run-here card after the onboarding first job keeps the sentence in history (Up recalls it)', async () => {
-  const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async () => 'LOCAL ANSWER',
-    onboarding: { initial: { intent: 'list monthly spending', scopeId: 's', folder: '', commandId: 'first-job' }, open: async () => null } as never,
-    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
-  await until(() => view.stdout.frame.includes('RUN HERE?'), 'card'); await settle(40); view.stdin.write('\u001b');
-  await until(() => view.stdout.text.includes('NOT RUN'), 'cancelled'); await settle(60);
-  const before = view.stdout.frame.split('/do list monthly spending').length; view.stdin.write('\u001b[A');
-  await until(() => view.stdout.frame.split('/do list monthly spending').length > before, 'Up recalls the first job');
+it('A62: the separate welcome hands a prompt to normal chat, keeps history and never plans a worker Run', async () => {
+  const asked: string[] = [], plans: string[] = [];
+  const view = mountWorkline({ ...windowLabels, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
+    onboarding: { initial: { intent: '/do list monthly spending', destination: 'chat', scopeId: 's', folder: '', commandId: 'first-job' }, open: async () => null } as never,
+    doPlan: { ...words, lines: () => [], plan: async () => { plans.push('unexpected'); throw new Error('must not plan'); } } }); mounted.push(view);
+  await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'normal turn'); expect(asked).toEqual(['/do list monthly spending']); expect(plans).toEqual([]);
+  await settle(60); view.stdin.write('\u001b[A'); await until(() => /> ?\/do list monthly spending/u.test(view.stdout.frame), 'Up recalls first job');
 });
-it('owner option A: "Set up workers" opens /setup at its worker steps and runs nothing here; a message without a model stays a draft and opens the model card', async () => {
-  const asked: string[] = [], opened: unknown[] = [];
-  const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`,
-    onboarding: { initial: null, modelDraft: 'KEPT AS DRAFT', open: async (_signal: AbortSignal, focus?: string) => { opened.push(focus); return null; } } as never,
-    completeTurn: async messages => { const text = String(messages.at(-1)?.content); if (!opened.includes('model')) throw new DeckentError('TERMINAL_CHAT_NOT_CONFIGURED', 'x'); asked.push(text); return 'LOCAL ANSWER'; },
-    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: { ...HERE, canSetup: async () => true }, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
-  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('SETUP-ROW'), 'card');
-  expect(view.stdout.frame).not.toContain('NEEDS GIT');
-  await settle(40); view.stdin.write('\u001b[B'); await settle(40); view.stdin.write('\r'); await until(() => opened.length === 1, 'setup opened');
-  expect(opened).toEqual(['workers']); await settle(60); expect(asked).toEqual([]);
-  view.stdin.write('\u001b'); await settle(60); view.stdin.write('Hello model\r');
-  await until(() => opened.length === 2 && view.stdout.text.includes('KEPT AS DRAFT'), 'model card opened'); await settle(80);
-  expect(opened).toEqual(['workers', 'model']); expect(view.stdout.text).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(asked).toEqual([]);
-  view.stdin.write('\r'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'the kept draft is sent once a model is there');
-  expect(asked).toHaveLength(1); expect(asked[0]).toContain('Hello model');
+it('A62: host permission is rechecked before local execution; a model-less normal message stays a draft without opening setup', async () => {
+  let offers = 0; const asked: string[] = [], opened: unknown[] = [];
+  const view = mountWorkline({ ...windowLabels, onboarding: { modelDraft: 'KEPT AS DRAFT: use /provider', open: async (_signal: AbortSignal, focus?: string) => { opened.push(focus); return null; } } as never,
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); throw new DeckentError('TERMINAL_CHAT_NOT_CONFIGURED', 'x'); },
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere: () => ++offers === 1, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.text.includes('NOT RUN'), 'revoked host permission'); expect(asked).toEqual([]);
+  view.stdin.write('Hello model\r'); await until(() => view.stdout.text.includes('KEPT AS DRAFT: use /provider'), 'draft guidance');
+  expect(opened).toEqual([]); expect(view.stdout.text).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(asked).toHaveLength(1);
+  await until(() => /> ?Hello model/u.test(view.stdout.frame), 'draft retained');
 });
 // alpha.60 B, owner 2026-10-31 rule (b): setup is prepared after the frame; its waiting card opens by itself only while the person has typed nothing.
 // Typed-ahead keys never answer it: one line names the waiting steps and the keys stay the draft.
@@ -201,11 +184,11 @@ it('BeUser M-32: with uncommitted changes and workers set up, /do asks first (Co
   await until(() => plans.length === 1, 'planned'); expect(plans).toEqual(['Second']);
 });
 
-it('RC-C1: a company/pool stop arriving while the run-here card is open cancels before the local turn', async () => {
-  let open = true; const asked: string[] = [];
+it('RC-C1: a company/pool stop during the model preflight cancels before the local turn', async () => {
+  let open = true, checking = false, release!: () => void; const asked: string[] = [];
   const view = mountWorkline({ ...windowLabels, errorText: () => 'Nothing set up', completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
-    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere: () => open, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
-  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('RUN HERE?'), 'card');
-  open = false; view.stdin.write('\r'); await until(() => view.stdout.text.includes('NOT RUN'), 'policy recheck cancels');
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere: () => open, chatReady: () => new Promise<boolean>(resolve => { checking = true; release = () => resolve(true); }), here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do First\r'); await until(() => checking, 'model preflight');
+  open = false; release(); await until(() => view.stdout.text.includes('NOT RUN'), 'policy recheck cancels');
   expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUNS HERE');
 });

@@ -550,11 +550,14 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   2026-10-28): the connect step now asks a keyless local server once whether it accepts a tool call and declares it. *Workaround:*
   reconnect the server once in `deckent` → /provider (the same address); a vLLM started without `--enable-auto-tool-choice
   --tool-call-parser <parser>` stays without tools, and the terminal says so.
-- **Without a work kind and worker pool, `/do` and the first task can run in the terminal, not as a background Run** (owner option A,
-  2026-10-28): only when nothing is set up, and only after a card you confirm every time (changes go straight to the folder: no
-  delivery card, no rollback; Esc cancels). Any other refusal (Brain tier, worker channel, assignment, a held pool, policy) shows its
-  own next step and never runs here. *Workaround:* for background workers set up /setup → First work kind → Worker image → Worker pool. `pool hold` and
-  `pool set-capacity` say there is no pool yet until then.
+- **First work is separate from setup (owner 2026-11-02).** With a connected chat model the post-setup welcome offers a project
+  description, a scan for suggested configuration when files exist, or a typed first task. Suggestions use ordinary chat and create
+  no new write authority. Without a model, connect one with `/provider`; unsent messages stay as drafts. Subscription and local
+  connections need no setup budget; metered API calls keep their budget and spending rules. A `/do` refused solely because nothing
+  is set up can run directly in the terminal when the host's policy, profile and pool-pause checks permit it. Changes go straight to
+  the folder, without background delivery or rollback; normal sandbox, mode and tool approvals remain. Other refusals keep their own
+  next step. *Workaround:* set up `/setup` worker steps for background work. Detailed project self-configuration is still to be decided
+  through use; assembled release acceptance remains open.
 - **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
   (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set
   stopped by the cancellation can be partly applied. The result text lists what was written. *Workaround:* before running a cancelled

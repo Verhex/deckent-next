@@ -551,12 +551,13 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   2026-10-28): bağlanma adımı artık anahtarsız yerel sunucuya bir kez araç çağrısını kabul edip etmediğini sorar ve bildirir. *Yol:*
   sunucuyu `deckent` → /provider içinde (aynı adresle) bir kez yeniden bağlayın; `--enable-auto-tool-choice --tool-call-parser <ayrıştırıcı>`
   olmadan başlatılan bir vLLM araçsız kalır ve terminal bunu söyler.
-- **İş türü ve işçi havuzu yokken `/do` ve ilk görev arka plan işi olarak değil, terminalde çalışabilir** (owner seçenek A, 2026-10-28):
-  yalnız hiçbir şey kurulmamışken ve her seferinde onayladığınız bir karttan sonra (değişiklikler doğrudan klasöre yazılır: teslim kartı ve
-  geri alma yok; Esc iptal eder). Diğer her ret (Brain kademesi, işçi kanalı, atama, bekletilen havuz, politika) kendi sonraki adımını
-  gösterir ve burada çalışmaz.
-  *Yol:* arka plan işçileri için /setup → İlk iş türü → İşçi imajı → İşçi havuzu. O zamana kadar `pool hold` ve `pool set-capacity`
-  henüz havuz olmadığını söyler.
+- **İlk iş kurulumdan ayrıdır (owner 2026-11-02).** Sohbet modeli bağlıysa kurulum sonrası karşılama projeyi anlatmayı, dosyalar
+  varsa önerilen yapılandırma için taramayı veya ilk işi yazmayı sunar. Öneriler normal sohbetten ilerler, yeni yazma yetkisi vermez.
+  Model yoksa `/provider` ile bağlayın; gönderilmeyen mesajlar taslakta kalır. Abonelik ve yerel bağlantıda kurulum bütçesi gerekmez;
+  API tarifeli çağrılar mevcut bütçe ve harcama kurallarını korur. Yalnız hiçbir şey kurulmadığı için reddedilen `/do`, host politikası,
+  profil ve havuzun bekletme denetimi izin verirse doğrudan terminalde çalışabilir. Değişiklikler klasöre yazılır; arka plan teslimi ve
+  geri alma yoktur. Sandbox, çalışma modu ve araç onayları korunur; diğer retler kendi sonraki adımını gösterir. *Yol:* arka plan işi
+  için `/setup` işçi adımlarını tamamlayın. Ayrıntılı kendini yapılandırma kullanırken belirlenecek; montajlı sürüm kabulü açıktır.
 - **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan
   bir araç çağrısı bittikten sonra tur iptal edilirse (bağlantı kopması, açık iptal, kapanış) çağrı yine `cancelled` bildirilir;
   iptalle durdurulan bir yazma kümesi kısmen uygulanmış kalabilir. Sonuç metni yazılanları listeler. *Yol:* iptal görünen bir

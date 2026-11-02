@@ -49,7 +49,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
   });
   const start = Math.max(0, at - height + 1), body = bodyLines.slice(Math.min(bodyAt, Math.max(0, bodyLines.length - bodyHeight)), bodyAt + bodyHeight);
   return <Box flexDirection="column" paddingX={1} paddingY={1}>
-    <Text>{t('onboarding.session.step', { n: question.step, total: question.total }, locale)}</Text>
+    {question.step > 0 && <Text>{t('onboarding.session.step', { n: question.step, total: question.total }, locale)}</Text>}
     <Text> </Text><Text bold>{terminalSafeText(question.title)}</Text><Text> </Text>
     {body.map((line, index) => <Text key={index}>{truncateEnd(terminalSafeText(line), width, '…')}</Text>)}
     <Text>{bodyLines.length > bodyHeight ? t('onboarding.session.scroll', {}, locale) : ' '}</Text>
