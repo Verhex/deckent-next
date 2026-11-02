@@ -1079,3 +1079,17 @@ Kaynak: dış `proof/ALPHA60/PAKET-2/PLAN.md` (owner satırları; saatler lead'i
 - **CI-LINT-SPLIT:** lint kontrolleri `prepare` dışında, Node başına ayrı işte paralel; `required verify` lint başarısızlığını da reddeder; hosted `npm ci --prefer-offline --no-audit --no-fund` (PR #134, `e87212381`; ölçülen toplam 8:00–8:20 → 7:05, tek koşu 41442223301).
 - **CI-WEIGHTS:** ağırlık sapma işi yalnız main push, gece ve elle koşularda; sapma uyarıdır, iş kırmızı olmaz; ağırlıklar o koşunun makbuzlarından otomatik yenilenip Actions cache'e yazılır, her `prepare` en yenisini okur. CI commit/push yapmaz; işlenmiş dosya tohumdur. 2026-10-29 sürüm adımındaki "kırmızı sapma sürüm PR'ını tutar" kuralının yerini alır.
 - **Node matrisi:** PR'larda Node 24 ve 26 birlikte koşmaya devam eder.
+
+<a id="bedrock-claude-2026-11-02"></a>
+## Owner kararları — 2026-11-02: Bedrock üzerinden Claude
+
+- **BEDROCK-CLAUDE:** şirketin AWS hesabı kurulduktan sonra (IAM kullanıcısı ve MFA, `aws login` profili, `eu-central-1`) owner, Claude'un Amazon Bedrock üzerinden bağlanmasını beta iş planına aldı: "bedrock üzerinden claude tarafını betada deneriz". Plan satırı PLAN Sıradaki 21. Yol ayrı ve açıkça seçilen bir sağlayıcıdır; mevcut abonelik/API yollarının yerine geçmez. İlk yüzey ve katman soruları uygulamadan önce owner'a gelir. Bu kayıt uygulama izni veya beta kabulü değildir.
+
+<a id="owner-kararlari-2026-11-03"></a>
+## Owner kararları — 2026-11-02 gece / 2026-11-03: alpha.62 yeniden testi ve alpha.63
+
+- **Karşılama girdi yarışı (Astra 2987 R2):** dar düzeltme alpha.62'de: kart açıkken yazmak/yapıştırmak kartı "sonra" ile kapatır ve tuşlar sohbet satırına geçer; seçim tuşları kart çizildikten sonra koruma süresi kadar beklenir.
+- **Kurulum kartlarında Enter koruması:** her onboarding kartında kart çizildikten sonraki `cardInputGuardMs` (registry, 500 ms) içinde gelen Enter/ok yok sayılır; "yazınca kapan" yalnız karşılamada; izin ve güvenlik kartları açık kalır.
+- **Yeniden test bulguları:** Claude girişi ve sohbet OK. B klasörü kartı çıkmıyordu: ilk sıfır kurulum artık typed register yolundan, kişi tanığıyla kaynak olarak kaydolur; eski kurulumlar açık seçimle kalır (D2). ChatGPT (Deckent'in kendi oturumu) WSL'de tarayıcı onayından sonra ilerlemedi; satır betada.
+- **Zamanlama:** alpha.62 hazır olanlarla çıktı (PR #136). **alpha.63 = abonelik paritesi:** Claude ve ChatGPT aboneliği Deckent içinde eksiksiz (araçlı sohbet, AI işçi, Brain, ajan/skill, model); "ChatGPT ile giriş" kişinin kendi Codex CLI girişidir; önce tasarım ve kanun denetimi. PLAN Sıradaki 22.
+- **SA-6:** kanun denetimi HOLD, denetçinin kabul ettiği metinle Sıradaki 20'ye eklendi (beta opsiyonel; PROD-CMP A1/A4 ve PUB-AI eki).
