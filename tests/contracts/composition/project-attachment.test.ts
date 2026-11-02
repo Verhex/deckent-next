@@ -223,6 +223,14 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
     await recovery.store.hold(() => recovery.store.write(foreignRegistry, registry!)); await writeFile(attachmentPath, attachmentBytes);
     await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).resolves.toBeDefined();
+    // Same person, same target membership: only the source scope membership is withdrawn, and the requester's source check refuses with no write.
+    const sourcePolicy = productResourcePath((await loadComposedConfig(f.a, f.options)).productLayout, 'policy'), policyBytes = await readFile(sourcePolicy);
+    await writeFile(sourcePolicy, policyBytes.toString('utf8').replaceAll('"source"', '"source-withdrawn"')); clearConfigCache();
+    const targetBefore = await snapshotBytes(f.b);
+    await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_UNAVAILABLE' });
+    expect(await snapshotBytes(f.b)).toEqual(targetBefore);
+    await writeFile(sourcePolicy, policyBytes); clearConfigCache();
+    await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).resolves.toBeDefined();
     const third = join(f.root, 'C'); await mkdir(third, { mode: 0o700 });
     const next = await f.make(third), plan = await next.app.preview('third');
     const results = await Promise.allSettled([next.app.apply('third', plan.planDigest, randomUUID()), next.app.apply('third', plan.planDigest, randomUUID())]);
