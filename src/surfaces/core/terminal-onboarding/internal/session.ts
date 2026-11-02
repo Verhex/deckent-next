@@ -36,10 +36,9 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
   // A connected model's done stage is absent above; its dependent guide still has the same position before work.
   if (!steps.some(row => row.kind === 'budget') && snapshot.budget.needed && !deferred.has('onboarding:budget')) steps.splice(steps[0]?.kind === 'permissions' ? 1 : 0, 0, { id: 'onboarding:budget', stages: [], kind: 'budget' });
   for (const pending of snapshot.pending.filter(row => row.status !== 'cancelled')) add({ id: `parked:${pending.runId}`, kind: 'parked', stages: [], pending });
-  if (!deferred.has(FIRST_TASK_DONE)) add({ id: 'onboarding:first-task', stages: [], kind: 'first-task' }); // BeUser M-J6: a chosen first task is not offered at every open
   return steps;
 }
-/** A person's chosen first task (kept like a deferral; /setup still offers the card). */
+/** Historical first-task marker, also records that the separate post-setup welcome was seen. */
 export const FIRST_TASK_DONE = 'onboarding:first-task:done';
 /** R18: a deferral whose step is no longer open (settled through /setup, /model or /mode) is not a deferral any more. */
 export const openDeferrals = (snapshot: OnboardingSnapshot): readonly string[] => {

@@ -35,7 +35,13 @@ export function validateInvocationProfileLayers(global: unknown, project: unknow
   const child = validate(project);
   if (!parent) return;
   for (const profile of child.profiles) {
-    if (!parent.profiles.some(candidate => isDeepStrictEqual(candidate, profile))) invalid();
+    if (!parent.profiles.some(candidate => {
+      if (isDeepStrictEqual(candidate, profile)) return true;
+      if (!('useLeaseId' in profile) || 'useLeaseId' in candidate) return false;
+      const { useLeaseId: ignoredLease, billingAxis, ...leased } = profile; void ignoredLease;
+      return isDeepStrictEqual(candidate, { ...leased, schemaVersion: candidate.schemaVersion, scopeId: candidate.scopeId,
+        ...('billingAxis' in candidate ? { billingAxis } : {}) });
+    })) invalid();
   }
 }
 export function registerInvocationProfileConfig(): void {

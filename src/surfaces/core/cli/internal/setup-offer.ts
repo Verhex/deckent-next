@@ -4,6 +4,7 @@ import { initCommand } from '#surfaces/core/cli-installation/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { relative, sep } from 'node:path';
+import { offerAttachedSession } from './session-offer.js';
 
 const code = (error: unknown) => (error as { code?: unknown } | null)?.code;
 /** The J2d answer: only a missing policy file means "no installation here"; an installation with no scope to read keeps its own error. */
@@ -20,8 +21,9 @@ async function installationMissing(context: CommandContext, root: string, env: N
 export async function offerSetup(refusal: unknown, context: CommandContext, locale: Locale, launch: (context: CommandContext) => Promise<void>): Promise<void> {
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, stdin = context.stdin ?? process.stdin;
   if (cliMode(context).reason !== 'tty' || !(await installationMissing(context, root, env))) throw refusal;
+  if (await offerAttachedSession(context, locale, launch)) return;
   const target = offerTarget(context.rootResolution?.found ?? false, context.rootResolution?.gitTop ?? null, root);
-  const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale)],
+  const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale), t('setup.session.registerHint', {}, locale)],
     options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), role: 'yes' },
       ...(target === root ? [] : [{ id: 'here', label: t('setup.offer.here', { path: terminalSafeText(root) }, locale), key: 'h' }]),
       { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'yes' },

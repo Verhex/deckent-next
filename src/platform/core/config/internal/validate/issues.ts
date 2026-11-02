@@ -9,7 +9,7 @@ export interface ConfigIssue { readonly path: string; readonly reason: string; r
 export const configIssue = (prefix: readonly (string | number)[], issue: StandardSchemaV1.Issue): ConfigIssue => {
   const detail = issue as StandardSchemaV1.Issue & { code?: string; values?: readonly unknown[]; params?: { legacyCode?: string } };
   const path = [...prefix, ...(issue.path ?? []).map(part => typeof part === 'object' ? part.key : part)].map(String).join('.');
-  const code = persistedIssueCode(detail);
+  const code = path === 'schema_version' && detail.code === 'invalid_union' ? 'invalid_literal' : persistedIssueCode(detail);
   return { path, reason: code === 'too_big' && path.startsWith('beuser.limits.') ? 'BEUSER_LIMITS_UNAVAILABLE' : code,
     ...(code === 'invalid_enum_value' ? { allowed: detail.values?.map(String) ?? [] } : {}) };
 };

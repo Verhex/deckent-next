@@ -27,7 +27,7 @@ export type SecretDeleteHandler = (root: string, input: { readonly schemaVersion
 
 /** The port's value bound; a longer value is refused, never cut. */
 const VALUE_MAX_BYTES = 65_536;
-type Input = Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown };
+type Input = Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown; ref?: () => unknown; unref?: () => unknown };
 type Sink = { write(text: string): unknown };
 
 /**
@@ -55,9 +55,10 @@ export async function readPiped(stdin: Input): Promise<string> {
 export function readHidden(stdin: Input, stderr: Sink, name: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // A multi-byte character split across two reads stays one character.
-    let value = ''; const decoder = new StringDecoder('utf8');
+    let value = '', settled = false; const decoder = new StringDecoder('utf8');
     const finish = (error: unknown, result?: string) => {
-      stdin.off('data', onData); stdin.setRawMode?.(false); stdin.pause(); stderr.write('\n');
+      if (settled) return; settled = true;
+      stdin.off('end', onEnd); stdin.off('close', onEnd); stdin.off('error', onError); stdin.off('data', onData); stdin.setRawMode?.(false); stdin.pause(); stdin.unref?.(); stderr.write('\n');
       if (error) reject(error instanceof Error ? error : new Error(String(error))); else resolve(result ?? '');
     };
     const onData = (chunk: Buffer | string) => {
@@ -70,8 +71,11 @@ export function readHidden(stdin: Input, stderr: Sink, name: string): Promise<st
         if (Buffer.byteLength(value, 'utf8') > VALUE_MAX_BYTES) { finish(ErrorRegistry.createError('SECRET_VALUE_INVALID')); return; }
       }
     };
+    const onEnd = () => finish(ErrorRegistry.createError('SECRET_INPUT_CANCELLED')), onError = (error: Error) => finish(error);
+    if (stdin.readableEnded || stdin.destroyed) { onEnd(); return; }
+    stdin.once('end', onEnd); stdin.once('close', onEnd); stdin.once('error', onError);
     stderr.write(`${name}: `);
-    stdin.setRawMode?.(true); stdin.on('data', onData); stdin.resume();
+    stdin.ref?.(); stdin.setRawMode?.(true); stdin.on('data', onData); stdin.resume();
   });
 }
 

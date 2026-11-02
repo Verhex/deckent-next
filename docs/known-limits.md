@@ -12,6 +12,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-journey BeUser re-walk and the owner terminal test are still open and run before beta. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
+Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
+
 ## BeUser B1 journey walks (alpha.57)
 
 Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.
@@ -110,6 +112,21 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `--yes --scope <id>` applies only fresh permissions and language, never read-only checks or person-only stages. It does not save the profile.
   The final check settles only over install stages; a completed check with warnings can be done, with warnings visible. A repeat `--yes`
   applies no already-settled work. Doctor derives work guidance from the setup stage evaluators and points onboarding work to `deckent` / `/setup`.
+  The setup language is saved as a global personal default; existing project language overrides keep precedence and are not migrated.
+  Language preference alone grants no connection authority.
+- **Registered source and new folder.** Bare `deckent` offers a TR/EN session card when a healthy source is explicitly registered;
+  acceptance creates separate project policy/ledger and revocable use of current source connections. Tokens are not copied.
+  Existing projects are not migrated. One personal global registry selects one source; a lost/broken source is never replaced with a new identity.
+  Read-only SQLite views include WAL and obey the configured aggregate file limit; exceeding it or finding a rollback journal requires recovery.
+  `terminal attach --lease-revoke <project> --apply` withdraws model use; `--detach <project> --apply` withdraws attachment and use, retaining data.
+  Source `--unregister --apply` refuses until every dependent project is detached. Source backup remains available.
+  Full target removal revokes inventory; encrypted restore does not reauthorize it. On the target, `--scope <id> --preview` then
+  `--restore <project> --expect <digest> --apply` grants new use through current policy.
+  `--relocate --scope <id> --apply` reconciles a move, refusing a copy while the old folder survives.
+  Default layouts stay portable after restore; explicit custom roots retain their exact paths. An interrupted uninstall with no started
+  effects can replan only after fresh person confirmation and authentication of the whole empty effect store; missing, corrupt or started records stay held.
+  API templates create separate empty scope accounts without resetting existing accounts. Subscription/local connections have no monetary gate.
+  Author evidence is limited to Linux/WSL synthetic PTY and a local fake model; real providers, other platforms and assembled-release acceptance remain separate.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
   lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
@@ -255,6 +272,24 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Providers and subscriptions
 
+- **Claude subscription text chat (A62):** `/model` can use the existing isolated Claude CLI connection for streamed text replies,
+  conversation history and cancellation without an API budget. Native CLI tools and MCP remain disabled; this connection cannot write files
+  or run commands in chat. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
+  store or intermediate OAuth/session tokens, share the profile with another principal, resell usage or bill on others' behalf.
+  Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
+  Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
+
+- **ChatGPT sign-in is beta in this release.** Full Claude and ChatGPT subscriptions as agents inside Deckent (tool-enabled chat, workers,
+  Brain, agents/skills) are planned for alpha.63. The current ChatGPT sign-in remains selectable with its beta note.
+- **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global
+  source is registered. Existing installations are not registered automatically. From the installed folder, run
+  `deckent terminal attach --register --apply`, confirm the source, then open `deckent` in the new folder. An existing source is kept.
+- **Provider sign-in menu (A62):** the subscription rows are **Sign in with Claude** and **Sign in with ChatGPT**; ChatGPT and Cursor are labelled beta.
+  The older Codex CLI connection and profiles remain readable through the same CLI commands; hiding its duplicate menu row does not move
+  credentials or make a worker ready. ChatGPT consent names chat, AI workers (`ai`) and Brain/background features (`system`), with extra use
+  off by default. Choosing ChatGPT with automatic API continuation off still starts sign-in. **Connect with an API key** opens API-provider
+  selection, including after a refusal; masked entry, custody, grants and budget requirements remain in force. Real account login and
+  Windows Terminal acceptance still need the assembled release walk.
 - **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
   `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
   codex-cli-subscription` (it runs `codex login` into its own Deckent-owned directory, `headless/logins/codex`; `--config-dir` and
@@ -274,11 +309,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. The terminal's `/provider` does the same
   (alpha.60): it shows the login directory first, hands the terminal to the CLI's own sign-in (Ctrl+C stops it; the registry time
   bound ends it), connects, then asks who besides you may use the login (system and ai unticked on a first connect, the consent in force ticked on a reconnect; MCP never). It runs only where
-  Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude and Codex
-  subscription rows disabled with that reason and lists the providers usable instead. Terminal chat with a Claude subscription is not
-  supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
-- **Terminal chat needs a model connection and, for a paid API, a budget.** Of the subscriptions only Sign in with ChatGPT serves
-  terminal chat (below); a paid API turn without a scope budget is refused. *Workaround:* sign in with ChatGPT in `/provider`, or
+  Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
+  sign-in row disabled with that reason and lists the providers usable instead. Alpha.62 adds text-only terminal chat through this
+  isolated connection; native CLI tools and MCP remain disabled. *Workaround where the sandbox is missing:* use an Anthropic API key.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT subscriptions support text chat;
+  a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
@@ -550,11 +585,18 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   2026-10-28): the connect step now asks a keyless local server once whether it accepts a tool call and declares it. *Workaround:*
   reconnect the server once in `deckent` → /provider (the same address); a vLLM started without `--enable-auto-tool-choice
   --tool-call-parser <parser>` stays without tools, and the terminal says so.
-- **Without a work kind and worker pool, `/do` and the first task can run in the terminal, not as a background Run** (owner option A,
-  2026-10-28): only when nothing is set up, and only after a card you confirm every time (changes go straight to the folder: no
-  delivery card, no rollback; Esc cancels). Any other refusal (Brain tier, worker channel, assignment, a held pool, policy) shows its
-  own next step and never runs here. *Workaround:* for background workers set up /setup → First work kind → Worker image → Worker pool. `pool hold` and
-  `pool set-capacity` say there is no pool yet until then.
+- **First work is separate from setup (owner 2026-11-02).** With a connected chat model the post-setup welcome offers a project
+  description, a scan for suggested configuration when files exist, or a typed first task. Suggestions use ordinary chat and create
+  no new write authority. Typing or pasting on this welcome closes it as Later and preserves the input in the chat line;
+  every onboarding card ignores arrows and Enter for a short registry-defined guard (initially 500 ms) after it is drawn.
+  Esc still means Later. Permission and security cards stay open on typing and keep their authority and confirmation rules.
+  This is targeted author evidence; native-platform and assembled-release acceptance remain open.
+  Without a model, connect one with `/provider`; unsent messages stay as drafts. Subscription and local
+  connections need no setup budget; metered API calls keep their budget and spending rules. A `/do` refused solely because nothing
+  is set up can run directly in the terminal when the host's policy, profile and pool-pause checks permit it. Changes go straight to
+  the folder, without background delivery or rollback; normal sandbox, mode and tool approvals remain. Other refusals keep their own
+  next step. *Workaround:* set up `/setup` worker steps for background work. Detailed project self-configuration is still to be decided
+  through use; assembled release acceptance remains open.
 - **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
   (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set
   stopped by the cancellation can be partly applied. The result text lists what was written. *Workaround:* before running a cancelled

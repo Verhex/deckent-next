@@ -1,3 +1,4 @@
+import { humanTurnNotes } from './turn-note.js';
 import { configuredBeuserPanelPort } from './beuser-panel.js';
 import { themePanelPort } from './theme-panel.js';
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
@@ -53,7 +54,7 @@ function ttyState(context: TerminalLaunchContext) {
 /** Typed errors render through the catalog; untyped failures never echo provider or transport detail. */
 function errorText(error: unknown, locale: Locale): string {
   if (error instanceof DeckentError && ErrorRegistry.has(error.code)) {
-    return `${ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? error.code}\n${t('terminal.error.code', { code: error.code }, locale)}`;
+    return ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? t('terminal.chat.failed', {}, locale);
   }
   return t('terminal.chat.failed', {}, locale);
 }
@@ -302,10 +303,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       return { level: 'warning' as const, text: typeof family === 'string' && typeof field === 'string' ? t('onboarding.session.unavailableField', { code, family, field }, locale) : t('onboarding.session.unavailable', { code }, locale) };
     };
     // P2: the settled opening snapshot when no step is shown; after a person's answer or action the state is observed again.
-    const deferred = (snapshot: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot) => { const text = surface.deferredOnboardingNotice(snapshot, locale); return text ? { level: 'info' as const, text } : null; };
+    const deferred = (snapshot: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot) => { const text = !snapshot.modelUsable ? t('onboarding.welcome.noModel', {}, locale) : surface.deferredOnboardingNotice(snapshot, locale); return text ? { level: 'info' as const, text } : null; };
     const opening = settled.then(async () => {
       closing.signal.throwIfAborted(); const prepared = await (await surface.loadOnboardingScreens()).prepareOnboardingSession(await port(), false, undefined, closing.signal);
-      return { total: prepared.total, notice: prepared.total ? null : deferred(prepared.snapshot), show: async (signal: AbortSignal) => {
+      return { total: prepared.total, welcome: prepared.welcome, notice: prepared.total || prepared.welcome ? null : deferred(prepared.snapshot), show: async (signal: AbortSignal) => {
         try { return { intent: await prepared.show(ui(), { ...io, signal }, await previous()), notice: deferred(await (await port()).observe({})) }; } catch (error) { return { intent: null, notice: unavailable(error) }; }
       } };
     }).catch((error: unknown) => ({ total: 0, notice: unavailable(error), unavailable: true as const, show: async () => ({ intent: null, notice: null }) }));
@@ -336,7 +337,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     for (const notice of accessNotices) emit(notice.text, sinks);
     if (serviceLine) emit(serviceLine, sinks);
     const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) =>
-      (async function* () { yield* context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages) }, options, signal); })() : undefined;
+      (async function* () { yield* humanTurnNotes(context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages) }, options, signal), locale); })() : undefined;
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
       async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'), getConfigKnownSecrets(config), lineStream, () => lineSources);
     return;
@@ -427,7 +428,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale), localFallback: t('brain.localFallback', {}, locale), localNoTools: t('brain.localNoTools', {}, locale), offerHere: async (code: unknown) => await context.localRunOffer?.(root, scopeId, options, code).catch(() => false) ?? false, // K2/K3: the one host answer (profile defaults, held pool)
-        chatReady: async () => !context.describeTerminalChatPlan || Boolean(await context.describeTerminalChatPlan(root, options).then(plan => plan?.reference, () => true)),
+        chatReady: async () => !context.describeTerminalChatPlan || Boolean(await context.describeTerminalChatPlan(root, options).then(plan => plan.status === 'ready' && plan.reference, () => false)),
         ...(context.workingTreeChanges ? { tree: async () => context.workingTreeChanges!(root, options) } : {}), dirty: { title: t('brain.dirty.title', {}, locale), body: t('brain.dirty.body', {}, locale), go: t('brain.dirty.continue', {}, locale), cancel: t('brain.here.cancel', {}, locale), prompt: t('brain.here.prompt', {}, locale), cancelled: t('brain.here.cancelled', {}, locale), check: async () => { const families = (await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options))?.observation.families ?? {}; const work = families['work'] as { registry?: boolean; pool?: boolean } | undefined; return (families['coding'] as { changes?: string } | undefined)?.changes === 'present' && work?.registry === true && work.pool === true; } }, here: { title: t('brain.here.title', {}, locale), effect: t('brain.here.effect', {}, locale), run: t('brain.here.run', {}, locale), setup: t('brain.here.setupChoice', {}, locale), cancel: t('brain.here.cancel', {}, locale), noWorkers: t('brain.here.noWorkers', {}, locale), noModel: t('brain.here.noModel', {}, locale), prompt: t('brain.here.prompt', {}, locale), cancelled: t('brain.here.cancelled', {}, locale), changed: t('brain.here.changed', {}, locale), unchanged: t('brain.here.unchanged', {}, locale), unread: t('brain.here.unread', {}, locale),
         canSetup: async () => ((await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options).catch(() => null))?.observation.families?.['coding'] as { repository?: string } | undefined)?.repository === 'present' },
       billingSwitch: t('siwc.switch.notice', { model: '{model}' }, locale),
@@ -449,9 +450,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(sessions ? { sessions } : {}),
     ...(modePort ? { permissionMode: modePort } : {}), ...(fullAccess ? { fullAccess } : {}),
     ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Parameters<WorklineStreamTurn>[2]) =>
-      context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
+      humanTurnNotes(context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
         ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.reference ? { reference: turn.reference } : {}),
-        ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal) } : {}),
+        ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal), locale) } : {}),
     ...(context.streamTerminalChat && context.secretGrantCard ? { secretGrant: secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, home) } : {}),
     ...(ports.runMcp ? { mcpGrants: { given: (name: string) => t('mcp.grant.givenKey', { key: name }, locale), keys: async () => ((await ports.runMcp!(root, { verb: 'list', health: false }, options, async () => null)) as { servers?: { reason?: string }[] }).servers?.flatMap(server => server.reason?.startsWith('secret-refused:SECRET_GRANT_REQUIRED:') ? [{ name: server.reason.slice(37), project: root }] : []) ?? [] } } : {}), // KER-17 audit: offered after a turn
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.

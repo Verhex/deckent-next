@@ -1,3 +1,4 @@
+import { humanTurnNotes } from '#surfaces/core/cli-terminal/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { PassThrough, Writable } from 'node:stream';
 import { tmpdir } from 'node:os';
@@ -81,13 +82,23 @@ it.each(['tr', 'en'] as const)('renders spend refusal from the turn loop in %s w
       invokeRound: async () => ({ status: 'failed', state: 'PROVIDER_SPEND_EXHAUSTED' }), authorize: async () => 'deny',
       describe: () => null, execute: async () => ({ status: 'denied', content: '' }), now: () => 0,
     });
-    yield { kind: 'done', finish: result.finish, note: result.note };
+    expect(result.note).toContain('PROVIDER_SPEND_EXHAUSTED'); // the service/JSON diagnostic is preserved
+    yield* humanTurnNotes((async function* () { yield { kind: 'done' as const, finish: result.finish, note: result.note }; })(), language);
   } }); views.push(view);
   await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
-  await until(() => view.stdout.text.includes('PROVIDER_SPEND_EXHAUSTED'), 'localized refusal');
+  await until(() => view.stdout.text.includes('/usage →'), 'localized refusal');
+  expect(view.stdout.text).not.toContain('PROVIDER_SPEND_EXHAUSTED');
   // SPEND-HOLDS: the budget next step moved to /usage (reconcile held reservations or change budget).
   expect(view.stdout.text).toContain(language === 'tr' ? '/usage → Bekleyen rezervasyonları uzlaştır veya Bütçeyi değiştir' : '/usage → Reconcile held reservations or Change budget');
   expect(view.stdout.text).not.toContain('The model round ended without an answer');
+  const raw = { kind: 'done' as const, finish: 'error' as const, note: 'Round failed (OPENAI_CHAT_DEFINITION_INVALID).' };
+  const projected = [];
+  for await (const delta of humanTurnNotes((async function* () { yield { kind: 'text' as const, text: 'OPENAI_API_KEY' }; yield raw; })(), language)) projected.push(delta);
+  expect(raw.note).toContain('OPENAI_CHAT_DEFINITION_INVALID');
+  expect(projected[0]).toEqual({ kind: 'text', text: 'OPENAI_API_KEY' });
+  expect(projected[1]).toMatchObject({ kind: 'done', finish: 'error' });
+  expect(projected[1]).not.toHaveProperty('note', raw.note);
+  expect(JSON.stringify(projected[1])).not.toContain('OPENAI_CHAT_DEFINITION_INVALID');
 });
 
 it('applies the registry defaults and the absolute threshold independently of the million-token window', () => {
@@ -257,8 +268,10 @@ it.each(['ready', 'cancel', 'failed', 'stored', 'shell'] as const)('alpha.60 B/C
     if (scenario === 'cancel') { input.write('\u0003'); await settle(80); answer(readiness); await settle(150); }
     else if (scenario === 'failed') {
       refuse(ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: '/state/runtime-service.log' } }));
-      await until(() => output.includes('RUNTIME_AUTOSTART_FAILED'), 'the typed error on the waiting line');
-      await until(() => /│ ?hello/u.test(output.slice(output.lastIndexOf('RUNTIME_AUTOSTART_FAILED'))), 'the line back as the draft');
+      const failureText = 'The local runtime service could not be started automatically.';
+      await until(() => output.includes(failureText), 'the localized refusal on the waiting line');
+      expect(output).not.toContain('RUNTIME_AUTOSTART_FAILED'); expect(output).toContain('/state/runtime-service.log');
+      await until(() => /│ ?hello/u.test(output.slice(output.lastIndexOf(failureText))), 'the line back as the draft');
     } else { answer(readiness); await until(() => output.includes('ANSWERED'), 'delivered'); }
     expect(order.slice(0, 2)).toEqual({ ready: ['mode', 'turn'], cancel: ['mode'], failed: [], stored: ['mode', 'turn full-access'] }[scenario]); // a turn then refreshes the mode
     expect(output.split(wait)).toHaveLength(2); expect(ensure).toHaveBeenCalledOnce();

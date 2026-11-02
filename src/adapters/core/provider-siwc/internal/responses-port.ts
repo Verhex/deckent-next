@@ -30,7 +30,7 @@ export function createSiwcResponsesPort(options: { readonly now: () => number;
     responseBytesUpperBound(value: unknown) { return modelInvocationNativeResponseUpperBound(target(value).limits.responseMaxBytes); }, estimatePrompt(value: unknown) { return Buffer.byteLength(target(value).body, 'utf8') + I.promptFramingAllowance.tokens; }, // estimate: exact body bytes + allowance
     async prepare(profileInput: unknown, bindingInput: unknown, requestInput: unknown) {
       const envelope = openAiChatWireObjectSchema.safeParse(profileInput), profile = envelope.success && modelInvocationProfileSchema.safeParse(envelope.data);
-      if (!profile || !profile.success || profile.data.schemaVersion !== 2 || profile.data.billingAxis !== 'subscription'
+      if (!profile || !profile.success || profile.data.schemaVersion === 1 || profile.data.billingAxis !== 'subscription'
         || profile.data.adapter.id !== I.adapter.id || profile.data.adapter.version !== I.adapter.version
         || profile.data.protocol.family !== OPENAI_CHAT_COMPLETIONS_FAMILY || profile.data.protocol.version !== OPENAI_CHAT_COMPLETIONS_VERSION)
         throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');

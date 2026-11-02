@@ -36,7 +36,7 @@ export function configuredProviderSpendCheckpoint(budget: ProviderSpendBudget) {
 
 /** Compatibility classification never rewrites historical v1 profiles or their digest. */
 export function modelInvocationBillingAxis(profile: ModelInvocationProfile): ModelInvocationBillingAxis {
-  return profile.schemaVersion === 2 ? profile.billingAxis : providerSpendLocalZeroTariffProfile(profile) ? 'local' : 'metered';
+  return profile.schemaVersion !== 1 ? profile.billingAxis : providerSpendLocalZeroTariffProfile(profile) ? 'local' : 'metered';
 }
 
 /** Unknown worker bindings stay conservatively metered at admission; observation must not claim an API charge. A profile without a

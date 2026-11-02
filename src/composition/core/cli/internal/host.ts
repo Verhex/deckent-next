@@ -34,7 +34,7 @@ import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredP
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
-import { previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
+import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -116,8 +116,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     /* T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed; the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it. */ providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
       endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? (kind.connect?.adapter === SIWC_INFERENCE.adapter.id ? providerDiscoveryChannel(kind, null) : null), connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
-      priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing, ...(kind.connect ? { pull: kind.connect.pull } : {}),
+      priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing, presentation: kind.presentation, ...(kind.connect ? { pull: kind.connect.pull } : {}),
       // PV: a CLI subscription that signs in with its own CLI and runs only inside the isolation realm (registry data).
+      terminalTextChat: kind.connect?.terminalTextChat === true,
       headlessLogin: Boolean(kind.connect?.personOnly && (kind.connect.adapter === 'native-cli-headless' || kind.connect.headless)) })),
     /* PV 2a/3: the isolation check before a row is offered, the Brain's own login dir before the sign-in, and the sign-in itself (the existing
        `models login` path: person check, realm seal, registry argv and time bound; the window owns the terminal hand-over around it). */
@@ -210,6 +211,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       try { return await resumeInstallation(projectRoot, input); }
       catch (error) { throw queryFailure(error); }
     },
+    projectAttachment: (root, input, options) => executeConfiguredProjectAttachment(root, input, options).catch(error => { throw queryFailure(error); }),
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     openOwnerBaselineInstallation: (projectRoot, scopeId, input) => openOwnerBaselineInstallation(projectRoot, scopeId, input),

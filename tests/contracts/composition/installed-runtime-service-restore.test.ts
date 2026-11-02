@@ -24,7 +24,7 @@ it.skipIf(process.platform !== 'linux').each(['restore'] as const)('known-identi
   };
   const failure = await installedScenario('contention', observed, 'after-found', boundary).then(() => undefined, (error: unknown) => error);
   try {
-    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure, failure instanceof Error ? `${failure.name}: ${failure.message}` : String(failure)).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).message).toBe('SCENARIO_AND_CLEANUP_FAILED');
     expect((failure as AggregateError).errors.map(error => (error as Error).message))
       .toEqual(['INJECTED_WITNESS_FAULT_AFTER_FOUND', `INJECTED_CLEANUP_FAULT_${stage.toUpperCase().replace('-', '_')}`]);

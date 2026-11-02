@@ -36,20 +36,27 @@ afterEach(async () => {
 const sdkProgram = `
 import { pathToFileURL } from 'node:url';
 const [entry,project,encoded]=process.argv.slice(1),api=await import(pathToFileURL(entry).href);
-try { process.stdout.write(JSON.stringify({ok:true,value:await api.inspectModelInvocation(project,JSON.parse(encoded),{env:process.env})})); }
-catch(error) { process.stdout.write(JSON.stringify({ok:false,code:error?.code??'UNKNOWN'})); }
-`;
-async function inspectSdk(project: string, env: Record<string, string>, query: unknown) {
-  const result = await execute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, project, JSON.stringify(query)],
-    { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
-  return JSON.parse(result.stdout) as { ok: true; value: ModelInvocationInspection } | { ok: false; code: string };
+const results=[];
+for (const query of JSON.parse(encoded)) {
+  try { results.push({ok:true,value:await api.inspectModelInvocation(project,query,{env:process.env})}); }
+  catch(error) { results.push({ok:false,code:error?.code??'UNKNOWN'}); }
 }
-async function inspectMcp(project: string, env: Record<string, string>, query: Record<string, unknown>) {
+process.stdout.write(JSON.stringify(results));
+`;
+// Keep the real compiled process boundary, amortizing its module load across read-only queries.
+async function inspectSdk(project: string, env: Record<string, string>, queries: readonly unknown[]) {
+  const result = await execute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, project, JSON.stringify(queries)],
+    { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
+  return JSON.parse(result.stdout) as Array<{ ok: true; value: ModelInvocationInspection } | { ok: false; code: string }>;
+}
+async function inspectMcp(project: string, env: Record<string, string>, queries: readonly Record<string, unknown>[]) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', project], env, stderr: 'pipe' });
   const client = new Client({ name: 'spending-inspection-proof', version: '1' });
   try {
     await bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT');
-    return await bounded(client.callTool({ name: 'inspect_model_invocation', arguments: query }), 'MCP_CALL_TIMEOUT');
+    const results = [];
+    for (const query of queries) results.push(await bounded(client.callTool({ name: 'inspect_model_invocation', arguments: query }), 'MCP_CALL_TIMEOUT'));
+    return results;
   } finally {
     await bounded(client.close(), 'MCP_CLIENT_CLOSE_TIMEOUT'); await bounded(transport.close(), 'MCP_TRANSPORT_CLOSE_TIMEOUT');
     expect(transport.pid).toBeNull();
@@ -136,8 +143,8 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   await startRuntime(project, env);
   const query = (id: string, ref = reference, scopeId = 'scope') => ({ schemaVersion: 2, scopeId, invocationId: id, reference: ref });
   const heldQuery = query('invocation-held'), releasedQuery = query('invocation-released'), reportedQuery = query('invocation-reported');
-  const before = ledgerSnapshot(ledger), heldSdk = await inspectSdk(project, env, heldQuery), releasedSdk = await inspectSdk(project, env, releasedQuery),
-    reportedSdk = await inspectSdk(project, env, reportedQuery);
+  const before = ledgerSnapshot(ledger), [heldSdk, releasedSdk, reportedSdk] = await inspectSdk(project, env, [heldQuery, releasedQuery, reportedQuery]);
+  if (!heldSdk || !releasedSdk || !reportedSdk) throw new Error('SDK_INSPECTION_MISSING');
   expect(heldSdk).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', contentStatus: 'retained', spending: { disposition: { state: 'held', reason: 'missing-usage' } } } });
   expect(releasedSdk).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', contentStatus: 'not-captured', spending: { disposition: { state: 'released-not-sent' } } } });
   expect(reportedSdk).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', contentStatus: 'retained', spending: {
@@ -153,7 +160,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   const reportedCliJson = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', reportedInput, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout) as ModelInvocationInspection;
   expect(reportedCliJson).toEqual(reportedSdk.value);
-  const mcpDenied = await inspectMcp(project, env, releasedQuery);
+  const mcpDenied = (await inspectMcp(project, env, [releasedQuery]))[0]!;
   expect(mcpDenied.isError).toBe(true);
   expect(JSON.parse((mcpDenied.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'POLICY_DENIED' , message: expect.any(String) });
   expect(ledgerSnapshot(ledger)).toBe(before);
@@ -162,9 +169,9 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
       principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
     { id: 'mcp-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
       principals: [mcpPrincipalRef(identity)], resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } }] }), { mode: 0o600 });
-  const mcpResult = await inspectMcp(project, env, releasedQuery);
+  const [mcpResult, reportedMcpResult] = await inspectMcp(project, env, [releasedQuery, reportedQuery]);
+  if (!mcpResult || !reportedMcpResult) throw new Error('MCP_INSPECTION_MISSING');
   expect(mcpResult.isError).not.toBe(true); expect(mcpResult.structuredContent).toEqual(releasedSdk.value);
-  const reportedMcpResult = await inspectMcp(project, env, reportedQuery);
   expect(reportedMcpResult.isError).not.toBe(true); expect(reportedMcpResult.structuredContent).toEqual(reportedSdk.value);
   for (const [language, phrase] of [['en', 'Local reservation held: up to 6 minor units (USD)'], ['tr', 'Yerel rezervasyon bekletildi: en fazla 6 alt birim (USD)']] as const) {
     const text = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', input, '--lang', language, '--no-color'],
@@ -181,7 +188,9 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   }
   expect((heldSdk.value.spending as ProviderSpendReservation).disposition).toEqual({ state: 'held', reason: 'missing-usage', observedMinorUnits: null,
     evidenceDigest: expect.any(String) });
-  expect(await inspectSdk(project, env, query('invocation-held', reference, 'foreign'))).toEqual({ ok: false, code: 'POLICY_DENIED' });
-  expect(await inspectSdk(project, env, query('invocation-held', { ...reference, modelId: 'foreign' }))).toEqual({ ok: false, code: 'POLICY_DENIED' });
+  expect(await inspectSdk(project, env, [query('invocation-held', reference, 'foreign'), query('invocation-held', { ...reference, modelId: 'foreign' })]))
+    .toEqual([{ ok: false, code: 'POLICY_DENIED' }, { ok: false, code: 'POLICY_DENIED' }]);
   expect(ledgerSnapshot(ledger)).toBe(before);
-});
+// Eleven compiled process starts: hosted alpha.61 took 28,752 ms and alpha.62 exceeded 30 s; CPU-pinned medians were 10.62/10.38 s.
+// Bound this cross-surface test only; the 10 s child/connect/call limits remain unchanged.
+}, 60_000);

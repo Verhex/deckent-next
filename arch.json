@@ -497,7 +497,8 @@
         "src/engine/core/bootstrap-identity",
         "src/adapters/core/beuser-surface",
         "src/engine/core/beuser-contract",
-        "src/engine/core/beuser-realm"
+        "src/engine/core/beuser-realm",
+        "src/engine/core/project-attachment"
       ],
       "plan": "FOUNDATION"
     },
@@ -1393,7 +1394,8 @@
         "src/surfaces/core/cli-agents",
         "src/surfaces/core/setup",
         "src/surfaces/core/cli-hub",
-        "src/surfaces/core/cli-beuser"
+        "src/surfaces/core/cli-beuser",
+        "src/domain/core/project-attachment"
       ],
       "plan": "SURFACES"
     },
@@ -1589,7 +1591,18 @@
         "src/adapters/core/git-workspace",
         "src/engine/core/policy",
         "src/engine/core/system-policy-rows",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/adapters/core/project-attachment",
+        "src/engine/core/project-attachment",
+        "src/domain/core/project-attachment",
+        "src/engine/core/bootstrap-identity",
+        "src/composition/core/attachment-lifecycle",
+        "src/composition/core/provider-spend",
+        "src/engine/core/model-use",
+        "src/engine/core/provider-spend",
+        "src/composition/core/model-use-grant",
+        "src/composition/core/model-use",
+        "src/adapters/core/sqlite-read-view"
       ],
       "plan": "INSTALLATION"
     },
@@ -1630,7 +1643,8 @@
         "src/platform/core/errors",
         "src/engine/core/bootstrap-identity",
         "src/engine/core/beuser-realm",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/domain/core/project-attachment"
       ],
       "plan": "INSTALLATION"
     },
@@ -1687,7 +1701,8 @@
         "src/engine/core/dispatch",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/adapters/core/sqlite-read-view"
       ],
       "plan": "STORE"
     },
@@ -1721,7 +1736,8 @@
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
         "src/engine/core/dispatch",
-        "src/engine/core/model-activation"
+        "src/engine/core/model-activation",
+        "src/adapters/core/sqlite-read-view"
       ],
       "plan": "PROVIDERS"
     },
@@ -1743,7 +1759,9 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/local-keyring",
         "src/engine/core/audit",
-        "src/engine/core/bootstrap-identity"
+        "src/engine/core/bootstrap-identity",
+        "src/adapters/core/project-attachment",
+        "src/engine/core/project-attachment"
       ],
       "plan": "PROVIDERS"
     },
@@ -1764,7 +1782,9 @@
         "src/composition/core/model-invocation",
         "src/composition/core/provider-catalog",
         "src/domain/core/provider-catalog",
-        "src/adapters/core/provider-connect"
+        "src/adapters/core/provider-connect",
+        "src/engine/core/model-use",
+        "src/composition/core/model-use"
       ],
       "plan": "PROVIDERS"
     },
@@ -1970,7 +1990,8 @@
         "src/domain/core/policy",
         "src/platform/core/integrity",
         "src/platform/core/errors",
-        "src/engine/core/oauth-connection"
+        "src/engine/core/oauth-connection",
+        "src/composition/core/model-use"
       ],
       "plan": "PROVIDERS"
     },
@@ -2526,7 +2547,7 @@
         "src/adapters/core/process-runner",
         "src/engine/core/runtime",
         "src/platform/core/config-fields",
-        "src/adapters/core/installation-files"
+        "src/composition/core/scoped-request"
       ],
       "plan": "PROVIDERS"
     },
@@ -3285,7 +3306,9 @@
         "src/engine/core/beuser-realm",
         "src/platform/core/errors",
         "src/platform/core/integrity",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/utils",
+        "src/platform/core/config"
       ],
       "plan": "INSTALLATION"
     },
@@ -3303,7 +3326,8 @@
         "src/platform/core/host",
         "src/platform/core/integrity",
         "src/platform/core/utils",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/common"
       ],
       "plan": "INSTALLATION"
     },
@@ -3326,7 +3350,10 @@
         "src/adapters/core/contract",
         "src/platform/core/managed-files",
         "src/composition/core/secrets",
-        "src/adapters/core/installation-removal"
+        "src/adapters/core/installation-removal",
+        "src/adapters/core/project-attachment",
+        "src/platform/core/common",
+        "src/composition/core/attachment-lifecycle"
       ],
       "plan": "INSTALLATION"
     },
@@ -3499,7 +3526,10 @@
         "src/domain/core/audit",
         "src/domain/core/model-invocation",
         "src/engine/core/secret-store",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/domain/core/principal",
+        "src/domain/core/identity-profile",
+        "src/engine/core/identity-profile"
       ],
       "plan": "PROVIDERS"
     },
@@ -3742,7 +3772,9 @@
         "src/platform/core/errors",
         "src/platform/core/integrity",
         "src/domain/core/audit",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/identity-profile"
       ],
       "plan": "INSTALLATION"
     },
@@ -3838,7 +3870,6 @@
         "src/domain/core/run",
         "src/platform/core/clock",
         "src/composition/core/approvals",
-        "src/engine/core/identity-profile",
         "src/adapters/core/contract"
       ],
       "plan": "INSTALLATION"
@@ -4500,7 +4531,6 @@
         "src/adapters/core/backup-store",
         "src/engine/core/backup",
         "src/platform/core/common",
-        "src/adapters/core/installation-files",
         "src/adapters/core/local-keyring",
         "src/adapters/core/worker-image",
         "src/engine/core/toolchain-currency",
@@ -4516,7 +4546,8 @@
         "src/engine/core/workspace-patch",
         "src/adapters/core/git-workspace",
         "src/domain/core/effect",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/adapters/core/project-attachment"
       ],
       "plan": "INSTALLATION"
     },
@@ -4533,21 +4564,13 @@
     "src/composition/core/siwc": {
       "dependencies": [
         "src/domain/core/model-invocation",
-        "src/domain/core/identity-profile",
         "src/domain/core/model-activation",
         "src/domain/core/primitives",
-        "src/engine/core/identity-profile",
         "src/engine/core/oauth-connection",
-        "src/engine/core/secret-store",
-        "src/adapters/core/contract",
         "src/adapters/core/provider-siwc",
-        "src/adapters/core/local-principal",
-        "src/adapters/core/installation-files",
         "src/adapters/core/provider-openai-chat",
-        "src/platform/core/host",
         "src/platform/core/config",
         "src/composition/core/scoped-request",
-        "src/engine/core/runtime",
         "src/engine/core/model-activation",
         "src/composition/core/root",
         "src/engine/core/model-invocation",
@@ -4556,7 +4579,11 @@
         "src/domain/core/attempt",
         "src/adapters/core/siwc-worker",
         "src/platform/core/common",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/adapters/core/siwc-connection",
+        "src/engine/core/project-attachment",
+        "src/composition/core/model-use",
+        "src/engine/core/model-use"
       ],
       "plan": "PROVIDERS"
     },
@@ -4848,6 +4875,117 @@
         "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
+    },
+    "src/domain/core/project-attachment": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/engine/core/project-attachment": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/project-attachment",
+        "src/engine/core/bootstrap-identity",
+        "src/platform/core/config"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/project-attachment": {
+      "dependencies": [
+        "src/domain/core/project-attachment",
+        "src/engine/core/project-attachment",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-principal",
+        "src/engine/core/runtime",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/platform/core/managed-files",
+        "src/platform/core/utils",
+        "src/engine/core/backup",
+        "src/platform/core/bootstrap-state",
+        "src/adapters/core/installation-journal",
+        "src/adapters/core/backup-store"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/model-use": {
+      "dependencies": [
+        "src/engine/core/model-use",
+        "src/adapters/core/sqlite-model-activation",
+        "src/platform/core/config",
+        "src/composition/core/root",
+        "src/composition/core/scoped-request",
+        "src/adapters/core/config-file",
+        "src/adapters/core/contract"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/engine/core/model-use": {
+      "dependencies": [
+        "src/domain/core/project-attachment",
+        "src/domain/core/model-invocation",
+        "src/engine/core/project-attachment",
+        "src/engine/core/model-invocation",
+        "src/engine/core/model-activation",
+        "src/engine/core/policy",
+        "src/engine/core/provider-catalog",
+        "src/engine/core/provider-spend",
+        "src/domain/core/model-activation",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/domain/core/primitives"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/model-use-grant": {
+      "dependencies": [
+        "src/engine/core/project-attachment",
+        "src/engine/core/model-use",
+        "src/adapters/core/project-attachment",
+        "src/adapters/core/sqlite-model-activation",
+        "src/platform/core/config",
+        "src/composition/core/model-use",
+        "src/composition/core/config",
+        "src/composition/core/scoped-request"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/attachment-lifecycle": {
+      "dependencies": [
+        "src/adapters/core/project-attachment",
+        "src/composition/core/scoped-request",
+        "src/platform/core/config"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/siwc-connection": {
+      "dependencies": [
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/engine/core/model-invocation",
+        "src/engine/core/secret-store",
+        "src/engine/core/oauth-connection",
+        "src/engine/core/runtime",
+        "src/engine/core/audit",
+        "src/adapters/core/contract",
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-principal",
+        "src/platform/core/host",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/sqlite-read-view": {
+      "dependencies": [
+        "src/platform/core/errors"
+      ],
+      "plan": "INSTALLATION"
     }
   },
   "composition": {

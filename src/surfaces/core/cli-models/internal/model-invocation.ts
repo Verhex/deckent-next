@@ -87,7 +87,7 @@ function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed
         : receipt.outcome.state === 'unknown' ? (purge ? t('models.invocation.unknownPurged', {}, locale) : t('models.invocation.unknown', {}, locale))
           : t('models.invocation.notSent', { command: receipt.outcome.cancellationCommandId }, locale);
   return [t('models.invocation.receipt', { id: receipt.claim.invocationId, command: receipt.claim.commandId, state }, locale),
-    ...(receipt.profile?.schemaVersion === 2 ? [t('billing.axis', { axis: { subscription: t('billing.subscription', {}, locale), metered: t('billing.metered', {}, locale), local: t('billing.local', {}, locale) }[receipt.profile.billingAxis] }, locale)] : []),
+    ...(receipt.profile && receipt.profile.schemaVersion !== 1 ? [t('billing.axis', { axis: { subscription: t('billing.subscription', {}, locale), metered: t('billing.metered', {}, locale), local: t('billing.local', {}, locale) }[receipt.profile.billingAxis] }, locale)] : []),
     ...(planUsage ? [t('models.invocation.planUsage', { counters: planUsage.source === 'provider-reported' ? t('models.invocation.planUsageCounters', {}, locale) : t('proposal.planning.unknown', {}, locale) }, locale)] : []),
     ...(control?.cancellation ? [renderCancellation(control.cancellation, locale)] : []),
     ...(replayed === true ? [t('models.invocation.replayed', {}, locale)] : []),

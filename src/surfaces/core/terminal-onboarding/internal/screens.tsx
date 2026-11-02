@@ -6,7 +6,7 @@ import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { FirstTaskIntent, OnboardingFocus, OnboardingPort, OnboardingUi } from './contract.js';
 import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE } from './session.js';
 import { askOnboardingQuestion, type QuestionAnswer } from './question.js';
-import { firstTaskScreen } from './first-task.js';
+import { welcomeScreen } from './first-task.js';
 import { guideScreen } from './guides.js';
 import { settleOnboardingReady } from './ready.js';
 import { firstCommitScreen } from './first-commit.js';
@@ -23,21 +23,22 @@ export async function prepareOnboardingSession(port: OnboardingPort, revisit = f
   // A closed terminal (`signal`) ends the observation and starts no settle write.
   const observed = await port.observe({}, signal); signal?.throwIfAborted();
   const session = createOnboardingSession(port, observed, revisit, focus, signal), model = await session.settle();
-  return { total: model.steps.length ? model.total : 0, snapshot: model.snapshot,
-    show: (ui: OnboardingUi, io: CliCardIo, conversationNotice?: string) => showOnboardingSession(session, port, ui, io, conversationNotice) };
+  const welcome = !focus && !model.snapshot.deferred.includes(FIRST_TASK_DONE);
+  return { total: model.steps.length ? model.total : 0, welcome, snapshot: model.snapshot,
+    show: (ui: OnboardingUi, io: CliCardIo, conversationNotice?: string) => showOnboardingSession(session, port, ui, io, conversationNotice, welcome) };
 }
-async function showOnboardingSession(session: ReturnType<typeof createOnboardingSession>, port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, conversationNotice?: string): Promise<FirstTaskIntent | null> {
+async function showOnboardingSession(session: ReturnType<typeof createOnboardingSession>, port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, conversationNotice?: string, welcome = false): Promise<FirstTaskIntent | null> {
   let shown = false;
   while (!io.signal?.aborted) {
     const model = session.model(), step = model.steps[0], locale = io.locale;
-    if (!step) { if (!shown) ui.observed?.(model.snapshot); return null; } // after a shown step the opener observes again
-    shown = true;
-    if (step.kind === 'first-task') {
-      const result = await firstTaskScreen(model, io, undefined, conversationNotice);
-      if (result === 'later' && !model.snapshot.deferred.includes(FIRST_TASK_DONE)) await session.defer(step); // AYSE-R2-04: after a first task, Esc only closes
-      if (typeof result === 'object') await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined);
-      return typeof result === 'object' ? result : null;
+    if (!step) {
+      if (!shown) ui.observed?.(model.snapshot);
+      if (!welcome || io.signal?.aborted) return null;
+      const result = await welcomeScreen(model, io, conversationNotice);
+      if (!io.signal?.aborted) await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined); // A welcome marker never discards the person's explicit choice.
+      return result;
     }
+    shown = true;
     if (step.kind === 'budget' || step.kind === 'permissions' || step.kind === 'rights') {
       try {
         const result = await guideScreen(model, step.kind, port, io);

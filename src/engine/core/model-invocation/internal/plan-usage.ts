@@ -18,7 +18,7 @@ function counters(input: JsonObject | null, depth = 0): JsonObject | null {
 }
 export function createModelInvocationPlanUsage(record: ModelInvocationRecord): ModelInvocationPlanUsage | null {
   const { receipt, content } = record, outcome = receipt.outcome;
-  if (receipt.profile.schemaVersion !== 2 || receipt.profile.billingAxis !== 'subscription' || !outcome) return null;
+  if (receipt.profile.schemaVersion === 1 || receipt.profile.billingAxis !== 'subscription' || !outcome) return null;
   const reported = outcome.state === 'responded' && content?.kind === 'native-response' ? counters(content.response.usage) : null;
   return modelInvocationPlanUsageSchema.parse({ schemaVersion: 1, kind: 'plan-usage', scopeId: receipt.claim.scopeId,
     invocationId: receipt.claim.invocationId, profileDigest: receipt.profileDigest, outcomeDigest: providerSpendOutcomeDigest(receipt),

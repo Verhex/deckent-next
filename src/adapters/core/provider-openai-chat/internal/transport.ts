@@ -218,7 +218,7 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       preparedTokens.add(prepared);
       // Local profiles may probe the protocol route; only a typed answer for this exact request proves a counter, never the URL.
       if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.set(prepared, adapterDefinition.tokenizeEndpoint);
-      else if (parsedProfile.data.schemaVersion === 2 && parsedProfile.data.billingAxis === 'local'
+      else if (parsedProfile.data.schemaVersion !== 1 && parsedProfile.data.billingAxis === 'local'
         && adapterDefinition.dialect?.protocol !== 'responses') countable.set(prepared,
         adapterDefinition.tokenizeEndpoint ?? new URL('/tokenize', adapterDefinition.endpoint).href);
       return prepared;

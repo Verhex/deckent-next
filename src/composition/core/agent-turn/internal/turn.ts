@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
+import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
@@ -10,7 +10,7 @@ import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, age
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, MESSAGE_REGISTRY, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
+import { terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
@@ -160,14 +160,15 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // OpenRouter adapter accepts `stream: false` only) gets one non-streamed round, and the answer arrives with the governed result.
     const roundStream = !profile || profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || profile.protocol.family === ANTHROPIC_MESSAGES_FAMILY
       ? { stream: true, stream_options: { include_usage: true } } : { stream: false };
+    const shapeRequest = (request: JsonObject) => profile && terminalTextChatFamilies.includes(profile.protocol.family) ? textOnlyModelInvocationRequest(request) : request;
     /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
     const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
       schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
       scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-      nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt), profile ? { scopeId: command.scopeId, reference, profileDigest: modelInvocationProfileDigest(profile) } : undefined), max_completion_tokens: chat.maxCompletionTokens,
+      nativeRequest: shapeRequest({ model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt), profile ? { scopeId: command.scopeId, reference, profileDigest: modelInvocationProfileDigest(profile) } : undefined), max_completion_tokens: chat.maxCompletionTokens,
         ...roundStream, ...roundThinking,
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
-          parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
+          parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject) });
     const mcps = (tool: AgentToolSpec) => mcp !== null && tool.toolClass === 'mcp' && mcp.owns(tool.name);
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
     /** T2-FOLLOWUP: what the card may say about undoing the call (by what it is) and, for a shell call, its structured posture. */
@@ -236,12 +237,14 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-          if (evidence?.adapter.id === SIWC_INFERENCE.adapter.id) {
+          const cliSubscription = evidence && profile && terminalTextChatFamilies.includes(profile.protocol.family)
+            && profile.adapter.id === evidence.adapter.id && profile.adapter.version === evidence.adapter.version;
+          if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliSubscription)) {
             const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
               invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options).catch(() => null);
             const content = inspected?.responseContent;
-            const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([SIWC_INFERENCE.adapter.id])) : null;
-            if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
+            const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
+            if (body?.refusal === 'quota') return { status: 'failed', state: cliSubscription ? t('headless.chat.quota', {}, language) : t('siwc.usage.limit', {}, language) };
             if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
             if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
             if (body?.refusal === 'plan-unavailable') return { status: 'failed', state: t('siwc.notEligible', {}, language) };

@@ -8,8 +8,7 @@ import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemT
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
-import { uninstallRecoveryDirectory, installationScopes, prepareUninstallBackup, writeUninstallTombstone, completeUninstall } from '#adapters/index.js';
-import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, installationScopes, prepareUninstallBackup, writeUninstallTombstone, completeUninstall, observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
 export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: UninstallPlan, approved: string, principal: VerifiedPrincipal,
@@ -34,7 +33,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     const affected = installationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopeIds);
     const decided = await policy.load();
     for (const action of plan.tier !== 'keep-data' ? ['uninstall', 'purge'] as const : ['uninstall'] as const) authorizeUninstall(decided, { ...principal, scopeIds: affected }, plan.installation.id, affected, action);
-    const recoveryLocation = await recovery.admit(plan);
+    const recoveryLocation = await recovery.admit(plan, location => new FileEffectStore(location, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords }).assertUnclaimed());
     const store = new FileEffectStore(recoveryLocation, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords });
     await store.initialize();
     const approvals = openSqliteApprovalStore(path, config.storage.sqlite);

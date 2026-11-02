@@ -29,3 +29,5 @@ export * from '#domain/core/identity-profile/index.js';
 export * from '#domain/core/work-cost/index.js';
 export * from '#domain/core/hub/index.js';
 export * from '#domain/core/beuser/index.js';
+
+export * from '#domain/core/project-attachment/index.js';

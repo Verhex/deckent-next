@@ -483,7 +483,7 @@ it.skipIf(process.platform !== 'linux')('completes compiled terminal line-mode t
   await f.policy(false);
   const denied = await session('third question\n');
   // T2 L3: the typed failure prints its human message, then the code on its own line (`(code: X)`).
-  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toMatch(/^\(code: [A-Z_]+\)$/m);
+  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toContain('Policy does not permit'); expect(`${denied.stdout}${denied.stderr}`).not.toMatch(/\(code: [A-Z_]+\)/); // human message only (owner test 2026-11-02 #2)
   expect(denied.stdout).not.toContain('done'); expect(f.requests).toBe(2);
 }, 30_000);
 

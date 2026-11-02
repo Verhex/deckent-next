@@ -131,7 +131,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
   const target = (profileInput: unknown) => {
     const parsed = modelInvocationProfileSchema.safeParse(profileInput);
     if (!parsed.success || parsed.data.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER.id || parsed.data.adapter.version !== NATIVE_CLI_HEADLESS_ADAPTER.version
-      || parsed.data.schemaVersion !== 2 || parsed.data.billingAxis !== 'subscription') refuse('HEADLESS_REQUEST_INVALID', { reason: 'profile' });
+      || parsed.data.schemaVersion === 1 || parsed.data.billingAxis !== 'subscription') refuse('HEADLESS_REQUEST_INVALID', { reason: 'profile' });
     const definition = nativeCliHeadlessDefinitionSchema.safeParse(parsed.data.adapter.definition), entry = nativeCliHeadless(parsed.data.protocol.family);
     if (!definition.success || !entry || !Object.hasOwn(TURNS, entry.command.capabilities.eventStream)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
     return { profile: parsed.data, definition: definition.data, entry };

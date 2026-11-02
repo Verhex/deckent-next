@@ -917,7 +917,7 @@
   "tui.provider.login.personOnly": "Yalnızca siz: yapay zekâ aktörleri, arka plan rolleri ve MCP istemcileri reddedilir.",
   "tui.provider.login.consentNow": "Bağlandı. Bu girişi şu an kim kullanabilir: {who}. Enter ile işaretleyin, sonra ilk satırı seçin; hiçbir şey işaretlenmezse yalnızca siz. Esc şimdiki hâlini korur.",
   "tui.provider.login.brainOnly": "Brain için bağlandı: /do planlaması ve BeUser bu aboneliği kullanır (bağlanırken denetimi yalıtım içinde çalıştı). Terminal sohbeti henüz CLI aboneliği kullanmaz; sohbet için bir API anahtarı bağlayın ya da ChatGPT ile giriş yapın.",
-  "tui.provider.login.brainOnlyNote": "Brain için bağlı (/do planlaması, BeUser); terminal sohbeti kullanmaz",
+  "tui.provider.login.brainOnlyNote": "Brain planlaması ve BeUser için CLI aboneliği; terminal sohbeti desteklenmiyor. /provider ile girişi denetleyin.",
   "tui.provider.field.storage": "Saklama",
   "tui.provider.outcome.ok": "Sağlayıcı anahtarı kabul etti.",
   "tui.provider.outcome.okNoKey": "Sunucu anahtarsız yanıt verdi.",
@@ -1209,5 +1209,7 @@
   "tui.theme.sample.diffRemoved": "- kaldırılan satır",
   "tui.theme.sample.mutedId": "kimlik: yalnız-önizleme",
   "tui.theme.sample.codeBlock": "Kod bloğu: | console.log(ready);",
-  "tui.beuser.slash": "BeUser yürüyüşlerini ve sınırlarını incele"
+  "tui.beuser.slash": "BeUser yürüyüşlerini ve sınırlarını incele",
+  "tui.provider.beta": "Betada — bu bağlantı kullanılamayabilir",
+  "tui.provider.apiTitle": "API sağlayıcıları"
 }

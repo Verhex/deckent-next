@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
-import { permissionDefaultsRegistry, IdentityProfileRegistry, SetupStageRegistry, inspectPermissionMode, PermissionModeApplication, AuditApplication,
-  AUDIT_PAGE_MAX, assertAuthorityWitness, setupProfileRefSchema, type AuthorityWitness, type SetupPermissionPreview } from '#engine/index.js';
+import { selectSetupPermissionProfile, finishSetupPermissionPreview, inspectPermissionMode, PermissionModeApplication, AuditApplication,
+  AUDIT_PAGE_MAX, assertAuthorityWitness, type AuthorityWitness, type SetupPermissionPreview } from '#engine/index.js';
 import { readIdentityProfileConfig, localPrincipalChannel, attestLocalInteractiveTerminal, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority } from '#adapters/index.js';
 import { ErrorRegistry, sha256, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -14,14 +14,7 @@ export async function observeSetupPermissions(root: string, scopeId: string, opt
   selected?: Readonly<{ id: string; version: number }>): Promise<SetupPermissionPreview> {
   const before = await snapshotConfiguredConfig(root, options);
   const context = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true, heal: false }, 'read');
-  const selection = readIdentityProfileConfig(context.config['identity']), saved = selection?.profile ?? null;
-  const defaultProfile = new SetupStageRegistry().unattendedProfile;
-  const profiles = new IdentityProfileRegistry(selection?.packages ?? []).list().map(row => ({ id: row.definition.id, version: row.definition.version }))
-    .sort((a, b) => Number(b.id === defaultProfile) - Number(a.id === defaultProfile));
-  const candidate = selected ? setupProfileRefSchema.parse(selected) : saved ?? profiles.find(row => row.id === defaultProfile) ?? null;
-  if (selected && (saved && JSON.stringify(saved) !== JSON.stringify(selected) || !profiles.some(row => row.id === selected.id && row.version === selected.version)))
-    throw ErrorRegistry.createError('PERMISSION_MODE_CONFLICT');
-  const defaults = permissionDefaultsRegistry.resolve(candidate);
+  const selection = selectSetupPermissionProfile(readIdentityProfileConfig(context.config['identity']), selected);
   const view = inspectPermissionMode(context.document, context.principal, { schemaVersion: 1, scopeId });
   const grants = await openPermissionModesInstallation(root, scopeId, { modes: [], apply: false,
     person: { issuer: context.principal.issuer, subject: context.principal.subject } }, options);
@@ -46,16 +39,7 @@ export async function observeSetupPermissions(root: string, scopeId: string, opt
   } finally { store.close(); }
   const after = await snapshotConfiguredConfig(root, options);
   if (before.digest !== after.digest || JSON.stringify(before.global) !== JSON.stringify(after.global)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
-  const configDigest = sha256(JSON.stringify({ project: after.project, global: after.global }));
-  const effectiveMode = view.mode === 'full-auto' && !view.fullAuto || view.mode === 'full-access' && !view.fullAccess ? 'standart' : view.mode;
-  const mode = preserveMode ? view.mode : defaults?.startMode ?? 'standart';
-  const state: SetupPermissionPreview['state'] = !view.supported || bounded ? 'blocked' : !saved ? 'needs-profile' : !defaults ? 'not-applicable'
-    : preserveMode || mode === 'standart' ? 'applied' : !['preview', 'current'].includes(grants.status) ? 'blocked' : 'needs-confirmation';
-  const profileDigest = sha256(JSON.stringify({ saved, candidate, defaults }));
-  const basis = { state, configDigest, profileDigest, revision: view.revision, modeRevision, currentMode: view.mode, effectiveMode, mode, preserveMode,
-    scopeId, principal: `${context.principal.issuer}/${context.principal.subject}`, profile: candidate?.id ?? '-', selectedProfile: candidate, profiles };
-  return { ...basis, reason: !defaults ? 'onboarding.permissions.profileWithoutDefaults' : !saved ? 'onboarding.permissions.profileMissing' : preserveMode ? 'onboarding.permissions.preserved' : 'onboarding.permissions.guided',
-    grantRevision: grants.revision, digest: sha256(JSON.stringify({ ...basis, grants })) };
+  return finishSetupPermissionPreview(selection, view, grants, preserveMode, bounded, modeRevision, { project: after.project, global: after.global }, scopeId, context.principal);
 }
 
 /** U5 sole carrier: witnessed config profile → PRE-9 grant → fresh observation → mode entry. Each owner keeps its CAS and audit. */

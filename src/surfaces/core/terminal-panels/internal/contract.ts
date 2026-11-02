@@ -222,7 +222,7 @@ export interface ModelPanelLabels {
 }
 
 /** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */
-export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: string; blocked: string | null; keyName: string | null; keyStored: boolean;
+export type ProviderPanelKind = Readonly<{ billing?: 'subscription' | 'local' | 'metered'; id: string; label: string; detail: string; blocked: string | null; keyName: string | null; keyStored: boolean;
   endpointEditable: boolean; endpointDefault: string | null; keyRequired: boolean;
   /** Owner 2026-10-08 (D3): where the kind takes an address it is chosen from this list (configured server, known local servers, the provider's
    * default); a typed address is only the list's last row, checked and previewed. A kind with a fixed endpoint has none. */

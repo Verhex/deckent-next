@@ -19,7 +19,7 @@ const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
 export const MEMORY_AUTOMATION_MODES = Object.freeze(['off', 'shadow', 'on'] as const);
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
 export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
-  schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.literal(CONFIG_SCHEMA_VERSION).prefault(CONFIG_SCHEMA_VERSION)),
+  schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.union([z.literal(CONFIG_SCHEMA_VERSION), z.literal(5), z.literal(6)]).prefault(CONFIG_SCHEMA_VERSION)),
   language: field('config.field.language', { state: 'bound', consumers: ['src/surfaces/core/cli-observe'] }, 'live', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).optional(), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
   output_mode: field('config.field.output_mode', { state: 'bound', consumers: ['src/platform/core/output'] }, 'live', z.enum(OUTPUT_MODES).prefault('standard')),
   layout: field('config.field.layout', { state: 'bound', consumers: ['src/platform/core/config'] }, 'restart', z.strictObject({ get root() { return persistedString(z.string().min(1)).nullable().prefault(null); }, get resources() { return z.record(z.string(), persistedString(z.string().min(1))).prefault({}); } }).prefault({}),
@@ -40,6 +40,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     get writeLockTimeoutMs() { return persistedInteger().positive().max(2147483647).prefault(2000); },
   }).prefault({})),
   installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation', 'src/adapters/core/installation-files'] }, 'live', z.strictObject({
+    get sharedRegistrationId() { return persistedString(z.string().uuid()).optional(); },
     get profileMaxBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1048576); },
     get writeLockTimeoutMs() { return persistedInteger().positive().max(2147483647).prefault(2000); },
     get identityProbe() { return z.strictObject({ timeoutMs: persistedInteger().positive().max(2147483647).prefault(2000),

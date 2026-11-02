@@ -6,7 +6,7 @@ const DECLINED = Symbol('declined');
 /** alpha.60 B: the opening's setup, prepared after the first frame. `total`: the steps waiting (0: none); `notice`: the line said when no card opens
  * (a deferral, an unreadable observation); `unavailable`: setup could not be read at all (the view then has no setup, as before the frame-first
  * opening); `show` runs the prepared cards and gives the chosen first task and the line said after them. */
-export type OnboardingOpening = Readonly<{ total: number; notice: OpeningNotice | null; unavailable?: true;
+export type OnboardingOpening = Readonly<{ total: number; welcome?: boolean; notice: OpeningNotice | null; unavailable?: true;
   show(signal: AbortSignal): Promise<Readonly<{ intent: FirstTaskIntent | null; notice: OpeningNotice | null }>> }>;
 export type OnboardingHandoff = Readonly<{ initial?: FirstTaskIntent | null; opening?: Promise<OnboardingOpening | null>; open(signal: AbortSignal, focus?: OnboardingFocus): Promise<FirstTaskIntent | null>;
   /** Said when a message waits as a draft for a model (catalog text; the raw TERMINAL_CHAT_NOT_CONFIGURED is not shown to the person). */
@@ -26,7 +26,7 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
   const enqueue = (intent: FirstTaskIntent | null) => {
     if (!intent || queued.current.has(intent.commandId)) return;
     queued.current.set(intent.commandId, intent);
-    if (!latest.current.submit(intent.commandId, `/do ${intent.intent}`)) queued.current.delete(intent.commandId);
+    if (!latest.current.submit(intent.commandId, intent.destination === 'chat' ? intent.intent : `/do ${intent.intent}`)) queued.current.delete(intent.commandId);
   };
   // Ink draws nothing while a card holds the terminal: rows pushed just before are drawn first, rows pushed meanwhile are held and drawn after it.
   // Node stops reading the TTY one tick after the host's hold pauses it; a card that attached its reader before that tick would never be read again.
@@ -49,9 +49,9 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
       if (!opening || stop.signal.aborted) return;
       say(opening.notice);
       const waiting = latest.current.port?.waiting;
-      if (!opening.total) return;
+      if (!opening.total && !opening.welcome) return;
       const shown = await suspended(() => opening.show(stop.signal), () => !typed.current && !stop.signal.aborted, () => !latest.current.port?.pending?.());
-      if (shown === DECLINED) { if (waiting && !stop.signal.aborted) say({ level: 'info', text: waiting(opening.total) }); return; }
+      if (shown === DECLINED) { if (waiting && opening.total && !stop.signal.aborted) say({ level: 'info', text: waiting(opening.total) }); return; }
       say(shown?.notice ?? null); enqueue(shown?.intent ?? null); latest.current.opened?.();
     }).catch(() => undefined);
     return () => stop.abort();

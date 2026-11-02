@@ -43,7 +43,7 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
       }
       const planUsage = readInvocationPlanUsage(this.db, version, record);
       const result = Object.freeze({ record, control: decodeInvocationControl(row, record), spending,
-        ...(record.receipt.profile.schemaVersion === 2 ? { planUsage } : {}) });
+        ...(record.receipt.profile.schemaVersion !== 1 ? { planUsage } : {}) });
       this.db.exec('COMMIT');
       return result;
     } catch (error) {

@@ -5,7 +5,7 @@ const quota = vi.hoisted(() => ({ body: Buffer.from(JSON.stringify({ schemaVersi
 // Only the subscription receipt-body read and account lease are synthetic. Pin minting, config, policy, activation, counter and Brain are real.
 vi.mock('../../../src/composition/core/model-invocation/internal/inspect.js', async original => ({ ...await original<object>(),
   inspectionApplication: () => ({ inspect: async () => ({ responseContent: { kind: 'response-body', data: quota.body } }) }) }));
-vi.mock('#composition/core/siwc/index.js', () => ({ withConfiguredSiwc: async (_root: string, _scope: string, _options: unknown, _operation: string,
+vi.mock('#composition/core/siwc/index.js', () => ({ withConfiguredSiwcModel: async (_root: string, _profile: unknown, _actor: unknown, _options: unknown, _operation: string,
   use: (app: unknown) => Promise<unknown>) => use({ inspectForLease: async () => {} }) }));
 import * as terminalChat from '#composition/core/terminal-chat/index.js';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';

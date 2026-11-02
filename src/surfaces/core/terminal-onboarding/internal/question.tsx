@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Text, render, useInput, useWindowSize } from 'ink';
+import { Box, Text, render, useInput, usePaste, useWindowSize } from 'ink';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cardCopyLabels, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+import presentation from './presentation.json' with { type: 'json' };
 import { fillTemplate, humanRecordText, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import { isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
@@ -9,11 +10,15 @@ export type OnboardingQuestion = Readonly<{ title: string; body: readonly string
   step: number; total: number; initial?: string | null; text?: boolean }>;
 export type QuestionAnswer = Readonly<{ id: string; text?: string }>;
 export type CardWork = 'applying' | 'preparing';
+/** The welcome alone yields to typing; every onboarding card guards selection keys for `cardInputGuardMs` after it has drawn (owner 2026-11-02). */
+type WelcomeInput = Readonly<{ typed(): void }>;
+type CardGuard = Readonly<{ guardMs: number; openedAt(): number }>;
 /** How long the copy result stays on the key line. */
 const COPIED_MS = 4_000;
 /** `finish` takes the one answer and says whether its apply now runs behind this card: the card then shows that it is applying and every key is
  * visibly not used (BeUser walk19R: never a silent drop, and never kept for the next card, which is another question). */
-export function OnboardingQuestionView({ question, locale, finish, copy = null, known, work = 'applying' }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => boolean;
+export function OnboardingQuestionView({ question, locale, finish, copy = null, known, work = 'applying', welcome, guard }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => boolean;
+  readonly welcome?: WelcomeInput | undefined; readonly guard?: CardGuard | undefined;
   /** The process's known secrets: the Ctrl+Y copy passes the same record projection as every card's copy (`humanRecordText`). */ readonly known?: CliCardIo['known'];
   /** What the card says while that work runs: a write (`applying`) or a preview or check that writes nothing (`preparing`). */ readonly work?: CardWork;
   /** Ctrl+Y sends the step's title and body (never the typed text) through the host's clipboard writer; absent off a TTY. */ readonly copy?: CardCopy | null }) {
@@ -23,10 +28,14 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
   const size = useWindowSize(), width = Math.max(8, size.columns - 4), height = Math.max(1, Math.min(question.choices.length || 1, Math.floor(size.rows / 3)));
   const bodyHeight = Math.max(1, size.rows - height - 9 - (question.text ? 3 : 0)), bodyLines = question.body.flatMap(line => wrapCells(terminalSafeText(line), width));
   const send = (answer: QuestionAnswer) => { if (done.current) return; done.current = true; if (finish(answer)) { busy.current = true; setApplying(true); } };
+  const yieldToTyping = () => { if (!done.current && welcome) { welcome.typed(); send({ id: 'later' }); } };
+  usePaste(text => { if (text) yieldToTyping(); }, { isActive: welcome !== undefined });
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_MS); return () => clearTimeout(timer); }, [copied]);
   useInput((input, key) => {
     if (done.current) { if (busy.current) setRefused(true); return; }
+    if (welcome && !key.ctrl && !key.meta && /[^\p{C}]/u.test(input)) { yieldToTyping(); return; }
+    if (guard && (key.upArrow || key.downArrow || key.return) && performance.now() - guard.openedAt() < guard.guardMs) return;
     if (input.length > 1 && !question.text) return;
     if (copy && isCardCopyKey(input, key)) {
       // Astra 2834 R1: file names and error messages reach this body unprojected; the copy redacts like the Window cards' copy (patterns + known values).
@@ -49,7 +58,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
   });
   const start = Math.max(0, at - height + 1), body = bodyLines.slice(Math.min(bodyAt, Math.max(0, bodyLines.length - bodyHeight)), bodyAt + bodyHeight);
   return <Box flexDirection="column" paddingX={1} paddingY={1}>
-    <Text>{t('onboarding.session.step', { n: question.step, total: question.total }, locale)}</Text>
+    {question.step > 0 && <Text>{t('onboarding.session.step', { n: question.step, total: question.total }, locale)}</Text>}
     <Text> </Text><Text bold>{terminalSafeText(question.title)}</Text><Text> </Text>
     {body.map((line, index) => <Text key={index}>{truncateEnd(terminalSafeText(line), width, '…')}</Text>)}
     <Text>{bodyLines.length > bodyHeight ? t('onboarding.session.scroll', {}, locale) : ' '}</Text>
@@ -67,7 +76,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
  * when it closes, so the next card draws where it was instead of under it; what was on the terminal before the card stays. `apply` (optional)
  * runs a chosen answer (not Later or exit) while this card stays up and says it is applying; its failure rejects after the card is gone.
  */
-export async function askOnboardingQuestion(question: OnboardingQuestion, io: CliCardIo, apply?: (answer: QuestionAnswer) => Promise<void>, work: CardWork = 'applying'): Promise<QuestionAnswer> {
+export async function askOnboardingQuestion(question: OnboardingQuestion, io: CliCardIo, apply?: (answer: QuestionAnswer) => Promise<void>, work: CardWork = 'applying', welcome?: WelcomeInput): Promise<QuestionAnswer> {
   if (io.signal?.aborted) return { id: 'exit' };
   cliCardGate({ title: question.title, options: [{ id: 'later', label: '-' }] }, io);
   let answer: QuestionAnswer = { id: 'exit' }, applying = null as Promise<void> | null, settle = () => {};
@@ -78,10 +87,12 @@ export async function askOnboardingQuestion(question: OnboardingQuestion, io: Cl
     applying = apply(value); applying.then(settle, settle);
     return true;
   };
-  const view = render(<OnboardingQuestionView question={question} locale={io.locale} finish={finish} work={work} known={io.known}
+  let openedAt = Infinity;
+  const view = render(<OnboardingQuestionView question={question} locale={io.locale} finish={finish} work={work} known={io.known} welcome={welcome} guard={{ guardMs: presentation.cardInputGuardMs, openedAt: () => openedAt }}
     copy={streamCardCopy((io.stdout ?? process.stdout) as NodeJS.WriteStream, cardCopyLabels(io.locale), io.env ?? process.env)} />,
     { stdin: (io.stdin ?? process.stdin) as NodeJS.ReadStream, stdout: (io.stdout ?? process.stdout) as NodeJS.WriteStream,
       interactive: true, patchConsole: false, exitOnCtrlC: false });
+  void view.waitUntilRenderFlush().then(() => { openedAt = performance.now(); });
   // An abort closes an open question (exit); an apply already running is waited for, as before the card stayed up for it.
   const stop = () => { if (!applying) settle(); };
   io.signal?.addEventListener('abort', stop, { once: true });

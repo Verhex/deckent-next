@@ -65,7 +65,8 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
         : span(`${marks.warn} ${t('monitor.map.model.blocked', {}, locale)}`, 'warning');
     // A subscription channel offers no readiness check: say so plainly instead of a generic unverifiable state (lead 2026-10-10, E2 4).
     const reason = (model: MonitorMap['models'][number]) => !model.availability && model.billing === 'subscription' ? t('model.invocable.subscription', {}, locale)
-      : modelInvocabilityText(model.availability ?? { invocable: false, reason: { kind: 'unavailable', code: 'MODEL_INVOCATION_UNAVAILABLE' } }, locale);
+      : model.availability ? modelInvocabilityText(model.availability, locale) // no readiness read: unverified, never "cannot serve this chat"
+        : `${t('model.invocable.unavailable', { code: 'MODEL_INVOCATION_UNAVAILABLE' }, locale)} ${t('model.invocable.unavailableNext', {}, locale)}`;
     const models: MonitorBlock = { kind: 'table', empty: none, columns: [col(t('monitor.col.state', {}, locale), 0, 6, 26), col(t('monitor.map.col.model', {}, locale), 1, 12, 44),
       col(t('monitor.map.col.channel', {}, locale), 2, 8, 28), col(t('monitor.col.scope', {}, locale), 4, 6, 20), col(t('monitor.map.col.billing', {}, locale), 3, 8, 24)],
     rows: map.models.map((model, at) => ({ ...row(`map:${install.id}:model:${at}`, [state(model), span(`${model.modelId}${model.reference ? `@${model.reference.modelVersion}` : ''}`),

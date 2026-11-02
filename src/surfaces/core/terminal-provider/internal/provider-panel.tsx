@@ -1,4 +1,4 @@
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, t } from '#platform/index.js';
 import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
 const SiwcWindow = lazy(loadSiwcWindow);
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -38,7 +38,7 @@ type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | n
   | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null; grant?: boolean }
   | { kind: 'optional-key'; target: ProviderPanelKind; endpoint: string | null }
   | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }
-  | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
+  | { kind: 'api-list' } | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
   | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
   | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }
   | { kind: 'subscription'; target: ProviderPanelKind } | { kind: 'refusal'; title: string; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }>;
@@ -47,6 +47,7 @@ const grantRefusal = (error: unknown): Readonly<{ name: string; project: string 
   const { code, params } = (error ?? {}) as { code?: unknown; params?: Record<string, unknown> };
   return code === 'SECRET_GRANT_REQUIRED' && typeof params?.['name'] === 'string' && typeof params['project'] === 'string' ? { name: params['name'], project: params['project'] } : null;
 };
+const API = ':api-key';
 const BUDGET = ':budget', CACHE = ':cache', LATER = ':later';
 
 /**
@@ -126,7 +127,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     granting(() => port.listModels!(target.id, endpoint), models => setStep({ kind: 'model', target: { ...target, models }, endpoint }));
   };
   const title = (text: string) => [span(text, { bold: true })];
-  if (step.kind === 'siwc' && port.siwc) return <Suspense fallback={null}><SiwcWindow port={port.siwc} onClose={back} onError={failed} /></Suspense>;
+  if (step.kind === 'siwc' && port.siwc) return <Suspense fallback={null}><SiwcWindow port={port.siwc} onClose={back} onError={failed} onApi={() => { setState(PICKER_INITIAL); setStep({ kind: 'api-list' }); }} /></Suspense>;
   if (!view || step.kind === 'busy') return <PickerWindow title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} bodyRows={BODY_ROWS} tree={null}
     labels={labels.picker} listHints={words.hints} position={labels.position} onResult={() => undefined} />;
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
@@ -229,14 +230,17 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       }} />;
   }
   const chosen = (result: PickerResult, at: PickerState) => {
-    if (result.kind !== 'selected') { onClose(); return; }
+    if (result.kind !== 'selected') { if (step.kind === 'api-list') back(); else onClose(); return; }
+    if (result.id === API) { setState(PICKER_INITIAL); setStep({ kind: 'api-list' }); return; }
     if (result.id === LATER) { onClose(); return; }
     if (result.id === BUDGET) { setState(at); setStep({ kind: 'budget' }); return; }
     if (result.id === CACHE) { setState(at); setStep({ kind: 'cache' }); return; }
     const [id, action] = result.path, target = view.kinds.find(kind => kind.id === id);
     if (!target || !action) { setState(at); back(); return; }
     connecting.current = target.id;
-    setState({ ...PICKER_INITIAL, pos: at.trail[0]?.pos ?? 0 });
+    // A filtered list's position is not the provider's position in the full list returned after a refusal.
+    const rootPos = view.kinds.indexOf(target) + Number(Boolean(budgetEntry(budget, labels.budget))) + Number(Boolean(cacheEntry(cache, labels.cache)));
+    setState({ ...PICKER_INITIAL, pos: rootPos + Number(Boolean(laterLabel) && rootPos > 0) });
     if (action === 'grant' && target.keyName && port.secretGrant?.check) {
       setStep({ kind: 'busy' }); granting(() => port.secretGrant!.check!(target.keyName!), () => back()); return;
     }
@@ -253,7 +257,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
-  const tree = withRows(providerPanelTree({ ...view, kinds: view.kinds.map(kind => refusals[kind.id] || custody?.id === kind.id ? { ...kind, blocked: refusals[kind.id] ?? custody!.reason } : kind) }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
+  const apiOnly = step.kind === 'api-list';
+  const apiLabel = t('siwc.card.apiKey', {}, port.locale ?? port.siwc?.locale);
+  const listTitle = apiOnly ? t('tui.provider.apiTitle', {}, port.locale ?? port.siwc?.locale) : view.title;
+  const shownKinds = apiOnly ? view.kinds.filter(kind => kind.billing === 'metered' || kind.billing === undefined && (kind.keyRequired || kind.keyName !== null)) : view.kinds;
+  const tree = withRows(providerPanelTree({ ...view, title: listTitle, kinds: shownKinds.map(kind => refusals[kind.id] || custody?.id === kind.id ? { ...kind, blocked: refusals[kind.id] ?? custody!.reason } : kind) }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
     budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache));
   // PV 2a: Enter on a CLI subscription this host cannot run opens its refusal card, which lists the rows that can be used here.
   const refused = (outcome: PickerOutcome) => {
@@ -261,8 +269,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!row || !card?.kinds.includes(row.id)) return;
     setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
   };
-  return <PickerWindow title={title(view.title)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
-    tree={laterLabel ? { ...tree, items: [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] } : tree} onResult={result => chosen(result, state)} onOutcome={refused} />;
+  return <PickerWindow title={title(listTitle)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
+    tree={{ ...tree, items: [...(laterLabel ? [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] : tree.items), ...(!apiOnly ? [{ id: API, label: apiLabel }] : [])] }} onClose={apiOnly ? back : onClose} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
 const BODY_ROWS = 1, REFUSAL_BODY_ROWS = 6;

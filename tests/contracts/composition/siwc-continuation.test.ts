@@ -8,7 +8,7 @@ vi.mock('#engine/index.js', async original => ({ ...await original<object>(),
   ModelBindingApplication: class { async inspect() { return state.binding; } },
 }));
 vi.mock('#composition/core/siwc/index.js', () => ({
-  withConfiguredSiwc: async (_root: string, _scope: string, _options: unknown, _operation: string,
+  withConfiguredSiwcModel: async (_root: string, _profile: unknown, _actor: unknown, _options: unknown, _operation: string,
     work: (app: unknown, caller: unknown) => Promise<unknown>) => work({ inspectForLease: async () => { state.order.push('custody'); } }, { principal: state.actor }),
 }));
 vi.mock('#adapters/index.js', async original => ({ ...await original<object>(),

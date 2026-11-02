@@ -23,6 +23,7 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
     onInput={(input, key, meta) => {
       // A burst read (several key events at once) is never an answer, as on the terminal's decision cards.
       if (done.current || meta?.burst) return true;
+      if (key.ctrl && (input === 'd' || input === '\u0004')) { answer(null); return true; }
       const step = questionStep('single', request.options, current.current, input, key);
       if (step.kind === 'move') { current.current = step.state; setState(step.state); return true; }
       if (step.kind === 'submit' || step.kind === 'cancel') { answer(step.kind === 'submit' ? step.ids[0] ?? null : null); return true; }
@@ -32,11 +33,11 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
 
 export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin: NodeJS.ReadStream; stdout: NodeJS.WriteStream; env: NodeJS.ProcessEnv;
   root?: string; locale: Locale; hints: string; signal?: AbortSignal; known?: KnownSecretSnapshot }>): Promise<string | null> {
-  let chosen: string | null = null;
+  let chosen: string | null = null, ended = false;
   // An abort event fires once: a signal already aborted at mount is never heard by a later listener, so exit before drawing (Astra 2661 P2).
-  if (io.signal?.aborted) return null;
+  if (io.signal?.aborted || io.stdin.readableEnded || io.stdin.destroyed) return null;
   const presentation = await loadConfigTerminalLaunch(io.root ?? process.cwd(), { env: io.env }).catch(() => null);
-  if (io.signal?.aborted) return null;
+  if (io.signal?.aborted || io.stdin.readableEnded || io.stdin.destroyed) return null;
   const setting = TERMINAL_THEME_SETTINGS.find(value => value === presentation?.terminal['theme']) ?? TERMINAL_THEME_SETTINGS[0];
   const theme = { setting, capability: colorCapability({ env: io.env, isTTY: true, argv: process.argv }), colorfgbg: io.env['COLORFGBG'] };
   const host = await openTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, stdout: io.stdout, stdin: io.stdin,
@@ -44,6 +45,9 @@ export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin
     view: () => <CardCopyContext.Provider value={streamCardCopy(io.stdout, cardCopyLabels(io.locale), io.env)}>
       <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
     </CardCopyContext.Provider> });
-  try { await host.wait(); } finally { await host.close(); }
-  return io.signal?.aborted ? null : chosen;
+  const eof = () => { ended = true; chosen = null; void host.close(); };
+  io.stdin.once('end', eof); io.stdin.once('close', eof);
+  if (io.stdin.readableEnded || io.stdin.destroyed) eof();
+  try { await host.wait(); } finally { io.stdin.off('end', eof); io.stdin.off('close', eof); await host.close(); }
+  return io.signal?.aborted || ended ? null : chosen;
 }

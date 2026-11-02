@@ -6,12 +6,12 @@ import type { SiwcResult, SiwcWindowPort } from './port.js';
 
 const SECOND_MS = 1000;
 /** The same bounded window/focus owner as every terminal card; no second shell or runtime sign-in. */
-export default function SiwcWindow({ port, onClose, onError }: { readonly port: SiwcWindowPort; readonly onClose: () => void; readonly onError: (error: unknown) => void }) {
+export default function SiwcWindow({ port, onClose, onError, onApi }: { readonly port: SiwcWindowPort; readonly onClose: () => void; readonly onError: (error: unknown) => void; readonly onApi?: () => void }) {
   const freshAccount = useRef(false), busy = useRef(false), [problem, setProblem] = useState<string | null>(null);
   const [stage, setStage] = useState<'background' | 'api' | 'browser' | 'result'>('background');
   const [selection, setSelection] = useState<QuestionState>({ at: 0, ticked: [] }), current = useRef(selection); current.current = selection;
   const [targets, setTargets] = useState<NonNullable<SiwcResult['apiTargets']>>([]), [result, setResult] = useState<SiwcResult | null>(null);
-  const [url, setUrl] = useState<string | null>(null), [seconds, setSeconds] = useState(0), [usageUrl, setUsageUrl] = useState<string | null>(null), background = useRef(false), controller = useRef<AbortController | null>(null);
+  const [url, setUrl] = useState<string | null>(null), [seconds, setSeconds] = useState(0), [usageUrl, setUsageUrl] = useState<string | null>(null), background = useRef<readonly ('ai' | 'system')[]>([]), controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   // The sign-in link also goes to the main screen's scrollback as one raw line (an OSC 8 link on the unbroken address): the terminal wraps it
   // softly, so its own click and selection take the whole address (alpha.59 L3; the card's rows break at the border). Not in the full window.
@@ -25,10 +25,10 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
     return () => clearInterval(timer);
   }, [stage]);
   const close = () => { controller.current?.abort(); onClose(); };
-  const options = stage === 'background' ? [{ id: 'no', label: t('siwc.card.onlyTyping', {}, port.locale), role: 'no' as const }, { id: 'yes', label: t('siwc.card.backgroundYes', {}, port.locale), role: 'yes' as const }]
-    : stage === 'api' ? [{ id: 'no', label: t('siwc.card.apiOff', {}, port.locale) }, ...targets.map((row, index) => ({ id: String(index), label: terminalSafeText(row.id) }))]
+  const options = stage === 'background' ? [{ id: 'no', label: t('siwc.card.onlyTyping', {}, port.locale), role: 'no' as const }, { id: 'yes', label: t('siwc.card.backgroundYes', {}, port.locale), role: 'yes' as const }, { id: 'ai', label: t('siwc.card.workersOnly', {}, port.locale) }, { id: 'system', label: t('siwc.card.brainOnly', {}, port.locale) }]
+    : stage === 'api' ? [{ id: 'no', label: t('siwc.card.apiOff', {}, port.locale) }, ...targets.map((row, index) => ({ id: String(index), label: terminalSafeText(row.id) })), ...(onApi ? [{ id: 'api-key', label: t('siwc.card.apiKey', {}, port.locale) }] : [])]
       : stage === 'result' ? [...(result?.state === 'disconnected' ? [{ id: 'new-account', label: t('siwc.card.otherAccount', {}, port.locale) }] : []), { id: 'close', label: t('siwc.card.close', {}, port.locale) }, ...(result?.connectionId && result.state !== 'disconnected' ? [{ id: 'usage', label: t('siwc.usage.title', {}, port.locale) }, { id: 'revoke', label: t('siwc.card.revokeConsent', {}, port.locale) }, { id: 'logout', label: t('siwc.revoke.title', {}, port.locale) }] : [])] : [];
-  const lines = stage === 'background' ? [t('siwc.card.body', {}, port.locale), t('siwc.privacy.body', {}, port.locale), t('siwc.card.connectedAppOnly', {}, port.locale), t('siwc.card.background', {}, port.locale)]
+  const lines = stage === 'background' ? [t('siwc.card.body', {}, port.locale), t('siwc.card.uses', {}, port.locale), t('siwc.privacy.body', {}, port.locale), t('siwc.card.connectedAppOnly', {}, port.locale), t('siwc.card.background', {}, port.locale)]
     : stage === 'api' ? [t('siwc.card.apiQuestion', {}, port.locale), t('siwc.card.apiCost', {}, port.locale)]
       : stage === 'browser' ? [t('siwc.browser.waiting', { seconds }, port.locale), ...(url ? [t('siwc.browser.fallback', {}, port.locale), url] : [])]
         : problem ? [problem] : [t('siwc.preview', {}, port.locale), result?.state === 'disconnected' ? t('siwc.revoke.done', {}, port.locale) : t('siwc.welcome.body', {}, port.locale), ...(result?.email ? [result.email] : []),
@@ -48,14 +48,15 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
       setResult(id === 'usage' ? { ...result, ...updated } : updated); return;
     }
     if (stage === 'background') {
-      background.current = id === 'yes';
+      background.current = id === 'yes' ? ['ai', 'system'] : id === 'ai' || id === 'system' ? [id] : [];
       const prepared = await port.execute({ operation: 'prepare' }); setTargets(prepared.apiTargets ?? []); setUsageUrl(prepared.usageUrl ?? null); setSelection({ at: 0, ticked: [] }); setStage('api'); return;
     }
     if (stage !== 'api') return;
+    if (id === 'api-key') { onApi?.(); return; }
     const target = id === 'no' ? null : targets[Number(id)];
     if (id !== 'no' && !target) return;
     const abort = new AbortController(); controller.current = abort; setStage('browser');
-    const connected = await port.execute({ operation: 'connect', ...(freshAccount.current ? { newAccount: true } : {}), delegate: background.current ? ['ai', 'system'] : [], apiContinuation: target?.reference ?? null },
+    const connected = await port.execute({ operation: 'connect', ...(freshAccount.current ? { newAccount: true } : {}), delegate: background.current, apiContinuation: target?.reference ?? null },
       { signal: abort.signal, fallback: value => { if (!abort.signal.aborted) setUrl(value); } });
     if (!abort.signal.aborted) { setResult(connected); setSelection({ at: 0, ticked: [] }); setStage('result'); }
   };

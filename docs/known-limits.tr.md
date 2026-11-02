@@ -12,6 +12,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUser dört yolculuk yeniden yürüyüşü ve owner terminal testi henüz açık; betadan önce yapılır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
+Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminal sohbet hatalarını ham kod olmadan katalog mesajıyla gösterir. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
+
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
 Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel kalıcı realm kayıtlarını, private transport'u, C4/C5 kanıtını, TaskEvaluation ve Run raporunu bağlar. R3-B izin verisini init/upgrade yayınının içine alır; replay özgün byte denetimini korur. Dry admission yazar kanıtıdır, gerçek realm yolculuğu değildir. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; ölçülmeyen alanlar unknown/null kalır. Sonlu limits profili provisional'dır. Mühürlü ledger hiçbir yolda export/backup/restore olamaz; yedek bağımlı dallar unknown kalır. Desteklenmeyen private systemd unknown/non-blocking'dir. Host socket/bus çözümü yoktur. Native adoption/tam surfaces B2/B4'tür. Birleşik sürümde host üzerindeki ilk yürüyüş üç yolculuğu koştu; üçü de kırmızı çıktı, yani yolculuk kabulü ve owner kabulü açıktır.
@@ -110,6 +112,21 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   `--yes --scope <kimlik>` yalnız yeni izinleri ve dili uygular; salt okunur kontrolleri veya kişi isteyen aşamaları uygulamaz, profili kaydetmez.
   Son kontrol yalnız kurulum aşamalarını bekler; ölçülmüş uyarılar görünür kalırken tamam sayılabilir. Tekrar `--yes`, bitmiş işi uygulamaz.
   Doctor iş yönlendirmesini kurulum aşamalarının değerlendiricilerinden türetir; ilk iş için `deckent` / `/setup` yolunu gösterir.
+  Kurulum dili global kişisel varsayılan olarak kaydedilir; eski proje dil tercihleri önceliğini korur ve taşınmaz.
+  Dil tercihi tek başına bağlantı yetkisi vermez.
+- **Kayıtlı kaynak ve yeni klasör.** Argümansız `deckent`, açıkça kaydedilmiş sağlıklı bir kaynak varsa TR/EN oturum kartı sunar;
+  kabul ayrı proje policy/ledger oluşturur ve güncel kaynak bağlantılarına geri alınabilir kullanım izni verir. Token kopyalanmaz.
+  Eski projeler otomatik taşınmaz. Bir kişisel global kayıtta tek kaynak vardır; bozuk/kayıp kaynak yeni kimlikle değiştirilmez.
+  Kaynak salt okunur SQLite görünümü WAL dahil yapılandırılmış toplam dosya sınırına tabidir; sınırda veya rollback journal'da kurtarma gerekir.
+  `terminal attach --lease-revoke <proje> --apply` model iznini, `--detach <proje> --apply` bağ ve izni kapatır; veriyi tutar.
+  Kaynakta `--unregister --apply` bütün bağlı projeler ayrılmadan reddedilir. Kaynak yedeği alınabilir.
+  Tam hedef kaldırma envanteri geri alır; şifreli yedekten dönüş bunu yeniden açmaz. Hedefte `--scope <id> --preview` ve
+  `--restore <proje> --expect <özet> --apply` ile güncel policy üzerinden yeni izin gerekir.
+  `--relocate --scope <id> --apply` yalnız gerçek taşımayı uzlaştırır; eski klasör varsa kopya reddedilir.
+  Varsayılan layout yedekten sonra taşınabilir kalır; özel layout yolları aynen korunur. Başlamadan kesilmiş kaldırma yalnız yeni kişi
+  onayı ve bütünüyle doğrulanmış boş etki deposuyla yeniden planlanır; eksik, bozuk veya etkisi başlamış kayıt kapalı kalır.
+  API şablonu ayrı, sıfır hareketli scope hesabı açar; mevcut hesap sıfırlanmaz. Abonelik/yerel bağlantı için para kapısı yoktur.
+  Bu yazar kanıtı Linux/WSL sentetik PTY ve yerel sahte modelle sınırlıdır; gerçek sağlayıcı, diğer platformlar ve monte sürüm kabulü ayrıdır.
 - **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; ilk açılış aşamasıdır, `deckent init` dışında, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
@@ -256,6 +273,19 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Sağlayıcılar ve abonelikler
 
+- **Claude aboneliğiyle metin sohbeti (A62):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. Native CLI araçları ve MCP kapalıdır; bu bağlantı sohbetten dosya yazamaz veya komut çalıştıramaz. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
+
+- **ChatGPT girişi bu sürümde betada; Claude ve ChatGPT aboneliklerinin Deckent içinde tam ajan olarak (araçlı sohbet, işçi, Brain, ajan/skill)
+  çalışması alpha.63 için planlanmıştır.** Mevcut ChatGPT girişi betada notuyla seçilebilir kalır.
+- **İlk kurulum ve yeni klasörler (A62):** kişinin tanığıyla tamamlanan sıfır kurulum, global kayıt yoksa kaynak olur. Eski kurulum otomatik
+  kaydedilmez. Kurulu klasörde `deckent terminal attach --register --apply` çalıştırıp kaynağı onaylayın; sonra yeni klasörde `deckent` açın.
+  Var olan kaynak kaydı korunur.
+- **Sağlayıcı giriş menüsü (A62):** abonelik satırları **Claude ile giriş** ve **ChatGPT ile giriş**; ChatGPT ve Cursor betada notuyla görünür.
+  Eski Codex CLI bağlantısı ve profilleri aynı CLI komutlarıyla okunur; yinelenen menü satırını gizlemek kimlik bilgilerini taşımaz,
+  işçiyi hazır hâle getirmez. ChatGPT onayı sohbeti, AI işçileri (`ai`) ve Brain/arka plan özelliklerini (`system`) adlandırır; ek kullanım
+  başlangıçta kapalıdır. Otomatik API geçişini kapalı tutarak ChatGPT'yi seçmek yine girişi başlatır. **API anahtarıyla bağlan** ret sonrasında
+  da API sağlayıcısı seçimini açar; gizli giriş, depo kontrolü, anahtar izni ve bütçe gereksinimi korunur. Gerçek hesap girişi ve Windows Terminal
+  kabulü montajlı sürüm yürüyüşünde doğrulanmalıdır.
 - **Codex CLI aboneliği (alpha.60):** Brain, yalıtılmış `codex-cli-subscription` bağlantısıyla kendi Codex CLI'nizle (ChatGPT planı)
   da planlayabilir; her seferinde tek `codex exec` turu. Giriş: `deckent models login --connection codex-cli-subscription` (`codex login`'i
   Deckent'e ait kendi dizinine, `headless/logins/codex`, çalıştırır; `--config-dir` ve `--executable` başka bir giriş dizini ya da ikili
@@ -275,11 +305,11 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Terminalin `/provider` penceresi de aynısını yapar
   (alpha.60): önce giriş dizinini gösterir, terminali CLI'ın kendi girişine devreder (Ctrl+C durdurur; kayıttaki süre sınırı bitirir),
   bağlar, sonra sizden başka kimin bu girişi kullanabileceğini sorar (ilk bağlantıda system ve ai işaretsiz, yeniden bağlantıda geçerli onay işaretli; MCP asla). Yalnız Deckent'in bubblewrap
-  korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar); yoksa `/provider` Claude ve
-  Codex abonelik satırlarını bu nedenle devre dışı gösterir ve yerine kullanılabilecek sağlayıcıları listeler. Claude aboneliğiyle terminal
-  sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
-- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Aboneliklerden yalnız ChatGPT ile giriş terminal
-  sohbetine hizmet eder (aşağıda); kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde ChatGPT ile giriş
+  korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar); yoksa `/provider` Claude
+  giriş satırını bu nedenle devre dışı gösterir ve yerine kullanılabilecek sağlayıcıları listeler. Alpha.62 bu yalıtılmış bağlantıya
+  metin sohbetini ekler; native CLI araçları ve MCP kapalıdır. *Korumalı alan yoksa yol:* Anthropic API anahtarı kullanın.
+- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT abonelikleri metin sohbeti sağlar;
+  kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
@@ -551,12 +581,17 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   2026-10-28): bağlanma adımı artık anahtarsız yerel sunucuya bir kez araç çağrısını kabul edip etmediğini sorar ve bildirir. *Yol:*
   sunucuyu `deckent` → /provider içinde (aynı adresle) bir kez yeniden bağlayın; `--enable-auto-tool-choice --tool-call-parser <ayrıştırıcı>`
   olmadan başlatılan bir vLLM araçsız kalır ve terminal bunu söyler.
-- **İş türü ve işçi havuzu yokken `/do` ve ilk görev arka plan işi olarak değil, terminalde çalışabilir** (owner seçenek A, 2026-10-28):
-  yalnız hiçbir şey kurulmamışken ve her seferinde onayladığınız bir karttan sonra (değişiklikler doğrudan klasöre yazılır: teslim kartı ve
-  geri alma yok; Esc iptal eder). Diğer her ret (Brain kademesi, işçi kanalı, atama, bekletilen havuz, politika) kendi sonraki adımını
-  gösterir ve burada çalışmaz.
-  *Yol:* arka plan işçileri için /setup → İlk iş türü → İşçi imajı → İşçi havuzu. O zamana kadar `pool hold` ve `pool set-capacity`
-  henüz havuz olmadığını söyler.
+- **İlk iş kurulumdan ayrıdır (owner 2026-11-02).** Sohbet modeli bağlıysa kurulum sonrası karşılama projeyi anlatmayı, dosyalar
+  varsa önerilen yapılandırma için taramayı veya ilk işi yazmayı sunar. Öneriler normal sohbetten ilerler, yeni yazma yetkisi vermez.
+  Bu karşılamada yazmak veya yapıştırmak kartı Sonra ile kapatır ve girdiyi sohbet satırına koruyarak aktarır. Her kurulum kartı
+  çizildikten sonra registry’den gelen kısa koruma boyunca (başlangıçta 500 ms) ok/Enter tuşlarını yok sayar; Esc yine Sonra’dır.
+  İzin ve güvenlik kartları yazarken açık kalır; yetki ve onay kuralları korunur. Bu hedefli yazar kanıtıdır; native platform ve
+  montajlı sürüm kabulü açıktır.
+  Model yoksa `/provider` ile bağlayın; gönderilmeyen mesajlar taslakta kalır. Abonelik ve yerel bağlantıda kurulum bütçesi gerekmez;
+  API tarifeli çağrılar mevcut bütçe ve harcama kurallarını korur. Yalnız hiçbir şey kurulmadığı için reddedilen `/do`, host politikası,
+  profil ve havuzun bekletme denetimi izin verirse doğrudan terminalde çalışabilir. Değişiklikler klasöre yazılır; arka plan teslimi ve
+  geri alma yoktur. Sandbox, çalışma modu ve araç onayları korunur; diğer retler kendi sonraki adımını gösterir. *Yol:* arka plan işi
+  için `/setup` işçi adımlarını tamamlayın. Ayrıntılı kendini yapılandırma kullanırken belirlenecek; montajlı sürüm kabulü açıktır.
 - **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan
   bir araç çağrısı bittikten sonra tur iptal edilirse (bağlantı kopması, açık iptal, kapanış) çağrı yine `cancelled` bildirilir;
   iptalle durdurulan bir yazma kümesi kısmen uygulanmış kalabilir. Sonuç metni yazılanları listeler. *Yol:* iptal görünen bir

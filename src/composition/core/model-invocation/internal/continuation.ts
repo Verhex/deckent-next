@@ -4,7 +4,8 @@ import { AUDIT_EVENT_SCHEMA_VERSION, policySchema, modelInvocationProfileSchema,
 import { subscriptionActor, readSubscriptionRejection, modelInvocationProfileDigest, ModelBindingApplication, modelInvocationBillingAxis, type ModelInvocationResult } from '#engine/index.js';
 import { SIWC_USAGE_LIMIT_STATUS, SIWC_INFERENCE, siwcResponsesDefinitionSchema } from '#adapters/index.js';
 import { ErrorRegistry, sha256, type ConfigLoadOptions } from '#platform/index.js';
-import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
+import { withConfiguredSiwcModel } from '#composition/core/siwc/index.js';
+import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
 import { withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { inspectionApplication } from './inspect.js';
 import type { loadInvocationContext } from './context.js';
@@ -40,7 +41,9 @@ export async function prepareConfiguredSiwcContinuation(context: Context, option
   const profiles = await readProfiles(), current = profiles.find(row => row.scopeId === original.scopeId && isDeepStrictEqual(row.reference, original.reference));
   if (!isDeepStrictEqual(current, source)) throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const target = profiles.find(row => row.scopeId === original.scopeId && isDeepStrictEqual(row.reference, sourceDefinition.apiContinuation!.reference));
-  if (!target || modelInvocationProfileDigest(target) !== sourceDefinition.apiContinuation.profileDigest || modelInvocationBillingAxis(target) !== 'metered' || !isDeepStrictEqual(target.protocol, source.protocol))
+  const targetUse = target && source.schemaVersion === 3 ? await resolveConfiguredModelUse(context.config.projectRoot, target, context.principal, options) : null;
+  const expectedTargetDigest = target ? modelInvocationProfileDigest(target) : null;
+  if (!target || modelInvocationProfileDigest(targetUse?.sourceProfile ?? target) !== sourceDefinition.apiContinuation.profileDigest || modelInvocationBillingAxis(target) !== 'metered' || !isDeepStrictEqual(target.protocol, source.protocol))
     throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const binding = await new ModelBindingApplication({ read: async () => (await context.freshConfig())['provider_catalog'] }).inspect(target.reference);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
@@ -51,16 +54,16 @@ export async function prepareConfiguredSiwcContinuation(context: Context, option
   if (signal?.aborted) throw ErrorRegistry.createError('OAUTH_CONNECTION_CANCELLED');
   if (!isDeepStrictEqual((await readProfiles()).find(row => row.scopeId === original.scopeId && isDeepStrictEqual(row.reference, original.reference)), source))
     throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
-  const auditOwner = await withConfiguredSiwc(context.config.projectRoot, original.scopeId, options, 'lease', async (app, caller) => { await app.inspectForLease(sourceDefinition.connectionId, caller); return subscriptionActor(context.principal).owner; }, {}, context.principal);
+  const auditOwner = await withConfiguredSiwcModel(context.config.projectRoot, source, context.principal, options, 'lease', async (app, caller) => { await app.inspectForLease(sourceDefinition.connectionId, caller); return subscriptionActor(context.principal).owner; });
   await withScopeAudit(context, async audit => audit.record({
     schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: original.scopeId, principal: auditOwner,
     atMs: Date.now(), policyRevision: policySchema.parse(await context.policy.load()).revision,
     subject: { kind: 'subscription-api-continuation', schemaVersion: 1, actor: { issuer: context.principal.issuer, subject: context.principal.subject }, sourceInvocationId: result.receipt.claim.invocationId,
-      connectionId: sourceDefinition.connectionId, profileDigest: sourceDefinition.apiContinuation!.profileDigest, reference: target.reference, commandId: command.commandId, phase: 'intent' } }), false);
+      connectionId: sourceDefinition.connectionId, profileDigest: expectedTargetDigest!, reference: target.reference, commandId: command.commandId, phase: 'intent' } }), false);
   await notice(target.reference);
   if (signal?.aborted) throw ErrorRegistry.createError('OAUTH_CONNECTION_CANCELLED');
   continuationPins.set(command, async profile => {
-    if (modelInvocationProfileDigest(profile) !== sourceDefinition.apiContinuation!.profileDigest
+    if (modelInvocationProfileDigest(profile) !== expectedTargetDigest
       || !isDeepStrictEqual((await readProfiles()).find(row => row.scopeId === original.scopeId && isDeepStrictEqual(row.reference, original.reference)), source))
       throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
   });

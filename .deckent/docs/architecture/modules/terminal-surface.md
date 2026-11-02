@@ -120,6 +120,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   through the runtime model client in the caller's `--scope` (same path as `models invoke`), so principal,
   policy, activation and spending apply. Abort (Esc, or Ctrl+C while busy) stops the wait and requests
   cancellation of that invocation. There is no direct/unmanaged HTTP backend and no silent fallback.
+  Registered terminal chat failures show only their localized catalog message in rich and line-mode output; the raw code is not shown to the person (alpha.61 owner terminal test, finding 2). Script consumers use the CLI's typed JSON errors.
   **Streaming (S-STREAM, implemented end to end 2026-09-24):** runtime protocol `invokeModelStream` (since v11; the unwired
   composition driver `streamTerminalChatTurn` was removed 2026-10-18, the service, client and e2e tests remain): the same governed invocation as `invokeModel`
   (authorization, activation, reservation before send, settlement, durable command replay), answered by ordered delta
@@ -290,6 +291,29 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   A literal zero tariff whose every declared endpoint is a literal loopback address runs without a money budget (owner 2026-10-09);
   a frozen scope account still refuses it, and a zero tariff on any other host keeps the budget gate. A responded call settles
   `settled-local 0` in the spend ledger. Positive chargeback rates need a separate measurement basis.
+- **First installation and later folders (owner 2026-11-03, A62-FIX6):** a fresh witnessed policy/identity installation registers its source
+  through the existing typed register application when no global source record exists. Guided `init` and onboarding share this owner.
+  Later folders offer the session card and revocable model use. Existing installations remain explicit: the setup offer names
+  `deckent terminal attach --register --apply`, run in the installed folder; it resolves the configured scope, previews and asks for person confirmation.
+  ChatGPT's selectable provider row carries the registry's beta presentation; full Claude/ChatGPT agent parity is planned for alpha.63.
+- **First work after setup (owner 2026-11-02, A62-FIRSTTASK):** first work is not an onboarding stage. A separate, unnumbered welcome
+  offers a project description, scanning existing visible files for suggested configuration, or a typed first task. The first two use
+  EN/TR catalog prompts and enter the ordinary chat queue; they propose configuration, with no new write authority. A model-less
+  opening names `/provider` in one line. An unsent normal message remains a draft; no model card opens automatically. A historical
+  first-task marker also suppresses the new welcome on later opens. A welcome alone is never counted as a pending `/setup` step.
+  **Welcome input (owner 2026-11-02, A62-FIX3):** only this choice card yields to a printable key or paste: it closes as Later and
+  returns the triggering input and subsequent keys to the composer in order. Its choices, prompts and seen-marker owner stay the same.
+  **Card input (owner 2026-11-02, A62-FIX4):** every onboarding card ignores arrows and Enter for `presentation.json`
+  `cardInputGuardMs` (initially 500 ms) after its first render flush; Esc still means Later. Only the welcome choice card yields to
+  typing; permission, security and person-witness cards retain their authority and confirmation rules.
+  Worker setup and Git are not prerequisites for ordinary terminal turns. A `/do` refusal may use the normal turn directly only when
+  the existing `localRunOffer` predicate permits that exact refusal, with fresh policy/profile/pool-pause recheck before the turn.
+  Missing model: a single `/provider` direction; other refusals keep their own path. Mode, sandbox, tool approvals and invocation
+  spending still apply. Human terminal notes omit diagnostic code prefixes and render registered failure codes through the catalog;
+  the original service notes, typed receipts and JSON/inspection data remain intact. Setup reads budget state only for a metered connection: the exact scoped invocation profile's `billingAxis`
+  wins over legacy provider-kind billing. Subscription and local profiles need no setup budget; metered tariffs, reservations,
+  capacity, frozen accounts and settlement remain governed by the existing invocation service. These are source behavior contracts;
+  author fixture/PTY evidence, independent batch review and assembled BeUser acceptance remain separate.
 - **Delivery fit (SESSION-RESULT-LIMIT-2026-09-28):** the worst-case delivered size of every declared provider profile —
   `modelInvocationNativeResponseUpperBound` (one formula shared by the adapters) plus the same arithmetic as
   `assertInvocationDeliveryFit` — is reported ahead of time by `deckent doctor` (`modelInvocationDelivery`, unconditional, `[]` when
@@ -534,3 +558,25 @@ read-class calls (`toolClass` from `builtinAgentToolClass`; MCP tools never grou
 click on it shows or hides its calls, the inline layout lists them under it, and errors, approvals and writes keep their own line (presentation
 only). Busy cards: the guided setup window and onboarding cards show "Applying…"/"Preparing…" while an answer is applied, keys then are visibly
 not used, and each onboarding card erases its own frame so the next one draws in its place.
+
+**A62 provider sign-in projection (owner 2026-11-02).** The provider-connect registry's optional `presentation` metadata
+(listed, hidden, beta) controls the menu projection without renaming or migrating a connection. The subscription rows are
+Sign in with Claude and Sign in with ChatGPT; the existing Codex CLI kind stays readable and callable through the CLI,
+while its duplicate menu row is hidden. Cursor is labelled beta. ChatGPT's consent card explicitly names chat, AI workers
+(`ai`) and Brain/background features (`system`); extra-use choices remain off by default and the existing person witness,
+policy and delegated-use validation still decide authorization. Worker readiness, including the SIWC activation hold, is
+separate from sign-in. The API-continuation step explicitly offers ChatGPT sign-in with continuation off; it also offers
+an API-key provider picker. The same API-key picker remains reachable from `/provider` after a custody or connection refusal.
+It lists metered registry kinds and reuses the masked key, custody and grant flow. Claude's terminal-chat limitation is
+worded from EN/TR catalogs in `/model`, without exposing the generic invocation code as its explanation.
+
+### Claude subscription text chat (A62)
+
+The provider connection registry explicitly admits terminal text chat per headless family. Readiness and model switching adapt their preview to the
+same two-message request used by terminal turns. Multi-message history passes as a role-tagged JSON transcript in the user message; existing single-user role prompts keep their contents.
+System messages stay in the system prompt. No CLI session or credential is imported. The existing native-cli-headless port owns version,
+flag, auth, UID, delegated-use, bubblewrap, egress and resource checks; native tools and MCP remain off. Existing durable chat turns and
+model invocations own streaming, cancellation, usage, quota refusal and replay; subscription billing has no API budget gate. The connection
+is text-only; it offers no file or shell tools. Other headless families retain their existing admission until explicitly opted in by registry.
+The account belongs to the person using Anthropic's unmodified binary and sign-in; Deckent never handles the OAuth/session token or resells
+or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.

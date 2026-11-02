@@ -3,7 +3,7 @@ import type { SetupPlan, SetupStage, SetupObservation, RunIntentRecord, RunPlann
 import type { Locale } from '#platform/index.js';
 /** The folder's kind and its visible top-level names (bounded by the observer); first-task facts are derived from them by registry data. */
 export type FolderFacts = Readonly<{ kind: 'coding' | 'documents' | 'empty' | 'unknown'; entries: readonly string[] }>;
-export type FirstTaskIntent = Readonly<{ commandId: string; scopeId: string; folder: string; intent: string; pending?: RunIntentRecord }>;
+export type FirstTaskIntent = Readonly<{ commandId: string; scopeId: string; folder: string; intent: string; destination?: 'chat'; pending?: RunIntentRecord }>;
 export type OnboardingConfigBasis = Readonly<{ projectDigest: string | null; globalDigest: string }>;
 export type OnboardingCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; identity: boolean; sign: boolean; hooks: 'not-run';
   total: number; selected: number; flagged: number; rows: readonly Readonly<{ path: string; bytes: number; flag: string | null }>[]; more: number; digest: string }>;

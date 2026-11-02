@@ -15,14 +15,14 @@ describe('H34 company version boundaries', () => {
   });
   it('rejects an old layout snapshot before resource path use or inspection', () => {
     const layout = resolveProductLayout({ projectRoot: '/project' });
-    // SCR-A (owner 2026-09-28): registry v4 adds the `scratch` resource; every installation's layout revision changes with it.
-    expect(layout.schemaVersion).toBe(4);
-    for (const version of [2, 3]) {
+    // ONCE (owner 2026-11-02): registry v5 adds the project attachment; older snapshots cannot resolve resources.
+    expect(layout.schemaVersion).toBe(5);
+    for (const version of [2, 3, 4]) {
       const old = { ...layout, schemaVersion: version };
       expect(() => productResourcePath(old, 'memory')).toThrow(expect.objectContaining({ code: 'LAYOUT_VERSION_UNSUPPORTED' }));
       expect(() => inspectProductLayout(old)).toThrow(expect.objectContaining({ code: 'LAYOUT_VERSION_UNSUPPORTED' }));
     }
-    expect(inspectProductLayout(layout).schemaVersion).toBe(4);
+    expect(inspectProductLayout(layout).schemaVersion).toBe(5);
     expect(productResourcePath(layout, 'scratch')).toBe('/project/.deckent/state/scratch');
     expect(inspectProductLayout(layout).resources.scratch).toBe('/project/.deckent/state/scratch');
   });

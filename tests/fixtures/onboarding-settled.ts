@@ -3,12 +3,12 @@ import { openOnboardingDeferrals, readLocalOsIdentity } from '#adapters/index.js
 import { prepareProductFile, type ProductLayout } from '#platform/index.js';
 
 // The presentation-only screens the onboarding session adds beside the setup stages (terminal-onboarding session/presentation).
-const PRESENTATION = ['onboarding:budget', 'onboarding:worker-ready', 'permissions:start-mode', 'onboarding:first-task'];
+const PRESENTATION = ['onboarding:budget', 'onboarding:worker-ready', 'permissions:start-mode', 'onboarding:first-task', 'onboarding:first-task:done'];
 
 /**
  * A terminal fixture that is not about first run: this OS user has already answered "Later" on every onboarding screen for `folder`
- * (canonical, relative to the installation root; '' is the root), written through the product's own deferral store. Later holds for the
- * model screen too (owner 2026-10-30); /setup reopens it.
+ * (canonical, relative to the installation root; '' is the root) and seen the post-setup welcome, written through the product's own deferral
+ * store. Later holds for the model screen too (owner 2026-10-30); /setup reopens it.
  */
 export async function settleOnboarding(layout: ProductLayout, folder = ''): Promise<void> {
   const stages = JSON.parse(await readFile(new URL('../../src/engine/core/setup/internal/stages.json', import.meta.url), 'utf8')) as { phases: Record<string, string> };

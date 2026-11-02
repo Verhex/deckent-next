@@ -50,7 +50,7 @@ const spendingSchema = immutableJsonObjectSchema.pipe(z.strictObject({
 
 export async function authorizeModelInvocationSpending(authority: ModelInvocationSpendingAuthority | undefined,
   input: ModelInvocationSpendingInput, signal?: AbortSignal): Promise<ModelInvocationSpending> {
-  if (input.profile.schemaVersion === 2 && input.profile.billingAxis === 'subscription') return Object.freeze({ budget: null, quote: null });
+  if (input.profile.schemaVersion !== 1 && input.profile.billingAxis === 'subscription') return Object.freeze({ budget: null, quote: null });
   if (!authority) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
   let result: unknown;
   try { result = await boundedAuthorization(authority, Object.freeze(input), signal); }
@@ -62,7 +62,7 @@ export async function authorizeModelInvocationSpending(authority: ModelInvocatio
   if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const { budget, quote } = parsed.data;
   providerSpendQuoteDigest(quote);
-  if (input.profile.schemaVersion === 2) {
+  if (input.profile.schemaVersion !== 1) {
     const local = providerSpendLocalZeroTariff(input.profile, quote);
     if (input.profile.billingAxis === 'local' ? !local || budget !== null : budget === null) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   }
