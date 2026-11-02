@@ -497,7 +497,8 @@
         "src/engine/core/bootstrap-identity",
         "src/adapters/core/beuser-surface",
         "src/engine/core/beuser-contract",
-        "src/engine/core/beuser-realm"
+        "src/engine/core/beuser-realm",
+        "src/engine/core/project-attachment"
       ],
       "plan": "FOUNDATION"
     },
@@ -1393,7 +1394,8 @@
         "src/surfaces/core/cli-agents",
         "src/surfaces/core/setup",
         "src/surfaces/core/cli-hub",
-        "src/surfaces/core/cli-beuser"
+        "src/surfaces/core/cli-beuser",
+        "src/domain/core/project-attachment"
       ],
       "plan": "SURFACES"
     },
@@ -1589,7 +1591,11 @@
         "src/adapters/core/git-workspace",
         "src/engine/core/policy",
         "src/engine/core/system-policy-rows",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/adapters/core/project-attachment",
+        "src/engine/core/project-attachment",
+        "src/domain/core/project-attachment",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "INSTALLATION"
     },
@@ -1630,7 +1636,8 @@
         "src/platform/core/errors",
         "src/engine/core/bootstrap-identity",
         "src/engine/core/beuser-realm",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/domain/core/project-attachment"
       ],
       "plan": "INSTALLATION"
     },
@@ -1743,7 +1750,10 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/local-keyring",
         "src/engine/core/audit",
-        "src/engine/core/bootstrap-identity"
+        "src/engine/core/bootstrap-identity",
+        "src/adapters/core/project-attachment",
+        "src/engine/core/project-attachment",
+        "src/domain/core/project-attachment"
       ],
       "plan": "PROVIDERS"
     },
@@ -2526,7 +2536,7 @@
         "src/adapters/core/process-runner",
         "src/engine/core/runtime",
         "src/platform/core/config-fields",
-        "src/adapters/core/installation-files"
+        "src/composition/core/scoped-request"
       ],
       "plan": "PROVIDERS"
     },
@@ -3303,7 +3313,8 @@
         "src/platform/core/host",
         "src/platform/core/integrity",
         "src/platform/core/utils",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/common"
       ],
       "plan": "INSTALLATION"
     },
@@ -3326,7 +3337,9 @@
         "src/adapters/core/contract",
         "src/platform/core/managed-files",
         "src/composition/core/secrets",
-        "src/adapters/core/installation-removal"
+        "src/adapters/core/installation-removal",
+        "src/adapters/core/project-attachment",
+        "src/platform/core/common"
       ],
       "plan": "INSTALLATION"
     },
@@ -4848,6 +4861,36 @@
         "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
+    },
+    "src/domain/core/project-attachment": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/engine/core/project-attachment": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/project-attachment",
+        "src/engine/core/bootstrap-identity"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/project-attachment": {
+      "dependencies": [
+        "src/domain/core/project-attachment",
+        "src/engine/core/project-attachment",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-principal",
+        "src/engine/core/runtime",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/platform/core/managed-files",
+        "src/platform/core/utils",
+        "src/engine/core/backup",
+        "src/platform/core/bootstrap-state"
+      ],
+      "plan": "INSTALLATION"
     }
   },
   "composition": {

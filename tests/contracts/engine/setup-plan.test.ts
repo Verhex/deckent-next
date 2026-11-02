@@ -40,7 +40,7 @@ describe('I-S1 setup planner', () => {
       operation: { id: 'installation.policy-template', version: 1, input: { scopeId: 'my-erp' } }, cli: ['deckent', 'init', 'policy', '--scope', 'my-erp', '--apply'] });
     expect(plan.get('core:language')).toMatchObject({ state: 'ready', reason: { code: 'setup.reason.languageSavedAfterPolicy', params: { language: 'tr' } }, operation: null });
     const installed = byId(planSetup(observe({ policy: { state: 'current' }, folder: { ...base.folder, configuredScope: 'my-erp' } }), answers({ 'core:language': 'tr' })));
-    expect(installed.get('core:language')).toMatchObject({ state: 'ready', operation: { id: 'config.set', input: { keyPath: 'language', value: 'tr' } }, cli: ['deckent', 'config', 'set', 'language', 'tr'] });
+    expect(installed.get('core:language')).toMatchObject({ state: 'ready', operation: { id: 'config.set', input: { keyPath: 'language', value: 'tr', layer: 'global' } }, cli: ['deckent', 'config', 'set', 'language', 'tr', '--global'] });
     expect(installed.get('core:model')).toMatchObject({ state: 'needs-answer', autoEligible: false });
   });
 

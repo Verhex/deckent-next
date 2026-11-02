@@ -3,13 +3,13 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { acquireLedgerLock, runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
-import { ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
 import { createBackupSet, locateBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
 import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
 import { inside, ownerOnlyWritable, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
-const FIXED = ['config', 'projectIdentity', 'installationJournal'];
+const FIXED = PRODUCT_LAYOUT_REGISTRY.fixedResources;
 const STAGE_PREFIX = '.backup-restore-', KEY_TEMP_INFIX = '.restore-', UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**

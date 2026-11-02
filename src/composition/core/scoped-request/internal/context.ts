@@ -1,10 +1,11 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
-import { openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { attachmentLifecycle, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { policySchema, type InstallationIdentityChoice } from '#domain/index.js';
-import { AuditApplication, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
+import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { configuredInstallationProjectContext } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
 // The local OS identity is read after the policy loads: unsupported policy custody (native Windows) refuses POLICY_UNAVAILABLE before
@@ -20,7 +21,8 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
   const identity = readIdentity();
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
-  const installation = await accessIdentity(new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation), access);
+  const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId));
+  const installation = installationContext.kind === 'legacy' ? await accessIdentity(new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation), access) : installationContext.identity;
   if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
   const project = await accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
@@ -34,7 +36,7 @@ export async function withScopeAudit<T>(context: { path(): Promise<string>; read
   try { return await work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, access === 'write' && createKey))); } finally { store.close(); }
 }
 async function accessIdentity<T extends { readonly status: string; readonly reason?: string; readonly pendingWrite?: true }>(store: { read(): Promise<T>; loadOrCreate(): Promise<unknown> }, access: ScopeAccess) {
-  return readIdentity(async () => {
+  return readBootstrapIdentity(async () => {
     const current = await store.read();
     // Write admission takes the store's write path for first use and for a pending binding transition (weak bind, strengthen, required machine binding).
     if (access === 'write' && ((current.status === 'unavailable' && current.reason === 'not-created') || current.pendingWrite)) {
@@ -43,10 +45,10 @@ async function accessIdentity<T extends { readonly status: string; readonly reas
     return current;
   });
 }
-async function readIdentity<T>(read: () => Promise<T>) {
+async function readBootstrapIdentity<T>(read: () => Promise<T>) {
   try { return await read(); }
   catch (error) {
-    if (error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code);
+    if (error instanceof ProjectAttachmentError || error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code);
     throw error;
   }
 }
@@ -56,7 +58,7 @@ export async function loadConfiguredProjectIdentity(projectRoot: string, options
 }
 export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  return accessIdentity(new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation), 'read');
+  return readBootstrapIdentity(async () => (await configuredInstallationProjectContext(config, options)).identity);
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
 export type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
@@ -78,7 +80,8 @@ export async function inspectConfiguredInstallationBinding(projectRoot: string, 
 /** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
   const principal = readLocalOsIdentity(), config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  return readIdentity(() => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
+  await attachmentLifecycle(config, options).assert();
+  return readBootstrapIdentity(() => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
     .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject }));
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */

@@ -46,8 +46,8 @@ function language(input: CoreStageInput): CoreStageResult {
   // Until then the stage is answered, with nothing to apply yet (never "blocked").
   if (!installed(input.facts)) return result({ state: 'ready', reason: reason('setup.reason.languageSavedAfterPolicy', { language: chosen }), default: chosen }, true);
   return result({ state: 'ready', reason: reason('setup.reason.languageChosen', { language: chosen }), default: chosen,
-    operation: { id: 'config.set', version: 1, input: { keyPath: 'language', value: chosen, layer: 'project' } },
-    cli: ['deckent', 'config', 'set', 'language', chosen] }, true);
+    operation: { id: 'config.set', version: 1, input: { keyPath: 'language', value: chosen, layer: 'global' } },
+    cli: ['deckent', 'config', 'set', 'language', chosen, '--global'] }, true);
 }
 function folder(input: CoreStageInput): CoreStageResult {
   const { configuredScope, suggestedScope, homeRoot } = input.facts.folder;

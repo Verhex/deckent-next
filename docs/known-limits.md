@@ -110,6 +110,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `--yes --scope <id>` applies only fresh permissions and language, never read-only checks or person-only stages. It does not save the profile.
   The final check settles only over install stages; a completed check with warnings can be done, with warnings visible. A repeat `--yes`
   applies no already-settled work. Doctor derives work guidance from the setup stage evaluators and points onboarding work to `deckent` / `/setup`.
+  The setup language is saved as a global personal default; existing project language overrides keep precedence and are not migrated.
+  This preference does not attach a new folder to an installation or grant access to another project's model connection; those remain separate work.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
   lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker

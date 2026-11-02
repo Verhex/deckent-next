@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { policySchema } from '#domain/index.js';
-import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
+import { UninstallRecovery, attachmentLifecycle, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
   uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, nativeUserUnitLinks, acquireLedgerLock, type LedgerLock, selectWorkTarget, resolveGitWorkTarget, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, DispatchPolicyAuthorization, workTargetAttemptAuthorization, resolvePolicyScopeMembership, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, prepareProductCompanionPath, recordedProcessState, type ConfigLoadOptions } from '#platform/index.js';
@@ -17,6 +17,7 @@ const marked = (env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefi
 /** Trusted local composition: read-only previews and witnessed application admission use the same owned inventory. */
 async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env; let shutdownSeenMs: number | undefined;
+  await attachmentLifecycle(config, options).assert();
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
   const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, options);
   // Lane J P1: an unsafe policy or bindings file decides no tier: a typed refusal naming it, never an untyped crash and never a repair.
@@ -70,7 +71,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
         if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
         throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: confirmed.unit ?? '', command: confirmed.command ?? '', reason: 'new-instance-holds-ledger' } });
       }
-      try { return await work(); } finally { stoppedLock.release(); stoppedLock = undefined; }
+      try { return await attachmentLifecycle(config, options).hold(work); } finally { stoppedLock.release(); stoppedLock = undefined; }
     }, budgetMs: terminal.serviceStartTimeoutMs, describe: signal => client.describeService(signal),
       async unit(pid) { const found = await detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS, env));
         return found && { unit: found.unit, ...await observeUserUnit(found, pid, exec, links) }; },

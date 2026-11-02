@@ -13,6 +13,10 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
   assertSafeKeys(input);
   assertNoRetiredConfigFields(input, locale);
   const issues: ConfigIssue[] = [], warnings: ConfigWarning[] = [];
+  const installation = input['installation'];
+  if (isRecord(installation) && installation['sharedRegistrationId'] != null && input['schema_version'] !== 5) {
+    issues.push({ path: 'schema_version', reason: 'CONFIG_VERSION_UNSUPPORTED' });
+  }
   const core = Object.fromEntries(Object.entries(input).filter(([key]) => Object.hasOwn(CORE_SCHEMA.shape, key)));
   const result = CORE_SCHEMA.safeParse(core);
   // A missing Run bound follows the effective service capacity; an authored bound stays independent.

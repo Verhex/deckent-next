@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getConfigFieldDefault, loadConfig, normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, ErrorRegistry } from '#platform/index.js';
 import { affectedToolchainProfiles, workerImageBudget, matchingWorkerConsent, workerConsentBinding, type WorkerConsentBinding } from '#engine/index.js';
-import { FileInstallationIdentityStore, readNewestWorkerReceipt, readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
+import { readNewestWorkerReceipt, readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
+import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { writeArtifact } from './update.js';
 const counter = (value: string) => Number(/^r([0-9]+)/u.exec(value)?.[1] ?? 0);
 /** Refresh and acquisition enter this same daemon-only owner before counter reservation or any build context. */
@@ -42,7 +43,7 @@ export async function configuredWorkerBuilder<T>(projectRoot: string, options: C
   const root = await prepareProductDirectory(layout, 'workerImageBuilders');
   const instanceId = input.instanceId ?? randomUUID(), budgetMs = workerImageBudget(config.toolchains.update.buildTimeoutMs, input.binding.providers.length);
   // No readable identity, no usage record: the image then never becomes provably sole-used (kept), and the build still runs.
-  const lessee = await new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read().catch(() => null);
+  const lessee = await loadConfiguredInstallationIdentity(config.projectRoot, options).catch(() => null);
   return withWorkerBuilder({ root, packageRoot: input.packageRoot, daemonId: identity.daemonId, instanceId, budgetMs, ...(input.signal ? { signal: input.signal } : {}), ...(lessee?.status === 'available' ? { lessee: lessee.value.installationId } : {}),
     audit: event => writeArtifact(join(input.home, 'builder-audits'), `${randomUUID()}${limits.artifactSuffix}`, event).then(() => undefined) }, async custody => {
     // Re-read after waiting for custody: changing a source or withdrawing access never inherits an earlier consent observation.

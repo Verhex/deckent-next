@@ -130,3 +130,5 @@ export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInve
 export { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 export * from '#adapters/core/beuser-realm/index.js';
 export * from '#adapters/core/beuser-surface/index.js';
+
+export * from '#adapters/core/project-attachment/index.js';

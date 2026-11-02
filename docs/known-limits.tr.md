@@ -110,6 +110,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   `--yes --scope <kimlik>` yalnız yeni izinleri ve dili uygular; salt okunur kontrolleri veya kişi isteyen aşamaları uygulamaz, profili kaydetmez.
   Son kontrol yalnız kurulum aşamalarını bekler; ölçülmüş uyarılar görünür kalırken tamam sayılabilir. Tekrar `--yes`, bitmiş işi uygulamaz.
   Doctor iş yönlendirmesini kurulum aşamalarının değerlendiricilerinden türetir; ilk iş için `deckent` / `/setup` yolunu gösterir.
+  Kurulum dili global kişisel varsayılan olarak kaydedilir; eski proje dil tercihleri önceliğini korur ve taşınmaz.
+  Bu tercih yeni klasörü kuruluma bağlamaz veya başka projenin model bağlantısına izin vermez; bunlar ayrı uygulama işleridir.
 - **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; ilk açılış aşamasıdır, `deckent init` dışında, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel

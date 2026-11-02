@@ -111,3 +111,5 @@ export * from '#engine/core/system-policy-rows/index.js';
 export * from '#engine/core/beuser-realm/index.js';
 export * from '#engine/core/beuser/index.js';
 export * from '#engine/core/beuser-evidence/index.js';
+
+export * from '#engine/core/project-attachment/index.js';

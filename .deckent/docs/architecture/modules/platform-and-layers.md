@@ -3,6 +3,18 @@
 Layer/package listing, startup cost, entries and hardcode ratchet (ARCHITECTURE.md "Packages (current implementation)" taşındı 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 565–617, 843–854, 1649–1662; the original text below is verbatim; later dated additions are marked separately.
 
+**A62-ONCE bağlam temeli (2026-11-02; tam yolculuk henüz tamamlanmadı).** Kurulum dili mevcut `ConfigApplication`
+ile global kaydedilir; eski proje dili override olarak kalır. Ayrı bir global kayıt, açık seçilmiş legacy kaynağın kimlik,
+şirket, kişi ve fiziksel konumunu tutar. Proje bağlantısı ayrı projectId, scope, policy, ledger, runtime ve audit kullanır;
+kimlik/token kopyalanmaz. Her kullanım kaynak kimliğini, hedefin fiziksel konumunu ve envanterdeki active/revoked durumunu okur.
+`terminal attach --register --scope <id> --preview|--apply` kaynak seçer; `terminal attach --scope <id> --preview|--apply`
+hedef bağlar. Apply, önizleme digest'i ve command-id ile aynı installer journal'ında koşullu ve kurtarılabilirdir.
+`--revoke <project-id> --apply` bağlantıyı geri alır. Bu hazırlık CLI'si model/abonelik kullanım izni sağlamaz.
+Bağlantılı config v5; legacy v3/v4 okunur. Layout registry v5'te registration ve attachment sabit kaynaklardır.
+Backup/restore/uninstall ve relocation, kayıtlı kaynakta veya bağlı projede etkiden önce reddedilir; tam lifecycle
+uzlaştırması henüz yoktur. Ayrı bütçe şablonu ve model lease join'i tamamlanmadan bu aday normal başlangıç yolculuğu
+veya release adayı değildir; argümansız terminal mevcut init teklifini korur. Başvuru: ARCHITECTURE Product data layout.
+
 
 ```text
 src/platform/       config, errors/i18n, identity/host, product paths, bootstrap state and shared metadata

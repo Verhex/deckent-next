@@ -454,9 +454,9 @@ refresh, usage and dogfood closure remain open.
 
 ### Product data layout — owner 2026-09-17
 
-- Development/dogfood and customer installations use the same product data layout: one project/installation
-  `.deckent` root owns persistent brain/memory, tasks/runs, locks, approvals, audit, artifacts and ERP state.
-  Source code and external host products' own configuration are outside this product-state contract.
+- Legacy project-local development/dogfood and customer installations use one project/installation `.deckent` root for
+  brain/memory, tasks/runs, locks, approvals, audit, artifacts and ERP state; source code and external host configuration stay outside it.
+- **Owner amendment 2026-11-02 — alpha.62 D1–D4 (accepted target; registration/attachment foundation implemented, connection lease and lifecycle completion pending):** one verified installation identity may serve projects with separate scope, policy, ledger, runtime and audit. An existing installation is explicitly selected and registered in place, never silently merged or replaced when its reference disappears; source uninstall, backup and relocation account for attached projects. Connection reuse requires a revocable lease binding the source owner to the target project, scope and actor; the OAuth owner's scope remains, tokens are not copied, and organization policy may narrow use. An API budget default is a configured template for each scope's separate ledger account, never transferred balance or a shared ceiling; subscriptions have no monetary budget gate. Existing projects stay legacy until explicit migration. The explicit attach CLI uses the installer journal with separate global inventory; registered roots refuse lifecycle mutations until reconciliation support lands. Bare-terminal attach remains gated on the lease join. Setup saves language through ConfigApplication to the global preference layer; authored project overrides keep precedence. This language change alone provides neither attachment nor connection authority.
 - One versioned path registry/resolver derives logical resource locations from validated config and scope;
   modules never assemble their own root, sibling `.brain`, `.tasks`, or arbitrary temporary directory.
   Root relocation is configuration, not per-consumer branching. Persist resource IDs/relative references;

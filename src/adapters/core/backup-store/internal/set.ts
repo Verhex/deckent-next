@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { chmod, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, type ProductLayout } from '#platform/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, type ProductLayout } from '#platform/index.js';
 import { type BackupResult } from '#engine/index.js';
 import { BACKUP_RESOURCES, archiveState, unpackState, type BackupConfigLayers, type BackupLimits, type BackupState } from './archive.js';
 import { decryptKey, encryptKey } from './crypto.js';
@@ -52,7 +52,7 @@ export async function verifyBackupSet(set: string, passphrase: string, limits: B
     const archive = await readPrivate(join(set, 'state.archive.json.gz'), limits.maxTotalBytes * 2);
     if (createHash('sha256').update(archive).digest('hex') !== expected.get('state.archive.json.gz')) return refuse('BACKUP_MANIFEST_INVALID');
     const state = unpackState(archive, limits);
-    const resources = Object.fromEntries(Object.entries(state.resources).filter(([name]) => !['config', 'projectIdentity', 'installationJournal'].includes(name)));
+    const resources = Object.fromEntries(Object.entries(state.resources).filter(([name]) => !PRODUCT_LAYOUT_REGISTRY.fixedResources.includes(name)));
     resolveProductLayout({ projectRoot: state.projectRoot, root: state.layoutRoot, resources });
     const identity = state.entries.find(item => item.resource === 'installationIdentity' && item.path === 'identity.json');
     if (!identity) return refuse('BACKUP_SET_INVALID');

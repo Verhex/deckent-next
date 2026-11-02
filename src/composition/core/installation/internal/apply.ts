@@ -32,6 +32,7 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
  * which leaves config settled). A pending config-publishing transaction reads its target layout under the journal; `publicationGuarded` (apply/resume): invalid config is never published over. */
 export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false) {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
+  if ((await loadConfig(projectRoot, { pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
   await loadConfiguredInstallationIdentity(projectRoot, { pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
 }
 /** The binding settings an owned init identity write uses: the settled configuration, or registry defaults while a config-publishing transaction is pending. */

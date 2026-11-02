@@ -330,5 +330,10 @@
   "setup.workerImage.progress.previous": "Önceki ölçülmüş hazırlama: {elapsed}; bu bir bitiş tahmini değildir.",
   "setup.instructions.external": "Bu projenin dışından alınan dosyalar aşağıda listelenir. Güven yalnız bu oturum içindir; bu talimatlar yetki vermez.",
   "setup.instructions.legacy": "AGENTS.md ve CLAUDE.md olmadığı için eski DECKENT.md okunuyor. Talimatlarınızı AGENTS.md dosyasına taşıyın; Deckent DECKENT.md üretmez.",
-  "setup.instructions.legacyNext": "Talimatları AGENTS.md dosyasına taşıyın, ardından deckent doctor komutunu yeniden çalıştırın."
+  "setup.instructions.legacyNext": "Talimatları AGENTS.md dosyasına taşıyın, ardından deckent doctor komutunu yeniden çalıştırın.",
+  "setup.attach.title": "Bu klasör seçilen kuruluma bağlansın mı?",
+  "setup.attach.body": "Klasör: {path}\nScope / proje: {scope}\nBu işlem ayrı bir proje bağlamı hazırlar. Model erişimi ayrıca yapılandırılır.",
+  "setup.attach.saved": "Proje bağlantı kaydı saklandı.",
+  "setup.attach.preview": "Proje bağlantısı önizlemesi (hiçbir şey yazılmadı).",
+  "setup.attach.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <digest>] [--command-id <id>] [--json]\nMevcut kurulumu kendi klasöründe --register ile açıkça seçin. Uygulama, terminalde kişi tanığı ve değişmemiş önizleme özeti gerektirir. --revoke <project-id> --apply proje bağlantısını geri alır."
 }

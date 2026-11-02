@@ -1238,5 +1238,12 @@
   "error.UNINSTALL_PLAN_CHANGED_DIFF": "The state changed after cancelling or stopping: {diff}. Nothing was deleted. Review the new plan and confirm again.",
   "error.UNINSTALL_SERVICE_RUNNING": "Automatic unit disable paused for {unit}: manager evidence, absence or startup custody could not be verified ({reason}). Review the retained receipt if present. Next: {command}; then preview uninstall again.",
   "error.UNINSTALL_WORK_ACTIVE_WORKSPACES": "{runs} runs are working, {approvals} approvals are pending and {workspaces} worker workspaces may hold undelivered work. Nothing was changed. Keep the work with deckent uninstall --keep-work, or remove it too with deckent uninstall --all --force (the encrypted backup holds the workspaces first; cancelled work is listed in the receipt).",
-  "error.UNINSTALL_RETIRED": "Deckent was removed from this folder and its data kept ({path}). The service does not start until you reopen the folder: run deckent in your terminal and choose Continue."
+  "error.UNINSTALL_RETIRED": "Deckent was removed from this folder and its data kept ({path}). The service does not start until you reopen the folder: run deckent in your terminal and choose Continue.",
+  "error.PROJECT_ATTACHMENT_INVALID": "The project attachment is invalid. Keep the original files and inspect the selected installation before retrying.",
+  "error.PROJECT_ATTACHMENT_UNAVAILABLE": "The selected installation could not be verified. Restore its original identity and location; no replacement identity was created.",
+  "error.PROJECT_ATTACHMENT_CHANGED": "The installation or folder changed. Preview the attachment again before applying it.",
+  "error.PROJECT_ATTACHMENT_DENIED": "This installation, company, project or person is not authorized for this attachment. Ask the installation owner.",
+  "error.PROJECT_ATTACHMENT_REVOKED": "This project attachment has been revoked. Ask the installation owner before using it again.",
+  "error.PROJECT_ATTACHMENT_INCOMPLETE": "The attachment is unfinished. Resume the same attach command with its original command ID and preview digest.",
+  "error.PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED": "This installation has registered project references. Detach and reconcile them before backup, restore, relocation or uninstall."
 }

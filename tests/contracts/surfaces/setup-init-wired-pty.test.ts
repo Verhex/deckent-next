@@ -134,7 +134,8 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     // R05: the start-permission preview wraps inside the window (its last words are on screen), never cut with "…"; the profile reads as its label.
     const confirm = run.output.indexOf('Confirm the previewed permissions'), preview = screen(run.output.slice(0, confirm)); expect(preview).toMatch(/keep their approval rules\./u);
     expect(run.output).toContain('Profile Solo will start');
-    expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:solo', version: 1 } } });
+    expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ language: 'en', identity: { profile: { id: 'core:solo', version: 1 } } });
+    expect(JSON.parse(await readFile(join(f.root, '.deckent', 'config.json'), 'utf8'))).not.toHaveProperty('language');
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
     expect(await f.plan()).toMatchObject({ 'core:language': 'done:setup.reason.languageConfigured', 'core:folder': 'done:setup.reason.scopeConfigured',
       'core:policy': 'done:setup.reason.policyCurrent', 'core:profile': 'done:setup.reason.profileConfigured' });

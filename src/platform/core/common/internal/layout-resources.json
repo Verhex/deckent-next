@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "rootName": ".deckent",
   "resources": {
     "config": "config.json",
@@ -38,13 +38,17 @@
     "workerImageBuilders": "state/worker-image-builders",
     "onboarding": "state/onboarding.json",
     "compileCache": "state/compile-cache",
-    "bin": "bin"
+    "bin": "bin",
+    "installationRegistration": "installation/registration.json",
+    "projectAttachment": "project-attachment.json"
   },
   "bootstrapResource": "config",
   "fixedResources": [
     "config",
     "installationJournal",
-    "projectIdentity"
+    "projectIdentity",
+    "projectAttachment",
+    "installationRegistration"
   ],
   "rootEnvironmentKey": "DECKENT_HOME",
   "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME",

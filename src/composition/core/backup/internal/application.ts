@@ -2,9 +2,9 @@ import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
 import { BackupApplication, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority } from '#engine/index.js';
-import { PolicyFileError, FileBackupStorage, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
+import { PolicyFileError, FileBackupStorage, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory, hasUninstallArchive, restoreUninstallArchive, uninstallArchiveRoots } from '#adapters/index.js';
-import { ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
@@ -27,10 +27,11 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
       recovered ??= await verifyBackupSet(command.set, passphrase, limits);
       const document = validateConfig(archivedConfigDocument(recovered.state)).config;
       const current = resolve(projectRoot) === recovered.state.projectRoot;
-      const resources = Object.fromEntries(Object.entries(recovered.state.resources).filter(([key]) => !['config', 'projectIdentity', 'installationJournal'].includes(key)));
+      const resources = Object.fromEntries(Object.entries(recovered.state.resources).filter(([key]) => !PRODUCT_LAYOUT_REGISTRY.fixedResources.includes(key)));
       const productLayout = resolveProductLayout({ projectRoot: resolve(projectRoot), ...(current ? { root: recovered.state.layoutRoot } : {}), resources });
       config = { ...document, projectRoot: resolve(projectRoot), productLayout, secretPaths: [] };
     }
+    await attachmentLifecycle(config, options).assert(command.action === 'restore' ? [command.target] : []);
     const layout = config.productLayout, limits = config.installation.packageMeasurement;
     const existingPolicy = await lstat(productResourcePath(layout, 'policy')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const identity = readLocalOsIdentity();
@@ -82,7 +83,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     const globalConfigPath = await resolveGlobalConfigReadPath(options.env, options.platform);
     const configDocument = command.action === 'create' ? async () => readBackupConfig(layout.bootstrapConfigPath, globalConfigPath, limits) : undefined;
     const source = { layout, projectRoot: resolve(projectRoot), installationId: authority.installationId, keyFile: config.approvals.keyFile, globalConfigPath, ...(configDocument ? { configDocument } : {}) };
-    const storage = new FileBackupStorage(source, limits);
+    const storage = attachmentGuardedBackupStorage(new FileBackupStorage(source, limits), config, options);
     // C-PRIO J1: a recovery audit lives next to the set, so a set that does not exist is refused before that audit is written (no stray
     // audit folder, never AUDIT_UNAVAILABLE for a mistyped path). Any other refusal of an existing set (unsafe, modified) is audited as before.
     if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'BACKUP_SET_NOT_FOUND') throw error; });
