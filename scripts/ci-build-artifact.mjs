@@ -60,8 +60,9 @@ export function validateBuild(root) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   if (process.argv[2] === 'pack') {
+    // The scheduling weights prepare used travel with the build, so every shard of one Node partitions with the same weights.
     const paths = sealBuild(root);
-    execFileSync('tar', ['-czf', '.pack/ci-build.tar.gz', ...paths, '.pack/ci-build.json', '.pack/ci-inventory.json'], { cwd: root, stdio: 'inherit' });
+    execFileSync('tar', ['-czf', '.pack/ci-build.tar.gz', ...paths, '.pack/ci-build.json', '.pack/ci-inventory.json', 'scripts/ci-test-durations.json'], { cwd: root, stdio: 'inherit' });
   } else if (process.argv[2] === 'seal') sealBuild(root);
   else if (process.argv[2] === 'validate') validateBuild(root);
   else throw new Error('Expected pack, seal or validate');
