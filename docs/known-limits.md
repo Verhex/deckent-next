@@ -12,7 +12,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-journey BeUser re-walk and the owner terminal test are still open and run before beta. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
-Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and retains typed terminal error codes. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
+Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
 
 ## BeUser B1 journey walks (alpha.57)
 

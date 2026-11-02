@@ -12,7 +12,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUser dört yolculuk yeniden yürüyüşü ve owner terminal testi henüz açık; betadan önce yapılır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
-Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminalde tipli hata kodunu korur. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
+Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminal sohbet hatalarını ham kod olmadan katalog mesajıyla gösterir. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
