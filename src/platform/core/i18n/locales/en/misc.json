@@ -721,7 +721,7 @@
   "brain.here.run": "Run here",
   "brain.here.setupChoice": "Set up workers (/setup, worker steps)",
   "brain.here.cancel": "Cancel",
-  "brain.here.noModel": "no chat model is connected yet: connect one with /model or /provider, then send the task again",
+  "brain.here.noModel": "Connect a model with /provider, then send your task again.",
   "brain.here.noWorkers": "workers need a Git project; this folder is not one",
   "brain.here.effect": "Changes are written to this folder directly: no background Run, no delivery card and no rollback. Your mode, the sandbox and approvals still apply.",
   "brain.here.prompt": "↑↓ choose · Enter confirm · Esc cancel",

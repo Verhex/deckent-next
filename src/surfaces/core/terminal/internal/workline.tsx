@@ -441,8 +441,8 @@ export function WorklineApp(props: WorklineProps) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
       const waitsForModel = code === 'TERMINAL_CHAT_NOT_CONFIGURED' && !signal.aborted && await onboarding.usable();
       history.current = (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService) || waitsForModel ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
-      // Owner 2026-10-30: in a person's terminal a message sent without a model is not sent; it stays the draft and the model card opens (/setup).
-      if (waitsForModel) { push([notice('info', props.onboarding!.modelDraft)]); await openSetup.current(signal, 'model'); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })); return; }
+      // Owner 2026-11-02: keep the unsent draft and name /provider without opening a card.
+      if (waitsForModel) { push([notice('info', props.onboarding!.modelDraft)]); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })); return; }
       if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
         const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
         if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
@@ -461,7 +461,7 @@ export function WorklineApp(props: WorklineProps) {
 
   const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
   const [draft, setDraft] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(() => props.initialDraft ? { seq: 1, entry: props.initialDraft } : null);
-  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: bareSlash(text), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim(), hold, typed: Boolean(props.initialDraft || props.queuedInputs?.length), say: (level, text) => push([notice(level, text)]),
+  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: redactForRecord(text, props.knownSecrets), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim(), hold, typed: Boolean(props.initialDraft || props.queuedInputs?.length), say: (level, text) => push([notice(level, text)]),
     // /setup (whole, or only the model card) and the opening's card may connect a model: the status row then names the configured one instead of the startup label.
     opened: async () => { const configured = props.panels?.ports.model ? (await props.panels.ports.model.inspect().catch(() => null))?.choices.find(choice => choice.configured) : undefined; if (configured) setConfiguredLabels({ model: configured.label, provider: configured.providerLabel ?? configured.group }); } });
   openSetup.current = onboarding.open;
@@ -477,8 +477,8 @@ export function WorklineApp(props: WorklineProps) {
   };
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
-    const slash = parseSlashLine(line);
-    if (!slash) { await runTurn(line, mentioned, execution); return true; }
+    const slash = onboarding.intent(execution.input.inputId)?.destination === 'chat' ? null : parseSlashLine(line);
+    if (!slash) { try { await runTurn(line, mentioned, execution); } finally { onboarding.settled(execution.input.inputId); } return true; }
     if (slash.command === 'setup') { if (await onboarding.usable()) await openSetup.current(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
     if (slash.command === 'do') {
       if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
@@ -516,10 +516,11 @@ export function WorklineApp(props: WorklineProps) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
         if (!execution.signal.aborted && props.doPlan.localFallback && props.doPlan.here && await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { // owner option A: K1 data, K4 card, K5 every time
           onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; const here = props.doPlan.here, tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
-          const body = [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : [])], workers = await here.canSetup?.().catch(() => false) ?? false, chat = Boolean(sessionModel.pinned()) || (await props.doPlan.chatReady?.().catch(() => true) ?? true); // DR3-01
-          const answer = await windows.ask({ title: here.title, hints: here.prompt, body: () => body.map(text => ({ spans: [span(text)] })), card: true, tree: { title: here.title, items: [{ id: 'run', label: here.run, ...(chat ? {} : { blocked: { reason: here.noModel } }) }, { id: 'setup', label: here.setup, ...(workers && await onboarding.usable() ? {} : { blocked: { reason: here.noWorkers } }) }, { id: 'cancel', label: here.cancel }] } });
-          if (answer === 'setup' && !execution.signal.aborted) { await onboarding.open(execution.signal, 'workers'); return true; } else if (answer !== 'run' || execution.signal.aborted) { push([notice('info', here.cancelled)]); return true; } // /setup worker steps; Esc = Cancel: nothing runs
-          if (!await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { push([notice('info', here.cancelled)]); return true; }
+          const chat = Boolean(sessionModel.pinned()) || (await props.doPlan.chatReady?.().catch(() => false) ?? true);
+          if (!chat) { push([notice('info', here.noModel)]); return true; }
+          // Owner 2026-11-02: terminal execution is the default; the host's policy/pause answer still owns admission.
+          if (execution.signal.aborted || !await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { push([notice('info', here.cancelled)]); return true; }
+          push([notice('info', here.effect), ...(tools === false && props.doPlan.localNoTools ? [notice('info', props.doPlan.localNoTools)] : [])]);
           push([notice('info', props.doPlan.localFallback)]); const before = await props.doPlan.tree?.().catch(() => null) ?? null; // K5: partial folder observations, not attributed effects
           await runTurn(slash.args.trim(), mentioned, execution).finally(async () => push([notice('info', treeChangeLine(before, before?.state === 'unknown' ? null : await props.doPlan!.tree?.().catch(() => null) ?? null, here))])); return true;
         }

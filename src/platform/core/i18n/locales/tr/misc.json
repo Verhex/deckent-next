@@ -721,7 +721,7 @@
   "brain.here.run": "Burada çalıştır",
   "brain.here.setupChoice": "İşçileri kur (/setup, işçi adımları)",
   "brain.here.cancel": "İptal",
-  "brain.here.noModel": "henüz bağlı bir sohbet modeli yok: /model ya da /provider ile bir model bağlayın, sonra görevi yeniden gönderin",
+  "brain.here.noModel": "/provider ile bir model bağla, sonra işini yeniden gönder.",
   "brain.here.noWorkers": "işçiler bir Git projesi ister; bu klasör öyle değil",
   "brain.here.effect": "Değişiklikler doğrudan bu klasöre yazılır: arka plan işi, teslim kartı ve geri alma yoktur. Çalışma modunuz, sandbox ve onaylar yine geçerlidir.",
   "brain.here.prompt": "↑↓ seç · Enter onayla · Esc iptal",

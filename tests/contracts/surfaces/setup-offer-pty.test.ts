@@ -238,7 +238,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
       // the profile was saved, so the pending permission screen comes first (permissions, model, first commit, instructions, then Ready!); with no
       // coding CLI on PATH the folder is not a coding folder, so no work-kind screen.
       // BeUser ZEY-02: the person's management rights follow the permission screen (Esc = later).
-      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Step 5/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
+      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Step 5/', '\u001b'], ['Connect a model with /provider', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();
@@ -250,7 +250,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     expect(run.output.indexOf('Step 1/')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     // alpha.60 B (draw first): the Workline frame comes first, the waiting setup card opens on it and the Workline returns after the last card.
-    expect(run.output.indexOf('Deckent workline')).toBeLessThan(run.output.indexOf('Step 1/')); expect(run.output.lastIndexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Ready!'));
+    expect(run.output.indexOf('Deckent workline')).toBeLessThan(run.output.indexOf('Step 1/')); expect(run.output.lastIndexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Project instructions'));
     expect(run.output.slice(run.output.indexOf('Permissions: applied'))).not.toContain(CARD);
     expect(run.output).not.toMatch(/CLI_INSTALLATION_MISSING|TERMINAL_SCOPE_REQUIRED/u);
     expect((await readdir(f.root)).sort()).toEqual(['.deckent', '.git']);

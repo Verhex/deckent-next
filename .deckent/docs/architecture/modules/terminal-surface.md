@@ -290,6 +290,19 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   A literal zero tariff whose every declared endpoint is a literal loopback address runs without a money budget (owner 2026-10-09);
   a frozen scope account still refuses it, and a zero tariff on any other host keeps the budget gate. A responded call settles
   `settled-local 0` in the spend ledger. Positive chargeback rates need a separate measurement basis.
+- **First work after setup (owner 2026-11-02, A62-FIRSTTASK):** first work is not an onboarding stage. A separate, unnumbered welcome
+  offers a project description, scanning existing visible files for suggested configuration, or a typed first task. The first two use
+  EN/TR catalog prompts and enter the ordinary chat queue; they propose configuration, with no new write authority. A model-less
+  opening names `/provider` in one line. An unsent normal message remains a draft; no model card opens automatically. A historical
+  first-task marker also suppresses the new welcome on later opens. A welcome alone is never counted as a pending `/setup` step.
+  Worker setup and Git are not prerequisites for ordinary terminal turns. A `/do` refusal may use the normal turn directly only when
+  the existing `localRunOffer` predicate permits that exact refusal, with fresh policy/profile/pool-pause recheck before the turn.
+  Missing model: a single `/provider` direction; other refusals keep their own path. Mode, sandbox, tool approvals and invocation
+  spending still apply. Human terminal notes omit diagnostic code prefixes and render registered failure codes through the catalog;
+  the original service notes, typed receipts and JSON/inspection data remain intact. Setup reads budget state only for a metered connection: the exact scoped invocation profile's `billingAxis`
+  wins over legacy provider-kind billing. Subscription and local profiles need no setup budget; metered tariffs, reservations,
+  capacity, frozen accounts and settlement remain governed by the existing invocation service. These are source behavior contracts;
+  author fixture/PTY evidence, independent batch review and assembled BeUser acceptance remain separate.
 - **Delivery fit (SESSION-RESULT-LIMIT-2026-09-28):** the worst-case delivered size of every declared provider profile —
   `modelInvocationNativeResponseUpperBound` (one formula shared by the adapters) plus the same arithmetic as
   `assertInvocationDeliveryFit` — is reported ahead of time by `deckent doctor` (`modelInvocationDelivery`, unconditional, `[]` when
