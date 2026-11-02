@@ -63,10 +63,10 @@ async function workerReadiness(host: Host, root: string, scopeId: string, option
   return channel?.access === 'allowed' && channel.channel.kind === 'native-cli' && channel.channel.cli ? workerChannelText(channel.channel.cli, channel.activation?.state === 'active',
     (await host.observeSetup?.(root, options).catch(() => null))?.observation.families ?? null, locale) : null;
 }
-/** PV: a CLI subscription that runs isolated serves the Brain (planning, BeUser), not the terminal chat: the chat readiness read refuses it by protocol
+/** A role-only CLI subscription serves the Brain (planning, BeUser); an opted-in terminal text family uses ordinary chat readiness. A role-only family refuses by protocol
  * (MODEL_INVOCATION_UNAVAILABLE), which is its expected state, never "unavailable". Any other refusal keeps its own words. */
 const brainOnly = (kind: ProviderConnectKindView | undefined, rows: readonly Readonly<{ invocable: boolean; reason: { code: string } | null }>[]) =>
-  Boolean(kind?.headlessLogin) && rows.length > 0 && rows.every(row => !row.invocable && row.reason?.code === 'MODEL_INVOCATION_UNAVAILABLE');
+  Boolean(kind?.headlessLogin) && !kind?.terminalTextChat && rows.length > 0 && rows.every(row => !row.invocable && row.reason?.code === 'MODEL_INVOCATION_UNAVAILABLE');
 const PULL = 'pull:available';
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
@@ -247,15 +247,16 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
         const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
         const active = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === (kind.catalogProviderId ?? kind.id)), on = active && active.access === 'allowed' ? active.models.filter(model => model.activation?.state === 'active').length : 0;
-        const detail = !kind.available ? '' : keyName === null ? (on ? t('tui.provider.state.models', { count: on }, locale) : '-') : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
+        const stateDetail = !kind.available ? '' : keyName === null ? (on ? t('tui.provider.state.models', { count: on }, locale) : '-') : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
+        const detail = kind.terminalTextChat ? `${t('tui.provider.login.ownSubscriptionNote', {}, locale)} · ${stateDetail}` : stateDetail;
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
           grantBlocked = errorText(error); grantRequired = (error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED';
         } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
-        return { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.presentation === 'beta' ? `${t('tui.provider.beta', {}, locale)} · ${detail}` : kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
+        return { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.terminalTextChat ? detail : kind.presentation === 'beta' ? `${t('tui.provider.beta', {}, locale)} · ${detail}` : kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
           blocked: !kind.available ? `${t('tui.provider.unavailable', {}, locale)} ${t('siwc.card.apiKey', {}, locale)}` : kind.headlessLogin && isolation ? isolationReason : null, keyName, keyStored: stored, grantRequired,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),

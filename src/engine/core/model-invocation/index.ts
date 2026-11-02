@@ -46,3 +46,4 @@ export { modelInvocabilityText, reservationAmountText } from './internal/words.j
 export { createModelInvocationPlanUsage, verifyModelInvocationPlanUsage, modelInvocationPlanUsageDigest } from './internal/plan-usage.js';
 export type { SubscriptionUsageSummary } from './internal/inspection.js';
 export { subscriptionActor, prepareSubscriptionConsent, readSubscriptionRejection } from './internal/delegation.js';
+export { textOnlyModelInvocationRequest } from './internal/text-request.js';

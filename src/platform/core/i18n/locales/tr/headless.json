@@ -54,5 +54,8 @@
   "headless.connect.loginOwned": "Kullanılan CLI girişi: {dir} (Brain'in kendi dizini; CLI onu kendisi okur, Deckent hiçbir zaman açmaz).",
   "doctor.headless.owned": "; Brain'in kendi giriş dizini",
   "doctor.headless.notOwned": "; Brain'in kendi giriş dizini değil (çalışmaya devam eder): Brain'in kendi dizininde giriş yapın, sonra yeniden bağlayın",
-  "doctor.headless.updated": "; CLI güncellendi: {from} → {to} (kullanmadan önce yeniden denetlendi)"
+  "doctor.headless.updated": "; CLI güncellendi: {from} → {to} (kullanmadan önce yeniden denetlendi)",
+  "tui.provider.login.ownSubscriptionNote": "Kendi aboneliğiniz, özgün CLI; giriş token'ına aracılık, paylaşım veya satış yok.",
+  "tui.model.textChatSubscription": "Abonelikle metin sohbeti; API bütçesi gerekmez. Native araçlar kapalıdır.",
+  "headless.chat.quota": "Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz."
 }

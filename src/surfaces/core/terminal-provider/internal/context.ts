@@ -14,6 +14,7 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   billing?: 'subscription' | 'local' | 'metered';
   presentation?: 'listed' | 'hidden' | 'beta';
   /** PV: a CLI subscription that signs in with its own CLI (`models login`) and runs only inside the isolation realm. */
+  terminalTextChat?: boolean;
   headlessLogin?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: string }>;

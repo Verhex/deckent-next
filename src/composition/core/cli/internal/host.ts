@@ -118,6 +118,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? (kind.connect?.adapter === SIWC_INFERENCE.adapter.id ? providerDiscoveryChannel(kind, null) : null), connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
       priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing, presentation: kind.presentation, ...(kind.connect ? { pull: kind.connect.pull } : {}),
       // PV: a CLI subscription that signs in with its own CLI and runs only inside the isolation realm (registry data).
+      terminalTextChat: kind.connect?.terminalTextChat === true,
       headlessLogin: Boolean(kind.connect?.personOnly && (kind.connect.adapter === 'native-cli-headless' || kind.connect.headless)) })),
     /* PV 2a/3: the isolation check before a row is offered, the Brain's own login dir before the sign-in, and the sign-in itself (the existing
        `models login` path: person check, realm seal, registry argv and time bound; the window owns the terminal hand-over around it). */

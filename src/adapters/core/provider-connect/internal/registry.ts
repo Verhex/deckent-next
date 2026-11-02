@@ -57,6 +57,8 @@ const kindSchema = z.strictObject({
     /** Codex headless (owner 2026-10-31): a worker CLI kind that also writes a headless invocation profile per connected model (its CLI registry entry
      * declares the headless step for `protocolFamily`); the worker image gate and worker activation stay as they are. */
     headless: z.boolean().prefault(false),
+    /** Explicit text-only terminal admission; never inferred from role availability. */
+    terminalTextChat: z.boolean().optional(),
     rawUse: z.literal('person').optional(), preview: z.boolean().prefault(false),
     pull: z.enum(['available', 'pick']).prefault('available'),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
@@ -87,6 +89,7 @@ const kindSchema = z.strictObject({
         && connect.personOnly && connect.rawUse === 'person' && connect.preview === true && connect.seed === null
         : connect.chatPath !== null && connect.protocolFamily === undefined)
     .refine(connect => connect.catalogOnly === (connect.adapter === 'native-cli-worker'))
+    .refine(connect => !connect.terminalTextChat || (connect.personOnly && connect.protocolFamily !== undefined && (connect.adapter === 'native-cli-headless' || connect.headless)))
     .refine(connect => !connect.headless || (connect.catalogOnly && connect.personOnly && connect.protocolFamily !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
@@ -157,3 +160,7 @@ export function providerEndpoint(text: string): Readonly<{ ok: true; base: strin
   // An OpenAI-compatible base is often given with its `/v1`; the probe path already carries it.
   return { ok: true, base: `${parsed.origin}${path.endsWith('/v1') ? path.slice(0, -3) : path}` };
 }
+
+/** Terminal text chat requires explicit connection-registry admission; a role connection alone never grants it. */
+export const terminalTextChatFamilies: readonly string[] = Object.freeze(PROVIDER_CONNECT_KINDS.flatMap(kind =>
+  kind.connect?.terminalTextChat && kind.connect.protocolFamily ? [kind.connect.protocolFamily] : []));
