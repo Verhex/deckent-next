@@ -50,7 +50,9 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
   // A62: the shipped registry + compiled provider/SIWC windows on a clean HOME under the checkout's home filesystem.
   // Fixture ports stop before OAuth/network I/O; existing native-headless tests exercise the CLI adapter separately.
   for (const locale of ['en', 'tr'] as const) {
-    const home = await mkdtemp(join(resolve('.'), '.login-pty-')); roots.push(home);
+    // Not the checkout root itself: the installed-package measurement observes that directory, so a sibling entry there reads as a changed package.
+    const homes = resolve('node_modules/.cache/deckent-login-pty'); await mkdir(homes, { recursive: true, mode: 0o700 });
+    const home = await mkdtemp(join(homes, 'home-')); roots.push(home);
     const loginFixture = resolve('tests/contracts/surfaces/provider-login-pty.fixture.mjs');
     const api = locale === 'en' ? 'Connect with an API key' : 'API anahtarıyla bağlan';
     const signIn = locale === 'en' ? 'Sign in with ChatGPT' : 'ChatGPT ile giriş';
