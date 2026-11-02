@@ -172,7 +172,7 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-active', action: 'activate',
       reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 0 }, f.options);
     // Synthetic person, inside this test's own disposable install only.
-    for (const key of sourceContext.config.cli.agentEnvironment) vi.stubEnv(key, undefined);
+    for (const key of [...sourceContext.config.cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined); // a person's terminal: no agent or CI marker
     vi.spyOn(localPrincipal, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
     const granted = await grantConfiguredModelUse(f.b, 'target', f.options);
     expect(granted.state).toBe('active');
@@ -246,7 +246,7 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
       await expect(sourceApp.preview('third')).resolves.toMatchObject({ scopeId: 'third' });
       expect(await snapshotBytes(f.a)).toEqual(healthy);
     } finally { db.close(); }
-    for (const key of sourceConfig.cli.agentEnvironment) vi.stubEnv(key, undefined);
+    for (const key of [...sourceConfig.cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined); // a person's terminal: no agent or CI marker
     const witness = vi.spyOn(localPrincipal, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
     try {
       const installationId = (await loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).installationId;
