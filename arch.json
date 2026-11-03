@@ -4999,6 +4999,23 @@
         "src/platform/core/errors"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/adapters/core/native-tool-bridge": {
+      "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/agent-tool",
+        "src/platform/core/common",
+        "src/platform/core/redaction",
+        "src/platform/core/validate"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/subscription-readiness": {
+      "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {

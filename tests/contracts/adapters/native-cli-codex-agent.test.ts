@@ -2,10 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { toolSessionSchema, type NativeAgentToolResult } from '#capabilities/index.js';
-import { codexAgentArgv, codexAgentTurn, type CodexAgentResultLookup } from '../../../src/adapters/core/native-cli-headless/internal/codex-agent.js';
-import { headlessLoginArgs } from '../../../src/adapters/core/native-cli-headless/internal/login.js';
-import type { HeadlessPreflight } from '../../../src/adapters/core/native-cli-headless/internal/preflight.js';
-import type { Prepared } from '../../../src/adapters/core/native-cli-headless/internal/turn.js';
+import { codexAgentArgv, codexAgentTurn, runHeadlessLogin, type CodexAgentResultLookup } from '#adapters/core/native-cli-headless/index.js';
+type Prepared = Parameters<typeof codexAgentTurn>[0];
+type HeadlessPreflight = Parameters<typeof codexAgentTurn>[1];
 import { CODEX_FAMILY } from '../../fixtures/native-headless/codex.js';
 
 const entry = nativeCliAgent(CODEX_FAMILY)!;
@@ -106,10 +105,11 @@ it('K3: incomplete/failed process and absent usage never yield a measured respon
   const malformed = create(); feed(malformed, [thread, turn, answer]);
   expect(malformed.line('{"type":"item.completed","item":{"id":"malformed","type":"agent_message"}}')).toMatchObject({ body: { field: 'item-text' } });
 });
-it('K3: browser/device login argv is registry data; unsupported methods, API key and SSO refuse', () => {
-  expect(headlessLoginArgs(CODEX_FAMILY, undefined, false)).toEqual(entry.headless.login.args);
-  expect(headlessLoginArgs(CODEX_FAMILY, 'browser', false)).toEqual(['-c', 'cli_auth_credentials_store="file"', 'login']);
-  expect(headlessLoginArgs(CODEX_FAMILY, 'device-auth', false)).toEqual(['-c', 'cli_auth_credentials_store="file"', 'login', '--device-auth']);
-  for (const method of ['claudeai', 'api-key', 'arbitrary']) expect(() => headlessLoginArgs(CODEX_FAMILY, method, false)).toThrow();
-  expect(() => headlessLoginArgs(CODEX_FAMILY, 'device-auth', true)).toThrow();
+it('K3: unsupported login methods, API key and SSO refuse before any realm lookup or process', async () => {
+  let probes = 0;
+  const login = (method: string, sso = false) => runHeadlessLogin({ family: CODEX_FAMILY, stateDir: '/tmp/unused-k3-state', configDir: '/tmp/unused-k3-login',
+    owned: false, sso, loginMethod: method, env: {}, now: () => 1, isolation: async () => { probes++; return { status: 'unavailable' } as never; } });
+  for (const method of ['claudeai', 'api-key', 'arbitrary']) await expect(login(method)).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID' });
+  await expect(login('device-auth', true)).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'sso' } });
+  expect(probes).toBe(0);
 });

@@ -13,4 +13,4 @@ export type { NativeAgentExecution, NativeAgentReadinessReason, NativeAgentReadi
 export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema } from './internal/agent-port.js';
 export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, ToolSessionClosure, ToolSessionCancellation, ToolSessionRevocation } from './internal/agent-port.js';
 export { nativeAgentInitReason, nativeAgentItemReason } from '#capabilities/index.js';
-export { headlessFlagSetDigest, nativeAgentFlagSetDigest } from './internal/env.js';
+export { headlessFlagSetDigest, nativeAgentFlagSetDigest } from './internal/env.js'; export { codexAgentArgv, codexAgentTurn, type CodexAgentResultLookup } from './internal/codex-agent.js';
