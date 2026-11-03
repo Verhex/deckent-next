@@ -1,7 +1,7 @@
 import type { TaskReadiness } from '#domain/index.js';
 
 export type ReservationDiagnosticSite = 'application-empty' | 'transaction-wave-mismatch';
-export type ReservationDiagnosticReason = 'no-ready-task' | 'delayed' | 'capacity-exhausted' | 'store-wave-mismatch';
+export type ReservationDiagnosticReason = 'no-ready-task' | 'delayed' | 'capacity-exhausted' | 'resource-capacity-exhausted' | 'store-wave-mismatch';
 export interface ReservationDiagnostic {
   readonly site: ReservationDiagnosticSite;
   readonly reason: ReservationDiagnosticReason;
@@ -20,6 +20,7 @@ export interface ReservationDiagnostic {
   readonly occupiedCount: number;
   readonly terminalCount: number;
   readonly reconciliationCount: number;
+  readonly resourceWaitingCount?: number;
 }
 
 interface DiagnosticWave {
@@ -29,6 +30,7 @@ interface DiagnosticWave {
   readonly deferredTaskIds: readonly string[];
   readonly occupancy: Readonly<{ execution: number; inFlight: number }>;
   readonly readiness: readonly TaskReadiness[];
+  readonly resourceWaits?: readonly unknown[];
 }
 
 /** Bounded metadata derived from an authoritative scheduling wave. The reason is a stable observed-blocker
@@ -41,7 +43,8 @@ export function diagnoseReservationWave(wave: DiagnosticWave, site: ReservationD
   for (const task of wave.readiness) counts[task.disposition === 'awaiting-decision' ? 'waiting' : task.disposition]++;
   const reason: ReservationDiagnosticReason = site === 'transaction-wave-mismatch' ? 'store-wave-mismatch'
     : counts.ready === 0 && counts.delayed > 0 ? 'delayed'
-      : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.deferredTaskIds.length > 0 ? 'capacity-exhausted' : 'no-ready-task';
+      : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.resourceWaits?.length ? 'resource-capacity-exhausted'
+        : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.deferredTaskIds.length > 0 ? 'capacity-exhausted' : 'no-ready-task';
   return Object.freeze({ site, reason, now: wave.observedAt,
     ...(wave.eligibilityGapMs === undefined ? {} : { eligibilityGapMs: wave.eligibilityGapMs }),
     executionSlots: capacity.executionSlots, inFlightSlots: capacity.inFlightSlots,
@@ -49,7 +52,8 @@ export function diagnoseReservationWave(wave: DiagnosticWave, site: ReservationD
     selectedCount: wave.selectedTaskIds.length, requestedCount,
     readyCount: counts.ready, waitingCount: counts.waiting, blockedCount: counts.blocked,
     delayedCount: counts.delayed, occupiedCount: counts.occupied, terminalCount: counts.terminal,
-    reconciliationCount: counts.reconciliation });
+    reconciliationCount: counts.reconciliation,
+    ...(wave.resourceWaits === undefined ? {} : { resourceWaitingCount: wave.resourceWaits.length }) });
 }
 
 /** The diagnostic as the typed error's parameters (`RUN_CAPACITY_OR_ORDER`): field by field in this fixed order, an absent gap stays absent. */
@@ -63,5 +67,6 @@ export function reservationDiagnosticParams(diagnostic: ReservationDiagnostic) {
     readyCount: diagnostic.readyCount, waitingCount: diagnostic.waitingCount, blockedCount: diagnostic.blockedCount,
     delayedCount: diagnostic.delayedCount, occupiedCount: diagnostic.occupiedCount,
     terminalCount: diagnostic.terminalCount, reconciliationCount: diagnostic.reconciliationCount,
+    ...(diagnostic.resourceWaitingCount === undefined ? {} : { resourceWaitingCount: diagnostic.resourceWaitingCount }),
   };
 }
