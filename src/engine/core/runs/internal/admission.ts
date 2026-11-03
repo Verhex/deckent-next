@@ -24,11 +24,6 @@ export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
  * when the command already has a receipt: the answer then comes from recorded state, never from a live reference that may have moved. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
-  /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
-  modelUse?: {
-    pin(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<RunCreate['execution']>;
-    recheck(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<void>;
-  };
   /** Trusted composition resolves installation layout, clock and execution policy. Never read them from model wire fields. */
   resolve(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy' | 'execution'> & { layoutRevision: string }>;
 }
@@ -85,16 +80,14 @@ export class RunAdmissionApplication {
       const graph = resolved?.graph ?? command.graph;
       const context = await this.context.resolve({ ...command, graph }, principal);
       await this.poolAuthorization.authorize(context.policy.poolId, command.scopeId, principal);
-      const execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal) : context.execution;
       create = runCreateSchema.parse({ commandId: command.commandId, actor, graph, ...(command.proposal ? { proposal: command.proposal } : {}), ...(resolved ? { branch: resolved.decision } : {}),
-        identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution });
+        identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution: context.execution });
     } catch (error) {
       this.authorization.recordUnapplied(command, principal, evaluation);
       throw error;
     }
     const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace);
     try {
-      await this.context.modelUse?.recheck(create.execution, principal);
       const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert);
       return await this.pinned(receipt, command, principal, workspace);
     } catch (error) {
