@@ -1590,7 +1590,8 @@
         "src/engine/core/approval",
         "src/domain/core/attempt",
         "src/engine/core/bootstrap-identity",
-        "src/engine/core/system-policy-rows"
+        "src/engine/core/system-policy-rows",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "INSTALLATION"
     },
@@ -2241,7 +2242,12 @@
         "src/adapters/core/native-coding",
         "src/platform/core/errors",
         "src/platform/core/config",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/composition/core/model-use",
+        "src/engine/core/model-use"
       ],
       "plan": "PROVIDERS"
     },
@@ -3775,7 +3781,10 @@
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
         "src/engine/core/config",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/engine/core/model-use",
+        "src/engine/core/model-invocation",
+        "src/domain/core/model-invocation"
       ],
       "plan": "SURFACES"
     },
