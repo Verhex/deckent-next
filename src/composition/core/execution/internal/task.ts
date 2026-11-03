@@ -15,7 +15,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
 import { openConfiguredSiwcWorker } from '#composition/core/siwc/index.js';
 import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker, validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence,
-  type NativeCliWorkerPorts, type NativeCliWorkerWaitReason } from '#adapters/core/native-cli-worker/index.js';
+  type NativeCliWorkerPorts, type NativeCliWorkerWaitReason } from '#adapters/index.js';
 /** Lead fan-in supplies trusted transport/capacity/lease owners and enables retirement at the alpha.63 switch. Never task-authored flags. */
 type NativeCliWorkerOptions = ConfigLoadOptions & { nativeCliWorker?: Readonly<{ ports?: NativeCliWorkerPorts; projectionRetired: boolean }> };
 /** Execute a reserved identity using its pinned task template. The trusted project root is the

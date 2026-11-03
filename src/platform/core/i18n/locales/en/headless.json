@@ -89,7 +89,6 @@
   "headless.agent.k13.unknown.plugins": "The allowed plugin set has not been verified for this CLI profile.",
   "headless.agent.k13.unknown.bridge": "The governed tool bridge has not been verified for this scope.",
   "headless.agent.k13.unknown.environment": "The isolated environment has not been verified for this CLI profile.",
-  "headless.agent.k15c.hostUnresolved": "The working directory could not be verified; this command may reach Deckent's state folder. The host realm is not a security boundary. Approve only if you accept this risk.",
   "headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED": "The earlier worker execution path is closed for new work. Reconnect the subscription to use the governed native worker; existing admitted work keeps its recorded profile.",
   "headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED": "Worker execution has not been verified for this exact CLI profile. Keep the task waiting until retained execution evidence is available; no other execution mode is chosen automatically.",
   "headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT": "The subscription resource is in use. Keep this task waiting or cancel it; capacity is released only after confirmed completion.",

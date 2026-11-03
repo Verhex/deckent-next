@@ -136,3 +136,6 @@ export { withSiwcConnection } from '#adapters/core/siwc-connection/index.js';
 export { withSideEffectFreeSqliteReads } from '#adapters/core/sqlite-read-view/index.js';
 
 export { bindCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
+export * from '#adapters/core/native-cli-worker/index.js';
+export { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+export * from '#adapters/core/native-tool-bridge/index.js';

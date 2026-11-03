@@ -162,6 +162,7 @@ export const CLI_CATALOG = [
   // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
   { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
     action('inspect', 'observe', 'agents.help.action.inspect', 'agents.help.detail', { requires: ['<id>'] }),
+    action('use', 'observe', 'headless.agent.k13.agents.action', 'headless.agent.k13.agents.help', { requires: ['<id>', '--task <id>', '--revision <number>'] }),
     action('skills', 'observe', 'agents.help.action.skills', 'agents.help.detail'),
     action('skill', 'observe', 'agents.help.action.skill', 'agents.help.detail', { requires: ['<id>'] }),
     action('define', 'observe', 'agents.help.action.define', 'agents.help.detail', { requires: ['--input <file>'] }),

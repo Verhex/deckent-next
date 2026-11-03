@@ -1,6 +1,6 @@
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
-import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import { nativeCliAgent } from '#adapters/index.js';
 import { nativeAgentFlagSetDigest, nativeCliHeadlessDefinitionSchema } from '#adapters/index.js';
 import { inspectSubscriptionReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 

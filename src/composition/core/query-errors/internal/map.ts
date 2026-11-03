@@ -1,3 +1,4 @@
+import { NativeCliWorkerError } from '#adapters/index.js';
 import { BeuserContractError, BeuserTransferError, AuthorityChangeError, AgentCatalogStoreError, DecisionApplicationError, MemoryJournalError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
 import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, MemoryError, AgentCatalogError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError, ModelRoleError, CatalogEvolutionError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError, NervousError, type ProviderSpendAccount } from '#engine/index.js';
@@ -20,6 +21,7 @@ const delegationRefusalParams = (facts: NonNullable<AuthorityChangeError['refusa
   people: facts.people.map(person => terminalSafeText(`${person.issuer}/${person.subject}`)).join(', ') });
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
+  if (error instanceof NativeCliWorkerError) return registeredFailure(error.code);
   if (error instanceof ProjectAttachmentError || error instanceof BeuserContractError || error instanceof BeuserTransferError || error instanceof BeuserSurfaceError) return registeredFailure(error.code);
   // alpha.56 U5-S1: the bound's refusal names the cell it stopped at and a hint chosen from display facts (never a decision input).
   if (error instanceof AuthorityChangeError && error.refusal) return registeredFailure(error.code, { params: delegationRefusalParams(error.refusal) });
