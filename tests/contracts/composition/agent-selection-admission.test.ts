@@ -8,6 +8,7 @@ import { defineConfiguredAgent, defineConfiguredSkill, inspectConfiguredAgent, p
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
@@ -96,6 +97,11 @@ it('K8: use-for-work previews exact catalog pins, then the admission port rechec
   await expect(select({ ...graph, tasks: [] }, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
   await expect(select(graph, undefined, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
   await expect(configuredAgentSelection(c.path, c.config.storage.sqlite, integrity, [pin, pin])(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'alternative', scopeId: 's', agentId: 'a-alternative', expectedRevision: null,
+    content: { ...content, name: 'Alternative' } }, f.options, witness);
+  await withConfiguredRunAdmission(f.project, c, f.options, app => app.create({ schemaVersion: 1, commandId: 'pinned-work', scopeId: 's', runId: 'pinned', graph }),
+    undefined, [pin]);
+  expect(f.task('pinned').agent).toMatchObject({ agentId: 'z-invoice', revision: 1, skills: content.skills });
   // Actual Run still needs its policy: the persona and pin cannot authorize create.
   const policyPath = join(f.project, 'd/policy.json');
   const policy = JSON.parse(await readFile(policyPath, 'utf8'));
@@ -104,4 +110,7 @@ it('K8: use-for-work previews exact catalog pins, then the admission port rechec
   await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'a2', scopeId: 's', agentId: 'z-invoice', expectedRevision: 1, content: { ...content, persona: 'New revision' } }, f.options, witness);
   await expect(select(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
   await expect(prepareConfiguredAgentUse(f.project, request, f.options)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await writeFile(policyPath, JSON.stringify(policy));
+  await withConfiguredRunAdmission(f.project, c, f.options, app => expect(app.create({ schemaVersion: 1, commandId: 'stale-pin', scopeId: 's', runId: 'stale', graph }))
+    .rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' }), undefined, [pin]);
 });

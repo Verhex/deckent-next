@@ -12,19 +12,20 @@ import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index
 import { withRunCreationAuthority } from './authority.js';
 import { readWorkerInstructions } from './worker-instructions.js';
 import { prepareMemoryContext } from './memory-context.js';
-import { configuredAgentSelection } from '#composition/core/agent-catalog/index.js';
+import { configuredAgentSelection, type TaskAgentUse } from '#composition/core/agent-catalog/index.js';
 import { configuredSiwcWorkerConnections } from '#composition/core/siwc/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
   work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>,
-  validateProfile?: (profile: import('#domain/index.js').ExecutionProfileDefinition) => undefined) {
+  validateProfile?: (profile: import('#domain/index.js').ExecutionProfileDefinition) => undefined,
+  agentUses: readonly TaskAgentUse[] = []) {
   let warnings: readonly WorkerAdmissionWarning[] = [], compiled = false;
   const { config, layout, document, principal, path } = context, instructions = await readWorkerInstructions(projectRoot, config, options);
   const siwc = await configuredSiwcWorkerConnections(projectRoot, context, options), [scopeId] = principal.scopeIds; // U9-7 producer facts (none while held)
   const store = runAdmissionStorePerCall({ reader: async () => openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
     writer: async () => openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid') });
   return withRunCreationAuthority(context, async (authority, sealing) => {
-  const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity); // S4B-5 memory, S8-1b agent selection
+  const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity, agentUses); // S4B-5 memory, K8 exact work selection
   const app = new RunAdmissionApplication(store, { async verify() { return principal; } }, authority,
     executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null),
     memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
