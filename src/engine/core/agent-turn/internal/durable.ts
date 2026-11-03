@@ -13,6 +13,7 @@ import type { ChatTurnSteerOutcome } from '#domain/index.js';
 export async function runDurableAgentTurn(input: AgentTurnInput & { readonly claim: AgentTurnClaim }, store: AgentTurnStore, ports: AgentTurnPorts):
   Promise<AgentTurnResult & { readonly replayed: boolean; readonly recorded: boolean; readonly steer: ChatTurnSteerOutcome }> {
   const { claim } = input;
+  if (input.nativeSession && input.nativeSession.turnId !== claim.turnId) throw new Error('TOOL_SESSION_TURN_CONFLICT');
   const claimed = await store.claim(claim);
   if (claimed.status === 'finished') {
     const { answer, finish, note: storedNote, rounds, toolCalls, steer = { joined: [], returned: [] } } = claimed.outcome;
