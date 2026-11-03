@@ -67,7 +67,7 @@ export async function readConfiguredHeadlessLogins(section: unknown, scopeId: st
   const root = await realpath(configuredHeadlessLoginRoot(options)).catch(() => null);
   return readHeadlessLogins(section, scopeId, root);
 }
-export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined }>;
+export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined; loginMethod?: string | undefined }>;
 /**
  * s3c `deckent models login`: the person signs the Brain's login dir in with the CLI's own sign-in in their terminal. A person's terminal act: an
  * MCP actor, or a caller without the local interactive-terminal witness, is refused before anything is created or started. `confirm` shows the
@@ -81,5 +81,5 @@ export async function loginConfiguredHeadless(command: HeadlessLoginCommand, opt
   if (!await confirm({ configDir, owned: configDir === owned })) return null;
   // Deckent's own state for this sign-in sits beside the connections' (the same per-login-dir lock), never in the login dir.
   const stateDir = join(stateRoot(env), 'headless', `login-${createHash('sha256').update(configDir).digest('hex').slice(0, 16)}`);
-  return runHeadlessLogin({ family, stateDir, configDir, owned: configDir === owned, executable: command.executable, sso: command.sso === true, env, now: Date.now, isolation: isolation(env) });
+  return runHeadlessLogin({ family, stateDir, configDir, owned: configDir === owned, executable: command.executable, sso: command.sso === true, loginMethod: command.loginMethod, env, now: Date.now, isolation: isolation(env) });
 }

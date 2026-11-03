@@ -261,6 +261,19 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.spawns()).toEqual(['login']);
     // The person's override signs a dir they name in instead (an AI actor never reaches this: refused above for every input).
     expect(await login(yes, true, { configDir: h.configDir })).toMatchObject({ configDir: h.configDir, owned: false });
+    // K3: the existing person witness and declined-card path also fence an explicit Codex login method.
+    const codexDir = join(h.f.data, 'codex-login'); await mkdir(codexDir, { mode: 0o700 });
+    const codexExe = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(codexDir, 'config.toml'), authFromLogin: true });
+    const codexLogin = (loginMethod: string, confirm = yes) => loginConfiguredHeadless({ connection: 'codex-cli-subscription', configDir: codexDir,
+      executable: codexExe, loginMethod }, { env: h.f.env }, confirm, { attest: async () => true });
+    await expect(withMcpPrincipal(() => codexLogin('device-auth'))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await codexLogin('device-auth', async () => false)).toBeNull();
+    expect(await readdir(codexDir)).toEqual([]);
+    for (const method of ['browser', 'device-auth']) expect(await codexLogin(method)).toMatchObject({ exit: 'completed', signedIn: true, authMethod: 'chatgpt' });
+    const logged = (await readFile(join(codexDir, 'config.toml'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[] });
+    expect(logged.filter(row => row.mode === 'login').map(row => row.argv)).toEqual([
+      ['-c', 'cli_auth_credentials_store="file"', 'login'], ['-c', 'cli_auth_credentials_store="file"', 'login', '--device-auth']]);
+    expect((await lstat(join(codexDir, 'auth.json'))).mode & 0o777).toBe(0);
   });
   it('N9: a CLI that is not logged in is refused typed and nothing is written; Codex: the headless profile connects without a worker image, the image gates only the worker activation', async () => {
     const h = await harness(true, { loggedIn: false });

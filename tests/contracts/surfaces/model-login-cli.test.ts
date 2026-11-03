@@ -79,6 +79,18 @@ it('a stopped or unfinished sign-in says so and exits 1; another dir is named as
     + 'Not signed in with a subscription for claude-cli-subscription: the Brain cannot use this directory yet. Run the sign-in again.');
   expect(renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: false, authMethod: null, subscriptionType: null }, 'tr', 'claude-cli-subscription')).toContain('Giriş tamamlanmadı');
 });
+it('K3: an explicit login method follows the same person card; CI, AI and pipe cannot use it', async () => {
+  const f = await project(), calls: unknown[] = [], argv = ['models', 'login', '--connection', 'codex-cli-subscription', '--login-method', 'device-auth'];
+  for (const env of [{ ...f.env, CI: 'true' }, { ...f.env, CODEX_THREAD_ID: 'agent' }])
+    await expect(modelsCommand(argv, { root: f.root, env, stdin: tty(), stdout: capture().sink, ...handler(calls) } as never)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  await expect(modelsCommand(argv, { root: f.root, env: f.env, stdin: Readable.from([]), stdout: capture().sink, ...handler(calls) } as never)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(calls).toEqual([]); expect(card.asked).toEqual([]);
+  card.interactive = true; card.answers = ['apply'];
+  await modelsCommand(argv, { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handler(calls) } as never);
+  expect(calls).toEqual([['login', { connection: 'codex-cli-subscription', loginMethod: 'device-auth' }], ['signed']]);
+  expect(card.asked).toHaveLength(1);
+  await expect(modelsCommand([...argv, '--login-method', 'browser'], { root: f.root, env: f.env } as never)).rejects.toMatchObject({ code: 'CLI_USAGE' });
+});
 it('help names the own dir, the account switch and the refusals', async () => {
   const f = await project(), out = capture();
   await modelsCommand(['models', 'login', '--help'], { root: f.root, env: f.env, stdout: out.sink } as never);
