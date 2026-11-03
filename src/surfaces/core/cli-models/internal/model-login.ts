@@ -6,9 +6,9 @@ import type { ModelCommandContext } from './context.js';
 /** s3c: what the sign-in reported (the composition's result; login kind and plan only, never an account name or a token). */
 export type HeadlessLoginView = Readonly<{ configDir: string; owned: boolean; exit: 'completed' | 'cancelled' | 'failed'; signedIn: boolean; authMethod: string | null;
   subscriptionType: string | null }>;
-export type HeadlessLoginHandler = (command: Readonly<{ connection: string; configDir?: string; executable?: string; sso?: boolean }>, options: ConfigLoadOptions,
+export type HeadlessLoginHandler = (command: Readonly<{ connection: string; configDir?: string; executable?: string; sso?: boolean; loginMethod?: string }>, options: ConfigLoadOptions,
   confirm: (dir: Readonly<{ configDir: string; owned: boolean }>) => Promise<boolean>) => Promise<HeadlessLoginView | null>;
-const FLAGS = ['--connection', '--config-dir', '--executable', '--lang'] as const;
+const FLAGS = ['--connection', '--config-dir', '--executable', '--login-method', '--lang'] as const;
 
 function parse(argv: readonly string[]) {
   const values = new Map<string, string>(); let help = false, json = false, sso = false;
@@ -50,7 +50,7 @@ export async function modelLoginCommand(argv: readonly string[], context: ModelC
   if (!login) throw ErrorRegistry.createError('CLI_USAGE');
   const value = (flag: string) => parsed.values.get(flag);
   const command = { connection: value('--connection')!, ...(value('--config-dir') ? { configDir: value('--config-dir')! } : {}),
-    ...(value('--executable') ? { executable: value('--executable')! } : {}), ...(parsed.sso ? { sso: true } : {}) };
+    ...(value('--executable') ? { executable: value('--executable')! } : {}), ...(value('--login-method') ? { loginMethod: value('--login-method')! } : {}), ...(parsed.sso ? { sso: true } : {}) };
   const view = await login(command, { env: context.env ?? process.env }, async dir => await askModelsCard(context, locale, { title: t('headless.login.card.title', { connection: terminalSafeText(command.connection) }, locale),
     body: [dirLine(dir, locale), t('headless.login.card.what', {}, locale)],
     options: modelsConfirmOptions(locale) }) === 'apply');
