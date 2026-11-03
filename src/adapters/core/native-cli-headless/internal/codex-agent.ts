@@ -25,13 +25,17 @@ function toolResult(value: unknown): NativeAgentToolResult | null { const result
   let decoded: unknown; try { decoded = JSON.parse(block['text']); } catch { return null; }
   const parsed = nativeAgentToolResultSchema.safeParse(decoded); if (!parsed.success || result?.['structured_content'] != null && !isDeepStrictEqual(result['structured_content'], parsed.data)) return null; return parsed.data; }
 /** Observes K4 results, never executes: item.id is stream lifecycle; deckentCallId is facade custody. Caller owns bounds and stop-on-refusal. */
-export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): HeadlessTurn {
+export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS) {
   const entry = prepared.entry.headless.protocolFamily ? nativeCliAgent(prepared.entry.headless.protocolFamily) : null;
   if (!entry || entry.agent.transport.kind !== 'codex-mcp' || !toolSessionSchema.safeParse(session).success || !('maxNotices' in entry.headless.guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
   const fail = (field: string) => refusal ??= reject('invalid-response', { refusal: 'guard', field });
-  return { line(raw) {
+  return { accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
+      if (refusal || !started || completed) return false;
+      let args: unknown; try { args = JSON.parse(call.argumentsJson); } catch { return false; }
+      return [...active.values()].some(item => item['tool'] === call.name && isDeepStrictEqual(item['arguments'], args));
+    }, line(raw: string) {
       if (refusal) return refusal; const line = parseCodexExecLine(raw);
       if (line.kind === 'invalid') return line.reason === 'blank' ? null : fail('json'); if (completed) return fail('after-turn');
       const { type, item, data } = line;
@@ -63,6 +67,6 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
       } else if (type !== 'error' && type !== 'turn.failed') return fail('event');
       refusal = base.line(raw); return refusal;
     },
-    end(exit, egress) { return refusal ? { refusal } : completed && !active.size ? base.end(exit, egress) : null; },
+    end(exit: Parameters<HeadlessTurn['end']>[0], egress: Parameters<HeadlessTurn['end']>[1]) { return refusal ? { refusal } : completed && !active.size ? base.end(exit, egress) : null; },
   };
 }

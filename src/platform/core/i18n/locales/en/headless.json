@@ -103,5 +103,6 @@
   "headless.agent.k13.worker.NATIVE_WORKER_CUSTODY_UNKNOWN": "The native worker’s process custody is unknown. Missing files or a process id do not prove it ended; keep capacity reserved until custody is reconciled.",
   "headless.agent.k13.resource.waiting": "Waiting for the shared subscription resource. No new worker has started; wait for confirmed release or cancel this task.",
   "headless.agent.k13.resource.legacy": "Earlier execution path: this admitted task keeps its recorded profile. New work requires a governed native worker connection.",
-  "headless.agent.k13.agents.action": "prepare an agent and its pinned skills for a task (read-only)"
+  "headless.agent.k13.agents.action": "prepare an agent and its pinned skills for a task (read-only)",
+  "headless.agent.k20.verifying": "Checking the CLI tool surface in this first guarded turn."
 }

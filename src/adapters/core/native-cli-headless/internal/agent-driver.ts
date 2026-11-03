@@ -38,6 +38,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
     || execution.ownerUid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
   const lifetime = new AbortController(), calls = new Map<string, NonNullable<ReturnType<CodexAgentResultLookup>>>();
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
+  let codex: ReturnType<typeof codexAgentTurn> | undefined;
   let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, used = false;
   const port: ToolSessionPort = { session: input.session.session,
     async propose(call, correlation, signal) {
@@ -45,6 +46,10 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
       if (entry.agent.transport.kind === 'claude-mcp') {
         if (!claude) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-order' });
         return claude.propose(call, correlation, signal);
+      }
+      if (!codex?.accepts(call)) {
+        refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'; lifetime.abort();
+        refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-order' });
       }
       const result = await input.session.propose(call, correlation, AbortSignal.any([signal, lifetime.signal]));
       // Retain the exact facade result; JSONL item ids never stand in for Deckent call custody.
@@ -86,7 +91,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
             cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, onDelta: delta }) : undefined;
-          const turn = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
+          const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
           let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
           const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => Object.freeze({ kind: 'rejected',
             evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, reason.reason, reason.status,
@@ -121,9 +126,9 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               refusal = finished.reason; await recordNativeAgentObservation(profile, preflight, execution, input.now, refusal);
               return rejectResult(reject('invalid-response', { refusal: 'guard', field: 'agent-surface' }));
             }
-            if (stopped) {
+            if (stopped || refusal) {
               refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'; await recordNativeAgentObservation(profile, preflight, execution, input.now, refusal);
-              return rejectResult(stopped);
+              return rejectResult(stopped ?? reject('invalid-response', { refusal: 'guard', field: 'proposal-order' }));
             }
             if (combined.aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
             if (evidence.limit || evidence.reason === 'output-limit' || evidence.reason === 'line-limit' || evidence.stdoutTruncated || evidence.stderrTruncated)

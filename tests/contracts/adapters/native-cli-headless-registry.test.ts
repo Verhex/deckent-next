@@ -132,7 +132,11 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     expect(nativeAgentFlagSetDigest({ ...claude, bridge: { ...claude.bridge, bodyMaxBytes: claude.bridge.bodyMaxBytes + 1 } })).not.toBe(nativeAgentFlagSetDigest(claude));
     expect(claude.agent.args).toEqual([...claude.headless.args.filter((arg, index, args) => arg !== '--safe-mode' && arg !== '--disallowedTools' && args[index - 1] !== '--disallowedTools'),
       '--mcp-config', '{mcpConfigFile}', '--allowedTools', '{toolList}', '--max-turns', '{maxTurns}']);
-    expect(codex.agent.args).toEqual(codex.headless.args);
+    expect(codex.agent.args).toEqual([codex.headless.args[0], '-c', 'agents.enabled=false', '-c', 'features.plugins=false', ...codex.headless.args.slice(1)]);
+    expect(codex.agent.configSources).toEqual([
+      { value: 'agents.enabled=false', source: expect.stringContaining('config/mod.rs:1690') },
+      { value: 'features.plugins=false', source: expect.stringContaining('manager.rs:2894') },
+    ]);
     expect(codex.agent.transport).toMatchObject({ mcpConfig: { url: '{bridgeUrl}', bearer_token_env_var: '{turnTokenEnv}',
       required: true, enabled_tools: '{toolNames}', omit_tools_from: ['deferred', 'code_mode'], default_tools_approval_mode: 'approve', tool_timeout_sec: '{approvalTtlSeconds}' } });
     expect(claude.agent.loginMethods.map(row => row.method)).toEqual(['claudeai']);

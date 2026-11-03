@@ -427,3 +427,21 @@ The detailed contracts below accompany the concise comments in the touched adapt
 `NativeCliCapabilities.discovery`: How `disabled` discovery is realised. Argv: non-empty `disabledArgs`, the help flags they need and hidden probes whose invalid value must draw the exact parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Checkout (C2, owner Q4 2026-10-23): a CLI without a suppression flag gets a worker checkout without the registry's `instructionSurface` (G1: one list for checkout shaping and the delivery floor; empty `disabledArgs`, no flags, no probes). Null = no `disabled` mode.
 
 `createAgentShell.posture`: v6 PROMPT-POSTURE: the posture the system prompt states for this turn's shell, from the same realm resolution and open-view rule its calls take. A full-access turn's calls run as `full-access` or `owner-approved`, both open (`shellWritePosture`; the tier does not change `open` or the floor for either); any other turn's calls are closed whatever their authority. In the open view the turn's write floor is the configuration file (turn.ts): read-only for a `full-access` call, and for an `owner-approved` one as `shellWritePosture` says (W3: the owner's card never opens configuration content). The realm is known now: the configuration, the memoized host measurement and the turn's providers are those of every call. Per call only an exception differs, and that call's result says so (its `sandbox:` marker and notices): a full-access call whose grant no longer holds runs unattended in the closed view, and an open view that cannot be built (a state root holding HOME, the HOME walk over its bound) refuses the call.
+
+
+### K20: first guarded subscription turn
+
+The invocation owner may run a no-model preflight when surface observations are absent or incomplete.
+CLI, login, environment and the exact execution identity must pass before this verification turn opens;
+known negative observations keep tools closed. Readiness readers remain read only. The existing running-turn
+cancellation controller owns the no-model probe too; it transfers into the admitted turn, and an early
+cancellation records a cancelled turn without model/tool work. Steering explicitly waits for admission. Claude init/plugin guards
+and Codex item order/allowlists precede proposals; the ordinary policy, approval and effect owners remain
+unchanged. A completed guarded turn records the current profile/agent-flag digests; a surface refusal records
+a negative observation and subsequent messages use text chat. No alternate tool envelope is introduced.
+The same retained observation is readable for workers; it is prerequisite evidence, never the separate F08
+worker execution/settlement proof. Registry capability lookup includes agent-capable headless chat families.
+Pure command schemas, environment/argv shaping, Claude stream validation and diagnostic projection live in
+`capabilities/core/native-agent-execution`; asset loading, filesystem custody and spawning stay in adapters.
+Codex agent argv disables agents and plugins using sourced registry data; the v1 text argv/digest stays unchanged.
+Actual CLI subagent suppression must be verified in owner R / the assembled BeUser walk; fake CLI cannot prove it.

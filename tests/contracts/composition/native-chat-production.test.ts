@@ -1,3 +1,4 @@
+import { configuredNativeChatReadiness } from '#composition/core/subscription-readiness/index.js';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
@@ -9,17 +10,14 @@ import { brainProviderFixture } from '../support/brain-provider.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 import { DRIVER } from '../support/pty-steps.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli } from '../../fixtures/native-headless/agent.js';
-import { testIsolation } from '../../fixtures/native-headless/connection.js';
 import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
-import { createNativeAgentDriver, preflightNativeAgent, readNativeAgentObservation } from '#adapters/core/native-cli-headless/index.js';
+import { readNativeAgentObservation } from '#adapters/core/native-cli-headless/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
-import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, type AgentTurnStreamEvent } from '#domain/index.js';
+import { modelInvocationProfileSchema, type AgentTurnStreamEvent } from '#domain/index.js';
 import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
-import { createConfiguredNativeChatRuntime } from '#composition/core/agent-turn/index.js';
-import { clearConfigCache, resolveProductLayout, snapshotKnownSecrets } from '#platform/index.js';
+import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 const closers: (() => Promise<unknown>)[] = [];
@@ -68,21 +66,8 @@ async function fixture(family: string) {
   await writeFile(join(f.data, 'policy.json'), JSON.stringify(policy)); clearConfigCache();
   await writeFile(join(f.project, 'input.txt'), 'BUSINESS-READBACK\n');
   const profile = modelInvocationProfileSchema.parse(config.provider_invocation_profiles.profiles[0]);
-  const runtime = createConfiguredNativeChatRuntime(f.project, options)!;
   expect((await describeTerminalChat(f.project, options)).tools).toBe('none');
-  const { execution } = await preflightNativeAgent(profile, Date.now, testIsolation);
-  const session = { schemaVersion: 1 as const, turnId: 'explicit-synthetic-inspection', generation: 1, approvalTtlMs: 120_000, tools: [] };
-  const closure = { turnId: session.turnId, generation: 1, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
-  const driver = createNativeAgentDriver({ profile, execution, now: Date.now, isolation: testIsolation, session: { session,
-    propose: async () => { throw new Error('inspection-has-no-tools'); }, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) } });
-  const bridge = await createNativeToolBridge({ port: driver.port, bridge: nativeCliAgent(family)!.bridge, limits: runtime.limits,
-    correlationKind: family === families[0] ? 'claude-tool-use' : 'codex-mcp' });
-  try {
-    const native = driver.native(bridge, { configured: snapshotKnownSecrets([]), turn: snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: bridge.turnToken }]) });
-    const binding = parseModelBindingDefinition({ encodingVersion: 1, provider: { id: f.reference.providerId, version: 1 }, model: config.provider_catalog.providers[0].models[0] });
-    expect(await native.send(await native.prepare(profile, binding, { model: 'vendor/model', messages: [{ role: 'system', content: '' }, { role: 'user', content: 'K16-SEAL' }], stream: false }))).toMatchObject({ schemaVersion: 1 });
-  } finally { await bridge.close(); await driver.close(); }
-  expect((await describeTerminalChat(f.project, options)).tools).toBe('available');
+  expect(await readNativeAgentObservation(profile)).toBeNull();
   await settleOnboarding(resolveProductLayout({ projectRoot: f.project, root: f.data }));
   const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: f.project, env: options.env, stdio: ['ignore', 'pipe', 'pipe'] });
   let serviceOut = '', serviceErr = '';
@@ -113,6 +98,20 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
       return result;
     };
     expect(await call('K16-READ', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    expect(events.some(event => event.kind === 'text' && event.text.includes('first guarded turn'))).toBe(true);
+    const firstSeal = await readNativeAgentObservation(h.profile);
+    expect(firstSeal).toMatchObject({ cli: true, login: true, environment: true, toolSurface: true, plugins: true, bridge: true });
+    const firstRecord = JSON.parse(await readFile(join(String(h.profile.adapter.definition['stateDir']), `agent-${firstSeal!.execution.profileDigest}.json`), 'utf8'));
+    expect(firstRecord.observed).toMatchObject(firstSeal!);
+    const reader = configuredNativeChatReadiness(h.f.project, h.options);
+    const query = { surface: 'worker' as const, scopeId: h.profile.scopeId, reference: h.profile.reference,
+      profileDigest: firstSeal!.execution.profileDigest, flagSetDigest: firstSeal!.execution.flagSetDigest };
+    expect(await reader.read(query)).toEqual(firstSeal);
+    expect(await reader.read({ ...query, flagSetDigest: '0'.repeat(64) })).toBeNull();
+    expect((await describeTerminalChat(h.f.project, h.options)).tools).toBe('available');
+    expect(await call('K16-READ-SECOND', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    const secondSeal = await readNativeAgentObservation(h.profile);
+    expect(secondSeal).toMatchObject({ execution: firstSeal!.execution });
     expect(await call('K16-WRITE', 'allow', async () => {
       expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
       // Actual gateway idle=30s is crossed while the authoritative approval card remains pending.
@@ -137,7 +136,7 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     expect(await readFile(join(h.f.project, 'revoked.txt'), 'utf8').catch(() => null)).toBeNull();
     expect(JSON.stringify(events)).not.toContain(h.canary);
     expect(await readFile(h.traceFile, 'utf8')).not.toContain(h.canary);
-    if (process.env['K16_PROOF_DIR']) await writeFile(join(process.env['K16_PROOF_DIR'], `compiled-${nativeCliAgent(family)!.id}${process.env['CI'] === 'true' ? '-ci' : ''}.json`), JSON.stringify({ events, decisions }, null, 2));
+    if (process.env['K16_PROOF_DIR']) await writeFile(join(process.env['K16_PROOF_DIR'], `compiled-${nativeCliAgent(family)!.id}${process.env['CI'] === 'true' ? '-ci' : ''}.json`), JSON.stringify({ events, decisions, firstRecord, firstSeal, secondSeal }, null, 2));
   }
 }, 150_000);
 

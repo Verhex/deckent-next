@@ -407,11 +407,16 @@
       "agent": {
         "schemaVersion": 1,
         "capability": "NativeAgentExecution",
-      "revision": "codex-agent-2026-11-03-r1",
+      "revision": "codex-agent-2026-11-03-r2",
       "observationMaxAgeMs": 300000,
         "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03); K16 freshness policy seed 2026-11-03: 5 minute observation ceiling, not a provider measurement",
-        "args": [
-          "exec",
+        "configSources": [
+        { "value": "agents.enabled=false", "source": "proof/ALPHA63/A0/CODEX-YUZEY-ARASTIRMA.md:4-7 (rust-v0.166.0 config_toml.rs:766-769; config/mod.rs:1690)" },
+        { "value": "features.plugins=false", "source": "proof/ALPHA63/A0/CODEX-YUZEY-ARASTIRMA.md:11-14 (rust-v0.166.0 features/src/lib.rs:1737-1742; manager.rs:2894)" }
+      ],
+      "args": [
+        "exec",
+          "-c", "agents.enabled=false", "-c", "features.plugins=false",
           "--json",
           "--color",
           "never",

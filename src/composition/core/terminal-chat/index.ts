@@ -3,4 +3,4 @@ export { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat
 export { prepareTerminalChatCommand, terminalModelHere } from './internal/turn.js';
 export { terminalSecretGrantOffer } from './internal/grant-card.js';
 export { assertConfiguredTerminalCredential } from './internal/credential.js';
-export { inspectNativeChat } from './internal/native.js';
+export { inspectNativeChat, nativeChatVerificationExecution } from './internal/native.js';

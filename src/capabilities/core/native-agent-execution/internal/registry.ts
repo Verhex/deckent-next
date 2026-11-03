@@ -39,10 +39,12 @@ const execJsonTransportSchema = z.strictObject({ kind: z.literal('codex-mcp'), s
 /** The agent profile inherits all v1 environment, isolation and output bounds. It has its own argv and forbidden set. */
 export const nativeCliAgentSchema = z.strictObject({ schemaVersion: z.literal(1), capability: z.literal('NativeAgentExecution'), revision: text, source: text,
   observationMaxAgeMs: positive.optional(),
+  configSources: z.array(z.strictObject({ value: text, source: text }).readonly()).readonly().optional(),
   args, forbiddenFlags: z.array(flag).min(1).readonly(), envSource: z.literal('headless'), loginMethods,
   timeoutSource: z.literal('tool-session-approval-ttl'), maxTurnsSource: z.literal('admission-policy'),
   transport: z.discriminatedUnion('kind', [streamJsonTransportSchema, execJsonTransportSchema]),
 }).refine(value => {
+  if (value.configSources?.some(row => !value.args.includes(row.value))) return false;
   if (value.args.some(arg => value.forbiddenFlags.some(flag => arg === flag || arg.startsWith(flag + '=')))) return false;
   if (value.transport.kind !== 'claude-mcp') return true;
   const at = value.args.indexOf(value.transport.mcpConfig.flag);

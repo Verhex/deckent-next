@@ -1,6 +1,6 @@
 import { ModelInvocationError, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { resolveModelUse } from '#engine/index.js';
-import { createNativeAgentDriver, nativeCliAgentBridge, nativeEgressLimits, shellSandboxCapabilities } from '#adapters/index.js';
+import { createNativeAgentDriver, preflightNativeAgent, nativeCliAgentBridge, nativeEgressLimits, shellSandboxCapabilities } from '#adapters/index.js';
 import { modelUseReadPorts } from '#composition/core/model-use/index.js';
 import { configuredNativeChatReadiness } from '#composition/core/subscription-readiness/index.js';
 import { globalStateRoot, type ConfigLoadOptions } from '#platform/index.js';
@@ -24,6 +24,10 @@ export function createConfiguredNativeChatRuntime(projectRoot: string, options: 
       const pin = pins.get(check.pin);
       if (!pin) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
       await resolveModelUse(ports, projectRoot, profile, actor, { action: 'recheck', pin });
+    },
+    async preflight(profile, signal) {
+      await preflightNativeAgent(profile, Date.now,
+        async () => (await shellSandboxCapabilities(globalStateRoot(options.env ?? process.env))).bubblewrap, signal);
     },
     driver: async input => createNativeAgentDriver({ ...input, now: Date.now,
       isolation: async () => (await shellSandboxCapabilities(globalStateRoot(options.env ?? process.env))).bubblewrap }),

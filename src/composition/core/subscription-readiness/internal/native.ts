@@ -11,7 +11,7 @@ import type { SubscriptionReadinessReader } from './readiness.js';
 /** Exact chat observation reader shared by the service and terminal. This never performs an inspection run. */
 export function configuredNativeChatReadiness(projectRoot: string, options: ConfigLoadOptions = {}): SubscriptionReadinessReader {
   const reader: SubscriptionReadinessReader = { async read(query) {
-    if (query.surface !== 'chat') return null;
+    if (query.surface !== 'chat' && query.surface !== 'worker') return null;
     const config = await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>;
     const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
       .map(value => modelInvocationProfileSchema.parse(value)).find(profile => profile.scopeId === query.scopeId
