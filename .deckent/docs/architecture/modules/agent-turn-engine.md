@@ -505,12 +505,14 @@ a closed bubblewrap view that first hides its state ancestor, then binds only th
 sibling state remains absent. This trusted composition-only layout rejects open views; ordinary chat
 shell layouts are unchanged. Generic template/probe shaping and the native bound wrapper live in
 `capabilities/core/native-agent-execution`; adapters supply registry data and the existing realm owner.
-The environment-to-F08/retained-output path does not establish coding-task acceptance:
-`GitWorkspacePatchSource` still restores Docker custody for native worker records, so evaluation can
-park with `PATCH_UNSAFE`. Native patch-custody integration remains a separate lead scope.
+`GitWorkspacePatchSource` selects capture and release observation from the recorded supervisor adapter:
+native workers use their exact retained terminal custody, while Docker records keep Docker observation.
+Unknown or mismatched terminal custody cannot produce a patch; path, symlink and snapshot bounds remain
+unchanged. Patch retention, task acceptance, queue admission and authorized custody release retain their
+existing application owners; a worker's successful exit alone does not establish coding-task acceptance.
 Legacy profile selection and `projectionRetired=false` are unchanged. Real-account R08, assembled BeUser,
 independent review and hosted acceptance remain separate from author fixtures and compiled evidence.
-The background worker currently has no production producer carrying hard-floor turn-bound decision
-capabilities to a human card. Its ordinary CLI/PTY approval refuses with `APPROVAL_ASSURANCE_INSUFFICIENT`;
-the readonly-write author fixture uses an explicit trusted ring plus a real PTY witness. That fixture does
-not close the production interaction. The common runtime-service/approval surface needs lead integration.
+Background worker approval binds the fresh deciding terminal peer through
+`attendedWorkerApprovalInput` before the existing approval application consumes its turn-bound capability.
+This does not lower the self-source or static hard floors. Author fixtures, compiled customer-project
+execution and assembled self-source interaction remain separate evidence scopes.
