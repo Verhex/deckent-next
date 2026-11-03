@@ -1,4 +1,4 @@
-import { persistedNumber, catalogModelRetired, workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
+import { workerTaskParameters, persistedNumber, catalogModelRetired, workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { z } from 'zod';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
@@ -44,7 +44,7 @@ const pinned = z.strictObject({ channelId: z.string(), modelId: z.string(), auxi
 const subscriptionSchema = z.looseObject({ schemaVersion: persistedNumber(z.number()), provider: z.enum(['claude', 'codex', 'cursor']),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
   preflight: z.looseObject({ cliVersion: z.string() }).optional(), model: pinned.optional() });
-const taskSchema = z.looseObject({ taskId: z.string(), profile: z.looseObject({ parameters: z.looseObject({ nativeSubscription: z.unknown().optional() }) }) });
+const taskSchema = z.looseObject({ taskId: z.string(), profile: z.looseObject({ parameters: z.preprocess(workerTaskParameters, z.looseObject({ nativeSubscription: z.unknown().optional() })) }) });
 const today = (nowMs: number) => new Date(nowMs).toISOString().slice(0, 10);
 /** The UTC day a catalog lifecycle date is compared with (admission, the activation cascade and an explicit activation). */
 export const catalogDay = today;

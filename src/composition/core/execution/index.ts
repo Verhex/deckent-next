@@ -1,3 +1,9 @@
 export { openConfiguredExecution } from './internal/open.js';
 export { executeConfiguredTask } from './internal/task.js';
+export type { NativeCliWorkerOptions } from './internal/task.js';
 export { releaseConfiguredPreflightProbes, settleConfiguredEnvironmentProbes } from './internal/preflight.js';
+export { executionTaskBase, validateExecutionSupervisorProfile, executionTaskSilenceDeadline, executionTaskHiddenPaths, executionTaskEffects } from '#adapters/index.js';
+export { nativeWorkerAdmission } from '#composition/core/runs/index.js';
+export { createConfiguredNativeCliWorkerPorts } from './internal/native-runtime.js';
+export type { NativeCliWorkerRuntime } from './internal/native-runtime.js';
+export { recordedTaskSupervisor, inspectRecordedTaskActivity, taskProfileObservesWorker } from '#adapters/index.js';

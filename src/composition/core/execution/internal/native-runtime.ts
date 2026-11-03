@@ -1,0 +1,58 @@
+import type { NativeAgentExecution } from '#capabilities/index.js';
+import { withMcpPrincipal, nativeAgentFlagSetDigest, nativeCliAgent, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
+import { inspectSubscriptionReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { nativeCliWorkerFence } from '#adapters/index.js';
+import { recheckNativeWorkerUse, resolveNativeWorkerUse, assertNativeWorkerReservation } from '#composition/core/runs/index.js';
+
+/** K16 owns the shared isolated driver/readiness; K1 owns the tool session. No invocation claim is opened for this Run worker. */
+export interface NativeCliWorkerRuntime {
+  readonly readiness: SubscriptionReadinessReader;
+  f08(query: Readonly<{ scopeId: string; reference: import('#domain/index.js').ModelReference; binding: NativeCliWorkerBinding }>): Promise<NativeAgentExecution | null>;
+  readonly driver: NativeCliWorkerPorts['driver'];
+  readonly openTools: NativeCliWorkerPorts['openTools'];
+  readonly bridgeLimits: NativeCliWorkerPorts['bridgeLimits'];
+  readonly checkEnvironment?: NativeCliWorkerPorts['checkEnvironment'];
+}
+export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: string, store: Pick<SqliteAttemptStore, 'loadRun' | 'loadRunResourceCapacity' | 'loadBoundDispatch' | 'load' | 'loadRunReceipt'>,
+  options: ConfigLoadOptions, runtime: NativeCliWorkerRuntime): NativeCliWorkerPorts {
+  const recheck: NativeCliWorkerPorts['recheck'] = async (request, binding, signal) => {
+    if (signal.aborted || request.identity.scopeId !== scopeId || !await nativeCliWorkerFence(store, request.identity)) throw ErrorRegistry.createError('DISPATCH_FENCED');
+    await recheckNativeWorkerUse(root, scopeId, binding, options);
+  };
+  return {
+    async readiness(binding) {
+      const current = await resolveNativeWorkerUse(root, scopeId, binding, options), entry = nativeCliAgent(binding.protocolFamily);
+      if (!entry) return { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' };
+      return inspectSubscriptionReadiness({ surface: 'worker', scopeId, reference: current.profile.reference,
+        profileDigest: binding.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) }, runtime.readiness);
+    },
+    async f08(binding) {
+      const current = await resolveNativeWorkerUse(root, scopeId, binding, options);
+      return runtime.f08({ scopeId, reference: current.profile.reference, binding });
+    },
+    recheck,
+    capacity: { async acquire(request, binding, signal) {
+      await recheck(request, binding, signal);
+      const run = await store.loadRun(scopeId, request.identity.runId);
+      if (!run || !assertNativeWorkerReservation(run, request, binding, await store.loadRunResourceCapacity(run))) return { state: 'waiting' };
+      // Reservation/progress in the existing ledger owns both acquisition and release. Unknown remains occupied.
+      return { state: 'acquired', async release() {} };
+    } },
+    async openTools(request, binding, signal, context) {
+      await recheck(request, binding, signal);
+      const tools = await withMcpPrincipal(() => runtime.openTools(request, binding, signal, context));
+      return { session: tools.session, propose: (...args) => withMcpPrincipal(() => tools.propose(...args)),
+        cancel: () => withMcpPrincipal(() => tools.cancel()), revoke: () => withMcpPrincipal(() => tools.revoke()) };
+    },
+    async driver(input, signal) {
+      const driver = await withMcpPrincipal(() => runtime.driver(input, signal));
+      return { ...driver, tools: driver.tools, run: (...args) => withMcpPrincipal(() => driver.run(...args)), close: () => withMcpPrincipal(() => driver.close()) };
+    },
+    ...(runtime.checkEnvironment ? { checkEnvironment: async (...args: Parameters<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>) => {
+      const [request, binding, , , signal] = args; await recheck(request, binding, signal);
+      await withMcpPrincipal(() => runtime.checkEnvironment!(...args));
+    } } : {}),
+    bridgeLimits: runtime.bridgeLimits,
+  };
+}

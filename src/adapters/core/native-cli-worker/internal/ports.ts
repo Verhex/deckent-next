@@ -1,6 +1,6 @@
 import type { NativeAgentExecution, NativeAgentReadiness, ToolSessionPort } from '#capabilities/index.js';
 import type { SandboxRequest } from '#engine/index.js';
-import type { WorkerEffort } from '#domain/index.js';
+import type { WorkerEffort, WorkerEvent } from '#domain/index.js';
 import type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 import type { createNativeToolBridge, NativeToolBridgeLimits } from '#adapters/core/native-tool-bridge/index.js';
 import type { NativeCliWorkerBinding } from './profile.js';
@@ -9,7 +9,8 @@ export type NativeCliWorkerWaitReason = 'NATIVE_PROJECTION_RETIRED' | 'NATIVE_WO
   | 'NATIVE_AGENT_CAPABILITY_UNSEALED' | 'NATIVE_AGENT_ENVIRONMENT_REFUSED' | 'NATIVE_AGENT_CLI_UNAVAILABLE'
   | 'NATIVE_AGENT_LOGIN_REQUIRED' | 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' | 'NATIVE_AGENT_PLUGIN_UNEXPECTED' | 'NATIVE_AGENT_BRIDGE_UNAVAILABLE';
 export type NativeCliWorkerReadiness = Readonly<{ state: 'ready'; execution: NativeAgentExecution } | { state: 'waiting'; reason: NativeCliWorkerWaitReason }>;
-export type NativeCliWorkerProcessResult = Readonly<{ termination: 'confirmed' | 'unverified'; status: 'completed' | 'failed' | 'cancelled'; text: string }>;
+export type NativeCliWorkerProcessResult = Readonly<{ termination: 'confirmed' | 'unverified'; status: 'completed' | 'failed' | 'cancelled'; text: string;
+  refusal?: import('#capabilities/index.js').NativeAgentReadinessReason }>;
 /** Admitted tool-realm resources; never passed to the login-bearing CLI realm. */
 export type NativeCliWorkerToolContext = Readonly<Pick<DockerSupervisorOptions, 'readOnlyMounts' | 'inputs' | 'handoffInputs'>>;
 export interface NativeCliWorkerDriver {
@@ -18,6 +19,7 @@ export interface NativeCliWorkerDriver {
   /** Must use the existing isolated headless runner, private login lock and bounded process owner; never host execution. */
   run(bridge: Awaited<ReturnType<typeof createNativeToolBridge>>, signal: AbortSignal): Promise<NativeCliWorkerProcessResult>;
   close(): Promise<void>;
+  inspectActivity?(): Promise<Readonly<{ state: 'running' | 'exited' | 'unknown'; handle: string | null }>>;
 }
 export interface NativeCliWorkerPorts {
   readiness(binding: NativeCliWorkerBinding): Promise<NativeAgentReadiness>;
@@ -30,8 +32,12 @@ export interface NativeCliWorkerPorts {
     Readonly<{ state: 'waiting' }> | Readonly<{ state: 'acquired'; release(): Promise<void> }>> };
   /** Existing K1 effect/approval/audit owner, always AI/MCP, scoped to this exact Attempt workspace. */
   openTools(request: SandboxRequest, binding: NativeCliWorkerBinding, signal: AbortSignal, context: NativeCliWorkerToolContext): Promise<ToolSessionPort>;
+  /** Probe requirements in the tool realm, never in the login realm or through the base Docker profile. */
+  checkEnvironment?(request: SandboxRequest, binding: NativeCliWorkerBinding, requirements: ReturnType<typeof import('#domain/index.js').environmentRequirementsSchema.parse>,
+    context: NativeCliWorkerToolContext, signal: AbortSignal): Promise<void>;
   /** Shared K2/K3 transport composition. Deliberately receives no workspace, Docker socket or task argv. */
   driver(input: Readonly<{ binding: NativeCliWorkerBinding; tools: ToolSessionPort; model: string; system: string; user: string;
-    deadlineMs: number; outputBytes: number; execution: NativeAgentExecution; effort?: WorkerEffort; maxTurns?: number }>, signal: AbortSignal): Promise<NativeCliWorkerDriver>;
+    deadlineMs: number; outputBytes: number; execution: NativeAgentExecution; effort?: WorkerEffort; maxTurns?: number;
+    onEvents?: (events: readonly WorkerEvent[]) => void }>, signal: AbortSignal): Promise<NativeCliWorkerDriver>;
   readonly bridgeLimits: NativeToolBridgeLimits;
 }

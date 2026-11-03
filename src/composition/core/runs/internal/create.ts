@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, dockerTaskSilenceDeadline, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
+import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -14,6 +14,8 @@ import { readWorkerInstructions } from './worker-instructions.js';
 import { prepareMemoryContext } from './memory-context.js';
 import { configuredAgentSelection, type TaskAgentUse } from '#composition/core/agent-catalog/index.js';
 import { configuredSiwcWorkerConnections } from '#composition/core/siwc/index.js';
+import { executionTaskBase, executionTaskSilenceDeadline } from '#adapters/index.js';
+import { nativeWorkerAdmission } from './native-worker.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
   work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>,
@@ -28,19 +30,23 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
   const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity, agentUses); // S4B-5 memory, K8 exact work selection
   const app = new RunAdmissionApplication(store, { async verify() { return principal; } }, authority,
     executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null),
-    memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
-      refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: dockerTaskSilenceDeadline, agents,
+    { ...memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
+      refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: executionTaskSilenceDeadline, agents,
       validation: { profile(value) {
         if (value.adapter.id === 'beuser' && validateProfile) return validateProfile(value);
         try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
-        try { validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
-        if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(value).options, config.execution.docker); return undefined;
+        let base;
+        try { base = executionTaskBase(value); validateDockerTaskProfile(base); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+        if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(base).options, config.execution.docker); return undefined;
       }, criterion(evaluator, criterion) { try { return validateInstalledCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } }, isTemplate: isNativeCodingTemplate },
       compiler: { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
         bind(value, selection, evidence) { try { return bindNativeWorkerEffort(value, selection, evidence); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
         compile(template, input, selection, evidence, task) { compiled = true; if (instructions.oversize) throw ErrorRegistry.createError('WORKER_INSTRUCTIONS_TOO_LARGE');
-          return memory.compile(task?.taskId, extra => { try { return bindSiwcWorker(compileNativeCodingWorkInput(template, input, selection, evidence, [...instructions.parts, ...extra], task?.agent), siwc, scopeId ?? ''); }
-            catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } }); } } })));
+          return memory.compile(task?.taskId, extra => { try {
+            const profile = compileNativeCodingWorkInput(template, input, selection, evidence, [...instructions.parts, ...extra], task?.agent);
+            return isNativeCliWorkerProfile(profile) ? profile : bindSiwcWorker(profile, siwc, scopeId ?? '');
+          } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } }); } } })),
+      ...nativeWorkerAdmission(projectRoot, scopeId ?? '', options) });
   // A withheld snapshot is reported only when this admission compiled a worker prompt; a replay or a template-free Run says nothing.
   return work(app, authority, () => [...(compiled && instructions.withheld ? [instructions.withheld] : []), ...warnings, ...memory.warnings()], agents);
   });

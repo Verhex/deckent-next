@@ -3,9 +3,14 @@ import { resolveDockerTaskProfile } from '#adapters/core/docker-supervisor/index
 import { nativeCliCommand, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { assertNativeWorkerBinding, NativeWorkerBindingError } from './binding.js';
 import { promptHash } from './composition.js';
+import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile } from '#adapters/core/native-cli-worker/index.js';
 /** Apply the same admitted selection to an operator-prepared pinned profile. Never alters prompt, model, work bounds or executable. Given catalog
  * `evidence` (owner K1/K2 2026-10-22), the pin's session-start names / provider-choice flag are replaced by exactly that data. */
 export function bindNativeWorkerEffort(profile: ExecutionProfileDefinition, input: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition {
+  if (isNativeCliWorkerProfile(profile)) {
+    const { base, binding } = resolveNativeCliWorkerProfile(profile);
+    return executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(bindNativeWorkerEffort(base, input, evidence), binding), id: profile.id, version: profile.version });
+  }
   assertNativeWorkerBinding(profile);
   const selected = workerEffortSchema.parse(input), resolved = resolveDockerTaskProfile(profile), binding = resolved.nativeSubscription;
   if (!binding?.model) throw new NativeWorkerBindingError();

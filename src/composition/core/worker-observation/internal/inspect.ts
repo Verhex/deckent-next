@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, mapBounded, HOST_LIMITS_REGISTRY, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteInventoryReader, DockerSupervisor, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
+import { openSqliteInventoryReader, inspectRecordedTaskActivity, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
 import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, readThrough,
   type DispatchInventoryEntry, type MonitorRecall, type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -54,7 +54,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
           if (query.open && entry.terminal) return { ...basic, resources, diagnostics: ['info:ledger-only'] };
           try {
             if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
-            const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
+            const activity = await inspectRecordedTaskActivity(record.profile, record.request).catch(() => ({ state: 'unknown' as const, handle: null }));
             let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
               .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
             const evidence = await recall(JSON.stringify(['models', entry.identity, files?.usage ?? null]), async () => observeAttemptWorkerModels(await reader(),

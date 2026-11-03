@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { workerEffortSchema, modelUsageEvidenceSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
+import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile } from '#adapters/core/native-cli-worker/index.js';
 
 export class NativeWorkerBindingError extends Error {
   constructor() { super('WORKER_MODEL_BINDING_MISMATCH'); this.name = 'NativeWorkerBindingError'; }
@@ -20,6 +21,7 @@ const same = (left: readonly string[], right: readonly string[]) => left.length 
  * engine. Profiles without a v2 binding are not checked here (Run admission refuses them as unpinned).
  */
 export function assertNativeWorkerBinding(profile: ExecutionProfileDefinition): void {
+  if (isNativeCliWorkerProfile(profile)) return assertNativeWorkerBinding(resolveNativeCliWorkerProfile(profile).base);
   const raw = (profile.parameters as Record<string, unknown>)['nativeSubscription'];
   if (!raw || typeof raw !== 'object' || (raw as { schemaVersion?: unknown }).schemaVersion !== 2) return;
   const binding = pinnedSchema.safeParse(raw), argv = argvSchema.safeParse((profile.parameters as Record<string, unknown>)['argv']);

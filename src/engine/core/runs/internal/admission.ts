@@ -4,6 +4,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/core/workspaces/index.js';
 import { runCreateSchema, RunStoreError, type RunStore, type RunCreate, type RunReceipt } from './store.js';
+import { runCapacityBindingsSchema, type RunCapacityBinding } from './capacity-resource.js';
 import { RunCreationAuthority, type RunAdmissionEvaluation } from './authority.js';
 import { projectRunView } from './view.js';
 export const runAdmissionSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
@@ -11,8 +12,7 @@ export const runAdmissionSchema = z.strictObject({ schemaVersion: z.literal(1), 
 export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 /** Engine-only deterministic provenance, never an ingress field of run create. */
 export type BoundRunAdmission = RunAdmission & { readonly proposal?: RunProposalBinding };
-/** D7a: the system, never the author, inserts scope-conflict order edges once at ingress, so the sealed admission input, the card, the
- * Run and every replay see the same graph. A branch Run keeps its exact compiled diamond (runtime exclusion still applies). */
+/** D7a: system-owned conflict edges are frozen at ingress and replayed; branch Runs retain their compiled diamond and runtime exclusion. */
 export function systemOrderedGraph(graph: RunAdmission['graph'], branch?: unknown): RunAdmission['graph'] {
   if (hasConflictEdges(graph)) throw new TaskGraphError('TASK_GRAPH_INVALID');
   return branch ? graph : withConflictEdges(graph);
@@ -20,8 +20,7 @@ export function systemOrderedGraph(graph: RunAdmission['graph'], branch?: unknow
 /** Local SDK ingress for a Run pinned to a completed delivery of the same scope; the commit is resolved by trusted composition. */
 export const runDeliveryAdmissionSchema = runAdmissionSchema.extend({ deliveryCommandId: identitySchema }).strict();
 export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
-/** Trusted composition resolves the pinned workspace custody after `run:create` authorization. Never a wire field. `replay` is true
- * when the command already has a receipt: the answer then comes from recorded state, never from a live reference that may have moved. */
+/** Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
@@ -29,6 +28,8 @@ export interface RunAdmissionContext {
     pin(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<RunCreate['execution']>;
     recheck(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<void>;
   };
+  /** General resource bindings, resolved by trusted adapters after model-use authorization; never an ingress field. */
+  resources?(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<readonly RunCapacityBinding[]>;
   /** Trusted composition resolves installation layout, clock and execution policy. Never read them from model wire fields. */
   resolve(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy' | 'execution'> & { layoutRevision: string }>;
 }
@@ -95,7 +96,8 @@ export class RunAdmissionApplication {
     const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace);
     try {
       await this.context.modelUse?.recheck(create.execution, principal);
-      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert);
+      const resources = this.context.resources ? runCapacityBindingsSchema.parse(await this.context.resources(create.execution, principal)) : undefined;
+      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert, resources);
       return await this.pinned(receipt, command, principal, workspace);
     } catch (error) {
       // A concurrent identical admission may have won using a different sampled clock/config snapshot.

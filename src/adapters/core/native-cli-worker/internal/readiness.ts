@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { realpath } from 'node:fs/promises';
 import { nativeAgentExecutionSchema, nativeAgentReadinessSchema } from '#capabilities/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
@@ -12,7 +13,8 @@ export async function inspectNativeCliWorker(binding: NativeCliWorkerBinding, po
     if (readiness.state !== 'ready') return { state: 'waiting', reason: readiness.reason };
     const { execution } = readiness, entry = nativeCliAgent(binding.protocolFamily);
     if (!entry || execution.profileDigest !== binding.profileDigest || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
-      || execution.executable !== binding.definition.executable || execution.ownerUid !== binding.definition.ownerUid)
+      || execution.executable !== binding.definition.executable && execution.executable !== await realpath(binding.definition.executable).catch(() => null)
+      || execution.ownerUid !== binding.definition.ownerUid)
       return { state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' };
     const proof = nativeAgentExecutionSchema.safeParse(await ports.f08(binding));
     if (!proof.success || !isDeepStrictEqual(proof.data, execution)) return { state: 'waiting', reason: 'NATIVE_WORKER_F08_REQUIRED' };
