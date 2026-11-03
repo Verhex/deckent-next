@@ -1,4 +1,5 @@
 {
+  "headless.agent.k15b.hostUnresolved": "The host realm is not a security boundary. With global state present, directory changes, path-producing commands and unresolved shell expansions are refused before approval. Use an enforcing sandbox.",
   "error.HEADLESS_CLI_UNAVAILABLE": "The subscription CLI is missing at the connected path (it was removed, or the path no longer leads to a program). Nothing was sent to a model and no other model was chosen. Reconnect: deckent models connect --connection <connection> --scope <scope> --model <model> --command-id <id> [--executable <abs path>] (without --executable the first one in PATH is used). A CLI that only updated itself behind the same path keeps working.",
   "error.HEADLESS_OWNER_MISMATCH": "The subscription Brain belongs to another operating-system user. A process may use only its own person's CLI login; nothing was started and no other model was chosen.",
   "error.HEADLESS_PREFLIGHT_FAILED": "The subscription Brain's check before use failed, so the channel stays closed. No model was called and no other model was chosen; the check runs again on the next call.",

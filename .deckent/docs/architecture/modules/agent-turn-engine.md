@@ -345,12 +345,21 @@ does not fail the turn and is not reported (`src/engine/core/audit/internal/poli
 `src/composition/core/agent-turn/internal/turn.ts:360`). See [core layers](core-layers.md#auditor-and-safety-holds-s5-s5b).
 
 
-**Login scope (alpha.63 K15).** Composition passes the selected invocation profile and the global state roots into the same shell handler
+**Login scope (alpha.63 K15/K15B).** Composition passes the selected invocation profile and the global state roots into the same shell handler
 used by agent tools. Global-state path names are rejected as `PRODUCT_STATE_PROTECTED` before approval, in every realm. Subscription
-profiles cannot resolve a usable host shell (`SUBSCRIPTION_HOST_SHELL_REFUSED`), whether host was configured or chosen as fallback;
-API profiles keep their existing host behavior. File tools retain descriptor custody, symlink confinement and multi-link refusal;
-their common deny floor now derives login-context file names from the CLI registry, scoped to the layout's login tree.
-The runtime tool name is `run_shell` (the card's generic command operation); no alternate command execution path is added.
+profiles cannot resolve a usable host shell (`SUBSCRIPTION_HOST_SHELL_REFUSED`), whether host was configured or chosen as fallback.
+With global state present, host calls using directory changes (`cd`, `pushd`, `popd`), path-producing `find`/`xargs`, command or parameter
+expansion, dynamic tilde names, braces, process substitution or unparseable syntax refuse before approval (`HOST_GLOBAL_STATE_UNRESOLVED`). This deliberately also
+refuses legitimate API host commands in these forms. Host names remain a best-effort check, not an isolation boundary; arbitrary programs
+and concurrent path replacements still require OS containment. Shell hard-link checks compare `(dev, ino)` metadata only against global
+login files projected from the CLI registry's `configVisible` names. Ordinary pnpm/cp-al names no longer hit the global-state hard-link refusal (other sandbox inode floors still apply);
+file tools retain their existing multi-link refusal, descriptor custody and symlink confinement.
+
+Project MCP launches receive the same global hard floor in their sandbox layout. In subscription turns only tools attesting the long-lived
+sandbox's read-only project view are offered (`projectReadOnly` is false on host, remote and prefer-sandbox fallback launches); withheld
+servers have a typed `not-decided` / `SUBSCRIPTION_HOST_MCP_REFUSED` notice. Their tool names are omitted from both specs and the system
+prompt. API MCP tool selection stays unchanged. This is a turn-composition gate, not a new trust or effect flow. The runtime tool name is
+`run_shell`; no alternate command execution path is added. Assembled bridge/CLI stdout canary acceptance remains a separate fan-in gate.
 
 ### Path custody and shell contracts
 

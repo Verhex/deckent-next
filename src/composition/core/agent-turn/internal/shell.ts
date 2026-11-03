@@ -3,7 +3,7 @@ import { NATIVE_CLI_HEADLESS_ADAPTER_ID, PRINCIPAL_EFFECT_PRODUCER, type ModelIn
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellAuthority, classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { agentGlobalStateRoots, createShellGlobalStateCheck, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
+import { agentGlobalStateRoots, agentLoginIdentityPaths, createShellGlobalStateCheck, hostGlobalStateUnresolved, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
@@ -46,7 +46,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState), floorNames = createShellProtectedNames(scope.root, [], input.writeFloor ?? (() => false));
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
-  const globalState = createShellGlobalStateCheck(scope.root, input.globalStateRoots ?? agentGlobalStateRoots([process.env]));
+  const globalRoots = input.globalStateRoots ?? agentGlobalStateRoots([process.env]);
+  const globalState = createShellGlobalStateCheck(scope.root, globalRoots, process.env, agentLoginIdentityPaths(globalRoots));
   const subscription = input.profile && ((input.profile.schemaVersion !== 1 && input.profile.billingAxis === 'subscription') || input.profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID);
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
@@ -79,6 +80,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     if (subscription && realm.containment === 'host') return { ok: false, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` };
+    if (realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots)) return { ok: false, text: `[deckent] run_shell: error=HOST_GLOBAL_STATE_UNRESOLVED; ${t('headless.agent.k15b.hostUnresolved', {}, input.language)}` };
     if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);

@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createShellGlobalStateCheck, createShellPathContext, createWorkspaceScope } from '#adapters/index.js';
+import { agentLoginIdentityPaths, createShellGlobalStateCheck, createShellPathContext, createWorkspaceScope, hostGlobalStateUnresolved } from '#adapters/index.js';
 import { classifyReadOnlyShellCommand, type ShellReasonCode } from '#engine/index.js';
 
 const roots: string[] = [];
@@ -132,6 +132,29 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     for (const [glob] of cases) seen.push([glob, await expand(glob)]);
     expect(seen).toEqual(cases);
   });
+});
+
+it('K15B: shell hard-link protection follows registry login inode identities, including glob aliases and late login creation', async () => {
+  const { root } = await workspace(), global = join(root, '..', 'custom-global'), credential = join(global, 'headless/logins/codex/auth.json');
+  const check = await createShellGlobalStateCheck(root, [global], {}, agentLoginIdentityPaths([global]));
+  await mkdir(join(credential, '..'), { recursive: true }); await writeFile(credential, 'SYNTHETIC-IDENTITY');
+  await link(credential, join(root, 'identity-alias'));
+  await writeFile(join(root, 'same-content'), 'SYNTHETIC-IDENTITY');
+  await link(join(root, 'same-content'), join(root, 'package-alias'));
+  for (const path of ['identity-alias', 'identity-*']) expect(await check(path), path).toBe(true);
+  for (const path of ['same-content', 'package-alias', 'package-*']) expect(await check(path), path).toBe(false);
+});
+
+it('K15B: host unresolved refusal depends on an existing global root; static paths and ordinary host commands remain', async () => {
+  const { root } = await workspace(), global = join(root, 'absent-global');
+  expect(await hostGlobalStateUnresolved('cd src && cat a.ts', [global])).toBe(false);
+  await mkdir(global);
+  for (const command of ['cd src && cat a.ts', 'pushd src', 'popd', 'cat "$X/file"', 'cat "${X:-src}/file"', 'cat `pwd`/file',
+    'cat $(pwd)/file', 'find . -name x', 'printf x | xargs cat', 'cat <(pwd)', 'cat "unterminated',
+    '(cd src && cat a.ts)', 'cd</dev/null src; cat a.ts', 'cat ~+/file', 'cat ~other/file', 'cat src/{a,b}.ts']) {
+    expect(await hostGlobalStateUnresolved(command, [global]), command).toBe(true);
+  }
+  for (const command of ['cat src/a.ts', 'printf API_HOST_STILL_WORKS', 'pwd']) expect(await hostGlobalStateUnresolved(command, [global]), command).toBe(false);
 });
 
 it('K15: global root names cover HOME, traversal, globs, aliases and absent children without opening contents', async () => {

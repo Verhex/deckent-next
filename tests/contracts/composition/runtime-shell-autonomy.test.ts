@@ -9,7 +9,7 @@ import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.
 
 // SHELL-AUTONOMY (owner 2026-09-28 live test, session ffc7277c): in full-auto, a command the classifier cannot bound (compound, variable
 // or command expansion, a path outside the project) runs without a card only inside a real sandbox realm — bubblewrap or enforced
-// Landlock — where the realm draws the boundary. Host, a `prefer-sandbox` host fallback and degraded Landlock keep asking; ask and
+// Landlock — where the realm draws the boundary. K15B refuses unresolved host/fallback forms before approval; other host calls and degraded Landlock ask; ask and
 // auto-edit are unchanged; the destructive table asks in every mode; the write floor and the product state never go silent.
 // Real runtime service, real policy/bindings files, real bwrap and the real Landlock helper (forced as the only provider).
 afterEach(closeModeRuntimes);
@@ -72,10 +72,16 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     expect(f.audit()).toHaveLength(4);
   }, 120_000);
 
-  it('host, a prefer-sandbox host fallback and degraded Landlock keep asking for every one of them in full-auto', async () => {
+  it('host/fallback refuse expanding forms before an armed approval; ordinary host and degraded Landlock calls still ask', async () => {
     for (const realm of ['host', 'fallback', ...(landlockAbi >= 1 ? ['degraded' as const] : [])] as const) {
-      const { f, results } = await matrix(realm, 'full-auto', [...OWNER_UNBOUNDED, ...OWNER_DESTRUCTIVE]);
-      for (const result of results) expect({ realm, ...result }).toMatchObject({ realm, card: true, status: 'denied' });
+      const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
+      const unresolved = new Set([OWNER_UNBOUNDED[0], OWNER_UNBOUNDED[1], OWNER_UNBOUNDED[3]]);
+      for (const command of [...OWNER_UNBOUNDED, ...OWNER_DESTRUCTIVE]) {
+        const refused = realm !== 'degraded' && unresolved.has(command);
+        const result = await f.call('run_shell', { command }, refused ? 'allow' : 'deny');
+        expect({ realm, command, ...result }).toMatchObject({ realm, command, card: !refused, status: refused ? 'error' : 'denied' });
+        if (refused) expect(result.text).toContain('HOST_GLOBAL_STATE_UNRESOLVED');
+      }
       expect(f.audit()).toEqual([]);
     }
   }, 180_000);

@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
-import { chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
   type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
@@ -10,7 +10,7 @@ import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, age
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, MESSAGE_REGISTRY, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
+import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
@@ -78,7 +78,6 @@ export function chatTurnApprovalPreview(tool: string, args: Record<string, unkno
 const BUILTIN_TOOL_CLASSES: ReadonlyMap<string, AgentToolClass> = new Map([...WORKSPACE_READ_TOOL_SPECS, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
   FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SESSION_STATE_TOOL_SPEC].map(spec => [spec.name, spec.toolClass]));
 export const builtinAgentToolClass = (name: string): AgentToolClass | null => BUILTIN_TOOL_CLASSES.get(name) ?? null;
-
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 /** One governed terminal turn: authenticated peer, fresh policy and tools; the engine owns execution.
  * Required events drain before further work; disconnect, own-principal cancellation and stop abort the turn. */
@@ -132,9 +131,15 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
     // MCP-SANDBOX-PATHS: a server that could not be decided or started is named by a typed notice of the result (v30; never in `note`).
+    // The trusted selected invocation profile, before deciding which project MCP tools this turn may offer.
+    const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
+      .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
+      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
     let mcpNotices: readonly ChatTurnNotice[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
-      turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}), signal, emit: emitApproval, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor }), cwd: workspace.scope.root }) : null;
+      turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}), signal, emit: emitApproval, sandboxes: host.shellSandboxes(agentShellSandboxLayout(projectRoot, context.layout, workspace.scope, fullAccess ? isWriteApprovalFloored : writeFloor, false, null, options.env ?? process.env)), cwd: workspace.scope.root }) : null;
+    const mcpTools = agentMcpToolScope(mcp, !!profile && ((profile.schemaVersion !== 1 && profile.billingAxis === 'subscription') || profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID));
+    mcpNotices = [...mcpNotices, ...mcpTools.notices];
     // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).
@@ -142,15 +147,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       proposer: `model ${reference.modelId}`, locale: language }) : null;
     // NATIVE-BAGLAM: `session_state` is offered only where policy allows it now (decided like every call; never a default grant).
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy), tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
-      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? []), PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];
+      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...mcpTools.specs, PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
       ...(project ? { authority, selfSource: selfSource && !fullAccess ? isSelfSourceWriteFloored : () => false } : {}) }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const sandboxLayout = workspace && agentShellSandboxLayout(projectRoot, context.layout, workspace.scope, writeFloor, fullAccess, scratch?.dir ?? null, options.env ?? process.env);
-    // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
-    const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
-      .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
-      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
     const shell = workspace && sandboxLayout ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel, language,
       config: readTerminalShellConfig(config), scratch, ...(profile ? { profile } : {}), globalStateRoots: agentGlobalStateRoots([options.env ?? process.env, process.env]), productState: agentProductStateDeny(projectRoot, context.layout, options.env), fullAccess, authority, selfSource: selfSource && !fullAccess, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
       sandboxes: host.shellSandboxes(sandboxLayout), sealed: sealedRootEntryRefused(projectRoot, sandboxLayout.hardFloor) }) : null;
@@ -199,7 +200,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
       model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
-      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,
+      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcpTools.prompt,
       // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
       shell: posture, session: await sessionOf(), responseStyle: readTerminalResponseStyle(config) });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
