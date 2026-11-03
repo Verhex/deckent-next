@@ -1,9 +1,10 @@
 import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
+import { readWorkerToolCard } from '#capabilities/index.js';
 import { renderBriefLines, runHoldReasonText } from '#surfaces/core/monitor/index.js';
 import { shortId, t, type Locale } from '#platform/index.js';
 import { heldPoolId, runStatusKey } from '#surfaces/core/cli-human/index.js';
-import { loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
+import { APPROVAL_SCAN_MAX_PAGES, scanPendingApprovals, loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
@@ -135,7 +136,7 @@ export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transc
   }
   if (command === 'run') {
     const run = await pickRun(panel, execution, ledger, work);
-    if (run && !execution.signal.aborted) { await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: runDetailLines(run, work, await queueRowSummaries(run, ledger.queueSummaryLines)) }, ['close']); onSeen?.(run.runId); }
+    if (run && !execution.signal.aborted) { await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: [...runDetailLines(run, work, await queueRowSummaries(run, ledger.queueSummaryLines)), ...await workerApprovalWaitLines(ledger, run.runId, work)] }, ['close']); onSeen?.(run.runId); }
     return run ? `${labels.runTitle}: ${runTitle(run, labels)} [${runStateText(run, labels)}]` : fillTemplate(labels.closed, { title: labels.runTitle });
   }
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker' && Boolean(row.attempt));
@@ -150,4 +151,19 @@ export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transc
   await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: worker.ordinal ?? 1, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },
     ...text.split(/\r?\n/u).map(line => ({ spans: [span(line)], exact: true }))] }, ['close']);
   return `${labels.transcriptTitle}: ${fillTemplate(work.workerLine.ordinal, { n: worker.ordinal ?? 1 })}`;
+}
+
+/** Read the same bounded pending-card projection; the run window never manufactures a worker phase or extends its TTL. */
+export async function workerApprovalWaitLines(ledger: WorklineLedgerPorts, runId: string, work: WorkSurfaceLabels): Promise<WindowLine[]> {
+  if (!ledger.listApprovalPage) return [];
+  const { pending, truncated } = await scanPendingApprovals(ledger.listApprovalPage, Date.now());
+  const lines = pending.flatMap(card => {
+    const worker = readWorkerToolCard(card.summary);
+    return worker?.identity.runId !== runId ? [] : [{ spans: [span(t('terminal.approval.k23.wait', {
+      run: runId, task: worker.identity.taskId, attempt: worker.identity.attemptId, tool: worker.tool, target: worker.resource,
+      reason: card.risk ?? card.requiredAssurance ?? '', seconds: Math.max(0, Math.ceil((card.expiresAt - Date.now()) / 1000)),
+    }, work.jobs?.locale), { role: 'warning' })] }];
+  });
+  if (truncated) lines.push({ spans: [span(fillTemplate(work.approvalsTruncated, { pages: APPROVAL_SCAN_MAX_PAGES }), { role: 'warning' })] });
+  return lines;
 }

@@ -409,3 +409,22 @@ describe('approval window: reversibility by call kind and structured posture (T2
     }
   });
 });
+
+it('K23 worker card shows exact Run/Task/Attempt and argsDigest with witnessed-terminal wording in both catalogs', async () => {
+  const { workerToolCardSummary } = await import('#capabilities/index.js');
+  const summary = workerToolCardSummary({ identity: { runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt', scopeId: 'scope', generation: 1, layoutRevision: 'l' },
+    turnId: 'worker-turn', tool: 'write_file', resource: 'src/result.ts', argsDigest: 'f'.repeat(64) });
+  for (const locale of ['en', 'tr'] as const) {
+    const lines = approvalCardLines(base({ summary, tool: 'write_file', target: 'src/result.ts', risk: 'edit-self-source', requiredAssurance: 'turn-bound' }),
+      workSurfaceLabels(locale), undefined, null, {}, NOW).join('\n');
+    for (const value of ['worker-run', 'worker-task', 'worker-attempt', 'src/result.ts', 'f'.repeat(64)]) expect(lines).toContain(value);
+    expect(lines).not.toContain(locale === 'tr' ? 'burada yalnız reddedebilirsiniz' : 'here you can only deny');
+    expect(lines).toContain(locale === 'tr' ? 'kişi tanığıyla' : 'witnessed terminal');
+    const { workerApprovalWaitLines } = await import('../../../src/surfaces/core/terminal-work/internal/job-windows.js');
+    const ledger = { scopeId: 'scope', listApprovalPage: async () => ({ items: [base({ summary, expiresAt: Date.now() + 60000, risk: 'edit-self-source' })], nextAfter: null }) };
+    const waits = await workerApprovalWaitLines(ledger as never, 'worker-run', workSurfaceLabels(locale));
+    expect(waits.map(line => plainText(line.spans)).join(' ')).toContain(locale === 'tr' ? 'Onayınız bekleniyor' : 'Waiting for your approval');
+    expect(waits.map(line => plainText(line.spans)).join(' ')).toContain('worker-attempt');
+    expect(await workerApprovalWaitLines(ledger as never, 'another-run', workSurfaceLabels(locale))).toEqual([]);
+  }
+});

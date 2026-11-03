@@ -12,3 +12,4 @@ export { createAgentFileEdits } from './internal/edits.js';
 export { withNativeChatInvocation } from './internal/native.js';
 export type { NativeChatRuntime } from './internal/native.js';
 export { createConfiguredNativeChatRuntime } from './internal/native-runtime.js';
+export { createAgentCallApprovals, describeAgentCall } from './internal/call-approvals.js';

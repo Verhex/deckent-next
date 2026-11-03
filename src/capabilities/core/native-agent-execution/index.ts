@@ -13,6 +13,7 @@ export { createClaudeAgentDriver, ClaudeAgentError, type ClaudeAgentDriver, type
 export * from './internal/worker-verification.js';
 export { errorDiagnostic } from './internal/error-diagnostic.js';
 export * from './internal/worker-profile.js';
-export { nativeWorkerToolGate, nativeWorkerProcessResult } from './internal/worker-stream.js';
+export { nativeWorkerApprovalExpired, nativeWorkerToolLifetime, nativeWorkerToolGate, nativeWorkerProcessResult } from './internal/worker-stream.js';
 export { nativeWorkerReadiness } from './internal/worker-readiness.js';
 export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';
+export { mintAttendedWorkerDecision, workerToolCardSummary, readWorkerToolCard, type WorkerToolCard } from './internal/worker-card.js';

@@ -29,6 +29,8 @@ export type ToolSessionRevocation = ToolSessionClosure & Readonly<{ kind: 'revok
 /** K1 owns call authorization/execution/settlement. K2/K3 and K4 only transport proposals and these results. */
 export interface ToolSessionPort {
   readonly session: ToolSession;
+  /** Producer-owned terminal cause, independent of the model's final answer. Not accepted from wire input. */
+  terminalFailure?(): 'approval-expired' | null;
   propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<NativeAgentToolResult>;
   cancel(): Promise<ToolSessionCancellation>;
   revoke(): Promise<ToolSessionRevocation>;

@@ -1,3 +1,4 @@
+import { readWorkerToolCard } from '#capabilities/index.js';
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
@@ -71,6 +72,7 @@ export class ApprovalApplication {
   }
   private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: unknown, decision: 'allow' | 'deny'): Promise<boolean> {
     const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true;
+    if (readWorkerToolCard(record.request.summary) && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
     if (!interactive) {
       const risk = facts?.risk;

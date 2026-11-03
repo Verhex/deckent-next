@@ -83,7 +83,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       });
       ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
-      return nativeWorkerProcessResult(evidence, combined.aborted, refused || gate.refused(), finished, result && 'response' in result ? result : undefined);
+      return nativeWorkerProcessResult(evidence, combined.aborted, refused || gate.refused(), finished, result && 'response' in result ? result : undefined, gate.terminalFailure());
     },
     async close() {
       // A thrown runner has no process-end proof; retain private files for reconciliation rather than remove a live CLI's files.

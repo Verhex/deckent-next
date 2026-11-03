@@ -45,7 +45,7 @@ export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: stri
     async openTools(request, binding, signal, context) {
       await recheck(request, binding, signal);
       const tools = await withMcpPrincipal(() => runtime.openTools(request, binding, signal, context));
-      return { session: tools.session, propose: (...args) => withMcpPrincipal(() => tools.propose(...args)),
+      return { session: tools.session, terminalFailure: () => tools.terminalFailure?.() ?? null, propose: (...args) => withMcpPrincipal(() => tools.propose(...args)),
         cancel: () => withMcpPrincipal(() => tools.cancel()), revoke: () => withMcpPrincipal(() => tools.revoke()) };
     },
     async driver(input, signal) {

@@ -14,19 +14,21 @@ export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal)
     lookup: (id: string) => calls.get(id),
     get signal(): AbortSignal { return controller.signal; },
     refused: () => refused,
+    terminalFailure: () => port.terminalFailure?.() ?? null,
     stop() { controller.abort(); },
     clear() { calls.clear(); },
     tools: { session: port.session, async propose(call, correlation, callSignal) {
       if (!guard || signal.aborted || controller.signal.aborted || callSignal.aborted) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
-      try { const result = await guard.propose(call, correlation, callSignal); calls.set(call.id, { call, result }); return result; }
+      try { const result = await guard.propose(call, correlation, callSignal); calls.set(call.id, { call, result }); if (port.terminalFailure?.()) controller.abort(); return result; }
       catch (error) { refused ||= !signal.aborted && !callSignal.aborted && (error instanceof NativeCliWorkerError || error instanceof ClaudeAgentError); controller.abort(); throw error; }
     }, cancel: () => port.cancel(), revoke: () => port.revoke() } satisfies ToolSessionPort,
   };
 }
 export function nativeWorkerProcessResult(evidence: { reason: string; limit: string | null; stdoutTruncated: boolean; stderrTruncated: boolean }, aborted: boolean,
   refused: boolean, finished?: { kind: 'completed'; text: string } | { kind: 'refused'; reason: NativeAgentReadinessReason } | { kind: 'failed' | 'cancelled' },
-  result?: { response?: { native?: unknown } } | null) {
+  result?: { response?: { native?: unknown } } | null, terminalFailure?: 'approval-expired' | null) {
   const base = { termination: 'confirmed' as const, text: '' };
+  if (terminalFailure === 'approval-expired') return { ...base, status: 'failed' as const, text: 'APPROVAL_EXPIRED' };
   if (finished?.kind === 'refused' || refused) return { ...base, status: 'failed' as const,
     refusal: finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const };
   if (aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') return { ...base, status: 'cancelled' as const };
@@ -35,3 +37,18 @@ export function nativeWorkerProcessResult(evidence: { reason: string; limit: str
   const native = result?.response?.native as { choices?: { message?: { content?: unknown } }[] } | undefined, content = native?.choices?.[0]?.message?.content;
   return typeof content === 'string' ? { ...base, status: 'completed' as const, text: content } : { ...base, status: 'failed' as const };
 }
+
+/** A K1 session is published once; cancellation before publication rejects its caller rather than leaving it waiting. */
+export function nativeWorkerToolLifetime() {
+  let ready!: (session: ToolSessionPort) => void, failed!: (error: unknown) => void, finish!: () => void;
+  const opened = new Promise<ToolSessionPort>((resolve, reject) => { ready = resolve; failed = reject; });
+  const finished = new Promise<void>(resolve => { finish = resolve; });
+  return { opened, finished, ready, failed, async close<K extends 'cancelled' | 'revoked'>(session: ToolSessionPort, turn: Promise<unknown>, kind: K) {
+    await session.cancel(); finish(); await turn;
+    return { ...await session.cancel(), kind };
+  } };
+}
+
+/** Policy rechecks spend the original wall/monotonic approval budget too. */
+export const nativeWorkerApprovalExpired = (expiresAt: number, started: { wallMs: number; monotonicMs: number }, now: { wallMs: number; monotonicMs: number }) =>
+  now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs;

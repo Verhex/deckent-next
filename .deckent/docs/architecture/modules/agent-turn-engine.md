@@ -47,6 +47,28 @@ Sources: retained external `proof/ALPHA63/A0/RESULT.md` (A0-1/2/3/4), `AMENDMENT
 The `approve` interpretation comes from A0 behavior, not a verified official semantic definition. Real-account,
 CLI-update, assembled-product and business-process acceptance remain separate from these schema/guard tests.
 
+### K23 işçi kartı bağlantısı — yazar adayı, 2026-11-03
+
+İşçi kartının mühürlü özeti `worker-tool-call` v1 metadata taşır: exact Run/Task/Attempt,
+turn, araç, hedefin redakte sunumu ve SHA-256'sı, argsDigest. Gerçek karar uygulaması ve
+minimum güvence değişmez. Attended karar üreticisi kayıt MAC'ini mevcut inspect yoluyla doğrular;
+scope/turn/araç/hedef digest/argsDigest bağını kontrol eder, gerçek socket peer ve TTY tanığından
+aynı service ring'inde tek kullanımlık karar üretir. AI/MCP ve TTY'siz SDK kişi tanığı kazanmaz.
+Sohbet kartının başlatan peer bağı ve istemcinin verdiği geçersiz capability reddi aynen kalır.
+
+Workline `/approvals` mevcut ok tuşlu kartı kullanır; exact kimlik ve tam argsDigest ayrıntıdadır.
+Run ayrıntısında bounded pending approval okuması neden ve kalan TTL'yi gösterir; görünüm
+worker fazını veya yetkiyi değiştirmez. İşçi kartında henüz bağlı bir standing cevap üreticisi yoktur:
+yalnız bir kez/red sunulur; oturum/kalıcı izin uydurulmaz ve taban gevşetilmez.
+`ToolSessionPort.terminalFailure` yalnız güvenilir üreticiye ait opsiyonel bir porttur, tel alanı değildir.
+TTL dolunca K1 kaydı expired olur; worker driver/supervisor bağlantısı `approval-expired` nedenini
+başarısız process sonucu `APPROVAL_EXPIRED` olarak kalıcı tutar; modelin son başarı metni bunu silemez.
+
+K23 worktree'si ortak runtime karar çağırıcısını ve driver/supervisor/workload-wrapper dosyalarını
+sahiplenmez: exact bağlantılar dış `proof/ALPHA63/k23/LEAD-CALLERS.patch` içindedir.
+Kaynak dal tek başına bu bağlantılar yapılmış gibi değerlendirilmez. Hedefli yazar kanıtı, derlenmiş
+fixture yürüyüşü, bağımsız Astra, monte BeUser ve owner kabulü ayrı kapılardır.
+
 ### K1 call coordinator
 
 `AgentTurnInput.nativeSession` explicitly selects push mode. `AgentTurnPorts.invokeAgent` receives the projected tools,
