@@ -85,7 +85,9 @@ custodyIt('K15: login canaries stay private through file tools and approved host
     }
   }
   for (const command of [`cat<"${credential}"`, `printf X>"${credential}"`, `dd if="${credential}"`,
-    'cat "$HOME/.deckent/headless/logins/codex/auth.json"', `cat "${global}/headless/logins/*/auth.json"`]) {
+    'cat "$HOME/.deckent/headless/logins/codex/auth.json"', 'cat "${HOME}/.deckent/headless/logins/codex/auth.json"',
+    'cat ~/.deckent/headless/logins/codex/auth.json', 'cat "$DECKENT_GLOBAL_HOME/headless/logins/codex/auth.json"',
+    `cat "${global}/headless/logins/*/auth.json"`]) {
     const result = await f.call('run_shell', { command }, 'allow');
     expect(result, f.evidence(result)).toMatchObject({ card: false, status: 'error' });
     expect(result.text).toContain('PRODUCT_STATE_PROTECTED');
@@ -106,9 +108,9 @@ custodyIt('K15: login canaries stay private through file tools and approved host
   expect(ordinary.text).toContain('API_HOST_STILL_WORKS');
 });
 
-custodyIt('K15B: unresolved host forms refuse before the armed approval, without leaking a login canary', async () => {
-  const f = await modeRuntime({ mode: 'ask', shell: { schemaVersion: 1, realm: 'host' }, grants: [
-    rule('shell', 'agent-tool', ['run_shell'], 'require-approval'), rule('effects', 'operation', ['host.shell.run'], 'allow')] });
+custodyIt('K15C: unresolved host forms show the warning even under allow/full-auto and execute only after the exact card is approved', async () => {
+  const f = await modeRuntime({ mode: 'full-auto', shell: { schemaVersion: 1, realm: 'host' }, grants: [
+    rule('shell', 'agent-tool', ['run_shell'], 'allow'), rule('effects', 'operation', ['host.shell.run'], 'allow')] });
   vi.stubEnv('HOME', f.env.HOME!);
   const credential = join(f.env.HOME!, '.deckent/headless/logins/codex/auth.json'), canary = 'K15B-HOST-LOGIN-CANARY';
   await mkdir(join(credential, '..'), { recursive: true }); await writeFile(credential, canary);
@@ -120,19 +122,32 @@ custodyIt('K15B: unresolved host forms refuse before the armed approval, without
     'find ~ -name auth.json -exec cat {} \\;', 'find ~ -name auth.json | xargs cat',
     `cd ${relative(f.project, f.env.HOME!)} && cat ${suffix}`,
     `(cd ~ && cat ${suffix})`, `cd</dev/null ~ && cat ${suffix}`,
+    'cat ~+/src/a.ts', 'cat ~other/file', 'cat src/{a,b}.ts', 'cat <(pwd)', 'cat "unterminated',
   ];
+  const denied = await f.call('run_shell', { command: commands[0]! }, 'deny');
+  expect(denied, f.evidence(denied)).toMatchObject({ card: true, status: 'denied' });
+  expect(JSON.stringify([denied, f.sent])).not.toContain(canary);
+  expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
   const measurements = [];
   for (const command of commands) {
     const grammar = await classifyReadOnlyShellCommand(command, createShellPathContext(await createWorkspaceScope(f.project)));
-    const sentAt = f.sent.length;
     const result = await f.call('run_shell', { command }, 'allow');
+    const card = result.events.find(event => event.kind === 'approval.requested');
+    expect(card, f.evidence(result)).toMatchObject({ kind: 'approval.requested',
+      preview: expect.stringContaining('The working directory could not be verified;'),
+      call: { kind: 'shell', command, reason: expect.stringContaining("this command may reach Deckent's state folder") } });
+    expect(result.text).not.toContain('HOST_GLOBAL_STATE_UNRESOLVED');
     measurements.push({ command, grammar: grammar.reasonCode, risk: classifyShellRisk(command, grammar).risk,
-      card: result.card, status: result.status, leaked: JSON.stringify([result, f.sent.slice(sentAt)]).includes(canary) });
+      card: result.card, status: result.status, reached: result.text.includes(canary) });
   }
-  console.info('K15B_HOST_GRAMMAR', JSON.stringify(measurements));
-  expect(measurements).toEqual(commands.map(command => expect.objectContaining({ command, card: false, status: 'error', leaked: false })));
+  console.info('K15C_HOST_GRAMMAR', JSON.stringify(measurements));
+  expect(measurements).toEqual(commands.map(command => expect.objectContaining({ command, card: true })));
+  // Owner decision: approval can expose computed state paths on the host; do not claim this is confinement.
+  expect(measurements[0]).toMatchObject({ status: 'ok', reached: true });
   expect(await readFile(credential, 'utf8')).toBe(canary);
-  expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
+  expect(f.rows('SELECT * FROM effect_intents').length).toBeGreaterThan(0);
+  await f.writeAuthority([rule('shell', 'agent-tool', ['run_shell'], 'deny'), rule('effects', 'operation', ['host.shell.run'], 'allow')], 'full-auto', 'denied');
+  expect(await f.call('run_shell', { command: commands[0]! }, 'allow')).toMatchObject({ card: false, status: 'denied' });
 });
 
 custodyIt('K15B: approved shell runs an ordinary pnpm-style hard link while file tools keep refusing it', async () => {

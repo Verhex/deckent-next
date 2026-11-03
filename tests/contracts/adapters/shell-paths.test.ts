@@ -145,7 +145,7 @@ it('K15B: shell hard-link protection follows registry login inode identities, in
   for (const path of ['same-content', 'package-alias', 'package-*']) expect(await check(path), path).toBe(false);
 });
 
-it('K15B: host unresolved refusal depends on an existing global root; static paths and ordinary host commands remain', async () => {
+it('K15C: host unresolved warning depends on an existing global root; static paths and ordinary host commands remain', async () => {
   const { root } = await workspace(), global = join(root, 'absent-global');
   expect(await hostGlobalStateUnresolved('cd src && cat a.ts', [global])).toBe(false);
   await mkdir(global);

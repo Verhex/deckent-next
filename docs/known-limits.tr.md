@@ -17,12 +17,15 @@ Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUse
 Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminal sohbet hatalarını ham kod olmadan katalog mesajıyla gösterir. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
 
 
-- **Ajan araçları Deckent global durumunu onaydan önce korur (alpha.63 K15/K15B).** Giriş ağacı dahil global durum yolunu adlandıran
+- **Ajan araçları Deckent global durumunu onaydan önce korur (alpha.63 K15/K15B/K15C).** Giriş ağacı dahil global durum yolunu adlandıran
   komut kabuk kartından önce reddedilir. Abonelik turları host kabuğunu hiç kullanmaz; OS düzeyinde yalıtım gerekir. Proje MCP araçları
   yalnız global durumu gizleyen sandbox'ta sunulur; host, uzak sunucu ve host'a düşen araçlar `SUBSCRIPTION_HOST_MCP_REFUSED` nedeniyle
   sunulmaz. API MCP araç seçimi değişmez. *Etki:* global durum kökü varken `cd`/`pushd`/`popd`, `find`/`xargs`, komut/parametre açılımı,
-  süreç ikamesi veya çözülemeyen sözdizimi kullanan host kabuk komutları, meşru API akışları dahil, onaydan önce reddedilir. Tutucu açılım
-  denetimi dinamik tilde adlarını, süslü parantezleri, düz metindeki dolar/ters tırnağı ve cd/find/xargs adlı operandları da reddeder. Bu komutlar için yalıtımı uygulayan sandbox kullanın. Meşru pnpm/cp-al hard
+  dinamik tilde, süslü parantez, süreç ikamesi veya çözülemeyen sözdizimi kullanan host kabuk komutları her çağrıda uyarılı kart ister:
+  “Çalışma yeri doğrulanamadı; Deckent durum klasörüne ulaşabilir.” Otomatik veya kalıcı/oturumluk izin bu kartı kaldırmaz.
+  Tutucu denetim düz metindeki dolar/ters tırnağa ve cd/find/xargs adlı operandlara da uyarı verir. Owner'ın 2026-11-03 kararı uyarılı karttır;
+  K15B'nin onay öncesi reddi owner'ın kabul ettiği kırılma değildir. Hesaplanmış yolu onaylamak global durumu açabilir. Global kökü açıkça
+  adlandıran mutlak/`~`/`$HOME`/`$DECKENT_GLOBAL_HOME` yolları, onay cevabı hazır olsa da kesin reddedilir. Yalıtım için gerçek sandbox kullanın. Meşru pnpm/cp-al hard
   link adları global durum ad denetimince topluca reddedilmez; diğer sandbox inode sınırları sürer; registry giriş kimlik dosyalarıyla aynı aygıt/inode'a bağlı adlar içerik okunmadan reddedilir. Dosya
   araçları tüm hard link'leri reddetmeye devam eder. **Host realm bir güvenlik sınırı değildir; ad denetimi en iyi çabadır.** Programın içinde
   üretilen yollar ve eşzamanlı yol değiştirme bu denetimin dışındadır. Monte abonelik köprüsü ve gerçek CLI stdout kanaryası kabulü,

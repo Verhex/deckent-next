@@ -17,12 +17,15 @@ Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-jo
 Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
 
 
-- **Agent tools protect Deckent's global state before approval (alpha.63 K15/K15B).** Named global-state paths, including the login tree,
+- **Agent tools protect Deckent's global state before approval (alpha.63 K15/K15B/K15C).** Named global-state paths, including the login tree,
   are refused before a shell card. Subscription turns never use the host shell: they require OS containment. Their project MCP tools are
   offered only in a sandbox that hides global state; host, remote and host-fallback tools are withheld with `SUBSCRIPTION_HOST_MCP_REFUSED`.
   API MCP tool selection stays unchanged. *Impact:* with global state present, host shell commands using `cd`/`pushd`/`popd`, `find`/`xargs`,
-  command/parameter expansion, dynamic tilde names, braces, process substitution or unparseable syntax are refused before approval, including legitimate API workflows.
-  The conservative name check also refuses dynamic tilde names, braces and literal dollar/backtick text or operands named cd/find/xargs. Use an enforcing sandbox for these commands. Ordinary
+  command/parameter expansion, dynamic tilde names, braces, process substitution or unparseable syntax require a warning card for each call:
+  “The working directory could not be verified; this command may reach Deckent's state folder.” No automatic or standing approval applies.
+  The conservative check also warns on literal dollar/backtick text or operands named cd/find/xargs. This is the owner's 2026-11-03 warning-card
+  decision, replacing K15B's pre-approval refusal; a person approving a computed path can expose global state. Explicit global-root names
+  (absolute, `~`, `$HOME`, `$DECKENT_GLOBAL_HOME`) remain hard refusals even with approval armed. Use an enforcing sandbox for isolation. Ordinary
   pnpm/cp-al names no longer hit the global-state hard-link refusal; other sandbox inode floors still apply; aliases of registry login identity files are refused by device/inode metadata, without
   reading credentials. File tools still refuse all hard-linked files. **The host realm is not a security boundary; name checks are best
   effort.** Paths computed inside arbitrary programs and concurrent replacements remain outside this check. Assembled subscription-bridge

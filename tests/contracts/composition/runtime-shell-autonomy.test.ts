@@ -72,17 +72,17 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     expect(f.audit()).toHaveLength(4);
   }, 120_000);
 
-  it('host/fallback refuse expanding forms before an armed approval; ordinary host and degraded Landlock calls still ask', async () => {
+  it('K15C: host/fallback expanding forms need a warned approval; ordinary host and degraded Landlock calls still ask', async () => {
     for (const realm of ['host', 'fallback', ...(landlockAbi >= 1 ? ['degraded' as const] : [])] as const) {
       const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
       const unresolved = new Set([OWNER_UNBOUNDED[0], OWNER_UNBOUNDED[1], OWNER_UNBOUNDED[3]]);
       for (const command of [...OWNER_UNBOUNDED, ...OWNER_DESTRUCTIVE]) {
-        const refused = realm !== 'degraded' && unresolved.has(command);
-        const result = await f.call('run_shell', { command }, refused ? 'allow' : 'deny');
-        expect({ realm, command, ...result }).toMatchObject({ realm, command, card: !refused, status: refused ? 'error' : 'denied' });
-        if (refused) expect(result.text).toContain('HOST_GLOBAL_STATE_UNRESOLVED');
+        const warned = realm !== 'degraded' && unresolved.has(command);
+        const result = await f.call('run_shell', { command }, warned ? 'allow' : 'deny');
+        expect({ realm, command, ...result }).toMatchObject({ realm, command, card: true, status: warned ? 'ok' : 'denied' });
+        if (warned) expect(result.events).toContainEqual(expect.objectContaining({ kind: 'approval.requested', preview: expect.stringContaining('The working directory could not be verified;') }));
       }
-      expect(f.audit()).toEqual([]);
+      expect(f.audit().filter(row => row.event.subject.kind === 'permission-mode')).toEqual([]);
     }
   }, 180_000);
 

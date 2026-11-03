@@ -364,12 +364,16 @@ does not fail the turn and is not reported (`src/engine/core/audit/internal/poli
 `src/composition/core/agent-turn/internal/turn.ts:360`). See [core layers](core-layers.md#auditor-and-safety-holds-s5-s5b).
 
 
-**Login scope (alpha.63 K15/K15B).** Composition passes the selected invocation profile and the global state roots into the same shell handler
+**Login scope (alpha.63 K15/K15B/K15C).** Composition passes the selected invocation profile and the global state roots into the same shell handler
 used by agent tools. Global-state path names are rejected as `PRODUCT_STATE_PROTECTED` before approval, in every realm. Subscription
 profiles cannot resolve a usable host shell (`SUBSCRIPTION_HOST_SHELL_REFUSED`), whether host was configured or chosen as fallback.
 With global state present, host calls using directory changes (`cd`, `pushd`, `popd`), path-producing `find`/`xargs`, command or parameter
-expansion, dynamic tilde names, braces, process substitution or unparseable syntax refuse before approval (`HOST_GLOBAL_STATE_UNRESOLVED`). This deliberately also
-refuses legitimate API host commands in these forms. Host names remain a best-effort check, not an isolation boundary; arbitrary programs
+expansion, dynamic tilde names, braces, process substitution or unparseable syntax require a per-call approval with a localized warning
+that the working directory could not be verified and the command may reach Deckent's state folder (owner 2026-11-03, K15C).
+The warning precedes the command in the bounded preview and is also carried in the structured shell reason. These host calls use the
+existing always-ask tier unless already destructive/authority; mode and standing approvals cannot allow them automatically. Explicit
+global-root names still refuse before any card; subscription host/fallback refusal is unchanged. K15B's prior hard refusal was a lead
+instruction, not owner acceptance of broken API workflows. Host names remain a best-effort check, not an isolation boundary; arbitrary programs
 and concurrent path replacements still require OS containment. Shell hard-link checks compare `(dev, ino)` metadata only against global
 login files projected from the CLI registry's `configVisible` names. Ordinary pnpm/cp-al names no longer hit the global-state hard-link refusal (other sandbox inode floors still apply);
 file tools retain their existing multi-link refusal, descriptor custody and symlink confinement.
