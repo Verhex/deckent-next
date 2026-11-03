@@ -1,7 +1,7 @@
 import { sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
 import { capturedWorkspacePatch, WorkspacePatchError, type DispatchRecord, type PatchLimits, type WorkspacePatchSource, type RunWorkspaceCustodyStore } from '#engine/index.js';
 import { GitWorkspaceBroker, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
+import { recordedTaskSupervisor, inspectRecordedTaskActivity } from '#adapters/core/native-cli-worker/index.js';
 import { completeHiddenBase, diffAgainstBase, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace, snapshotDigest, SnapshotBudget } from './snapshot.js';
 /** Trusted composition only: exact ledger record, no caller-provided paths, shell commands or Git config. */
 export class GitWorkspacePatchSource implements WorkspacePatchSource {
@@ -20,7 +20,7 @@ export class GitWorkspacePatchSource implements WorkspacePatchSource {
         || custody.source.sourceFingerprint !== lease.sourceBase.sourceFingerprint
         || custody.source.adapter.id !== 'git' || custody.source.adapter.version !== 1) throw new WorkspacePatchError('PATCH_CONFLICT');
       await broker.assertSourceBase(lease.sourceBase);
-      const supervisor = await DockerSupervisor.restoreProfile(record.profile);
+      const supervisor = recordedTaskSupervisor(record.profile);
       const stopped = async () => {
         const observed = await supervisor.observe(record.request);
         if (observed.handle !== record.terminal!.handle || observed.result.kind !== 'exited'
@@ -49,6 +49,6 @@ export class GitWorkspacePatchSource implements WorkspacePatchSource {
   /** EXEC-RELEASE: the clone directory or the labelled container is gone; daemon or lease errors are not proof of release. */
   async released(record: DispatchRecord) {
     if (!(await new GitWorkspaceBroker(this.options).holds(record.request.identity))) return true;
-    return (await (await DockerSupervisor.restoreProfile(record.profile)).inspectActivity(record.request)).state === 'missing';
+    return (await inspectRecordedTaskActivity(record.profile, record.request)).state === 'missing';
   }
 }

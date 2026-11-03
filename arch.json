@@ -2299,7 +2299,8 @@
         "src/platform/core/redaction",
         "src/domain/core/effect",
         "src/capabilities/core/artifacts",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/adapters/core/native-cli-worker"
       ],
       "plan": "ISOLATION"
     },
