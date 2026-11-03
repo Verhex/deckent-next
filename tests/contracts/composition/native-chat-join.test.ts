@@ -12,6 +12,8 @@ import { describeTerminalChat, inspectNativeChat } from '#composition/core/termi
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
+import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
 import { ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
 import { clearConfigCache, redactForRecord, SystemTrustedClock } from '#platform/index.js';
@@ -178,6 +180,11 @@ it('shows a plugin mismatch and keeps the same subscription text path usable wit
     assistantLine('tools-off text answer', 'vendor/model'), resultLine('tools-off text answer', {}, 'vendor/model')].map(line => ({ line })) });
   const configFile = join(h.f.project, '.deckent', 'config.json'), config = JSON.parse(await readFile(configFile, 'utf8'));
   Object.assign(config.provider_invocation_profiles.profiles[0].adapter.definition, { executable, configDir: login, stateDir: join(h.f.data, 'fake-state') });
+  // This replacement login has its own resource, just as a witnessed reconnect would persist.
+  const db = openSqliteLedger(h.f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }, 'forbid');
+  try { bindCapacityResource(db, headlessCapacityBinding(config.provider_invocation_profiles.profiles[0].adapter.definition), {
+    executionSlots: h.profile.allocation.maxInFlight, inFlightSlots: h.profile.allocation.maxInFlight,
+  }); } finally { db.close(); }
   await writeFile(configFile, JSON.stringify(config)); clearConfigCache();
   h.runtime.readiness.read = async () => ({ cli: true, login: true, environment: true, toolSurface: true, bridge: true, plugins: false, execution: h.execution });
   expect(await h.run()).toMatchObject({ answer: 'tools-off text answer', toolCalls: 0, recorded: true });

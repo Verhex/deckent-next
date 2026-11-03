@@ -11,6 +11,7 @@ import { assistantLine, initLine, rateLimitLine, resultLine, uiLine, writeFakeCl
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { createServer } from 'node:http';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
+import { readLocalOsIdentity } from '#adapters/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput, configuredBeuserModels, beuserEvaluatorEvidence, beuserEvaluatorInputLossy } from '#composition/core/beuser/index.js';
 
@@ -281,7 +282,8 @@ it.skipIf(process.platform !== 'linux' || !sandbox)('production subscription CLI
       accessibility: [], initialKnowledge: [], goal: 'request goods', competency: { computer: 1, domain: 4, product: 0 }, preferences: [], riskAttitude: 'cautious',
       surface: 'terminal', organizationContext: {}, patience: { maxSteps: 4, maxWaitMs: 100 }, attentionMs: 1000 };
     const binding = { ...context.binding, identity: { ...context.binding.identity, scopeId: 's' }, personaDigest: sha256(encodeCommandProjection('beuser-persona:1', persona)) };
-    const ctx: BeuserContext = { ...context, binding, principal: { ...context.principal, scopeIds: ['s'] },
+    const person = readLocalOsIdentity();
+    const ctx: BeuserContext = { ...context, binding, principal: { ...context.principal, ...beuserEvaluatorPrincipalRef(person), scopeIds: ['s'] },
       limits: { ...limits, maxTokens: 200_000, maxWallMs: 20_000, maxArtifactBytes: 100_000 } };
     const configPath = join(f.project, '.deckent/config.json'), { clearConfigCache } = await import('#platform/index.js');
     const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
@@ -297,7 +299,7 @@ it.skipIf(process.platform !== 'linux' || !sandbox)('production subscription CLI
     // No delegated-use consent for the system class: refused by the invocation application before any process starts.
     await expect(model.models.evaluate(ctx, 'f'.repeat(64))).rejects.toMatchObject({ code: 'HEADLESS_DELEGATION_REFUSED' });
     expect(await spawns()).toEqual([]);
-    await consent({ consentedBy: { issuer: 'host', subject: 'person' }, atMs: 1, classes: ['system'] });
+    await consent({ consentedBy: { issuer: person.issuer, subject: person.subject }, atMs: 1, classes: ['system'] });
     // Both roles send once each; each reservation is settled to the CLI's reported usage (586 prompt + 9 completion).
     await expect(model.models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { role: 'beuser-evaluator', invocation: { receipt: { outcome: { state: 'responded' } } } } });
     await expect(walk()).resolves.toMatchObject({ state: 'invoked', receipt: { role: 'beuser-walker', invocation: { receipt: { outcome: { state: 'responded' } } } } });

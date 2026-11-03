@@ -6,6 +6,8 @@ import { vi } from 'vitest';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { readLocalOsIdentity, openSqliteModelActivationStore, compileNativeCodingDockerProfile } from '#adapters/index.js';
+import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -105,6 +107,13 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   await loadComposedConfig(project, loadOptions);
   const { store, path } = await openConfiguredAttemptStore(project, loadOptions);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } }); store.close();
+  if (options.headless) {
+    // Direct fixture setup bypasses models connect, which persists the shared subscription resource.
+    const db = openSqliteLedger(path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }, 'forbid');
+    try { bindCapacityResource(db, headlessCapacityBinding(profile.adapter.definition), {
+      executionSlots: profile.allocation.maxInFlight, inFlightSlots: profile.allocation.maxInFlight,
+    }); } finally { db.close(); }
+  }
   const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] };
   const activation = new ModelActivationApplication({ verify: async () => principal }, { authorize: async () => ({ revision: 'seed', ruleId: 'seed' }) },
     new ModelBindingApplication({ read: async () => catalog }), () => openSqliteModelActivationStore(path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }), () => 1);
