@@ -872,7 +872,7 @@
               "type": "http",
               "url": "{bridgeUrl}",
               "headers": {
-                "Authorization": "{turnTokenHeader}"
+                "Authorization": "${turnTokenHeader}"
               },
               "timeout": "{approvalTtlMs}"
             }

@@ -51,7 +51,7 @@ describe('MCP SDK default validator (ajv/fast-uri) is never used by Deckent code
     // Positive control: the pool's Client, the MCP surface's Server, the Hub's skills Server (alpha.56 H3, 35e61a754) and the Hub
     // operation/revocation Clients (H5/H7) are all seen, so an empty violation list means something.
     expect(constructions.map(site => site.replace(/:\d+$/u, '')).sort()).toEqual(['adapters/core/hub-http/internal/operations.ts', 'adapters/core/hub-http/internal/revocations.ts',
-      'adapters/core/mcp-client/internal/pool.ts', 'surfaces/core/hub-mcp/internal/server.ts', 'surfaces/core/mcp/internal/server.ts']);
+      'adapters/core/mcp-client/internal/pool.ts', 'adapters/core/native-tool-bridge/internal/bridge.ts', 'surfaces/core/hub-mcp/internal/server.ts', 'surfaces/core/mcp/internal/server.ts']);
   });
 
   it('the Server Deckent builds validates with Deckent\'s own validator, not the SDK default or cf-worker', async () => {

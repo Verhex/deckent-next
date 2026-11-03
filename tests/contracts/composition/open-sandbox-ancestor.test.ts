@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -9,7 +9,7 @@ import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-mode
  * and a mount point's writable ancestor must not be renamable — `mv` of the ancestor would carry the mount away with the renamed dentry and
  * let a command recreate the original path with bytes of its choosing. Real runtime service, real policy/full-access grant,
  * `terminal.shell.realm=require-sandbox`, real bubblewrap. Expected: the rename fails (EBUSY: every ancestor is a mount point), the
- * original path keeps its bytes.
+ * original path keeps its bytes. K15 refuses a literal global-state ancestor even earlier, before approval or shell execution.
  */
 const roots: string[] = [];
 afterEach(async () => { await closeModeRuntimes(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -52,7 +52,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] f
     const result = await f.call('run_shell', { command }, 'deny', { fullAccess: true });
     const current = await readFile(join(state, 'mcp.json'), 'utf8').catch(() => null);
     console.log('R7_OPEN_GLOBAL_PARENT', JSON.stringify({ target, status: result.status, card: result.card, text: result.text, current }));
-    expect(result.text).toMatch(/Device or resource busy/);
+    expect(result.card).toBe(false);
+    expect(result.status).toBe('error');
+    expect(result.text).toContain('PRODUCT_STATE_PROTECTED');
     expect(current).toBe(original);
+    expect(await lstat(`${target}-moved`).catch(() => null)).toBeNull();
   }
 }, 60_000);

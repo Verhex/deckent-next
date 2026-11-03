@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Server, WebStandardStreamableHTTPServerTransport, type CallToolResult, type Tool, type RequestId } from '@modelcontextprotocol/server';
+import type { CallToolResult, Tool, RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 import { nativeAgentBridgeSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
@@ -34,6 +34,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const bridge = nativeAgentBridgeSchema.parse(input.bridge), session = toolSessionSchema.parse(input.port.session), limits = input.limits;
   if ([limits.idleMs, limits.maxConnections, limits.replayMaxEntries, limits.replayMaxBytes].some(value => !Number.isSafeInteger(value) || value <= 0)
     || limits.idleMs <= 1 || limits.replayMaxBytes < bridge.frameMaxBytes || !nodeDelaySchema.safeParse(session.approvalTtlMs).success) throw new Error('NATIVE_BRIDGE_LIMITS_INVALID');
+  const { Server, WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
   const turnToken = randomBytes(32).toString('base64url'), tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken);
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
   const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Set<string>();

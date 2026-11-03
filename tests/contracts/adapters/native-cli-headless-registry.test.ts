@@ -159,6 +159,13 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     }
   });
   it('accepts only the generated MCP template and refuses free paths, inline overrides and stdio configuration', () => {
+    const legacy = structuredClone(registry);
+    legacy.adapters.claude.agent.transport.mcpConfig.server.headers.Authorization = '{turnTokenHeader}';
+    expect(() => parseNativeCliRegistry(legacy)).not.toThrow();
+    expect(() => parseNativeCliRegistry(registry)).not.toThrow();
+    const literal = structuredClone(registry);
+    literal.adapters.claude.agent.transport.mcpConfig.server.headers.Authorization = 'not-a-token-reference';
+    expect(() => parseNativeCliRegistry(literal)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
     for (const value of ['/tmp/foreign-mcp.json', '{arbitraryFile}', '--mcp-config=/tmp/foreign.json']) {
       const invalid = structuredClone(registry), args = invalid.adapters.claude.agent.args;
       args[args.indexOf('--mcp-config') + 1] = value;
