@@ -1,6 +1,5 @@
-import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema, policyHasResourceRules, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { clientCommandIdSchema, counterSchema, identitySchema, policyHasResourceRules, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { diagnoseReservationWave, planSchedulingWave, type ResourceCapacityInput } from '#engine/core/scheduling/index.js';
@@ -36,6 +35,14 @@ function checkedSnapshot(input: unknown) {
  * tasks, supply capacity or override time. The ledger remains the atomic shared-pool authority.
  */
 export class RunReservationApplication {
+  /** A Run worker reuses its existing reservation. This neither claims another slot nor releases unknown work. */
+  static ownsResourceReservation(run: RunSnapshot, identity: AttemptIdentity, resourceKey: string, resources: ResourceCapacityInput): boolean {
+    if (!run.bindings.some(row => sameAttemptIdentity(row.identity, identity))
+      || !run.progress.some(row => row.taskId === identity.taskId && row.phase === 'active')
+      || !resources.bindings.some(row => row.taskId === identity.taskId && row.resourceKey === resourceKey)) throw new RunStoreError('RUN_STORE_CONFLICT');
+    const resource = resources.resources.find(row => row.resourceKey === resourceKey);
+    return !!resource && resource.occupancy.execution <= resource.capacity.executionSlots && resource.occupancy.inFlight <= resource.capacity.inFlightSlots;
+  }
   constructor(private readonly store: RunReservationStore, private readonly verifier: PrincipalVerifier,
     private readonly authorization: RunAuthorization, private readonly poolAuthorization: PoolAuthorization, private readonly runtime: ReservationRuntime, private readonly admission?: RunAdmissionFilter) {}
   private project(receipt: RunReceipt, command: RunReservationCommand, actor: RunReservation['actor']) {

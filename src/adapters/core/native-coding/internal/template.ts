@@ -90,7 +90,7 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
     model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence);
-  return worker ? createNativeCliWorkerProfile(compiled, worker) : compiled;
+  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(compiled, worker), id: template.id, version: template.version }) : compiled;
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */

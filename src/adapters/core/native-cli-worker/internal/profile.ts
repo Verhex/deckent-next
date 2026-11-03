@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { executionProfileDefinitionSchema, identitySchema, persistedUuid, type ExecutionProfileDefinition } from '#domain/index.js';
+import { executionProfileDefinitionSchema, identitySchema, persistedUuid, immutableJsonObjectSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
 import { resolveDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
@@ -9,7 +9,9 @@ export const NATIVE_CLI_WORKER_ADAPTER = Object.freeze({ id: 'native-cli-worker'
 /** Nonsecret connection identity, frozen at witnessed connection/admission; a capability is checked again at dispatch. */
 export const nativeCliWorkerBindingSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(),
   protocolFamily: identitySchema, profileDigest: z.string().regex(/^[a-f0-9]{64}$/u), resourceKey: identitySchema,
-  definition: nativeCliHeadlessDefinitionSchema }).readonly();
+  definition: nativeCliHeadlessDefinitionSchema,
+  /** K5 admission snapshot; only trusted composition writes it, fresh resolution checks it at every spawn/tool. */
+  modelUsePin: immutableJsonObjectSchema.optional() }).readonly();
 export type NativeCliWorkerBinding = z.infer<typeof nativeCliWorkerBindingSchema>;
 const parametersSchema = z.strictObject({ schemaVersion: z.literal(1), base: executionProfileDefinitionSchema, binding: nativeCliWorkerBindingSchema }).readonly();
 export class NativeCliWorkerError extends Error {

@@ -19,9 +19,16 @@ export type WorkerProvider = z.infer<typeof workerProviderSchema>;
 const pinnedSubscriptionSchema = z.looseObject({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() });
 const parametersSchema = z.looseObject({ nativeSubscription: pinnedSubscriptionSchema });
 
+/** Versioned task-data wrappers retain the base as the sole model-pin source. This grants no execution route. */
+export function workerTaskParameters(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || !Object.hasOwn(input, 'base')) return input;
+  const wrapper = z.strictObject({ schemaVersion: z.literal(1), base: z.looseObject({ parameters: z.unknown() }), binding: z.record(z.string(), z.unknown()) }).safeParse(input);
+  return wrapper.success ? wrapper.data.base.parameters : undefined;
+}
+
 /** The exact-model pin a native worker profile carries (nativeSubscription v2 `model`), or null: not a pinned worker profile. */
 export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence; reasoningEffort?: WorkerEffort }> | null {
-  const parsed = parametersSchema.safeParse(profileParameters);
+  const parsed = parametersSchema.safeParse(workerTaskParameters(profileParameters));
   return parsed.success ? Object.freeze({ provider: parsed.data.nativeSubscription.provider, pin: parsed.data.nativeSubscription.model,
     ...(parsed.data.nativeSubscription.reasoningEffort ? { reasoningEffort: parsed.data.nativeSubscription.reasoningEffort } : {}),
     evidenceCapability: parsed.data.nativeSubscription.modelUsageEvidence ?? readLegacyModelUsageEvidence(parsed.data.nativeSubscription.provider) }) : null;
