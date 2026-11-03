@@ -57,5 +57,12 @@
   "doctor.headless.updated": "; CLI updated {from} → {to} (checked again before use)",
   "tui.provider.login.ownSubscriptionNote": "Own subscription, unmodified CLI; no login-token handling, sharing or resale.",
   "tui.model.textChatSubscription": "Subscription text chat; no API budget. Native tools are disabled.",
-  "headless.chat.quota": "Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically."
+  "headless.chat.quota": "Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.",
+  "headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE": "The subscription CLI is unavailable. Install it or reconnect before using agent tools.",
+  "headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED": "Sign in through the CLI’s own login in your terminal before using agent tools.",
+  "headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED": "Agent execution has not been verified for this CLI version and profile. It is unavailable until verification completes.",
+  "headless.agent.reason.NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED": "The CLI exposed an unexpected tool or event. Agent execution stays closed; choose another execution mode explicitly or reconnect.",
+  "headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED": "The CLI loaded a plugin outside the allowed built-in set. Agent execution stays closed; reconnect after checking the CLI version.",
+  "headless.agent.reason.NATIVE_AGENT_BRIDGE_UNAVAILABLE": "The governed tool bridge is unavailable. No agent tool can run until it is ready.",
+  "headless.agent.reason.NATIVE_AGENT_ENVIRONMENT_REFUSED": "The agent environment contains a forbidden override or bypasses the governed proxy. Agent execution stays closed."
 }

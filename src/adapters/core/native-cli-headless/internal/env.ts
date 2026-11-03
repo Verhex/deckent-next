@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import type { NativeCliHeadless, nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
+import type { NativeCliHeadless, nativeCliHeadless, nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { refuse } from './contract.js';
 
 export type HeadlessEntry = NonNullable<ReturnType<typeof nativeCliHeadless>>;
@@ -41,6 +41,10 @@ export function headlessFlagSetDigest(entry: HeadlessEntry): string {
     forbidden: headless.forbiddenFlags, env: { fixed: headless.env.fixed, runDir: headless.env.runDir, configDir: headless.env.configDir },
     isolation: { ...headless.isolation, source: undefined, configVisibleSource: undefined, refreshLock: { ...headless.isolation.refreshLock, source: undefined },
       limits: { ...headless.isolation.limits, boundsSource: undefined, limiterSource: undefined } } })).digest('hex');
+}
+/** Expand-only agent seal: includes its transport/guards/bridge data and all inherited text-profile bounds; v1's digest never changes. */
+export function nativeAgentFlagSetDigest(entry: NonNullable<ReturnType<typeof nativeCliAgent>>): string {
+  return createHash('sha256').update(JSON.stringify({ headless: headlessFlagSetDigest(entry), agent: entry.agent, bridge: entry.bridge })).digest('hex');
 }
 /** The call argv: no prompt and no secret (system prompt by 0600 file, user message by stdin); a forbidden flag or alias refuses. The turn bound is the
  * CLI's flag, or (`turnBound: stream`, no such flag) the line guard; the prompt file goes in the registry's template (a quoted config value: no quote in it). */

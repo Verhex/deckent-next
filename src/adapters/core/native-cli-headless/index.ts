@@ -8,3 +8,9 @@ export { prepareHeadlessConnection, headlessConsent, headlessConnectionAdapter, 
 export { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 export { headlessOwnedLoginDir, runHeadlessLogin } from './internal/login.js';
 export type { HeadlessLoginResult, HeadlessLoginExit } from './internal/login.js';
+export { nativeAgentExecutionSchema, nativeAgentReadinessReasonSchema, nativeAgentReadinessSchema } from './internal/contract.js';
+export type { NativeAgentExecution, NativeAgentReadinessReason, NativeAgentReadiness } from './internal/contract.js';
+export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema } from './internal/agent-port.js';
+export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, ToolSessionClosure, ToolSessionCancellation, ToolSessionRevocation } from './internal/agent-port.js';
+export { nativeAgentInitReason, nativeAgentItemReason } from '#capabilities/index.js';
+export { headlessFlagSetDigest, nativeAgentFlagSetDigest } from './internal/env.js';

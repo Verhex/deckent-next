@@ -403,6 +403,131 @@
             "limiterSource": "prlimit(1) util-linux 2.39 --cpu=soft:hard, --nproc, --data (a single value sets soft and hard); setrlimit(2) man-pages 6.7: RLIMIT_CPU SIGXCPU at soft then SIGKILL at hard, RLIMIT_DATA covers brk and mmap since Linux 4.7, RLIMIT_NPROC counts threads (per user namespace since Linux 5.14 ucounts)"
           }
         }
+      },
+      "agent": {
+        "schemaVersion": 1,
+        "capability": "NativeAgentExecution",
+        "revision": "codex-agent-2026-11-03-r1",
+        "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03)",
+        "args": [
+          "exec",
+          "--json",
+          "--color",
+          "never",
+          "--ignore-user-config",
+          "--ignore-rules",
+          "--ephemeral",
+          "--skip-git-repo-check",
+          "--strict-config",
+          "--sandbox",
+          "read-only",
+          "-c",
+          "approval_policy=\"never\"",
+          "-c",
+          "cli_auth_credentials_store=\"file\"",
+          "-c",
+          "forced_login_method=\"chatgpt\"",
+          "-c",
+          "features.code_mode_host=false",
+          "-c",
+          "features.shell_tool=false",
+          "-c",
+          "features.unified_exec=false",
+          "-c",
+          "web_search=\"disabled\"",
+          "-c",
+          "features.view_image=false",
+          "-c",
+          "features.apps=false",
+          "-c",
+          "features.multi_agent=false",
+          "-c",
+          "features.remote_plugin=false",
+          "-c",
+          "features.hooks=false",
+          "-c",
+          "features.memories=false",
+          "-c",
+          "skills.include_instructions=false",
+          "-c",
+          "skills.bundled.enabled=false",
+          "-c",
+          "project_doc_max_bytes=0",
+          "-c",
+          "history.persistence=\"none\"",
+          "-c",
+          "check_for_update_on_startup=false",
+          "-c",
+          "analytics.enabled=false"
+        ],
+        "forbiddenFlags": [
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--dangerously-bypass-hook-trust",
+          "--approve-for-me",
+          "--add-dir",
+          "--worktree",
+          "--image",
+          "--oss",
+          "--local-provider",
+          "--profile",
+          "--output-schema",
+          "--output-last-message",
+          "--enable",
+          "--cd",
+          "--cyber-access-program",
+          "--thread-source"
+        ],
+        "envSource": "headless",
+        "timeoutSource": "tool-session-approval-ttl",
+        "maxTurnsSource": "admission-policy",
+        "loginMethods": [
+          {
+            "method": "browser",
+            "args": [
+              "-c",
+              "cli_auth_credentials_store=\"file\"",
+              "login"
+            ],
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-1 codex-b"
+          },
+          {
+            "method": "device-auth",
+            "args": [
+              "-c",
+              "cli_auth_credentials_store=\"file\"",
+              "login",
+              "--device-auth"
+            ],
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-1 codex-d + A0-4(e)"
+          }
+        ],
+        "transport": {
+          "kind": "codex-mcp",
+          "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-3; R replaces command/args with HTTP url and bearer_token_env_var",
+          "configFlag": "-c",
+          "mcpConfig": {
+            "url": "{bridgeUrl}",
+            "bearer_token_env_var": "{turnTokenEnv}",
+            "required": true,
+            "enabled_tools": "{toolNames}",
+            "omit_tools_from": [
+              "deferred",
+              "code_mode"
+            ],
+            "default_tools_approval_mode": "approve",
+            "tool_timeout_sec": "{approvalTtlSeconds}"
+          },
+          "approvalModeSource": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-3 codex-b-approve: approve meaning inferred from observed handler calls, not an official definition; Deckent policy/approval remains mandatory; re-probe on CLI updates",
+          "guards": {
+            "allowedItems": [
+              "agent_message",
+              "mcp_tool_call",
+              "reasoning"
+            ],
+            "codeModeError": "Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.",
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-3 stdout.jsonl item_0; only this exact error item is tolerated; command_execution, file_change, web_search and unknown items refuse"
+          }
+        }
       }
     },
     "claude": {
@@ -668,6 +793,108 @@
             "boundsSource": "f5 lane 2026-10-24, measured in this realm with the real CLI 2.1.309 (Bun 1.4.4; --help and auth status only, no model call): peak RSS 180 MB, CPU 0.12 s, 8 realm tasks; RLIMIT_NPROC counts the realm's own user namespace on kernel 6.18 (7 runs auth status while the owner has hundreds of processes; 5 aborts), Bun sizes its reservations to RLIMIT_DATA (512 MiB runs --help; 256 MiB aborts); prlimit adds no measurable time (--help 98-104 ms either way). Per process: CPU soft 60 s (SIGXCPU) and hard +5 s (SIGKILL), data 2 GiB; realm: 64 tasks. Turn-time peaks unmeasured until the lead's real call.",
             "limiter": "/usr/bin/prlimit", "limiterSource": "prlimit(1) util-linux 2.39 --cpu=soft:hard, --nproc, --data (a single value sets soft and hard); setrlimit(2) man-pages 6.7: RLIMIT_CPU SIGXCPU at soft then SIGKILL at hard, RLIMIT_DATA covers brk and mmap since Linux 4.7, RLIMIT_NPROC counts threads (per user namespace since Linux 5.14 ucounts)" }
         }
+      },
+      "agent": {
+        "schemaVersion": 1,
+        "capability": "NativeAgentExecution",
+        "revision": "claude-agent-2026-11-03-r1",
+        "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03)",
+        "args": [
+          "--print",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--restricted",
+          "--tools",
+          "",
+          "--strict-mcp-config",
+          "--disable-slash-commands",
+          "--no-session-persistence",
+          "--permission-mode",
+          "dontAsk",
+          "--permission-prompts",
+          "none",
+          "--mcp-config",
+          "{mcpConfigFile}",
+          "--allowedTools",
+          "{toolList}",
+          "--max-turns",
+          "{maxTurns}"
+        ],
+        "forbiddenFlags": [
+          "--fallback-model",
+          "--bare",
+          "--dangerously-skip-permissions",
+          "--allow-dangerously-skip-permissions",
+          "--settings",
+          "--setting-sources",
+          "--add-dir",
+          "--plugin-dir",
+          "--continue",
+          "--resume",
+          "--session-id",
+          "--system-prompt",
+          "--append-system-prompt",
+          "--json-schema",
+          "--include-partial-messages",
+          "--agents",
+          "--max-budget-usd"
+        ],
+        "envSource": "headless",
+        "timeoutSource": "tool-session-approval-ttl",
+        "maxTurnsSource": "admission-policy",
+        "loginMethods": [
+          {
+            "method": "claudeai",
+            "args": [
+              "auth",
+              "login",
+              "--claudeai"
+            ],
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-1; claude auth login --claudeai"
+          }
+        ],
+        "transport": {
+          "kind": "claude-mcp",
+          "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-2(c), A0-4(c); R overrides the stdio transport from the original spike",
+          "mcpConfig": {
+            "flag": "--mcp-config",
+            "value": "{mcpConfigFile}",
+            "fileName": "deckent-mcp.json",
+            "server": {
+              "type": "http",
+              "url": "{bridgeUrl}",
+              "headers": {
+                "Authorization": "{turnTokenHeader}"
+              },
+              "timeout": "{approvalTtlMs}"
+            }
+          },
+          "guards": {
+            "permissionMode": "dontAsk",
+            "apiKeySources": [
+              "none"
+            ],
+            "plugins": [
+              {
+                "name": "cc-plugin-agents-md",
+                "path": "builtin",
+                "source": "cc-plugin-agents-md@builtin"
+              },
+              {
+                "name": "cc-plugin-privacy",
+                "path": "builtin",
+                "source": "cc-plugin-privacy@builtin"
+              },
+              {
+                "name": "cc-plugin-plugin-authoring",
+                "path": "builtin",
+                "source": "cc-plugin-plugin-authoring@builtin"
+              }
+            ],
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-2(c) init; owner plugin exception limited to these builtin identities; no arbitrary plugin paths"
+          }
+        }
       }
     },
     "cursor": {
@@ -715,6 +942,29 @@
           "requiredFlags": []
         }
       }
+    }
+  },
+  "agentBridge": {
+    "schemaVersion": 1,
+    "topology": "relay-http",
+    "source": "proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03)",
+    "sentinelHost": "deckent-mcp.invalid",
+    "path": "/mcp",
+    "serverName": "deckent",
+    "toolPrefix": "mcp__deckent__",
+    "tokenHeaderName": "Authorization",
+    "tokenEnvName": "DECKENT_NATIVE_AGENT_TOKEN",
+    "tokenValueTemplate": "Bearer {turnToken}",
+    "bodyMaxBytes": 1048576,
+    "frameMaxBytes": 1048576,
+    "limitsSource": "K0 policy seed 2026-11-03 under AMENDMENT-BRIDGE v2 Facade: 1 MiB body/frame ceilings reuse Claude headless.limits.maxLineBytes; not an A0 measurement or provider limit. Header/env names are Deckent turn capability names, never subscription credentials.",
+    "fallback": {
+      "enabled": false,
+      "permissionFlags": [
+        "--permission",
+        "--allow-net"
+      ],
+      "source": "proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03); P only, A0-5R/*-bridge-locked; no command or automatic fallback"
     }
   }
 }
