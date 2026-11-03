@@ -1,18 +1,26 @@
 import { createNativeCliWorkerDriver, createClaudeAgentDriver, prepareClaudeAgentRun, preflightNativeAgent, runHeadlessIsolated,
-  nativeCliAgentBridge, nativeEgressLimits, shellSandboxCapabilities } from '#adapters/index.js';
+  nativeCliAgentBridge, nativeCliAgent, nativeAgentFlagSetDigest, nativeEgressLimits, shellSandboxCapabilities, nativeWorkerEvidenceFile, type NativeCliWorkerBinding } from '#adapters/index.js';
+import { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey, nativeWorkerEvidenceTargetSchema, type NativeAgentExecution } from '#capabilities/index.js';
 import { globalStateRoot, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { configuredNativeChatReadiness } from '#composition/core/subscription-readiness/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 import type { NativeCliWorkerRuntime } from './native-runtime.js';
+import { nativeWorkerEnvironment } from './worker-floor.js';
 import { openConfiguredNativeWorkerTools } from './worker-tools.js';
-
 /** Trusted composition dependencies, never command/task input. Missing F08 remains unknown. */
 export function createConfiguredNativeCliWorkerRuntime(root: string, options: ConfigLoadOptions = {},
-  f08: NativeCliWorkerRuntime['f08'] = async () => null): NativeCliWorkerRuntime | undefined {
+  f08?: NativeCliWorkerRuntime['f08']): NativeCliWorkerRuntime | undefined {
   const bridge = nativeCliAgentBridge(), egress = nativeEgressLimits();
   if (!bridge?.maxConnections || !bridge.replayMaxEntries || !bridge.replayMaxBytes || bridge.maxConnections >= egress.connections) return undefined;
   const isolation = async () => (await shellSandboxCapabilities(globalStateRoot(options.env ?? process.env))).bubblewrap;
-  return Object.freeze({ readiness: configuredNativeChatReadiness(root, options), f08,
+  const readiness = configuredNativeChatReadiness(root, options), evidence = configuredNativeWorkerVerification(root, options);
+  return Object.freeze({ readiness, verification: evidence.verification, f08: f08 ?? (async query => {
+    const entry = nativeCliAgent(query.binding.protocolFamily); if (!entry) return null;
+    const observed = await readiness.read({ surface: 'worker', scopeId: query.scopeId, reference: query.reference,
+      profileDigest: query.binding.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) });
+    return observed?.execution ? evidence.read(query.scopeId, query.binding, observed.execution) : null;
+  }),
+    checkEnvironment: nativeWorkerEnvironment(root, options),
     bridgeLimits: { idleMs: egress.idleMs, maxConnections: bridge.maxConnections, replayMaxEntries: bridge.replayMaxEntries, replayMaxBytes: bridge.replayMaxBytes },
     openTools: (request, binding, signal, context) => openConfiguredNativeWorkerTools(root, request, binding, signal, context, options),
     async driver(input, signal) {
@@ -25,4 +33,22 @@ export function createConfiguredNativeCliWorkerRuntime(root: string, options: Co
         runIsolated: (entry, spawn, bounds, signal, line) => runHeadlessIsolated(entry, isolation, spawn, bounds, signal, line) }, signal);
     },
   } satisfies NativeCliWorkerRuntime);
+}
+
+function configuredNativeWorkerVerification(root: string, options: ConfigLoadOptions) {
+  const target = async (scopeId: string, binding: NativeCliWorkerBinding, execution: NativeAgentExecution) => {
+    const { profile } = await recheckNativeWorkerUse(root, scopeId, binding, options), entry = nativeCliAgent(binding.protocolFamily);
+    if (!entry) throw new Error('NATIVE_WORKER_F08_INVALID');
+    const value = nativeWorkerEvidenceTargetSchema.parse({ scopeId, reference: profile.reference, connectionId: binding.connectionId, execution });
+    return { value, file: nativeWorkerEvidenceFile(binding.definition.stateDir, binding.definition.ownerUid, entry.headless.limits.preflightOutputBytes, nativeWorkerEvidenceKey(value)) };
+  };
+  return {
+    async read(scopeId: string, binding: NativeCliWorkerBinding, execution: NativeAgentExecution) {
+      const { value, file } = await target(scopeId, binding, execution); return readNativeWorkerEvidence(file, value);
+    },
+    verification: { async acquire(request, binding, execution) {
+      const { value, file } = await target(request.identity.scopeId, binding, execution);
+      return claimNativeWorkerVerification(file, value, request.identity.attemptId);
+    } } satisfies NonNullable<NativeCliWorkerRuntime['verification']>,
+  };
 }

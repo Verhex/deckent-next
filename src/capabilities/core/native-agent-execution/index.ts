@@ -10,4 +10,9 @@ export { parseNativeCliRegistry, nativeCliCapabilitiesSchema, nativeEffortArgs, 
 export { buildHeadlessEnv, headlessLoginEnv, headlessRequiredFlags, headlessFlagSetDigest, nativeAgentFlagSetDigest, headlessArgv, type HeadlessEntry } from './internal/environment.js';
 export { emitDelta, reportedCounters } from './internal/stream.js';
 export { createClaudeAgentDriver, ClaudeAgentError, type ClaudeAgentDriver, type ClaudeAgentResult } from './internal/claude-stream.js';
+export * from './internal/worker-verification.js';
 export { errorDiagnostic } from './internal/error-diagnostic.js';
+export * from './internal/worker-profile.js';
+export { nativeWorkerToolGate, nativeWorkerProcessResult } from './internal/worker-stream.js';
+export { nativeWorkerReadiness } from './internal/worker-readiness.js';
+export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';

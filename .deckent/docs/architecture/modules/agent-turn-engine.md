@@ -445,3 +445,27 @@ Pure command schemas, environment/argv shaping, Claude stream validation and dia
 `capabilities/core/native-agent-execution`; asset loading, filesystem custody and spawning stay in adapters.
 Codex agent argv disables agents and plugins using sourced registry data; the v1 text argv/digest stays unchanged.
 Actual CLI subagent suppression must be verified in owner R / the assembled BeUser walk; fake CLI cannot prove it.
+
+### K22: retained worker verification and input views
+
+A worker with current CLI/login/environment observations and no F08 record may open its first guarded
+verification Attempt. The tree gate, K5 recheck, K6 reservation and ordinary policy/approval owners still
+precede execution. A host-private exclusive claim serializes this binding/seal; contention waits visibly.
+The CLI init/item guards precede every proposal. After the CLI realm closes, effects settle and terminal
+custody is retained, release publishes F08 for the exact connection, scope, reference, execution seal and
+Attempt. A guard refusal instead retains a terminal negative; observing it again cannot trigger a retry.
+Unsafe or unreadable records fail closed; a claim left by an unknown process is never stolen or aged out.
+The record follows no-follow, owner, private-mode, single-link and bounded-read rules and is absent from
+both CLI and tool views. An observation still does not constitute F08 or product acceptance.
+
+Admitted task artifacts and predecessor handoffs appear only in tool views at `/deckent/inputs/...`;
+dependency binds retain their admitted targets. Read tools use the shared scoped reader; shell calls and
+read-only environment probes use the shared bubblewrap view resolver/process owner with read-only aliases.
+Receipts, source roots, scope, byte limits and link checks are rechecked before consumption. A realm unable
+to provide those views refuses them. The CLI receives neither these mounts nor their paths in argv.
+Legacy profile selection and `projectionRetired=false` are unchanged. Real-account R08, assembled BeUser,
+independent review and hosted acceptance remain separate from author fixtures and compiled evidence.
+The background worker currently has no production producer carrying hard-floor turn-bound decision
+capabilities to a human card. Its ordinary CLI/PTY approval refuses with `APPROVAL_ASSURANCE_INSUFFICIENT`;
+the readonly-write author fixture uses an explicit trusted ring plus a real PTY witness. That fixture does
+not close the production interaction. The common runtime-service/approval surface needs lead integration.

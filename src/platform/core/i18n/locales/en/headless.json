@@ -104,5 +104,10 @@
   "headless.agent.k13.resource.waiting": "Waiting for the shared subscription resource. No new worker has started; wait for confirmed release or cancel this task.",
   "headless.agent.k13.resource.legacy": "Earlier execution path: this admitted task keeps its recorded profile. New work requires a governed native worker connection.",
   "headless.agent.k13.agents.action": "prepare an agent and its pinned skills for a task (read-only)",
-  "headless.agent.k20.verifying": "Checking the CLI tool surface in this first guarded turn."
+  "headless.agent.k20.verifying": "Checking the CLI tool surface in this first guarded turn.",
+  "headless.agent.k22.worker.NATIVE_WORKER_VERIFICATION_WAIT": "Another verification Attempt owns this binding and seal. Wait for its retained result or custody reconciliation; a second CLI is not started.",
+  "headless.agent.k22.worker.NATIVE_WORKER_F08_INVALID": "The retained worker verification record cannot be read safely. Execution stops until the record is reconciled.",
+  "headless.agent.k22.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "The worker CLI tool guard refused the surface. The Attempt ended; this binding and seal will not be retried.",
+  "headless.agent.k22.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "The worker CLI reported an unexpected plugin. The Attempt ended; this binding and seal will not be retried.",
+  "headless.agent.k22.worker.NATIVE_WORKER_INPUT_REFUSED": "The task input read-only view could not be verified. Inspect its path, scope, links and byte limits."
 }

@@ -1,5 +1,9 @@
 # Bilinen sınırlar
 
+Alpha.63 işçi adayı, kalıcı işçi kanıtını ilk korumalı Attempt ile üretir. Okunamayan kayıt veya sonucu belirsiz doğrulama kilidi uzlaştırma bekletir; kendiliğinden yeniden denenmez. Görev girdileri ve önceki görevin çıktıları yalnız araçların salt okunur görünümündedir; CLI giriş realm’ine girmez. Gerçek hesap ve monte sürüm kabulü açıktır.
+
+Bu adayda turn-bound güvence isteyen işçi shell kartının özel karar üreticisi insan yüzeyine henüz bağlı değildir. Kartı listelemek ve sıradan CLI/PTY üzerinden yanıtlamak bu güvenceyi sağlamaz; işçi bekler. Yazar fixture’ı doğru karta bağlı karar sonrasında salt okunur sınırı kanıtlar; bu üretim etkileşimini kanıtlamaz.
+
 Codex ajan profili, sürüm kaynağı belirtilmiş registry ayarlarıyla alt ajanları ve eklentileri kapatır. Gerçek CLI’de alt ajanların kapalı olduğu owner R / monte BeUser yürüyüşünde doğrulanacaktır; fake CLI bunu kanıtlamaz.
 
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)

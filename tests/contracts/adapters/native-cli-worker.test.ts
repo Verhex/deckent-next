@@ -314,3 +314,62 @@ it('K17: Codex worker uses the real K3 stream guard, token env and no invented t
     expect(() => createNativeCliWorkerDriver({ ...f.input, maxTurns: 3 }, f.transport, new AbortController().signal)).toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
 });
+
+it('K22: first Attempt verifies once, retains F08 only after terminal custody, then the next Attempt uses its seal', async () => {
+  const { nativeWorkerEvidenceFile } = await import('#adapters/core/native-cli-worker/index.js');
+  const { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey } = await import('#capabilities/index.js');
+  const { mkdir } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'k22-verification-')), state = join(root, 'state'); await mkdir(state, { mode: 0o700 });
+  const f = fixture(), target = { scopeId: request.identity.scopeId, connectionId: binding.connectionId,
+    reference: { providerId: 'fixture', providerVersion: 1, modelId: 'fixture', modelVersion: 1 }, execution };
+  const file = nativeWorkerEvidenceFile(state, process.getuid!(), 8192, nativeWorkerEvidenceKey(target));
+  f.ports.f08 = () => readNativeWorkerEvidence(file, target);
+  f.ports.verification = { acquire: async (request) => claimNativeWorkerVerification(file, target, request.identity.attemptId) };
+  const scoped = { ...request, workspace: join(root, 'workspace') }, options = { profile: profile(), request: scoped, ports: f.ports, fence: f.fence, custody: nativeWorkerCustodyFile(scoped) };
+  try {
+    expect(await inspectNativeCliWorker(binding, f.ports)).toMatchObject({ state: 'ready', verification: true });
+    const first = await prepareNativeCliWorker(options); if (first.state !== 'ready') throw Error('not-ready');
+    expect(await prepareNativeCliWorker({ ...options, request: { ...scoped, identity: { ...scoped.identity, attemptId: 'concurrent' } } }))
+      .toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_VERIFICATION_WAIT' });
+    expect(f.ports.driver).not.toHaveBeenCalled();
+    expect(await first.supervisor.execute(scoped)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } });
+    expect(await file.read()).toBeNull(); // Realm exit alone is not retained Dispatch output.
+    await first.supervisor.release(scoped);
+    expect(await file.read()).toMatchObject({ attemptId: scoped.identity.attemptId, verdict: { state: 'verified' } });
+    expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'ready', execution });
+    const secondRequest = { ...scoped, identity: { ...scoped.identity, attemptId: 'second' } };
+    const second = await prepareNativeCliWorker({ ...options, request: secondRequest }); if (second.state !== 'ready') throw Error('not-ready');
+    expect(await second.supervisor.execute(secondRequest)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } }); await second.supervisor.release(secondRequest);
+    expect(f.run).toHaveBeenCalledTimes(2);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('K22: guard rejection is a terminal negative; corrupted, linked and writable retained evidence never opens verification', async () => {
+  const { nativeWorkerEvidenceFile } = await import('#adapters/core/native-cli-worker/index.js');
+  const { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey } = await import('#capabilities/index.js');
+  const { mkdir, symlink, link, chmod, unlink } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'k22-negative-')), state = join(root, 'state'); await mkdir(state, { mode: 0o700 });
+  const f = fixture(), target = { scopeId: request.identity.scopeId, connectionId: binding.connectionId,
+    reference: { providerId: 'fixture', providerVersion: 1, modelId: 'fixture', modelVersion: 1 }, execution };
+  const key = nativeWorkerEvidenceKey(target), file = nativeWorkerEvidenceFile(state, process.getuid!(), 8192, key), path = join(state, `worker-f08-${key}.json`);
+  f.ports.f08 = () => readNativeWorkerEvidence(file, target);
+  f.ports.verification = { acquire: async request => claimNativeWorkerVerification(file, target, request.identity.attemptId) };
+  f.run.mockResolvedValue({ termination: 'confirmed', status: 'failed', text: '', refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' });
+  const scoped = { ...request, workspace: join(root, 'workspace') };
+  try {
+    const first = await prepareNativeCliWorker({ profile: profile(), request: scoped, ports: f.ports, fence: f.fence, custody: nativeWorkerCustodyFile(scoped) });
+    if (first.state !== 'ready') throw Error('not-ready');
+    expect(await first.supervisor.execute(scoped)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, stderr: 'NATIVE_WORKER_PLUGIN_UNEXPECTED' });
+    await first.supervisor.release(scoped);
+    expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_PLUGIN_UNEXPECTED' });
+    expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_PLUGIN_UNEXPECTED' }); expect(f.run).toHaveBeenCalledOnce();
+    const record = await readFileText(path);
+    await chmod(path, 0o666); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await chmod(path, 0o600);
+    await link(path, join(state, 'hardlink')); await expect(file.read()).rejects.toThrow(); await unlink(join(state, 'hardlink'));
+    await unlink(path); await symlink(join(state, 'absent'), path); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await unlink(path);
+    await writeFile(path, 'x'.repeat(8193), { mode: 0o600 }); await expect(file.read()).rejects.toThrow();
+    await writeFile(path, '{', { mode: 0o600 }); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
+    await writeFile(path, record, { mode: 0o600 }); expect(await file.read()).toMatchObject({ verdict: { state: 'refused' } });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+async function readFileText(path: string) { return (await import('node:fs/promises')).readFile(path, 'utf8'); }

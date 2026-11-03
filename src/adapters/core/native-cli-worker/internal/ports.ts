@@ -6,9 +6,10 @@ import type { createNativeToolBridge, NativeToolBridgeLimits } from '#adapters/c
 import type { NativeCliWorkerBinding } from './profile.js';
 
 export type NativeCliWorkerWaitReason = 'NATIVE_PROJECTION_RETIRED' | 'NATIVE_WORKER_F08_REQUIRED' | 'NATIVE_WORKER_CAPACITY_WAIT'
+  | 'NATIVE_WORKER_VERIFICATION_WAIT' | 'NATIVE_WORKER_F08_INVALID' | 'NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED' | 'NATIVE_WORKER_PLUGIN_UNEXPECTED'
   | 'NATIVE_AGENT_CAPABILITY_UNSEALED' | 'NATIVE_AGENT_ENVIRONMENT_REFUSED' | 'NATIVE_AGENT_CLI_UNAVAILABLE'
   | 'NATIVE_AGENT_LOGIN_REQUIRED' | 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' | 'NATIVE_AGENT_PLUGIN_UNEXPECTED' | 'NATIVE_AGENT_BRIDGE_UNAVAILABLE';
-export type NativeCliWorkerReadiness = Readonly<{ state: 'ready'; execution: NativeAgentExecution } | { state: 'waiting'; reason: NativeCliWorkerWaitReason }>;
+export type NativeCliWorkerReadiness = Readonly<{ state: 'ready'; execution: NativeAgentExecution; verification?: true } | { state: 'waiting'; reason: NativeCliWorkerWaitReason }>;
 export type NativeCliWorkerProcessResult = Readonly<{ termination: 'confirmed' | 'unverified'; status: 'completed' | 'failed' | 'cancelled'; text: string;
   refusal?: import('#capabilities/index.js').NativeAgentReadinessReason }>;
 /** Admitted tool-realm resources; never passed to the login-bearing CLI realm. */
@@ -25,6 +26,8 @@ export interface NativeCliWorkerPorts {
   readiness(binding: NativeCliWorkerBinding): Promise<NativeAgentReadiness>;
   /** Retained F08 for this exact execution seal, not a test result boolean supplied by the task. Missing/stale = null. */
   f08(binding: NativeCliWorkerBinding): Promise<NativeAgentExecution | null>;
+  verification?: { acquire(request: SandboxRequest, binding: NativeCliWorkerBinding, execution: NativeAgentExecution): Promise<null | {
+    finish(verdict: import('#capabilities/index.js').NativeWorkerEvidenceVerdict): Promise<void>; abandon(): Promise<void> }> };
   /** K5b: principal, installation/company, delegation, activation, lease, profile revision; on every spawn and tool admission. */
   recheck(request: SandboxRequest, binding: NativeCliWorkerBinding, signal: AbortSignal): Promise<void>;
   /** K6b owns installation-wide durable custody. A busy login is waiting, never more parallel processes. */
