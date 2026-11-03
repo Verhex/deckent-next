@@ -25,7 +25,7 @@ const loginMethods = z.array(z.strictObject({ method: nativeAgentLoginMethodSche
   .refine(rows => new Set(rows.map(row => row.method)).size === rows.length);
 const streamJsonTransportSchema = z.strictObject({ kind: z.literal('claude-mcp'), source: text,
   mcpConfig: z.strictObject({ flag: z.literal('--mcp-config'), value: z.literal('{mcpConfigFile}'), fileName: z.string().regex(/^[a-z][a-z0-9.-]*\.json$/u),
-    server: z.strictObject({ type: z.literal('http'), url: z.literal('{bridgeUrl}'), headers: z.record(z.string(), z.literal('{turnTokenHeader}')).readonly(),
+    server: z.strictObject({ type: z.literal('http'), url: z.literal('{bridgeUrl}'), headers: z.record(z.string(), z.enum(['{turnTokenHeader}', '${turnTokenHeader}'])).readonly(),
       timeout: z.literal('{approvalTtlMs}') }).readonly() }).readonly(),
   guards: z.strictObject({ permissionMode: text, apiKeySources: z.array(text).min(1).readonly(),
     plugins: z.array(z.strictObject({ name: text, path: text, source: text }).readonly()).readonly(), source: text }).readonly(),

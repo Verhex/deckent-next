@@ -474,6 +474,6 @@
   "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır.",
   "terminal.approval.k23.assurance": "Bu arka plan çağrısı terminalde kişi tanığıyla karar ister; servis kartı şu an kullandığınız terminale bağlar.",
   "terminal.approval.k23.call": "İşçi denemesi (Attempt): {attempt} · argsDigest: {digest}",
-  "terminal.approval.k23.wait": "Onayınız bekleniyor · Run {run} · Task {task} · Attempt {attempt} · {tool} → {target} · {reason} · {seconds} sn kaldı. /approvals açın.",
+  "terminal.approval.k23.wait": "Onayınız bekleniyor · İş {run} · Görev {task} · Deneme {attempt} · {tool} → {target} · {reason} · {seconds} sn kaldı. /approvals açın.",
   "terminal.approval.k23.expired": "Onay süresi doldu; görev tamamlanmadı."
 }
