@@ -493,6 +493,21 @@ dependency binds retain their admitted targets. Read tools use the shared scoped
 read-only environment probes use the shared bubblewrap view resolver/process owner with read-only aliases.
 Receipts, source roots, scope, byte limits and link checks are rechecked before consumption. A realm unable
 to provide those views refuses them. The CLI receives neither these mounts nor their paths in argv.
+Native template defaults derive their Node requirement from the native CLI registry's hard `dataBytes`
+bound and `native-agent-execution/internal/worker-environment.json`'s heap policy; Docker defaults and
+explicit environment declarations retain their own values. Both read-only probes and governed worker
+shell calls use that same native bound: `prlimit` sets soft and hard RLIMIT_DATA before the command,
+and the fixed Node environment sets old-space to the registry share (currently 1536 MiB of 2 GiB).
+Children inherit the hard limit; this is a per-process data bound, not an aggregate RSS/cgroup limit.
+The existing heap probe still checks minimum available V8 heap, not exact old-space size. A missing
+executable or unmet declaration refuses before model launch. An Attempt inside installation state uses
+a closed bubblewrap view that first hides its state ancestor, then binds only that Attempt subtree;
+sibling state remains absent. This trusted composition-only layout rejects open views; ordinary chat
+shell layouts are unchanged. Generic template/probe shaping and the native bound wrapper live in
+`capabilities/core/native-agent-execution`; adapters supply registry data and the existing realm owner.
+The environment-to-F08/retained-output path does not establish coding-task acceptance:
+`GitWorkspacePatchSource` still restores Docker custody for native worker records, so evaluation can
+park with `PATCH_UNSAFE`. Native patch-custody integration remains a separate lead scope.
 Legacy profile selection and `projectionRetired=false` are unchanged. Real-account R08, assembled BeUser,
 independent review and hosted acceptance remain separate from author fixtures and compiled evidence.
 The background worker currently has no production producer carrying hard-floor turn-bound decision

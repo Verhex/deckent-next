@@ -7,6 +7,7 @@ import { dirname } from 'node:path';
  * writable project, right after the project bind.
  */
 export interface BubblewrapView {
+  readonly containedWorkspaceRoot?: string;
   /** The project root: read-write (the one place a command changes). */
   readonly projectRoot: string;
   /** Astra 2170 R1: the project bound read-only (an unbounded call the owner did not approve); absent = read-write. */
@@ -88,6 +89,7 @@ function viewMounts(view: BubblewrapView): ViewMount[] {
   for (const path of view.systemPaths) add(path, ['--ro-bind-try', path, path], false, false);
   for (const path of view.network ? view.networkFiles ?? [] : []) add(path, ['--ro-bind-try', path, path], false, false);
   for (const path of view.toolchainPaths) add(path, ['--ro-bind-try', path, path], false, false);
+  if (view.containedWorkspaceRoot) add(view.containedWorkspaceRoot, ['--perms', '0700', '--tmpfs', view.containedWorkspaceRoot], false, true);
   if (view.overlay) add(view.projectRoot, ['--overlay-src', view.projectRoot, '--overlay', view.overlay.upper, view.overlay.work, view.projectRoot], false, false);
   else add(view.projectRoot, [view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot], !view.projectReadOnly, false);
   for (const path of view.sealedPaths ?? view.open?.sealed ?? []) add(path, ['--ro-bind', path, path], false, true);
@@ -158,6 +160,7 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
   // `--remount-ro` changes only that mount point (man page), so a scratch area bound inside a hidden root stays writable.
   for (const path of view.hiddenPaths ?? view.open?.hidden ?? []) args.push('--remount-ro', path);
   for (const path of view.emptiedDirectories ?? []) args.push('--remount-ro', path);
+  if (view.containedWorkspaceRoot) args.push('--remount-ro', view.containedWorkspaceRoot);
   args.push('--chdir', view.projectRoot);
   return args;
 }

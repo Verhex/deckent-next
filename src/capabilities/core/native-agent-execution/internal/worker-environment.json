@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "$comment": "K27: native tool Node old-space uses this share of the native CLI registry hard dataBytes bound, enforced in both probes and tools. This is not Docker memoryBytes or a cgroup/RSS guarantee.",
+  "environment": "NODE_OPTIONS",
+  "flag": "--max-old-space-size=",
+  "memoryFraction": 0.75,
+  "bytesPerUnit": 1048576
+}

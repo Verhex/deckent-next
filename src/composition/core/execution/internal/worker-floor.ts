@@ -1,9 +1,9 @@
 import { prepareNativeWorkerInputs, nativeWorkerViewSandboxes } from './worker-inputs.js';
-import { ErrorRegistry, getConfigKnownSecrets, globalStateRoot, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, globalStateRoot, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { agentWorkspaceDeny, createWorkspaceReadTools, agentAuthorityPaths, agentTurnWriteFloor, isSelfSourceProject,
-  agentShellSandboxLayout, shippedShellSandboxes, nativeCodingEnvironmentProbes, resolveShellRealm, shellSandboxCapabilities,
-  type NativeCliWorkerPorts } from '#adapters/index.js';
-import { nativeWorkerEnvironmentProbe } from '#capabilities/index.js';
+  agentShellSandboxLayout, shippedShellSandboxes, nativeCodingEnvironmentProbes, nativeCliAgent, resolveShellRealm, shellSandboxCapabilities,
+  type NativeCliWorkerPorts, type ShellCapabilities, type ShellSandbox } from '#adapters/index.js';
+import { nativeWorkerEnvironmentProbe, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, nativeWorkerToolBounds } from '#capabilities/index.js';
 import { assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -24,9 +24,9 @@ export async function nativeWorkerToolFloor(root: string, request: Parameters<Op
   const inputs = await prepareNativeWorkerInputs(resources, scopeId, root, request.workspace, context.layout, context.config.execution?.secretGate, context.config.artifacts.maxBytes, context.config.service.responseMaxBytes);
   const authority = agentAuthorityPaths(request.workspace, context.layout);
   const selfSource = await isSelfSourceProject(root), writeFloor = agentTurnWriteFloor(authority, false, selfSource);
-  const sandbox = agentShellSandboxLayout(request.workspace, context.layout, workspace.scope, writeFloor, false, null, env);
+  const sandbox = nativeWorkerContainedLayout(agentShellSandboxLayout(request.workspace, context.layout, workspace.scope, writeFloor, false, null, env), context.layout.root, productResourcePath(context.layout, 'workspaces'));
   return { current, context, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox,
-    sandboxes: nativeWorkerViewSandboxes(sandbox, inputs, shippedShellSandboxes(sandbox)) };
+    sandboxes: nativeWorkerBoundSandboxes<ShellCapabilities, Extract<ReturnType<ShellSandbox['usable']>, { ok: true }>>(nativeWorkerViewSandboxes(sandbox, inputs, shippedShellSandboxes(sandbox)), nativeWorkerToolBounds(nativeCliAgent(current.profile.protocol.family)?.headless.isolation.limits)) };
 }
 
 export function nativeWorkerEnvironment(root: string, options: ConfigLoadOptions): NonNullable<NativeCliWorkerPorts['checkEnvironment']> {

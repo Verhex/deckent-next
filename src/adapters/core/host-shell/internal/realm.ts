@@ -177,6 +177,8 @@ export type ShellRealmResolution = { readonly ok: true; readonly realm: ShellRea
 /** What a sandbox realm needs to lay out its view of the machine: the project scope (real root, deny floor, ignored names) and the
  * turn's scratch area (SCR-A); nothing about the command. */
 export interface ShellSandboxLayout {
+  /** Trusted worker-only closed view: hide this state ancestor before binding the exact Attempt workspace. */
+  readonly containedWorkspaceRoot?: string;
   /** The turn's workspace scope: real root, deny floor, ignored names, and the deny list's nested literal heads (`protectedAnchors`) —
    * the product's own state (ledger, policy, sessions, …) and the Core floor's nested paths — which the realms protect together with
    * their ancestors even under an ignored tree (`node_modules`, `.cache`, a `.gitignore` entry) that they otherwise do not scan; a chain

@@ -17,4 +17,5 @@ export { nativeWorkerPreflight, nativeWorkerApprovalExpired, nativeWorkerToolLif
 export { nativeWorkerReadiness } from './internal/worker-readiness.js';
 export { prepareNativeWorkerObservation } from './internal/worker-preparation.js';
 export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';
+export { nativeWorkerEnvironmentProbes, nativeWorkerTemplateEnvironment, nativeWorkerToolBounds, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, type NativeWorkerProbeRunner } from './internal/worker-environment.js';
 export { workerToolPreviewComplete, mintAttendedWorkerDecision, workerToolCardSummary, readWorkerToolCard, type WorkerToolCard } from './internal/worker-card.js';
