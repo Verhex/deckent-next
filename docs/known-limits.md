@@ -4,7 +4,7 @@ The alpha.63 worker candidate verifies its first guarded Attempt before retainin
 
 In this candidate, worker shell cards that require turn-bound assurance still need the dedicated decision producer connected to the human surface. Listing the card and answering from an ordinary CLI/PTY does not satisfy that assurance; the worker remains waiting. The author fixture proves read-only enforcement after a properly bound decision, not this production interaction.
 
-Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it.
+Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it. The Codex text profile (subscription text chat and Brain) keeps the CLI's own subagents on by owner choice (2026-11-03): gpt-6.x catalog models ignore `features.multi_agent=false`, so the model may open helper agents whose turns and quota use Deckent does not see. Deckent-governed CLI subagents in the natural CLI flow are the first item of the next package.
 
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
