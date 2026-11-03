@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { counterSchema, identitySchema, policyHasResourceRules, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
-import { diagnoseReservationWave, planSchedulingWave } from '#engine/core/scheduling/index.js';
+import { diagnoseReservationWave, planSchedulingWave, type ResourceCapacityInput } from '#engine/core/scheduling/index.js';
 import { runQuerySchema, type RunAuthorization } from './application.js';
 import { runExecutionPolicySchema, runReservationSchema, RunStoreError, type RunStore, type RunReceipt, type RunReservation } from './store.js';
 import { assertRunExecution } from './registry.js';
@@ -12,6 +12,7 @@ import { projectRunView } from './view.js';
 export const runReservationCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema }).strict();
 export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
 export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
+  loadRunResourceCapacity?(run: RunSnapshot): Promise<ResourceCapacityInput>;
   quotaHeldTasks?(run: RunSnapshot, now: number): Promise<readonly string[]>;
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;
 }
@@ -84,6 +85,7 @@ export class RunReservationApplication {
       const now = counterSchema.parse(this.runtime.now());
       const excludedTaskIds = [...(await this.admission?.prepare(run, principal, now) ?? []), ...(await this.store.quotaHeldTasks?.(run, now) ?? [])];
       const wave = planSchedulingWave(run.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, excludedTaskIds,
+        resourceCapacity: await this.store.loadRunResourceCapacity?.(run),
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,

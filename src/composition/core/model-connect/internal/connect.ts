@@ -34,7 +34,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const principal = typeof scopeId === 'string' ? () => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options) : () => { throw new ModelConnectError('MODEL_CONNECT_INVALID'); };
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
     let effective: Record<string, unknown> = {};
-    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal) : null;
+    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal, scope) : null;
     if (parsed.success && parsed.data.workspaceId) {
       const rows = await listConfiguredConnectionWorkspaces(projectRoot, String(scopeId), parsed.data.connection, parsed.data.endpoint, options, host);
       if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');

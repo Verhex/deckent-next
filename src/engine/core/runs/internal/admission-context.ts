@@ -11,7 +11,7 @@ export function runAdmissionStorePerCall(ports: { reader(): Promise<Pick<Store, 
   writer(): Promise<Pick<Store, 'createRun' | 'loadRunWorkspaceCustody'> & { close(): void }> }): Store {
   return { async loadRunReceipt(scopeId, commandId) { const store = await ports.reader(); try { return await store.loadRunReceipt(scopeId, commandId); } finally { store.close(); } },
     async loadRunWorkspaceCustody(scopeId, runId) { const store = await ports.writer(); try { return await store.loadRunWorkspaceCustody(scopeId, runId); } finally { store.close(); } },
-    async createRun(request, workspace, authority) { const store = await ports.writer(); try { return await store.createRun(request, workspace, authority); } finally { store.close(); } },
+    async createRun(request, workspace, authority, resources) { const store = await ports.writer(); try { return await store.createRun(request, workspace, authority, resources); } finally { store.close(); } },
   };
 }
 /** The same application-owned admission preparation is used for public Runs and private-candidate verification Runs. `model_roles`: the installation's tier/role overlays (absent = the Core seed); system worker assignment reads the composed registry (M3). */

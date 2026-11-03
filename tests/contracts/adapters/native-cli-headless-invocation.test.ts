@@ -5,7 +5,8 @@ import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { ModelInvocationApplication } from '#engine/core/model-invocation/index.js';
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
-import { openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
+import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { headlessCapacityBinding, openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
 import { isNativeCliHeadlessAdapter, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
 import { bubblewrapObservation } from '#adapters/index.js';
 import { binding as definition, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -25,7 +26,8 @@ async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, 
   const activations = await openSqliteModelActivationStore(path, sqlite);
   const admitted = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: 'catalog', expectedBinding }, actor, authorization, admittedAtMs: 1, definition }); activations.close();
-  (await openSqliteModelInvocationStore(path, sqlite, 'forbid')).close();
+  const resources = openSqliteLedger(path, sqlite, 'forbid');
+  try { bindCapacityResource(resources, headlessCapacityBinding(c.profile.adapter.definition), { executionSlots: c.profile.allocation.maxInFlight, inFlightSlots: c.profile.allocation.maxInFlight }); } finally { resources.close(); }
   // The registry shape the composition uses: resolve gives the headless port, admit (the credential-source decision) runs its preflight before any claim.
   const app = new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return authorization; } },
     { async inspect() { return { schemaVersion: 1, reference, status: 'declared', catalogRevision: 'catalog', definition, binding: expectedBinding, availability: 'not-observed' }; } },

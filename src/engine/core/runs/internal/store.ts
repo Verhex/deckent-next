@@ -1,4 +1,5 @@
 import { clientCommandIdSchema, runProposalBindingSchema, authorityAdmissionSchema, branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
+import type { RunCapacityBinding } from './capacity-resource.js';
 import { z } from 'zod';
 import type { ReservationDiagnostic } from '#engine/core/scheduling/index.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
@@ -31,7 +32,7 @@ export interface RunStore {
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   /** `workspace`, when given, is the Run's immutable workspace custody, written in the admission transaction and never part of the
    * receipt command (record shapes unchanged). A replay whose custody differs is RUN_COMMAND_CONFLICT. */
-  createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void): Promise<RunReceipt>;
+  createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void, resources?: readonly RunCapacityBinding[]): Promise<RunReceipt>;
   /** Atomically admits a nonempty ordered prefix fitting both limits. Command retains candidates;
    * snapshot contains only admitted attempts. Replay never expands the original admission. */
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;

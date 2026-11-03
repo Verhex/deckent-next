@@ -1,3 +1,4 @@
+import { assertInvocationResourceCapacity } from './resource-capacity.js';
 import { recordInvocationPlanUsage } from './plan-usage.js';
 import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
@@ -77,6 +78,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
             || activationRow['model_version'] !== command.reference.modelVersion || activationRow['revision'] !== persisted.revision
             || persisted.state !== 'active' || !same(persisted, supplied) || persisted.binding.digest !== admission.profile.bindingDigest) throw new Error();
         } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT'); }
+        assertInvocationResourceCapacity(this.db, profile);
         const configured = profile.allocation, checkpoint = readModelAllocationCheckpoint(this.db, command.scopeId, configured.id);
         const current = checkpoint?.allocation;
         if (current && (current.maxCalls !== configured.maxCalls || current.maxInFlight !== configured.maxInFlight)) {

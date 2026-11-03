@@ -134,3 +134,5 @@ export * from '#adapters/core/beuser-surface/index.js';
 export * from '#adapters/core/project-attachment/index.js';
 export { withSiwcConnection } from '#adapters/core/siwc-connection/index.js';
 export { withSideEffectFreeSqliteReads } from '#adapters/core/sqlite-read-view/index.js';
+
+export { bindCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
