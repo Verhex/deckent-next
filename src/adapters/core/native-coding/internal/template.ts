@@ -56,7 +56,7 @@ export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): E
 /** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. PRE-7: a template
  * that declares no environment gets the adapter's default requirements (registry data), so they are part of its content identity. */
 export function createNativeCodingTemplate(resourceLimits: unknown, invocation: unknown, worker?: NativeCliWorkerBinding): ExecutionProfileDefinition {
-  const declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits) } : resourceLimits;
+  const declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits, worker?.protocolFamily) } : resourceLimits;
   const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: declared, invocation, ...(worker ? { worker } : {}) });
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   const parameters = immutableJsonObjectSchema.parse(parsed.data);

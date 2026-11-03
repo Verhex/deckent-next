@@ -109,5 +109,6 @@
   "headless.agent.k22.worker.NATIVE_WORKER_F08_INVALID": "Kalıcı işçi doğrulama kaydı güvenle okunamadı. Kayıt uzlaştırılana kadar yürütme durur.",
   "headless.agent.k22.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "İşçi CLI araç guard’ı doğrulanmadı. Attempt sonlandı; aynı bağlantı ve mühür yeniden denenmez.",
   "headless.agent.k22.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "İşçi CLI beklenmeyen bir eklenti bildirdi. Attempt sonlandı; aynı bağlantı ve mühür yeniden denenmez.",
-  "headless.agent.k22.worker.NATIVE_WORKER_INPUT_REFUSED": "Görev girdisinin salt okunur görünümü doğrulanamadı. Girdi yolu, kapsamı, bağlantıları ve bayt sınırlarını inceleyin."
+  "headless.agent.k22.worker.NATIVE_WORKER_INPUT_REFUSED": "Görev girdisinin salt okunur görünümü doğrulanamadı. Girdi yolu, kapsamı, bağlantıları ve bayt sınırlarını inceleyin.",
+  "headless.agent.k27.containedWorkspaceRefused": "İşçinin çalışma dizini, kurulum durumunun kapalı görünümü olarak açılamıyor."
 }

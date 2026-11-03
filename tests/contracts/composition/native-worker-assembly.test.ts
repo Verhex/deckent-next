@@ -15,6 +15,28 @@ import type { NativeCliWorkerBinding, NativeCliWorkerPorts, NativeCliWorkerTrans
 const temporary: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await cleanupConnections(); for (const root of temporary.splice(0)) await rm(root, { recursive: true, force: true }); });
 
+it('K27: production environment checks the default native requirements inside state custody and refuses a missing executable before any model', async () => {
+  const { nativeAgentRealmAvailable } = await import('../../fixtures/native-headless/agent.js');
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const { mkdir } = await import('node:fs/promises'), { productResourcePath } = await import('#platform/index.js');
+  const { loadConfiguredScopeContext } = await import('#composition/core/scoped-request/index.js');
+  const f = await brainProviderFixture(), c = await connection();
+  try {
+    vi.spyOn(runs, 'recheckNativeWorkerUse').mockResolvedValue({ profile: c.profile } as never);
+    const model = vi.spyOn(adapters, 'runHeadlessIsolated'), context = await loadConfiguredScopeContext(f.project, 's', f.options, 'read');
+    const workspace = join(productResourcePath(context.layout, 'workspaces'), 'native-attempt', 'workspace'); await mkdir(workspace, { recursive: true });
+    const runtime = createConfiguredNativeCliWorkerRuntime(f.project, f.options)!, request = { protocolVersion: 1 as const, workspace, argv: [],
+      identity: { scopeId: 's', runId: 'environment-run', taskId: 'coding', attemptId: 'environment-attempt', generation: 1, layoutRevision: context.layout.revision } };
+    const requirements = { schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' },
+      { id: 'node-heap', kind: 'node-heap', target: 'node', expect: '1610612736' }] };
+    await runtime.checkEnvironment!(request, {} as NativeCliWorkerBinding, requirements, {}, new AbortController().signal);
+    await expect(runtime.checkEnvironment!(request, {} as NativeCliWorkerBinding, { schemaVersion: 1,
+      requirements: [{ id: 'absent-node', kind: 'executable', target: '/missing-k27/node' }] }, {}, new AbortController().signal))
+      .rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_NOT_READY' });
+    expect(model).not.toHaveBeenCalled(); expect(f.posts).toBe(0);
+  } finally { await f.close(); }
+});
+
 it('K21: production construction reads worker prerequisites without refreshing them and keeps missing F08 unknown', async () => {
   const preflight = vi.spyOn(adapters, 'preflightNativeAgent'), driver = vi.spyOn(adapters, 'createNativeCliWorkerDriver');
   const runtime = createConfiguredNativeCliWorkerRuntime('/not-an-install', { env: { HOME: '/synthetic/home', DECKENT_GLOBAL_HOME: '/synthetic/global' } })!;

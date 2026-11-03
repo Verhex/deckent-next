@@ -29,6 +29,20 @@ const invocation = { provider: entry.id, cliVersion: execution.cliVersion, disco
 const workInput = { schemaVersion: 1, task: 'Update the scoped note.', scope: { paths: ['note.txt'] }, acceptance: 'The note matches the requested text.',
   model: { channelId: 'fixture-channel', modelId: 'fixture-exact-model', auxiliaryModelIds: [] } };
 const profile = () => compileNativeCodingWorkInput(createNativeCodingTemplate(docker, invocation, binding), workInput);
+it('K27: native defaults use the enforcing native bound, preserve declarations and leave Docker defaults unchanged', () => {
+  for (const family of ['claude-code-stream-json', 'codex-jsonl']) {
+    const agent = nativeCliAgent(family)!;
+    const native = { ...binding, protocolFamily: family }, call = { ...invocation, provider: agent.id };
+    const template = createNativeCodingTemplate(docker, call, native), compiled = resolveNativeCliWorkerProfile(compileNativeCodingWorkInput(template, workInput));
+    expect(compiled.environment).toEqual({ schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' },
+      { id: 'node-heap', kind: 'node-heap', target: 'node', expect: '1610612736' }] });
+    const declared = { schemaVersion: 1, requirements: [{ id: 'operator', kind: 'executable', target: 'operator-node' }] };
+    expect(resolveNativeCliWorkerProfile(compileNativeCodingWorkInput(createNativeCodingTemplate({ ...docker, environment: declared }, call, native), workInput)).environment).toEqual(declared);
+  }
+  const template = createNativeCodingTemplate(docker, invocation);
+  expect((template.parameters['docker'] as { environment: unknown }).environment).toEqual({ schemaVersion: 1,
+    requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'node-heap', kind: 'node-heap', target: 'node', expect: '201326592' }] });
+});
 const request: SandboxRequest = { protocolVersion: 1, identity: { scopeId: 'scope', runId: 'run', taskId: 'task', attemptId: 'attempt', generation: 1, layoutRevision: 'layout' },
   workspace: '/fixture/attempt/workspace', argv: resolveNativeCliWorkerProfile(profile()).argv };
 const session = { schemaVersion: 1 as const, turnId: 'fixture-turn', generation: 1, approvalTtlMs: 5000,
@@ -59,7 +73,8 @@ it('K12: v2 template freezes a separate tokenless backend; legacy v1 remains unc
   const template = createNativeCodingTemplate(docker, invocation, binding), worker = profile();
   expect(template.adapter).toEqual({ id: 'native-coding-template', version: 2 });
   expect(worker.adapter).toEqual({ id: 'native-cli-worker', version: 1 });
-  expect(profile()).toEqual(worker); expect(resolveNativeCliWorkerProfile(worker).base.parameters).toEqual(legacy.parameters);
+  expect(profile()).toEqual(worker); expect(resolveNativeCliWorkerProfile(worker).base.parameters).toEqual({ ...legacy.parameters,
+    environment: { schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'node-heap', kind: 'node-heap', target: 'node', expect: '1610612736' }] } });
   expect(resolveNativeCliWorkerProfile(worker).base.id).toBe(template.id);
   expect(worker.id).toBe(template.id); expect(worker.version).toBe(template.version);
   expect(() => compileNativeCodingWorkInput({ ...template, adapter: { ...template.adapter, version: 1 } }, workInput)).toThrow('NATIVE_CODING_TEMPLATE_INVALID');
