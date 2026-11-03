@@ -1,19 +1,21 @@
 import { bindRuntimeApplicationMethods, executeRuntimeApplicationOperation, type RuntimeServiceDelivery, type RuntimeServiceRequest } from '#engine/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { executeConfiguredTask } from '#composition/core/execution/index.js';
+import { executeConfiguredTask, createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 import { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
   reconcileConfiguredAttempt, recoverConfiguredCancellations, requestConfiguredRunCancellation,
   reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 export function createConfiguredRuntimeOperations(projectRoot: string, options: ConfigLoadOptions = {}) {
+  const runtime = createConfiguredNativeCliWorkerRuntime(projectRoot, options);
+  const executionOptions = { ...options, ...(runtime ? { nativeCliWorker: { runtime, projectionRetired: false } } : {}) };
   return Object.freeze({
     renewApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'renew', input, options, undefined, delivery?.maxResultBytes); },
     listApprovals(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'list', input, options, undefined, delivery?.maxResultBytes); },
     inspectApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'inspect', input, options, undefined, delivery?.maxResultBytes); },
     decideApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'decide', input, options, undefined, delivery?.maxResultBytes); },
     ...bindRuntimeApplicationMethods(projectRoot, options, { proposeRun: proposeConfiguredRun, inspectRunProposal: inspectConfiguredRunProposal, createRun: createConfiguredRun,
-      reserveRunTasks: reserveConfiguredRunTasks, executeTask: executeConfiguredTask, evaluateTask: evaluateConfiguredTask, inspectRun: inspectConfiguredRun,
+      reserveRunTasks: reserveConfiguredRunTasks, executeTask: (root: string, input: Parameters<typeof executeConfiguredTask>[1]) => executeConfiguredTask(root, input, executionOptions), evaluateTask: evaluateConfiguredTask, inspectRun: inspectConfiguredRun,
       inspectInventory: inspectConfiguredInventory, requestRunCancellation: requestConfiguredRunCancellation, deliverRunCancellation: deliverConfiguredRunCancellation,
       reconcileAttempt: reconcileConfiguredAttempt, recoverCancellations: recoverConfiguredCancellations }),
   });

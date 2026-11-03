@@ -1,6 +1,6 @@
 import { relative, resolve, sep } from 'node:path';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
+import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellAuthority, classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentGlobalStateRoots, agentLoginIdentityPaths, createShellGlobalStateCheck, hostGlobalStateUnresolved, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
@@ -22,7 +22,7 @@ type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: S
   | { readonly ok: false; readonly text: string };
 
 /** Permission-tiered, C11-governed shell calls: policy and intent precede spawn; uncertain effects are never repeated. */
-export function createAgentShell(input: { readonly scope: WorkspaceScope; readonly peer: LocalPeerIdentity; readonly config: TerminalShellConfig;
+export function createAgentShell(input: { readonly scope: WorkspaceScope; readonly peer?: LocalPeerIdentity; readonly sessions?: () => Promise<SessionVerifier & SessionAuthority>; readonly config: TerminalShellConfig;
   readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly channel: RuntimeServiceTurnChannel;
   /** SCR-A: the conversation's scratch area — the command's `TMPDIR`, and a second root its path checks accept. */
   readonly scratch: { readonly scope: WorkspaceScope; readonly dir: string } | null;
@@ -161,7 +161,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         channel.emit({ kind: 'tool.output', callId, stream, text });
       };
       const clock = new SystemTrustedClock();
-      const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
+      const sessions = await (input.sessions ? input.sessions() : input.peer ? createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock) : Promise.reject(new SessionAuthenticationError('SESSION_REQUIRED')));
       // The call's write posture in a sandbox realm, derived once (`shellWritePosture`); the host realm has no such boundary.
       const posture = shellWritePosture(authority, planned.tier, input.fullAccess === true, planned.realm.writeSets === true && writes !== undefined);
       // Full access requires an enforcing open sandbox, before any effect target or write-set directory exists.
@@ -211,7 +211,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSetResult(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
-          context, peer: input.peer, scopeId, shellCommandId: commandId, signal }), input.language) : '';
+          context, ...(input.peer ? { peer: input.peer } : {}), ...(input.sessions ? { sessions: input.sessions } : {}), scopeId, shellCommandId: commandId, signal }), input.language) : '';
         return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
           cleanup: ran.cleanup };
       } catch (error) {

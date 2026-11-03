@@ -3,7 +3,7 @@ import { userInfo } from 'node:os';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
-import { executeConfiguredTask, settleConfiguredEnvironmentProbes } from '#composition/core/execution/index.js';
+import { executeConfiguredTask, settleConfiguredEnvironmentProbes, createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -24,6 +24,8 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await work(store); } finally { store.close(); }
     }
+    const runtime = createConfiguredNativeCliWorkerRuntime(projectRoot, options);
+    const executionOptions = { ...options, ...(runtime ? { nativeCliWorker: { runtime, projectionRetired: false } } : {}) };
     const turn = new RunProgressionTurn({
       // REVISE 2693: a held uncertain probe of this Run is proven again first; only its proven removal releases the slot.
       async advanceLifecycle(request) { await settleConfiguredEnvironmentProbes(projectRoot, request, options); await advanceConfiguredRunLifecycle(projectRoot, request, options); },
@@ -34,7 +36,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       },
       canExecute: identity => withRunStore(query, async store => { const run = await store.loadRun(identity.scopeId, identity.runId);
         return !!run && !(await store.quotaHeldTasks(run, Date.now())).includes(identity.taskId); }),
-      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, options); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }, waited => { waitedForSlotMs += waited; }); },
+      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, executionOptions); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }, waited => { waitedForSlotMs += waited; }); },
       async evaluate(command) {
         try { await evaluateConfiguredTask(projectRoot, command, options); return 'recorded'; }
         catch (error) {
