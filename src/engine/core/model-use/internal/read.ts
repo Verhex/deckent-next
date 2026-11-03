@@ -1,5 +1,7 @@
+import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { delegatedUseOf, subscriptionDelegationRefusal, modelInvocationProfileSchema, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, delegatedUseOf, subscriptionDelegationRefusal, modelInvocationProfileSchema, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { attachmentFailure, sameAttachmentPerson } from '#engine/core/project-attachment/index.js';
 import { modelInvocationProfileDigest, subscriptionActor } from '#engine/core/model-invocation/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
@@ -80,6 +82,14 @@ function assertModelUsePerson(context: ModelUseContext, profile: ModelInvocation
   const definition = profile.adapter.definition, uid = definition['ownerUid'], connectedOwner = definition['owner'];
   if (uid !== undefined && String(uid) !== owner.subject) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   if (connectedOwner !== undefined && !isDeepStrictEqual(connectedOwner, owner)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  if (profile.schemaVersion !== 3 && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID) {
+    const parsed = nativeCliHeadlessDefinitionSchema.safeParse(definition);
+    if (!parsed.success) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+    const bound = parsed.data.sourceBinding;
+    if (!bound) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
+    if (bound.installationId !== context.installationId || bound.companyId !== context.config.company.id || bound.scopeId !== profile.scopeId
+      || !sameAttachmentPerson(bound.principal, owner)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  }
   const refusal = subscriptionDelegationRefusal({ billing: 'subscription', ...caller, consent: delegatedUseOf(definition) });
   if (refusal) throw new ModelUseDelegationError(refusal);
 }

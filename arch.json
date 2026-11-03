@@ -1807,6 +1807,9 @@
     },
     "src/composition/core/model-connect": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/engine/core/model-use",
+        "src/adapters/core/sqlite-model-activation",
         "src/composition/core/installation",
         "src/composition/core/terminal-chat",
         "src/composition/core/runtime-service",
@@ -1879,6 +1882,7 @@
     },
     "src/adapters/core/sqlite-model-invocation": {
       "dependencies": [
+        "src/adapters/core/native-cli-registry",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
@@ -4959,6 +4963,8 @@
     },
     "src/engine/core/model-use": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/errors",
         "src/domain/core/project-attachment",
         "src/domain/core/model-invocation",
         "src/engine/core/project-attachment",

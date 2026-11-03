@@ -19,11 +19,11 @@ export function findCapacityResource(db: DatabaseSync, input: CapacityResourceBi
   const binding = bindingSchema.parse(input), row = db.prepare('SELECT resource_key FROM capacity_resources WHERE binding_kind=? AND binding_id=?').get(binding.kind, binding.id);
   return row ? readCapacityResource(db, String(row.resource_key)) : null;
 }
-/** Called by the witnessed connection writer, once per real resource. A UUID is persisted, never derived from its locator.
+/** Called by the connection writer or legacy first-use admission, once per real resource. A UUID is persisted, never derived from its locator.
  * Changed capacity requires an admitted revision mechanism; reconnect cannot silently increase or decrease it. */
 export function bindCapacityResource(db: DatabaseSync, input: CapacityResourceBinding, capacityInput: z.infer<typeof capacitySchema>) {
   const binding = bindingSchema.parse(input), capacity = capacitySchema.parse(capacityInput);
-  return ledgerTransaction(db, () => {
+  const bind = () => {
     const prior = findCapacityResource(db, binding);
     if (prior) {
       if (prior.capacity.executionSlots !== capacity.executionSlots || prior.capacity.inFlightSlots !== capacity.inFlightSlots) throw new RunStoreError('RUN_POOL_CONFLICT');
@@ -33,5 +33,6 @@ export function bindCapacityResource(db: DatabaseSync, input: CapacityResourceBi
     db.prepare('INSERT INTO capacity_resources(resource_key,binding_kind,binding_id,execution_slots,in_flight_slots) VALUES(?,?,?,?,?)')
       .run(resourceKey, binding.kind, binding.id, capacity.executionSlots, capacity.inFlightSlots);
     return readCapacityResource(db, resourceKey);
-  });
+  };
+  return db.isTransaction ? bind() : ledgerTransaction(db, bind);
 }

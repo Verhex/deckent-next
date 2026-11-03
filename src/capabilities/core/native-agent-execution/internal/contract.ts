@@ -1,6 +1,6 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { persistedString, counterSchema, delegatedUseConsentSchema } from '#domain/index.js';
+import { persistedString, counterSchema, delegatedUseConsentSchema, identitySchema } from '#domain/index.js';
 
 const path = persistedString(z.string().min(1).max(4096)).refine(value => isAbsolute(value) && !value.includes('\0') && !/\/\.\.?(?:\/|$)/u.test(value));
 /**
@@ -12,6 +12,9 @@ const path = persistedString(z.string().min(1).max(4096)).refine(value => isAbso
 export const nativeCliHeadlessDefinitionSchema = z.strictObject({ schemaVersion: z.literal(1), executable: path, configDir: path, stateDir: path,
   ownerUid: counterSchema, minCliVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   delegatedUse: delegatedUseConsentSchema.nullable(),
+  sourceBinding: z.strictObject({ schemaVersion: z.literal(1), installationId: identitySchema, companyId: identitySchema, scopeId: identitySchema,
+    principal: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(),
+  }).readonly().optional(),
 }).readonly();
 export type NativeCliHeadlessDefinition = z.infer<typeof nativeCliHeadlessDefinitionSchema>;
 /** A separate v1 capability, not consent or a grant. Issued only after the agent profile and actual CLI surface are verified. */
