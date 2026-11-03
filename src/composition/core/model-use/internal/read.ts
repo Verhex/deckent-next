@@ -15,4 +15,6 @@ export function modelUseReadPorts(options: ConfigLoadOptions): ModelUseReadPorts
 }
 export const resolveConfiguredModelUse = (root: string, profile: Parameters<typeof resolveModelUse>[2], actor: Parameters<typeof resolveModelUse>[3], options: ConfigLoadOptions = {}) =>
   resolveModelUse(modelUseReadPorts(options), root, profile, actor);
+export const inspectConfiguredModelUse = (root: string, profile: Parameters<typeof resolveModelUse>[2], actor: Parameters<typeof resolveModelUse>[3], options: ConfigLoadOptions = {}) =>
+  resolveModelUse(modelUseReadPorts(options), root, profile, actor, { action: 'inspect' });
 export const inspectModelUsePreparation = (root: string, scopeId: string, options: ConfigLoadOptions = {}) => inspectPreparation(modelUseReadPorts(options), root, scopeId);
