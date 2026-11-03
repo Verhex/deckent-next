@@ -284,7 +284,7 @@ it('A62: onboarding follows the exact scoped billingAxis; subscription/local nee
 it('A62: separate welcome shows the conversation return, excludes the step count, and copies no secrets or typed input', async () => {
   const { PassThrough, Writable } = await import('node:stream');
   const { welcomeScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-task.js');
-  const { snapshotKnownSecrets } = await import('#platform/index.js');
+  const { snapshotKnownSecrets, t } = await import('#platform/index.js');
   // Astra 2834 R1: a body line carrying a credential-shaped value and a known secret (as a Git file name or an error message can).
   const KNOWN = 'known-canary-7f3e9d2a', TOKEN = 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', TYPED = 'typed-canary-41c0';
   // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
@@ -304,6 +304,9 @@ it('A62: separate welcome shows the conversation return, excludes the step count
     // Ctrl+Y copies the card through the record projection (no credential shape, no known value) and decides nothing.
     stdin.write('\u0019'); await until(() => copies().length === 1, 'onboarding card copy');
     expect(copies()[0]).toContain('Saved conversation: use /resume'); expect(copies()[0]).toContain('[REDACTED]');
+    expect(copies()[0]).toContain(t('onboarding.welcome.describe', {}, 'en'));
+    expect(copies()[0]).toContain(t('onboarding.welcome.scan', {}, 'en'));
+    expect(copies()[0]).toContain(t('onboarding.welcome.first', {}, 'en'));
     expect(copies()[0]).not.toContain(TOKEN); expect(copies()[0]).not.toContain(KNOWN); expect(copies()[0]).not.toMatch(/sk-ant-|known-canary/u);
     await settle(50); expect(decided).toBe(false);
     await waitForCard(() => frame, "Let's start");

@@ -107,6 +107,12 @@ describe('/model window', () => {
     await view.press(ENTER);
     expect(pins).toEqual(['fast']); expect(calls.closed).toBe(1);
     expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
+    // A63-K9: one stdin read carries filter text and Enter; it must open the current model's scope once.
+    const rapid = modelPort(MODELS), next = panel('model', { model: rapid.port }), coalesced = mount(next.element, 100, 40);
+    await settle(80); await coalesced.raw('fast\r', 60);
+    expect(coalesced.frame()).toContain('This session only (from the next turn)');
+    expect(rapid.pins).toEqual([]); await coalesced.press(ENTER);
+    expect(rapid.pins).toEqual(['fast']); expect(next.calls.closed).toBe(1);
   });
 
   it('BeUser alpha.56.1 (3t): with no model to pick, the first row connects one through the same /provider flow; without that flow the row is absent', async () => {
@@ -232,7 +238,8 @@ describe('/provider window', () => {
     const { element, calls } = panel('provider', { provider: port });
     const view = mount(element, 100, 40, false, true);
     await settle(80);
-    await view.press(`${ENTER}${ENTER}`, 60);
+    await view.raw('Anthropic\r', 60);
+    await view.press(ENTER, 60);
     expect(view.frame()).toContain('Anthropic API · API key'); expect(view.frame()).toContain('TRANSPARENCY-NOTE');
     expect(view.frame()).toContain(t('tuicopy.card.hint', {}, 'en'));
     await view.press(ENTER, 40); // an empty required key is refused in place

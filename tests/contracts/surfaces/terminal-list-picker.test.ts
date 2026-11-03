@@ -82,6 +82,18 @@ describe('ListPicker view', () => {
     expect(results).toEqual([{ kind: 'selected', path: ['theme'], id: 'theme', scope: 'user' }]);
     await view.press(ENTER);
     expect(results).toHaveLength(1);
+    // A63-K9: other pickers keep text+CR as filter only; opt-in never crosses scope or accepts mixed control bursts.
+    const guarded: PickerResult[] = [], safe = mount(el(guarded), 80);
+    await settle(60); await safe.press('the\r');
+    expect(safe.frame()).toContain('filter: the'); expect(safe.frame()).not.toContain('>   Project'); expect(guarded).toEqual([]);
+    const mixed: PickerResult[] = [], opted = mount(el(mixed, { submitFilter: true }), 80);
+    await settle(60); await opted.press('the\r\r');
+    expect(opted.frame()).toContain('filter: the'); expect(mixed).toEqual([]);
+    await opted.press('\u0015'); await opted.press('the\t\r');
+    expect(opted.frame()).toContain('filter: the'); expect(mixed).toEqual([]);
+    await opted.press('\u0015'); await opted.press('the\r');
+    expect(opted.frame()).toContain('Project'); expect(mixed).toEqual([]);
+    await opted.press('User\r'); expect(mixed).toEqual([]);
   });
   it('multi-level: Enter opens a section, Esc climbs, Esc at the root cancels', async () => {
     const results: PickerResult[] = [];

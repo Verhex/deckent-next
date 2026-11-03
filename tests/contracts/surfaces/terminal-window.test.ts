@@ -3,8 +3,13 @@ import { createElement, useState, type ReactElement } from 'react';
 import { Box, render, Text, useInput } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { RenderGlyphsContext, cells, resolveRenderGlyphs, span } from '#surfaces/core/terminal-render/index.js';
-import { Window, WindowStackProvider, WINDOW_PRIORITY, layoutWindowLines, scrollBy, topWindowLayer, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { HumanTextContext, RenderGlyphsContext, cells, resolveRenderGlyphs, span } from '#surfaces/core/terminal-render/index.js';
+import { CardCopyContext, QuestionRows, cardCopyText, Window, WindowStackProvider, WINDOW_PRIORITY, layoutWindowLines, scrollBy, topWindowLayer, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+
+import { ArrowPicker, ListPicker } from '#surfaces/core/terminal-picker/index.js';
+import { clipboardRequest } from '#surfaces/core/terminal-host/index.js';
+import { pickerLabels } from '#surfaces/core/work-labels/index.js';
+import { snapshotKnownSecrets } from '#platform/index.js';
 
 class Screen extends Writable {
   frame = '';
@@ -136,4 +141,38 @@ describe('window layout and scroll model', () => {
     expect(scrollBy(19, 'pageDown', 30, 10)).toBe(20);
     expect(scrollBy(0, 'down', 5, 10)).toBe(0);
   });
+});
+
+
+it('card copy follows visible option labels across question/list/arrow/custom footers, projects secrets, excludes entries and keeps the byte cap', async () => {
+  const copies: string[] = [], known = 'option-canary-7db54', token = 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const writer = { write: (text: string) => { copies.push(text); return { ok: true as const, bytes: Buffer.byteLength(text) }; }, maxBytes: 65_536,
+    labels: { hint: 'COPY', sent: 'SENT {count}', tooLarge: 'BIG {bytes}/{max}', unavailable: 'UNAVAILABLE' } };
+  function Card() {
+    const [mode, setMode] = useState(0);
+    return createElement(Window, { title: [span('CARD')], body: [{ spans: [span('BODY')] }], hints: 'HINTS', position: '',
+      copyOptions: mode === 3 ? ['Custom visible choice'] : [],
+      onInput: (_input, key) => { if (key.ctrl && _input === 'n') { setMode(value => value + 1); return true; } return false; },
+      footer: () => createElement(Box, { flexDirection: 'column' }, createElement(Text, null, 'ENTRY-MUST-NOT-COPY ••••'),
+        mode === 0 ? createElement(QuestionRows, { kind: 'single', options: [{ id: 'authority-id-not-a-label', label: `Question ${known} ${token}` }], state: { at: 0, ticked: [] }, focused: true })
+          : mode === 1 ? createElement(ListPicker, { embedded: true, maxRows: 3, tree: { title: 'List', items: Array.from({ length: 8 }, (_, i) => ({ id: `id-${i}`, label: `List ${i}` })) }, labels: pickerLabels('en'), onResult: () => {} })
+            : mode === 2 ? createElement(ArrowPicker, { rows: ['Arrow A', 'Arrow B'], filter: { prompt: text => `FILTER ${text}`, none: 'NONE' }, onSelect: () => {}, onCancel: () => {} })
+              : createElement(Text, null, 'Custom visible choice')) });
+  }
+  const view = mount(createElement(HumanTextContext.Provider, { value: snapshotKnownSecrets([{ name: 'OPTION', value: known }]) },
+    createElement(CardCopyContext.Provider, { value: writer }, createElement(Card))));
+  await settle(60); await view.press('\u0019');
+  expect(copies[0]).toContain('Question ‹secret:OPTION› [REDACTED]');
+  expect(copies[0]).not.toContain(known); expect(copies[0]).not.toContain(token); expect(copies[0]).not.toContain('authority-id');
+  await view.press('\u000e'); await view.press('\u0019');
+  expect(copies[1]).toBe('CARD\nBODY\nList 0\nList 1\nList 2');
+  await view.press('\u001b[F'); await view.press('\u0019');
+  expect(copies[2]).toContain('List 7'); expect(copies[2]).not.toContain('List 0');
+  await view.press('\u000e'); await view.press('B'); await view.press('\u0019');
+  expect(copies[3]).toBe('CARD\nBODY\nArrow B');
+  await view.press('\u000e'); await view.press('\u0019');
+  expect(copies[4]).toBe('CARD\nBODY\nCustom visible choice');
+  expect(copies.join('')).not.toMatch(/ENTRY-MUST-NOT-COPY|••••|id-\d/u);
+  expect(view.frame()).toContain(`SENT ${[...copies[4]!].length}`);
+  expect(clipboardRequest(cardCopyText([span('T')], [], ['€€€€']), {}, 10)).toEqual({ ok: false, reason: 'too-large', bytes: 14 });
 });

@@ -269,7 +269,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!row || !card?.kinds.includes(row.id)) return;
     setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
   };
-  return <PickerWindow title={title(listTitle)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
+  return <PickerWindow submitFilter title={title(listTitle)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
     tree={{ ...tree, items: [...(laterLabel ? [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] : tree.items), ...(!apiOnly ? [{ id: API, label: apiLabel }] : [])] }} onClose={apiOnly ? back : onClose} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */

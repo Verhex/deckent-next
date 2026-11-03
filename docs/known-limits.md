@@ -118,6 +118,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   *Impact:* after "Copied … characters" or "Sent answer …" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
   terminal's own selection, or set `terminal.layout` to `inline`. The full window prints no unbroken plain sign-in link (owner choice):
   there the link is an OSC 8 link split over the card's rows; use Ctrl+Y, or the inline layout, where it is printed once unbroken.
+  Ctrl+Y includes the title, body and currently visible option labels; entry values (including masked inputs) stay excluded.
+  Dragging over a card selects its body only; mouse selection of options is deferred.
+
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
