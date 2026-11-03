@@ -99,7 +99,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       delivery, host, channel, { profile, execution: readiness.execution, witness: witness.principal }));
     const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
     const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-    channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language) + '\n' });
+    channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
     await channel.drained();
   }
   return runChatTurn(projectRoot, input, peer, options, delivery, host, channel);
@@ -190,7 +190,8 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     // OpenRouter adapter accepts `stream: false` only) gets one non-streamed round, and the answer arrives with the governed result.
     const roundStream = !profile || profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || profile.protocol.family === ANTHROPIC_MESSAGES_FAMILY
       ? { stream: true, stream_options: { include_usage: true } } : { stream: false };
-    const shapeRequest = (request: JsonObject) => profile && terminalTextChatFamilies.includes(profile.protocol.family) ? textOnlyModelInvocationRequest(request) : request;
+    const textTransport = profile && (profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID || terminalTextChatFamilies.includes(profile.protocol.family));
+    const shapeRequest = (request: JsonObject) => textTransport ? textOnlyModelInvocationRequest(request) : request;
     /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
     const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
       schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
@@ -272,7 +273,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-          const cliSubscription = evidence && profile && terminalTextChatFamilies.includes(profile.protocol.family)
+          const cliSubscription = evidence && profile && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
             && profile.adapter.id === evidence.adapter.id && profile.adapter.version === evidence.adapter.version;
           if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliSubscription)) {
             const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,

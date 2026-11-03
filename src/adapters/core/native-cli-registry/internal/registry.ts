@@ -61,6 +61,8 @@ export function parseNativeCliRegistry(input: unknown) {
   return parsed.data;
 }
 const registry = parseNativeCliRegistry(asset);
+/** Shared facade policy. Absent fields are never replaced by adapter defaults. */
+export const nativeCliAgentBridge = () => registry.agentBridge;
 export { nativeCliIds, nativeCliIdSchema };
 export function nativeCliCommand(provider: z.infer<typeof nativeCliIdSchema>) {
   const parsed = nativeCliIdSchema.safeParse(provider);

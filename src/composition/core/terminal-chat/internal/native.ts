@@ -1,4 +1,5 @@
 import type { ModelInvocationProfile } from '#domain/index.js';
+import { realpath } from 'node:fs/promises';
 import { modelInvocationProfileDigest } from '#engine/index.js';
 import { nativeCliAgent } from '#adapters/index.js';
 import { nativeAgentFlagSetDigest, nativeCliHeadlessDefinitionSchema } from '#adapters/index.js';
@@ -12,7 +13,7 @@ export async function inspectNativeChat(profile: ModelInvocationProfile, runtime
     profileDigest: modelInvocationProfileDigest(profile), flagSetDigest: nativeAgentFlagSetDigest(entry) }, runtime.readiness);
   if (readiness.state !== 'ready') return readiness;
   const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
-  if (!definition.success || readiness.execution.executable !== definition.data.executable || readiness.execution.ownerUid !== definition.data.ownerUid)
+  if (!definition.success || readiness.execution.executable !== await realpath(definition.data.executable).catch(() => null) || readiness.execution.ownerUid !== definition.data.ownerUid)
     return { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
   return readiness;
 }

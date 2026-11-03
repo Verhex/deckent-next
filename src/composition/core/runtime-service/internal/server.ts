@@ -22,7 +22,7 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createRuntimeChatTurnHost, scratchResource } from '#composition/core/agent-turn/index.js';
+import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, scratchResource } from '#composition/core/agent-turn/index.js';
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
@@ -111,7 +111,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   /* The send owner names this instance and the custody it holds: only a later start holding that custody proves its open calls ended. */ const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions),
     ...(ports.modelInvocationClock ? { clock: ports.modelInvocationClock } : {}) };
   /* Service stop cancels running turns (they close as cancelled, not interrupted). */ const turnStop = new AbortController();
-  const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport, ports.shellSandboxes, config.mcp.maxServers);
+  const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport, ports.shellSandboxes, config.mcp.maxServers,
+    createConfiguredNativeChatRuntime(projectRoot, options));
   const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, { onPage: (command, result) => observer.onModelCancellationPage?.(command, result), onError: (command, error) => observer.onModelCancellationError?.(command, error), }, options);
   const build = readBuildIdentity();

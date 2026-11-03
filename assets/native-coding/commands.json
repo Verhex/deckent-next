@@ -407,8 +407,9 @@
       "agent": {
         "schemaVersion": 1,
         "capability": "NativeAgentExecution",
-        "revision": "codex-agent-2026-11-03-r1",
-        "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03)",
+      "revision": "codex-agent-2026-11-03-r1",
+      "observationMaxAgeMs": 300000,
+        "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03); K16 freshness policy seed 2026-11-03: 5 minute observation ceiling, not a provider measurement",
         "args": [
           "exec",
           "--json",
@@ -797,8 +798,9 @@
       "agent": {
         "schemaVersion": 1,
         "capability": "NativeAgentExecution",
-        "revision": "claude-agent-2026-11-03-r1",
-        "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03)",
+      "revision": "claude-agent-2026-11-03-r1",
+      "observationMaxAgeMs": 300000,
+        "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03); owner OQ-A + plugin exception; proof/ALPHA63/AMENDMENT-BRIDGE.md v2 + bridge-research/RESEARCH.md section 2; A0/A0-5R/*-relay (2026-11-03); K16 freshness policy seed 2026-11-03: 5 minute observation ceiling, not a provider measurement",
         "args": [
           "--print",
           "--output-format",
@@ -957,7 +959,10 @@
     "tokenValueTemplate": "Bearer {turnToken}",
     "bodyMaxBytes": 1048576,
     "frameMaxBytes": 1048576,
-    "limitsSource": "K0 policy seed 2026-11-03 under AMENDMENT-BRIDGE v2 Facade: 1 MiB body/frame ceilings reuse Claude headless.limits.maxLineBytes; not an A0 measurement or provider limit. Header/env names are Deckent turn capability names, never subscription credentials.",
+    "maxConnections": 8,
+    "replayMaxEntries": 128,
+    "replayMaxBytes": 8388608,
+    "limitsSource": "K0 policy seed 2026-11-03 under AMENDMENT-BRIDGE v2 Facade: 1 MiB body/frame ceilings reuse Claude headless.limits.maxLineBytes; not an A0 measurement or provider limit. Header/env names are Deckent turn capability names, never subscription credentials. K16 policy seed 2026-11-03: maxConnections 8 below gateway 24; replayMaxEntries 128 and replayMaxBytes 8 MiB are independent ceilings, not measured capacity.",
     "fallback": {
       "enabled": false,
       "permissionFlags": [

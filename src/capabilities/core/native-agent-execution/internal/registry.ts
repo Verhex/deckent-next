@@ -15,8 +15,10 @@ export const nativeAgentBridgeSchema = z.strictObject({ schemaVersion: z.literal
   serverName: z.string().regex(/^[a-z][a-z0-9_]*$/u), toolPrefix: z.string().regex(/^mcp__[a-z][a-z0-9_]*__$/u),
   tokenHeaderName: z.string().regex(/^[A-Za-z][A-Za-z0-9-]*$/u), tokenEnvName: envName, tokenValueTemplate: z.literal('Bearer {turnToken}'),
   bodyMaxBytes: positive, frameMaxBytes: positive, limitsSource: text,
+  maxConnections: positive.optional(), replayMaxEntries: positive.optional(), replayMaxBytes: positive.optional(),
   fallback: z.strictObject({ enabled: z.literal(false), permissionFlags: z.tuple([z.literal('--permission'), z.literal('--allow-net')]).readonly(), source: text }).readonly(),
-}).refine(value => value.frameMaxBytes <= value.bodyMaxBytes && value.toolPrefix === `mcp__${value.serverName}__`).readonly();
+}).refine(value => value.frameMaxBytes <= value.bodyMaxBytes && value.toolPrefix === `mcp__${value.serverName}__`
+  && (value.replayMaxBytes === undefined || value.replayMaxBytes >= value.frameMaxBytes)).readonly();
 export type NativeAgentBridge = z.infer<typeof nativeAgentBridgeSchema>;
 
 const loginMethods = z.array(z.strictObject({ method: nativeAgentLoginMethodSchema, args, source: text }).readonly()).min(1).readonly()
@@ -36,6 +38,7 @@ const execJsonTransportSchema = z.strictObject({ kind: z.literal('codex-mcp'), s
 }).readonly();
 /** The agent profile inherits all v1 environment, isolation and output bounds. It has its own argv and forbidden set. */
 export const nativeCliAgentSchema = z.strictObject({ schemaVersion: z.literal(1), capability: z.literal('NativeAgentExecution'), revision: text, source: text,
+  observationMaxAgeMs: positive.optional(),
   args, forbiddenFlags: z.array(flag).min(1).readonly(), envSource: z.literal('headless'), loginMethods,
   timeoutSource: z.literal('tool-session-approval-ttl'), maxTurnsSource: z.literal('admission-policy'),
   transport: z.discriminatedUnion('kind', [streamJsonTransportSchema, execJsonTransportSchema]),

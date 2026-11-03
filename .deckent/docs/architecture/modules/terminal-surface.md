@@ -582,6 +582,20 @@ The account belongs to the person using Anthropic's unmodified binary and sign-i
 or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.
 
 
+### Native subscription agent assembly (alpha.63 K16 source candidate)
+
+The runtime service supplies the shared Claude/Codex driver to the governed chat host. The driver uses the existing
+isolated spawn, login lock, K1 tool session, model-use admission pin and approval/effect owner. Claude's turn token stays
+in the private read-only MCP config; Codex receives it in the built environment. Both feed the known-secret projection.
+Registry values bound facade connections and replay; progress derives from the unchanged egress idle bound.
+
+Readiness reads existing exact-profile observations without spawning or granting authority. The agent preflight proves
+executable realpath/version, owner, flags and realm without a model call; it does not manufacture plugin/tool/bridge
+observations. A guarded, explicitly admitted verification turn must supply those observations before tool-bearing chat
+is ready. Missing, expired or changed observations stay unknown. The reader also refuses tool readiness for login/state
+directories outside the installation-global roots protected by K15. The same selected model's text chat remains usable
+with the reason displayed. First real-provider verification and assembled-release acceptance are separate open gates.
+
 **Global state and subscription shell floor (alpha.63 K15).** Every agent shell realm refuses named global-state roots and descendants
 before an approval card, including configured `DECKENT_GLOBAL_HOME`, the configuration/process environments' roots and conventional
 `~/.deckent`. HOME spellings, traversal, bounded globs and existing filesystem aliases are checked without reading file contents.

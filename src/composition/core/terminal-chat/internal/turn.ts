@@ -1,5 +1,5 @@
 import { inspectNativeChat } from './native.js';
-import type { SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
+import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import { modelInvocationProfileSchema, NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { randomUUID } from 'node:crypto';
@@ -45,6 +45,7 @@ export interface TerminalChatTurnInput {
 }
 const describeModel = (reference: ModelReference): string => `${reference.providerId}/${reference.modelId}@${reference.modelVersion}`;
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<TerminalChatPlan> {
+  runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options) };
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
