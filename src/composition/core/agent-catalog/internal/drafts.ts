@@ -12,11 +12,7 @@ import { catalogDependencies, type ScopeContext } from './application.js';
 
 export type ConfiguredCatalogDraft = Readonly<{ schemaVersion: 1; suggestion: CatalogSuggestionView; draft: CatalogDraft; digest: string; readable: number; withheld: number; aiDerived: boolean }>;
 const witnessOf = (operation: string, witness: AuthorityWitness) => assertAuthorityWitness(operation, localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), witness);
-/**
- * S8-4 (S8-DESIGN §6 fold A, N23, N36): the draft of an open `propose-agent` / `propose-skill` suggestion, rendered now for the deciding person — only on
- * their terminal card (never MCP, never stored). The lessons are read through the person's own memory read filter at the cited revision and digest;
- * hidden ones are only counted, and with fewer readable than the rule's `minLessons` no draft is offered. A skill draft is AI output (worker lesson claims).
- */
+/** Person-card-only, never stored: draft from readable pinned lessons above minLessons; hidden refs only count, a skill draft is AI output. */
 async function render(context: ScopeContext, scopeId: string, suggestionId: string): Promise<ConfiguredCatalogDraft> {
   const shown = await new AgentStandingApplication(catalogDependencies(context)).inspectSuggestion({ schemaVersion: 1, scopeId, suggestionId });
   if (shown.status !== 'ok') throw ErrorRegistry.createError('AGENT_CATALOG_NOT_FOUND');
@@ -46,8 +42,7 @@ export async function draftConfiguredSuggestion(root: string, input: unknown, op
 }
 const defineInput = suggestionInspectQuerySchema.extend({ id: catalogIdSchema, expectedRevision: counterSchema.positive().nullable(), draftDigest: suggestionInspectQuerySchema.shape.suggestionId,
   commandId: clientCommandIdSchema.optional() }).strict();
-/** The define card of a draft: rendered again at apply and compared with the digest the card showed (a change in between is a new card); the define decides
- * the suggestion in its own commit and the revision names it (`origin`). */
+/** Re-render at apply and compare the card digest; define settles the suggestion atomically and names it in origin. */
 export async function defineConfiguredFromSuggestion(root: string, input: unknown, options: ConfigLoadOptions = {},
   witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
   try {
@@ -61,10 +56,7 @@ export async function defineConfiguredFromSuggestion(root: string, input: unknow
       : await catalog.defineSkill({ ...base, skillId: command.id, content: rendered.draft.content });
   } catch (error) { throw queryFailure(error); }
 }
-/**
- * S8-4 monitor lines (read-soft, the viewer's own reads): open live suggestions ("öneri bekliyor (N)"), promotions still in effect that a revoked key
- * signed ("imzalayan iptal edildi"), a running aggregator without its signing key ("imza anahtarı yok") and an unusable registry overlay.
- */
+/** Soft viewer-scoped monitor: open suggestions, revoked-key promotions, missing aggregator key and unusable registry. */
 export async function inspectConfiguredCatalogMonitor(root: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<readonly string[]> {
   const context = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'read'), out: string[] = [], mode = context.config.catalogEvolution.mode;
   if (!catalogEvolutionRegistryAvailable(context.config.catalogEvolution.overlay)) out.push('catalog-evolution-registry-unavailable');
