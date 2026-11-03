@@ -23,6 +23,7 @@ export interface NativeCliWorkerDriver {
   inspectActivity?(): Promise<Readonly<{ state: 'running' | 'exited' | 'unknown'; handle: string | null }>>;
 }
 export interface NativeCliWorkerPorts {
+  /** Execution-only; readiness stays read-only. */ prepare?(binding: NativeCliWorkerBinding): Promise<import('#capabilities/index.js').NativeAgentReadinessReason | null>;
   readiness(binding: NativeCliWorkerBinding): Promise<NativeAgentReadiness>;
   /** Retained F08 for this exact execution seal, not a test result boolean supplied by the task. Missing/stale = null. */
   f08(binding: NativeCliWorkerBinding): Promise<NativeAgentExecution | null>;

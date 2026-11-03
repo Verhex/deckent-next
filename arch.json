@@ -415,7 +415,8 @@
         "src/adapters/core/sqlite-agent-turn",
         "src/adapters/core/approval-store",
         "src/composition/core/agent-turn",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/engine/core/model-invocation"
       ],
       "plan": "EXECUTION"
     },

@@ -480,6 +480,14 @@ Unsafe or unreadable records fail closed; a claim left by an unknown process is 
 The record follows no-follow, owner, private-mode, single-link and bounded-read rules and is absent from
 both CLI and tool views. An observation still does not constitute F08 or product acceptance.
 
+K26 places no-model preparation in the authorized task owner before the worker readiness gate. Missing
+or expired observations invoke the existing native-agent preflight and retain its prerequisite observation;
+an existing observation, including a known refusal, is never reprobed by preparation. Readiness queries
+remain read only. The current K5 binding is rechecked before preparation, and an exclusive host-side claim
+for the profile serializes concurrent preparations across processes. Contention and probe failures park the
+Run with a typed reason; an abandoned claim is never stolen. This claim grants neither model execution nor
+F08: the tree gate, lease/delegation checks, K6 reservation and guarded verification Attempt still apply.
+
 Admitted task artifacts and predecessor handoffs appear only in tool views at `/deckent/inputs/...`;
 dependency binds retain their admitted targets. Read tools use the shared scoped reader; shell calls and
 read-only environment probes use the shared bubblewrap view resolver/process owner with read-only aliases.
