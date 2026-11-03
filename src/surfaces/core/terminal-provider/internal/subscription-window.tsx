@@ -3,8 +3,10 @@ import { fillTemplate, span, useTerminalHandover } from '#surfaces/core/terminal
 import { PICKER_INITIAL } from '#surfaces/core/terminal-picker/index.js';
 import { EntryWindow, LinesWindow, PickerWindow, QuestionWindow, type PanelLabels, type PanelLine, type ProviderModelOutcome, type ProviderPanelKind } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderDelegateClass, ProviderSubscriptionOutcome, ProviderSubscriptionPort } from './context.js';
+import type { NativeAgentLoginMethod } from '#capabilities/index.js';
 
 type Step = Readonly<{ kind: 'busy' } | { kind: 'dir'; owned: string; lines: readonly PanelLine[] } | { kind: 'other'; problem: string | null }
+  | { kind: 'method'; configDir: string | null }
   | { kind: 'ended'; title: string; lines: readonly PanelLine[]; retry: boolean }
   | { kind: 'consent'; outcome: ProviderSubscriptionOutcome; configDir: string | null; now: readonly ProviderDelegateClass[]; ticked: readonly ProviderDelegateClass[]; pos: number }
   | { kind: 'confirm'; outcome: ProviderSubscriptionOutcome; configDir: string | null; now: readonly ProviderDelegateClass[]; ticked: readonly ProviderDelegateClass[] }>;
@@ -31,10 +33,12 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
   const opened = useRef(prepare);
   useEffect(() => { opened.current(); return () => { live.current = false; }; }, []);
   const connect = (configDir: string | null, delegate?: readonly ProviderDelegateClass[]) => port.connect(kind.id, configDir, delegate);
-  const signIn = (configDir: string | null) => {
+  const methods = port.methods?.(kind.id) ?? [];
+  const chooseMethod = (configDir: string | null) => methods.length > 1 ? show({ kind: 'method', configDir }) : signIn(configDir, methods[0]?.id);
+  const signIn = (configDir: string | null, method?: NativeAgentLoginMethod) => {
     show({ kind: 'busy' });
     void (async () => {
-      const done = await handOver(fillTemplate(words.banner, { kind: kind.label }), () => port.login(kind.id, configDir));
+      const done = await handOver(fillTemplate(words.banner, { kind: kind.label }), () => port.login(kind.id, configDir, method));
       if (!done || !done.signedIn) { ended(done?.title ?? kind.label, done?.lines ?? [], !done?.refused); return; }
       const outcome = await connect(configDir);
       const shown = { ...outcome, lines: [...done.lines, ...outcome.lines] };
@@ -51,11 +55,15 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
     ? <QuestionWindow title={step.title} lines={step.lines} hints={words.retryKeys} position={labels.position} onAnswer={answer => { if (answer) prepare(); else onBack(); }} />
     : <LinesWindow title={step.title} lines={step.lines} hints={labels.provider.resultHints} position={labels.position} onClose={onBack} />;
   if (step.kind === 'other') return <EntryWindow key="login-dir" title={`${kind.label} · ${words.otherTitle}`} hints={words.otherHint} position={labels.position} problem={step.problem}
-    onCancel={prepare} onSubmit={text => { if (!text.trim().startsWith('/')) return words.otherAbsolute; signIn(text.trim()); return null; }} />;
+    onCancel={prepare} onSubmit={text => { if (!text.trim().startsWith('/')) return words.otherAbsolute; chooseMethod(text.trim()); return null; }} />;
+  if (step.kind === 'method') return <PickerWindow title={title(`${kind.label} · ${words.methodTitle}`)} body={[{ spans: [span(words.methodHint ?? '')] }]} bodyRows={DIR_BODY_ROWS}
+    labels={labels.picker} position={labels.position} pickerKey="login-method"
+    tree={{ title: words.methodTitle ?? kind.label, items: (port.methods?.(kind.id, step.configDir) ?? []).map(method => ({ id: method.id, label: method.label, detail: method.command })) }}
+    onResult={result => { if (result.kind !== 'selected') { prepare(); return; } const method = methods.find(row => row.id === result.id); if (method) signIn(step.configDir, method.id); }} />;
   if (step.kind === 'dir') return <PickerWindow title={title(`${kind.label} · ${words.dirTitle}`)} body={step.lines.map(line => ({ spans: [...(line.label ? [span(`${line.label}: `, { bold: true })] : []),
     span(line.text, line.tone === 'muted' ? { role: 'muted' } : {})] }))} bodyRows={DIR_BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey="login-dir"
     tree={{ title: words.dirTitle, items: [{ id: 'owned', label: words.dirOwned, detail: step.owned }, { id: 'other', label: words.dirOther }] }}
-    onResult={result => { if (result.kind !== 'selected') { onBack(); return; } if (result.id === 'other') show({ kind: 'other', problem: null }); else signIn(null); }} />;
+    onResult={result => { if (result.kind !== 'selected') { onBack(); return; } if (result.id === 'other') show({ kind: 'other', problem: null }); else chooseMethod(null); }} />;
   if (step.kind === 'confirm') {
     const { outcome, configDir, now, ticked } = step;
     return <QuestionWindow title={fillTemplate(words.question, { classes: ticked.join(', '), kind: kind.label })} lines={[]} hints={words.questionKeys} position={labels.position}

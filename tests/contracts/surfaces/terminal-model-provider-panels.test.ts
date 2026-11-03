@@ -1033,3 +1033,46 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
   expect(await stalled.inspectCustody!()).toBeNull();
 
 });
+
+it('K13: the provider and onboarding subscription window offers the registry methods, Esc starts nothing and device choice preserves the typed command in EN/TR', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const requests: unknown[] = [], kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null };
+    const source = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: async () => ({ layers: ['global'], decisions: [{ layer: 'global', decision: 'allow', ruleId: 'fixture' }] }), providerConnect: {
+      kinds: [{ id: kind.id, labelKey: 'tui.provider.kind.codexCli', available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
+        secretName: null, probePath: null, endpointChoices: [], headlessLogin: true, terminalTextChat: true, connectFamily: 'fixture-jsonl', pull: 'available' }],
+      endpoint: () => ({ ok: false, reason: 'unused' }), probe: async () => { throw new Error('unused'); },
+      loginMethods: () => ['browser', 'device-auth'], loginDir: async () => ({ owned: '/fixture/login' }),
+      login: async command => { requests.push(command); return { configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }; } },
+      connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'fixture', scopeId: 'scope', connection: kind.id, status: 'connected',
+        reference: ref('fixture', kind.id), carriedModels: [], notCarried: [], steps: { catalog: 'present', declaration: 'skipped', profile: 'written', activation: 'present', carried: 0 }, tariff: 'unmetered', keyStored: null, credentialRef: null,
+        cli: { configDir: '/fixture/login', owned: true, delegate: [] } }) as never }, {}, locale, () => 'REFUSED');
+    const { port } = providerPort(), subscription = source.subscription!;
+    const ui = mount(panel('provider', { provider: { ...port, subscription, inspect: async () => ({ ...KINDS, kinds: [kind] }) } as ProviderWindowPort }, locale).element);
+    await until(() => ui.frame().includes(kind.label), 'subscription listed'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.action.replace('…', '')), 'subscription action'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.dirTitle), 'login directory'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.methodTitle!), 'method choice');
+    expect(ui.frame()).toContain(locale === 'en' ? 'Sign in with a device code' : 'Cihaz kodu ile giriş');
+    await ui.press(ESC); expect(requests).toEqual([]);
+    await until(() => ui.frame().includes(subscription.words.dirTitle), 'directory after Esc'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.methodTitle!), 'method choice reopened'); await ui.press(DOWN + ENTER);
+    await until(() => requests.length === 1, 'one explicit sign-in');
+    expect(requests).toEqual([{ connection: kind.id, loginMethod: 'device-auth' }]);
+    await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent still required');
+  }
+});
+
+it('K13: /model rechecks subscription readiness at confirmation and does not pin after capability revocation', async () => {
+  const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
+  let ready = true;
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
+    inspect: async () => ready ? { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
+      profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } } : { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' } } };
+  const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
+  await until(() => ui.frame().includes(t('headless.agent.k13.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
+  ready = false;
+  await ui.press(ENTER + ENTER);
+  await until(() => calls.errors.length > 0, 'revocation reported');
+  expect(model.pins).toEqual([]);
+  expect(calls.errors[0]).toMatchObject({ code: 'TERMINAL_MODEL_SWITCH_REFUSED' });
+});

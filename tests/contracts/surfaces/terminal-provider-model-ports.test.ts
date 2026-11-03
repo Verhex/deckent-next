@@ -7,7 +7,9 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
-import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
+import { providerModelTree, providerPanelTree, subscriptionModelView } from '#surfaces/core/terminal-provider/index.js';
+import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import type { NativeAgentReadiness } from '#capabilities/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { ModelInvocableNowApplication, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { main as runConfiguredCli } from '#composition/core/cli/index.js';
@@ -714,4 +716,80 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
   const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
   expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);
   expect((await providerPanelPort(root, 'scope', { ...host, providerConnect: { ...host.providerConnect, isolationRefusal: async () => null } }, options, 'en', errorText).inspect()).kinds[0]!.blocked).toBeNull();
+});
+
+it('K13: registry login methods reach the same typed login, Codex is visible and the SIWC beta stays hidden in EN/TR', async () => {
+  const { root, options } = await project({}), requests: unknown[] = [];
+  const base = connectHost('ok'), codex = { ...base.kinds[1]!, id: 'codex-cli-subscription', catalogProviderId: 'codex-cli-subscription',
+    labelKey: 'tui.provider.kind.codexCli', headlessLogin: true, billing: 'subscription' as const, presentation: 'hidden' as const, terminalTextChat: true };
+  const methods = nativeCliAgent('codex-jsonl')!.agent.loginMethods.map(row => row.method);
+  expect(methods).toEqual(['browser', 'device-auth']);
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', { connectModel: async () => { throw new Error('not a login'); }, providerConnect: { ...base,
+      kinds: [codex, { ...base.kinds[2]!, available: true, presentation: 'beta', billing: 'subscription' }], loginMethods: () => methods,
+      loginDir: async () => ({ owned: '/fixture/login' }), login: async request => { requests.push(request); return { configDir: '/fixture/login', owned: true,
+        signedIn: true, exit: 'completed', authMethod: 'chatgpt', subscriptionType: null }; } } }, options, locale, errorText);
+    const view = await port.inspect();
+    expect(view.kinds.map(row => row.id)).toEqual([codex.id]);
+    expect(view.kinds[0]!.label).toBe(locale === 'en' ? 'Sign in with ChatGPT (Codex CLI)' : 'ChatGPT ile giriş (Codex CLI)');
+    expect(port.subscription!.methods!(codex.id).map(row => row.command)).toEqual(methods.map(method => `deckent models login --connection ${codex.id} --login-method ${method}`));
+    expect(await port.subscription!.login(codex.id, null, 'device-auth')).toMatchObject({ signedIn: true, refused: false });
+    expect(requests.at(-1)).toEqual({ connection: codex.id, loginMethod: 'device-auth' });
+    const before = requests.length;
+    expect(await port.subscription!.login(codex.id, null, 'claudeai')).toMatchObject({ signedIn: false, refused: true });
+    expect(requests).toHaveLength(before);
+  }
+});
+
+it('K13: text invocability never mints agent readiness; the model and provider share unknown, refusal and verified prerequisites', async () => {
+  const { root, options } = await project({}), calls: unknown[] = [], base = connectHost('ok');
+  const native = { ...base.kinds[1]!, id: 'fixture-native', catalogProviderId: 'fixture-native', terminalTextChat: true, headlessLogin: true, keyRequired: false,
+    secretName: null, pull: 'available' as const, connectFamily: 'fixture-jsonl' };
+  const reference = { providerId: native.id, providerVersion: 1, modelId: 'fixture', modelVersion: 1 };
+  const choice = { reference, label: 'Fixture', detail: 'OLD TEXT READY', group: native.id, blocked: null, configured: false, exact: 'fixture', command: null };
+  let state: NativeAgentReadiness | undefined;
+  const host = { providerConnect: { ...base, kinds: [native] }, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } }] }) as never,
+    inspectSubscriptionReadiness: async (_root: string, query: unknown) => { calls.push(query); return state as NativeAgentReadiness; } };
+  const plain = { title: 'models', choices: [choice, { ...choice, reference: { ...reference, providerId: 'api-fixture' } }], notes: [], defaultBlocked: null };
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', host, options, locale, errorText);
+    state = undefined;
+    const unknown = await subscriptionModelView(plain, port, locale);
+    expect(unknown.choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, locale));
+    expect(unknown.choices[0]!.detail).not.toContain('OLD TEXT READY'); expect(unknown.choices[1]).toEqual(plain.choices[1]);
+    expect((await port.inspect()).notes.join('\n')).toContain(unknown.choices[0]!.detail);
+    state = { state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
+    const unchecked = await subscriptionModelView(plain, port, locale);
+    expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.cli', {}, locale));
+    expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale));
+    state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
+    state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
+      profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
+    const ready = await subscriptionModelView(plain, port, locale);
+    expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.k13.readiness.ready', {}, locale));
+    expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', reference });
+    // A later missing observation cannot retain an earlier ready projection.
+    state = undefined;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).not.toBeNull();
+    const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
+    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.blocked).not.toBeNull();
+  }
+});
+
+it('K13: unavailable observation readers are bounded and never leak their error or keep a ready result', async () => {
+  const { root, options } = await project({}), base = connectHost('ok');
+  const reference = { providerId: 'fixture-native', providerVersion: 1, modelId: 'fixture', modelVersion: 1 };
+  const providerConnect = { ...base, kinds: [{ ...base.kinds[1]!, id: reference.providerId, headlessLogin: true }] };
+  const failed = providerPanelPort(root, 'scope', { providerConnect, inspectSubscriptionReadiness: async () => { throw new Error(CANARY); } }, options, 'en', errorText);
+  const refusal = await failed.subscriptionReadiness!.inspect('chat', reference);
+  expect(refusal).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' }); expect(JSON.stringify(refusal)).not.toContain(CANARY);
+  vi.useFakeTimers();
+  try {
+    const stalled = providerPanelPort(root, 'scope', { providerConnect, inspectSubscriptionReadiness: () => new Promise(() => {}) }, options, 'en', errorText);
+    const result = stalled.subscriptionReadiness!.inspect('chat', reference);
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
 });

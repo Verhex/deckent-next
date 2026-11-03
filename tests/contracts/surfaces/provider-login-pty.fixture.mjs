@@ -10,6 +10,7 @@ import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { PROVIDER_CONNECT_KINDS, providerConnectFamily } from '#adapters/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
 // Synthetic-person fixture: compiled production windows/port, fixture login and provider I/O; no network or real credentials.
 const mode = process.argv[2], locale = mode.endsWith('-tr') ? 'tr' : 'en';
 const kinds = PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available,
@@ -43,5 +44,10 @@ const host = { providerConnect: { kinds, endpoint: text => ({ ok: true, base: te
 const port = providerPanelPort(process.env.HOME, 'scope', host, {}, locale, error => error.message);
 const view = createElement(SettingsPanel, { kind: 'provider', ports: { provider: port }, labels: terminalPanelLabels(locale), push: () => {},
   onError: error => process.stdout.write('\nERROR ' + error.code + '\n'), onClose: () => instance.unmount() });
-const instance = render(view, { exitOnCtrlC: true, patchConsole: false, interactive: true });
+// SIWC is hidden in the public list. Exercise its retained custody refusal explicitly as a beta fixture.
+const SiwcWindow = mode.startsWith('chatgpt-') ? (await loadSiwcWindow()).default : null;
+if (SiwcWindow) process.stdout.write('K13-HIDDEN-SIWC-BETA: fixture-only\n');
+const beta = SiwcWindow ? createElement(SiwcWindow, { port: port.siwc, onClose: () => instance.rerender(view), onApi: () => instance.rerender(view),
+  onError: error => process.stdout.write('\nERROR ' + error.code + '\n') }) : view;
+const instance = render(beta, { exitOnCtrlC: true, patchConsole: false, interactive: true });
 await instance.waitUntilExit();

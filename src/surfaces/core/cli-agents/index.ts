@@ -1,2 +1,2 @@
 export { agentsCommand } from './internal/command.js';
-export type { AgentsCommandContext } from './internal/context.js';
+export type { AgentsCommandContext, AgentUsePreview } from './internal/context.js';
