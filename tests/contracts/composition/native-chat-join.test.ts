@@ -186,9 +186,11 @@ it('shows a plugin mismatch and keeps the same subscription text path usable wit
     executionSlots: h.profile.allocation.maxInFlight, inFlightSlots: h.profile.allocation.maxInFlight,
   }); } finally { db.close(); }
   await writeFile(configFile, JSON.stringify(config)); clearConfigCache();
+  const preflight = h.runtime.preflight = vi.fn(async () => {});
   h.runtime.readiness.read = async () => ({ cli: true, login: true, environment: true, toolSurface: true, bridge: true, plugins: false, execution: h.execution });
   expect(await h.run()).toMatchObject({ answer: 'tools-off text answer', toolCalls: 0, recorded: true });
   expect(h.events.some(event => event.kind === 'text' && /plugin/iu.test(event.text))).toBe(true);
+  expect(preflight).not.toHaveBeenCalled();
   expect(h.runtime.resolveModelUse).not.toHaveBeenCalled(); expect(h.state.calls).toBe(0);
   const calls = (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   expect(calls.filter(row => row.mode === 'call')).toHaveLength(1);
@@ -208,4 +210,26 @@ it('shows the current driver plugin refusal even after an earlier readiness seal
   expect(result.note).toMatch(/plugin/iu);
   expect(h.state.calls).toBe(0); expect(h.state.closes).toBe(1);
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
+});
+
+it('cancels the first no-model preflight from the starting person before any model send or tool effect', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(), started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  let probeSignal: AbortSignal | undefined;
+  h.runtime.readiness.read = async () => ({ cli: true, login: true, environment: true, execution: h.execution });
+  h.runtime.preflight = async (_profile, signal) => {
+    probeSignal = signal; started.resolve(); await release.promise; signal.throwIfAborted();
+    throw Object.assign(new Error('fixture-preflight-ended'), { code: 'HEADLESS_ISOLATION_UNAVAILABLE' });
+  };
+  const pending = h.run();
+  try {
+    await started.promise;
+    expect(await cancelPeerConfiguredChatTurn(h.f.project, { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn' }, h.peer, h.f.options, h.host)).toMatchObject({ state: 'cancelling' });
+    expect(probeSignal?.aborted).toBe(true);
+    release.resolve();
+    expect(await pending).toMatchObject({ finish: 'cancelled', toolCalls: 0, recorded: true });
+    expect(h.state.calls).toBe(0); expect(h.host.running.size).toBe(0);
+    expect(h.events.filter(event => event.kind === 'text')).toEqual([]);
+    expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
+  } finally { release.resolve(); await pending.catch(() => undefined); }
 });

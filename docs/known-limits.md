@@ -1,5 +1,7 @@
 # Known limits
 
+Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it.
+
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
 Subscription-based agent execution with tools is being built in alpha.63.

@@ -1,3 +1,4 @@
+import { nativeCliHeadless, nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { persistedString, persistedInteger, persistedUrl } from '#domain/index.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { z } from 'zod';
@@ -163,4 +164,4 @@ export function providerEndpoint(text: string): Readonly<{ ok: true; base: strin
 
 /** Terminal text chat requires explicit connection-registry admission; a role connection alone never grants it. */
 export const terminalTextChatFamilies: readonly string[] = Object.freeze(PROVIDER_CONNECT_KINDS.flatMap(kind =>
-  kind.connect?.terminalTextChat && kind.connect.protocolFamily ? [kind.connect.protocolFamily] : []));
+  kind.connect?.protocolFamily && (kind.connect.terminalTextChat || nativeCliHeadless(kind.connect.protocolFamily) && nativeCliAgent(kind.connect.protocolFamily)) ? [kind.connect.protocolFamily] : []));

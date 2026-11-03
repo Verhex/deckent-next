@@ -10,7 +10,6 @@ import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-le
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
@@ -131,7 +130,8 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'fixture-policy', restrictions: [], grants }), { mode: 0o600 });
   if (options.headless) {
     // Trusted fixture setup mirrors the source identities sealed by witnessed models connect; no production authority is bypassed.
-    const context = await loadConfiguredScopeContext(project, 's', loadOptions, 'write');
+    const scoped = await vi.importActual<typeof import('#composition/core/scoped-request/index.js')>('#composition/core/scoped-request/index.js');
+    const context = await scoped.loadConfiguredScopeContext(project, 's', loadOptions, 'write');
     if (!context.installationId) throw new Error('FIXTURE_INSTALLATION_MISSING');
     Object.assign(profile.adapter.definition, { sourceBinding: { schemaVersion: 1, installationId: context.installationId,
       companyId: context.config.company.id, scopeId: 's', principal: { issuer: principal.issuer, subject: principal.subject } } });

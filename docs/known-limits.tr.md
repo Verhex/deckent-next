@@ -1,5 +1,7 @@
 # Bilinen sınırlar
 
+Codex ajan profili, sürüm kaynağı belirtilmiş registry ayarlarıyla alt ajanları ve eklentileri kapatır. Gerçek CLI’de alt ajanların kapalı olduğu owner R / monte BeUser yürüyüşünde doğrulanacaktır; fake CLI bunu kanıtlamaz.
+
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)
 
 Abonelikle araçlı ajan yürütme alpha.63’te inşa ediliyor.

@@ -94,7 +94,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
   it('S3-5/A62: connects without a preview switch; subscription text chat streams, carries history and Esc cancels in the built terminal', async () => {
     expect(textOnlyModelInvocationRequest({ model: 'fixture', max_completion_tokens: 1, messages: [{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }] })['messages']).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }]);
     expect(adapters.terminalTextChatFamilies).toContain(seed.providers[0]!.channel.protocolFamily);
-    expect(adapters.terminalTextChatFamilies).not.toContain(CODEX_FAMILY);
+    expect(adapters.terminalTextChatFamilies).toContain(CODEX_FAMILY);
     for (const preview of [null, false]) {
       const h = await harness(preview);
       await expect(h.connect('c-1')).resolves.toMatchObject({ status: 'connected' });
@@ -332,6 +332,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     await expect(codex('x-0')).resolves.toMatchObject({ status: 'connected', cli: { configDir: codexDir, delegate: ['ai'] }, worker: 'image-required',
       steps: { declaration: 'written', profile: 'written', activation: 'written' } });
     expect(await workerModel()).not.toBe('active');
+    expect((await inspectConfiguredInvocableModels(h.f.project, 'scope', { env: h.f.env })).models.find(model => model.nativeId === codexModel)?.availability).toEqual({ invocable: true, reason: null });
     const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     const profiles = (written['provider_invocation_profiles'] as { profiles: (Profile & { protocol: { family: string } })[] }).profiles;
     expect(profiles.find(item => item.protocol.family === CODEX_FAMILY)).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', adapter: { id: 'native-cli-headless',

@@ -24,9 +24,10 @@ export interface FakeAgentScenario {
   readonly answer?: string;
   readonly preamble?: string;
   readonly pluginMismatch?: boolean;
-  readonly nativeItem?: boolean;
+  readonly nativeItem?: boolean | 'collab_tool_call';
   readonly echoToken?: boolean;
   readonly loginCanary?: string;
+  readonly proposalBeforeItem?: boolean;
   readonly hang?: boolean;
 }
 export async function writeFakeAgentCli(dir: string, family: string, scenario: FakeAgentScenario = {}) {
@@ -60,8 +61,9 @@ async function main() {
   sessionId ??= res.headers['mcp-session-id']; let out='';res.on('data',c=>out+=c);res.on('error',reject);res.on('end',()=>{ try { const frames=out.split('\\n').filter(l=>l.startsWith('data:')).map(l=>JSON.parse(l.slice(5))); const result=frames.find(v=>v.id===id) ?? JSON.parse(out); if (res.statusCode!==200 || result.error) reject(new Error('rpc-failed')); else resolve(result.result); } catch {reject(new Error('rpc-invalid'));} }); });req.on('error',reject);req.end(JSON.stringify({jsonrpc:'2.0',id,method,params})); }); }
  await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'synthetic-agent',version:'1'}});
  const listed = await rpc('tools/list',{});
+ if (!claude && x.proposalBeforeItem) { const call=x.calls[0]; try { await rpc('tools/call',{name:call.name,arguments:call.arguments,_meta:{callId:'call-early',itemId:'fc-early'}}); } catch {} await new Promise(r=>setTimeout(r,100)); return; }
  if (claude) { await line({...s.init,cwd:process.cwd(),model,tools:listed.tools.map(t=>e.bridge.toolPrefix+t.name),mcp_servers:[{name:e.bridge.serverName,status:'connected'}],...(x.pluginMismatch?{plugins:[{name:'unexpected',path:'fixture',source:'fixture'}]}:{})}); await new Promise(r=>setTimeout(r,100)); }
- else { await line(s.codex[0]); await line(s.codex[1]); if(x.nativeItem) { await line({type:'item.started',item:{id:'native-bad',type:'command_execution',command:'unchanged risky request'}}); await new Promise(r=>setTimeout(r,100)); } }
+ else { await line(s.codex[0]); await line(s.codex[1]); if(x.nativeItem) { await line({type:'item.started',item:{id:'native-bad',type:x.nativeItem===true?'command_execution':x.nativeItem,command:'unchanged risky request'}}); await new Promise(r=>setTimeout(r,100)); } }
  if (x.hang) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:'K16-WAITING '}]}}); else await line({type:'item.completed',item:{id:'waiting',type:'agent_message',text:'K16-WAITING '}}); await new Promise(()=>setInterval(()=>{},1000)); }
  if (x.preamble) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:x.preamble}]}}); else await line({type:'item.completed',item:{id:'preamble',type:'agent_message',text:x.preamble}}); }
  let n=0;

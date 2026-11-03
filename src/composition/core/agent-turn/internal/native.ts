@@ -14,6 +14,8 @@ type Bridge = Awaited<ReturnType<typeof createNativeToolBridge>>;
 export interface NativeChatRuntime {
   readonly readiness: SubscriptionReadinessReader;
   readonly limits: NativeToolBridgeLimits;
+  /** No model call; establishes prerequisites only. Never overrides a known surface refusal. */
+  preflight?(profile: ModelInvocationProfile, signal: AbortSignal): Promise<void>;
   resolveModelUse(profile: ModelInvocationProfile, actor: VerifiedPrincipal,
     check: { readonly action: 'pin' } | { readonly action: 'recheck'; readonly pin: object }): Promise<object | void | null>;
   /** K2 wraps proposals to correlate Claude tool_use; K3 retains the exact recorded call/result lookup. */
@@ -69,3 +71,11 @@ export const nativeChatReasonText = (reason: NativeAgentReadinessReason, languag
   NATIVE_AGENT_BRIDGE_UNAVAILABLE: t('headless.agent.reason.NATIVE_AGENT_BRIDGE_UNAVAILABLE', {}, language),
   NATIVE_AGENT_ENVIRONMENT_REFUSED: t('headless.agent.reason.NATIVE_AGENT_ENVIRONMENT_REFUSED', {}, language),
 })[reason];
+
+/** Probe errors expose a typed prerequisite reason, never CLI output or credential-bearing error text. */
+export function nativeChatPreflightReason(error: unknown): NativeAgentReadinessReason {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 'HEADLESS_LOGIN_REQUIRED' ? 'NATIVE_AGENT_LOGIN_REQUIRED'
+    : code === 'HEADLESS_CLI_UNAVAILABLE' ? 'NATIVE_AGENT_CLI_UNAVAILABLE'
+    : 'NATIVE_AGENT_ENVIRONMENT_REFUSED';
+}

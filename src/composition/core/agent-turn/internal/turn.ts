@@ -16,7 +16,7 @@ import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, age
   withMcpPrincipal, isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
-import { withNativeChatInvocation, nativeChatReasonText, type NativeChatRuntime } from './native.js';
+import { withNativeChatInvocation, nativeChatReasonText, nativeChatPreflightReason, type NativeChatRuntime } from './native.js';
 import type { NativeAgentExecution } from '#capabilities/index.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
@@ -24,7 +24,7 @@ import { createMcpProposals } from './mcp-propose.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { terminalModelHere, inspectNativeChat } from '#composition/core/terminal-chat/index.js';
+import { terminalModelHere, inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
@@ -94,19 +94,51 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
     .map(value => modelInvocationProfileSchema.parse(value)).find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
   if (profile?.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID) {
-    const readiness = await inspectNativeChat(profile, host.nativeAgent);
-    if (readiness.state === 'ready' && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, { ...command, reference }, peer, options,
-      delivery, host, channel, { profile, execution: readiness.execution, witness: witness.principal }));
-    const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
-    const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-    channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
-    await channel.drained();
+    const observed = await inspectNativeChat(profile, host.nativeAgent);
+    const start = async (controller?: AbortController) => {
+      let readiness = observed;
+      let execution = readiness.state === 'ready' ? readiness.execution : null;
+      if (readiness.state === 'unknown' && host.nativeAgent?.preflight) {
+        try {
+          await host.nativeAgent.preflight(profile, AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]));
+          execution = await nativeChatVerificationExecution(profile, host.nativeAgent);
+          readiness = await inspectNativeChat(profile, host.nativeAgent);
+          if (readiness.state === 'unavailable') execution = null;
+        } catch (error) {
+          if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted)
+            return runChatTurn(projectRoot, input, peer, options, delivery, host, channel, undefined, controller);
+          execution = null; readiness = { state: 'unavailable', reason: nativeChatPreflightReason(error) };
+        }
+      }
+      if (execution && readiness.state !== 'ready') {
+        const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
+        channel.emit({ kind: 'text', text: t('headless.agent.k20.verifying', {}, language) + '\n' });
+        await channel.drained();
+      }
+      if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, { ...command, reference }, peer, options,
+        delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
+      const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
+      const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
+      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
+      await channel.drained();
+      return runChatTurn(projectRoot, input, peer, options, delivery, host, channel, undefined, controller);
+    };
+    if (observed.state !== 'unknown' || !host.nativeAgent?.preflight) return start();
+    const key = runningKey(command.scopeId, command.turnId);
+    if (host.running.has(key)) return start();
+    const controller = new AbortController();
+    // Use the existing cancellation owner while probing; steering is explicitly unavailable until admission.
+    host.running.set(key, { principalKey: principalKeyOf(witness.principal), controller,
+      steer: { pending: [], joined: [], seen: new Set(), closed: true, room: 0 } });
+    try { return await start(controller); }
+    finally { if (host.running.get(key)?.controller === controller) host.running.delete(key); }
   }
   return runChatTurn(projectRoot, input, peer, options, delivery, host, channel);
 }
+
 async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   delivery: ModelInvocationDelivery, host: RuntimeChatTurnHost, channel: RuntimeServiceTurnChannel,
-  native?: { readonly profile: import('#domain/index.js').ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly witness: Awaited<ReturnType<typeof loadPeerInvocationContext>>['principal'] }): Promise<ChatTurnResult> {
+  native?: { readonly profile: import('#domain/index.js').ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly witness: Awaited<ReturnType<typeof loadPeerInvocationContext>>['principal'] }, controller?: AbortController): Promise<ChatTurnResult> {
   const parsed = chatTurnCommandSchema.safeParse(input);
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const command = parsed.data;
@@ -150,7 +182,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}) }), readTerminalScratchConfig(config), host.scratch,
     { maxResultBytes: chat.readResultMaxBytes }) : null;
   const key = runningKey(command.scopeId, command.turnId);
-  const cancel = new AbortController();
+  const cancel = controller ?? new AbortController();
   const connection = watchTurnConnection(peer);
   const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal, connection.signal]);
   // B1: each card of this turn (tool call, MCP trust) gets a one-time capability for this principal and peer process, sent only on this turn's stream; settled → revoked.
@@ -238,7 +270,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
-    registered = !host.running.has(key);
+    registered = !host.running.has(key) || host.running.get(key)?.controller === cancel;
     // v30 (tema L6): MCP notices as data, at the protocol's bound; `note` keeps only the turn's own note (and a failed policy record).
     const notices = mcpNotices.flatMap(notice => { const parsed = mcpStartNoticeSchema.safeParse(notice); return parsed.success ? [parsed.data] : []; }).slice(0, CHAT_TURN_RESULT_NOTICES);
     // The largest result before any steer id, answer or note (every count at its bound): what steer admission leaves room for.

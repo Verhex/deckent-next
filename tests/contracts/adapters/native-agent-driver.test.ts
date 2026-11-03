@@ -114,3 +114,25 @@ it('keeps cancelled calls unknown, closes the process and removes token-bearing 
     expect(f.propose).not.toHaveBeenCalled();
   }
 });
+
+it('refuses a Codex collaboration item before a Deckent proposal even when the first surface has no seal', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const f = await fixture(families[1]!, { nativeItem: 'collab_tool_call', calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }] });
+  const h = await f.start();
+  expect(await h.run()).toMatchObject({ kind: 'rejected' });
+  expect(f.propose).not.toHaveBeenCalled();
+  expect(h.driver.refusal()).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+  expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
+  expect(f.entry.agent.args).toContain('agents.enabled=false');
+  expect(f.entry.agent.args).toContain('features.plugins=false');
+});
+
+it('refuses a Codex MCP proposal before its guarded item instead of delegating it', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const f = await fixture(families[1]!, { proposalBeforeItem: true, calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }] });
+  const h = await f.start();
+  expect(await h.run()).toMatchObject({ kind: 'rejected' });
+  expect(f.propose).not.toHaveBeenCalled();
+  expect(h.driver.refusal()).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+  expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
+});

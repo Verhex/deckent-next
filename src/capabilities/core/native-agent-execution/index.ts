@@ -6,3 +6,8 @@ export type { NativeCliHeadlessDefinition, NativeAgentExecution, NativeAgentRead
 export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema } from './internal/session.js';
 export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, ToolSessionClosure, ToolSessionCancellation, ToolSessionRevocation } from './internal/session.js';
 export { nativeAgentInitReason, nativeAgentItemReason } from './internal/guards.js';
+export { parseNativeCliRegistry, nativeCliCapabilitiesSchema, nativeEffortArgs, type NativeCliCapabilities } from './internal/command-registry.js';
+export { buildHeadlessEnv, headlessLoginEnv, headlessRequiredFlags, headlessFlagSetDigest, nativeAgentFlagSetDigest, headlessArgv, type HeadlessEntry } from './internal/environment.js';
+export { emitDelta, reportedCounters } from './internal/stream.js';
+export { createClaudeAgentDriver, ClaudeAgentError, type ClaudeAgentDriver, type ClaudeAgentResult } from './internal/claude-stream.js';
+export { errorDiagnostic } from './internal/error-diagnostic.js';

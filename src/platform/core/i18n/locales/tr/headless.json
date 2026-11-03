@@ -103,5 +103,6 @@
   "headless.agent.k13.worker.NATIVE_WORKER_CUSTODY_UNKNOWN": "Native işçinin süreç sahipliği bilinmiyor. Eksik dosya veya süreç kimliği sonlanma kanıtı değildir; sahiplik uzlaştırılana kadar kapasiteyi ayrılmış tutun.",
   "headless.agent.k13.resource.waiting": "Paylaşılan abonelik kaynağı bekleniyor. Yeni işçi başlamadı; doğrulanmış serbest bırakmayı bekleyin veya bu görevi iptal edin.",
   "headless.agent.k13.resource.legacy": "Önceki yürütme yolu: kabul edilmiş bu görev kayıtlı profilini korur. Yeni iş için denetimli native işçi bağlantısı gerekir.",
-  "headless.agent.k13.agents.action": "bir görev için ajanı ve sabit skill sürümlerini hazırla (salt okunur)"
+  "headless.agent.k13.agents.action": "bir görev için ajanı ve sabit skill sürümlerini hazırla (salt okunur)",
+  "headless.agent.k20.verifying": "Bu ilk denetimli turda CLI araç yüzeyi doğrulanıyor."
 }

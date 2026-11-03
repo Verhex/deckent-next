@@ -80,7 +80,9 @@
         "src/domain/core/agent-tool",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/platform/core/errors",
+        "src/platform/core/redaction"
       ],
       "plan": "PROVIDERS"
     },
@@ -388,7 +390,6 @@
         "src/adapters/core/native-cli-worker",
         "src/capabilities/core/native-agent-execution",
         "src/adapters/core/local-principal",
-        "src/adapters/core/native-cli-headless",
         "src/adapters/core/native-cli-registry",
         "src/composition/core/subscription-readiness",
         "src/engine/core/supervisor",
@@ -550,7 +551,6 @@
         "src/engine/core/model-invocation",
         "src/platform/core/config",
         "src/platform/core/errors",
-        "src/adapters/core/native-cli-headless",
         "src/capabilities/core/native-agent-execution",
         "src/composition/core/subscription-readiness"
       ],
@@ -2097,7 +2097,8 @@
         "src/domain/core/primitives",
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-anthropic-messages",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "PROVIDERS"
     },
@@ -2201,7 +2202,8 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/memory",
         "src/domain/core/worker-event",
-        "src/adapters/core/native-cli-worker"
+        "src/adapters/core/native-cli-worker",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "PROVIDERS"
     },
@@ -3187,7 +3189,6 @@
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
         "src/capabilities/core/native-agent-execution",
-        "src/domain/core/primitives",
         "src/domain/core/provider-catalog"
       ],
       "plan": "HARDCODE-P1"
