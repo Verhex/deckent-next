@@ -20,7 +20,9 @@ export function nativeWorkerTemplateEnvironment(defaults: { requirements: readon
   return { schemaVersion: 1, requirements: [...defaults.requirements, ...defaults.whenMounted.filter(row => mounted.has(row.target)).map(row => row.requirement),
     ...(heap ? [{ ...defaults.nodeHeap, expect: String(heap) }] : [])] };
 }
-export function nativeWorkerToolBounds(limits: { limiter: string; dataBytes: number } | undefined) {
+/** Explicit result type: the published declaration never references the JSON policy module. */
+export type NativeWorkerToolBounds = Readonly<{ limiter: string; dataBytes: number; heapBytes: number; fixedEnv: Readonly<Record<string, string>> }>;
+export function nativeWorkerToolBounds(limits: { limiter: string; dataBytes: number } | undefined): NativeWorkerToolBounds {
   if (!limits) throw ErrorRegistry.createError('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   const units = Math.floor(limits.dataBytes * policy.memoryFraction / policy.bytesPerUnit);
   if (!Number.isSafeInteger(units) || units <= 0 || policy.memoryFraction <= 0 || policy.memoryFraction >= 1 || !limits.limiter.startsWith('/'))
@@ -35,7 +37,7 @@ export function nativeWorkerContainedLayout<L extends { project: { root: string 
 }
 /** Both preflight and governed tool calls inherit the same hard data limit; no open view or long-lived launch is offered. */
 export function nativeWorkerBoundSandboxes<C, R extends { ok: true; realm: ShellRealm }>(
-  providers: readonly { kind: Exclude<ShellRealm['kind'], 'host'>; usable(capabilities: C): R | { ok: false; reason: string } }[], bounds: ReturnType<typeof nativeWorkerToolBounds>) {
+  providers: readonly { kind: Exclude<ShellRealm['kind'], 'host'>; usable(capabilities: C): R | { ok: false; reason: string } }[], bounds: NativeWorkerToolBounds) {
   return providers.filter(provider => provider.kind === 'bubblewrap').map(provider => ({ ...provider, usable(capabilities: C) {
     const ready = provider.usable(capabilities); if (!ready.ok) return ready;
     const { launch: _launch, ...closed } = ready as R & { launch?: unknown }; void _launch;
