@@ -3,6 +3,9 @@ import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { PickerWindow, useLoadingText, BudgetWindow, budgetEntry, WorkspaceWindow, CacheWindow, cacheEntry, type BudgetPanelView, type CachePanelView, type ModelPanelChoice, type ModelPanelLabels, type ModelPanelPort, type ModelPanelReference, type ModelPanelView, type PanelLabels, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { ProviderPanel } from './provider-panel.js';
+import { ErrorRegistry } from '#platform/index.js';
+import type { ProviderWindowPort } from './context.js';
+import { subscriptionModelView, subscriptionReadinessText } from './readiness.js';
 
 const SESSION = 'session', DEFAULT = 'default', CONNECT = ':connect', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', WORKSPACE = ':workspace', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
 /** Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed). */
@@ -38,6 +41,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval: (approvalId: string) => void; readonly onError: (error: unknown) => void;
   readonly onClose: () => void }) {
   const words = labels.model;
+  const provider = port.provider as ProviderWindowPort | undefined, locale = provider?.locale ?? 'en';
+  const inspect = () => port.inspect().then(view => subscriptionModelView(view, provider, locale));
   const [workspaces, setWorkspaces] = useState<Awaited<ReturnType<NonNullable<ModelPanelPort['workspace']>['inspect']>>>([]);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [view, setView] = useState<ModelPanelView | null>(null);
@@ -57,7 +62,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   useEffect(() => {
     mounted.current = true;
     let live = true;
-    port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
+    port.inspect().then(view => subscriptionModelView(view, port.provider, (port.provider as ProviderWindowPort | undefined)?.locale ?? 'en')).then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
     port.cache?.inspect().then(value => { if (live) setCache(value); }, () => undefined);
     port.workspace?.inspect().then(value => { if (live) setWorkspaces(value); }, () => undefined);
@@ -67,7 +72,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const loading = useLoadingText(labels, !view || preparing);
   if (!view) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={onClose} onResult={onClose} />;
-  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void port.inspect().then(setView, onError); }} />;
+  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void inspect().then(setView, onError); }} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   if (workspaceOpen && port.workspace && labels.workspace) return <WorkspaceWindow port={port.workspace} profiles={workspaces} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
@@ -102,7 +107,13 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     if (preparingRef.current) return;
     preparingRef.current = true; setPreparing(true);
     // Recheck at confirmation; only a successful governed preparation can change the session pin.
-    Promise.resolve().then(() => port.prepare?.(choice, port.reasoning?.())).then(async () => {
+    Promise.resolve().then(async () => {
+      if (provider?.subscriptionReadiness?.recognizes(choice.reference)) {
+        const readiness = await provider.subscriptionReadiness.inspect('chat', choice.reference);
+        if (readiness.state !== 'ready') throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: subscriptionReadinessText(readiness, locale) } });
+      }
+      await port.prepare?.(choice, port.reasoning?.());
+    }).then(async () => {
       if (!mounted.current) return;
       port.pin(choice, fresh === true);
       push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label, provider: choice.providerLabel ?? choice.group }),
@@ -122,7 +133,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       { id: 'keep', label: view.fixKeep ?? words.shadowKeep, unscoped: true }] }} body={[{ spans: [span(fix.choice.detail)] }, { spans: [span(fix.choice.exact)] }]}
     onResult={result => { if (result.kind !== 'selected' || result.id !== 'apply') { setFix(null); return; }
       setPreparing(true); const selected = fix; setFix(null);
-      port.fix!(selected.choice, selected.action).then(() => port.inspect()).then(setView, onError).finally(() => setPreparing(false)); }} />;
+      port.fix!(selected.choice, selected.action).then(inspect).then(setView, onError).finally(() => setPreparing(false)); }} />;
   if (preparing) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={() => { mounted.current = false; onClose(); }} onResult={() => undefined} />;
   if (shadow) {

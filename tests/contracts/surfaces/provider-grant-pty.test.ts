@@ -58,11 +58,10 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     const signIn = locale === 'en' ? 'Sign in with ChatGPT' : 'ChatGPT ile giriş';
     const keys = locale === 'en' ? '↑/↓ select · Enter continue · Esc cancel' : '↑/↓ seç · Enter devam · Esc vazgeç';
     const noApi = locale === 'en' ? 'Sign in with ChatGPT (keep automatic API continuation off)' : 'ChatGPT ile giriş yap (otomatik API geçişi kapalı kalsın)';
-    const choose = locale === 'en' ? 'Continue with ChatGPT' : 'ChatGPT ile devam et';
     const failure = locale === 'en' ? 'session credentials must stay on' : 'oturum bilgileri bu bilgisayarın';
     const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: join(home, 'global'), XDG_CONFIG_HOME: join(home, '.config'), TERM: 'xterm-256color', NO_COLOR: '1' };
     const sign = words((await inPty(loginFixture, home, env, `chatgpt-${locale}`, [
-      [signIn, 'ChatGPT'], [`${locale === 'en' ? 'filter' : 'filtre'}: ChatGPT`, '\r', 'fresh'], [choose, '\r', 'next'], [keys, '\r', 'next'], [noApi, '\r', 'next'],
+      ['K13-HIDDEN-SIWC-BETA: fixture-only', ''], [keys, '\r', 'next'], [noApi, '\r', 'next'],
       ['FIXTURE-OAUTH-CONNECT-REACHED', ''], [failure, '\r'],
       [api, api], [`${locale === 'en' ? 'filter' : 'filtre'}: ${api}`, '\r', 'fresh'], [locale === 'en' ? 'API providers' : 'API sağlayıcıları', '\r', 'fresh'],
       [locale === 'en' ? 'Connect (enter the key' : 'Bağlan (anahtarı girin', '\r', 'next'],
@@ -70,8 +69,9 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     expect(sign.match(/FIXTURE-OAUTH-CONNECT-REACHED/gu)).toHaveLength(1);
     expect(sign).not.toContain('Codex subscription workers'); expect(sign).not.toContain('Codex abonelik işçileri');
     expect(sign).toContain(locale === 'en' ? 'Sign in with Claude' : 'Claude ile giriş');
-    // Assert ChatGPT's own row; Cursor's independent beta badge is not evidence for this one.
-    expect(sign).toMatch(locale === 'en' ? /Sign in with ChatGPT\s+Beta/u : /ChatGPT ile giriş\s+Betada/u);
+    // The beta custody denial remains exercised, while the public ChatGPT row is now the person's Codex CLI.
+    expect(sign).toContain('K13-HIDDEN-SIWC-BETA: fixture-only');
+    expect(sign).toContain(locale === 'en' ? 'Sign in with ChatGPT (Codex CLI)' : 'ChatGPT ile giriş (Codex CLI)');
     const claude = words((await inPty(loginFixture, home, env, `claude-${locale}`, [
       [signIn, 'Claude'], [`${locale === 'en' ? 'filter' : 'filtre'}: Claude`, '\r', 'fresh'], [locale === 'en' ? 'Sign in with its CLI and connect…' : "CLI'ıyla giriş yap ve bağla…", '\r', 'next'],
       [locale === 'en' ? 'Login directory' : 'Giriş dizini', '\r', 'next'],

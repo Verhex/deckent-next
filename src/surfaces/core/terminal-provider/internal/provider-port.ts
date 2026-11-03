@@ -7,11 +7,12 @@ import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, Provide
 import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost, ProviderWindowPort } from './context.js';
 import { subscriptionPort } from './subscription-port.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
-import { providerDisplayName } from './provider-label.js';
+import { providerDisplayName, providerKindLabel } from './provider-label.js';
+import { subscriptionReadinessPort, subscriptionReadinessText } from './readiness.js';
 import presentation from './presentation.json' with { type: 'json' };
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
 function kindLabel(kind: ProviderConnectKindView | undefined, id: string, locale: Locale): string {
-  return kind ? (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[kind.labelKey] ?? id : id;
+  return kind ? providerKindLabel(kind, locale) : id;
 }
 /** The check's typed outcome in words (the secret lane's rejection kinds, then unreachable / unexpected). */
 export function providerOutcomeWord(probe: ProviderConnectProbeView, locale: Locale): string {
@@ -100,6 +101,7 @@ function discoveryPort(root: string, scopeId: string, connect: NonNullable<Host[
 export function providerPanelPort(root: string, scopeId: string, host: Host & { providerConnect: NonNullable<Host['providerConnect']> }, options: ConfigLoadOptions, locale: Locale,
   errorText: (error: unknown) => string, secretGrant?: ProviderSecretGrantPort): ProviderWindowPort {
   const connect = host.providerConnect; let backend = '-', isolation: unknown = null; // PV 2a: the last isolation refusal read for the list
+  const subscriptionReadiness = subscriptionReadinessPort(root, scopeId, host, options);
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
   const pullModels = async (kind: ProviderConnectKindView, endpoint: string | null, lines: PanelLine[], workspaceRequired: boolean): Promise<readonly Readonly<{ id: string; name: string }>[] | undefined> => {
@@ -113,6 +115,10 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale, kind.billing).filter(row => row.text !== t('tui.provider.model.next', {}, locale))); for (const model of result.models ?? []) if (model.reference) answered.add(model.reference.providerId);
       const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       const usable = reading?.models.find(row => row.availability.invocable && result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference)));
+      if (kind.headlessLogin && kind.terminalTextChat && result.status === 'connected') {
+        const readiness = await subscriptionReadiness.inspect('chat', result.reference);
+        lines.push({ label: '', text: subscriptionReadinessText(readiness, locale), tone: readiness.state === 'ready' ? 'success' : 'warning' }); return;
+      }
       const worker = usable ? null : await workerReadiness(host, root, scopeId, options, result.reference.providerId, locale);
       if (worker) { lines.push({ label: '', text: worker }); return; }
       if (!usable && result.status === 'connected' && brainOnly(kind, (reading?.models ?? []).filter(row => result.models?.some(model => model.reference && referenceKey(model.reference)
@@ -156,9 +162,11 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         lines: [{ label: '', text: summary, tone: 'warning' }, { label: t('tui.provider.field.check', {}, locale), text: errorText(error), tone: 'warning' }] } };
     }
     const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
-    const usable = candidates.some(row => row.availability.invocable);
+    const prerequisite = result.status === 'connected' && kind?.headlessLogin && kind.terminalTextChat
+      ? await subscriptionReadiness.inspect('chat', result.reference) : null;
+    const usable = candidates.some(row => row.availability.invocable) && (!prerequisite || prerequisite.state === 'ready');
     // PV: the readiness read is the terminal chat's (its protocol families); a CLI subscription connects for the Brain, whose check ran isolated at connect.
-    const unavailable = brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
+    const unavailable = prerequisite && prerequisite.state !== 'ready' ? subscriptionReadinessText(prerequisite, locale) : brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
       : t('tui.provider.pull.blocked', { reason: candidates[0] ? modelInvocabilityText(candidates[0].availability, locale) : t('tui.provider.unavailable', {}, locale) }, locale);
     const brain = !usable && brainOnly(kind, candidates.map(row => row.availability));
     if (result.status === 'connected') lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : unavailable, tone: usable || brain ? 'success' : 'warning' });
@@ -171,6 +179,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
   }
   return {
     locale,
+    subscriptionReadiness,
     ...(host.siwc && host.inspectSecretStore ? { async inspectCustody() {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -242,7 +251,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       const isolationReason = isolation instanceof DeckentError ? ErrorRegistry.get(isolation.code, locale, isolation.params)?.message ?? t('tui.provider.isolation.blocked', {}, locale)
         : t('tui.provider.isolation.blocked', {}, locale);
       const reading = await host.inspectInvocableModels?.(root, scopeId, options), catalogView = await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null); // M-28 tail: a keyless CLI channel's count
-      const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.filter(kind => kind.presentation !== 'hidden').map(async kind => {
+      const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.filter(kind => kind.headlessLogin || (kind.presentation !== 'hidden' && kind.presentation !== 'beta')).map(async kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
         const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
@@ -274,8 +283,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-      for (const model of reading?.models ?? []) notes.push(`${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
-        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale)}`);
+      notes.push(...await Promise.all((reading?.models ?? []).map(async model => `${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${subscriptionReadiness.recognizes(model.reference)
+        ? subscriptionReadinessText(await subscriptionReadiness.inspect('chat', model.reference), locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
+        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale)}`)));
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
     },
     endpoint(kind, text) {

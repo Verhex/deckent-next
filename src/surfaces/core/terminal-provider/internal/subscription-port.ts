@@ -1,4 +1,4 @@
-import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import type { PanelLine, ProviderModelOutcome } from '#surfaces/core/terminal-panels/index.js';
@@ -36,10 +36,14 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
     retryKeys: t('tui.provider.login.retryKeys', {}, locale), consentTitle: t('tui.provider.login.consentTitle', {}, locale), consentNow: t('tui.provider.login.consentNow', {}, locale),
     consentConfirm: t('tui.provider.login.consentConfirm', {}, locale), configPolicy: t('tui.provider.login.configPolicy', {}, locale), onlyYou: t('tui.provider.login.onlyYou', {}, locale), youAnd: t('tui.provider.login.youAnd', {}, locale),
     system: t('tui.provider.login.system', {}, locale), ai: t('tui.provider.login.ai', {}, locale), mcp: t('tui.provider.login.mcp', {}, locale),
-    mcpBlocked: t('tui.provider.login.mcpBlocked', {}, locale), question: t('tui.provider.login.question', {}, locale), questionKeys: t('tui.provider.login.questionKeys', {}, locale) };
+    mcpBlocked: t('tui.provider.login.mcpBlocked', {}, locale), question: t('tui.provider.login.question', {}, locale), questionKeys: t('tui.provider.login.questionKeys', {}, locale),
+    methodTitle: t('headless.agent.k13.login.methodTitle', {}, locale), methodHint: t('headless.agent.k13.login.methodHint', {}, locale) };
   const twin = (kind: string, configDir: string | null) => ['deckent', 'models', 'login', '--connection', kind, ...(configDir ? ['--config-dir', configDir] : [])].map(quoted).join(' ');
   return {
     kinds: connect.kinds.filter(kind => kind.headlessLogin && kind.available).map(kind => kind.id), words,
+    methods: (kind, configDir) => (connect.loginMethods?.(kind) ?? []).map(id => ({ id, label: id === 'browser' ? t('headless.agent.k13.login.method.browser', {}, locale)
+      : id === 'device-auth' ? t('headless.agent.k13.login.method.device-auth', {}, locale) : t('headless.agent.k13.login.method.claudeai', {}, locale),
+      command: `${twin(kind, configDir ?? null)} --login-method ${quoted(id)}` })),
     refusal(kind, usable) {
       return { title: t('tui.provider.isolation.title', { kind: input.kindLabel(kind) }, locale), lines: [
         { label: t('tui.provider.field.check', {}, locale), text: errorText(input.refusal()), tone: 'warning' },
@@ -53,10 +57,11 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
       return { owned: dir.owned, lines: [{ label: '', text: t('tui.provider.login.what', { kind: input.kindLabel(kind) }, locale) },
         { label: t('tui.provider.login.twinLabel', {}, locale), text: `${twin(kind, null)} && deckent models connect --connection ${quoted(kind)} --scope ${quoted(scopeId)}`, tone: 'muted' }] };
     },
-    async login(kind, configDir) {
+    async login(kind, configDir, method) {
       const label = input.kindLabel(kind);
       try {
-        const view = await connect.login({ connection: kind, ...(configDir ? { configDir } : {}) }, options);
+        if (method !== undefined && !connect.loginMethods?.(kind).includes(method)) throw ErrorRegistry.createError('CLI_USAGE');
+        const view = await connect.login({ connection: kind, ...(configDir ? { configDir } : {}), ...(method ? { loginMethod: method } : {}) }, options);
         if (!view) return { signedIn: false, refused: true, title: t('tui.provider.login.refusedTitle', { kind: label }, locale), lines: [] };
         const signedIn = view.signedIn && view.exit === 'completed';
         return { signedIn, refused: false, title: signedIn ? t('tui.provider.login.doneTitle', { kind: label }, locale) : t('tui.provider.login.failedTitle', { kind: label }, locale),
