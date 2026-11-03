@@ -19,9 +19,10 @@ const leaseId = '00000000-0000-4000-8000-000000000001';
 function fixture(attached = true) {
   const sourceProfile = modelInvocationProfileSchema.parse({ schemaVersion: 2, billingAxis: 'subscription', id: 'fixture-profile', version: 1, scopeId: 'source',
     reference, bindingDigest: binding.digest, protocol: { family: 'fixture-protocol', version: 'v1' },
-    adapter: { id: 'fixture-adapter', version: 1, definition: { ownerUid: 1000, delegatedUse: { consentedBy: owner, atMs: 1, classes: ['ai', 'system'] } } },
+    adapter: { id: 'native-cli-headless', version: 1, definition: { schemaVersion: 1, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: '/fixture/state', minCliVersion: '1.0.0', ownerUid: 1000,
+      sourceBinding: { schemaVersion: 1, installationId: 'installation', companyId: 'company', scopeId: 'source', principal: owner }, delegatedUse: { consentedBy: owner, atMs: 1, classes: ['ai', 'system'] } } },
     allocation: { id: 'fixture-allocation', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 1000, responseMaxBytes: 1000, timeoutMs: 1000 } });
-  let profile: ModelInvocationProfile = modelInvocationProfileSchema.parse({ ...sourceProfile, scopeId: 'target', ...(attached ? { schemaVersion: 3, useLeaseId: leaseId } : {}) });
+  let profile: ModelInvocationProfile = modelInvocationProfileSchema.parse({ ...sourceProfile, scopeId: 'target', ...(!attached ? { adapter: { ...sourceProfile.adapter, definition: { ...sourceProfile.adapter.definition, sourceBinding: { schemaVersion: 1, installationId: 'installation', companyId: 'company', scopeId: 'target', principal: owner } } } } : {}), ...(attached ? { schemaVersion: 3, useLeaseId: leaseId } : {}) });
   const context = (scope: string, profile: ModelInvocationProfile): ModelUseContext => ({
     config: { installation: { sharedRegistrationId: scope === 'target' && attached ? 'registration' : undefined }, company: { id: 'company' },
       provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_catalog: { schemaVersion: 1, revision: 'catalog', providers: [
@@ -115,12 +116,12 @@ it('binds an admitted pin to its exact principal even for two actors acting for 
 it('refuses another company even when source and target were both moved together', async () => {
   const f = fixture(), pin = await pinModelUse(f.ports, 'target-root', f.profile, person);
   Object.assign(f.state.source.config.company, { id: 'other-company' }); Object.assign(f.state.target.config.company, { id: 'other-company' });
-  await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
 });
 it('refuses another installation even when source and target now agree on the new installation', async () => {
   const f = fixture(), pin = await pinModelUse(f.ports, 'target-root', f.profile, person);
   Object.assign(f.state.source, { installationId: 'other-installation' }); Object.assign(f.state.target, { installationId: 'other-installation' });
-  await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
 });
 it('rechecks source activation and target policy rather than treating a pin as permission', async () => {
   const f = fixture(), pin = await pinModelUse(f.ports, 'target-root', f.profile, person); f.state.activation = 'inactive';
@@ -141,4 +142,25 @@ it('observes an inactive direct connection without granting invocation or a pin'
   await expect(pinModelUse(f.ports, 'target-root', f.profile, person)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
   await expect(resolveModelUse(f.ports, 'target-root', f.profile, { ...person, subject: '1001' }, { action: 'inspect' }))
     .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+});
+
+it('refuses a copied direct person-only connection on first use in another installation, company, scope or principal', async () => {
+  const effect = vi.fn();
+  const installation = fixture(false); Object.assign(installation.state.target, { installationId: 'copied-installation' });
+  await expect(resolveModelUse(installation.ports, 'target-root', installation.profile, person).then(effect)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  const company = fixture(false); Object.assign(company.state.target.config.company, { id: 'copied-company' });
+  await expect(resolveModelUse(company.ports, 'target-root', company.profile, person).then(effect)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  const scope = fixture(false), copied = scope.replace({ ...scope.profile, scopeId: 'copied-scope' });
+  await expect(resolveModelUse(scope.ports, 'target-root', copied, { ...person, scopeIds: ['copied-scope'] }).then(effect)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  const principal = fixture(false); Object.assign(principal.state.target, { principal: { ...person, issuer: 'copied-host' } });
+  await expect(resolveModelUse(principal.ports, 'target-root', principal.profile, { ...person, issuer: 'copied-host' }).then(effect)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect(effect).not.toHaveBeenCalled();
+});
+it('reads legacy definitions without silently manufacturing source authority at inspect, admission or send', async () => {
+  const f = fixture(false), { sourceBinding, ...legacy } = f.profile.adapter.definition; void sourceBinding;
+  const profile = f.replace({ ...f.profile, adapter: { ...f.profile.adapter, definition: legacy } });
+  const before = JSON.stringify(profile);
+  await expect(resolveModelUse(f.ports, 'target-root', profile, person, { action: 'inspect' })).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+  await expect(pinModelUse(f.ports, 'target-root', profile, person)).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+  expect(JSON.stringify(profile)).toBe(before);
 });

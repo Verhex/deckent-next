@@ -74,3 +74,14 @@ it('keeps custody on restart and elapsed time; a missing resource rolls back adm
   await reopened.createRun(create('two'), undefined, undefined, f.bindings);
   await expect(reopened.reserveRunTasks({ ...claim('two'), now: 1_000_000 })).rejects.toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER' });
 });
+
+it('joins its caller transaction without committing a new legacy resource on rollback', async () => {
+  const f = await fixture(), db = openSqliteLedger(f.path, options, 'forbid');
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    bindCapacityResource(db, { kind: 'fixture-login', id: 'legacy-login' }, { executionSlots: 1, inFlightSlots: 1 });
+    expect(db.isTransaction).toBe(true);
+    db.exec('ROLLBACK');
+    expect(db.prepare("SELECT count(*) AS n FROM capacity_resources WHERE binding_id='legacy-login'").get()?.n).toBe(0);
+  } finally { db.close(); }
+});

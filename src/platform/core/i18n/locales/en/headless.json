@@ -1,4 +1,5 @@
 {
+  "headless.agent.k18.reconnectRequired": "Reconnect this subscription from the owning person’s terminal in its original installation, company and scope. Its source or login resource binding is missing or unavailable.",
   "headless.agent.k15c.hostUnresolved": "The working directory could not be verified; this command may reach Deckent's state folder. The host realm is not a security boundary. Approve only if you accept this risk.",
   "headless.agent.k15b.hostUnresolved": "The host realm is not a security boundary. With global state present, directory changes, path-producing commands and unresolved shell expansions are refused before approval. Use an enforcing sandbox.",
   "error.HEADLESS_CLI_UNAVAILABLE": "The subscription CLI is missing at the connected path (it was removed, or the path no longer leads to a program). Nothing was sent to a model and no other model was chosen. Reconnect: deckent models connect --connection <connection> --scope <scope> --model <model> --command-id <id> [--executable <abs path>] (without --executable the first one in PATH is used). A CLI that only updated itself behind the same path keeps working.",

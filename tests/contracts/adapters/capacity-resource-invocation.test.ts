@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, parseModelBindingDefinition } from '#domain/index.js';
@@ -50,13 +51,32 @@ it('shares one login resource between two models/projects; cancellation and prov
     expect(first.record.receipt.outcome).toBeNull();
   } finally { store.close(); }
 });
-it('refuses an unbound subscription claim before allocation or invocation writes', async () => {
+it('binds an alpha.62-shaped subscription on its first claim, reuses the login resource and separates another login directory', async () => {
   const f = await fixture(false), store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
   try {
-    await expect(store.claim(f.first)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
+    expect(f.first.profile.adapter.definition).not.toHaveProperty('sourceBinding');
+    await expect(store.claim(f.first)).resolves.toMatchObject({ replayed: false });
+    const db = openSqliteLedger(f.path, sqlite, 'forbid');
+    try { expect(db.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(1); } finally { db.close(); }
+    await expect(store.claim(f.second)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
+    const configDir = join(f.c.root, 'second-login'); await mkdir(configDir, { mode: 0o700 });
+    const profile = { ...f.second.profile, adapter: { ...f.second.profile.adapter, definition: { ...f.second.profile.adapter.definition, configDir } } };
+    await expect(store.claim({ ...f.second, profile, profileDigest: modelInvocationProfileDigest(profile) })).resolves.toMatchObject({ replayed: false });
+    const after = openSqliteLedger(f.path, sqlite, 'forbid');
+    try { expect(after.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(2); } finally { after.close(); }
+  } finally { store.close(); }
+});
+it('reports unavailable legacy login metadata as reconnect required before allocation or invocation writes', async () => {
+  const f = await fixture(false), store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+  await rename(f.c.configDir, join(f.c.root, 'moved-login'));
+  try {
+    await expect(store.claim(f.first)).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
     expect(await store.loadReceipt('one', 'invoke')).toBeNull();
     const db = openSqliteLedger(f.path, sqlite, 'forbid');
-    try { expect(db.prepare('SELECT count(*) AS n FROM model_invocation_allocations').get()?.n).toBe(0); } finally { db.close(); }
+    try {
+      expect(db.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(0);
+      expect(db.prepare('SELECT count(*) AS n FROM model_invocation_allocations').get()?.n).toBe(0);
+    } finally { db.close(); }
   } finally { store.close(); }
 });
 it('counts a model call against a worker reservation and a worker reservation against a model call', async () => {

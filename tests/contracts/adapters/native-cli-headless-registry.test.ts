@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+import { nativeCliHeadlessDefinitionSchema } from '#adapters/core/native-cli-headless/index.js';
 import { describe, expect, it } from 'vitest';
 import { nativeCliHeadless, nativeCliAgent, parseNativeCliRegistry } from '#adapters/core/native-cli-registry/index.js';
 import { headlessFlagSetDigest, nativeAgentFlagSetDigest, nativeAgentInitReason, nativeAgentItemReason, toolSessionSchema, nativeAgentCorrelationSchema,
@@ -208,4 +210,16 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
       expect(() => parseNativeCliRegistry(collision)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
     }
   });
+});
+
+it('expands the strict legacy headless definition with only a versioned optional source binding', () => {
+  const legacy = { schemaVersion: 1, executable: resolve('fixture-cli'), configDir: resolve('fixture-login'), stateDir: resolve('fixture-state'),
+    ownerUid: 1000, minCliVersion: '1.0.0', delegatedUse: null };
+  expect(nativeCliHeadlessDefinitionSchema.parse(legacy)).toEqual(legacy);
+  const sourceBinding = { schemaVersion: 1, installationId: 'installation', companyId: 'company', scopeId: 'scope', principal: { issuer: 'host', subject: '1000' } };
+  expect(nativeCliHeadlessDefinitionSchema.parse({ ...legacy, sourceBinding })).toEqual({ ...legacy, sourceBinding });
+  expect(nativeCliHeadlessDefinitionSchema.safeParse({ ...legacy, unknown: true }).success).toBe(false);
+  expect(nativeCliHeadlessDefinitionSchema.safeParse({ ...legacy, sourceBinding: { ...sourceBinding, schemaVersion: 2 } }).success).toBe(false);
+  expect(nativeCliHeadlessDefinitionSchema.safeParse({ ...legacy, sourceBinding: { ...sourceBinding, principal: {} } }).success).toBe(false);
+  expect(nativeCliHeadlessDefinitionSchema.safeParse({ ...legacy, sourceBinding: { ...sourceBinding, extra: true } }).success).toBe(false);
 });

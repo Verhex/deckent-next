@@ -19,6 +19,9 @@ import * as configComposition from '#composition/core/config/index.js';
 import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
+import { parseModelInvocationProfile } from '#domain/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -42,6 +45,7 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
   // S3-5: the CLI runs isolated, so the fake logs into its own state file in the login dir (the one place it may write).
   const f = await runtime({ extraGrants: grants, noServer: true }), configDir = join(f.data, 'claude-login'), bin = join(f.data, 'bin'), logPath = join(configDir, '.claude.json');
   await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
+  vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
   const executable = await writeFakeCli(bin, { logPath, ...(auth ? { auth } : {}) }), options = { env: f.env };
   // alpha.55.1: the retired key is protected, so the fixture sets it as the person at a terminal (the witness attests).
   if (preview !== null) await createConfiguredConfigApplication(f.project, options, undefined, { attest: async () => true }).submit('set', { keyPath: 'models.headless.preview', value: preview, layer: 'global',
@@ -55,6 +59,7 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
 }
 
 async function unwitnessedDelegation(h: Awaited<ReturnType<typeof harness>>) {
+  vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
   const path = join(h.f.project, '.deckent/config.json'), original = await readFile(path, 'utf8');
   const argv = ['models', 'connect', '--scope', 'scope', '--connection', 'claude-cli-subscription', '--model', nativeId,
     '--executable', h.executable, '--config-dir', h.configDir, '--delegate', 'ai,system', '--command-id', 'f11-cli', '--json'];
@@ -136,6 +141,38 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       expect(turns.map(turn => turn.outcome?.finish)).toEqual(expect.arrayContaining(['stop', 'cancelled', 'error']));
     }
   }, 120_000);
+  it('K18: reads the alpha.62 profile shape, refuses unwitnessed rebinding and seals it only on a witnessed reconnect', async () => {
+    const h = await harness(null);
+    await h.connect('k18-first');
+    const path = join(h.f.project, '.deckent/config.json'), original = JSON.parse(await readFile(path, 'utf8'));
+    const profile = original.provider_invocation_profiles.profiles.find((p: Profile) => p.adapter.id === 'native-cli-headless');
+    const bound = profile.adapter.definition.sourceBinding;
+    const context = await loadConfiguredScopeContext(h.f.project, 'scope', { env: h.f.env }, 'read');
+    expect(bound).toEqual({ schemaVersion: 1, installationId: context.installationId, companyId: context.config.company.id, scopeId: 'scope', principal: me[0] });
+    delete profile.adapter.definition.sourceBinding;
+    await writeFile(path, JSON.stringify(original)); platform.clearConfigCache();
+    const legacy = parseModelInvocationProfile(profile), before = await readFile(path, 'utf8');
+    await expect(resolveConfiguredModelUse(h.f.project, legacy, context.principal, { env: h.f.env })).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(before);
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
+    await expect(h.connect('k18-no-witness')).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(before);
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
+    await expect(h.connect('k18-reconnect')).resolves.toMatchObject({ status: 'connected', steps: { profile: 'written' } });
+    expect((await h.profile())!.adapter.definition.sourceBinding).toEqual(bound);
+    const fresh = parseModelInvocationProfile(await h.profile());
+    await expect(resolveConfiguredModelUse(h.f.project, fresh, context.principal, { env: h.f.env })).resolves.toBeNull();
+    // A witnessed reconnect cannot launder a source bound in another company/installation/scope/person.
+    for (const changed of [{ ...bound, installationId: 'another-installation' }, { ...bound, companyId: 'another-company' },
+      { ...bound, scopeId: 'another-scope' }, { ...bound, principal: { ...me[0], subject: 'another-person' } }]) {
+      const copied = JSON.parse(await readFile(path, 'utf8'));
+      copied.provider_invocation_profiles.profiles.find((p: Profile) => p.adapter.id === 'native-cli-headless').adapter.definition.sourceBinding = changed;
+      await writeFile(path, JSON.stringify(copied)); platform.clearConfigCache();
+      const unchanged = await readFile(path, 'utf8');
+      await expect(h.connect('k18-copied')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+      expect(await readFile(path, 'utf8')).toBe(unchanged);
+    }
+  });
   it('N19: an MCP actor can neither connect the person\'s login nor change its consent', async () => {
     const h = await harness(true);
     const path = join(h.f.project, '.deckent/config.json'), before = await readFile(path, 'utf8');
@@ -154,7 +191,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
   });
   it('the person connects: preflight without a model call, uid floor and login dir sealed, subscription profile with no key; consent is theirs to give, keep and withdraw', async () => {
     const h = await harness(true), { person, cli, argv } = await unwitnessedDelegation(h), path = join(h.f.project, '.deckent/config.json');
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
     const first = await h.connect('c-1');
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
     expect(first).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered', cli: { configDir: h.configDir, delegate: [] },
       steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
     expect(await h.spawns()).toEqual(expect.arrayContaining(['version', 'help', 'auth']));
