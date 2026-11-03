@@ -351,6 +351,7 @@
     },
     "src/composition/core/execution": {
       "dependencies": [
+        "src/adapters/core/native-cli-headless",
         "src/platform/core/host",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
