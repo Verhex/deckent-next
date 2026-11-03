@@ -3,6 +3,49 @@
 Agent turn loop, durable turns, runtime chatTurn, context measurement, compaction, history, system prompt and reasoning control (moved from ARCHITECTURE.md Packages 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 855–1004, 1028–1101, 1102–1116; the original text below is verbatim; later dated additions are marked separately.
 
+## Subscription agent contract (alpha.63 K0, 2026-11-03)
+
+`adapters/core/native-cli-headless` exports a separate `NativeAgentExecution` v1 capability and `ToolSessionPort`.
+The pure schemas, session port and surface guards live in `capabilities/core/native-agent-execution`; adapter exports stay compatible.
+This is a contract and registry slice: no agent driver, coordinator or bridge is wired by K0. The existing tool-less
+v1 text-chat profile, flags, preflight and `headlessFlagSetDigest` remain unchanged. An agent capability is a verified
+executable/version, owner uid, profile digest and agent flag-set digest; it grants no consent or authority.
+
+`ToolSession` pins a turn id, generation, unique `AgentToolSpec` set and effective-policy `approvalTtlMs`.
+It never exposes `decide_approval`. The existing coordinator owns authorization, approval, execution and durable settlement;
+CLI drivers and the bridge only transport proposals/results through `ToolSessionPort`. Claude correlates MCP
+`_meta["claudecode/toolUseId"]` with `tool_use.id`. Codex carries `_meta.callId` and `_meta.itemId`, but its JSONL
+`item.id` is unrelated: the handler stamps `deckentCallId`, turn id and generation in **every** result, including errors.
+Cancellation and revocation fence a generation; their results distinguish confirmed/unverified termination from
+settled/unknown external effects. Neither stopping a CLI nor receiving a cancel proves that a business effect was undone.
+
+`nativeCliAgent(protocolFamily)` selects sourced registry data beside `nativeCliHeadless`. It inherits the existing
+environment, deny names, login serialization, isolation and resource bounds. Its own argv/guards and the shared bridge
+are included in `nativeAgentFlagSetDigest`. Claude keeps restricted mode, empty native tools and `dontAsk`/no prompts,
+removes safe mode and the blanket MCP denial, and admits exactly one generated `{mcpConfigFile}` slot, a tool list
+and an admission-policy turn bound. Drivers must materialize that file only at the registry file name in the private run
+directory; the registry accepts no arbitrary MCP path or inline configuration. The init guard compares the exact session
+tool set and built-in plugin provenance; any other tool/plugin refuses sealing. Codex keeps the v1 argv and uses direct MCP
+tools (`omit_tools_from`) with `approve`; this value opens the route to Deckent's handler, never bypasses its approval.
+Native/unknown item types refuse; only the exact measured code-mode error is allowed (K3 also enforces stream counts/order).
+
+The shared bridge data describes topology R: HTTP MCP through the existing relay to a `.invalid` sentinel host/path,
+with a generation-bound **Deckent** turn token, not a subscription credential. Claude's HTTP entry uses headers and a
+millisecond timeout; Codex uses URL/bearer-token environment and seconds. Both timeouts derive from the session approval
+TTL; no CLI default supplies authority or a policy deadline. HTTP_PROXY stays in effect and NO_PROXY is cleared by schema.
+Body/frame limits are sourced provisional policy ceilings, not measured capacity. P is disabled fallback flag data only.
+K4 and K15 must supply the facade, token/generation enforcement and login-scope negative evidence before the bridge opens.
+Login methods are registry data: Claude `claudeai`, Codex `browser` and `device-auth`; person-witness checks stay with login.
+Readiness reasons are typed, with matching EN/TR `headless.agent.reason.*` catalog entries; unknown never means ready.
+
+Sources: retained external `proof/ALPHA63/A0/RESULT.md` (A0-1/2/3/4), `AMENDMENT-BRIDGE.md` v2,
+`bridge-research/RESEARCH.md` and `A0/A0-5R/*-relay`; current official
+[Claude CLI reference](https://code.claude.com/docs/en/cli-reference),
+[Claude MCP configuration](https://code.claude.com/docs/en/mcp) and
+[Codex configuration reference](https://developers.openai.com/codex/config-reference/) (accessed 2026-11-03).
+The `approve` interpretation comes from A0 behavior, not a verified official semantic definition. Real-account,
+CLI-update, assembled-product and business-process acceptance remain separate from these schema/guard tests.
+
 **Agent turn loop (T-L3b, engine core; runtime and terminal wiring below).** `engine/core/agent-turn` `runAgentTurn` runs one turn over ports: a
 governed model round (the composition derives the round command id from the turn so a replay never bills twice) → each declared
 tool call checked against its JSON schema subset, authorized per call (policy resource `agent-tool`, id = tool name, action

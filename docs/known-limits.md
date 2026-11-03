@@ -2,6 +2,8 @@
 
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
+Subscription-based agent execution with tools is being built in alpha.63.
+
 This page says plainly what Deckent does not do yet, what has not been tried, and what you should do instead. It
 describes the current pre-release (the version is in the [README](../README.md) and the top line of the
 [CHANGELOG](../CHANGELOG.md)). A limit leaves this page when the change that closes it has landed and been
