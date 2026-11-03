@@ -3,12 +3,13 @@
 Agent turn loop, durable turns, runtime chatTurn, context measurement, compaction, history, system prompt and reasoning control (moved from ARCHITECTURE.md Packages 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 855–1004, 1028–1101, 1102–1116; the original text below is verbatim; later dated additions are marked separately.
 
-## Subscription agent contract (alpha.63 K0, 2026-11-03)
+## Subscription agent contract (alpha.63 K0/K1, 2026-11-03)
 
 `adapters/core/native-cli-headless` exports a separate `NativeAgentExecution` v1 capability and `ToolSessionPort`.
 The pure schemas, session port and surface guards live in `capabilities/core/native-agent-execution`; adapter exports stay compatible.
-This is a contract and registry slice: no agent driver, coordinator or bridge is wired by K0. The existing tool-less
-v1 text-chat profile, flags, preflight and `headlessFlagSetDigest` remain unchanged. An agent capability is a verified
+K0 defines the contract and registry; K1 connects native proposals to the same call coordinator as pull rounds.
+Native drivers, facade and product composition are separate slices. The existing tool-less v1 text-chat profile,
+flags, preflight and `headlessFlagSetDigest` remain unchanged. An agent capability is a verified
 executable/version, owner uid, profile digest and agent flag-set digest; it grants no consent or authority.
 
 `ToolSession` pins a turn id, generation, unique `AgentToolSpec` set and effective-policy `approvalTtlMs`.
@@ -45,6 +46,24 @@ Sources: retained external `proof/ALPHA63/A0/RESULT.md` (A0-1/2/3/4), `AMENDMENT
 [Codex configuration reference](https://developers.openai.com/codex/config-reference/) (accessed 2026-11-03).
 The `approve` interpretation comes from A0 behavior, not a verified official semantic definition. Real-account,
 CLI-update, assembled-product and business-process acceptance remain separate from these schema/guard tests.
+
+### K1 call coordinator
+
+`AgentTurnInput.nativeSession` explicitly selects push mode. `AgentTurnPorts.invokeAgent` receives the projected tools,
+messages and `ToolSessionPort`; without that driver the turn refuses rather than falling back to `invokeRound`.
+Native proposals require `call.id = correlation.deckentCallId`; provider ids stay in correlation. Each proposal uses the
+same argument/ingress checks, authorization, preparation, exact approval, execution and settlement as a pull call.
+Concurrent proposals serialize; the same id and body joins its recorded result, while conflicting reuse refuses.
+The driver returns a final answer without tool calls; returned tool calls cannot create a second execution path.
+The session closes at driver completion and drains accepted work. Cancel/revoke fence new proposals and abort both driver
+and call signals. Pending or uncertain non-read effects remain unknown; a completed effect stays successful in its native
+result even on cancellation. K1 has no CLI process-termination evidence and reports `termination: unverified`.
+`runDurableAgentTurn` binds the session turn id to its claim, records through the existing tool-call store and replays a
+finished turn without opening a session. Generation-local replay is not restart recovery. K1 counts one native driver
+invocation as one engine round; native model rounds and compaction belong to the driver. Existing admission request-byte
+bounds also gate queued proposal input; no new round/call/time policy is introduced.
+These are author code/test claims. Real CLI/facade/realm, hosted CI, independent review and assembled acceptance remain
+separate; K15 must be GREEN before the product bridge opens.
 
 **Agent turn loop (T-L3b, engine core; runtime and terminal wiring below).** `engine/core/agent-turn` `runAgentTurn` runs one turn over ports: a
 governed model round (the composition derives the round command id from the turn so a replay never bills twice) → each declared

@@ -2587,6 +2587,7 @@
     },
     "src/engine/core/agent-turn": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
         "src/domain/core/policy",

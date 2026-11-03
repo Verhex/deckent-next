@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { toolSessionSchema, nativeAgentCorrelationSchema, type ToolSession, type ToolSessionPort, type NativeAgentToolResult } from '#capabilities/index.js';
 import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
 import { createAgentContextCarry } from './carry.js';
 import { agentSpendFailureNote, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
@@ -7,8 +8,8 @@ import { checkModelIngressArguments, projectModelIngressSchema } from './model-i
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
-import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
-  AgentTurnMessage, AgentMessageContinuation, AgentProviderStop, ChatTurnSteerOutcome } from '#domain/index.js';
+import { agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
+  type AgentTurnMessage, type AgentMessageContinuation, type AgentProviderStop, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 const providerStopWords = (language: Locale | undefined) => ({ 'content-filter': t('agent.turn.outcome.contentFilter', {}, language), 'context-window': t('agent.turn.outcome.providerContext', {}, language),
   'network-error': t('agent.turn.outcome.providerNetwork', {}, language), 'resource-exhausted': t('agent.turn.outcome.providerResource', {}, language), 'aborted': t('agent.turn.outcome.providerAborted', {}, language) });
@@ -31,6 +32,10 @@ export interface AgentTurnPorts {
   serviceStopping?(): boolean;
   invokeRound(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
+  /** Native driver owns model transport only; every proposal goes through this turn's single call coordinator. */
+  invokeAgent?(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[];
+    readonly session: ToolSessionPort }, onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void,
+    signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`, and the
    * call's position in the turn (the identity the turn's decision record names; never used for authority). */
   authorize(tool: AgentToolSpec, args?: Record<string, unknown>, call?: { readonly round: number; readonly index: number; readonly callId: string }): Promise<'allow' | 'deny' | 'require-approval'>;
@@ -130,6 +135,8 @@ export function agentTurnTruncatedCallsNote(count: number, limitTokens: number |
 export interface AgentToolExecution { readonly round: number; readonly index: number }
 
 export interface AgentTurnInput {
+  /** Explicit push mode; pinned by admission, never inferred from a provider identity. */
+  readonly nativeSession?: ToolSession;
   /** Service-resolved locale; the existing wire carries the resulting note. */
   readonly language?: Locale;
   readonly messages: readonly AgentTurnMessage[];
@@ -227,6 +234,126 @@ async function approverNoteLine(note: string | null, input: AgentTurnInput, port
   return `\n${text}`;
 }
 
+/** One call owner for pull responses and native proposals. Transport never authorizes or executes a tool. */
+function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts, push: (message: AgentTurnMessage) => AgentTurnMessage,
+  carry: ReturnType<typeof createAgentContextCarry>) {
+  const { emit } = input, byName = new Map(input.tools.map(tool => [tool.name, tool]));
+  const seenReads = new Map<string, { readonly callId: string; readonly message: AgentTurnMessage }>();
+  let toolCalls = 0, cut = 0, effectsUnknown = false;
+  const limitTokens = input.admission?.completionLimitTokens ?? null;
+  const run = async (call: AgentToolCall, { round, index }: AgentToolExecution, signal: AbortSignal, truncated = false) => {
+    const tool = byName.get(call.name), started = ports.now();
+    let progressed = false;
+    let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
+    // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
+    const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic) => {
+      if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
+      const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, { ...input, signal }, ports, round) : content;
+      const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
+      carry.observed(message, call, round, index, invoked, status, cleanup);
+      emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
+        ...(cleanup !== undefined ? { cleanup } : {}) });
+      await ports.settled?.({ round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
+      return { message, progressed, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
+        ...(cleanup !== undefined ? { cleanup } : {}), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
+    };
+    if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`); }
+    // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.
+    if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens)); }
+    if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('error', `[deckent] ${call.name}: error=unknown-tool`); }
+    const checked = await checkArguments(tool, call.argumentsJson, ports);
+    targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
+    emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
+    if (!checked.ok) { return result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); }
+    const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest; pauseArgs = checked.args;
+    if (tool.toolClass === 'read' && seenReads.has(digest)) {
+      return result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)!.callId} earlier in this turn; its result is above. Change the arguments to read something else.`);
+    }
+    // Policy first: a denied call learns nothing from the target (a plan error would reveal content).
+    let decision = await ports.authorize(tool, checked.args, { round, index, callId: call.id });
+    if (decision === 'deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-policy`); }
+    if (ports.prepare) {
+      let prepared: Awaited<ReturnType<NonNullable<AgentTurnPorts['prepare']>>>;
+      try { prepared = await ports.prepare(tool, checked.args, signal); } catch { prepared = { ok: false, text: `[deckent] ${call.name}: error=failed` }; }
+      if (!prepared.ok) { return result('error', prepared.text); }
+      if (prepared.requireApproval && decision === 'allow') decision = 'require-approval';
+    }
+    if (decision === 'require-approval') {
+      // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
+      if (!ports.requestApproval) { return result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); }
+      let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
+      try { const owner = ownerOutcome(await ports.requestApproval({ round, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal));
+        answer = owner.outcome; noteOf = owner.note; }
+      catch { answer = null; }
+      if (answer === null && !signal.aborted) { return result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); }
+      if (signal.aborted || answer === 'cancelled') { return result('cancelled', `[deckent] ${call.name}: error=cancelled`); }
+      if (answer === 'deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, ports)}`); }
+      if (answer === 'policy-deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-policy (approved, but policy denies it now; nothing ran)`); }
+      if (answer === 'expired') { return result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); }
+    }
+    if (signal.aborted) return result('cancelled', `[deckent] ${call.name}: error=cancelled`);
+    toolCalls++;
+    invoked = true;
+    let outcomeText: AgentToolOutcome;
+    try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
+    if ((tool.toolClass !== 'read' && outcomeText.status !== 'ok') || outcomeText.cleanup === 'unverified') effectsUnknown = true;
+    // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.
+    if (tool.toolClass !== 'read') seenReads.clear();
+    // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
+    const completed = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, ports)}`,
+      tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic);
+    if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: completed.message });
+    // Cancellation is a transport fact; preserve the handler's completed effect in the native envelope.
+    return { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } };
+  };
+  return { run, get toolCalls() { return toolCalls; }, get cut() { return cut; }, get effectsUnknown() { return effectsUnknown; },
+    retain(visible: ReadonlySet<AgentTurnMessage>) { for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest); } };
+}
+
+/** A generation-local replay fence. Durable turn replay remains owned by runDurableAgentTurn. */
+function createNativeToolSession(session: ToolSession, input: AgentTurnInput, coordinator: ReturnType<typeof createAgentToolCoordinator>,
+  push: (message: AgentTurnMessage) => AgentTurnMessage, historyBytes: () => number) {
+  const controller = new AbortController(), records = new Map<string, { fingerprint: string; result: Promise<NativeAgentToolResult> }>();
+  const pending = new Set<string>();
+  let pendingBytes = 0, closed = false, interrupted = false, queue: Promise<unknown> = Promise.resolve(), nextIndex = 0, failedSettlement = false;
+  const envelope = (deckentCallId: string, outcome: AgentToolOutcome): NativeAgentToolResult => Object.freeze({ schemaVersion: 1,
+    turnId: session.turnId, generation: session.generation, deckentCallId, outcome: Object.freeze({ ...outcome }) });
+  const refusal = (id: string, reason: string) => envelope(id, { status: 'error', text: `[deckent] error=${reason}` });
+  const close = () => {
+    closed = true; controller.abort();
+    return { turnId: session.turnId, generation: session.generation, pendingCallIds: [...pending], termination: 'unverified' as const,
+      effects: pending.size || coordinator.effectsUnknown || failedSettlement ? 'unknown' as const : 'settled' as const };
+  };
+  const port: ToolSessionPort = { session,
+    async propose(rawCall, rawCorrelation, signal) {
+      const parsed = nativeAgentCorrelationSchema.safeParse(rawCorrelation), checked = agentToolCallSchema.safeParse(rawCall);
+      const callId = parsed.success ? parsed.data.deckentCallId : checked.success ? checked.data.id : 'invalid-call';
+      if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) return refusal(callId, 'tool-correlation-invalid');
+      const call = Object.freeze(checked.data), correlation = parsed.data;
+      if (closed || input.signal.aborted) return refusal(correlation.deckentCallId, 'tool-session-closed');
+      const fingerprint = createHash('sha256').update(canonical({ call, correlation })).digest('hex'), prior = records.get(call.id);
+      if (prior) return prior.fingerprint === fingerprint ? prior.result : refusal(call.id, 'tool-call-conflict');
+      const bound = input.admission?.requestMaxBytes;
+      const bytes = Buffer.byteLength(JSON.stringify(call), 'utf8');
+      if (bound !== undefined && historyBytes() + pendingBytes + bytes > bound) return refusal(call.id, 'AGENT_CONTEXT_REQUEST_TOO_LARGE');
+      const combined = AbortSignal.any([input.signal, controller.signal, signal]), index = nextIndex++;
+      pending.add(call.id); pendingBytes += bytes;
+      const result = queue.then(async () => {
+        pendingBytes -= bytes;
+        try { push({ role: 'assistant', content: '', toolCalls: [call] }); return envelope(call.id, (await coordinator.run(call, { round: 1, index }, combined)).outcome); }
+        catch { failedSettlement = true; closed = true; controller.abort(); return refusal(call.id, 'tool-settlement-unknown'); }
+        finally { pending.delete(call.id); }
+      });
+      records.set(call.id, { fingerprint, result }); queue = result;
+      return result;
+    },
+    async cancel() { interrupted = true; return { kind: 'cancelled', ...close() }; },
+    async revoke() { interrupted = true; return { kind: 'revoked', ...close() }; },
+  };
+  return { port, close, signal: AbortSignal.any([input.signal, controller.signal]), get interrupted() { return interrupted; },
+    get failedSettlement() { return failedSettlement; }, drain: async () => { await queue; } };
+}
+
 /**
  * One agent turn (T-L3, engine-owned): model round → declared tool calls authorized and executed one by one → results back to the
  * model → next round, until the model answers without tools, the user cancels, or a round has no answer. There is no round, call
@@ -248,11 +375,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   for (const tool of input.tools) tools.push({ ...tool, description: await presentModelIngress(tool.description, null, input, ports, 0),
     inputSchema: await projectModelIngressSchema(tool.inputSchema, ports.recordIngress?.bind(ports)) });
   const compactionGuard = createAgentCompactionGuard();
-  const byName = new Map(input.tools.map(tool => [tool.name, tool]));
-  // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
-  // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
-  const seenReads = new Map<string, { readonly callId: string; readonly message: AgentTurnMessage }>();
-  let rounds = 0, toolCalls = 0, compactions = 0, mechanical = 0, cut = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
+  let rounds = 0, compactions = 0, mechanical = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
   const limitTokens = input.admission?.completionLimitTokens ?? null;
   // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
   const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
@@ -261,6 +384,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     emit({ kind: 'message', message, ...(steerId ? { steerId } : {}) });
     return message;
   };
+  const coordinator = createAgentToolCoordinator(input, ports, push, carry);
+  const session = input.nativeSession ? toolSessionSchema.parse(input.nativeSession) : null;
+  if (session && canonical(session.tools) !== canonical(input.tools)) throw new Error('TOOL_SESSION_TOOLS_CONFLICT');
+  const native = session ? createNativeToolSession(Object.freeze({ ...session, tools: Object.freeze(tools) }), input, coordinator, push, () => agentHistoryBytes(messages)) : null;
   const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
     if (value === 'cancelled' && ports.serviceStopping?.()) { value = 'error'; closure = t('agent.turn.outcome.serviceStopped', { summary: summary() }, input.language); }
     const deliveryFailure = ports.contextFailure?.();
@@ -270,15 +397,15 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       value = 'error'; closure = agentContextFailureNote('AGENT_CONTEXT_REQUEST_TOO_LARGE', input.language);
     }
     // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
-    const extra = [...(cut ? [agentTurnTruncatedCallsNote(cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : [])];
+    const extra = [...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : [])];
     const note = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
     emit({ kind: 'done', finish: value, note });
     const final = last as AgentTurnMessage | null;
     const answer = final?.role === 'assistant' && final.toolCalls.length === 0 && final.content ? final.content : null;
     return Object.freeze({ finish: value, answer, appendedCount, appendedDigest: appendedCount ? appendedHash.update(']').digest('hex') : null,
-      rounds, toolCalls, note });
+      rounds, toolCalls: coordinator.toolCalls, note });
   };
-  const summary = () => toolCalls === 0 ? t('agent.turn.outcome.noTools', {}, input.language) : t('agent.turn.outcome.tools', { calls: toolCalls, rounds }, input.language);
+  const summary = () => coordinator.toolCalls === 0 ? t('agent.turn.outcome.noTools', {}, input.language) : t('agent.turn.outcome.tools', { calls: coordinator.toolCalls, rounds }, input.language);
   const cancelled = () => t('agent.turn.outcome.cancelled', { summary: summary() }, input.language);
 
   for (;;) {
@@ -332,7 +459,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       compactionGuard.applied(messages, next);
       messages.splice(0, messages.length, ...next);
       const visible = new Set<AgentTurnMessage>(plan.tail);
-      for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
+      coordinator.retain(visible);
       emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
       await measure();
       if (signal.aborted) return finish('cancelled', cancelled());
@@ -350,8 +477,18 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     let streamed = '';
     // NATIVE-BAGLAM: a leading inline `<think>` block in the answer text goes to the reasoning channel, streamed and settled alike.
     const routed = createInlineReasoningRouter(), show = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { if (delta.kind === 'text') streamed += delta.text; emit(delta); };
-    try { outcome = await ports.invokeRound({ round: rounds, messages, tools }, delta => { for (const part of delta.kind === 'text' ? routed.push(delta.text) : [delta]) show(part); }, signal); }
-    catch { outcome = { status: 'failed', state: signal.aborted ? 'cancelled' : 'unavailable' }; }
+    const onDelta = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { for (const part of delta.kind === 'text' ? routed.push(delta.text) : [delta]) show(part); };
+    try {
+      if (native) {
+        try { outcome = ports.invokeAgent ? await ports.invokeAgent({ round: rounds, messages, tools, session: native.port }, onDelta, native.signal)
+          : { status: 'failed', state: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' }; }
+        finally { native.close(); await native.drain(); }
+        if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown' };
+        else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled' };
+        // Native transport already submitted proposals. Returned calls must never become a second execution path.
+        if (outcome.status === 'responded' && outcome.toolCalls.length) outcome = { status: 'failed', state: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
+      } else outcome = await ports.invokeRound({ round: rounds, messages, tools }, onDelta, signal);
+    } catch { outcome = { status: 'failed', state: native?.failedSettlement ? 'unknown' : signal.aborted || native?.interrupted ? 'cancelled' : 'unavailable' }; }
     if (outcome.status === 'responded') {
       for (const part of routed.finish()) show(part);
       const split = splitInlineReasoning(outcome.content);
@@ -382,64 +519,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     // A round that reached its output limit carries incomplete calls, whatever its finish says and whether or not the arguments parse.
     const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
     for (const [index, call] of outcome.toolCalls.entries()) {
-      const tool = byName.get(call.name), started = ports.now();
-      let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
-      // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
-      const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic) => {
-        if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
-        const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, input, ports, rounds) : content;
-        const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
-        carry.observed(message, call, rounds, index, invoked, status, cleanup);
-        emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
-          ...(cleanup !== undefined ? { cleanup } : {}) });
-        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
-        return message;
-      };
-      if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
-      // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.
-      if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens)); continue; }
-      if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('error', `[deckent] ${call.name}: error=unknown-tool`); continue; }
-      const checked = await checkArguments(tool, call.argumentsJson, ports);
-      targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
-      emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
-      if (!checked.ok) { await result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); continue; }
-      const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest; pauseArgs = checked.args;
-      if (tool.toolClass === 'read' && seenReads.has(digest)) {
-        await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)!.callId} earlier in this turn; its result is above. Change the arguments to read something else.`);
-        continue;
-      }
-      // Policy first: a denied call learns nothing from the target (a plan error would reveal content).
-      let decision = await ports.authorize(tool, checked.args, { round: rounds, index, callId: call.id });
-      if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
-      if (ports.prepare) {
-        let prepared: Awaited<ReturnType<NonNullable<AgentTurnPorts['prepare']>>>;
-        try { prepared = await ports.prepare(tool, checked.args, signal); } catch { prepared = { ok: false, text: `[deckent] ${call.name}: error=failed` }; }
-        if (!prepared.ok) { await result('error', prepared.text); continue; }
-        if (prepared.requireApproval && decision === 'allow') decision = 'require-approval';
-      }
-      if (decision === 'require-approval') {
-        // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
-        if (!ports.requestApproval) { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); continue; }
-        let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
-        try { const owner = ownerOutcome(await ports.requestApproval({ round: rounds, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal));
-          answer = owner.outcome; noteOf = owner.note; }
-        catch { answer = null; }
-        if (answer === null && !signal.aborted) { await result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); continue; }
-        if (signal.aborted || answer === 'cancelled') { await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
-        if (answer === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, ports)}`); continue; }
-        if (answer === 'policy-deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy (approved, but policy denies it now; nothing ran)`); continue; }
-        if (answer === 'expired') { await result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); continue; }
-      }
-      toolCalls++;
-      invoked = true;
-      let outcomeText: AgentToolOutcome;
-      try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
-      // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.
-      if (tool.toolClass !== 'read') seenReads.clear();
-      // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
-      const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, ports)}`,
-        tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic);
-      if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
+      const completed = await coordinator.run(call, { round: rounds, index }, signal, truncated);
+      if (completed.progressed) progressed = true;
     }
     stalled = progressed ? 0 : stalled + 1;
     if (stalled === 2 && !signal.aborted) push({ role: 'user', content: agentTurnNoProgressNote(input.language) });
