@@ -1,9 +1,9 @@
 import { relative, resolve, sep } from 'node:path';
-import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
-  classifyShellAuthority, classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
+  classifyShellAuthority, classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
+import { agentGlobalStateRoots, createShellGlobalStateCheck, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
@@ -21,14 +21,7 @@ type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: S
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
 
-/**
- * The agent's host shell in one turn (T-L4 slice 3c, Jev 82858581). A command is classified into a permission tier: only a
- * read-only command of bounded reach (risk `none`: explicit, checked paths) runs without asking under allow; traversal and
- * repository-object reads (`low`), the destructive table, the always-ask floor and any other modification ask in every mode; the
- * narrow mutating set asks unless the turn's decision lowers a company-eligible require-approval in full-auto (slice 4a). Every run is a C11 effect of Core `host.shell.run` on the `host-shell`
- * target — session, operation policy, intent before spawn, an uncertain run reported as such and never repeated. Streamed output
- * goes to the turn only while the channel has room; beyond that it is skipped with one visible marker (the result is unaffected).
- */
+/** Permission-tiered, C11-governed shell calls: policy and intent precede spawn; uncertain effects are never repeated. */
 export function createAgentShell(input: { readonly scope: WorkspaceScope; readonly peer: LocalPeerIdentity; readonly config: TerminalShellConfig;
   readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly channel: RuntimeServiceTurnChannel;
   /** SCR-A: the conversation's scratch area — the command's `TMPDIR`, and a second root its path checks accept. */
@@ -37,6 +30,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   readonly sandboxes: readonly ShellSandbox[];
   /** Astra 2162 (owner F2): deny patterns of the product's own state — a command that names one is refused, never offered for approval. */
   readonly productState: readonly string[];
+  /** K15: installation-global roots, including process and configuration environments, even outside the workspace. */
+  readonly globalStateRoots?: readonly string[];
+  /** Trusted selected profile: a subscription never executes shell on the host, including prefer-sandbox fallback. */
+  readonly profile?: ModelInvocationProfile;
   /** MODES-3: the turn was launched in full access (its sandbox layout: the configuration file as the floor, `.git` writable). */
   readonly fullAccess?: boolean;
   /** SHELL-OVERLAY: the installation's configuration file inside the project (a write-set entry there is `edit-authority`). */
@@ -49,6 +46,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState), floorNames = createShellProtectedNames(scope.root, [], input.writeFloor ?? (() => false));
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
+  const globalState = createShellGlobalStateCheck(scope.root, input.globalStateRoots ?? agentGlobalStateRoots([process.env]));
+  const subscription = input.profile && ((input.profile.schemaVersion !== 1 && input.profile.billingAxis === 'subscription') || input.profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID);
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
   /** The realm a call of this turn resolves: the configured mode against the service's (memoized) host measurement and the turn's providers. */
@@ -73,8 +72,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
+    const globalName = await globalState;
+    for (const name of shellNamedPaths(command, () => true).flatMap(word => word.split(/[<>]/u))) {
+      if (await globalName(name)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED; ${t('agent.shell.productStateProtected', {}, input.language)}` };
+    }
     const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
+    if (subscription && realm.containment === 'host') return { ok: false, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` };
     if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
@@ -92,19 +96,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   };
   return {
     plan,
-    /**
-     * v6 PROMPT-POSTURE: the posture the system prompt states for this turn's shell, from the same realm resolution and open-view rule its
-     * calls take. A full-access turn's calls run as `full-access` or `owner-approved`, both open (`shellWritePosture`; the tier does not
-     * change `open` or the floor for either); any other turn's calls are closed whatever their authority. In the open view the turn's write
-     * floor is the configuration file (turn.ts): read-only for a `full-access` call, and for an `owner-approved` one as `shellWritePosture`
-     * says (W3: the owner's card never opens configuration content). The realm is known now: the configuration, the
-     * memoized host measurement and the turn's providers are those of every call. Per call only an exception differs, and that call's result
-     * says so (its `sandbox:` marker and notices): a full-access call whose grant no longer holds runs unattended in the closed view, and an
-     * open view that cannot be built (a state root holding HOME, the HOME walk over its bound) refuses the call.
-     */
+    /** Prompt posture uses the call's realm/open-view resolution; unavailable open views and subscription host execution refuse. */
     async posture(): Promise<AgentTurnShellPosture> {
       const resolved = await resolveRealm();
-      if (!resolved.ok) return { kind: 'unavailable' };
+      if (!resolved.ok || (subscription && resolved.containment === 'host')) return { kind: 'unavailable' };
       const fullAccess = input.fullAccess === true, approved = shellWritePosture('owner-approved', 'other-modify', fullAccess);
       const open = shellWritePosture(fullAccess ? 'full-access' : 'owner-approved', 'other-modify', fullAccess).open;
       const realm = callRealm(resolved, open);

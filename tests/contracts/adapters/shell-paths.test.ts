@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createShellPathContext, createWorkspaceScope } from '#adapters/index.js';
+import { createShellGlobalStateCheck, createShellPathContext, createWorkspaceScope } from '#adapters/index.js';
 import { classifyReadOnlyShellCommand, type ShellReasonCode } from '#engine/index.js';
 
 const roots: string[] = [];
@@ -132,4 +132,18 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     for (const [glob] of cases) seen.push([glob, await expand(glob)]);
     expect(seen).toEqual(cases);
   });
+});
+
+it('K15: global root names cover HOME, traversal, globs, aliases and absent children without opening contents', async () => {
+  const { root } = await workspace(), base = join(root, '..'), home = join(base, 'home'), global = join(home, '.deckent');
+  await mkdir(join(global, 'headless/logins/fixture'), { recursive: true });
+  await symlink(global, join(root, 'state-link'));
+  await symlink(join(global, 'headless'), join(root, 'deep-state-link'));
+  const check = await createShellGlobalStateCheck(root, [global, join(root, 'new-global')], { HOME: home, DECKENT_GLOBAL_HOME: global });
+  for (const name of [global, `${global}/headless/logins/fixture/auth.json`, '~/.deckent/headless/*/auth.json', '$HOME/.deckent/new',
+    '${HOME}/.deckent/new', '$DECKENT_GLOBAL_HOME/new', '../home/.deckent/new', 'state-link/new/deeper', 'deep-state-link/../new',
+    '../home/.deck*/headless/*/auth.json', '../*/.deckent/headless/*/auth.json', `${global}/../.deckent/missing`, 'new-global/new', `if=${global}/headless/logins/fixture/auth.json`]) {
+    expect(await check(name), name).toBe(true);
+  }
+  for (const name of ['src/a.ts', '../outside/secret', '../home/.deckent-other/auth.json', 'new-global-other/new', '[', '[[']) expect(await check(name), name).toBe(false);
 });

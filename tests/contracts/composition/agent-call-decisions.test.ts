@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, type TestContext } from 'vitest';
-import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { loadConfig, configDisplayView, getConfigKnownSecrets, registerConfigSection, redactForDecision, resolveGlobalConfigPaths, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { z } from 'zod';
@@ -696,4 +696,24 @@ describe('policy-turn record of refused and silently allowed calls (S5 D1)', () 
     expect(await broken.decisions.authorize(edit, args, { round: 1, index: 0, callId: 'c0' })).toBe('deny');
     expect(await broken.decisions.flush()).toBe(false);
   });
+});
+
+it('K15: subscription profiles refuse explicit and fallback host realms before planning effects; sandbox/API plans remain', async () => {
+  const { scope } = await fixture([snapshot('allow', null)]);
+  const make = (profile: Record<string, unknown>, realm: 'host' | 'prefer-sandbox', sandbox = false, language: 'en' | 'tr' = 'en') => createAgentShell({
+    scope, peer: {} as never, context: {} as never, config: { realm } as never, scopeId: 'scope', turnId: 'k15', channel: {} as never,
+    scratch: null, productState: [], profile: profile as never, language,
+    sandboxes: sandbox ? [{ kind: 'bubblewrap', usable: () => ({ ok: true, realm: { kind: 'bubblewrap' } as never, marker: 'sandbox: test',
+      notice: null, posture: () => '', containment: 'sandbox' }) }] : [] });
+  const subscription = { schemaVersion: 2, billingAxis: 'subscription', adapter: { id: 'fixture-adapter' } };
+  const native = { schemaVersion: 1, adapter: { id: NATIVE_CLI_HEADLESS_ADAPTER_ID } };
+  for (const realm of ['host', 'prefer-sandbox'] as const) for (const profile of [subscription, native]) {
+    const shell = make(profile, realm);
+    expect(await shell.plan('run_shell', { command: 'cat /etc/passwd' })).toMatchObject({ ok: false, text: expect.stringContaining('SUBSCRIPTION_HOST_SHELL_REFUSED') });
+    expect(await shell.posture()).toEqual({ kind: 'unavailable' });
+    expect(shell.preview('run_shell', { command: 'cat /etc/passwd' })).toBeUndefined();
+  }
+  expect(await make(subscription, 'host', false, 'tr').plan('run_shell', { command: 'pwd' })).toMatchObject({ ok: false, text: expect.stringContaining('ajan bilgisayarda komut çalıştıramaz') });
+  expect(await make(subscription, 'prefer-sandbox', true).plan('run_shell', { command: 'pwd' })).toMatchObject({ ok: true });
+  expect(await make({ schemaVersion: 2, billingAxis: 'metered', adapter: { id: 'fixture-api' } }, 'host').plan('run_shell', { command: 'pwd' })).toMatchObject({ ok: true });
 });

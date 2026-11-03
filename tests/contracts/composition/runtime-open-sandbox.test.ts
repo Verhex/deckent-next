@@ -197,27 +197,32 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     expect(peek.text).not.toContain('schemaVersion');
 
     // Hard floor, global state root: its files are hidden and nothing can be written there (user MCP registry, secrets, the bwrap copy).
-    const global = await f.call('run_shell', { command: `cat "${globalRoot}/secrets.json"; ls -A "${globalRoot}"; echo {} > "${globalRoot}/mcp.json"` }, 'deny', fa);
+    const global = await f.call('run_shell', { command: `cat "${globalRoot}/secrets.json"; ls -A "${globalRoot}"; echo {} > "${globalRoot}/mcp.json"` }, 'allow', fa);
+    expect(global).toMatchObject({ card: false, status: 'error' });
+    expect(global.text).toContain('PRODUCT_STATE_PROTECTED');
     expect(global.text).not.toContain('GLOBAL-SECRET');
     expect(global.text).not.toContain('bwrap-');
     expect(await exists(join(globalRoot, 'mcp.json'))).toBe(false);
     // The service's bubblewrap is the verified copy under this global root when no system launcher ≥ 0.12 is selected (this machine: 0.9.0).
     if (measured.bubblewrap.launcher?.source !== 'system') {
       expect(launcher).not.toBeNull();
-      const replace = await f.call('run_shell', { command: `cp /bin/true "${launcher}"; chmod u+w "${launcher}"; : > "${launcher}"` }, 'deny', fa);
-      expect(/exit [1-9]/u.test(replace.text)).toBe(true);
+      const replace = await f.call('run_shell', { command: `cp /bin/true "${launcher}"; chmod u+w "${launcher}"; : > "${launcher}"` }, 'allow', fa);
+      expect(replace).toMatchObject({ card: false, status: 'error' });
+      expect(replace.text).toContain('PRODUCT_STATE_PROTECTED');
       expect(await sha(launcher!)).toBe(launcherHash);
     }
     // The product's conventional global root under this HOME (`~/.deckent`) is sealed the same way.
-    const userRegistry = await f.call('run_shell', { command: 'echo {} > "$HOME/.deckent/mcp.json"' }, 'deny', fa);
-    expect(/exit [1-9]/u.test(userRegistry.text)).toBe(true);
+    const userRegistry = await f.call('run_shell', { command: 'echo {} > "$HOME/.deckent/mcp.json"' }, 'allow', fa);
+    expect(userRegistry).toMatchObject({ card: false, status: 'error' });
+    expect(userRegistry.text).toContain('PRODUCT_STATE_PROTECTED');
     expect(await exists(join(f.home, '.deckent/mcp.json'))).toBe(false);
     // P5a: the CLI compile cache under each global state root the floor knows — the service process's DECKENT_GLOBAL_HOME and the turn's
     // configuration environment, whose root ($HOME/.deckent) differs from it here — takes no planted entry and keeps every entry unchanged.
     const caches = [join(globalRoot, 'state/compile-cache'), join(f.home, '.deckent/state/compile-cache')], member = 'v0.0.0-x64-00000000-0/0000abcd';
     for (const cache of caches) { await mkdir(join(cache, dirname(member)), { recursive: true, mode: 0o700 }); await writeFile(join(cache, member), 'CACHE', { mode: 0o600 }); }
-    const poison = await f.call('run_shell', { command: caches.map(cache => `echo POISON > "${cache}/${member}"; mkdir "${cache}/planted"`).join('; ') }, 'deny', fa);
-    expect({ card: poison.card, failed: /exit [1-9]/u.test(poison.text) }).toEqual({ card: false, failed: true });
+    const poison = await f.call('run_shell', { command: caches.map(cache => `echo POISON > "${cache}/${member}"; mkdir "${cache}/planted"`).join('; ') }, 'allow', fa);
+    expect(poison).toMatchObject({ card: false, status: 'error' });
+    expect(poison.text).toContain('PRODUCT_STATE_PROTECTED');
     for (const cache of caches) expect({ cache, member: await readFile(join(cache, member), 'utf8'), planted: await exists(join(cache, 'planted')) }).toEqual({ cache, member: 'CACHE', planted: false });
     await rm(join(globalRoot, 'state/compile-cache', dirname(member)), { recursive: true });
 
@@ -235,9 +240,10 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     expect({ ran: /sandbox: bubblewrap; exit [1-9]/u.test(closedHome.text), read: closedHome.text.includes('home-notes') }).toEqual({ ran: true, read: false });
     // P5a (lead 2026-10-31): the conventional root of a HOME that has none yet is sealed too — nothing can be planted for a later default-root CLI.
     const fresh = join(dirname(f.project), 'home-fresh'); await mkdir(fresh); vi.stubEnv('HOME', fresh);
-    const plant = await f.call('run_shell', { command: 'mkdir -p "$HOME/.deckent/state/compile-cache/v0.0.0-x64-00000000-0" && echo POISON > "$HOME/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd"' }, 'deny', fa);
-    expect({ card: plant.card, failed: /sandbox: bubblewrap; exit [1-9]/u.test(plant.text) }).toEqual({ card: false, failed: true });
-    expect(await readdir(join(fresh, '.deckent'))).toEqual([]);
+    const plant = await f.call('run_shell', { command: 'mkdir -p "$HOME/.deckent/state/compile-cache/v0.0.0-x64-00000000-0" && echo POISON > "$HOME/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd"' }, 'allow', fa);
+    expect(plant).toMatchObject({ card: false, status: 'error' });
+    expect(plant.text).toContain('PRODUCT_STATE_PROTECTED');
+    expect(await exists(join(fresh, '.deckent'))).toBe(false); // K15 refuses before even preparing a floor directory.
   }, 240_000);
 
   it.skipIf(!bwrapReady)('owner Y: an existing non-product subdirectory of .deckent (tracked docs) is writable — git checkout completes clean; the root and product dirs take no name', async () => {
@@ -268,9 +274,10 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     const cached = join(f.project, 'person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0'), copied = join(f.project, 'person/.deckent/bin');
     for (const [dir, file, bytes] of [[cached, '0000abcd', 'CACHE'], [copied, 'bwrap-0', 'BWRAP']]) { await mkdir(dir!, { recursive: true, mode: 0o700 }); await writeFile(join(dir!, file!), bytes!, { mode: 0o600 }); }
     vi.stubEnv('HOME', join(f.project, 'person'));
-    const poison = await f.call('run_shell', { command: 'echo POISON > person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd; mkdir person/.deckent/state/compile-cache/planted; echo POISON > person/.deckent/bin/bwrap-0; mkdir person/.deckent/bin/planted' }, 'deny', fa);
-    // The cache is in the deny list too (edit tools), so the view masks it: the path is not there to write, and nothing reaches the host.
-    expect({ card: poison.card, ran: /sandbox: bubblewrap; exit [1-9]/u.test(poison.text), masked: (poison.text.match(/No such file or directory/gu) ?? []).length }).toEqual({ card: false, ran: true, masked: 4 });
+    const poison = await f.call('run_shell', { command: 'echo POISON > person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd; mkdir person/.deckent/state/compile-cache/planted; echo POISON > person/.deckent/bin/bwrap-0; mkdir person/.deckent/bin/planted' }, 'allow', fa);
+    // K15: the original attack is now refused before a card or spawn; the same host inode assertions still follow.
+    expect(poison).toMatchObject({ card: false, status: 'error' });
+    expect(poison.text).toContain('PRODUCT_STATE_PROTECTED');
     expect({ member: await readFile(join(cached, '0000abcd'), 'utf8'), planted: await exists(join(f.project, 'person/.deckent/state/compile-cache/planted')), bwrap: await readFile(join(copied, 'bwrap-0'), 'utf8'), bin: await exists(join(copied, 'planted')) }).toEqual({ member: 'CACHE', planted: false, bwrap: 'BWRAP', bin: false });
     // The agent's edit tools refuse the same paths the shell floor seals (one derivation), here and when the project is HOME itself; a project file
     // is still edited. The approval answer is `allow`, so only the deny list can stop the write.

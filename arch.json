@@ -2316,6 +2316,7 @@
     },
     "src/adapters/core/workspace-read": {
       "dependencies": [
+        "src/adapters/core/native-cli-registry",
         "src/domain/core/agent-tool",
         "src/platform/core/common",
         "src/engine/core/workspaces"
