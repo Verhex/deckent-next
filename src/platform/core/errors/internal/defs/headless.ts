@@ -68,4 +68,9 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   // visibly first (new derived attempt); this refusal means no wait applied or the attempts are spent. Nothing retries on its own.
   HEADLESS_QUOTA_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: `${t('error.HEADLESS_QUOTA_EXHAUSTED', p, l)} ${typeof p['resetsAtMs'] === 'number'
     ? t('quotaask.card.resetKnown', { time: clockText(p['resetsAtMs']) }, l) : t('quotaask.card.resetUnknown', {}, l)}` }) },
+  NATIVE_WORKER_VERIFICATION_WAIT: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k22.worker.NATIVE_WORKER_VERIFICATION_WAIT', p, l) }) },
+  NATIVE_WORKER_F08_INVALID: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k22.worker.NATIVE_WORKER_F08_INVALID', p, l) }) },
+  NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k22.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED', p, l) }) },
+  NATIVE_WORKER_PLUGIN_UNEXPECTED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k22.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED', p, l) }) },
+  NATIVE_WORKER_INPUT_REFUSED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k22.worker.NATIVE_WORKER_INPUT_REFUSED', p, l) }) },
 });

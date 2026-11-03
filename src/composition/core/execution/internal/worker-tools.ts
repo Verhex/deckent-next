@@ -1,40 +1,27 @@
+import { nativeWorkerToolFloor } from './worker-floor.js';
 import type { ToolSessionPort } from '#capabilities/index.js';
-import { ErrorRegistry, SystemTrustedClock, sha256, getConfigKnownSecrets, redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, SystemTrustedClock, sha256, redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { runDurableAgentTurn, agentToolCallApprovalGate, agentToolArgumentsDigest, requestAgentToolApproval, awaitAgentToolApproval,
   agentToolApprovalFacts, AgentToolPolicyAuthorization, type AgentToolCallAdmission, type AgentTurnPorts } from '#engine/index.js';
-import { agentWorkspaceDeny, createWorkspaceReadTools, projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC,
-  agentAuthorityPaths, agentTurnWriteFloor, isSelfSourceProject, isSelfSourceWriteFloored, agentProductStateDeny, agentGlobalStateRoots,
-  agentShellSandboxLayout, shippedShellSandboxes, sealedRootEntryRefused, sandboxWriteSetRoot, readTerminalShellConfig,
+import { projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC,
+  isSelfSourceWriteFloored, agentProductStateDeny, agentGlobalStateRoots,
+  sealedRootEntryRefused, sandboxWriteSetRoot, readTerminalShellConfig,
   LocalOsSessionAuthority, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, type NativeCliWorkerPorts } from '#adapters/index.js';
 import { createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { loadComposedConfig } from '#composition/core/root/index.js';
-import { userInfo } from 'node:os';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 
 type OpenTools = NativeCliWorkerPorts['openTools'];
 /** The K1 coordinator owns proposals and durable settlement. The model CLI never receives this workspace. */
 export async function openConfiguredNativeWorkerTools(root: string, request: Parameters<OpenTools>[0], binding: Parameters<OpenTools>[1],
   signal: AbortSignal, resources: Parameters<OpenTools>[3], options: ConfigLoadOptions): Promise<ToolSessionPort> {
-  // The shared shell realm currently has no mount/input view contract: never silently omit admitted resources or put them in the login realm.
-  if (resources.readOnlyMounts?.length || resources.inputs?.length || resources.handoffInputs?.length) throw ErrorRegistry.createError('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   const { scopeId, generation } = request.identity, turnId = sha256(JSON.stringify(request.identity));
-  const current = await recheckNativeWorkerUse(root, scopeId, binding, options), loaded = await loadConfiguredScopeContext(root, scopeId, options, 'write');
-  const context = { ...loaded, policy: createLayoutPolicySource(loaded.layout, userInfo().uid, loaded.config.inspection.policyMaxBytes),
-    async freshConfig() { const config = await loadComposedConfig(root, { ...options, heal: false });
-      if (JSON.stringify(config.productLayout) !== JSON.stringify(loaded.layout)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED'); return config; } };
-  const env = options.env ?? process.env, clock = new SystemTrustedClock(), known = getConfigKnownSecrets(context.config);
-  const workspace = await createWorkspaceReadTools(request.workspace, { deny: agentWorkspaceDeny(request.workspace, context.layout, false, env),
-    limits: { maxResultBytes: context.config.service.responseMaxBytes } });
+  const { current, context, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
+  const clock = new SystemTrustedClock();
   const sessions = () => LocalOsSessionAuthority.create(context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-  const authority = agentAuthorityPaths(request.workspace, context.layout);
-  const selfSource = await isSelfSourceProject(root), writeFloor = agentTurnWriteFloor(authority, false, selfSource);
   const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority,
     selfSource: selfSource ? isSelfSourceWriteFloored : () => false });
-  const sandbox = agentShellSandboxLayout(request.workspace, context.layout, workspace.scope, writeFloor, false, null, env);
   const shell = createAgentShell({ scope: workspace.scope, context, sessions, scopeId, turnId, config: readTerminalShellConfig(context.config as unknown as Record<string, unknown>),
-    channel: { signal, emit() {}, async drained() {}, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes: shippedShellSandboxes(sandbox), profile: current.profile,
+    channel: { signal, emit() {}, async drained() {}, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes, profile: current.profile,
     globalStateRoots: agentGlobalStateRoots([env, process.env]), productState: agentProductStateDeny(request.workspace, context.layout, env), authority,
     selfSource, writeFloor, writeSetRoot: () => sandboxWriteSetRoot(request.workspace, context.layout, env), sealed: sealedRootEntryRefused(request.workspace, sandbox.hardFloor) });
   const tools = [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC], subject = (execution: { round: number; index: number }, tool: { name: string; version: number }, target: string | null, argsDigest: string) =>
@@ -89,7 +76,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
       const result = tool.toolClass === 'edit' || tool.toolClass === 'shell'
         ? await decisions.execute(tool, args, execution, callId, (gate, authority, writes, track) => tool.toolClass === 'edit'
           ? edits.apply(tool.name, args, execution, gate) : shell.apply(tool.name, args, callSignal, callId, execution, gate, authority, writes, track))
-        : await workspace.execute(tool.name, args, callSignal);
+        : await inputs.read(tool.name, args, callSignal) ?? await workspace.execute(tool.name, args, callSignal);
       return { ...result, text: redactForRecord(result.text, known) };
     }, now: Date.now,
   };

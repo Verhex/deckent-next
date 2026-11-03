@@ -82,7 +82,9 @@
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
         "src/platform/core/errors",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/capabilities/core/artifacts",
+        "src/domain/core/run"
       ],
       "plan": "PROVIDERS"
     },
@@ -476,7 +478,6 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
-        "src/adapters/core/native-cli-worker",
         "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/engine/core/supervisor",
@@ -535,7 +536,8 @@
         "src/adapters/core/beuser-surface",
         "src/engine/core/beuser-contract",
         "src/engine/core/beuser-realm",
-        "src/engine/core/project-attachment"
+        "src/engine/core/project-attachment",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "FOUNDATION"
     },
@@ -656,7 +658,8 @@
         "src/engine/core/model-invocation",
         "src/engine/core/model-use",
         "src/engine/core/provider-catalog",
-        "src/composition/core/model-use"
+        "src/composition/core/model-use",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "EXECUTION"
     },
@@ -5099,7 +5102,6 @@
         "src/adapters/core/native-tool-bridge",
         "src/capabilities/core/native-agent-execution",
         "src/domain/core/attempt",
-        "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
         "src/domain/core/run",
         "src/engine/core/dispatch",

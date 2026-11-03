@@ -104,5 +104,10 @@
   "headless.agent.k13.resource.waiting": "Paylaşılan abonelik kaynağı bekleniyor. Yeni işçi başlamadı; doğrulanmış serbest bırakmayı bekleyin veya bu görevi iptal edin.",
   "headless.agent.k13.resource.legacy": "Önceki yürütme yolu: kabul edilmiş bu görev kayıtlı profilini korur. Yeni iş için denetimli native işçi bağlantısı gerekir.",
   "headless.agent.k13.agents.action": "bir görev için ajanı ve sabit skill sürümlerini hazırla (salt okunur)",
-  "headless.agent.k20.verifying": "Bu ilk denetimli turda CLI araç yüzeyi doğrulanıyor."
+  "headless.agent.k20.verifying": "Bu ilk denetimli turda CLI araç yüzeyi doğrulanıyor.",
+  "headless.agent.k22.worker.NATIVE_WORKER_VERIFICATION_WAIT": "Aynı bağlantı ve mühür için başka bir doğrulama Attempt’i var. Kalıcı sonuç veya custody uzlaştırması bekleniyor; ikinci CLI açılmaz.",
+  "headless.agent.k22.worker.NATIVE_WORKER_F08_INVALID": "Kalıcı işçi doğrulama kaydı güvenle okunamadı. Kayıt uzlaştırılana kadar yürütme durur.",
+  "headless.agent.k22.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "İşçi CLI araç guard’ı doğrulanmadı. Attempt sonlandı; aynı bağlantı ve mühür yeniden denenmez.",
+  "headless.agent.k22.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "İşçi CLI beklenmeyen bir eklenti bildirdi. Attempt sonlandı; aynı bağlantı ve mühür yeniden denenmez.",
+  "headless.agent.k22.worker.NATIVE_WORKER_INPUT_REFUSED": "Görev girdisinin salt okunur görünümü doğrulanamadı. Girdi yolu, kapsamı, bağlantıları ve bayt sınırlarını inceleyin."
 }

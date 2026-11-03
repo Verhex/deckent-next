@@ -1,5 +1,9 @@
 # Known limits
 
+The alpha.63 worker candidate verifies its first guarded Attempt before retaining worker evidence. An unreadable record or an unresolved verification claim keeps the worker waiting for reconciliation; it is never retried automatically. Task artifacts and predecessor outputs are read-only tool inputs and are absent from the CLI login realm. Real-account and assembled-release acceptance remain open.
+
+In this candidate, worker shell cards that require turn-bound assurance still need the dedicated decision producer connected to the human surface. Listing the card and answering from an ordinary CLI/PTY does not satisfy that assurance; the worker remains waiting. The author fixture proves read-only enforcement after a properly bound decision, not this production interaction.
+
 Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it.
 
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)

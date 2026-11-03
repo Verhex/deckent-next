@@ -7,7 +7,7 @@ import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-regi
 import { buildHeadlessEnv, codexAgentArgv, codexAgentTurn } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
-import type { ToolSessionPort, NativeAgentExecution } from '#capabilities/index.js';
+import { nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver } from './ports.js';
 import { NativeCliWorkerError } from './profile.js';
 
@@ -39,18 +39,8 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
     || input.maxTurns !== undefined && !entry.command.capabilities.maxTurns
     || Buffer.byteLength(input.user) > entry.headless.limits.stdinMaxBytes || Buffer.byteLength(input.system) > entry.headless.limits.stdinMaxBytes)
     throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
-  const calls = new Map<string, NonNullable<ReturnType<Parameters<typeof codexAgentTurn>[3]>>>();
+  const gate = nativeWorkerToolGate(input.tools, signal), tools = gate.tools;
   let claude: ClaudeDriver | undefined, runDir: string | undefined, dispose: (() => Promise<void>) | undefined, used = false, ended = false;
-  const tools: ToolSessionPort = { session: input.tools.session,
-    async propose(call, correlation, callSignal) {
-      if (signal.aborted || ended) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
-      if (entry.agent.transport.kind === 'claude-mcp') {
-        if (!claude) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
-        return claude.propose(call, correlation, callSignal);
-      }
-      const result = await input.tools.propose(call, correlation, callSignal);
-      calls.set(call.id, { call, result }); return result;
-    }, cancel: () => input.tools.cancel(), revoke: () => input.tools.revoke() };
   return { tools,
     async run(bridge, runSignal) {
       if (used) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE'); used = true;
@@ -62,7 +52,11 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         system: input.system, user: input.user, effortArgs };
       claude = entry.agent.transport.kind === 'claude-mcp' ? transport.claudeDriver({ entry, port: input.tools, model: input.model,
         cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes }) : undefined;
-      const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, id => calls.get(id));
+      const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, gate.lookup);
+      gate.bind(claude ?? { async propose(call, correlation, callSignal) {
+        if (!turn?.accepts(call)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
+        return input.tools.propose(call, correlation, callSignal);
+      } });
       let args: readonly string[], configFile: string | undefined, promptFile = join(runDir, entry.headless.systemPromptFile);
       if (claude) {
         const files = await transport.claudeRun(entry, tools.session, { runDir, model: input.model, system: input.system, turnToken: bridge.turnToken,
@@ -82,28 +76,19 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         ...(configFile ? { mcpConfigFile: configFile } : {}), mcp: bridge, now: Date.now },
       { timeoutMs: input.deadlineMs, outputBytes: 2 * input.outputBytes + entry.headless.limits.responseFramingBytes, stderrBytes: entry.headless.limits.stderrMaxBytes,
         maxLineBytes: entry.headless.limits.maxLineBytes, interruptGraceMs: entry.headless.limits.killGraceMs, stdinBase64: Buffer.from(input.user).toString('base64') },
-      claude ? AbortSignal.any([combined, claude.signal]) : combined, raw => {
+      AbortSignal.any([combined, gate.signal, ...(claude ? [claude.signal] : [])]), raw => {
         const stop = claude ? claude.line(raw) === 'stop' : !!turn!.line(raw);
         if (stop) { refused = true; return 'stop'; }
         observer.observe(Buffer.from(raw + '\n'));
       });
-      ended = true; observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
+      ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
-      if (finished?.kind === 'refused' || refused) return { termination: 'confirmed', status: 'failed', text: '',
-        refusal: finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
-      if (combined.aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') return { termination: 'confirmed', status: 'cancelled', text: '' };
-      if (evidence.limit || evidence.stdoutTruncated || evidence.stderrTruncated) return { termination: 'confirmed', status: 'failed', text: '' };
-      if (finished?.kind === 'completed') return { termination: 'confirmed', status: 'completed', text: finished.text };
-      if (result && 'response' in result) {
-        const native = result.response.native as { choices?: { message?: { content?: unknown } }[] }, content = native.choices?.[0]?.message?.content;
-        if (typeof content === 'string') return { termination: 'confirmed', status: 'completed', text: content };
-      }
-      return { termination: 'confirmed', status: 'failed', text: '' };
+      return nativeWorkerProcessResult(evidence, combined.aborted, refused || gate.refused(), finished, result && 'response' in result ? result : undefined);
     },
     async close() {
       // A thrown runner has no process-end proof; retain private files for reconciliation rather than remove a live CLI's files.
       if (used && !ended) return;
-      try { await dispose?.(); } finally { if (runDir) await rm(runDir, { recursive: true, force: true }); calls.clear(); }
+      try { await dispose?.(); } finally { if (runDir) await rm(runDir, { recursive: true, force: true }); gate.clear(); }
     },
   };
 }
