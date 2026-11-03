@@ -4,6 +4,7 @@ import { isAbsolute, join } from 'node:path';
 import type { ModelConnectCommand } from '#domain/index.js';
 import { ModelConnectError, assertAuthorityWitness, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessConsent, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
+  bindCapacityResource, headlessCapacityBinding, openSqliteLedger,
   prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, shellSandboxCapabilities, type HeadlessLoginResult,
   type ProviderConnectKind } from '#adapters/index.js';
 import { ErrorRegistry, automationMarker, globalStateRoot, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
@@ -33,7 +34,8 @@ export const headlessPersonWitness = (env: Env, agents: readonly string[]): Auth
  * first, then executable, login dir — s3c: the Brain's own unless the person names one —, uid, preflight inside the realm; no model call), and the
  * consent is the person's own choice on each written layer. State lives under the person's global state dir, one fixed dir per connection.
  */
-export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>) {
+export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>,
+  ledger: () => Promise<Readonly<{ path: () => Promise<string>; config: { storage: { sqlite: Parameters<typeof openSqliteLedger>[1] } } }>>) {
   const env = options.env ?? process.env;
   const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>>>();
   const prepare = (kind: ProviderConnectKind, nativeId: string) => {
@@ -51,7 +53,10 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
   return {
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
       const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, await person(), Date.now());
-      return { ...headlessConnectionAdapter({ ...base, delegatedUse: consent }, protocol), cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [] } };
+      const definition = { ...base, delegatedUse: consent }, adapter = headlessConnectionAdapter(definition, protocol);
+      const context = await ledger(), db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
+      try { bindCapacityResource(db, headlessCapacityBinding(definition), { executionSlots: adapter.maxInFlight, inFlightSlots: adapter.maxInFlight }); } finally { db.close(); }
+      return { ...adapter, cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [] } };
     },
   };
 }

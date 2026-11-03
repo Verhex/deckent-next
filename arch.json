@@ -131,7 +131,8 @@
         "src/platform/core/clock",
         "src/domain/core/worker-event",
         "src/adapters/core/run-proposal-store",
-        "src/adapters/core/target-queue-store"
+        "src/adapters/core/target-queue-store",
+        "src/adapters/core/sqlite-model-invocation"
       ],
       "plan": "STORE"
     },
@@ -1711,7 +1712,8 @@
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
-        "src/adapters/core/sqlite-read-view"
+        "src/adapters/core/sqlite-read-view",
+        "src/engine/core/scheduling"
       ],
       "plan": "STORE"
     },
@@ -1837,7 +1839,8 @@
         "src/engine/core/provider-spend",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/secret-store",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/adapters/core/sqlite-ledger"
       ],
       "plan": "PROVIDERS"
     },
@@ -1879,7 +1882,11 @@
         "src/engine/core/provider-spend",
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/scheduling"
       ],
       "plan": "PROVIDERS"
     },
@@ -4260,7 +4267,9 @@
         "src/engine/core/model-invocation",
         "src/engine/core/toolchain-currency",
         "src/platform/core/errors",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/utils"
       ],
       "plan": "PROVIDERS"
     },

@@ -1,3 +1,4 @@
+import { migrateCapacityResources } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateProviderSpendPeriods, migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
@@ -15,7 +16,8 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 73;
+export const CURRENT_LEDGER_VERSION = 74;
+export const CAPACITY_RESOURCE_LEDGER_VERSION = 74;
 // alpha.56 BP budget periods: each period-less spend checkpoint is archived once (append-only history) and gets its first local month boundary.
 // Older binaries refuse v72; rollback restores the pre-switch backup (the rewritten account records carry the period).
 export const PROVIDER_SPEND_PERIOD_LEDGER_VERSION = 72;
@@ -407,7 +409,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
   // Older custody validators inspect the current Run shape. Prove and convert old eligibility
   // before those validators, inside the same transaction; never skip their independent checks.
   if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
-  const codeSteps: Readonly<Record<number, () => void>> = { [PROVIDER_SPEND_PERIOD_LEDGER_VERSION]: () => migrateProviderSpendPeriods(db), 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
+  const codeSteps: Readonly<Record<number, () => void>> = { [CAPACITY_RESOURCE_LEDGER_VERSION]: () => migrateCapacityResources(db), [PROVIDER_SPEND_PERIOD_LEDGER_VERSION]: () => migrateProviderSpendPeriods(db), 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
     8: () => requireLedgerV8ExecutionRegistry(db), 15: () => migrateModelInvocationEvidence(db), 16: () => migrateModelInvocationContents(db),
     17: () => migrateModelInvocationPurge(db), 18: () => migrateModelInvocationControl(db), 19: () => migrateModelAllocationCheckpoints(db),
     20: () => migrateProviderSpend(db), 21: () => migrateProviderReportedSpend(db), [SCOPE_REGISTRY_LEDGER_VERSION]: () => migrateScopeRegistry(db, companyId),

@@ -1,3 +1,4 @@
+import { readRunResourceCapacity } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readEnvironmentProbeHolds, commitEnvironmentProbeSettlement, writeEnvironmentProbeCustody, releaseEnvironmentProbeCustody, type EnvironmentProbeHold } from '#adapters/core/sqlite-ledger/index.js';
 import { loadQuotaReleasePools, releaseQuota } from '#adapters/core/quota-control-store/index.js';
 import { readDispatchFence } from './dispatch-fence.js';
@@ -112,7 +113,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadRunEvaluationPrincipal(identity: AttemptIdentity) { return readRunEvaluationPrincipal(this.db, identity); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRun(scopeId, runId); }
   async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunExecutionPolicy(scopeId, runId); }
-  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody, assertAuthority?: () => void) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace, assertAuthority); }
+  async loadRunResourceCapacity(run: import('#domain/index.js').RunSnapshot) { return readRunResourceCapacity(this.db, run); }
+  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody, assertAuthority?: () => void, resources?: readonly import('#engine/index.js').RunCapacityBinding[]) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace, assertAuthority, resources); }
   async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission, this.lifecycleTiming, this.poolCeiling).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }

@@ -95,3 +95,31 @@ acceptance rates with integer Wilson bounds (`src/domain/core/catalog-evolution/
 acceptance rate is not correctness and an association is not causation: the Wilson bound corrects for small samples only, never for task
 difficulty or model differences, and only failures attributable to the worker or the evaluator count. It is a separate signal from the
 cost and quality reports described above; see [core layers](core-layers.md#agents-standing-statistics-suggestions-and-signer-keys-s7-s8-1as8-5).
+
+## Abonelik kaynağı kapasitesi — alpha.63 K6b yazar adayı
+
+Ledger v74, bağlantının özel metadata konumunu bir kez üretilen opaque UUID ile
+ilişkilendirir. Aynı gerçek login dizini ve uid kullanan farklı proje/model bağlantıları
+aynı kaynağı bulur. Bu bağ token okumaz ve yetki vermez. Ayrı login dizinlerinin aynı
+abonelik hesabı olduğunu çıkaramaz. Kapasite bağlantının registry sınırından gelir;
+yeniden bağlanma mevcut kaynak limitini sessizce değiştirmez.
+
+Run admission transaction'ı `createRun` portunun dördüncü trusted girdisindeki
+`taskId → resourceKey` bağlarını sabitler. Rezervasyon uygulaması kaynağı planlamaya
+geçirir; SQLite rezervasyon transaction'ı bağı ve bütün scope'lardaki doluluğu yeniden
+okur. Model Invocation claim aynı kaynak kapısından geçer. Run progress ve mevcut
+Invocation receipt/control yerel custody otoritesidir; ayrı süreli sayaç tutulmaz.
+İptal niyeti veya zamanın geçmesi slotu bırakmaz; mevcut önleme, terminal gözlem veya
+kanıtlı custody release yolu gerekir. Belirsiz dış etki başarıya çevrilmez.
+
+Login kilidinin kalıcı companion inode'u kernel flock ile korunur; uzun onay beklemesi
+kilidi eskitemez. Eski marker canlı PID gösteriyorsa yaşı ne olursa olsun bekler;
+bozuk kayıt release kanıtı sayılmaz. Gerçek realm süreç grubunun crash sonrası
+sonlanması kaynak slotu bırakma kanıtından ayrı doğrulanır.
+
+K5b admission ve K12 backend'i, yeni abonelik işçisi için kaynak bağının zorunlu
+üretimini ve spawn öncesi yeniden denetimini monte etmelidir. Bu portların eklenmesi
+tek başına monte ürün kabulü değildir. Migration additive'dir; kullanılmamış ekler
+v73'e geri alınabilir, kullanılmış kayıtlar için servis durdurma/uzlaştırma ve
+geçiş öncesi backup'ın geri yüklenmesi gerekir. Canlı/N1 gerçek veri şekli ve BeUser
+kabulü bu yazar adayının hedefli test kanıtından ayrıdır.

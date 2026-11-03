@@ -1,3 +1,4 @@
+import { readRunResourceCapacity } from '#adapters/core/sqlite-model-invocation/index.js';
 import { SqliteRunProposals } from '#adapters/core/run-proposal-store/index.js';
 import { readDispatchFence } from './dispatch-fence.js';
 import { propagateRunCancellation } from './run-cancellation.js';
@@ -8,23 +9,15 @@ import type { DatabaseSync } from 'node:sqlite';
 import { releaseWorkerCustody, verifiedPrincipalSchema, readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt, observeRunAttemptClosure, closesAttemptWithoutExit, RunError, TaskEvaluationError } from '#domain/index.js';
 import { assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, dispatchReleaseReceiptId, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
-  type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
+  type RunCapacityBinding, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { assertEvaluationDigests, readEvaluationDigests, bindOperationEvidenceUse } from './evaluation-evidence.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
-import { quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
+import { decodeLedgerRunSnapshot as decodeRunSnapshot, withRunCapacityBindings, quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { matchRunLifecycleCommand, proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
-// Shared reads have no writer timing dependency and expose no mutation path.
-function decodeRunSnapshot(snapshot: unknown, scopeId: string, runId: string) {
-  try {
-    const value = runSnapshotSchema.parse(JSON.parse(String(snapshot)));
-    if (value.identity.scopeId !== scopeId || value.identity.runId !== runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-    return value;
-  } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-}
 export async function readRunReceipt(db: DatabaseSync, scopeInput: string, commandInput: string): Promise<RunReceipt | null> {
   const scopeId = identitySchema.parse(scopeInput); const commandId = identitySchema.parse(commandInput);
   try {
@@ -230,11 +223,11 @@ export class SqliteRunJournal {
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
-  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void): Promise<RunReceipt> {
+  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void, resources: readonly RunCapacityBinding[] = []): Promise<RunReceipt> {
     const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
     if (workspace && (workspace.scopeId !== scopeId || workspace.runId !== runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
-    return this.transaction(() => {
+    return this.transaction(() => withRunCapacityBindings(this.db, parsed, resources, () => {
       const custody = new SqliteRunWorkspaceCustody(this.db);
       const replay = this.receipt(scopeId, runId, parsed.commandId, command);
       if (replay) { if (workspace && !custody.matchesWithin(workspace)) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return replay; }
@@ -253,7 +246,7 @@ export class SqliteRunJournal {
       if (workspace) custody.admitWithin(workspace);
       const receipt = this.record({ commandId: parsed.commandId, command, snapshot });
       proposals.acceptWithin(proposal, receipt); return receipt;
-    });
+    }));
   }
   async reserveRunTasks(input: RunReservation): Promise<RunReceipt> {
     const parsed = runReservationSchema.parse(input), command = JSON.stringify({ action: 'reserve-run-tasks', ...parsed }), { scopeId, runId } = parsed;
@@ -269,7 +262,7 @@ export class SqliteRunJournal {
       let policy;
       try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;
-      try { wave = planSchedulingWave(current.graph, { excludedTaskIds: [...(this.admission?.excluded(current, parsed.actor, parsed.now) ?? []), ...quotaHeldTasks(this.db, current, parsed.now)], schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
+      try { wave = planSchedulingWave(current.graph, { excludedTaskIds: [...(this.admission?.excluded(current, parsed.actor, parsed.now) ?? []), ...quotaHeldTasks(this.db, current, parsed.now)], schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, resourceCapacity: readRunResourceCapacity(this.db, current), snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
       catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'transaction-wave-mismatch', parsed.identities.length, policy.capacity));
       // Validate every candidate before trimming; an invalid suffix must never disappear silently.

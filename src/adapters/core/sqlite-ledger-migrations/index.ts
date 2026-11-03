@@ -1,3 +1,5 @@
+export { migrateCapacityResources, revertCapacityResources } from './internal/migration-v74.js';
+
 // Code-owned ledger migration steps (history): split out of sqlite-ledger (S4B-1) so the schema unit keeps its unit budget. `schema.ts` dispatches them.
 export { requireLedgerV5Custody } from './internal/migration-v5.js';
 export { requireLedgerV6ProfileCompatibility } from './internal/migration-v6.js';
