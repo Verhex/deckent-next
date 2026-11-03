@@ -10,6 +10,12 @@ export function agentToolApprovalSummary(input: { readonly tool: string; readonl
 /** Largest approval preview in UTF-8 bytes: far below the event bound and any frame, whatever the script (Astra 2094 R3). */
 export const APPROVAL_PREVIEW_MAX_BYTES = 16_384;
 
+/** Reuse the same bounded preview and owner-only retention for streamed and stored cards. */
+export async function prepareApprovalPreview(text: string, keep: ((text: string) => Promise<string>) | null) {
+  const kept = keep && Buffer.byteLength(text, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES ? await keep(text) : null;
+  return boundApprovalPreviewFacts(text, kept);
+}
+
 /** Longest prefix of `text` within `maxBytes` UTF-8 bytes, never splitting a code point. */
 function utf8Prefix(text: string, maxBytes: number): string {
   let bytes = 0, end = 0;

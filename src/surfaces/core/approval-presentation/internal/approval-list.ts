@@ -23,7 +23,7 @@ export interface WorklineApproval {
   /** v21 (T2-FOLLOWUP POSTURE): a shell call's structured sandbox posture, from the running turn's card only. */
   readonly posture?: AgentShellPosture;
   /** v21 (Astra 2431): the running turn's card fields as data and its preview cut's facts. */
-  readonly call?: AgentToolCardCall; readonly previewCut?: ApprovalPreviewCutFacts;
+  readonly call?: AgentToolCardCall; readonly previewCut?: ApprovalPreviewCutFacts; readonly preview?: string;
   /** T3 L4: a `config-change` approval's own facts (display copies from the stored subject): the window speaks of a setting, not a tool call. */
   readonly config?: Readonly<{ action: 'set' | 'unset'; layer: 'project' | 'global'; keyPath: string; ruleId: string }>;
 }

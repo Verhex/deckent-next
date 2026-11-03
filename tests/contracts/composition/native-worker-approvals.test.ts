@@ -115,6 +115,7 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     const worker = (await import('#capabilities/index.js')).readWorkerToolCard(card.request.summary);
     expect(worker).toMatchObject({ identity: { runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt' }, tool: 'write_file', resource: 'src/allowed.ts' });
     expect(worker?.argsDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(card.request).toMatchObject({ preview: { schemaVersion: 1, argsDigest: worker?.argsDigest, text: expect.stringContaining('+approved-output'), cut: null } });
     const command = { schemaVersion: 1, scopeId: 'scope', approvalId: card.request.approvalId, expectedRevision: card.revision, reason: 'Reviewed exact worker call', decision: 'allow' };
     await expect(f.client.decideApproval({ ...command, commandId: 'unattended-worker' })).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
     await expect(readFile(join(f.attempt, 'src/allowed.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -165,11 +166,15 @@ it('K23 worker mint refuses AI, expiry, foreign subject and forged capability wh
   const ring = createTurnDecisionCapabilities(), identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 'scope', layoutRevision: 'l', generation: 1 };
   const subject = { kind: 'agent-tool-call' as const, turnId: 'worker-turn', round: 0, index: 0, tool: 'write_file', toolVersion: 1, resource: 'src/x.ts', argsDigest: 'a'.repeat(64) };
   const record = { request: { schemaVersion: 3, scopeId: 'scope', approvalId: 'card', subject, expiresAt: 100,
+    preview: { schemaVersion: 1, argsDigest: subject.argsDigest, text: '+reviewed-content', cut: null },
     summary: workerToolCardSummary({ identity, turnId: subject.turnId, tool: subject.tool, resource: subject.resource, argsDigest: subject.argsDigest }) }, status: 'pending', revision: 0, decision: null } as unknown as import('#domain/index.js').ApprovalRecord;
   expect(mintAttendedWorkerDecision(record, { ...principal, issuer: principal.issuer + '/mcp' }, 10, true, ring, 50)).toBeNull();
   expect(mintAttendedWorkerDecision(record, principal, 10, false, ring, 50)).toBeNull();
   expect(mintAttendedWorkerDecision(record, principal, 10, true, ring, 100)).toBeNull();
   expect(mintAttendedWorkerDecision({ ...record, request: { ...record.request, subject: { ...subject, resource: 'elsewhere' } } } as never, principal, 10, true, ring, 50)).toBeNull();
+  for (const preview of [undefined, { schemaVersion: 1, argsDigest: 'b'.repeat(64), text: 'foreign-call', cut: null },
+    { schemaVersion: 1, argsDigest: subject.argsDigest, text: 'cut', cut: { shown: 1, total: 2, bytes: 3, totalBytes: 10, digest: 'c'.repeat(64), kept: '/synthetic/full' } }])
+    expect(mintAttendedWorkerDecision({ ...record, request: { ...record.request, preview } } as never, principal, 10, true, ring, 50)).toBeNull();
   const capability = mintAttendedWorkerDecision(record, principal, 10, true, ring, 50)!;
   const evidence = { scopeId: 'scope', approvalId: 'card', decider: principal, peerPid: 10, capability, nowMs: 50 };
   expect(ring.attests({ ...evidence, peerPid: 11 })).toBe(false);
@@ -177,3 +182,56 @@ it('K23 worker mint refuses AI, expiry, foreign subject and forged capability wh
   expect(ring.attests({ ...evidence, capability: 'A'.repeat(43) })).toBe(false);
   expect(ring.attests(evidence)).toBe(true); ring.settle(evidence); expect(ring.attests(evidence)).toBe(false);
 });
+
+it('K24 oversized worker diff is redacted, retained owner-only, and cannot mint or allow a cut card', async () => {
+  const platform = await import('#platform/index.js'), { terminalRequest } = await import('../support/approval-terminal.js');
+  const secret = 'synthetic-known-card-value';
+  vi.spyOn(platform, 'getConfigKnownSecrets').mockReturnValue(platform.snapshotKnownSecrets([{ name: 'SYNTHETIC_CARD_SECRET', value: secret }]));
+  const f = await workerFixture(), text = secret + '\n' + 'visible-diff-line\n'.repeat(1500) + 'unseen-tail';
+  try {
+    const write = adapters.withMcpPrincipal(() => f.port.propose({ id: 'oversized', name: 'write_file', argumentsJson: JSON.stringify({ path: 'src/oversized.ts', content: text }) },
+      { kind: 'claude-tool-use', toolUseId: 'oversized', deckentCallId: 'oversized' }, new AbortController().signal));
+    const card = await f.pending(); expect(card.request.schemaVersion).toBe(3);
+    const preview = card.request.schemaVersion === 3 ? card.request.preview : undefined;
+    expect(preview?.cut?.totalBytes).toBeGreaterThan(16_384); expect(preview?.argsDigest).toBe(approvalSubject(card.request).kind === 'agent-tool-call' ? (approvalSubject(card.request) as { argsDigest: string }).argsDigest : '');
+    expect(JSON.stringify(card)).not.toContain(secret); expect(preview?.text).toContain('‹secret:SYNTHETIC_CARD_SECRET›');
+    const retained = preview!.cut!.kept;
+    const { stat } = await import('node:fs/promises');
+    expect((await stat(retained!)).mode & 0o777).toBe(0o600);
+    const full = await readFile(retained!, 'utf8'); expect(full).toContain('unseen-tail'); expect(full).not.toContain(secret); expect(platform.sha256(full)).toBe(preview?.cut?.digest);
+    const command = { schemaVersion: 1, scopeId: 'scope', approvalId: card.request.approvalId, expectedRevision: card.revision, reason: 'synthetic person sees only the cut', channel: 'local-terminal-card' };
+    expect((await terminalRequest(f, 'decideApproval', { ...command, decision: 'allow', commandId: 'cut-worker-allow' })).response).toMatchObject({ ok: false, error: { code: 'APPROVAL_ASSURANCE_INSUFFICIENT' } });
+    await expect(readFile(join(f.attempt, 'src/oversized.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await terminalRequest(f, 'decideApproval', { ...command, decision: 'deny', commandId: 'cut-worker-deny' })).response.ok).toBe(true);
+    expect((await write).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
+    await expect(readFile(retained!)).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { await adapters.withMcpPrincipal(() => f.port.cancel()); }
+}, 30_000);
+
+it('K24 a truncated worker summary and a genuine capability cannot authorize an unseen cut diff', async () => {
+  const { terminalRuntimePeer, createTerminalRuntimeClient } = await import('../support/terminal-runtime-client.js');
+  const { terminalRequest } = await import('../support/approval-terminal.js');
+  const { createTurnDecisionCapabilities } = await import('#engine/index.js');
+  const { configuredApproval } = await import('#composition/core/approvals/index.js');
+  const { principal } = await import('../support/agent-turn-modes.js');
+  const f = await workerFixture(), dir = 'src/' + Array.from({ length: 40 }, () => 'nested-directory-'.repeat(3)).join('/'), path = dir + '/unseen.ts';
+  try {
+    await mkdir(join(f.attempt, dir), { recursive: true });
+    const write = adapters.withMcpPrincipal(() => f.port.propose({ id: 'long-path', name: 'write_file', argumentsJson: JSON.stringify({ path, content: 'unseen-change\n'.repeat(2000) }) },
+      { kind: 'claude-tool-use', toolUseId: 'long-path', deckentCallId: 'long-path' }, new AbortController().signal));
+    const card = await f.pending();
+    expect(card.request.summary.length).toBe(2048); expect((await import('#capabilities/index.js')).readWorkerToolCard(card.request.summary)).toBeNull();
+    expect(card.request.schemaVersion === 3 && card.request.preview?.cut).toBeTruthy();
+    const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, { env: f.env })), ring = createTurnDecisionCapabilities();
+    const capability = ring.mint({ scopeId: 'scope', approvalId: card.request.approvalId, principal, peerPid: peer.pid, expiresAt: card.request.expiresAt }, Date.now());
+    const command = { schemaVersion: 1, scopeId: 'scope', approvalId: card.request.approvalId, expectedRevision: card.revision, reason: 'synthetic person attempts the exact unseen change' };
+    let error: unknown;
+    try { await configuredApproval(f.project, 'decide', { ...command, decision: 'allow', commandId: 'truncated-summary-allow', decisionCapability: capability }, { env: f.env }, peer, undefined, {}, ring); }
+    catch (failure) { error = failure; }
+    if (!error) await write;
+    await expect(readFile(join(f.attempt, path))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(error).toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
+    expect((await terminalRequest(f, 'decideApproval', { ...command, decision: 'deny', commandId: 'truncated-summary-deny' })).response.ok).toBe(true);
+    expect((await write).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
+  } finally { await adapters.withMcpPrincipal(() => f.port.cancel()); }
+}, 30_000);

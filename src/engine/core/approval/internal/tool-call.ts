@@ -21,13 +21,14 @@ export const agentToolCallActionDigest = (scopeId: string, subject: ToolCallSubj
  */
 export function requestAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, input: { readonly scopeId: string;
   readonly subject: ToolCallSubject; readonly requester: ApprovalActor; readonly policyRevision: string; readonly summary: string;
-  readonly createdAt: number; readonly expiresAt: number; readonly facts?: ApprovalFacts }): ApprovalRecord {
+  readonly createdAt: number; readonly expiresAt: number; readonly facts?: ApprovalFacts;
+  readonly preview?: Extract<ApprovalRecord['request'], { schemaVersion: 3 }>['preview'] }): ApprovalRecord {
   const actionDigest = agentToolCallActionDigest(input.scopeId, input.subject);
   const existing = store.findToolCall(input.scopeId, actionDigest);
   if (existing) return verifyApproval(existing, integrity);
   const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject,
     requester: input.requester, actionDigest, policyRevision: input.policyRevision, summary: input.summary.slice(0, 2048),
-    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? undeclaredAgentToolApprovalFacts(input.scopeId) });
+    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? undeclaredAgentToolApprovalFacts(input.scopeId), ...(input.preview ? { preview: input.preview } : {}) });
   return verifyApproval(store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, integrity)), integrity);
 }
 

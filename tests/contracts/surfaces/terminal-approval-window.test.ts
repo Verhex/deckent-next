@@ -415,9 +415,9 @@ it('K23 worker card shows exact Run/Task/Attempt and argsDigest with witnessed-t
   const summary = workerToolCardSummary({ identity: { runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt', scopeId: 'scope', generation: 1, layoutRevision: 'l' },
     turnId: 'worker-turn', tool: 'write_file', resource: 'src/result.ts', argsDigest: 'f'.repeat(64) });
   for (const locale of ['en', 'tr'] as const) {
-    const lines = approvalCardLines(base({ summary, tool: 'write_file', target: 'src/result.ts', risk: 'edit-self-source', requiredAssurance: 'turn-bound' }),
+    const lines = approvalCardLines(base({ summary, tool: 'write_file', target: 'src/result.ts', risk: 'edit-self-source', requiredAssurance: 'turn-bound', preview: '+exact worker content\n-last hidden payload' }),
       workSurfaceLabels(locale), undefined, null, {}, NOW).join('\n');
-    for (const value of ['worker-run', 'worker-task', 'worker-attempt', 'src/result.ts', 'f'.repeat(64)]) expect(lines).toContain(value);
+    for (const value of ['worker-run', 'worker-task', 'worker-attempt', 'src/result.ts', 'f'.repeat(64), '+exact worker content', '-last hidden payload']) expect(lines).toContain(value);
     expect(lines).not.toContain(locale === 'tr' ? 'burada yalnız reddedebilirsiniz' : 'here you can only deny');
     expect(lines).toContain(locale === 'tr' ? 'kişi tanığıyla' : 'witnessed terminal');
     const { workerApprovalWaitLines } = await import('../../../src/surfaces/core/terminal-work/internal/job-windows.js');

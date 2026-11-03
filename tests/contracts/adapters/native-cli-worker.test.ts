@@ -373,3 +373,21 @@ it('K22: guard rejection is a terminal negative; corrupted, linked and writable 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 async function readFileText(path: string) { return (await import('node:fs/promises')).readFile(path, 'utf8'); }
+
+it('K24 cancellation during preflight settles without spawning; a genuine preflight error still fails', async () => {
+  const f = await transportFixture('claude-code-stream-json'), cancel = new AbortController();
+  try {
+    const error = Object.assign(new Error('preflight stopped before model spawn'), { code: 'HEADLESS_PREFLIGHT_FAILED' });
+    const preflight = vi.spyOn(f.transport, 'preflight').mockImplementation(async signal => {
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); throw error;
+    });
+    const driver = createNativeCliWorkerDriver(f.input, f.transport, cancel.signal), pending = driver.run(f.bridge, cancel.signal);
+    cancel.abort();
+    expect(await pending).toMatchObject({ status: 'cancelled', termination: 'confirmed' });
+    await driver.close(); expect(f.isolated).not.toHaveBeenCalled(); expect(await readdir(f.stateDir)).toEqual([]);
+    preflight.mockRejectedValue(error);
+    const live = createNativeCliWorkerDriver(f.input, f.transport, new AbortController().signal);
+    await expect(live.run(f.bridge, new AbortController().signal)).rejects.toBe(error); await live.close();
+    expect(f.isolated).not.toHaveBeenCalled();
+  } finally { await rm(f.stateDir, { recursive: true, force: true }); }
+});

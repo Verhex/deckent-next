@@ -611,3 +611,7 @@ Only the `/provider` and `/model` navigation lists opt into treating plain filte
 input event as filter then Enter. The picker reduces the text first and selects from that resulting state. Scope steps, mixed control input
 and every other picker keep the existing behavior; decision arming/burst/focus and onboarding's 500 ms Enter guard are unchanged.
 Author RED/GREEN and compiled CLI/PTY evidence are external in `proof/ALPHA63/k9/`; independent review and assembled-release acceptance are separate.
+
+### İşçi onay önizlemeleri (alpha.63 K24 yazar adayı)
+
+Kalıcı işçi kartı, sohbetle aynı sınırlı ve bilinen sırları redakte edilmiş komut/diff önizlemesini ve kesim bilgisini exact çağrının argsDigest değeriyle mühürlü taşır; büyük önizlemenin tam kopyası yalnız bekleme boyunca kişiye özel saklanır ve kesik veya eski önizlemesiz kart allow üretemez. Ön kontrol sırasındaki iptal, model süreci başlamadan iptal sonucuna bağlanır; gerçek ön kontrol hataları ve mevcut iptal süresi değişmez. Yazar kanıtı dış `proof/ALPHA63/k24/` alanındadır; monte sürüm kabulü ve bağımsız inceleme ayrıdır.

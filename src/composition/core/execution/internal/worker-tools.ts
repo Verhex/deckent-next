@@ -2,12 +2,12 @@ import { nativeWorkerToolFloor } from './worker-floor.js';
 import { nativeWorkerApprovalExpired, workerToolCardSummary, nativeWorkerToolLifetime, type ToolSessionPort } from '#capabilities/index.js';
 import { ErrorRegistry, SystemTrustedClock, sha256, redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { runDurableAgentTurn, requestAgentToolApproval, awaitAgentToolApproval,
-  agentToolApprovalFacts, AgentToolPolicyAuthorization, type AgentTurnPorts } from '#engine/index.js';
+  prepareApprovalPreview, projectModelIngressField, agentToolApprovalFacts, AgentToolPolicyAuthorization, type AgentTurnPorts } from '#engine/index.js';
 import { projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC,
   isSelfSourceWriteFloored, agentProductStateDeny, agentGlobalStateRoots,
   sealedRootEntryRefused, sandboxWriteSetRoot, readTerminalShellConfig,
-  LocalOsSessionAuthority, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, type NativeCliWorkerPorts } from '#adapters/index.js';
-import { describeAgentCall, createAgentCallApprovals, createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
+  keepFullPreview, dropFullPreview, LocalOsSessionAuthority, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, type NativeCliWorkerPorts } from '#adapters/index.js';
+import { chatTurnApprovalPreview, describeAgentCall, createAgentCallApprovals, createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 
 type OpenTools = NativeCliWorkerPorts['openTools'];
@@ -38,10 +38,14 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
     prepare: async (tool, args) => tool.toolClass === 'shell' || tool.toolClass === 'edit' ? decisions.prepare(tool, args) : Promise.resolve({ ok: true }), describe,
     async requestApproval(input, callSignal) {
       const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
+      let kept: string | null = null;
       try {
         const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), policy = await context.policy.load() as { revision: string };
         const started = clock.sample(), { id, issuer, subject: actor } = context.principal;
+        const raw = edits.preview(input.tool.name, input.args) ?? shell.previewText(input.tool.name, input.args) ?? chatTurnApprovalPreview(input.tool.name, input.args);
+        const preview = await prepareApprovalPreview(redactForRecord(raw, known), async text => kept = await keepFullPreview(context.layout, sha256(`${turnId}\0${input.round}\0${input.index}`), text));
         const record = requestAgentToolApproval(journal.store, integrity, { scopeId, requester: { id, issuer, subject: actor },
+          preview: { schemaVersion: 1, argsDigest: input.argsDigest, text: projectModelIngressField(preview.text).modelText, cut: preview.cut },
           subject: approvals.subject(input, input.tool, input.target, input.argsDigest), facts: agentToolApprovalFacts(policy, scopeId, decisions.cell(input.tool, input.args)),
           policyRevision: policy.revision, summary: workerToolCardSummary({ identity: request.identity, turnId, tool: input.tool.name, resource: redactForRecord(input.target ?? '(no target)', known), resourceDigest: sha256(input.target ?? '(no target)'), argsDigest: input.argsDigest }),
           createdAt: started.wallMs, expiresAt: started.wallMs + context.config.approvals.requestTtlMs });
@@ -54,7 +58,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
           approvals.allowed(input, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
         }
         return outcome;
-      } finally { journal.close(); }
+      } finally { journal.close(); if (kept) await dropFullPreview(kept); }
     },
     async execute(tool, args, callSignal, callId, execution) {
       await recheckNativeWorkerUse(root, scopeId, binding, options);
