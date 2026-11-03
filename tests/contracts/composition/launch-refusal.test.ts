@@ -108,6 +108,21 @@ it('a transient refusal (policy denial before the ledger is touched) is not reco
   } finally { f.store.close(); }
 });
 
+it('K12: an explicitly retired projection parks the pinned queue with its reason before workspace, probe or credential dispatch', async context => {
+  const f = await fixture(context);
+  try {
+    const identity = await nativeCodexRun(f, compiled => compiled), before = await f.store.load(identity.scopeId, identity.attemptId);
+    const worker = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe'), allocate = vi.spyOn(GitWorkspaceBroker.prototype, 'allocate');
+    const answer = await executeConfiguredTask(f.project, identity, { ...f.options, nativeCliWorker: { projectionRetired: true } });
+    expect(answer.execution).toMatchObject({ identity, status: 'unresolved', terminal: null, outputRecorded: false,
+      waiting: { reason: 'NATIVE_PROJECTION_RETIRED', legacy: true } });
+    expect((await f.store.loadRun(identity.scopeId, identity.runId))!.state).toMatchObject({ kind: 'parked', reason: 'progression-failed', failureCode: 'NATIVE_PROJECTION_RETIRED' });
+    expect(await f.store.load(identity.scopeId, identity.attemptId)).toEqual(before);
+    expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+    expect(worker).not.toHaveBeenCalled(); expect(probe).not.toHaveBeenCalled(); expect(allocate).not.toHaveBeenCalled();
+  } finally { f.store.close(); }
+});
+
 it('a Run frozen on the SIWC relay route while activation is held closes launch-refused with zero launches and no other Codex route (U9-7)', async context => {
   const f = await fixture(context), owner = { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject };
   try {

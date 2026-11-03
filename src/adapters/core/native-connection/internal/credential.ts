@@ -6,6 +6,7 @@ import { persistedString, workerEffortSchema, nativeCliIdSchema, modelUsageEvide
 import { z } from 'zod';
 import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
+import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 
 const exactModelId = persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value && !value.startsWith('-')
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
@@ -29,6 +30,10 @@ export const nativeSubscriptionSchema = z.strictObject({ schemaVersion: z.union(
 }).refine(value => (value.schemaVersion === 2) === (value.model !== undefined))
   .refine(value => value.checkout === undefined || value.preflight?.discovery === 'disabled').readonly();
 export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
+/** Alpha.63 contract gate: only new dispatch is checked; persisted/running connections retain their own custody. */
+export function nativeProjectionDispatch(binding: NativeSubscription | undefined, retired: boolean): 'legacy' | 'retired' {
+  return retired && binding && nativeCliCommand(binding.provider).agent ? 'retired' : 'legacy';
+}
 export class NativeConnectionError extends Error {
   constructor(readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE') { super(code); this.name = 'NativeConnectionError'; }
 }
