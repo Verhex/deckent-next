@@ -5,6 +5,7 @@ import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { recheckNativeWorkerUse, resolveNativeWorkerUse, assertNativeWorkerReservation } from '#composition/core/runs/index.js';
 /** K16 owns the shared isolated driver/readiness; K1 owns the tool session. No invocation claim is opened for this Run worker. */
 export interface NativeCliWorkerRuntime {
+  prepare?(profile: import('#domain/index.js').ModelInvocationProfile): Promise<import('#capabilities/index.js').NativeAgentReadinessReason | null>;
   readonly readiness: SubscriptionReadinessReader;
   f08(query: Readonly<{ scopeId: string; reference: import('#domain/index.js').ModelReference; binding: NativeCliWorkerBinding }>): Promise<NativeAgentExecution | null>;
   readonly verification?: NativeCliWorkerPorts['verification'];
@@ -20,6 +21,7 @@ export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: stri
     await recheckNativeWorkerUse(root, scopeId, binding, options);
   };
   return {
+    ...(runtime.prepare ? { prepare: async (binding: NativeCliWorkerBinding) => runtime.prepare!((await recheckNativeWorkerUse(root, scopeId, binding, options)).profile) } : {}),
     async readiness(binding) {
       const current = await resolveNativeWorkerUse(root, scopeId, binding, options), entry = nativeCliAgent(binding.protocolFamily);
       if (!entry) return { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' };

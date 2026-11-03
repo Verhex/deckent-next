@@ -68,6 +68,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (!native && !relayed && nativeProjectionDispatch(profile.nativeSubscription, options.nativeCliWorker?.projectionRetired === true) === 'retired') return await waiting('NATIVE_PROJECTION_RETIRED');
       if (native) {
         if (!nativePorts) return await waiting('NATIVE_AGENT_BRIDGE_UNAVAILABLE');
+        const refusal = await nativePorts.prepare?.(native.binding); if (refusal) return await waiting(refusal);
         const ready = await inspectNativeCliWorker(native.binding, nativePorts);
         if (ready.state !== 'ready') return await waiting(ready.reason);
       }

@@ -50,11 +50,12 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     const tools = { session: { schemaVersion: 1 as const, turnId: 'turn', generation: 1, approvalTtlMs: 1000, tools: [] },
       propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() };
     const runtime: NativeCliWorkerRuntime = { readiness: { read: vi.fn(async () => ({ cli: true, login: true, environment: true, plugins: true, toolSurface: true, bridge: true, execution: seal })) },
-      f08: vi.fn(async () => seal), openTools: vi.fn(async request => { expect(localPrincipalChannel()).toBe('mcp'); expect(request.workspace).toBe('/synthetic/attempt/workspace'); return tools; }),
+      prepare: vi.fn(async () => null), f08: vi.fn(async () => seal), openTools: vi.fn(async request => { expect(localPrincipalChannel()).toBe('mcp'); expect(request.workspace).toBe('/synthetic/attempt/workspace'); return tools; }),
       driver: vi.fn(), bridgeLimits: { idleMs: 1000, maxConnections: 2, replayMaxEntries: 2, replayMaxBytes: entry.bridge.frameMaxBytes * 2 } };
     const ports = createConfiguredNativeCliWorkerPorts(f.project, 's', store as never, f.options, runtime), signal = new AbortController().signal;
     const request = { protocolVersion: 1 as const, identity, workspace: '/synthetic/attempt/workspace', argv: resolveNativeCliWorkerProfile(execution.tasks[0]!.profile).argv };
     expect(await ports.readiness(frozen)).toEqual({ state: 'ready', execution: seal }); expect(await ports.f08(frozen)).toEqual(seal);
+    expect(await ports.prepare!(frozen)).toBeNull(); expect(runtime.prepare).toHaveBeenCalledWith(profile);
     await ports.recheck(request, frozen, signal);
     const slot = await ports.capacity.acquire(request, frozen, signal); expect(slot.state).toBe('acquired');
     await ports.openTools(request, frozen, signal, { inputs: [] }); expect(runtime.openTools).toHaveBeenCalledOnce();
@@ -63,9 +64,11 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     expect(await ports.capacity.acquire(request, frozen, signal)).toEqual({ state: 'waiting' });
     // Preserve the pinned principal/profile/company snapshot; changing it never silently repins it.
     await expect(ports.recheck(request, { ...frozen, modelUsePin: { ...frozen.modelUsePin, companyId: 'other' } }, signal)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+    await expect(ports.prepare!({ ...frozen, modelUsePin: { ...frozen.modelUsePin, companyId: 'other' } })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
     policy.grants = policy.grants.filter((row: { id: string }) => row.id !== 'ai-invoke');
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
     await expect(ports.openTools(request, frozen, signal, {})).rejects.toBeTruthy(); expect(runtime.openTools).toHaveBeenCalledOnce(); expect(runtime.driver).not.toHaveBeenCalled();
+    await expect(ports.prepare!(frozen)).rejects.toBeTruthy(); expect(runtime.prepare).toHaveBeenCalledOnce();
     const check = new DatabaseSync(f.path, { readOnly: true });
     try { expect(check.prepare('SELECT count(*) AS n FROM model_invocations').get()).toEqual({ n: 0 }); } finally { check.close(); }
     expect(f.posts).toBe(0);

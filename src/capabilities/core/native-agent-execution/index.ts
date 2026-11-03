@@ -15,5 +15,6 @@ export { errorDiagnostic } from './internal/error-diagnostic.js';
 export * from './internal/worker-profile.js';
 export { nativeWorkerPreflight, nativeWorkerApprovalExpired, nativeWorkerToolLifetime, nativeWorkerToolGate, nativeWorkerProcessResult } from './internal/worker-stream.js';
 export { nativeWorkerReadiness } from './internal/worker-readiness.js';
+export { prepareNativeWorkerObservation } from './internal/worker-preparation.js';
 export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';
 export { workerToolPreviewComplete, mintAttendedWorkerDecision, workerToolCardSummary, readWorkerToolCard, type WorkerToolCard } from './internal/worker-card.js';

@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { identitySchema, modelReferenceSchema } from '#domain/index.js';
 import { nativeAgentExecutionSchema, type NativeAgentExecution } from './contract.js';
+import type { NativeCliWorkerBinding } from './worker-profile.js';
 
 export const nativeWorkerRefusalSchema = z.enum(['NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_PLUGIN_UNEXPECTED']);
 export type NativeWorkerRefusal = z.infer<typeof nativeWorkerRefusalSchema>;
@@ -47,3 +48,17 @@ export async function claimNativeWorkerVerification(file: NativeWorkerEvidenceFi
 }
 export const nativeWorkerGuardRefusal = (reason: string): NativeWorkerRefusal => reason === 'NATIVE_AGENT_PLUGIN_UNEXPECTED'
   ? 'NATIVE_WORKER_PLUGIN_UNEXPECTED' : 'NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED';
+
+/** Share the evidence lifecycle through a fresh, authorized target/file port. */
+export function nativeWorkerVerificationPorts(target: (scopeId: string, binding: NativeCliWorkerBinding, execution: NativeAgentExecution) =>
+  Promise<{ value: NativeWorkerEvidenceTarget; file: NativeWorkerEvidenceFile }>) {
+  return {
+    async read(scopeId: string, binding: NativeCliWorkerBinding, execution: NativeAgentExecution) {
+      const { value, file } = await target(scopeId, binding, execution); return readNativeWorkerEvidence(file, value);
+    },
+    verification: { async acquire(request: { identity: { scopeId: string; attemptId: string } }, binding: NativeCliWorkerBinding, execution: NativeAgentExecution) {
+      const { value, file } = await target(request.identity.scopeId, binding, execution);
+      return claimNativeWorkerVerification(file, value, request.identity.attemptId);
+    } },
+  };
+}
