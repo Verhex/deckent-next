@@ -276,7 +276,7 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
       { kind: 'claude-tool-use', toolUseId: 'interpreter-write', deckentCallId: 'interpreter-write' }, new AbortController().signal))).outcome)
       .toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-policy') });
     for (const [index, path] of targets.entries()) {
-      const id = `readonly-shell-${index}`, exactWrite = `printf '%s' unauthorized-change > '${path}'`;
+      const id = `readonly-shell-${index}`, exactWrite = `printf '%s' '${'unauthorized-change'.repeat(20)}' > '${path}'`;
       let observed: unknown;
       const pending = adapters.withMcpPrincipal(() => port!.propose({ id, name: 'run_shell', argumentsJson: JSON.stringify({ command: exactWrite }) },
         { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal)).then(result => { observed = result; return result; });

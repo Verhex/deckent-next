@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, ModelInvocationError, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
   type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, MESSAGE_REGISTRY, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -365,7 +365,6 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         return { ok: true };
       },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
-        // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
         const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
         // Once a card was requested it is always settled: `unsettled` when the wait failed (the request may stay pending, it permits nothing).
         let answer: { wait(): Promise<void>; close(): void } | null = null;
@@ -380,16 +379,13 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: agentToolApprovalSummary({ tool: tool.name, resource, argsDigest, cell: decisions.cell(tool, args), selfSourceReason: decisions.cell(tool, args) === 'edit-self-source' ? t('terminal.approval.selfSource',
               { path: resource, mode: fullAccess ? 'full-access' : agentCallPermissionMode(policy, context.principal, command.scopeId) }, language) : '' }), createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
-          // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
           const diff = editsOf(tool.name)?.preview(tool.name, args);
-          if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           const offer = await decisions.sessionOffer(tool, args);
           if (offer) answer = host.answers.register({ record, principal: native?.witness ?? context.principal, peerPid: peer.pid,
             session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId), key: offer.key, signal: approvalSignal, clock, started,
             remember: (valid, refused) => decisions.remember(tool, args, { round, index }, call.id, record.request.approvalId, { valid, refused }) });
-          // One bound for every kind's preview, with the cut's facts (Astra 2431: the card never parses the text for them).
-          const bounded = boundApprovalPreviewFacts((diff !== undefined ? diff : (tool.toolClass === 'shell' ? shell?.previewText(tool.name, args) : fetches(tool) ? fetcher?.preview(args)
-            : mcps(tool) ? mcp!.preview(tool.name, args) : undefined)) ?? chatTurnApprovalPreview(tool.name, args), diff !== undefined ? kept : null);
+          const bounded = await prepareApprovalPreview((diff !== undefined ? diff : (tool.toolClass === 'shell' ? shell?.previewText(tool.name, args) : fetches(tool) ? fetcher?.preview(args)
+            : mcps(tool) ? mcp!.preview(tool.name, args) : undefined)) ?? chatTurnApprovalPreview(tool.name, args), diff !== undefined ? async text => kept = await keepFullPreview(context.layout, record.request.approvalId, text) : null);
           emitApproval({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision, risk: facts.risk?.source === 'cell' ? facts.risk.cell : null,
             requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(bounded.text).modelText,
             expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, args, facts),

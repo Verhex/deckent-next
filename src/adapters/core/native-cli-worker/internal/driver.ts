@@ -7,7 +7,7 @@ import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-regi
 import { buildHeadlessEnv, codexAgentArgv, codexAgentTurn } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
-import { nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
+import { nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver } from './ports.js';
 import { NativeCliWorkerError } from './profile.js';
 
@@ -44,7 +44,8 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
   return { tools,
     async run(bridge, runSignal) {
       if (used) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE'); used = true;
-      const combined = AbortSignal.any([signal, runSignal]), checked = await transport.preflight(combined);
+      const combined = AbortSignal.any([signal, runSignal]), checked = await nativeWorkerPreflight(() => transport.preflight(combined), combined);
+      if (!checked) { ended = true; gate.stop(); return { termination: 'confirmed', status: 'cancelled', text: '' }; }
       if (!isDeepStrictEqual(checked.execution, input.execution)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
       runDir = await realpath(await mkdtemp(join(input.binding.definition.stateDir, 'worker-run-')));
       const effortArgs = input.effort ? nativeEffortArgs(entry.command.capabilities.reasoningEffort, input.effort) : [];

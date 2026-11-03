@@ -15,13 +15,19 @@ export function readWorkerToolCard(summary: string): WorkerToolCard | null {
 
 type DecisionMinter = { mint(binding: { scopeId: string; approvalId: string; principal: Pick<VerifiedPrincipal, 'issuer' | 'subject'>;
   peerPid: number; expiresAt: number }, nowMs: number): string };
+/** No full-text display receipt exists on stored cards: a cut (or legacy absent preview) cannot authorize an allow. */
+export function workerToolPreviewComplete(record: ApprovalRecord): boolean {
+  const preview = record.request.schemaVersion === 3 ? record.request.preview : undefined, subject = approvalSubject(record.request);
+  return subject.kind === 'agent-tool-call' && !!preview && preview.argsDigest === subject.argsDigest && preview.text.length > 0 && !preview.cut;
+}
 /** Same single-use ring as a conversation card, minted only after the service witnessed this deciding peer's terminal. */
 export function mintAttendedWorkerDecision(record: ApprovalRecord | null, principal: VerifiedPrincipal, peerPid: number,
   interactive: boolean, decisions: DecisionMinter, nowMs: number): string | null {
   if (!record || !interactive || isAiPrincipal(principal) || record.status !== 'pending' || nowMs >= record.request.expiresAt) return null;
   const worker = readWorkerToolCard(record.request.summary), subject = approvalSubject(record.request);
   if (!worker || subject.kind !== 'agent-tool-call' || worker.identity.scopeId !== record.request.scopeId || worker.turnId !== subject.turnId
-    || worker.tool !== subject.tool || worker.resourceDigest !== sha256(subject.resource) || worker.argsDigest !== subject.argsDigest) return null;
+    || worker.tool !== subject.tool || worker.resourceDigest !== sha256(subject.resource) || worker.argsDigest !== subject.argsDigest
+    || !workerToolPreviewComplete(record)) return null;
   return decisions.mint({ scopeId: record.request.scopeId, approvalId: record.request.approvalId, principal, peerPid,
     expiresAt: record.request.expiresAt }, nowMs);
 }

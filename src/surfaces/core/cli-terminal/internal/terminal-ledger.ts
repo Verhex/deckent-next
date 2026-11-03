@@ -31,6 +31,7 @@ function approvalView(record: ApprovalRecord, locale?: Locale): WorklineApproval
     risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
     ...(record.decision ? { deciderLabel: approvalDeciderLabel(record, locale) } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),
+    ...(request.schemaVersion === 3 && request.preview ? { preview: request.preview.text, ...(request.preview.cut ? { previewCut: request.preview.cut } : {}) } : {}),
     ...(subject.kind === 'config-change' ? { config: { action: subject.action, layer: subject.layer, keyPath: subject.keyPath, ruleId: subject.ruleId } } : {}) });
 }
 

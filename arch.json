@@ -2479,7 +2479,8 @@
     },
     "src/domain/core/approval": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SECURITY"
     },

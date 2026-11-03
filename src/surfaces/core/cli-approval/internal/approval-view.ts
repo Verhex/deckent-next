@@ -69,6 +69,7 @@ export function approvalLines(record: ApprovalRecord, nowMs: number, locale: Loc
     t('cli.approval.line.what', { what: approvalWhat(record, locale) }, locale),
     // BeUser: the binding line, then each described input field on its own line (an operation card shows what the command changes).
     ...record.request.summary.split('\n').map((line, index) => index === 0 ? t('cli.approval.line.summary', { summary: safeCell(line) }, locale) : `  ${safeCell(line)}`),
+    ...(record.request.schemaVersion === 3 && record.request.preview ? record.request.preview.text.split('\n').map(line => terminalSafeText(line)) : []),
     t('cli.approval.line.requester', { requester: actor(record), scope: terminalSafeText(record.request.scopeId), at: formatClock(record.request.createdAt, locale) }, locale),
     t('cli.approval.line.risk', { risk: terminalSafeText(risk), undo: terminalSafeText(undo) }, locale),
     ...(onHardFloor(record) ? [t('cli.approval.line.floor', {}, locale)] : []),

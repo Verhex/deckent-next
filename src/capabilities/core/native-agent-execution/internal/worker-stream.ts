@@ -5,6 +5,12 @@ import { NativeCliWorkerError } from './worker-profile.js';
 
 type Call = Parameters<ToolSessionPort['propose']>[0];
 type Result = Awaited<ReturnType<ToolSessionPort['propose']>>;
+/** Preflight owns only bounded probes. Its settled cancellation precedes any model process or private run files. */
+export async function nativeWorkerPreflight<T>(run: () => Promise<T>, signal: AbortSignal): Promise<T | null> {
+  if (signal.aborted) return null;
+  try { const checked = await run(); return signal.aborted ? null : checked; }
+  catch (error) { if (signal.aborted) return null; throw error; }
+}
 export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal) {
   const calls = new Map<string, { call: Call; result: Result }>(), controller = new AbortController();
   let refused = false;
