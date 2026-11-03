@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a1a0bb-d449-7b91-994b-7f921bae55c8"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"I’ll call `slow_wait` once with `seconds: 30` and report its response exactly.\n"}}
+{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"deckent","tool":"slow_wait","arguments":{"seconds":30},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"deckent","tool":"slow_wait","arguments":{"seconds":30},"result":null,"error":{"message":"tool call error: tool call failed for `deckent/slow_wait`\n\nCaused by:\n    timed out awaiting tools/call after 5s"},"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"```text\nWall time: 5.0029 seconds\nOutput:tool call error: tool call failed for `deckent/slow_wait`\n\nCaused by:\n    timed out awaiting tools/call after 5s\n```"}}
+{"type":"turn.completed","usage":{"input_tokens":19068,"cached_input_tokens":17536,"cache_write_input_tokens":0,"output_tokens":101,"reasoning_output_tokens":0}}
