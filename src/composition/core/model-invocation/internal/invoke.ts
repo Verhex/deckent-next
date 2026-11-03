@@ -8,7 +8,7 @@ import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBi
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, openSqliteModelActivationStore, type LocalPeerIdentity } from '#adapters/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
-import { createConfiguredModelInvocationNative } from './native.js';
+import { createConfiguredModelInvocationNative, type ModelInvocationNativeBinding } from './native.js';
 import { modelSpendRefusal } from './spend-refusal.js';
 export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers; readonly clock?: TrustedClock }
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
@@ -36,12 +36,12 @@ export async function previewConfiguredModel(projectRoot: string, input: ModelIn
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) { return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta); }
 async function invoke(input: ModelInvocationCommand, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, entry: 'raw' | 'feature' = 'raw', onNotice?: (text: string) => void | Promise<void>,
-  guard?: { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void }) {
+  guard?: { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void }, agent?: ModelInvocationNativeBinding) {
   try {
     const command = parsedCommand(input), context = await loadContext(command.scopeId);
-    const app = application(context, options, host, false, entry, guard ? async profile => { await configuredContinuationPin(input)?.(profile); await guard.profile(profile); } : configuredContinuationPin(input), guard?.spending);
+    const app = application(context, options, host, false, entry, guard ? async profile => { await configuredContinuationPin(input)?.(profile); await guard.profile(profile); } : configuredContinuationPin(input), guard?.spending, agent);
     const result = await app.invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
-    if (entry !== 'feature' || !onDelta || !onNotice) return result;
+    if (agent || entry !== 'feature' || !onDelta || !onNotice) return result;
     const next = await prepareConfiguredSiwcContinuation(context, options, command, result, value => app.preview(value, undefined, signal),
       reference => onNotice(`${t('siwc.switch.notice', { model: reference.modelId }, context.config.language)}\n`), signal);
     return next ? application(context, options, host, false, entry, configuredContinuationPin(next)).invoke(next, undefined, signal, delivery, onDelta) : result;
@@ -66,9 +66,9 @@ function parsedCommand(input: ModelInvocationCommand) {
   if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   return parsed.data as ModelInvocationCommand;
 }
-export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false, entry: 'raw' | 'feature' = 'raw', profileGuard?: (profile: import('#domain/index.js').ModelInvocationProfile) => Promise<void>, observeSpending?: (value: import('#engine/index.js').ModelInvocationSpending) => void) {
+export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false, entry: 'raw' | 'feature' = 'raw', profileGuard?: (profile: import('#domain/index.js').ModelInvocationProfile) => Promise<void>, observeSpending?: (value: import('#engine/index.js').ModelInvocationSpending) => void, agent?: ModelInvocationNativeBinding) {
   // One trusted clock for pricing and durable invocation records (I40).
-  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly);
+  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly, agent);
   const verifier = { async verify() { return context.principal; } }, bindings = new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
   return new ModelInvocationApplication(verifier, new ModelInvocationPolicyAuthorization(context.policy), bindings,
     async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),
@@ -102,4 +102,10 @@ export async function prepareConfiguredFeatureContinuation(root: string, command
   guard: (next: ModelInvocationCommand) => Promise<unknown>, signal?: AbortSignal): Promise<ModelInvocationCommand | null> {
   const context = await loadInvocationContext(root, command.scopeId, options, 'write'), app = application(context, options, undefined, false, 'feature');
   return prepareConfiguredSiwcContinuation(context, options, command, result, async next => { await guard(next); return app.preview(next, undefined, signal); }, notice, signal);
+}
+
+/** K11 code-only push invocation: preserves policy, activation, allocation, cancellation and durable model receipts. */
+export async function invokePeerConfiguredAgentModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions,
+  host: RuntimeModelInvocationHost, onDelta: ModelInvocationDeltaSink, signal: AbortSignal, agent: ModelInvocationNativeBinding) {
+  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, undefined, host, onDelta, 'feature', undefined, undefined, agent);
 }
