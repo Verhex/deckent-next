@@ -96,7 +96,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       await guard();
       tools = await this.input.ports.openTools(this.input.request, this.resolved.binding, combined, this.input.toolContext ?? {});
       const session = toolSessionSchema.parse(tools.session), delegate = tools;
-      const guarded: ToolSessionPort = { session, async propose(call, correlation, signal) {
+      const guarded: ToolSessionPort = { session, terminalFailure: () => delegate.terminalFailure?.() ?? null, async propose(call, correlation, signal) {
         await guard(); if (signal.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
         return delegate.propose(call, correlation, AbortSignal.any([combined, signal]));
       }, cancel: () => delegate.cancel(), revoke: () => delegate.revoke() };

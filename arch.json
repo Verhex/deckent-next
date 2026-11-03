@@ -84,7 +84,11 @@
         "src/platform/core/errors",
         "src/platform/core/redaction",
         "src/capabilities/core/artifacts",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/domain/core/attempt",
+        "src/domain/core/approval",
+        "src/domain/core/principal",
+        "src/platform/core/integrity"
       ],
       "plan": "PROVIDERS"
     },
@@ -744,7 +748,8 @@
         "src/adapters/core/git-patch",
         "src/adapters/core/target-queue-store",
         "src/engine/core/workspace-patch",
-        "src/adapters/core/autonomy-shadow"
+        "src/adapters/core/autonomy-shadow",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "EXECUTION"
     },
@@ -1286,7 +1291,8 @@
         "src/surfaces/core/monitor",
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
-        "src/surfaces/core/recovery-text"
+        "src/surfaces/core/recovery-text",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SURFACES"
     },
@@ -2495,7 +2501,8 @@
         "src/domain/core/audit",
         "src/platform/core/redaction",
         "src/domain/core/agent-turn",
-        "src/domain/core/adapter-registry"
+        "src/domain/core/adapter-registry",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SECURITY"
     },

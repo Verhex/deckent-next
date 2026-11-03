@@ -2,7 +2,7 @@
 
 Alpha.63 işçi adayı, kalıcı işçi kanıtını ilk korumalı Attempt ile üretir. Okunamayan kayıt veya sonucu belirsiz doğrulama kilidi uzlaştırma bekletir; kendiliğinden yeniden denenmez. Görev girdileri ve önceki görevin çıktıları yalnız araçların salt okunur görünümündedir; CLI giriş realm’ine girmez. Gerçek hesap ve monte sürüm kabulü açıktır.
 
-Bu adayda turn-bound güvence isteyen işçi shell kartının özel karar üreticisi insan yüzeyine henüz bağlı değildir. Kartı listelemek ve sıradan CLI/PTY üzerinden yanıtlamak bu güvenceyi sağlamaz; işçi bekler. Yazar fixture’ı doğru karta bağlı karar sonrasında salt okunur sınırı kanıtlar; bu üretim etkileşimini kanıtlamaz.
+K23, işçi kararını terminalde kişi tanığına bağlayan ve exact Run/Task/Attempt kimliğini gösteren bir aday ekler. Ortak runtime/driver çağırıcı değişiklikleri lead montaj patch’indedir; bu dal tek başına tam yolu açmaz. İşçi kartları şu an bir kez izin veya red sunar; üreticiye bağlı standing cevap olmadan oturum/kalıcı seçenek sunulmaz. Self-source src/dist/scripts/assets yazmaları ayrı Attempt workspace’inde de onay ister; statik yetki tabanındaki AI yazmaları kesin red kalır. Gerçek hesap ve monte sürüm kabulü açıktır.
 
 Codex ajan profili, sürüm kaynağı belirtilmiş registry ayarlarıyla alt ajanları ve eklentileri kapatır. Gerçek CLI’de alt ajanların kapalı olduğu owner R / monte BeUser yürüyüşünde doğrulanacaktır; fake CLI bunu kanıtlamaz.
 
