@@ -4,7 +4,7 @@ import { globalStateRoot, PRODUCT_LAYOUT_REGISTRY, productResourcePath, resolveP
 import { createGlobMatcher, createWorkspaceScope, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
-import { MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
+import { type mcpTurnTools, MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
 import { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { DECK_FILE } from '#engine/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject } from './self-source.js';
@@ -60,6 +60,12 @@ export function agentGlobalStateRoots(environments: readonly Environment[]): str
     return [...resolved ? [resolved] : [], ...conventional && conventional !== resolved ? [conventional] : []];
   }))];
 }
+/** Registry-derived login identity names only; shell checks their metadata, never their contents. */
+export function agentLoginIdentityPaths(roots: readonly string[]): string[] {
+  const prefix = `**/${PRODUCT_LAYOUT_REGISTRY.resources.headlessLogins}/`;
+  const names = CREDENTIAL_WORKSPACE_DENY.filter(pattern => pattern.startsWith(prefix)).map(pattern => pattern.slice('**/'.length));
+  return roots.flatMap(root => names.map(name => join(root, name)));
+}
 const globalLayout = (root: string) => resolveProductLayout({ projectRoot: root, root, bootstrapConfigPath: join(root, PRODUCT_LAYOUT_REGISTRY.resources.config) });
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
@@ -108,4 +114,16 @@ export async function inspectAgentShellRealm(input: { readonly mode: ShellRealmR
   const sandbox = agentShellSandboxLayout(projectRoot, layout, scope, writeFloor, false, null, env), absent = new Set([env, process.env].map(each => each['HOME'] ? globalStateRoot({ HOME: each['HOME'] }) : null).filter(root => root && root !== globalStateRoot(env) && !existsSync(root)));
   const tested = { ...sandbox, hardFloor: { ...sandbox.hardFloor, roots: sandbox.hardFloor.roots.filter(root => !absent.has(root)) } };
   return inspectShellRealmSelection({ mode: input.mode, stateDir: input.stateDir, project: scope, sandboxes: shippedShellSandboxes(tested), ...(tested.hardFloor.roots.every(root => existsSync(root)) ? { selfTest: { environment: env } } : {}) });
+}
+
+/** Long-lived MCP launches mark projectReadOnly only in an enforcing sandbox; host, remote and fallback launches cannot attest it. */
+export function agentMcpToolScope(mcp: Pick<ReturnType<typeof mcpTurnTools>, 'specs' | 'prompt' | 'entry'> | null, subscription: boolean) {
+  const refused = new Set<string>(), specs = (mcp?.specs ?? []).filter(spec => {
+    const entry = mcp?.entry(spec.name);
+    if (!subscription || entry?.projectReadOnly === true) return true;
+    refused.add(entry?.server ?? spec.name); return false;
+  });
+  const names = new Set(specs.map(spec => spec.name));
+  return { specs, prompt: mcp?.prompt.filter(entry => names.has(entry.name)) ?? null,
+    notices: [...refused].map(name => ({ kind: 'not-decided' as const, name, code: 'SUBSCRIPTION_HOST_MCP_REFUSED' })) };
 }

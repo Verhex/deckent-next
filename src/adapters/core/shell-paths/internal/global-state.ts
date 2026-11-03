@@ -1,6 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import { posix } from 'node:path';
 import { JSON_SCHEMA_LIMITS, StepBudgetExceeded } from '#platform/index.js';
+import { classifyShellContainment, shellNamedPaths } from '#engine/index.js';
 import { expandGlob, segmentMatcher, SHELL_GLOB_MAX_MATCHES } from './paths.js';
 
 const GLOB = /[*?[]/u;
@@ -16,10 +17,22 @@ async function realName(path: string): Promise<string> {
 }
 
 /** K15 closes global-state names before approval, using the shared bounded glob grammar; sandbox isolation still bounds computed paths/races. */
-export async function createShellGlobalStateCheck(projectRoot: string, roots: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env): Promise<(text: string) => Promise<boolean>> {
+export async function createShellGlobalStateCheck(projectRoot: string, roots: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env,
+  loginFiles: readonly string[] = []): Promise<(text: string) => Promise<boolean>> {
   const protectedRoots = [...new Set([...roots, ...await Promise.all(roots.map(realName))])];
   const protectedPath = (path: string) => protectedRoots.some(root => within(root, path));
   const home = env['HOME'];
+  const loginAlias = async (path: string) => {
+    const info = await stat(path, { bigint: true }).catch(() => null);
+    if (!info?.isFile() || info.nlink <= 1n) return false;
+    for (const login of loginFiles) {
+      try {
+        const identity = await stat(login, { bigint: true });
+        if (identity.dev === info.dev && identity.ino === info.ino) return true;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true; }
+    }
+    return false;
+  };
   return async text => {
     if (['[', '[[', ']', ']]'].includes(text)) return false;
     text = text.replace(/^[A-Za-z_][A-Za-z0-9_]*=/u, '');
@@ -31,9 +44,7 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
     if (globAt < 0) {
       const real = await realName(raw);
       if (protectedPath(real)) return true;
-      // An innocent alias can name a credential inode. As with file tools, no multi-link regular file is opened by the shell.
-      const info = await stat(raw).catch(() => null);
-      return within(projectRoot, real) && info?.isFile() === true && info.nlink > 1;
+      return loginAlias(raw);
     }
     const slash = raw.lastIndexOf('/', globAt), base = await realName(raw.slice(0, slash) || '/'), pattern = raw.slice(slash + 1);
     if (protectedPath(base)) return true;
@@ -55,9 +66,21 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
     if (matches === null || matches === 'unsupported') return true;
     for (const match of matches) {
       if (protectedPath(await realName(match))) return true;
-      const info = await stat(match).catch(() => null);
-      if (info?.isFile() && info.nlink > 1) return true;
+      if (await loginAlias(match)) return true;
     }
     return false;
   };
+}
+
+/** Host names are best effort, never confinement. Refuse unresolved forms before any card when global state exists. */
+export async function hostGlobalStateUnresolved(command: string, roots: readonly string[]): Promise<boolean> {
+  const unresolved = /[$`{}]/u.test(command) || shellNamedPaths(command, () => true).flatMap(word => word.split(/[<>]/u))
+    .some(word => /^~[^/]/u.test(word) || ['cd', 'pushd', 'popd', 'find', 'xargs'].includes(posix.basename(word.replace(/^[({]+|[)}]+$/gu, ''))))
+    || ['UNPARSEABLE', 'PROCESS_SUBSTITUTION'].includes(classifyShellContainment(command, () => false).reasonCode);
+  if (!unresolved) return false;
+  for (const root of roots) {
+    try { await stat(root); return true; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true; }
+  }
+  return false;
 }

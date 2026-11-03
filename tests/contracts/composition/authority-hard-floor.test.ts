@@ -2,8 +2,8 @@ import { link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { agentWorkspaceDeny, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, projectEditArea } from '#adapters/index.js';
-import { classifyReadOnlyShellCommand, decideAgentToolCall } from '#engine/index.js';
+import { agentWorkspaceDeny, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, projectEditArea, resolveBubblewrapView, type ShellSandboxLayout } from '#adapters/index.js';
+import { classifyReadOnlyShellCommand, classifyShellRisk, decideAgentToolCall } from '#engine/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, resolvePolicyBindings } from '#domain/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
@@ -65,11 +65,11 @@ describe('authority hard floor under the owner root and full-auto', () => {
 // K15: the allow answer is armed for the original attack, never replaced with a harmless command.
 custodyIt('K15: login canaries stay private through file tools and approved host shell attacks', async () => {
   const f = await modeRuntime({ mode: 'ask', shell: { schemaVersion: 1, realm: 'host' }, grants: [
-    rule('tools', 'agent-tool', ['write_file', 'run_shell'], 'require-approval'),
-    rule('read', 'agent-tool', ['read_file'], 'allow'),
-    rule('effects', 'operation', ['host.shell.run', 'workspace.file.write'], 'allow')] });
+    rule('tools', 'agent-tool', ['edit_file', 'write_file', 'run_shell', 'scratch_write'], 'require-approval'),
+    rule('read', 'agent-tool', ['read_file', 'list_dir', 'grep', 'glob', 'scratch_read', 'scratch_list'], 'allow'),
+    rule('effects', 'operation', ['host.shell.run', 'workspace.file.write', 'workspace.scratch.write'], 'allow')] });
   vi.stubEnv('HOME', f.env.HOME!);
-  const global = process.env['DECKENT_GLOBAL_HOME']!, login = join(global, 'headless/logins/fixture'), credential = join(login, 'auth.json');
+  const global = process.env['DECKENT_GLOBAL_HOME']!, login = join(global, 'headless/logins/codex'), credential = join(login, 'auth.json');
   const canary = 'K15-SYNTHETIC-LOGIN-CANARY';
   await mkdir(login, { recursive: true }); await writeFile(credential, canary);
   await symlink(login, join(f.project, 'login-link'));
@@ -85,10 +85,18 @@ custodyIt('K15: login canaries stay private through file tools and approved host
     }
   }
   for (const command of [`cat<"${credential}"`, `printf X>"${credential}"`, `dd if="${credential}"`,
-    'cat "$HOME/.deckent/headless/logins/fixture/auth.json"', `cat "${global}/headless/logins/*/auth.json"`]) {
+    'cat "$HOME/.deckent/headless/logins/codex/auth.json"', `cat "${global}/headless/logins/*/auth.json"`]) {
     const result = await f.call('run_shell', { command }, 'allow');
     expect(result, f.evidence(result)).toMatchObject({ card: false, status: 'error' });
     expect(result.text).toContain('PRODUCT_STATE_PROTECTED');
+    expect(JSON.stringify([result, f.audit(true), f.policyTurns(), f.sent])).not.toContain(canary);
+    expect(await readFile(credential, 'utf8')).toBe(canary);
+  }
+  for (const [tool, args] of [['list_dir', { path: login }], ['grep', { path: login, pattern: 'K15' }],
+    ['glob', { path: login, pattern: '**/*' }], ['edit_file', { path: credential, old_string: 'fixture-old', new_string: 'CHANGED' }],
+    ['scratch_read', { path: credential }], ['scratch_list', { path: login }], ['scratch_write', { path: credential, content: 'CHANGED' }]] as const) {
+    const result = await f.call(tool, args, 'allow');
+    expect(result, f.evidence(result)).toMatchObject({ card: false, status: 'error' });
     expect(JSON.stringify([result, f.audit(true), f.policyTurns(), f.sent])).not.toContain(canary);
     expect(await readFile(credential, 'utf8')).toBe(canary);
   }
@@ -96,6 +104,52 @@ custodyIt('K15: login canaries stay private through file tools and approved host
   const ordinary = await f.call('run_shell', { command: 'printf API_HOST_STILL_WORKS' }, 'allow');
   expect(ordinary, f.evidence(ordinary)).toMatchObject({ card: true, status: 'ok' });
   expect(ordinary.text).toContain('API_HOST_STILL_WORKS');
+});
+
+custodyIt('K15B: unresolved host forms refuse before the armed approval, without leaking a login canary', async () => {
+  const f = await modeRuntime({ mode: 'ask', shell: { schemaVersion: 1, realm: 'host' }, grants: [
+    rule('shell', 'agent-tool', ['run_shell'], 'require-approval'), rule('effects', 'operation', ['host.shell.run'], 'allow')] });
+  vi.stubEnv('HOME', f.env.HOME!);
+  const credential = join(f.env.HOME!, '.deckent/headless/logins/codex/auth.json'), canary = 'K15B-HOST-LOGIN-CANARY';
+  await mkdir(join(credential, '..'), { recursive: true }); await writeFile(credential, canary);
+  const suffix = '.deckent/headless/logins/codex/auth.json';
+  const commands = [
+    `cd ~ && cat ${suffix}`, `pushd ~; cat ${suffix}`,
+    `cat "$(printf %s ~)/${suffix}"`, `cat "\`printf %s ~\`/${suffix}"`,
+    `X=~; cat "$X/${suffix}"`, `cat "\${X:-$HOME}/${suffix}"`,
+    'find ~ -name auth.json -exec cat {} \\;', 'find ~ -name auth.json | xargs cat',
+    `cd ${relative(f.project, f.env.HOME!)} && cat ${suffix}`,
+    `(cd ~ && cat ${suffix})`, `cd</dev/null ~ && cat ${suffix}`,
+  ];
+  const measurements = [];
+  for (const command of commands) {
+    const grammar = await classifyReadOnlyShellCommand(command, createShellPathContext(await createWorkspaceScope(f.project)));
+    const sentAt = f.sent.length;
+    const result = await f.call('run_shell', { command }, 'allow');
+    measurements.push({ command, grammar: grammar.reasonCode, risk: classifyShellRisk(command, grammar).risk,
+      card: result.card, status: result.status, leaked: JSON.stringify([result, f.sent.slice(sentAt)]).includes(canary) });
+  }
+  console.info('K15B_HOST_GRAMMAR', JSON.stringify(measurements));
+  expect(measurements).toEqual(commands.map(command => expect.objectContaining({ command, card: false, status: 'error', leaked: false })));
+  expect(await readFile(credential, 'utf8')).toBe(canary);
+  expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
+});
+
+custodyIt('K15B: approved shell runs an ordinary pnpm-style hard link while file tools keep refusing it', async () => {
+  for (const realm of ['host', 'require-sandbox'] as const) {
+    const f = await modeRuntime({ mode: 'ask', shell: { schemaVersion: 1, realm }, grants: [
+      rule('shell', 'agent-tool', ['run_shell'], 'require-approval'), rule('read', 'agent-tool', ['read_file'], 'allow'),
+      rule('effects', 'operation', ['host.shell.run'], 'allow')] });
+    vi.stubEnv('HOME', f.env.HOME!);
+    await mkdir(join(f.project, 'node_modules/fixture'), { recursive: true });
+    await writeFile(join(f.project, 'package-store'), 'K15B-PNPM-OK');
+    await link(join(f.project, 'package-store'), join(f.project, 'node_modules/fixture/index.js'));
+    const result = await f.call('run_shell', { command: 'cat node_modules/fixture/index.js' }, 'allow');
+    expect(result, f.evidence(result)).toMatchObject({ card: true, status: 'ok' });
+    expect(result.text).toContain('K15B-PNPM-OK');
+    const read = await f.call('read_file', { path: 'node_modules/fixture/index.js' }, 'allow');
+    expect(read).toMatchObject({ card: false, status: 'error' }); expect(read.text).toContain('hardlink-refused');
+  }
 });
 
 custodyIt('K15: registry login files and every in-project global-root name stay closed to file tools', async () => {
@@ -114,4 +168,36 @@ custodyIt('K15: registry login files and every in-project global-root name stay 
     expect(await readFile(join(root, path), 'utf8')).toBe('K15-IN-PROJECT-CANARY');
   }
   expect(await tools.execute('read_file', { path: 'src/auth.json' })).toMatchObject({ status: 'ok' });
+});
+
+custodyIt('K15B: project=HOME closes conventional and nonstandard global roots through product tools', async () => {
+  const { root, layout } = await project(), env = { HOME: root, DECKENT_GLOBAL_HOME: join(root, 'nonstandard-global') };
+  const canary = 'K15B-HOME-CANARY', paths = ['.deckent/unregistered.txt', 'nonstandard-global/unregistered.txt'];
+  const tools = await createWorkspaceReadTools(root, { deny: agentWorkspaceDeny(root, layout, true, env) });
+  for (const path of paths) {
+    const directory = join(path, '..');
+    await mkdir(join(root, directory), { recursive: true }); await writeFile(join(root, path), canary);
+    for (const [tool, args] of [['read_file', { path }], ['list_dir', { path: directory }], ['grep', { path: directory, pattern: 'K15B' }],
+      ['glob', { path: directory, pattern: '**/*' }]] as const) {
+      const result = await tools.execute(tool, args);
+      expect(result, tool).toMatchObject({ status: 'error' }); expect(result.text).not.toContain(canary);
+    }
+    for (const [tool, args] of [['write_file', { path, content: 'CHANGED' }],
+      ['edit_file', { path, old_string: canary, new_string: 'CHANGED' }]] as const) expect(await projectEditArea(tools.scope).plan(tool, args)).toMatchObject({ ok: false });
+    expect(await readFile(join(root, path), 'utf8')).toBe(canary);
+  }
+});
+
+custodyIt('K15B: the runtime MCP launch layout hides both configured and conventional global roots', async () => {
+  const layouts: ShellSandboxLayout[] = [];
+  const f = await modeRuntime({ mode: 'ask', grants: [rule('read', 'agent-tool', ['read_file'], 'allow')],
+    sandboxes: layout => { layouts.push(layout); return []; } });
+  vi.stubEnv('HOME', f.env.HOME!);
+  expect(await f.call('read_file', { path: 'src/a.ts' }, 'allow')).toMatchObject({ status: 'ok', card: false });
+  const mcp = layouts.find(layout => layout.scratchDir === null)!;
+  expect(mcp.hardFloor?.roots).toEqual(expect.arrayContaining([process.env['DECKENT_GLOBAL_HOME'], join(f.env.HOME!, '.deckent')]));
+  const view = await resolveBubblewrapView(mcp, f.env, {}, { projectReadOnly: true, floorReadOnly: true });
+  expect(view).toMatchObject({ ok: true });
+  if (!view.ok) throw new Error(view.reason);
+  expect(view.view.hiddenPaths).toEqual(expect.arrayContaining([process.env['DECKENT_GLOBAL_HOME'], join(f.env.HOME!, '.deckent')]));
 });

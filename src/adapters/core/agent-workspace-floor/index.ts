@@ -1,2 +1,2 @@
-export { AGENT_READABLE_PRODUCT_RESOURCES, agentGlobalStateRoots, agentAuthorityPaths, agentDataRootRel, agentProductStateDeny, agentShellHardFloor, agentShellSandboxLayout, inspectAgentShellRealm, agentWorkspaceDeny, classifySandboxWritePath, sealedRootEntryRefused } from './internal/floor.js';
+export { AGENT_READABLE_PRODUCT_RESOURCES, agentMcpToolScope, agentGlobalStateRoots, agentLoginIdentityPaths, agentAuthorityPaths, agentDataRootRel, agentProductStateDeny, agentShellHardFloor, agentShellSandboxLayout, inspectAgentShellRealm, agentWorkspaceDeny, classifySandboxWritePath, sealedRootEntryRefused } from './internal/floor.js';
 export { agentTurnWriteFloor, isSelfSourceIdentity, isSelfSourceProject, resolveSourceCommonDir } from './internal/self-source.js';

@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
 import { agentTurnWriteFloor, applySandboxWriteSet, fileContentVersion, classifySandboxWritePath, createWorkspaceScope, isSelfSourceWriteFloored, projectEditArea, shellWritePosture, type ShellCallAuthority } from '#adapters/index.js';
+import { agentMcpToolScope, mcpTurnTools, type McpOfferedTool } from '#adapters/index.js';
 
 
 // T-L4 slice 4a (MODES-3: a bindings v2 `auto-edit` entry reads as standart, `ask` as standart that asks for every edit too): the turn's
@@ -716,4 +717,18 @@ it('K15: subscription profiles refuse explicit and fallback host realms before p
   expect(await make(subscription, 'host', false, 'tr').plan('run_shell', { command: 'pwd' })).toMatchObject({ ok: false, text: expect.stringContaining('ajan bilgisayarda komut çalıştıramaz') });
   expect(await make(subscription, 'prefer-sandbox', true).plan('run_shell', { command: 'pwd' })).toMatchObject({ ok: true });
   expect(await make({ schemaVersion: 2, billingAxis: 'metered', adapter: { id: 'fixture-api' } }, 'host').plan('run_shell', { command: 'pwd' })).toMatchObject({ ok: true });
+});
+
+it('K15B: subscription MCP specs and prompt omit host/fallback tools with a typed notice; API tools stay intact', () => {
+  const entries = ['host', 'fallback', 'sandbox'].map(server => {
+    const name = `mcp__${server}__read`, entry = { server, spec: { name, version: 1, toolClass: 'mcp' },
+      display: `mcp:${server}/read`, projectReadOnly: server === 'sandbox' } as McpOfferedTool;
+    return [name, entry] as const;
+  });
+  const mcp = mcpTurnTools(new Map(entries));
+  const subscription = agentMcpToolScope(mcp, true), api = agentMcpToolScope(mcp, false);
+  expect(subscription.specs.map(spec => spec.name)).toEqual(['mcp__sandbox__read']);
+  expect(subscription.prompt).toEqual([{ name: 'mcp__sandbox__read', display: 'mcp:sandbox/read' }]);
+  expect(subscription.notices).toEqual(['host', 'fallback'].map(name => ({ kind: 'not-decided', name, code: 'SUBSCRIPTION_HOST_MCP_REFUSED' })));
+  expect(api.specs).toEqual(mcp.specs); expect(api.prompt).toEqual(mcp.prompt); expect(api.notices).toEqual([]);
 });
