@@ -14,10 +14,7 @@ export const nativeCliCapabilitiesSchema = z.strictObject({
       && (value.mode === 'model-id' ? value.args.length === 0 : value.args.some(arg => arg.includes('{effort}')))).readonly().nullable(),
   maxTurns: z.strictObject({ flag, hiddenHelpProbe: z.strictObject({ args: argumentsSchema, refusal: argument }).readonly().nullable() }).readonly().nullable(),
   settings: z.strictObject({ flag }).readonly().nullable(),
-  /** How `disabled` discovery is realised. Argv: non-empty `disabledArgs`, the help flags they need and hidden probes whose invalid value must
-   * draw the exact parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Checkout
-   * (C2, owner Q4 2026-10-23): a CLI without a suppression flag gets a worker checkout without the registry's `instructionSurface` (G1: one
-   * list for checkout shaping and the delivery floor; empty `disabledArgs`, no flags, no probes). Null = no `disabled` mode. */
+  /** Disabled discovery is either measured argv/probes or checkout shaping; the registry validates the exclusive forms. */
   discovery: z.strictObject({ requiredFlags: z.array(flag).readonly(),
     hiddenProbes: z.array(z.strictObject({ args: argumentsSchema, refusal: argument }).readonly()).max(4).readonly(),
     checkout: z.strictObject({}).readonly().nullable() })
@@ -94,4 +91,10 @@ export function nativeEffortArgs(capability: NativeCliCapabilities['reasoningEff
   if (selection.level === null) return [];
   if (!capability || !capability.levels.includes(selection.level)) throw new NativeCliRegistryError();
   return capability.args.map(arg => arg.replaceAll('{effort}', selection.level!));
+}
+
+/** Login-context files from the CLI registry, scoped to the layout's login tree (never a blanket auth.json ban). */
+export function nativeCliLoginReadDeny(loginRoot: string): readonly string[] {
+  return Object.freeze(Object.entries(registry.adapters).flatMap(([id, command]) =>
+    (command.headless?.isolation.configVisible ?? []).map(name => `**/${loginRoot}/${id}/${name}`)));
 }

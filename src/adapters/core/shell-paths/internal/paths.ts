@@ -12,10 +12,9 @@ const GLOB_CHARS = /[*?[]/u;
 /** A `..` path component: the kernel resolves it against the real path before it (after any symlink), never lexically. */
 const PARENT_SEGMENT = /(?:^|\/)\.\.(?:\/|$)/u;
 
-/** SEC-6 F31: a segment is the engine's exact sh regex (brackets, POSIX classes) run by the platform's linear engine under a step
- *  budget, never a backtracking RegExp; the engine's leading-dot lookahead (`NO_DOT`) is checked here. `null`: unsupported (fail closed). */
+/** SEC-6 F31: a segment is the engine's exact sh regex (brackets, POSIX classes) run by the platform's linear engine under a step  budget, never a backtracking RegExp; the engine's leading-dot lookahead (`NO_DOT`) is checked here. Details: agent-turn-engine module note. */
 const NO_DOT = '^(?!\\.)', LIMITS = { sourceMax: JSON_SCHEMA_LIMITS.patternSource, statesMax: JSON_SCHEMA_LIMITS.patternStates, repeatMax: JSON_SCHEMA_LIMITS.patternRepeat };
-function segmentMatcher(segment: string): ((name: string, budget: StepBudget) => boolean) | null {
+export function segmentMatcher(segment: string): ((name: string, budget: StepBudget) => boolean) | null {
   const source = globSegmentRegExp(segment)?.source, dot = source?.startsWith(NO_DOT) === true;
   try {
     const compiled = source === undefined ? null : compilePattern(dot ? `^${source.slice(NO_DOT.length)}` : source, LIMITS);
@@ -23,10 +22,8 @@ function segmentMatcher(segment: string): ((name: string, budget: StepBudget) =>
   } catch (error) { if (error instanceof PatternRefusal) return null; throw error; }
 }
 
-/** sh-style expansion of one glob argument (no brace expansion; `**` is `*`), bounded; `null` over the bound. A `..` after a glob
- *  segment is unsupported: joining it lexically would name the match's lexical parent, not the one the kernel opens (Astra 2111).
- *  Every name test of the whole expansion is charged to one step budget; exhausting it is unsupported (fail closed, SEC-6 F31). */
-async function expandGlob(base: string, pattern: string, bound: number, steps: number): Promise<string[] | null | 'unsupported'> {
+/** sh-style expansion of one glob argument (no brace expansion; `**` is `*`), bounded; `null` over the bound. Details: agent-turn-engine module note. */
+export async function expandGlob(base: string, pattern: string, bound: number, steps: number): Promise<string[] | null | 'unsupported'> {
   if (PARENT_SEGMENT.test(pattern)) return 'unsupported';
   const budget: StepBudget = { remaining: steps };
   let frontier = [base];
@@ -54,17 +51,7 @@ type Refused = Extract<ShellPathVerdict, { readonly ok: false }>;
 const fromScope = (error: WorkspacePathError): ShellReasonCode =>
   error === 'path-outside-workspace' ? 'PATH_OUTSIDE_ROOT' : error === 'path-denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED';
 
-/**
- * The shell classifier's path check over the workspace scope (T-L4 slice 3a): one mechanism with the read tools and edits. A path
- * argument is read-only only when it lies lexically inside the root, is not denied, exists, and its real path (every symlink
- * resolved) is inside and not denied. A path with a `..` component is checked as the kernel opens it (Astra 2111): components in
- * order, so `link/..` is the parent of the link's target, never the lexical parent; that object must exist, be inside and not
- * denied. A glob is expanded with sh rules against the real directory (dotfiles only for a leading dot, bounded), and every match
- * passes the same check; no match (sh would pass the literal) or too many is GLOB_EXPANSION, a `..` after a glob segment is
- * GLOB_UNSUPPORTED, as is one exhausting `globSteps` (SEC-6 F31). Git pathspecs are checked lexically only (git normalizes them
- * itself). Not covered: intermediate symlink hops that leave the root and return (the final real path is what the shell reads); the verdict is taken before the command runs, so a
- * later swap is not excluded.
- */
+/** The shell classifier's path check over the workspace scope (T-L4 slice 3a): one mechanism with the read tools and edits. Details: agent-turn-engine module note. */
 export function createShellPathContext(project: WorkspaceScope, maxGlobMatches = SHELL_GLOB_MAX_MATCHES,
   roots: readonly WorkspaceScope[] = [], globSteps = JSON_SCHEMA_LIMITS.validationSteps): ShellPathContext & { readonly examined: readonly string[] } {
   const examined: string[] = [];
@@ -135,13 +122,7 @@ function shellPathCheck(scope: WorkspaceScope, maxGlobMatches: number, globSteps
   };
 }
 
-/**
- * Write targets of the narrow mutating tier (T-L4 slice 4a), over the same workspace scope and write floor as agent edits: inside the
- * workspace, not denied, parent a real directory inside, not on the write floor (a new directory is refused when anything under it
- * would be), and the target absent (new directory), absent or a single-link regular file (file), or such an existing file (the source
- * of `mv`). Anything else makes the command not narrow — it then asks, as before. An absolute path inside a second root (SCR-A: the
- * conversation's scratch area) is checked the same way against that root's scope.
- */
+/** Write targets of the narrow mutating tier (T-L4 slice 4a), over the same workspace scope and write floor as agent edits: inside the workspace, not denied, parent a real directory inside, not on the write floor (a new directory is refused when anything under it would be), and the target absent (new directory), absent or a single-link regular file (file), or such an existing file (the source of `mv`). Details: agent-turn-engine module note. */
 export function createShellWriteContext(project: WorkspaceScope, roots: readonly WorkspaceScope[] = [], projectFloor = isWriteApprovalFloored): ShellWritePathContext {
   return {
     async checkWrite(word, kind): Promise<ShellPathVerdict> {
@@ -161,12 +142,7 @@ export function createShellWriteContext(project: WorkspaceScope, roots: readonly
   };
 }
 
-/**
- * SHELL-AUTONOMY: whether a word of a command names a protected path — the write floor or the product state (its glob patterns,
- * relative to the project root) — by name only, lexically (no file system): as resolved from the project root when it lies inside,
- * and with leading `./`/`../` segments dropped (a `cd` earlier in the same command moves the base). A path or its directory form
- * (`.github` for `.github/**`) counts. A name is not a boundary: the sandbox realm keeps existing floor paths read-only itself.
- */
+/** SHELL-AUTONOMY: whether a word of a command names a protected path — the write floor or the product state (its glob patterns, relative to the project root) — by name only, lexically (no file system): as resolved from the project root when it lies inside, and with leading `./`/`../` segments dropped (a `cd` earlier in the same command moves the base). Details: agent-turn-engine module note. */
 export function createShellProtectedNames(root: string, productState: readonly ((rel: string) => boolean)[], floored = isWriteApprovalFloored): (text: string) => boolean {
   const named = (rel: string) => rel.length > 0 && [rel, `${rel}/-`].some(path => floored(path) || productState.some(match => match(path)));
   return text => {

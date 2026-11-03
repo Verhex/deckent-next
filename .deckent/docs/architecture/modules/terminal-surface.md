@@ -580,3 +580,12 @@ model invocations own streaming, cancellation, usage, quota refusal and replay; 
 is text-only; it offers no file or shell tools. Other headless families retain their existing admission until explicitly opted in by registry.
 The account belongs to the person using Anthropic's unmodified binary and sign-in; Deckent never handles the OAuth/session token or resells
 or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.
+
+
+**Global state and subscription shell floor (alpha.63 K15).** Every agent shell realm refuses named global-state roots and descendants
+before an approval card, including configured `DECKENT_GLOBAL_HOME`, the configuration/process environments' roots and conventional
+`~/.deckent`. HOME spellings, traversal, bounded globs and existing filesystem aliases are checked without reading file contents.
+A selected subscription profile (billing axis or the native headless adapter contract) also refuses explicit/fallback host execution
+with `SUBSCRIPTION_HOST_SHELL_REFUSED`; its shell posture is unavailable. API host calls retain their existing approval path.
+The shared read/edit deny floor includes CLI-registry `configVisible` entries under the layout's login tree, including `auth.json`;
+ordinary application `auth.json` files remain usable. These are handler checks; assembled-release and bridge acceptance remain separate.

@@ -16,6 +16,13 @@ Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-jo
 
 Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
 
+
+- **Agent tools cannot open Deckent's global state, even with approval (alpha.63 K15).** Named global-state paths, including the login tree,
+  are refused before a shell card. Subscription agents also refuse host shell execution when no sandbox is selected, including an explicit
+  host setting. *Impact:* use an available sandbox for subscription shell tools; an approval cannot open the state/login directory.
+  API host calls keep their existing approval behavior. Path-name checks cannot confine paths computed inside arbitrary programs or a
+  concurrent path replacement; sandbox isolation remains necessary. Assembled subscription-bridge acceptance is separate from these checks.
+
 ## BeUser B1 journey walks (alpha.57)
 
 Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.
