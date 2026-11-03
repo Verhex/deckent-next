@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
 import { assertConfigPersonWitness, type ConfigSnapshot, type ConfigWriteResult, type ConfigApplication } from '#engine/core/config/index.js';
+import type { NativeCliWorkerBinding } from '#capabilities/index.js';
 import defaults from './initial-registry.json' with { type: 'json' };
 const initialRegistryDefaults = z.strictObject({ schemaVersion: z.literal(1), ordering: z.literal('input-order'),
   evaluators: z.array(evaluatorDefinitionSchema).min(1) }).parse(defaults);
@@ -11,7 +12,8 @@ export interface NativeTemplatePorts {
   snapshot(): Promise<ConfigSnapshot>;
   principal(scopeId: string): Promise<VerifiedPrincipal>;
   writer(guard: (snapshot: ConfigSnapshot) => void): Pick<ConfigApplication, 'set'>;
-  template(resources: unknown, invocation: unknown): ExecutionProfileDefinition;
+  template(resources: unknown, invocation: unknown, worker?: NativeCliWorkerBinding): ExecutionProfileDefinition;
+  connection?(snapshot: ConfigSnapshot, id: string, provider: string): Promise<NativeCliWorkerBinding>;
   detect(provider: string, settings: NonNullable<DeckentConfig['execution']>['docker']): Promise<string>;
   beforeWrite?: () => void | Promise<void>;
   /** alpha.55.1: the person's terminal witness (`ConfigAuthorityPort.witness`): `admission` is a protected root, so an apply asks it right after
@@ -21,14 +23,13 @@ export interface NativeTemplatePorts {
 
 const discoveryModeSchema = z.enum(['disabled', 'repository']);
 /** `discovery` omitted: `coding template` keeps the mode of the admitted profiles it derives from, `init registry` takes the adapter default
- * (`disabled`, owner 2026-10-23 Q2). Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
+ * (`disabled`, owner 2026-10-23 Q2); a connected worker requires disabled. Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
 const requestSchema = z.strictObject({ provider: nativeCliIdSchema, kind: identitySchema,
-  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() });
+  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), connection: identitySchema.optional(), detach: z.boolean().optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() });
 export type CodingTemplateRequest = z.infer<typeof requestSchema>;
-/** `current` is returned by the first-registry bootstrap only (an equal registry already exists); the template returns the other three. */
 export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
   profile: ExecutionRegistry['profiles'][number]; kind: ExecutionRegistry['kinds'][number]; registry: ExecutionRegistry;
-  expect: string | null; write: ConfigWriteResult | null }>;
+  expect: string | null; connection?: string | null; write: ConfigWriteResult | null }>;
 function refuse(code: string): never { throw ErrorRegistry.createError(code); }
 /** The adapter's typed refusal for a discovery mode the selected CLI cannot honour, named instead of a generic template failure. */
 function discoveryRefusal(error: unknown, provider: string, fallback: string): never {
@@ -36,8 +37,7 @@ function discoveryRefusal(error: unknown, provider: string, fallback: string): n
   refuse(fallback);
 }
 
-/** Pure proposal from the authored project registry and the effective, validated resource limits. */
-function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template'], discovered?: ExecutionProfileDefinition) {
+function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template'], discovered?: ExecutionProfileDefinition, worker?: NativeCliWorkerBinding) {
   const admission = snapshot.effective.admission;
   if (!admission?.poolId || !admission.executionSlots || !admission.inFlightSlots) refuse('CODING_TEMPLATE_ADMISSION_REQUIRED');
   const hold = registryLayerHold(snapshot);
@@ -47,16 +47,20 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const settings = snapshot.effective.execution?.docker;
   if (!settings) refuse('CODING_TEMPLATE_IMAGE_REQUIRED');
   const imageId = request.image ?? settings.imageId;
+  const bound = registry.data.kinds.find(entry => entry.kind === request.kind);
+  const discoveryMode = request.discovery ?? (worker ? 'disabled' : undefined);
+  if (worker && discoveryMode !== 'disabled') refuse('CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED');
   const { executable, ...resourceLimits } = settings; void executable;
-  const pins = affectedToolchainProfiles({ admission: { registry: registry.data } }).filter(pin => pin.provider === request.provider && pin.imageId === imageId);
+  const pins = affectedToolchainProfiles({ admission: { registry: registry.data } }).filter(pin => pin.provider === request.provider && pin.imageId === imageId
+    && (!(request.connection || request.detach) || !bound || pin.profile.id === bound.profile.id && pin.profile.version === bound.profile.version));
   const candidates = discovered ? [discovered] : pins.map(pin => {
     const source = registry.data.profiles.find(profile => profile.id === pin.profile.id && profile.version === pin.profile.version)!;
     const invocation = source.parameters['invocation'] as { discovery?: JsonValue } | undefined;
     const preflight = (source.parameters['nativeSubscription'] as { preflight?: { discovery?: string } } | undefined)?.preflight;
-    const discovery = request.discovery ? { schemaVersion: 1, mode: request.discovery }
+    const discovery = discoveryMode ? { schemaVersion: 1, mode: discoveryMode }
       : invocation?.discovery ?? (preflight?.discovery ? { schemaVersion: 1, mode: preflight.discovery } : null);
     if (!discovery) refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
-    try { return template({ ...resourceLimits, imageId }, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }); }
+    try { return template({ ...resourceLimits, imageId }, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }, worker); }
     catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); }
   });
   if (new Set(candidates.map(candidate => JSON.stringify(candidate))).size !== 1) refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
@@ -65,16 +69,16 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const existing = registry.data.profiles.find(profile => profile.id === candidate.id && profile.version === candidate.version);
   if (existing && !same(existing)) refuse('CODING_TEMPLATE_KIND_CONFLICT');
   const kind = { kind: request.kind, profile: { id: candidate.id, version: candidate.version } };
-  const bound = registry.data.kinds.find(entry => entry.kind === request.kind);
-  if (bound && (bound.profile.id !== kind.profile.id || bound.profile.version !== kind.profile.version)) refuse('CODING_TEMPLATE_KIND_CONFLICT');
-  if (bound) return { profile: candidate, kind: bound, registry: registry.data, changed: false };
-  const next = { ...registry.data, profiles: existing ? registry.data.profiles : [...registry.data.profiles, candidate], kinds: [...registry.data.kinds, kind] };
+  const replacing = bound && (bound.profile.id !== kind.profile.id || bound.profile.version !== kind.profile.version);
+  if (bound && replacing && (!(request.connection || request.detach) || !registry.data.profiles.some(profile => profile.id === bound.profile.id
+    && profile.version === bound.profile.version && profile.adapter.id === 'native-coding-template'))) refuse('CODING_TEMPLATE_KIND_CONFLICT');
+  if (bound && !replacing) return { profile: candidate, kind: bound, registry: registry.data, changed: false };
+  const next = { ...registry.data, profiles: existing ? registry.data.profiles : [...registry.data.profiles, candidate], kinds: bound ? registry.data.kinds.map(row => row.kind === request.kind ? kind : row) : [...registry.data.kinds, kind] };
   return { profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };
 }
 
-/** Add a newly acquired provider to an existing registry. Bootstrap is never used for this path. */
 export async function addNativeProfile(input: unknown, ports: NativeTemplatePorts) {
-  const parsed = requestSchema.extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  const parsed = requestSchema.omit({ connection: true, detach: true }).extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(), digest: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict().safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
@@ -112,12 +116,10 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   return { ...result, status: 'applied' as const, write };
 }
 
-/** No launch/build/network. Apply is one allow-only ConfigApplication CAS write; no retry or policy bypass. */
 export async function configureNativeTemplate(input: unknown, ports: NativeTemplatePorts): Promise<CodingTemplateResult & Readonly<{ status: 'preview' | 'applied' | 'unchanged' }>> {
   const parsed = requestSchema.safeParse(input);
-  if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
+  if (!parsed.success || parsed.data.connection && parsed.data.detach) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
-  // alpha.55.1 (Astra 2752): an apply is the person's act — the witness first, before any read, discovery, principal or write; preview stays open.
   if (request.apply) await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
   const read = await ports.snapshot().catch((error: unknown) => {
     if (error instanceof ConfigValidationError) {
@@ -126,8 +128,10 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     }
     throw error;
   });
-  const plan = proposal(read, request, ports.template);
-  const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest };
+  const worker = request.connection ? await ports.connection?.(read, request.connection, request.provider) : undefined;
+  if (request.connection && !worker) refuse('NATIVE_AGENT_RECONNECT_REQUIRED');
+  const plan = proposal(read, request, ports.template, undefined, worker);
+  const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null };
   if (!request.apply || !plan.changed) return { ...result, status: plan.changed ? 'preview' : 'unchanged', write: null };
   const config = read.effective;
   const scopeId = config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
@@ -135,7 +139,9 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const principal = await ports.principal(scopeId);
   // Refuse a changed global registry or effective resource source under the writer's lock as well as the project CAS.
   const guard = (current: ConfigSnapshot) => {
-    const fresh = proposal(current, request, ports.template);
+    if (worker && (JSON.stringify(current.effective['provider_invocation_profiles']) !== JSON.stringify(read.effective['provider_invocation_profiles'])
+      || JSON.stringify(current.effective['provider_catalog']) !== JSON.stringify(read.effective['provider_catalog']))) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+    const fresh = proposal(current, request, ports.template, undefined, worker);
     if (JSON.stringify(fresh.profile) !== JSON.stringify(plan.profile)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   };
   await ports.beforeWrite?.();
@@ -144,7 +150,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   return { ...result, status: 'applied', write };
 }
 
-const initializeSchema = requestSchema.extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
+const initializeSchema = requestSchema.omit({ connection: true, detach: true }).extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
   expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(),
   poolId: identitySchema, executionSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlightSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   discovery: discoveryModeSchema.optional() }).strict();
@@ -176,8 +182,7 @@ function initialRegistry(request: InitialRegistryRequest, settings: DockerSettin
   const content = { schemaVersion: 1, profiles: [profile], kinds: [kind], evaluators: initialRegistryDefaults.evaluators };
   return { profile, kind, registry: executionRegistrySchema.parse({ ...content, revision: `initial-registry-${sha256(JSON.stringify(content))}` }) };
 }
-/** I-S6: a project registry equal to what this request would write (rebuilt from its own recorded CLI version, so no new probe) is
- * `current`; any other authored registry, or one in the global layer, keeps the `INITIAL_REGISTRY_EXISTS` refusal before any write. */
+/** An identical first registry is current; any other authored registry remains refused. */
 function currentRegistry(snapshot: ConfigSnapshot, request: InitialRegistryRequest, template: NativeTemplatePorts['template']) {
   if (authoredRegistry(snapshot.global)) refuse('INITIAL_REGISTRY_EXISTS');
   if (!authoredRegistry(snapshot.project)) return null;
@@ -193,12 +198,10 @@ function currentRegistry(snapshot: ConfigSnapshot, request: InitialRegistryReque
   if (!equal) refuse('INITIAL_REGISTRY_EXISTS');
   return candidate;
 }
-/** Bootstrap only: discovery is a port observation, and the existing config application remains the sole durable writer. */
 export async function initializeNativeRegistry(input: unknown, ports: NativeTemplatePorts) {
   const parsed = initializeSchema.safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
-  // alpha.55.1 (Astra 2752): the witness before the snapshot and the discovery probe (a container), so a refused apply starts nothing.
   if (request.apply) await assertConfigPersonWitness('set', 'admission', ports.witness);
   const read = await ports.snapshot();
   if (request.expect !== undefined && request.expect !== read.digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');

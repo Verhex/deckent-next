@@ -19,6 +19,9 @@ import * as configComposition from '#composition/core/config/index.js';
 import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
+import { configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
+import { main } from '#surfaces/core/cli/index.js';
+import { Writable } from 'node:stream';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
 import { parseModelInvocationProfile } from '#domain/index.js';
@@ -91,6 +94,69 @@ afterEach(() => vi.restoreAllMocks());
 const platformPrune = platform.pruneConfigBackups;
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
+  it('K29: connected profile authors v2 through governed config, lists its connection and returns the same kind to Docker', async () => {
+    const h = await harness(null); await h.connect('k29-connect');
+    const path = join(h.f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
+    const profile = config.provider_invocation_profiles.profiles.find((row: { adapter: { id: string } }) => row.adapter.id === 'native-cli-headless');
+    const docker = { imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64, logMaxSizeKiB: 64, logMaxFiles: 2,
+      tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
+    const template = adapters.createNativeCodingTemplate(docker, { provider: 'claude', cliVersion: '9.1.0 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' });
+    config.terminal.scopeId = 'scope';
+    config.execution = { docker: { ...docker, executable: 'docker' }, git: { gitExecutable: 'git', timeoutMs: 5000 } };
+    config.admission = { poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'k29-before', profiles: [template],
+      kinds: [{ kind: 'coding', profile: { id: template.id, version: template.version } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } };
+    await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const request = { provider: 'claude', kind: 'coding', connection: profile.id, apply: false }, options = { env: h.f.env }, person = { witness: { attest: async () => true } };
+    const before = await readFile(path, 'utf8'), spawns = await h.spawns();
+    const preview = await configureNativeCodingTemplate(h.f.project, request, options, person);
+    expect(preview.profile.adapter.version).toBe(2); expect(preview.profile.parameters['invocation']).toMatchObject({ discovery: { mode: 'disabled' } }); expect(await readFile(path, 'utf8')).toBe(before); expect(await h.spawns()).toEqual(spawns);
+    expect(preview.profile.parameters['worker']).toMatchObject({ definition: profile.adapter.definition, protocolFamily: profile.protocol.family });
+    await expect(configureNativeCodingTemplate(h.f.project, { ...request, discovery: 'repository' }, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED' });
+    const applied = await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person);
+    expect(applied.registry).toEqual(preview.registry); expect(applied.status).toBe('applied');
+    expect((await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person)).status).toBe('unchanged');
+    let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } });
+    expect(await main(['coding', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
+    expect(JSON.parse(output).profiles[0]).toMatchObject({ runtime: 'subscription', connection: profile.id });
+    const back = await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, apply: false }, options, person);
+    expect(back.profile.adapter.version).toBe(1); expect(back.profile.parameters).not.toHaveProperty('worker');
+    expect((await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, discovery: 'repository', apply: true }, options, person)).profile).toEqual(template);
+    const stable = await readFile(path, 'utf8');
+    await expect(adapters.withMcpPrincipal(() => configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(stable);
+    for (const connection of ['missing', profile.id]) {
+      if (connection === profile.id) { delete profile.adapter.definition.sourceBinding; config.provider_invocation_profiles.profiles = [profile]; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache(); }
+      await expect(configureNativeCodingTemplate(h.f.project, { ...request, connection }, options, person)).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+    }
+    const unsupported = { ...profile, protocol: { family: 'cursor-agent-stream-json', version: 'v1' } };
+    config.provider_invocation_profiles.profiles = [unsupported]; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const unsupportedBefore = await readFile(path, 'utf8');
+    await expect(configureNativeCodingTemplate(h.f.project, request, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_UNSUPPORTED' });
+    expect(await readFile(path, 'utf8')).toBe(unsupportedBefore);
+  });
+
+  it('K29: Codex connection selects its registry capability and refuses a different provider without writing', async () => {
+    const h = await harness(null), configDir = join(h.f.data, 'codex-k29'), path = join(h.f.project, '.deckent/config.json');
+    await mkdir(configDir, { mode: 0o700 });
+    const executable = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(configDir, 'config.toml') });
+    await connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId: 'codex-k29', scopeId: 'scope', connection: 'codex-cli-subscription',
+      model: { nativeId: codexSeed.recommendedActivations[0]!.modelIds[0]! }, cli: { executable, configDir }, delegate: ['ai', 'system'] }, { env: h.f.env });
+    const config = JSON.parse(await readFile(path, 'utf8')), profile = config.provider_invocation_profiles.profiles.find((row: { protocol: { family: string } }) => row.protocol.family === CODEX_FAMILY);
+    const docker = { imageId: `sha256:${'b'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64, logMaxSizeKiB: 64, logMaxFiles: 2,
+      tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
+    const template = adapters.createNativeCodingTemplate(docker, { provider: 'codex', cliVersion: 'codex-cli 9.1.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' });
+    config.terminal.scopeId = 'scope';
+    config.execution = { docker: { ...docker, executable: 'docker' }, git: { gitExecutable: 'git', timeoutMs: 5000 } };
+    config.admission = { poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'k29-codex', profiles: [template],
+      kinds: [{ kind: 'coding', profile: { id: template.id, version: template.version } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } };
+    await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const before = await readFile(path, 'utf8'), request = { provider: 'codex', kind: 'coding', connection: profile.id, apply: false }, options = { env: h.f.env };
+    const result = await configureNativeCodingTemplate(h.f.project, request, options);
+    expect(result.profile.adapter.version).toBe(2); expect(result.profile.parameters['worker']).toMatchObject({ protocolFamily: CODEX_FAMILY, definition: profile.adapter.definition });
+    await expect(configureNativeCodingTemplate(h.f.project, { ...request, provider: 'claude' }, options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_UNSUPPORTED' });
+    expect(await readFile(path, 'utf8')).toBe(before);
+  });
+
   it('S3-5/A62: connects without a preview switch; subscription text chat streams, carries history and Esc cancels in the built terminal', async () => {
     expect(textOnlyModelInvocationRequest({ model: 'fixture', max_completion_tokens: 1, messages: [{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }] })['messages']).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }]);
     expect(adapters.terminalTextChatFamilies).toContain(seed.providers[0]!.channel.protocolFamily);

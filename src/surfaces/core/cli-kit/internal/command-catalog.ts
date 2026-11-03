@@ -288,9 +288,9 @@ export const CLI_CATALOG = [
     action('shutdown', 'developer', 'cli.help.action.shutdown', 'cli.help.runtime'),
     action('restart', 'developer', 'cli.help.action.restart', 'cli.help.runtime'),
   ] },
-  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
+  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'k29.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
     action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help', { requires: ['--input <file|->'] }),
-    action('template', 'developer', 'cli.help.action.codingTemplate', 'cli.coding.template.help'),
+    action('template', 'developer', 'cli.help.action.codingTemplate', 'k29.coding.template.help'),
     { name: 'instructions', group: 'developer', summary: 'cli.help.action.coding.instructions', detail: 'cli.coding.instructions.help', children: [
       action('status', 'developer', 'cli.help.action.coding.instructions.status', 'cli.coding.instructions.help'),
       action('trust', 'developer', 'cli.help.action.coding.instructions.trust', 'cli.coding.instructions.help'),
