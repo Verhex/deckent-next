@@ -11,3 +11,4 @@ export { createAgentShell, inspectConfiguredShellRealm } from './internal/shell.
 export { createAgentFileEdits } from './internal/edits.js';
 export { withNativeChatInvocation } from './internal/native.js';
 export type { NativeChatRuntime } from './internal/native.js';
+export { createConfiguredNativeChatRuntime } from './internal/native-runtime.js';

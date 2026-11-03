@@ -52,7 +52,15 @@ export async function withNativeChatInvocation<T>(input: { readonly runtime: Nat
 }
 
 /** The readiness and current driver's sticky refusal use the same catalog renderer. */
-export const nativeChatReasonText = (reason: NativeAgentReadinessReason, language: Locale): string => ({
+export const nativeChatReasonText = (reason: NativeAgentReadinessReason, language: Locale, unknown = false): string => unknown ? ({
+  NATIVE_AGENT_CLI_UNAVAILABLE: t('headless.agent.k13.unknown.cli', {}, language),
+  NATIVE_AGENT_LOGIN_REQUIRED: t('headless.agent.k13.unknown.login', {}, language),
+  NATIVE_AGENT_CAPABILITY_UNSEALED: t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, language),
+  NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED: t('headless.agent.k13.unknown.tools', {}, language),
+  NATIVE_AGENT_PLUGIN_UNEXPECTED: t('headless.agent.k13.unknown.plugins', {}, language),
+  NATIVE_AGENT_BRIDGE_UNAVAILABLE: t('headless.agent.k13.unknown.bridge', {}, language),
+  NATIVE_AGENT_ENVIRONMENT_REFUSED: t('headless.agent.k13.unknown.environment', {}, language),
+})[reason] : ({
   NATIVE_AGENT_CLI_UNAVAILABLE: t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, language),
   NATIVE_AGENT_LOGIN_REQUIRED: t('headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED', {}, language),
   NATIVE_AGENT_CAPABILITY_UNSEALED: t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, language),

@@ -1976,7 +1976,11 @@
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/native-tool-bridge",
         "src/composition/core/subscription-readiness",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/native-connection",
+        "src/composition/core/model-use",
+        "src/engine/core/model-use"
       ],
       "plan": "SURFACES"
     },
@@ -5041,7 +5045,14 @@
     "src/composition/core/subscription-readiness": {
       "dependencies": [
         "src/capabilities/core/native-agent-execution",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/agent-workspace-floor",
+        "src/composition/core/root",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation",
+        "src/platform/core/config"
       ],
       "plan": "PROVIDERS"
     },
