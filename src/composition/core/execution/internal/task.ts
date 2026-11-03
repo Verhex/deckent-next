@@ -5,7 +5,7 @@ import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigK
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  gitQueueCandidateSource, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
+  gitQueueCandidateSource, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, dispatchNeedsObservation, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -14,12 +14,16 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
 import { openConfiguredSiwcWorker } from '#composition/core/siwc/index.js';
+import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker, validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence,
+  type NativeCliWorkerPorts, type NativeCliWorkerWaitReason } from '#adapters/core/native-cli-worker/index.js';
+/** Lead fan-in supplies trusted transport/capacity/lease owners and enables retirement at the alpha.63 switch. Never task-authored flags. */
+type NativeCliWorkerOptions = ConfigLoadOptions & { nativeCliWorker?: Readonly<{ ports?: NativeCliWorkerPorts; projectionRetired: boolean }> };
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
  */
 /** E1: park refusals meaning another transition already holds, ended or changed the Run (the timed-out refusal then stays the error). */
 const HELD_PARK_SUPERSEDED: ReadonlySet<string> = new Set(['RUN_PARKED', 'RUN_TERMINAL', 'RUN_STORE_CONFLICT']);
-export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
+export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: NativeCliWorkerOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
@@ -30,7 +34,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const crashes = await prepareProductDirectory(layout, 'crashes'), preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
       launchers: jsonRecordDirectory(join(crashes, 'dispatch-launcher')),
       now: Date.now, record: audit, parked: async commandId => !!await store.loadRunReceipt(identity.scopeId, commandId), loadRun: () => store.loadRun(identity.scopeId, identity.runId), park: command => parkConfiguredRunProgression(projectRoot, command, options) });
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', {
+      validate: profile => profile.adapterId === 'native-cli-worker' ? validateNativeCliWorkerSupervisorProfile(profile) : validateDockerSupervisorProfile(profile) });
     // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
     let dispatching = false, kept = false;
     // REVISE 2695: set while the ledger holds this attempt's probe custody that no closure below may transition (only its proven end releases it).
@@ -43,7 +48,25 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (identity.layoutRevision !== layout.revision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const run = await store.loadRun(identity.scopeId, identity.runId);
       const selected = selectReservedTaskProfile(run, await store.load(identity.scopeId, identity.attemptId), identity);
-      const profile = resolveDockerTaskProfile(selected), relayed = profile.siwcWorker && profile.nativeSubscription;
+      const native = isNativeCliWorkerProfile(selected) ? resolveNativeCliWorkerProfile(selected) : null;
+      const profile = native ?? resolveDockerTaskProfile(selected), relayed = profile.siwcWorker && profile.nativeSubscription;
+      const waiting = async (reason: NativeCliWorkerWaitReason) => {
+        const current = await store.loadRun(identity.scopeId, identity.runId);
+        if (current?.state.kind === 'running' && !current.cancelRequested) await parkConfiguredRunProgression(projectRoot, { schemaVersion: 1,
+          scopeId: identity.scopeId, runId: identity.runId, commandId: randomUUID(), expectedRevision: current.revision, failureCode: reason }, options)
+          .catch((failure: unknown) => { if (!HELD_PARK_SUPERSEDED.has(queryFailure(failure).code)) throw failure; });
+        return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity,
+          status: 'unresolved' as const, terminal: null, outputRecorded: false, waiting: Object.freeze({ reason, legacy: !native }) }) });
+      };
+      // Existing dispatch replay above is deliberately outside the new-dispatch retirement/readiness gates.
+      if (!native && !relayed && nativeProjectionDispatch(profile.nativeSubscription, options.nativeCliWorker?.projectionRetired === true) === 'retired') return await waiting('NATIVE_PROJECTION_RETIRED');
+      if (native) {
+        if (!options.nativeCliWorker?.ports) return await waiting('NATIVE_AGENT_BRIDGE_UNAVAILABLE');
+        // Native activity has no observation contract yet; never silently discard a pinned silence policy.
+        if (run!.execution.tasks.find(task => task.taskId === identity.taskId)?.stall) return await waiting('NATIVE_AGENT_ENVIRONMENT_REFUSED');
+        const ready = await inspectNativeCliWorker(native.binding, options.nativeCliWorker.ports);
+        if (ready.state !== 'ready') return await waiting(ready.reason);
+      }
       // U9-7: a relay worker passes the launch gate before any workspace, probe, connection or container; held/unprovable is a typed refusal, never another route.
       if (profile.siwcWorker) assertSiwcWorkerLaunchable({ platform: process.platform, imageCodexVersion: relayed ? relayed.preflight?.cliVersion ?? null : null });
       if (profile.options.outputFiles && profile.options.outputFiles.maxBytes > config.artifacts.maxBytes) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
@@ -68,7 +91,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const privateSource = queue ? await gitQueueCandidateSource(queue, store, artifacts, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }) : undefined;
       const broker = new GitWorkspaceBroker(git, privateSource); await preparation.enter('workspace');
       // C2: the pinned checkout shaping hides the instruction surface from a worker's clone; a queue verification Run keeps the full tree.
-      const hidden = queue ? undefined : dockerTaskHiddenPaths(selected) ?? undefined;
+      const hidden = queue ? undefined : dockerTaskHiddenPaths(native?.base ?? selected) ?? undefined;
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker, hidden)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches, hidden); await preparation.enter('secret-gate');
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
@@ -98,11 +121,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome, events: Awaited<ReturnType<typeof openWorkerEventSink>> | undefined, connection: Awaited<ReturnType<typeof openNativeConnection>> | undefined;
       let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
+      let worker: Extract<Awaited<ReturnType<typeof prepareNativeCliWorker>>, { state: 'ready' }> | undefined;
       try { // D-05: the sink's file handle and the connection open inside the try whose finally closes both (Node 26 ends the service for a collected unclosed FileHandle).
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
-      events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
+      events = profile.nativeSubscription && !relayed && !native ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
       // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
-      connection = profile.nativeSubscription && !relayed ? await openNativeConnection({ binding: profile.nativeSubscription,
+      connection = profile.nativeSubscription && !relayed && !native ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
         deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}) }) : undefined; await preparation.enter('dispatch');
       relay = relayed ? await openConfiguredSiwcWorker(projectRoot, options, { identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: profile.options.imageId,
@@ -111,13 +135,21 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         fence: async () => { const current = await store.loadRun(identity.scopeId, identity.runId); return current?.state.kind === 'running' && !current.cancelRequested; } }) : undefined;
       const dockerOptions = { ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
         ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) };
-      const supervisor = relay ? new SiwcWorkerSupervisor(dockerOptions, relay) : new DockerSupervisor(dockerOptions);
+      if (native) {
+        const prepared = await prepareNativeCliWorker({ profile: selected, request, ports: options.nativeCliWorker!.ports!,
+          ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), knownSecrets: getConfigKnownSecrets(config),
+          toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
+          fence: () => nativeCliWorkerFence(store, identity) });
+        if (prepared.state !== 'ready') { await release(); return await waiting(prepared.reason); }
+        worker = prepared;
+      }
+      const supervisor = worker?.supervisor ?? (relay ? new SiwcWorkerSupervisor(dockerOptions, relay) : new DockerSupervisor(dockerOptions));
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       // R3: the frozen silence policy stops a worker whose gateway saw no event or model traffic; the existing kill path follows.
       const stall = run!.execution.tasks.find(row => row.taskId === identity.taskId)?.stall, silence = new AbortController();
       const gateway = connection ?? relay, watch = stall && gateway ? inactivityWatch(stall, Date.now()) : undefined;
-      const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
+      const observation = native ? { async close() {} } : await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
         config.inspection.workers.maxFileBytes, async () => {
           if (watch?.(Date.now(), gateway!.statistics()) === 'stop') silence.abort('inactivity');
           let record = await store.loadBoundDispatch(identity); if (!record) return null;
@@ -136,8 +168,10 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       let result; dispatching = true;
       try { result = await app.execute(request, undefined, silence.signal); } finally { await observation.close(); }
       outcome = { status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output };
+      if (result.kind === 'terminal' && worker) await worker.supervisor.release(request);
       } finally {
         await connection?.close(); await relay?.close();
+        await worker?.supervisor.close();
         // Seal the event log once the gateway is closed; a sealing failure never changes the execution outcome and is returned typed.
         const closedSink = await events?.close();
         // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
