@@ -18,7 +18,7 @@ export async function inspectConfiguredShellRealm(projectRoot: string, options: 
   return inspectAgentShellRealm({ mode, stateDir: globalStateRoot(env), projectRoot, layout: config.productLayout, env });
 }
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
-  readonly contained: boolean }
+  readonly contained: boolean; readonly warning: string | null }
   | { readonly ok: false; readonly text: string };
 
 /** Permission-tiered, C11-governed shell calls: policy and intent precede spawn; uncertain effects are never repeated. */
@@ -67,7 +67,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   };
   const previewText = (tool: string, args: Record<string, unknown>): string | undefined => {
     const card = cardView(tool, args);
-    return card ? `$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})\n${card.realm.posture(card.view)}` : undefined;
+    return card ? `${card.planned.warning ? `${card.planned.warning}\n` : ''}$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})\n${card.realm.posture(card.view)}` : undefined;
   };
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
@@ -80,7 +80,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     if (subscription && realm.containment === 'host') return { ok: false, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` };
-    if (realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots)) return { ok: false, text: `[deckent] run_shell: error=HOST_GLOBAL_STATE_UNRESOLVED; ${t('headless.agent.k15b.hostUnresolved', {}, input.language)}` };
+    const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots) ? t('headless.agent.k15c.hostUnresolved', {}, input.language) : null;
     if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
@@ -92,7 +92,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
     }
-    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command)), contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
+    const tier = shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command));
+    const planned: ShellPlan = { ok: true, realm, command, risk, warning, tier: warning !== null && tier !== 'destructive' && tier !== 'authority' ? 'always-ask' : tier, contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
     plans.set(key(tool, args), planned);
     return planned;
   };
@@ -126,7 +127,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     /** Astra 2431: the card's fields as data — the whole command (never cut) and the classifier's tier and reason. */
     cardCall(tool: string, args: Record<string, unknown>): { readonly kind: 'shell'; readonly command: string; readonly tier: string; readonly reason: string } | undefined {
       const planned = plans.get(key(tool, args));
-      return planned?.ok ? { kind: 'shell', command: planned.command, tier: planned.risk.risk, reason: planned.risk.reason } : undefined;
+      return planned?.ok ? { kind: 'shell', command: planned.command, tier: planned.risk.risk, reason: [planned.warning, planned.risk.reason].filter(Boolean).join('\n') } : undefined;
     },
     /** POSTURE (T2-FOLLOWUP): the same card's realm and write view as structured facts (the surface words them); null when not planned. */
     postureFacts(tool: string, args: Record<string, unknown>) { const card = cardView(tool, args); return card ? shellPostureFacts(card.realm, card.view) : null; },

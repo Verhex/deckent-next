@@ -1,4 +1,5 @@
 {
+  "headless.agent.k15c.hostUnresolved": "Çalışma yeri doğrulanamadı; Deckent durum klasörüne ulaşabilir. Host realm bir güvenlik sınırı değildir. Yalnız bu riski kabul ediyorsanız onaylayın.",
   "headless.agent.k15b.hostUnresolved": "Host realm bir güvenlik sınırı değildir. Global durum kökü varken dizin değiştiren, yol üreten komutlar ve çözülemeyen kabuk açılımları onaydan önce reddedilir. Yalıtımı uygulayan bir sandbox kullanın.",
   "error.HEADLESS_CLI_UNAVAILABLE": "Abonelik CLI'ı bağlanan yolda yok (kaldırılmış ya da yol artık bir programa çıkmıyor). Modele hiçbir şey gönderilmedi, başka bir model seçilmedi. Yeniden bağlanın: deckent models connect --connection <bağlantı> --scope <kapsam> --model <model> --command-id <kimlik> [--executable <mutlak yol>] (--executable olmadan PATH'teki ilk CLI kullanılır). Aynı yolun arkasında yalnızca kendini güncelleyen bir CLI çalışmaya devam eder.",
   "error.HEADLESS_OWNER_MISMATCH": "Abonelik Brain'i başka bir işletim sistemi kullanıcısına ait. Bir süreç yalnız kendi kişisinin CLI girişini kullanabilir; hiçbir şey başlatılmadı, başka bir model seçilmedi.",

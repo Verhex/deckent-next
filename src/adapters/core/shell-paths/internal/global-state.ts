@@ -72,7 +72,7 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
   };
 }
 
-/** Host names are best effort, never confinement. Refuse unresolved forms before any card when global state exists. */
+/** Host names are best effort, never confinement. Unresolved forms need a warning and per-call approval when global state exists. */
 export async function hostGlobalStateUnresolved(command: string, roots: readonly string[]): Promise<boolean> {
   const unresolved = /[$`{}]/u.test(command) || shellNamedPaths(command, () => true).flatMap(word => word.split(/[<>]/u))
     .some(word => /^~[^/]/u.test(word) || ['cd', 'pushd', 'popd', 'find', 'xargs'].includes(posix.basename(word.replace(/^[({]+|[)}]+$/gu, ''))))
