@@ -7,7 +7,7 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { useWindowLayer, useWindowReserve, useWindowInputGuard, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
+import { useCardCopyOptions, useWindowLayer, useWindowReserve, useWindowInputGuard, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import { cells, fillTemplate, truncateEnd, useRenderGlyphs, wrapCells, modelProviderSpans, spanStyle } from '#surfaces/core/terminal-render/index.js';
 import { ARROW_PICKER_ROWS } from './arrow-picker.js';
 import { PICKER_INITIAL, pickerActionOf, pickerFirstRow, pickerReduce, pickerView, type PickerOutcome, type PickerResult, type PickerState, type PickerTree, type PickerView } from './picker-core.js';
@@ -79,6 +79,8 @@ export function ListPicker(props: {
   readonly embedded?: boolean;
   /** False: PgUp/PgDn are not the list's (a card window scrolls its body with them, AYSE-R3-01/DR3-01). Default true. */
   readonly pageKeys?: boolean;
+  /** Non-decision /model and /provider navigation only: one plain filter followed by one CR also selects. Default false. */
+  readonly submitFilter?: boolean;
 }): ReactNode {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
@@ -106,9 +108,12 @@ export function ListPicker(props: {
 
   useInput((input, key) => {
     if (closed.current || !acceptsInput()) return;
-    const action = pickerActionOf(input, key, stateRef.current.stage);
+    const submit = latest.current.submitFilter && stateRef.current.stage === 'list' && !key.ctrl && !key.meta
+      && input.length > 1 && input.endsWith('\r') && !/\p{C}/u.test(input.slice(0, -1));
+    const action = submit ? { type: 'type' as const, text: input.slice(0, -1) } : pickerActionOf(input, key, stateRef.current.stage);
     if (!action || action.type === 'page' && latest.current.pageKeys === false) return;
-    const before = stateRef.current, next = pickerReduce(latest.current.tree, before, action, { pageSize: pageRef.current });
+    const before = stateRef.current, typed = pickerReduce(latest.current.tree, before, action, { pageSize: pageRef.current });
+    const next = submit ? pickerReduce(latest.current.tree, typed.state, { type: 'enter' }, { pageSize: pageRef.current }) : typed;
     stateRef.current = next.state;
     setState(next.state);
     if (next.state !== before) latest.current.onState?.(next.state);
@@ -119,6 +124,7 @@ export function ListPicker(props: {
   const listRows = layout.listRows;
   const first = pickerFirstRow(view.pos, view.rows.length, listRows);
   const shown = view.rows.slice(first, first + listRows);
+  useCardCopyOptions(shown.map(row => `${row.label}${row.detail ? `  ${row.detail}` : ''}`));
   const current = view.rows[view.pos];
   const filterText = view.stage === 'list' && state.filter ? truncateEnd(fillTemplate(props.labels.filter, { query: state.filter }), width, glyphs.ellipsis) : null;
   const positionText = view.rows.length > listRows

@@ -144,6 +144,6 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const body = [...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     ...(tokens !== null && focused ? [{ spans: [span(fillTemplate(words.switch.title, { model: focused.label, tokens }), { role: 'warning' as const })] }] : []),
     ...(focused ? [{ spans: [span(focused.exact, { role: 'muted' as const })] }, ...(focused.command ? [{ spans: [span(focused.command, { role: 'muted' as const })] }] : [])] : [])];
-  return <PickerWindow title={[span(view.title, { bold: true })]} body={body} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} position={labels.position}
+  return <PickerWindow submitFilter title={[span(view.title, { bold: true })]} body={body} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} position={labels.position}
     initial={state} onState={setState} onResult={result => chosen(result)} />;
 }

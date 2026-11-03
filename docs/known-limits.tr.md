@@ -101,6 +101,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın. Tam pencere bölünmemiş düz giriş
   bağlantısı yazmaz (owner tercihi): orada bağlantı kart satırlarına bölünmüş bir OSC 8 bağlantısıdır; Ctrl+Y'yi ya da bağlantıyı bir kez
   bölünmeden yazan satır içi düzeni kullanın.
+  Ctrl+Y başlığı, gövdeyi ve o anda görünen seçenek etiketlerini içerir; girdi değerleri (maskeli girdiler dahil) dışarıda kalır.
+  Kart üzerinde sürükleme yalnız gövdeyi seçer; seçeneklerin fareyle seçimi ertelenmiştir.
+
 - **arm64 yayımlanmıyor.** Kilitli bubblewrap paketi x86_64 için gelir; arm64 derleme kontrolü arm64 çalışma kanıtı değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).

@@ -59,6 +59,8 @@ export function PickerWindow(props: {
   readonly onClose?: () => void;
   /** PgUp/PgDn scroll the body instead of paging the list (a choice card with a long explanation). Default false. */
   readonly bodyPages?: boolean;
+  /** Opt-in filter+Enter navigation for the model/provider lists; never enabled by decision cards. */
+  readonly submitFilter?: boolean;
 }) {
   const glyphs = useRenderGlyphs(), size = useWindowSize(), reserve = useWindowReserve();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
@@ -85,7 +87,7 @@ export function PickerWindow(props: {
   return <Window title={title} {...(props.status ? { status: props.status } : {})} body={body} hints={hints} position={props.position} footerRows={geometry.footerRows}
     onInput={(_input, pressed) => !(props.bodyPages && (pressed.pageUp || pressed.pageDown))}
     footer={focused => <Box flexDirection="column">
-      <ListPicker key={key} embedded pageKeys={!props.bodyPages} tree={tree} labels={props.labels} active={focused && (props.active ?? true)} initial={initial}
+      <ListPicker key={key} embedded submitFilter={props.submitFilter ?? false} pageKeys={!props.bodyPages} tree={tree} labels={props.labels} active={focused && (props.active ?? true)} initial={initial}
         maxRows={geometry.pageSize} onState={next => { setTracked({ key, state: next }); props.onState?.(next); }} onResult={props.onResult}
         {...(props.onOutcome ? { onOutcome: props.onOutcome } : {})} />
       {blank(padding)}

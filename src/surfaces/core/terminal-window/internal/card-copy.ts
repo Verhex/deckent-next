@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext } from 'react';
+import { createContext, useCallback, useContext, useId, useLayoutEffect } from 'react';
 import { useStdout, type Key } from 'ink';
 import { plainText, type Span } from '#surfaces/core/terminal-render/index.js';
 import { sliceCells } from './selection.js';
@@ -15,7 +15,18 @@ export type CardCopyLabels = Readonly<{ hint: string; sent: string; tooLarge: st
 export type CardCopy = Readonly<{ write: (text: string) => CardCopyResult; labels: CardCopyLabels; maxBytes: number }>;
 /** Absent where no real TTY takes clipboard requests: the cards then neither show nor take the copy key. */
 export const CardCopyContext = createContext<CardCopy | null>(null);
-/** True where a raw line written now lands in the main screen's scrollback (the full window's alternate screen has none). */
+/** Only option labels enter this window-local collection; never input values or authority ids. */
+export const CardCopyOptionsContext = createContext<Map<string, readonly string[]> | null>(null);
+/** Register the currently drawn option labels after commit; replacement/unmount removes stale rows before another key. */
+export function useCardCopyOptions(labels: readonly string[]): void {
+  const options = useContext(CardCopyOptionsContext), id = useId();
+  useLayoutEffect(() => {
+    if (!options) return undefined;
+    options.set(id, labels);
+    return () => { options.delete(id); };
+  }, [options, id, labels]);
+}
+/** True where a raw line lands in main-screen scrollback (the alternate screen has none). */
 export const MainScreenContext = createContext<boolean>(true);
 /** Writes finished lines above the live area into the main screen's scrollback, unbroken (the terminal wraps them softly, so its own click
  * and selection take a whole address); null in the full window, whose alternate screen has no scrollback. The caller makes the text safe. */
@@ -27,10 +38,9 @@ export function useMainScreenLine(): ((text: string) => void) | null {
 
 export const isCardCopyKey = (input: string, key: Key): boolean => key.ctrl && !key.meta && input === 'y';
 
-/** The card's text as drawn, one logical line per body line (a wrapped value is copied whole): title, then `label value` rows. Inputs
- * (an entry, the option rows) are never part of it, so a masked value is never copied. */
-export function cardCopyText(title: readonly Span[], body: readonly Readonly<{ label?: readonly Span[]; spans: readonly Span[] }>[]): string {
-  return [plainText(title), ...body.map(line => [line.label ? plainText(line.label).trim() : '', plainText(line.spans)].filter(Boolean).join(' '))].join('\n').trim();
+/** The card's text as drawn, one logical line per body line (a wrapped value is copied whole): title, then `label value` rows. Option labels follow the body. Entry values never enter this projection, so a masked value is never copied. */
+export function cardCopyText(title: readonly Span[], body: readonly Readonly<{ label?: readonly Span[]; spans: readonly Span[] }>[], options: readonly string[] = []): string {
+  return [plainText(title), ...body.map(line => [line.label ? plainText(line.label).trim() : '', plainText(line.spans)].filter(Boolean).join(' ')), ...options].join('\n').trim();
 }
 
 /** A point of a mouse selection inside a card's body: display row (of all its rows, scrolled-out ones included) and display cell. */

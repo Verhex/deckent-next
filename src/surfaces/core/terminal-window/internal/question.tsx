@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Text, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { useCardCopyOptions } from './card-copy.js';
 import { Window } from './window.js';
 import { WINDOW_PRIORITY } from './window-stack.js';
 
@@ -53,6 +54,7 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
 /** The option rows: a pointer on the highlighted row, its number, `[x]` for ticked rows of a multi-choice question, the letter it answers to. */
 export function QuestionRows({ kind, options, state, focused }: { readonly kind: QuestionKind; readonly options: readonly QuestionOption[]; readonly state: QuestionState; readonly focused: boolean }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), pointer = glyphs.ascii ? '>' : '›';
+  useCardCopyOptions(options.map((option, index) => `${index + 1}. ${option.label}${optionKey(option) ? ` (${optionKey(option)})` : ''}`));
   return <>{options.map((option, index) => {
     const here = index === state.at, box = kind === 'multi' ? `${state.ticked.includes(option.id) ? '[x]' : '[ ]'} ` : '', letter = optionKey(option);
     return <Text key={option.id} wrap="truncate-end" {...(here && focused ? palette.selection : {})}>
