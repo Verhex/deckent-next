@@ -392,7 +392,22 @@
         "src/adapters/core/native-cli-registry",
         "src/composition/core/subscription-readiness",
         "src/engine/core/supervisor",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/platform/core/clock",
+        "src/platform/core/integrity",
+        "src/platform/core/redaction",
+        "src/engine/core/agent-turn",
+        "src/engine/core/approval",
+        "src/adapters/core/agent-workspace-floor",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/host-shell",
+        "src/adapters/core/contract",
+        "src/adapters/core/sqlite-agent-turn",
+        "src/adapters/core/approval-store",
+        "src/composition/core/agent-turn",
+        "src/composition/core/root"
       ],
       "plan": "EXECUTION"
     },
@@ -1994,7 +2009,8 @@
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/native-connection",
         "src/composition/core/model-use",
-        "src/engine/core/model-use"
+        "src/engine/core/model-use",
+        "src/engine/core/authentication"
       ],
       "plan": "SURFACES"
     },
