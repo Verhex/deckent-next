@@ -76,12 +76,12 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
     const compensate = (input: EffectCommand) => { tracked.add(input.commandId); return runtime
       ? runtime.command<Awaited<ReturnType<typeof compensateConfiguredOperation>>>(['operation', 'compensate'], input) : compensateConfiguredOperation(project, input, options); };
     const inspect = (commandId: string) => runtime
-      ? runtime.command<Awaited<ReturnType<typeof inspectConfiguredOperation>>>(['operation', 'inspect', '--scope', config.scopeId, '--command-id', commandId])
+      ? runtime.client.inspectOperation({ schemaVersion: 1, scopeId: config.scopeId, commandId })
       : inspectConfiguredOperation(project, { scopeId: config.scopeId, commandId }, options);
     const approvals = new Set<string>();
     const inspectApproval = (approvalId: string) => {
       const input = { schemaVersion: 1, scopeId: config.scopeId, approvalId };
-      return runtime ? runtime.command<Awaited<ReturnType<typeof configuredApproval>>>(['approval', 'inspect'], input)
+      return runtime ? runtime.client.inspectApproval(input)
         : configuredApproval(project, 'inspect', input, options);
     };
     const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny' = 'allow') => {
