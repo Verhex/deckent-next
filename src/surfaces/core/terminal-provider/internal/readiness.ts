@@ -11,7 +11,7 @@ export function subscriptionReadinessText(value: NativeAgentReadiness, locale: L
     switch (value.reason) {
       case 'NATIVE_AGENT_CLI_UNAVAILABLE': return value.state === 'unknown' ? t('headless.agent.k13.unknown.cli', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale);
       case 'NATIVE_AGENT_LOGIN_REQUIRED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.login', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED', {}, locale);
-      case 'NATIVE_AGENT_CAPABILITY_UNSEALED': return t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, locale);
+      case 'NATIVE_AGENT_CAPABILITY_UNSEALED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.sealed', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, locale);
       case 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.tools', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', {}, locale);
       case 'NATIVE_AGENT_PLUGIN_UNEXPECTED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.plugins', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale);
       case 'NATIVE_AGENT_BRIDGE_UNAVAILABLE': return value.state === 'unknown' ? t('headless.agent.k13.unknown.bridge', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_BRIDGE_UNAVAILABLE', {}, locale);
@@ -44,6 +44,6 @@ export async function subscriptionModelView(view: ModelPanelView, provider: Prov
   return { ...view, choices: await Promise.all(view.choices.map(async choice => {
     if (!port.recognizes(choice.reference)) return choice;
     const readiness = await port.inspect('chat', choice.reference), text = subscriptionReadinessText(readiness, locale);
-    return { ...choice, detail: text, blocked: choice.blocked ?? (readiness.state === 'ready' ? null : text) };
+    return { ...choice, detail: text, blocked: choice.blocked ?? (readiness.state === 'unavailable' ? text : null) }; // unknown stays selectable: the guarded first turn verifies it
   })) };
 }

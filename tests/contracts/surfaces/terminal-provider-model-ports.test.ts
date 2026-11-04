@@ -754,14 +754,15 @@ it('K13: text invocability never mints agent readiness; the model and provider s
   for (const locale of ['en', 'tr'] as const) {
     const port = providerPanelPort(root, 'scope', host, options, locale, errorText);
     state = undefined;
+    // R2a: unknown stays selectable (the guarded first turn verifies it); only unavailable blocks.
     const unknown = await subscriptionModelView(plain, port, locale);
-    expect(unknown.choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, locale));
+    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
     expect(unknown.choices[0]!.detail).not.toContain('OLD TEXT READY'); expect(unknown.choices[1]).toEqual(plain.choices[1]);
     expect((await port.inspect()).notes.join('\n')).toContain(unknown.choices[0]!.detail);
     state = { state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
     const unchecked = await subscriptionModelView(plain, port, locale);
     expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.cli', {}, locale));
-    expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale));
+    expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale)); expect(unchecked.choices[0]!.blocked).toBeNull();
     state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
     state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
@@ -771,9 +772,9 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', reference });
     // A later missing observation cannot retain an earlier ready projection.
     state = undefined;
-    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).not.toBeNull();
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
     const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
-    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.blocked).not.toBeNull();
+    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
   }
 });
 

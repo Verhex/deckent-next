@@ -90,6 +90,7 @@
   "headless.agent.k13.unknown.plugins": "İzinli eklenti kümesi bu CLI profili için doğrulanmadı.",
   "headless.agent.k13.unknown.bridge": "Denetimli araç köprüsü bu kapsam için doğrulanmadı.",
   "headless.agent.k13.unknown.environment": "Yalıtılmış ortam bu CLI profili için doğrulanmadı.",
+  "headless.agent.k13.unknown.sealed": "Araçlar bu CLI sürümü ve profil için henüz doğrulanmadı. İlk mesajın onları doğrular; bu arada metin sohbeti çalışır.",
   "headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED": "Önceki işçi yürütme yolu yeni işler için kapalı. Denetimli native işçiyi kullanmak için aboneliği yeniden bağlayın; kabul edilmiş işler kayıtlı profili korur.",
   "headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED": "Bu CLI profilinde işçi yürütmesi doğrulanmadı. Kalıcı yürütme kanıtı sağlanana kadar görev bekler; başka yürütme yolu kendiliğinden seçilmez.",
   "headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT": "Abonelik kaynağı kullanımda. Görevi bekletebilir veya iptal edebilirsiniz; kapasite yalnız sonlanma doğrulanınca serbest kalır.",

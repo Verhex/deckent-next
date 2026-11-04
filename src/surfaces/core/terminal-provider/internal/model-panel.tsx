@@ -110,7 +110,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     Promise.resolve().then(async () => {
       if (provider?.subscriptionReadiness?.recognizes(choice.reference)) {
         const readiness = await provider.subscriptionReadiness.inspect('chat', choice.reference);
-        if (readiness.state !== 'ready') throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: subscriptionReadinessText(readiness, locale) } });
+        if (readiness.state === 'unavailable') throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: subscriptionReadinessText(readiness, locale) } });
       }
       await port.prepare?.(choice, port.reasoning?.());
     }).then(async () => {

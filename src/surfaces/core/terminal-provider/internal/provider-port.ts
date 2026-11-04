@@ -117,7 +117,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       const usable = reading?.models.find(row => row.availability.invocable && result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference)));
       if (kind.headlessLogin && kind.terminalTextChat && result.status === 'connected') {
         const readiness = await subscriptionReadiness.inspect('chat', result.reference);
-        lines.push({ label: '', text: subscriptionReadinessText(readiness, locale), tone: readiness.state === 'ready' ? 'success' : 'warning' }); return;
+        lines.push({ label: '', text: subscriptionReadinessText(readiness, locale), tone: readiness.state === 'unavailable' ? 'warning' : 'success' }); return;
       }
       const worker = usable ? null : await workerReadiness(host, root, scopeId, options, result.reference.providerId, locale);
       if (worker) { lines.push({ label: '', text: worker }); return; }
@@ -164,9 +164,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
     const prerequisite = result.status === 'connected' && kind?.headlessLogin && kind.terminalTextChat
       ? await subscriptionReadiness.inspect('chat', result.reference) : null;
-    const usable = candidates.some(row => row.availability.invocable) && (!prerequisite || prerequisite.state === 'ready');
+    const usable = candidates.some(row => row.availability.invocable) && (!prerequisite || prerequisite.state !== 'unavailable');
     // PV: the readiness read is the terminal chat's (its protocol families); a CLI subscription connects for the Brain, whose check ran isolated at connect.
-    const unavailable = prerequisite && prerequisite.state !== 'ready' ? subscriptionReadinessText(prerequisite, locale) : brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
+    const unavailable = prerequisite && prerequisite.state === 'unavailable' ? subscriptionReadinessText(prerequisite, locale) : brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
       : t('tui.provider.pull.blocked', { reason: candidates[0] ? modelInvocabilityText(candidates[0].availability, locale) : t('tui.provider.unavailable', {}, locale) }, locale);
     const brain = !usable && brainOnly(kind, candidates.map(row => row.availability));
     if (result.status === 'connected') lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : unavailable, tone: usable || brain ? 'success' : 'warning' });

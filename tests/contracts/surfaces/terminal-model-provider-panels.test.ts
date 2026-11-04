@@ -1069,6 +1069,17 @@ it('K13: the provider and onboarding subscription window offers the registry met
   }
 });
 
+it('R2a: /model pins an unverified (unknown) subscription model; its first turn verifies the tools', async () => {
+  const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
+    inspect: async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }) } };
+  const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
+  await until(() => ui.frame().includes(t('headless.agent.k13.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
+  await ui.press(ENTER + ENTER);
+  await until(() => model.pins.length > 0, 'unknown model pinned');
+  expect(calls.errors).toEqual([]);
+});
+
 it('K13: /model rechecks subscription readiness at confirmation and does not pin after capability revocation', async () => {
   const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
   let ready = true;
