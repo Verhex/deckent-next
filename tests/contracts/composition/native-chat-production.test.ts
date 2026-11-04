@@ -25,6 +25,8 @@ afterEach(async () => { for (const close of closers.splice(0).reverse()) await c
 const families = [registry.adapters.claude.capabilities.eventStream, registry.adapters.codex.headless.protocolFamily];
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const execute = promisify(execFile);
+/** Proof JSON for CI artifacts: approval decision capabilities are redacted. */
+const proofJson = (value: unknown) => JSON.stringify(value, (key, item: unknown) => key === 'decisionCapability' ? '[redacted]' : item, 2);
 async function fixture(family: string) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-k16-production-'));
   closers.push(() => rm(root, { recursive: true, force: true }));
@@ -95,6 +97,10 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
           expectedRevision: event.revision, decisionCapability: event.decisionCapability, decision, reason: 'synthetic-person reviewed exact request' }); decisions.push(record);
       })()); });
       await Promise.all(pending);
+      if (process.env['K16_PROOF_DIR']) await writeFile(join(process.env['K16_PROOF_DIR'], `turn-${nativeCliAgent(family)!.id}-${id}.json`),
+        proofJson({ result, events, decisions,
+          limits: { idleMs: nativeEgressLimits().idleMs, approvalTtlMs: h.config.approvals.requestTtlMs, timeoutMs: h.profile.limits.timeoutMs },
+          trace: await readFile(h.traceFile, 'utf8') }));
       return result;
     };
     expect(await call('K16-READ', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
@@ -112,11 +118,15 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     expect(await call('K16-READ-SECOND', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
     const secondSeal = await readNativeAgentObservation(h.profile);
     expect(secondSeal).toMatchObject({ execution: firstSeal!.execution });
-    expect(await call('K16-WRITE', 'allow', async () => {
+    const idleMs = nativeEgressLimits().idleMs, keepAliveMs = Math.floor(idleMs / 2);
+    const approvalWaitMs = Math.min(idleMs + keepAliveMs, h.config.approvals.requestTtlMs / 2);
+    expect(approvalWaitMs).toBeGreaterThan(idleMs);
+    const written = await call('K16-WRITE', 'allow', async () => {
       expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
-      // Actual gateway idle=30s is crossed while the authoritative approval card remains pending.
-      await new Promise(resolveWait => setTimeout(resolveWait, nativeEgressLimits().idleMs + 1000));
-    })).toMatchObject({ finish: 'stop', toolCalls: 1 });
+      // Derive a wait beyond gateway idle while reserving half the approval TTL for completion.
+      await new Promise(resolveWait => setTimeout(resolveWait, approvalWaitMs));
+    });
+    expect(written, JSON.stringify({ family, result: written })).toMatchObject({ finish: 'stop', toolCalls: 1 });
     expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('business result\n');
     expect(await call('K16-DENY', 'deny')).toMatchObject({ toolCalls: 0 });
     expect(await readFile(join(h.f.project, 'denied.txt'), 'utf8').catch(() => null)).toBeNull();
@@ -136,7 +146,7 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     expect(await readFile(join(h.f.project, 'revoked.txt'), 'utf8').catch(() => null)).toBeNull();
     expect(JSON.stringify(events)).not.toContain(h.canary);
     expect(await readFile(h.traceFile, 'utf8')).not.toContain(h.canary);
-    if (process.env['K16_PROOF_DIR']) await writeFile(join(process.env['K16_PROOF_DIR'], `compiled-${nativeCliAgent(family)!.id}${process.env['CI'] === 'true' ? '-ci' : ''}.json`), JSON.stringify({ events, decisions, firstRecord, firstSeal, secondSeal }, null, 2));
+    if (process.env['K16_PROOF_DIR']) await writeFile(join(process.env['K16_PROOF_DIR'], `compiled-${nativeCliAgent(family)!.id}${process.env['CI'] === 'true' ? '-ci' : ''}.json`), proofJson({ events, decisions, firstRecord, firstSeal, secondSeal }));
   }
 }, 150_000);
 
