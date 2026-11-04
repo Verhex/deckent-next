@@ -62,11 +62,16 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "Scheduling weights: ${key:-committed seed}"
       - if: steps.weights.outputs.key != ''
+        run: mkdir -p .pack && cp scripts/ci-test-durations.json .pack/ci-weights-seed.json
+      - if: steps.weights.outputs.key != ''
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: scripts/ci-test-durations.json
           key: ${{ steps.weights.outputs.key }}
           fail-on-cache-miss: true
+      # The restored main weights win unless the committed seed weighs more of this tree's test files (a PR that added tests and refreshed).
+      - if: steps.weights.outputs.key != ''
+        run: node scripts/ci-test-weights.mjs select .pack/ci-weights-seed.json
       - run: npm run build
       - run: npm run smoke
       - name: Record complete Vitest inventory and Node-specific build

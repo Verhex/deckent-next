@@ -1,7 +1,10 @@
 // Scheduling weights from hosted shard receipts (`gh run download RUN -p 'shard-*' -D DIR`): `refresh` rewrites
 // ci-test-durations.json, `check` runs the drift guard (the CI drift job, or offline) and exits 1 on drift.
+// `select SEED` (CI prepare): after the newest main-refreshed weights were restored over the committed file, keep whichever of the two
+// weighs more of the test files on disk; on a tie the restored main weights (the newer measurement) stay. A PR that adds tests and
+// refreshes its committed weights is thereby scheduled with them instead of main's older inventory.
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DURATION_DRIFT, durationDrift, inventoryDigest, observedDurations } from './ci-test-plan.mjs';
 
@@ -57,8 +60,29 @@ export function driftReport(result, limits = DURATION_DRIFT) {
   return lines.map(line => `${line}. Refresh scripts/ci-test-durations.json with scripts/ci-test-weights.mjs.`);
 }
 
+// Test files on disk under the Vitest include (`tests/**/*.test.ts`), repository-relative and sorted.
+export function testFilesOnDisk(root = fileURLToPath(new URL('..', import.meta.url))) {
+  return readdirSync(join(root, 'tests'), { recursive: true, encoding: 'utf8' }).filter(path => path.endsWith('.test.ts'))
+    .map(path => relative(root, join(root, 'tests', path)).split('\\').join('/')).sort();
+}
+export function weightCoverage(weights, files) {
+  const durations = weights?.durationMs ?? {};
+  return files.filter(file => durations[file] > 0).length;
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, ...rest] = process.argv.slice(2);
+  if (command === 'select') {
+    const [seedPath] = rest;
+    if (!seedPath || rest.length !== 1) throw new Error('Usage: ci-test-weights.mjs select SEED_PATH');
+    const files = testFilesOnDisk(), current = JSON.parse(readFileSync(weightsPath, 'utf8')), seed = JSON.parse(readFileSync(seedPath, 'utf8'));
+    const restored = weightCoverage(current, files), committed = weightCoverage(seed, files);
+    if (committed > restored) writeFileSync(weightsPath, readFileSync(seedPath));
+    const summary = `Scheduling weights: ${committed > restored ? 'committed seed' : 'restored main'} (${Math.max(restored, committed)}/${files.length} test files weighted; main ${restored}, committed ${committed})`;
+    console.log(summary);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+    process.exit(0);
+  }
   const option = rest.indexOf('--durations');
   const durationsPath = option >= 0 ? rest[option + 1] : weightsPath;
   const directories = option >= 0 ? rest.filter((_, index) => index !== option && index !== option + 1) : rest;
