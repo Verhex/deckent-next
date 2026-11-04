@@ -7,12 +7,12 @@ import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRun, executeTask, evaluateTask, inspectRun, reserveRunTasks } from '../../../src/index.js';
 import { advanceConfiguredRun } from '../../../src/composition/core/run-progression/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
+import { DockerSupervisor, GitWorkspaceBroker } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
@@ -454,42 +454,64 @@ describe.skipIf(!dockerEnabled)('accepted dependency inputs', () => {
 });
 
 describe.skipIf(!dockerEnabled)('named output artifact collection', () => {
-  it.each(['valid', 'unsafe'] as const)('retains declared files and prevents incomplete acceptance (%s)', async mode => {
-    const f = await fixture(true, false, false, true, mode);
-    const surface = await reserveThroughPublicSurface('sdk', f); const identity = surface.identity;
-    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+  it.for(['valid', 'unsafe'] as const)('retains declared files and prevents incomplete acceptance (%s)', { timeout: 30000 }, async (mode, context) => {
+    const started = performance.now();
+    const timeline: Array<{ phase: string; state: string; at: number; elapsedMs: number }> = [];
+    const mark = (phase: string, state: string) => timeline.push({ phase, state, at: Date.now(), elapsedMs: Math.round(performance.now() - started) });
+    const step = async <T,>(phase: string, work: () => Promise<T>): Promise<T> => {
+      mark(phase, 'begin');
+      try { const result = await work(); mark(phase, 'end'); return result; }
+      catch (error) { mark(phase, 'error'); throw error; }
+    };
+    let reported = false;
+    const report = () => {
+      if (!reported) { reported = true; console.error(`NAMED_OUTPUT_PHASE_EVIDENCE ${JSON.stringify({ mode, timeline })}`); }
+    };
+    // Report at the timeout itself: afterEach may remove the fixture before onTestFailed runs.
+    context.signal.addEventListener('abort', report, { once: true });
+    context.onTestFailed(report);
+    const allocate = GitWorkspaceBroker.prototype.allocate, execute = DockerSupervisor.prototype.execute, collect = DockerSupervisor.prototype.collectOutputFiles;
+    const spies = [
+      vi.spyOn(GitWorkspaceBroker.prototype, 'allocate').mockImplementation(function (this: GitWorkspaceBroker, ...args) { return step('workspace.allocate', () => allocate.apply(this, args)); }),
+      vi.spyOn(DockerSupervisor.prototype, 'execute').mockImplementation(function (this: DockerSupervisor, ...args) { return step('docker.execute', () => execute.apply(this, args)); }),
+      vi.spyOn(DockerSupervisor.prototype, 'collectOutputFiles').mockImplementation(function (this: DockerSupervisor, ...args) { return step('docker.collect', () => collect.apply(this, args)); }),
+    ];
+    context.onTestFinished(() => { context.signal.removeEventListener('abort', report); for (const spy of spies) spy.mockRestore(); });
+    const f = await step('fixture', () => fixture(true, false, false, true, mode));
+    const surface = await step('reserve', () => reserveThroughPublicSurface('sdk', f)); const identity = surface.identity;
+    const runtime = await step('open', () => openConfiguredExecution(f.project, f.project, f.options));
     try {
-      expect((await executeTask(f.project, identity, f.options)).execution.status).toBe('terminal');
-      const record = (await runtime.store.loadBoundDispatch(identity))!;
-      const envelope = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record.output!)));
+      expect((await step('execute', () => executeTask(f.project, identity, f.options))).execution.status).toBe('terminal');
+      const record = (await step('dispatch.read', () => runtime.store.loadBoundDispatch(identity)))!;
+      const envelope = JSON.parse(new TextDecoder().decode(await step('artifact.envelope', () => runtime.artifacts.read('s', record.output!))));
       expect(envelope.stdout).toBe('saved'); expect(envelope.files).toHaveLength(1);
       if (mode === 'valid') {
         expect(envelope.completeness).toBe('complete');
         expect(envelope.files[0]).toMatchObject({ name: 'report', status: 'collected', receipt: { scopeId: 's', byteLength: 3 } });
         const receipt = envelope.files[0].receipt;
-        expect(Buffer.from(await runtime.artifacts.read('s', receipt))).toEqual(Buffer.from([0, 255, 10]));
-        await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-files', identity, expectedRevision: (await runtime.store.loadRun('s', 'r'))!.revision }, f.options);
-        expect((await runtime.store.loadRun('s', 'r'))!.progress[0]!.phase).toBe('accepted');
-        const lease = await runtime.workspaces.openRecorded(identity);
-        await writeFile(join(lease!.workspace, 'report.bin'), 'later change');
-        expect(Buffer.from(await runtime.artifacts.read('s', receipt))).toEqual(Buffer.from([0, 255, 10]));
+        expect(Buffer.from(await step('artifact.bytes', () => runtime.artifacts.read('s', receipt)))).toEqual(Buffer.from([0, 255, 10]));
+        await step('evaluate', async () => evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-files', identity, expectedRevision: (await step('run.read', () => runtime.store.loadRun('s', 'r')))!.revision }, f.options));
+        expect((await step('run.read', () => runtime.store.loadRun('s', 'r')))!.progress[0]!.phase).toBe('accepted');
+        const lease = await step('workspace.open', () => runtime.workspaces.openRecorded(identity));
+        await step('workspace.mutate', () => writeFile(join(lease!.workspace, 'report.bin'), 'later change'));
+        expect(Buffer.from(await step('artifact.bytes', () => runtime.artifacts.read('s', receipt)))).toEqual(Buffer.from([0, 255, 10]));
       } else {
         expect(envelope.completeness).toBe('partial');
         expect(envelope.files[0]).toEqual({ name: 'report', status: 'unavailable', reason: 'unsafe' });
-        await expect(evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-files', identity, expectedRevision: (await runtime.store.loadRun('s', 'r'))!.revision }, f.options)).rejects.toThrow();
-        expect((await runtime.store.loadRun('s', 'r'))!.progress[0]!.phase).not.toBe('accepted');
+        await expect(step('evaluate', async () => evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-files', identity, expectedRevision: (await step('run.read', () => runtime.store.loadRun('s', 'r')))!.revision }, f.options))).rejects.toThrow();
+        expect((await step('run.read', () => runtime.store.loadRun('s', 'r')))!.progress[0]!.phase).not.toBe('accepted');
       }
-      const replay = await executeTask(f.project, identity, f.options);
+      const replay = await step('replay', () => executeTask(f.project, identity, f.options));
       expect(replay.execution.status).toBe('terminal');
-      expect((await runtime.store.loadBoundDispatch(identity))!.output).toEqual(record.output);
+      expect((await step('dispatch.read', () => runtime.store.loadBoundDispatch(identity)))!.output).toEqual(record.output);
     } finally {
-      const record = await runtime.store.loadBoundDispatch(identity);
-      if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
-      const lease = await runtime.workspaces.openRecorded(identity);
-      if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      const record = await step('dispatch.read', () => runtime.store.loadBoundDispatch(identity));
+      if (record) await step('docker.release', async () => (await DockerSupervisor.restoreProfile(record.profile)).release(record.request));
+      const lease = await step('workspace.open', () => runtime.workspaces.openRecorded(identity));
+      if (lease) await step('workspace.release', () => runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit }));
       runtime.store.close();
     }
-  }, 30000);
+  });
 });
 
 describe.skipIf(!dockerEnabled)('named artifact dependency inputs', () => {
