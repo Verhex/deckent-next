@@ -142,6 +142,8 @@ jobs:
           DECKENT_TEST_STARTUP_COST: '1'
           DECKENT_TEST_TIMEOUT_MS: '30000'
           VITEST_MAX_FORKS: '${{ needs.prepare.outputs.max-forks }}'
+          K16_PROOF_DIR: '${{ github.workspace }}/.pack/ci-evidence'
+          DECKENT_TEST_ERP_PROOF: '${{ github.workspace }}/.pack/ci-evidence'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
