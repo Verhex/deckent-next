@@ -180,6 +180,9 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
   });
   it('refuses a Claude seal for a foreign plugin, plugin provenance or tool; missing fields also fail closed', () => {
     const { agent, bridge } = nativeCliAgent(FAMILY)!;
+    // R9 (2026-11-05): the Brain text path and the agent path allow the same owner-excepted built-in plugins (CLI 2.1.317+ loads cc-plugin-privacy).
+    const names = (rows: readonly { name: string; path: string }[]) => rows.map(row => `${row.name}@${row.path}`).sort();
+    expect(names(registry.adapters.claude.headless.guards.plugins)).toEqual(names((agent.transport as { guards: { plugins: { name: string; path: string }[] } }).guards.plugins));
     // Literal wire shape from A0-2(c); source has more tools, this session deliberately exposes only read_file.
     const init = { type: 'system', subtype: 'init', tools: ['mcp__deckent__read_file'], mcp_servers: [{ name: 'deckent', status: 'connected', source: 'dynamic' }],
       plugins: [{ name: 'cc-plugin-agents-md', path: 'builtin', source: 'cc-plugin-agents-md@builtin' }], skills: [], slash_commands: [], permissionMode: 'dontAsk', apiKeySource: 'none' };

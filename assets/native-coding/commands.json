@@ -750,6 +750,10 @@
               "path": "builtin"
             },
             {
+              "name": "cc-plugin-privacy",
+              "path": "builtin"
+            },
+            {
               "name": "cc-plugin-plugin-authoring",
               "path": "builtin"
             }
