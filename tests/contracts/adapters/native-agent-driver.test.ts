@@ -137,6 +137,10 @@ it('owner 2026-11-05: an unrecognised Claude event is a turn note; a registry st
   const f = await fixture(family, { events: [{ type: 'system', subtype: 'permission_denied' }], calls }), h = await f.start(), result = await h.run();
   expect(result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null).toMatchObject({ field: 'agent-surface:event', subtype: 'system/permission_denied' });
   await notPaused(f.profile);
+  for (const event of [{ type: 'system', subtype: 'Permission_Denied' }, { type: 'system', subtype: 'odd name' }]) {
+    const g = await fixture(family, { events: [event], calls }), r = await (await g.start()).run();
+    expect(r.kind === 'rejected' ? readHeadlessRejection(r.evidence) : null).toMatchObject({ field: 'agent-surface:event' });
+  }
 });
 it('keeps cancelled calls unknown, closes the process and removes token-bearing files for both CLI families', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;

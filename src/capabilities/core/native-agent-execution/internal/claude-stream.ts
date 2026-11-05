@@ -38,8 +38,9 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
   const notices = new Set<string>(), stopEvents = new Set(entry.agent.transport.kind === 'claude-mcp' ? entry.agent.transport.guards.stopEvents : []);
   const notice = (value: Record<string, unknown>): 'stop' | undefined => {
-    const name = `${fact(value.type)}${value.subtype === undefined ? '' : `/${fact(value.subtype)}`}`;
-    if (stopEvents.has(name) || stopEvents.has(fact(value.type))) return fail('event', undefined, facts([name]));
+    // Case-folded so a spelling variant cannot pass a stop event; a non-identifier name ('?') stops too.
+    const type = fact(value.type).toLowerCase(), name = `${type}${value.subtype === undefined ? '' : `/${fact(value.subtype).toLowerCase()}`}`;
+    if (name.includes('?') || stopEvents.has(name) || stopEvents.has(type)) return fail('event', undefined, facts([name]));
     if (notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
   };
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
