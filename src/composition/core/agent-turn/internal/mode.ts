@@ -41,7 +41,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   /** This conversation's "this session" memory (a service-process map). */
   readonly standing?: { readonly memory: SessionStanding; readonly session: string };
   /** MODES-3: the turn was launched in full access (admitted and audited by the turn); every decision asks the company grant again. */
-  readonly fullAccess?: boolean; /** R4a: the person who started a native turn; the AI actor follows their mode. */ readonly person?: VerifiedPrincipal }) {
+  readonly fullAccess?: boolean; /** R4a: the person who started a native turn; the AI actor follows their mode. */ readonly person?: VerifiedPrincipal; /** R9: a Run worker's call and its plan ceiling. */ readonly origin?: AgentToolCallRequest['origin'] }) {
   const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input, mcp = input.mcp ?? null;
   const fetches = (tool: AgentToolSpec) => tool.name === FETCH_URL_TOOL_SPEC.name, mcps = (tool: AgentToolSpec) => tool.toolClass === 'mcp';
   const stored = new Map<string, Stored>(), knownSecrets = getConfigKnownSecrets(context.config), turnRecord = new PolicyTurnRecord({ scopeId, turnId, principal: context.principal });
@@ -64,7 +64,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     const server = mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined;
     try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, ...(server === undefined ? {} : { mcpServer: server }),
       standing: probeSession && standing ? { ...standing, session: true } : standing,
-      ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}), ...(input.person ? { person: input.person } : {}) }); }
+      ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}), ...(input.person ? { person: input.person } : {}), ...(input.origin ? { origin: input.origin } : {}) }); }
     catch { return null; }
   };
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {

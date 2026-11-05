@@ -289,6 +289,12 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
     const program = `const fs=require('node:fs'); for (const path of ${JSON.stringify(targets)}) { try { fs.writeFileSync(path,'unauthorized-change'); throw Error('input-writable'); } catch(e) { if(e.code!=='EROFS') throw e; } } console.log('all-three-readonly')`;
     const command = `node -e '${program.replaceAll("'", "'\\''")}'`;
     await adapters.openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
+    // R9 (owner 2026-11-05): a read-only shell command of a Run worker runs card-free in standart (the v19 rule is modeEligible) and is audited as shell-read.
+    await writeFile(join(workspace, 'note.txt'), 'twelve bytes');
+    expect((await adapters.withMcpPrincipal(() => port!.propose({ id: 'read-only-shell', name: 'run_shell', argumentsJson: JSON.stringify({ command: 'ls; test -f note.txt && wc -c note.txt' }) },
+      { kind: 'claude-tool-use', toolUseId: 'read-only-shell', deckentCallId: 'read-only-shell' }, new AbortController().signal))).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('12 note.txt') });
+    { const { DatabaseSync } = await import('node:sqlite'), db = new DatabaseSync(f.path, { readOnly: true });
+      try { expect(db.prepare(`SELECT count(*) AS n FROM audit_events WHERE record LIKE '%"kind":"permission-mode"%' AND record LIKE '%"cell":"shell-read"%'`).get()).toEqual({ n: 1 }); } finally { db.close(); } }
     // Keep the interpreter attack intact: the AI authority floor refuses it before any card.
     expect((await adapters.withMcpPrincipal(() => port!.propose({ id: 'interpreter-write', name: 'run_shell', argumentsJson: JSON.stringify({ command }) },
       { kind: 'claude-tool-use', toolUseId: 'interpreter-write', deckentCallId: 'interpreter-write' }, new AbortController().signal))).outcome)

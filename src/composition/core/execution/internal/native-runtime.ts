@@ -10,7 +10,7 @@ export interface NativeCliWorkerRuntime {
   f08(query: Readonly<{ scopeId: string; reference: import('#domain/index.js').ModelReference; binding: NativeCliWorkerBinding }>): Promise<NativeAgentExecution | null>;
   readonly verification?: NativeCliWorkerPorts['verification'];
   readonly driver: NativeCliWorkerPorts['driver'];
-  readonly openTools: NativeCliWorkerPorts['openTools'];
+  /** `plan`: the Run's recorded worker ceiling (R9; null: none recorded). */ readonly openTools: (...args: [...Parameters<NativeCliWorkerPorts['openTools']>, plan?: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null]) => ReturnType<NativeCliWorkerPorts['openTools']>;
   readonly bridgeLimits: NativeCliWorkerPorts['bridgeLimits'];
   readonly checkEnvironment?: NativeCliWorkerPorts['checkEnvironment'];
 }
@@ -45,8 +45,8 @@ export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: stri
       return { state: 'acquired', async release() {} };
     } },
     async openTools(request, binding, signal, context) {
-      await recheck(request, binding, signal);
-      const tools = await withMcpPrincipal(() => runtime.openTools(request, binding, signal, context));
+      await recheck(request, binding, signal); const plan = (await store.loadRun(scopeId, request.identity.runId))?.execution.workerMode ?? null;
+      const tools = await withMcpPrincipal(() => runtime.openTools(request, binding, signal, context, plan));
       return { session: tools.session, terminalFailure: () => tools.terminalFailure?.() ?? null, propose: (...args) => withMcpPrincipal(() => tools.propose(...args)),
         cancel: () => withMcpPrincipal(() => tools.cancel()), revoke: () => withMcpPrincipal(() => tools.revoke()) };
     },

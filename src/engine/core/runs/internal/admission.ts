@@ -1,7 +1,7 @@
 import { clientCommandIdSchema, branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import type { PoolAuthorization } from '#engine/core/policy/index.js';
+import { runWorkerMode, type PoolAuthorization } from '#engine/core/policy/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/core/workspaces/index.js';
 import { runCreateSchema, RunStoreError, type RunStore, type RunCreate, type RunReceipt } from './store.js';
 import { runCapacityBindingsSchema, type RunCapacityBinding } from './capacity-resource.js';
@@ -25,7 +25,7 @@ export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
   modelUse?: {
-    pin(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<RunCreate['execution']>;
+    pin(execution: RunCreate['execution'], principal: VerifiedPrincipal, workerMode?: RunCreate['execution']['workerMode']): Promise<RunCreate['execution']>; // R9: recorded for a Run with a worker
     recheck(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<void>;
   };
   /** General resource bindings, resolved by trusted adapters after model-use authorization; never an ingress field. */
@@ -86,14 +86,14 @@ export class RunAdmissionApplication {
       const graph = resolved?.graph ?? command.graph;
       const context = await this.context.resolve({ ...command, graph }, principal);
       await this.poolAuthorization.authorize(context.policy.poolId, command.scopeId, principal);
-      const execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal) : context.execution;
+      const execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal, runWorkerMode(evaluation.policy, principal, command.scopeId)) : context.execution;
       create = runCreateSchema.parse({ commandId: command.commandId, actor, graph, ...(command.proposal ? { proposal: command.proposal } : {}), ...(resolved ? { branch: resolved.decision } : {}),
         identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution });
     } catch (error) {
       this.authorization.recordUnapplied(command, principal, evaluation);
       throw error;
     }
-    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace);
+    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace); create = admitted.create; // R9: without a card, no worker ceiling
     try {
       await this.context.modelUse?.recheck(create.execution, principal);
       const resources = this.context.resources ? runCapacityBindingsSchema.parse(await this.context.resources(create.execution, principal)) : undefined;

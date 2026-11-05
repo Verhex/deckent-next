@@ -28,7 +28,7 @@ async function fixture(effect: 'allow' | 'deny' | 'require-approval' = 'require-
     if (state.changeDuringResolution) state.revision = 'p2';
     return { now: state.now, layoutRevision: state.layout, execution: fixtureExecution(admitted.graph),
       policy: { schemaVersion: 2 as const, poolId: 'pool', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['task'] } };
-  } };
+  }, modelUse: { pin: async (execution: RunCreate['execution'], _principal: VerifiedPrincipal, workerMode?: RunCreate['execution']['workerMode']) => workerMode ? { ...execution, workerMode } : execution, async recheck() {} } };
   const app = (port: Pick<SqliteAttemptStore, 'createRun' | 'loadRunReceipt' | 'loadRunWorkspaceCustody'> = store) => new RunAdmissionApplication(port,
     { verify: async () => state.principal }, f.authority, { authorize: async () => {} }, context);
   const sessions = { verifySession: async () => ({ principal: actor, session: { schemaVersion: 1, sessionId: 'human-session', authorityRef: 'test-human-authority', kind: 'os-user',
@@ -55,7 +55,7 @@ function noEffects(f: Awaited<ReturnType<typeof fixture>>) {
 }
 it('seals an allow before the Run and exposes the identical durable reference in its view and receipt', async () => {
   const f = await fixture('allow'), result = await f.app().create(command), receipt = (await f.store.loadRunReceipt('s', 'create'))!;
-  expect(result.run.authority).toEqual(receipt.snapshot.authority);
+  expect(result.run.authority).toEqual(receipt.snapshot.authority); expect(receipt.snapshot.execution.workerMode).toBeUndefined(); // R9: no card, no worker ceiling
   const record = f.audit.load('s', result.run.authority!.decision.eventId)!;
   expect(record.event.subject).toMatchObject({ kind: 'authority-decision', envelope: { principalRef: { id: 'owner' } }, verdict: { decision: 'allow', revision: 'p1', ruleId: 'run-rule' } });
   expect(record.sequence).toBe(result.run.authority!.decision.sequence);
@@ -127,6 +127,8 @@ it('approve-card-then-assert: creates one Run bound to that decision and approva
   expect(f.db.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(1);
   expect(f.db.prepare('SELECT count(*) AS n FROM run_execution_intents').get()!.n).toBe(1);
   f.state.now = 9000; expect(await f.app().create(command)).toEqual(first);
+  // R9: the card showed the person's mode as the worker ceiling (in the sealed request) and the Run keeps exactly it (bound in the approved basis).
+  expect(request.request.summary).toContain('Background worker: at most standard'); expect((await f.store.loadRun('s', 'r'))!.execution.workerMode).toEqual({ mode: 'standart', askEdits: false });
 });
 it.each(['graph', 'run', 'actor', 'layout', 'policy'] as const)('approve-card-then-assert: changed %s cannot consume the old approval', async changed => {
   const f = await fixture(); await pending(f); await f.decide(); let altered = command;

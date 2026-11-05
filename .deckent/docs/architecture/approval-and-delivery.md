@@ -745,7 +745,7 @@ composeCore. `DockerSupervisor.probe` runs on the worker floor without workspace
 closes the attempt `launch-refused` (EXECUTION_ENVIRONMENT_NOT_READY + requirement); `observeRunAttemptClosure` parks the Run
 `environment-not-ready` (failure code = requirement, park deadline); resume (run-decision) checks again on a new generation; no automatic
 retry and no manual acceptance from the park. Report evidence `not-run` → task reason `acceptance-check-not-run` (a worker claim;
-`failed`/`unknown` outrank it). Worker core `deckent-worker-core@3`. Ledger v59 is an additive version step.
+`failed`/`unknown` outrank it). Worker core `deckent-worker-core@4` (R9 2026-11-05: read and edit tools for files, the shell only when the work needs it). Ledger v59 is an additive version step.
 
 ### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
 

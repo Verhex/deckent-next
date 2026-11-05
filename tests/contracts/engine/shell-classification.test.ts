@@ -26,6 +26,9 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
     // B2 (owner test 2026-10-07): a redirection into /dev/null or a descriptor duplication / close writes no file.
     ['ls -la src/deneme.md 2>&1', 'none'], ['cat f >/dev/null', 'none'], ['cat f &>/dev/null', 'none'], ['cat f &>> /dev/null', 'none'], ['cat f >>/dev/null', 'none'],
     ['cat f >&2', 'none'], ['cat f 1>&2', 'none'], ['cat f 3>&1 1>&2 2>&3', 'none'], ['cat f 2>&-', 'none'], ['cat f 2>/dev/null; echo x 2>&1', 'none'],
+    // R9 (owner 2026-11-05): `test` / `[ … ]` are file tests and comparisons; the live R9i worker command is read-only as a whole.
+    ['test -f x && wc -c x', 'none'], ['ls; test -f a', 'none'], ['[ -f a ] && cat a', 'none'], ['test ! -d b || test 1 -eq 2', 'none'],
+    ['ls -la; test -f notlar.txt && od -c notlar.txt | tail -5 && sha256sum notlar.txt && wc -c notlar.txt', 'none'],
   ])('%s → read-only (risk %s)', async (command, risk) => {
     const verdict = await classify(command);
     expect(verdict, command).toMatchObject({ readOnly: true, risk, reasonCode: 'READ_ONLY' });
@@ -51,6 +54,7 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
     ['uniq f out', 'OUTPUT_FILE_POSITIONAL'], ['cat f | sort -o /dev/stdout', 'MUTATING_FLAG'], ['date -s x', 'MUTATING_FLAG'], ['rg --pre cat x', 'MUTATING_FLAG'],
     ['curl http://x', 'PROGRAM_NOT_ALLOWLISTED'], ['yes', 'PROGRAM_NOT_ALLOWLISTED'], ['/usr/bin/cat f', 'PROGRAM_PATH'], ['./cat f', 'PROGRAM_PATH'],
     ['', 'EMPTY_COMMAND'], ['   ', 'EMPTY_COMMAND'], ['echo "unterminated', 'UNPARSEABLE'],
+    ['[ -f a ] && rm a', 'PROGRAM_NOT_ALLOWLISTED'], // R9: a file test never makes the rest of the command a read
     // B2 negative: a redirection into a file stays a write, whatever the operator; a quoted or expanded target is not /dev/null.
     ['ls > x.txt', 'OUTPUT_REDIRECTION'], ['ls 2> err.log', 'OUTPUT_REDIRECTION'], ['ls &> out.txt', 'OUTPUT_REDIRECTION'], ['ls &>> out.txt', 'OUTPUT_REDIRECTION'],
     ['ls >& out.txt', 'OUTPUT_REDIRECTION'], ['ls 2>&1 > x.txt', 'OUTPUT_REDIRECTION'], ['ls >"/dev/null"', 'OUTPUT_REDIRECTION'], ['ls 2>&1 &', 'BACKGROUND_JOB'],
@@ -128,6 +132,16 @@ describe('shell risk tiers (legacy parity)', () => {
     ['ls >&2', 'safe-read'], ['ls 2>&1 | head', 'safe-read'], ['ls > x.txt', 'destructive'], ['ls &> out.txt', 'destructive'], ['ls >& out.txt', 'destructive'], ['ls 2> err.log', 'destructive'],
     ['ls 2>&1 >> log', 'modify'], ['rm deneme.md && ls deneme.md 2>&1 || true', 'modify'], ['rm -f x 2>/dev/null', 'destructive'],
   ])('%s → %s', async (command, expected) => { expect(await risk(command), command).toBe(expected); });
+  // R9 (owner 2026-11-05): for a Run worker the strict read-only classifier owns `safe-read`, so the live R9i command is a read; the terminal
+  // keeps the legacy segment list (unchanged), and no destructive or redirection signal is ever demoted.
+  it('R9: a Run worker\'s allowlisted read is safe-read; the terminal and every write signal are unchanged', async () => {
+    for (const command of ['test -f x && wc -c x', '[ -f a ] && cat a', 'ls -la; test -f notlar.txt && od -c notlar.txt | tail -5 && sha256sum notlar.txt && wc -c notlar.txt']) {
+      expect(classifyShellRisk(command, await classify(command), true).risk, command).toBe('safe-read');
+      expect(classifyShellRisk(command, await classify(command)).risk, command).toBe('modify');
+    }
+    for (const [command, expected] of [['[ -f a ] && rm a', 'modify'], ['test -f a && rm -rf a', 'destructive'], ['od -c f > out', 'destructive'], ['sha256sum f >> log', 'modify']] as const)
+      expect(classifyShellRisk(command, await classify(command), true).risk, command).toBe(expected);
+  });
 });
 
 it('founder decision commands stay authority-bound on argv paths; ordinary npm tasks stay outside this floor', () => {
