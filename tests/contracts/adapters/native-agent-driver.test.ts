@@ -115,10 +115,10 @@ it('R5b: retains which Claude stream check refused and identifier-only facts, ne
   expect(f.propose).not.toHaveBeenCalled();
   expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
 });
-it('R6b: a Claude keepalive for a pending offered call keeps the turn; one naming an unknown call still stops it', async () => {
+it('R6b/R5b: Claude keepalive and thinking-token notices keep the turn; a keepalive naming an unknown call still stops it', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   const calls = [{ name: 'read_file', arguments: { path: 'scoped.txt' } }], family = registry.adapters.claude.capabilities.eventStream!;
-  const ok = await (await fixture(family, { heartbeat: 'known', calls })).start();
+  const ok = await (await fixture(family, { heartbeat: 'known', thinkingTokens: true, calls })).start();
   expect(await ok.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
   const foreign = await fixture(family, { heartbeat: 'foreign', calls }), h = await foreign.start(), result = await h.run();
   expect(result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null).toMatchObject({ field: 'agent-surface:subagent' });

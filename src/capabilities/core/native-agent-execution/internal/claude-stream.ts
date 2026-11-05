@@ -74,6 +74,9 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     // Only A0's inert UI invalidation may precede init. Unknown notices, retries and permission denials stop the run.
     if (value.type === 'system' && value.subtype === 'ui_invalidate') return;
     if (!init) return fail('before-init');
+    // CLI 2.1.318 thinking progress: two token estimates, no content.
+    if (value.type === 'system' && value.subtype === 'thinking_tokens' && value.parent_tool_use_id == null
+      && [value.estimated_tokens, value.estimated_tokens_delta].every(n => typeof n === 'number' && Number.isFinite(n))) return;
     // CLI keepalive (A0 claude-keepalive): each 30 s of a pending offered call it names that call as parent and carries no content.
     const parentId = typeof value.parent_tool_use_id === 'string' ? value.parent_tool_use_id : '', parent = calls.get(parentId);
     if (value.type === 'tool_progress' && value.heartbeat === true && parent && value.tool_name === entry.bridge.toolPrefix + parent.name
