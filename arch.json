@@ -1456,6 +1456,7 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/surfaces/core/terminal-beuser",
         "src/platform/core/config-fields",
         "src/surfaces/core/terminal-host",
@@ -2313,6 +2314,7 @@
     },
     "src/composition/core/workspace-patch": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/domain/core/attempt",
         "src/platform/core/config",
         "src/platform/core/errors",
@@ -5169,9 +5171,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 41816,
+      "adapters": 41910,
       "surfaces": 45000,
-      "composition": 13400
+      "composition": 13408
     },
     "totalSrcLines": 200000,
     "testCases": 8200,

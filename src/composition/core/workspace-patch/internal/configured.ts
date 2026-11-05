@@ -24,7 +24,7 @@ export async function workspacePatchContext(root: string, input: unknown, option
     const fingerprint = (sourceRoot: string) => new GitWorkspaceBroker({ ...execution.git, sourceRoot, workspaceRoot }).captureSourceBase().then(base => base.sourceFingerprint);
     await assertSameWorkSource(recorded, { now, project: resolve(root) }, fingerprint);
   };
-  return { ...context, identity, artifacts, authorization, sameWorkSource, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
+  return { ...context, identity, artifacts, authorization, policy, sameWorkSource, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
 }
 async function preparePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions, release: boolean) {
   try {

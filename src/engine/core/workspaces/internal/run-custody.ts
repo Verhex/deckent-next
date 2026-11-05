@@ -9,6 +9,9 @@ export const runWorkspaceCustodySchema = z.strictObject({ schemaVersion: z.liter
   source: workspaceSourceSchema, baseRevision: persistedString(z.string().trim().min(1)),
 }).readonly();
 export type WorkspaceSource = z.infer<typeof workspaceSourceSchema>;
+/** Owner 2026-11-05 (R9n): a Run whose base is a commit of the person's current files in Deckent's private Run repository (git adapter version 2).
+ * The Run keeps this mode for its whole life (mode pinning): integration, delivery and its card read it from the patch or the custody, never config. */
+export const workingTreeSource = (source: WorkspaceSource | null | undefined) => source?.adapter.id === 'git' && source.adapter.version === 2;
 export type RunWorkspaceCustody = z.infer<typeof runWorkspaceCustodySchema>;
 export interface RunWorkspaceCustodyStore {
   loadRunWorkspaceCustody(scopeId: string, runId: string): Promise<RunWorkspaceCustody | null>;

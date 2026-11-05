@@ -6,5 +6,6 @@
   "hooks": "hooks",
   "detached": ".released-",
   "sourceBase": ".base-",
+  "runBases": "run-bases",
   "sourceBaseStaleAfterGitTimeouts": 3
 }

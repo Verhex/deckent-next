@@ -22,7 +22,7 @@ export const policyResources = Object.freeze({
   skillSigner: Object.freeze({ kind: 'skill-signer' as const, actions: Object.freeze(['inspect', 'enrol', 'add', 'revoke', 'repair'] as const) }),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
-  attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),
+  attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration', 'deliver-working-tree'] as const) }),
   operation: Object.freeze({ kind: 'operation' as const, actions: Object.freeze(['execute', 'compensate', 'inspect'] as const) }),
   scope: Object.freeze({ kind: 'scope' as const, actions: Object.freeze(['inspect'] as const) }),
   // `use` at Run admission and reservation. K5 typed hold (owner 2026-09-30): `hold`/`resume` stop and restart new reservations of the

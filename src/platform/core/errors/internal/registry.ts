@@ -547,6 +547,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_WORKING_TREE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_BUSY', p, l) }) },
   PATCH_WORKING_TREE_PARTIAL: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_PARTIAL', p, l) }) },
   PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
+  DELIVERY_WORKING_TREE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_DENIED', p, l) }) },
   PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },
   PATCH_INSTRUCTION_SURFACE_WRITE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INSTRUCTION_SURFACE_WRITE', p, l) }) },
   // S6 (owner 2026-10-14): the pre-dispatch secret gate; params count, paths (first 16 as `path (rule)`), omitted — never a value. Without

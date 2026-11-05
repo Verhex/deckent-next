@@ -31,7 +31,7 @@ async function repository(files = FILES) {
   // into .git while afterEach removes the fixture (ENOTEMPTY). The fixture is a leaf test repository, so no background work is wanted.
   await git('-c', 'core.hooksPath=/dev/null', '-c', 'gc.auto=0', '-c', 'gc.autoDetach=false', '-c', 'maintenance.auto=false', 'commit', '-q', '-m', 'base');
   const head = await git('rev-parse', 'HEAD');
-  const lease = { baseCommit: head, workspace: root, sourceBase: { source: { repositoryRoot: root } } } as unknown as GitWorkspaceLease;
+  const lease = { baseCommit: head, workspace: root, sourceBase: { adapter: { id: 'git', version: 1 }, source: { repositoryRoot: root } } } as unknown as GitWorkspaceLease;
   const options = (outputBytes: number) => ({ gitExecutable: '/usr/bin/git', timeoutMs: 30_000, outputBytes, sourceRoot: root, workspaceRoot: root }) as unknown as GitWorkspaceOptions;
   return { root, head, lease, options, budget: () => new SnapshotBudget(limits, Date.now() + 30_000) };
 }

@@ -1,12 +1,14 @@
 import { execFile } from 'node:child_process';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { hostname, userInfo } from 'node:os';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { evaluateTask, inspectConfiguredWorkspaceIntegration } from '../../../src/index.js';
+import { deliverConfiguredWorkspaceIntegration, evaluateTask, inspectConfiguredWorkspaceIntegration } from '../../../src/index.js';
 import { DatabaseSync } from 'node:sqlite';
-import { DockerSupervisor } from '#adapters/index.js';
+import { DockerSupervisor, openSqliteAuditStore } from '#adapters/index.js';
+import { gitBlobOid } from '#engine/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { readyDeliveryFixture, type FixtureTracker } from '../support/workspace-patch-fixture.js';
 import { DRIVER, inPty as runInPty, type Step } from '../support/pty-steps.js';
@@ -71,13 +73,32 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(await f.source()).toEqual(before);
   });
 
-  it('working-tree mode (R9p): y writes the change into the project files; no reference or object in the repository, HEAD and index unchanged, no adoption step', async () => {
-    const f = await fixture({ deliveryMode: 'working-tree' }), before = await f.refs(), head = await f.git('rev-parse', 'HEAD'), index = await readFile(join(f.project, '.git/index'));
+  it('working-tree mode (R9n/R9p): the worker starts from the uncommitted files without the secrets; a company deny is a typed refusal; y writes onto the WIP line with the Run\'s own mode', async () => {
+    const secrets = { '.env': 'TOKEN=synthetic-env\n', 'secret.pem': 'synthetic-pem\n' };
+    const f = await fixture({ deliveryMode: 'working-tree', beforeRun: async project => { await writeFile(join(project, 'todo.txt'), 'untracked\n');
+      for (const [path, text] of Object.entries(secrets)) await writeFile(join(project, path), text); await symlink('/etc/hostname', join(project, 'link.txt')); } });
+    const before = await f.refs(), head = await f.git('rev-parse', 'HEAD'), index = await readFile(join(f.project, '.git/index'));
+    // The Run's private base: the WIP line and the untracked file; no withheld content there or in the person's repository (audited, never hashed).
+    const runBase = join(productResourcePath(f.runtime.layout, 'workspaces'), 'run-bases', createHash('sha256').update(JSON.stringify({ scopeId: 's', runId: 'r' })).digest('hex'));
+    expect(await execute('/usr/bin/git', ['-C', runBase, 'show', 'HEAD:note.txt']).then(out => out.stdout)).toBe('owner-wip\n');
+    expect(await execute('/usr/bin/git', ['-C', runBase, 'show', 'HEAD:todo.txt']).then(out => out.stdout)).toBe('untracked\n');
+    for (const text of Object.values(secrets)) for (const root of [runBase, f.project]) await expect(execute('/usr/bin/git', ['-C', root, 'cat-file', '-e', gitBlobOid(Buffer.from(text), 'sha1')])).rejects.toBeDefined();
+    const audit = await openSqliteAuditStore(productResourcePath(f.runtime.layout, 'ledger'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' });
+    try { expect(audit.page('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === 'worker-tree-excluded').flatMap(subject => 'entries' in subject ? subject.entries : [])
+      .filter(entry => entry.by === 'working-tree-base' && !entry.path.startsWith('.deckent/')).map(entry => entry.path).sort()).toEqual(['.env', 'link.txt', 'secret.pem']); } finally { audit.close(); }
+    // Owner "ayar + şirket politikası": a company deny of deliver-working-tree refuses typed; nothing is written, no fallback to a reference.
+    const grants = JSON.parse(await readFile(productResourcePath(f.runtime.layout, 'policy'), 'utf8'));
+    await writeFile(productResourcePath(f.runtime.layout, 'policy'), JSON.stringify({ ...grants, restrictions: [{ id: 'no-files', actions: ['deliver-working-tree'], scopes: 'all', principals: 'all', resource: { kind: 'attempt', ids: 'all' } }] }), { mode: 0o600 });
+    await expect(deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'denied', identity: f.identity, integrationCommandId: 'candidate' }, f.options)).rejects.toMatchObject({ code: 'DELIVERY_WORKING_TREE_DENIED' });
+    await writeFile(productResourcePath(f.runtime.layout, 'policy'), JSON.stringify(grants), { mode: 0o600 });
+    // Mode pinning: the config changes back to reference after the Run began; the Run still delivers into the files.
+    await writeFile(f.configPath, JSON.stringify({ ...JSON.parse(await readFile(f.configPath, 'utf8')), execution: { ...JSON.parse(await readFile(f.configPath, 'utf8')).execution, deliveryMode: 'reference' } })); clearConfigCache();
+    expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('owner-wip\n');
     const result = await inPty(f.project, f.options.env, 'window', [...opening, ...decide('y'), ['no commit, index and branches unchanged.', '']]);
     expect(result.output).toContain('Yes: the change is written into your files (no commit'); expect(result.output).not.toContain('refs/deckent/deliveries/');
     expect(result.output).not.toContain('Adopt commit'); expect(result.output).toContain('Written into your files (no commit)');
     expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('after\n'); expect(await readFile(join(f.project, 'added.txt'), 'utf8')).toBe('new\n');
-    await expect(readFile(join(f.project, 'removed.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(f.project, 'removed.txt'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(f.project, 'todo.txt'), 'utf8')).toBe('untracked\n');
     expect(await f.refs()).toEqual(before); expect(await f.git('rev-parse', 'HEAD')).toBe(head); expect(await readFile(join(f.project, '.git/index'))).toEqual(index);
   });
 

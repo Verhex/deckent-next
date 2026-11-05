@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
-  GitQueueTarget, GitWorkingTreeDelivery, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
+  GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
-  targetQueueKey, assertIntegrationBase, SnapshotBudget, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
+  targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
 
 const exec = promisify(execFile), roots: string[] = [];
@@ -33,10 +33,12 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
   const options: GitWorkspaceOptions = { sourceRoot, workspaceRoot, gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536,
     ...(refOnly ? { baseRef: targetRef } : {}), ...(workingTree ? { workingTree: true as const } : {}) };
   const target = new GitIntegrationTarget(options, limits), delivery = new GitIntegrationDelivery(options), adoption = new GitIntegrationAdoption(options), files = new GitWorkingTreeDelivery(options, limits);
+  // R9n: a working-tree Run's base lives in its private base repository; on this clean tree it is HEAD itself.
+  if (workingTree) expect((await captureWorkingTreeBase(options, { scopeId: 's', runId: 'wt' }, limits, workerTreeDenied)).commit).toBe(base);
   const file = (text: string) => patchFile(Buffer.from(text), '100644');
   const patch = (id: string, path: string, before: string | null, after: string | null): WorkspacePatch => workspacePatchSchema.parse({
     schemaVersion: 1, kind: 'workspace-patch', identity: { scopeId: 's', runId: id, taskId: 't', attemptId: id, layoutRevision: 'l', generation: 1 },
-    source: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: fingerprintGitSource({ schemaVersion: 1, sourceRoot, repositoryRoot: sourceRoot }) },
+    source: { schemaVersion: 1, adapter: { id: 'git', version: workingTree ? 2 : 1 }, sourceFingerprint: fingerprintGitSource({ schemaVersion: 1, sourceRoot, repositoryRoot: sourceRoot }) },
     baseCommit: base, snapshotDigest: patchDigest(id), exclusions: patchExclusions,
     changes: [{ path, before: before === null ? null : file(before), after: after === null ? null : file(after) }] });
   const prepare = async (p: WorkspacePatch) => {
@@ -385,6 +387,25 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     const journal = join(f.workspaceRoot, 'working-tree-deliveries', plan.ref.split('/').pop()!);
     expect(JSON.parse(await readFile(join(journal, 'journal.json'), 'utf8'))).toMatchObject({ state: 'written', written: ['a.txt', 'dir/new.txt', 'old.txt'] });
     expect([await readFile(join(journal, 'original-0'), 'utf8'), await readFile(join(journal, 'original-2'), 'utf8')]).toEqual(['a before\n', 'remove\n']);
+  });
+  it('R9n: the base is the current files in a private Run repository; secrets, links and hard links stay out, nothing enters the person\'s repository, the yes writes onto the WIP line', async () => {
+    const f = await fixture(false, 'sha1', true), s = f.sourceRoot, withheld = ['TOKEN=synthetic\n', 'synthetic-key\n', 'hard\n'];
+    await writeFile(join(s, 'a.txt'), 'a before\nikinci satır\n'); await writeFile(join(s, 'todo.txt'), 'untracked\n'); await writeFile(join(s, '.env'), withheld[0]!);
+    await writeFile(join(s, 'secret.pem'), withheld[1]!); await exec('ln', ['-s', '/etc/hostname', join(s, 'link.txt')]);
+    await writeFile(join(f.workspaceRoot, 'shared'), withheld[2]!); await exec('ln', [join(f.workspaceRoot, 'shared'), join(s, 'hard.txt')]);
+    // The person's repository (refs, HEAD, status, index bytes, object files); Deckent's own workspace root is not part of it.
+    const person = async () => { const { candidates, ...state } = await f.state(); void candidates; return [state, await readFile(join(s, '.git/index')), await objects(s)]; }, before = await person();
+    const base = await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'r9n' }, limits, workerTreeDenied);
+    expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual([['.env', 'patch-excluded'], ['hard.txt', 'hard-link'], ['link.txt', 'symlink'], ['secret.pem', 'deny-path:**/*.pem']]);
+    const identity = { scopeId: 's', runId: 'r9n', taskId: 't', attemptId: 'w', layoutRevision: 'l', generation: 1 };
+    const lease = await new GitWorkspaceBroker(base.options).allocate({ schemaVersion: 1, identity, baseCommit: base.commit });
+    expect(lease.sourceBase.adapter.version).toBe(2); expect((await readdir(lease.workspace)).filter(name => name !== '.git').sort()).toEqual(['a.txt', 'b.txt', 'old.txt', 'todo.txt']);
+    expect(await readFile(join(lease.workspace, 'a.txt'), 'utf8')).toBe('a before\nikinci satır\n');
+    for (const text of withheld) for (const root of [s, base.options.runBase!, lease.workspace]) await expect(exec('/usr/bin/git', ['-C', root, 'cat-file', '-e', gitBlobOid(Buffer.from(text), 'sha1')])).rejects.toBeDefined();
+    expect(await person()).toEqual(before);
+    await f.deliver(workspacePatchSchema.parse({ ...f.patch('r9n', 'a.txt', 'a before\nikinci satır\n', 'a before\nikinci satır\nworker\n'), baseCommit: base.commit }));
+    expect(await readFile(join(s, 'a.txt'), 'utf8')).toBe('a before\nikinci satır\nworker\n'); expect(await readFile(join(s, 'todo.txt'), 'utf8')).toBe('untracked\n');
+    expect(await person()).toEqual(before);
   });
   it('one touched path differing from its base writes nothing (PATCH_CONFLICT before any write)', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n');

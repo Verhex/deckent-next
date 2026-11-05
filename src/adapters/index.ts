@@ -17,7 +17,7 @@ export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-worksp
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
 export { gitRefFileSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
 export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
-export { scanWorkerTree, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
+export { scanWorkerTree, workerTreeDenied, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';

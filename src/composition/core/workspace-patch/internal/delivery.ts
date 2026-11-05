@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
-import { assertAuthorityWitness, deliveryDismissalEvent, dismissedDeliveries, WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
+import { assertAuthorityWitness, workingTreeDeliveryAuthorization, workingTreeSource, deliveryDismissalEvent, dismissedDeliveries, WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { workspacePatchContext } from './configured.js';
@@ -57,8 +57,10 @@ export async function deliverWorkspaceIntegrationWithConfirmation(root: string, 
     try { await c.sameWorkSource(store);
       const patches = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
       const inspection = new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes);
-      return await new WorkspaceDeliveryApplication(patches, inspection, target, git.workingTree ? new GitWorkingTreeDelivery(git, limits) : new GitIntegrationDelivery(git), store,
-        sessions, c.authorization, clock, confirmation, getConfigKnownSecrets(c.config)).deliver(command);
+      // Mode pinning (R9n): the Run's custody, not today's config, decides whether the yes writes the files (a company deny closes that path).
+      const files = workingTreeSource((await store.loadRunWorkspaceCustody(command.identity.scopeId, command.identity.runId))?.source);
+      return await new WorkspaceDeliveryApplication(patches, inspection, target, files ? new GitWorkingTreeDelivery(git, limits) : new GitIntegrationDelivery(git), store,
+        sessions, files ? workingTreeDeliveryAuthorization(c.authorization, c.policy) : c.authorization, clock, confirmation, getConfigKnownSecrets(c.config)).deliver(command);
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

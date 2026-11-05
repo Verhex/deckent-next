@@ -1211,6 +1211,34 @@ anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is a
 PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
 `working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`); each write is a same-directory temporary file,
 fsynced, compared once more and renamed; a removal is compared and unlinked; an existing file keeps its permission bits. The trace is the
-Deckent delivery record and that journal. Open (see the alpha.63 L1 handoff): a worker still starts from the Run's HEAD (uncommitted work
-is not in its base until a Deckent-private base repository lands), no policy action of its own for file delivery, the kept originals are
-not yet wired to a rollback command.
+Deckent delivery record and that journal. Open: the kept originals are not yet wired to a rollback command.
+
+## Working-tree base (R9n, owner 2026-11-05; alpha.63 L1b)
+
+A Run that starts in `working-tree` mode (no recorded custody yet and the config derives `working-tree`; never a queue verification Run)
+gets its base from the person's current files, not HEAD: `captureWorkingTreeBase` builds one private bare repository per Run under the
+workspace root (`run-bases/<sha256(scope, run)>`). Only the objects reachable from HEAD are streamed in (`pack-objects --revs` into
+`index-pack`; the person's unreachable objects never travel). Every tracked path that differs from HEAD (`diff-index`) and every untracked
+file outside `.gitignore`/`.git/info/exclude` (`ls-files --others --exclude-standard`; the person's global excludes file is not read) is read
+through `readTreeFile` (descriptor-relative, `O_NOFOLLOW`, owner, one link, regular file) and hashed into that repository only; the
+detached HEAD there is the base commit (HEAD itself on a clean tree). Before any read, a path on the S6 deny list
+(`workerTreeDenied`), under a patch exclusion, under a product-state root (layout root, configuration directory), a nested repository, a
+symlink, hard link, foreign-owned or special file, or one over the snapshot budget (`artifacts.maxBytes`, `patchPreview.maxEntries`) is
+withheld: never read or hashed anywhere; a tracked one keeps its HEAD version, an untracked one is absent. Each withheld path (path and
+rule) is audited as `worker-tree-excluded` with `by: working-tree-base` before the launch and reaches the worker as one data line
+`{"kind":"workspace-files-withheld",…}` after its context (workers that take Deckent's prompt context). The person's repository gets no
+object, reference or index write. Concurrent first attempts build in fresh directories and rename into place; the loser uses the winner.
+
+The base's adapter version is 2 (`workingTreeSource`); the Run custody, the attempt lease and every patch carry it, so the mode is pinned
+for the Run's life: the broker, patch capture (`listBase`/`readBaseBlobs`/`completeHiddenBase`), predecessor patches, the integration
+candidate clone, delivery planning and the delivery card read the base from the Run's private repository and choose the delivery target
+from the custody or patch, never from today's config. A later config change keeps the Run on its own mode. The working-tree delivery
+compares each touched file with the base content (the person's uncommitted bytes), so a yes writes onto an uncommitted line; a file the
+person saved again meanwhile is PATCH_CONFLICT, as before.
+
+Company policy can close file delivery: a deny grant or restriction on the attempt action `deliver-working-tree` refuses a working-tree
+Run's delivery at every `deliver-integration` check with the typed `DELIVERY_WORKING_TREE_DENIED` (EN/TR text); nothing is written and
+there is no fall back to a reference. The action needs no grant (default open: it rides on `deliver-integration`), so no template version
+or upgrade step exists for it. Reference mode (work target or adoption targets: live and N1) is unchanged: base HEAD of the person's
+repository, adapter version 1. Open (alpha.63 L1b handoff): a Run's private base repository is never removed (a full HEAD history copy
+per working-tree Run), interrupted build directories are not swept, and a project root below its repository root is refused.

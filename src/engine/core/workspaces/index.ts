@@ -1,6 +1,6 @@
 export { workspaceRequestSchema, WorkspaceError } from './internal/port.js';
 export type { WorkspaceRequest, WorkspaceLease, WorkspaceBroker } from './internal/port.js';
-export { workspaceSourceSchema, runWorkspaceCustodySchema, RunWorkspaceCustodyError, workspaceCustodyConflict } from './internal/run-custody.js';
+export { workspaceSourceSchema, workingTreeSource, runWorkspaceCustodySchema, RunWorkspaceCustodyError, workspaceCustodyConflict } from './internal/run-custody.js';
 export type { WorkspaceSource, RunWorkspaceCustody, RunWorkspaceCustodyStore } from './internal/run-custody.js';
 export { RunWorkspaceAcquisitionApplication } from './internal/acquire.js';
 export type { RunWorkspaceProvider } from './internal/acquire.js';
@@ -8,7 +8,7 @@ export { WorkTargetError, assertWorkTarget } from './internal/work-target.js';
 export type { WorkTargetErrorCode, WorkTargetObservation, WorkTargetContext } from './internal/work-target.js';
 export { createWorkspaceFileIndexCache, rankWorkspacePaths, workspacePathRank } from './internal/file-index.js';
 export type { RuntimeWorkspaceFileHost, WorkspaceFileIndex } from './internal/file-index.js';
-export { enforceWorkerTreeGate, workerTreeDenyForms, WORKER_TREE_SHOWN_PATHS } from './internal/secret-gate.js';
+export { enforceWorkerTreeGate, withheldBaseEvent, workerTreeDenyForms, WORKER_TREE_SHOWN_PATHS } from './internal/secret-gate.js';
 export type { WorkerTreeFinding, WorkerTreeGateContext, WorkerTreeLimit, WorkerTreeScan } from './internal/secret-gate.js';
 export { enforceAdmittedWorkerTreeGate, mergeWorkerTreeScans, WorkerTreeScanAdmission, WorkerTreeScanAdmissionTimeout, WORKER_TREE_SCAN_ADMISSION } from './internal/scan-admission.js';
 export type { AdmittedWorkerTreeGateInput, WorkerTreeScanAdmissionSettings, WorkerTreeScanView, WorkerTreeTimeRefusalFile } from './internal/scan-admission.js';

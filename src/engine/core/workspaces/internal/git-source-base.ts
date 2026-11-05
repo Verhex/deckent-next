@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 export const gitSourcePreimageSchema = z.strictObject({ schemaVersion: z.literal(1), sourceRoot: persistedString(z.string().min(1)), repositoryRoot: persistedString(z.string().min(1)) }).readonly();
-export const gitSourceBaseSchema = z.strictObject({ schemaVersion: z.literal(1), adapter: z.strictObject({ id: z.literal('git'), version: z.literal(1) }).readonly(),
+export const gitSourceBaseSchema = z.strictObject({ schemaVersion: z.literal(1), adapter: z.strictObject({ id: z.literal('git'), version: z.union([z.literal(1), z.literal(2)]) }).readonly(),
   sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/), source: gitSourcePreimageSchema,
   baseCommit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
 }).readonly();
@@ -22,7 +22,10 @@ export const gitWorkspaceOptionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceR
   baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/).optional(),
   /** Owner 2026-11-05 (R9p): no work target and `deliveryMode` working-tree: integration compares, and the working-tree delivery target writes,
    * the source checkout's files instead of HEAD and its index. Never part of a clone fingerprint (the broker drops it). */
-  workingTree: z.literal(true).optional() }).strict().readonly();
+  workingTree: z.literal(true).optional(),
+  /** Owner 2026-11-05 (R9n): the Run's private base repository (Deckent-owned, `captureWorkingTreeBase`). Present, Run bases are read from
+   * and cloned out of it and are adapter version 2; the person's repository is only read. Never part of a clone fingerprint (the broker drops it). */
+  runBase: persistedString(z.string().min(1)).optional() }).strict().readonly();
 export type GitWorkspaceOptions = z.infer<typeof gitWorkspaceOptionsSchema>;
 export const gitWorkspaceRecordSchema = z.strictObject({ schemaVersion: z.literal(2), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   request: workspaceRequestSchema, sourceBase: gitSourceBaseSchema, status: z.enum(['allocating', 'ready']) });

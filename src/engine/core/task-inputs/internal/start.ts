@@ -58,6 +58,16 @@ export async function prepareTaskStart(identity: AttemptIdentity, store: StartSt
   return { declarations, inputs, handoffInputs, patches, events: handoff.events,
     ...(prompt ? { dependencyContext: { text: prompt, sha256: createHash('sha256').update(prompt).digest('hex') } } : {}) };
 }
+/** Owner 2026-11-05 (R9n): the worker learns which of the project's current files its working-tree base withheld (S6 deny, patch exclusion,
+ * product state, unsafe entry or size) as one labelled data line after its context: path and rule only, at most `shown` paths, the count always. */
+export function withheldBaseStart<T extends { readonly dependencyContext?: Readonly<{ text: string; sha256: string }> }>(start: T, count: number,
+  excluded: readonly Readonly<{ path: string; rule: string }>[], shown: number): T {
+  if (!count) return start;
+  const line = (paths: readonly unknown[]) => JSON.stringify({ kind: 'workspace-files-withheld', count, paths });
+  const text = [start.dependencyContext?.text, line(excluded.slice(0, shown))].filter(Boolean).join('\n'), fits = Buffer.byteLength(text) <= workerReportLimits.promptBytes;
+  const prompt = fits ? text : [start.dependencyContext?.text, line([])].filter(Boolean).join('\n');
+  return { ...start, dependencyContext: { text: prompt, sha256: createHash('sha256').update(prompt).digest('hex') } };
+}
 /**
  * S6R-5 (S6R-DESIGN §6, §7 step 4b): what the Attempt that continues a lost one learns of it, as one labelled data line — the decision's registry note
  * (its code and worker-facing registry text; never model text) and the settled task-idempotent work the gate saw (never re-executed; a repeat dedups

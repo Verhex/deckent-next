@@ -48,7 +48,8 @@ async function fixture(execute = true, twoTasks = false, withInputs = false, rea
     "const fs=require('node:fs');const p='/deckent/inputs/report';let denied=false;try{fs.writeFileSync(p,'overwrite')}catch(e){denied=e.code==='EROFS'}if(!denied)process.exit(71);process.stdout.write(fs.readFileSync(p).toString('hex'))"];
   const configPath = join(project, '.deckent/config.json'); const options = { env: { HOME: join(root, 'home') } };
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
-    execution: { docker: { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
+    // The reference contract: the worker starts from the detached HEAD (R9n working-tree bases: git-parallel-delivery, terminal-delivery-pty-process).
+    execution: { deliveryMode: 'reference', docker: { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
       git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const owner = { issuer: hostname(), subject: String(os.uid) };

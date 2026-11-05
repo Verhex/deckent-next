@@ -4,7 +4,7 @@ import { open, realpath, lstat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fingerprintGitSource, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { patchFile, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
+import { patchFile, patchDigest, workingTreeSource, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
 import { gitFailure, SnapshotBudget } from './snapshot.js';
 import { readTreeFile } from './working-tree.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
@@ -34,13 +34,13 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
     await assertIntegrationBase(git, patch, tip, budget);
     return Object.freeze({ source, head: tip, digest: patchDigest(JSON.stringify({ source, baseRef: options.baseRef, head: tip })) });
   }
-  // Working-tree mode: the base is the Run's own commit of the files (never compared with HEAD) and the person's index is not consulted.
-  const head = options.workingTree ? patch.baseCommit : (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
+  // Working-tree Run (pinned by its patch's source): the base is the Run's own commit of the files (never compared with HEAD), the index is not consulted.
+  const files = workingTreeSource(patch.source), head = files ? patch.baseCommit : (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
   if (source !== repository || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
     throw new WorkspacePatchError('PATCH_CONFLICT');
   await assertIntegrationBase(git, patch, head, budget);
   const index = new Map<string, string>();
-  for (const entry of options.workingTree ? [] : (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)) {
+  for (const entry of files ? [] : (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)) {
     budget.time();
     const tab = entry.indexOf('\t'); const path = entry.slice(tab + 1);
     if (!patch.changes.some(change => path === change.path || path.startsWith(change.path + '/') || change.path.startsWith(path + '/'))) continue;
@@ -53,11 +53,11 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
     for (const change of patch.changes) {
       const expected = change.before ? change.before.mode + ' ' + createHash(head.length === 40 ? 'sha1' : 'sha256')
         .update(`blob ${Buffer.byteLength(change.before.text)}\0`).update(change.before.text).digest('hex') : undefined;
-      if (!options.workingTree && (index.get(change.path) !== expected || [...index.keys()].some(path => path !== change.path && (path.startsWith(change.path + '/') || change.path.startsWith(path + '/')))))
+      if (!files && (index.get(change.path) !== expected || [...index.keys()].some(path => path !== change.path && (path.startsWith(change.path + '/') || change.path.startsWith(path + '/')))))
         throw new WorkspacePatchError('PATCH_CONFLICT');
       const read = await readTreeFile(root, change.path, budget), file = JSON.stringify(read && patchFile(read.bytes, read.mode));
       // A working-tree path already holding its `after` is an interrupted delivery's own write; the writer leaves it as it is.
-      if (file !== JSON.stringify(change.before) && !(options.workingTree && file === JSON.stringify(change.after))) throw new WorkspacePatchError('PATCH_CONFLICT');
+      if (file !== JSON.stringify(change.before) && !(files && file === JSON.stringify(change.after))) throw new WorkspacePatchError('PATCH_CONFLICT');
     }
   } finally { await root.close(); }
   return Object.freeze({ source, head, digest: patchDigest(JSON.stringify({ source, head, index: [...index].sort(),

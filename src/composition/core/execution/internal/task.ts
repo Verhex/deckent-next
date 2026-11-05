@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
-import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  gitQueueCandidateSource, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, type WorkerEventSealing } from '#adapters/index.js';
+  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
+  RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -79,7 +79,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       await preparation.begin(run!); const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
       const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
         ...(Object.keys(layout.resources) as ProductResource[]).map(resource => productResourcePath(layout, resource))]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
-      const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes }), start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
+      const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
+      let start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
       const agent = run?.execution.tasks.find(task => task.taskId === identity.taskId)?.agent;
       if (agent?.skills.length) {
         const catalog = openSqliteHubClientStore(await path(), config.storage.sqlite, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, false), 'read');
@@ -90,8 +91,13 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           if (files.some(file => !file.entry)) throw ErrorRegistry.createError('HUB_SKILL_FILES_UNAVAILABLE');
         } catch (cause) { throw ErrorRegistry.createError('HUB_SKILL_FILES_UNAVAILABLE', { cause }); } finally { catalog.close(); }
       }
-      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
-      const queue = await store.loadTargetQueueVerification(identity.scopeId, identity.runId);
+      const configured = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
+      const queue = await store.loadTargetQueueVerification(identity.scopeId, identity.runId), recorded = await store.loadRunWorkspaceCustody(identity.scopeId, identity.runId);
+      // R9n: a working-tree Run starts from the person's current files, committed in its own private base repository; the Run keeps the mode it began with.
+      const product = [layout.root, dirname(layout.bootstrapConfigPath)].map(root => relative(configured.sourceRoot, root)).filter(path => path && !path.startsWith('..') && !isAbsolute(path));
+      const base = !queue && (recorded ? workingTreeSource(recorded.source) : configured.workingTree) ? await captureWorkingTreeBase(configured, identity, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes },
+        path => workerTreeDenied(path) ?? (product.some(root => path === root || path.startsWith(root + '/')) ? 'product-state' : null)) : undefined, git = base?.options ?? configured;
+      if (base?.count) { await audit(withheldBaseEvent({ identity, principal, policyRevision: document.revision, now: Date.now }, base.count, base.excluded)); start = withheldBaseStart(start, base.count, base.excluded, WORKER_TREE_SHOWN_PATHS); }
       if (queue) await authorization.authorizeIdentity('read-output', queue.request.identity, principal);
       const privateSource = queue ? await gitQueueCandidateSource(queue, store, artifacts, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }) : undefined;
       const broker = new GitWorkspaceBroker(git, privateSource); await preparation.enter('workspace');

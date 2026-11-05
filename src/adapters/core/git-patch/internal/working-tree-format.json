@@ -4,5 +4,8 @@
   "locks": "working-tree-locks",
   "journal": "journal.json",
   "original": "original-",
-  "lockPollMs": 50
+  "lockPollMs": 50,
+  "base": "deckent-base.json",
+  "baseIndex": "deckent-index",
+  "baseMessage": "Deckent: the project's current files (working-tree base of one Run)\n"
 }

@@ -118,7 +118,8 @@
         "prepare-integration",
         "deliver-integration",
         "adopt-integration",
-        "rollback-integration"
+        "rollback-integration",
+        "deliver-working-tree"
       ]
     },
     {
