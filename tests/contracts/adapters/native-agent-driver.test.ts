@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { parseModelBindingDefinition, modelInvocationProfileSchema, type ModelInvocationDelta } from '#domain/index.js';
+import { parseModelBindingDefinition, modelInvocationProfileSchema, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
 import { createNativeAgentDriver, preflightNativeAgent, readNativeAgentObservation, headlessFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
@@ -104,6 +104,17 @@ it('stops unexpected Claude plugins and Codex native items before accepting tool
   }
 });
 
+it('R5b: retains which Claude stream check refused and identifier-only facts, never the call arguments', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const f = await fixture(registry.adapters.claude.capabilities.eventStream!, { calls: [{ name: 'list_dir', arguments: { path: '/secret-argument-canary' } }] });
+  const h = await f.start(), result = await h.run();
+  expect(result).toMatchObject({ kind: 'rejected' });
+  const body = result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null;
+  expect(body).toMatchObject({ refusal: 'guard', field: 'agent-surface:tool-use', subtype: `name=${f.entry.bridge.toolPrefix}list_dir prefix=1 offered=0` });
+  expect(JSON.stringify(body)).not.toContain('secret-argument-canary');
+  expect(f.propose).not.toHaveBeenCalled();
+  expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
+});
 it('keeps cancelled calls unknown, closes the process and removes token-bearing files for both CLI families', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {

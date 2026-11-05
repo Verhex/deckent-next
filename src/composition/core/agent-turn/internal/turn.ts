@@ -13,7 +13,7 @@ import { t, MESSAGE_REGISTRY, globalStateRoot, getConfigKnownSecrets, ErrorRegis
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
-  withMcpPrincipal, isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
+  withMcpPrincipal, withLocalPrincipalChannel, localPrincipalPeer, isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
 import { withNativeChatInvocation, nativeChatReasonText, nativeChatPreflightReason, type NativeChatRuntime } from './native.js';
@@ -119,7 +119,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
       const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
+      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown', profile) + '\n' });
       await channel.drained();
       return runChatTurn(projectRoot, input, peer, options, delivery, host, channel, undefined, controller);
     };
@@ -284,7 +284,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        const nativeRefusal = () => { const reason = agent?.refusal(); return reason ? nativeChatReasonText(reason, language) : null; };
+        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, native?.profile)}${check ? ` (${check})` : ''}` : null; };
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
@@ -308,8 +308,8 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
           const cliSubscription = evidence && profile && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
             && profile.adapter.id === evidence.adapter.id && profile.adapter.version === evidence.adapter.version;
           if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliSubscription)) {
-            const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
-              invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options).catch(() => null);
+            const inspected = await withLocalPrincipalChannel(undefined, () => inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+              invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()).catch(() => null);
             const content = inspected?.responseContent;
             const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
             if (body?.refusal === 'quota') return { status: 'failed', state: cliSubscription ? t('headless.chat.quota', {}, language) : t('siwc.usage.limit', {}, language) };

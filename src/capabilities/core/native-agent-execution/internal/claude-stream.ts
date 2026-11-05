@@ -11,13 +11,16 @@ type Command = Registry['adapters'][string];
 type Entry = { id: string; command: Command; headless: NonNullable<Command['headless']>; agent: NonNullable<Command['agent']>; bridge: NonNullable<Registry['agentBridge']> };
 type Call = Parameters<ToolSessionPort['propose']>[0];
 type ToolResult = Awaited<ReturnType<ToolSessionPort['propose']>>;
-type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string }>;
+type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string }>;
 export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
 export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
   finish(exit: StreamExit): ClaudeAgentResult }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
+/** R5b: shape facts for a refusal's record. Identifier-shaped names and codes only (never arguments, text or CLI output), at most 64 characters. */
+const fact = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,48}$/u.test(value) ? value : '?';
+const facts = (parts: readonly string[]) => parts.join(' ').slice(0, 64);
 /** Only fixed diagnostic keys leave this adapter; CLI output and token-bearing I/O errors never become error messages. */
 export class ClaudeAgentError extends Error {
   constructor(readonly reason: NativeAgentReadinessReason, readonly field: string) { super(reason); this.name = 'ClaudeAgentError'; }
@@ -33,17 +36,19 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
-  const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'): 'stop' => {
-    failure ??= { kind: 'refused', reason, field }; controller.abort(); return 'stop';
+  const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string): 'stop' => {
+    failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }) }; controller.abort(); return 'stop';
   };
   const charge = (size: number) => { bytes += size; return Number.isSafeInteger(bytes) && bytes <= options.outputMaxBytes; };
   const checkCall = (name: unknown, input: unknown): input is Record<string, unknown> => typeof name === 'string'
     && session.tools.some(tool => tool.name === name) && record(input) !== null;
   const addStreamCall = (block: Record<string, unknown>) => {
+    const prefixed = typeof block.name === 'string' && block.name.startsWith(entry.bridge.toolPrefix), offered = prefixed && session.tools.some(tool => tool.name === (block.name as string).slice(entry.bridge.toolPrefix.length));
+    const toolFacts = () => facts([`name=${fact(block.name)}`, `prefix=${prefixed ? 1 : 0}`, `offered=${offered ? 1 : 0}`]);
     if (typeof block.id !== 'string' || !block.id || block.id.length > 256 || block.id.includes('\0') || typeof block.name !== 'string'
-      || !block.name.startsWith(entry.bridge.toolPrefix)) return fail('tool-use');
+      || !prefixed) return fail('tool-use', undefined, toolFacts());
     const name = block.name.slice(entry.bridge.toolPrefix.length), input = block.input;
-    if (!checkCall(name, input)) return fail('tool-use');
+    if (!checkCall(name, input)) return fail('tool-use', undefined, toolFacts());
     const prior = calls.get(block.id);
     if (prior && (prior.streamed || prior.name !== name || !isDeepStrictEqual(prior.input, input))) return fail('correlation');
     if (prior) prior.streamed = true; else calls.set(block.id, { name, input, streamed: true });
@@ -83,9 +88,11 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     }
     if (value.type === 'user') {
       const message = record(value.message);
-      if (!message || !Array.isArray(message.content) || message.content.some(input => {
+      const foreign = !message || !Array.isArray(message.content) ? null : message.content.find(input => {
         const block = record(input); return !block || block.type !== 'tool_result' || typeof block.tool_use_id !== 'string' || !calls.has(block.tool_use_id);
-      })) return fail('tool-result');
+      });
+      if (foreign === null || foreign !== undefined) return fail('tool-result', undefined, foreign === null ? 'shape'
+        : facts([`type=${fact(record(foreign)?.type)}`, `known=${typeof record(foreign)?.tool_use_id === 'string' && calls.has(record(foreign)!.tool_use_id as string) ? 1 : 0}`]));
       return;
     }
     if (value.type === 'tool_progress') return typeof value.tool_use_id === 'string' && calls.has(value.tool_use_id) ? undefined : fail('tool-progress');
@@ -93,9 +100,10 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       const info = record(value.rate_limit_info);
       return info?.status === 'allowed' || info?.status === 'allowed_warning' ? undefined : fail('rate-limit');
     }
-    if (value.type !== 'result') return fail('event');
+    if (value.type !== 'result') return fail('event', undefined, facts([`${fact(value.type)}/${value.subtype === undefined ? '-' : fact(value.subtype)}`]));
     terminal = true;
-    if (!Array.isArray(value.permission_denials) || value.permission_denials.length) return fail('permission-denials');
+    if (!Array.isArray(value.permission_denials) || value.permission_denials.length) return fail('permission-denials', undefined, Array.isArray(value.permission_denials)
+      ? facts(value.permission_denials.map(denial => fact(record(denial)?.tool_name))) : 'shape');
     if (typeof value.is_error !== 'boolean' || typeof value.subtype !== 'string') return fail('result');
     result = value;
     if (value.is_error || value.subtype !== 'success') return;
@@ -105,7 +113,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if ([...calls.values()].some(call => !call.streamed || !call.settled)) return fail('correlation-incomplete');
   };
   const propose: ToolSessionPort['propose'] = async (call: Call, correlation: NativeAgentCorrelation, signal: AbortSignal) => {
-    function refuse(field: string): never { fail(field); throw new ClaudeAgentError(failure!.reason, failure!.field); }
+    function refuse(field: string, detail?: string): never { fail(field, undefined, detail); throw new ClaudeAgentError(failure!.reason, failure!.field); }
     if (failure || controller.signal.aborted || signal.aborted || !init || ended || terminal) refuse('proposal-order');
     const checked = nativeAgentCorrelationSchema.safeParse(correlation), input = objectJson(call.argumentsJson);
     if (!checked.success || checked.data.kind !== 'claude-tool-use' || call.id !== checked.data.deckentCallId || !checkCall(call.name, input)) refuse('proposal');
@@ -127,10 +135,11 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (!parsed.success || parsed.data.turnId !== session.turnId || parsed.data.generation !== session.generation || parsed.data.deckentCallId !== call.id
         || Buffer.byteLength(JSON.stringify(value)) > entry.bridge.frameMaxBytes) refuse('facade-result');
       current.settled = true; return parsed.data;
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (failure) throw new ClaudeAgentError(failure.reason, failure.field);
       if (controller.signal.aborted || signal.aborted) throw new ClaudeAgentError('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', 'cancelled');
-      return refuse('facade-result');
+      // R5b: the facade's typed code only (an error-registry identifier), never its message.
+      return refuse('facade-result', facts([`code=${fact((error as { code?: unknown } | null)?.code)}`]));
     });
     return current.promise;
   };

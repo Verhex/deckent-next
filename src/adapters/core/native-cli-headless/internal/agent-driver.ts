@@ -39,7 +39,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   const lifetime = new AbortController(), calls = new Map<string, NonNullable<ReturnType<CodexAgentResultLookup>>>();
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
-  let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, used = false;
+  let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
   const port: ToolSessionPort = { session: input.session.session,
     async propose(call, correlation, signal) {
       if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
@@ -65,7 +65,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
     }
     return sealed.preflight;
   };
-  return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal,
+  return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck,
     async close() { lifetime.abort(); calls.clear(); },
     native(bridge: Bridge, secrets: { configured: KnownSecretSnapshot; turn: KnownSecretSnapshot }): ModelInvocationNativePort {
       const known = knownPair(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation });
@@ -124,7 +124,8 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             const finished = claude?.finish(evidence);
             if (finished?.kind === 'refused') {
               refusal = finished.reason; await recordNativeAgentObservation(profile, preflight, execution, input.now, refusal);
-              return rejectResult(reject('invalid-response', { refusal: 'guard', field: 'agent-surface' }));
+              const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
+              return rejectResult(reject('invalid-response', { refusal: 'guard', field, ...(finished.detail ? { subtype: finished.detail } : {}) }));
             }
             if (stopped || refusal) {
               refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'; await recordNativeAgentObservation(profile, preflight, execution, input.now, refusal);
