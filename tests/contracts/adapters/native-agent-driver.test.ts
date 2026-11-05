@@ -115,6 +115,14 @@ it('R5b: retains which Claude stream check refused and identifier-only facts, ne
   expect(f.propose).not.toHaveBeenCalled();
   expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
 });
+it('R6b: a Claude keepalive for a pending offered call keeps the turn; one naming an unknown call still stops it', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const calls = [{ name: 'read_file', arguments: { path: 'scoped.txt' } }], family = registry.adapters.claude.capabilities.eventStream!;
+  const ok = await (await fixture(family, { heartbeat: 'known', calls })).start();
+  expect(await ok.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
+  const foreign = await fixture(family, { heartbeat: 'foreign', calls }), h = await foreign.start(), result = await h.run();
+  expect(result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null).toMatchObject({ field: 'agent-surface:subagent' });
+});
 it('keeps cancelled calls unknown, closes the process and removes token-bearing files for both CLI families', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {

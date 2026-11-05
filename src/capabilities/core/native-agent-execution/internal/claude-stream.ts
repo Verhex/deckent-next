@@ -74,6 +74,10 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     // Only A0's inert UI invalidation may precede init. Unknown notices, retries and permission denials stop the run.
     if (value.type === 'system' && value.subtype === 'ui_invalidate') return;
     if (!init) return fail('before-init');
+    // CLI keepalive (A0 claude-keepalive): each 30 s of a pending offered call it names that call as parent and carries no content.
+    const parentId = typeof value.parent_tool_use_id === 'string' ? value.parent_tool_use_id : '', parent = calls.get(parentId);
+    if (value.type === 'tool_progress' && value.heartbeat === true && parent && value.tool_name === entry.bridge.toolPrefix + parent.name
+      && typeof value.tool_use_id === 'string' && value.tool_use_id.startsWith(parentId) && /^-heartbeat-\d{1,9}$/u.test(value.tool_use_id.slice(parentId.length))) return;
     if (value.parent_tool_use_id !== undefined && value.parent_tool_use_id !== null) return fail('subagent');
     if (value.type === 'assistant') {
       const message = record(value.message);

@@ -29,6 +29,8 @@ export interface FakeAgentScenario {
   readonly loginCanary?: string;
   readonly proposalBeforeItem?: boolean;
   readonly hang?: boolean;
+  /** Claude CLI keepalive during a pending call; 'foreign' names an unknown parent. */
+  readonly heartbeat?: 'known' | 'foreign';
 }
 export async function writeFakeAgentCli(dir: string, family: string, scenario: FakeAgentScenario = {}) {
   const entry = nativeCliAgent(family)!;
@@ -71,7 +73,9 @@ async function main() {
  for (const call of x.calls ?? []) { const id='use-'+(++n), itemId='item-'+n;
   if (claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'tool_use',id,name:e.bridge.toolPrefix+call.name,input:call.arguments}]}});
   else await line({type:'item.started',item:{id:itemId,type:'mcp_tool_call',server:e.bridge.serverName,tool:call.name,arguments:call.arguments,status:'in_progress',result:null,error:null}});
-  const result=await rpc('tools/call',{name:call.name,arguments:call.arguments,_meta:claude?{'claudecode/toolUseId':id}:{callId:'call-'+n,itemId:'fc-'+n}});
+  const pending=rpc('tools/call',{name:call.name,arguments:call.arguments,_meta:claude?{'claudecode/toolUseId':id}:{callId:'call-'+n,itemId:'fc-'+n}});
+  if (claude && x.heartbeat) { const parent=x.heartbeat==='known'?id:'use-unknown'; await line({type:'tool_progress',tool_use_id:parent+'-heartbeat-0',tool_name:e.bridge.toolPrefix+call.name,parent_tool_use_id:parent,elapsed_time_seconds:30,heartbeat:true,session_id:'s-1',uuid:'u-hb'}); }
+  const result=await pending;
   if (!claude) await line({type:'item.completed',item:{id:itemId,type:'mcp_tool_call',server:e.bridge.serverName,tool:call.name,arguments:call.arguments,status:'completed',result,error:null}});
   else await line({type:'user',message:{role:'user',content:[{type:'tool_result',tool_use_id:id,content:result.content}]},parent_tool_use_id:null});
  }
