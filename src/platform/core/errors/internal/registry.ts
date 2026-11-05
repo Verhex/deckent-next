@@ -547,6 +547,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_SCOPE_VIOLATION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_VIOLATION', p, l) }) },
   PATCH_WORKING_TREE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_BUSY', p, l) }) },
   PATCH_WORKING_TREE_PARTIAL: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_PARTIAL', p, l) }) },
+  // F1 (Astra 3015): a file moved aside could not return to its name (the person's newer file is there); `kept` names it, `written` may be empty.
+  PATCH_WORKING_TREE_KEPT: { category: 'error', render: (p, l) => ({ message: p['written'] ? t('error.PATCH_WORKING_TREE_KEPT.partial', p, l) : t('error.PATCH_WORKING_TREE_KEPT', p, l) }) },
   PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
   PATCH_WORKING_TREE_SUBFOLDER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_SUBFOLDER', p, l) }) },
   PATCH_WORKING_TREE_NOT_WRITTEN: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_NOT_WRITTEN', p, l) }) },

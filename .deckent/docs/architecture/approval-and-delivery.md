@@ -1205,15 +1205,29 @@ turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-e
 (`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
 also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
 the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by an
-exclusive lock directory in Deckent's workspace root (bounded wait; the lock holds its owner record, and only a holder proven gone by pid and
-start bound is taken over, its journal still `writing` first classified from the files: all `before` = nothing written, all `after` =
-written, a mix = PATCH_WORKING_TREE_PARTIAL with both lists; an ownerless lock is never taken), and writes nothing to the person's repository: no
+exclusive lock directory in Deckent's workspace root (bounded wait; the lock holds its owner record naming the delivery and the operation it
+runs, delivery or rollback, and only a holder proven gone by pid and start bound is taken over: the journal of that operation, still `writing`,
+is first recovered and classified from the files: all `before` = nothing written, all `after` = written, a mix = PATCH_WORKING_TREE_PARTIAL
+with both lists; an ownerless or operation-less lock is never taken), and writes nothing to the person's repository: no
 reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
 anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
 PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
-`working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`); each write is a same-directory temporary file,
-fsynced, compared once more and renamed; a removal is compared and unlinked; an existing file keeps its permission bits. The trace is the
-Deckent delivery record and that journal.
+`working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`) that keeps each path's full `before`/`after` state
+(absent, or content digest and Git mode) and the token naming what it moves aside; crash settling uses the writer's own equality, so a
+mode-only change is never taken as written (Astra 3015 F2). Each path is written without ever writing over or unlinking a file the person
+saved meanwhile (Astra 3015 F1): the new bytes go to a same-directory temporary file (fsynced); the path's file is then taken aside by an
+atomic rename (whatever is there at that instant keeps its inode) and compared; the new file goes in only by a no-clobber link. The person's
+file found at the take or saved into the empty name goes back or stays (link back, EEXIST leaves theirs in place) and the result is
+PATCH_CONFLICT; a write into the taken file through an editor's open handle is caught by a second comparison and the person's file returns
+over Deckent's. A taken file that cannot return because a newer file of the person's took its name is kept beside it and named
+(PATCH_WORKING_TREE_KEPT). A taken file that still holds `before` leaves the checkout by a rename into the journal directory (the inode
+itself, so a write through a handle opened before the take still lands there). On another filesystem (EXDEV, e.g. a WSL `/mnt/c` project;
+lead 2026-11-06, never a refusal) it is first copied into the journal directory (O_EXCL, fsynced), then compared again with `before` and with
+that copy, and unlinked only when both hold; otherwise it stays in place under its `.deckent-<uuid>.aside` name and the person is told its
+full path (PATCH_WORKING_TREE_KEPT). One residual window remains there: a handle opened before the take writing between that last
+comparison and the unlink. A removal is the same take, comparison and
+departure. Settling a crashed journal first puts a taken file back into its empty name and removes Deckent's temporary name. An existing
+file keeps its permission bits. The trace is the Deckent delivery record and that journal.
 
 Rollback (alpha.63 L1c): `deckent task integration-rollback --scope --run [--task]` (no `--adoption-command-id`; the delivered task, its
 attempt and delivery are found as for the light adoption) puts a written delivery's `before` contents back through the same lock and writer

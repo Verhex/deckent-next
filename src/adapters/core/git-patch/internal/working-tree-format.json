@@ -5,6 +5,7 @@
   "lockOwner": "owner-",
   "journal": "journal.json",
   "original": "original-",
+  "aside": ".deckent-",
   "rollback": ".rollback",
   "lockPollMs": 50,
   "base": "deckent-base.json",
