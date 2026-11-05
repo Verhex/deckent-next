@@ -112,6 +112,13 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(preview.profile.adapter.version).toBe(2); expect(preview.profile.parameters['invocation']).toMatchObject({ discovery: { mode: 'disabled' } }); expect(await readFile(path, 'utf8')).toBe(before); expect(await h.spawns()).toEqual(spawns);
     expect(preview.profile.parameters['worker']).toMatchObject({ definition: profile.adapter.definition, protocolFamily: profile.protocol.family });
     await expect(configureNativeCodingTemplate(h.f.project, { ...request, discovery: 'repository' }, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED' });
+    // Owner 2026-11-05 (R8): without a Docker toolchain pin the template records the connection's CLI floor; the worker runs on the current sealed version.
+    const pinless = { ...config, admission: { ...config.admission, registry: { ...config.admission.registry, profiles: [{ ...template, parameters: { ...template.parameters,
+      invocation: { ...(template.parameters['invocation'] as object), provider: 'codex', cliVersion: 'codex-cli 9.1.0' } } }] } } };
+    await writeFile(path, JSON.stringify(pinless)); platform.clearConfigCache();
+    const floor = await configureNativeCodingTemplate(h.f.project, request, options, person).catch((error: unknown) => error);
+    expect(floor).toMatchObject({ profile: { parameters: { invocation: { cliVersion: profile.adapter.definition.minCliVersion } } } });
+    await writeFile(path, before); platform.clearConfigCache();
     const applied = await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person);
     expect(applied.registry).toEqual(preview.registry); expect(applied.status).toBe('applied');
     expect((await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person)).status).toBe('unchanged');

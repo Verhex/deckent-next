@@ -128,10 +128,14 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     }
     throw error;
   });
-  const worker = request.connection ? await ports.connection?.(read, request.connection, request.provider) : undefined;
-  if (request.connection && !worker) refuse('NATIVE_AGENT_RECONNECT_REQUIRED');
-  const plan = proposal(read, request, ports.template, undefined, worker);
-  const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null };
+  const worker = request.connection ? await ports.connection?.(read, request.connection, request.provider) : undefined; if (request.connection && !worker) refuse('NATIVE_AGENT_RECONNECT_REQUIRED');
+  // Owner 2026-11-05: the worker runs on its connection's current sealed CLI version, so a template without a Docker toolchain pin records the floor.
+  const own = (snapshot: ConfigSnapshot) => { const { executable, ...resources } = snapshot.effective.execution!.docker!; void executable;
+    try { return ports.template({ ...resources, imageId: request.image ?? resources.imageId }, { provider: request.provider, cliVersion: worker!.definition.minCliVersion,
+      discovery: { schemaVersion: 1, mode: request.discovery ?? 'disabled' }, permissionMode: 'unattended' }, worker); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } };
+  const planFor = (snapshot: ConfigSnapshot) => { try { return proposal(snapshot, request, ports.template, undefined, worker); } catch (error) {
+    if (!worker || (error as { code?: unknown }).code !== 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') throw error; return proposal(snapshot, request, ports.template, own(snapshot), worker); } };
+  const plan = planFor(read), result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null };
   if (!request.apply || !plan.changed) return { ...result, status: plan.changed ? 'preview' : 'unchanged', write: null };
   const config = read.effective;
   const scopeId = config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
@@ -141,7 +145,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const guard = (current: ConfigSnapshot) => {
     if (worker && (JSON.stringify(current.effective['provider_invocation_profiles']) !== JSON.stringify(read.effective['provider_invocation_profiles'])
       || JSON.stringify(current.effective['provider_catalog']) !== JSON.stringify(read.effective['provider_catalog']))) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
-    const fresh = proposal(current, request, ports.template, undefined, worker);
+    const fresh = planFor(current);
     if (JSON.stringify(fresh.profile) !== JSON.stringify(plan.profile)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   };
   await ports.beforeWrite?.();

@@ -97,8 +97,6 @@ it('K12: unsealed, stale F08, mismatched executable and unavailable readiness ne
   expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
   f.ports.readiness = async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_LOGIN_REQUIRED' });
   expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_LOGIN_REQUIRED' });
-  f.ports.readiness = async () => ({ state: 'ready', execution: { ...execution, cliVersion: '2.1.318' } }); f.ports.f08 = async () => ({ ...execution, cliVersion: '2.1.318' });
-  expect(await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence })).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
   expect(f.ports.capacity.acquire).not.toHaveBeenCalled(); expect(f.ports.driver).not.toHaveBeenCalled();
 });
 it('K12: capacity is owned by the shared opaque resource; a busy login waits without starting tools or CLI', async () => {
@@ -154,8 +152,9 @@ it('K12: a lost fence or revoked lease between preparation and spawn never invok
   expect(await revoked.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown' } }); expect(revoked.run).not.toHaveBeenCalled(); await revoked.supervisor.close();
   const changed = await prepared(), newer = { ...execution, cliVersion: '2.1.318' };
   changed.ports.readiness = async () => ({ state: 'ready', execution: newer }); changed.ports.f08 = async () => newer;
-  expect(await changed.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } });
-  expect(changed.run).not.toHaveBeenCalled(); await changed.supervisor.close();
+  // Owner 2026-11-05: a CLI auto-update does not stall the worker; it runs on the connection's current sealed version.
+  expect((await changed.supervisor.execute(request)).result).not.toMatchObject({ reasonCode: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+  expect(changed.run).toHaveBeenCalled(); await changed.supervisor.close();
 });
 it('K12: each tool admission rechecks the fence and lease; a later denial is never converted to another command', async () => {
   const f = fixture(), call = { id: 'original-call', name: 'read_file', argumentsJson: '{"path":"note.txt"}' };
