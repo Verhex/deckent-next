@@ -11,3 +11,5 @@ export const FIRST_RUN_V16_RULE_IDS: readonly string[] = Object.freeze([
   "first-run-recovery-promote-launcher-dead-orphan",
   "first-run-recovery-promote-launcher-dead-gone"
 ]);
+// Frozen v18 delta from 4466a4e33 (the rollback delta until v19 moved it on).
+export const FIRST_RUN_V18_RULE_IDS: readonly string[] = Object.freeze(["first-run-uninstall", "first-run-uninstall-operations"]);

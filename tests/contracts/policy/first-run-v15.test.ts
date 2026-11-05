@@ -1,13 +1,13 @@
-import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
+import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V19_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS];
 
 // S4B-1 + S7 (owner S-M1/S-M2 2026-10-23, S4B-DESIGN §5 A2/A2b; lead: v15 carries s7's agent-catalog grants): one add-only bump v14 → v15. The memory
 // distiller workload gets D1+D2 (memory inspect, propose), D4 (run inspect) and, as its own rule, D3 (attempt read-output); the named person may
@@ -18,7 +18,8 @@ const person = { issuer: 'host', subject: 'owner' };
 const mcpRef = mcpPrincipalRef(person), distillerRef = memoryDistillerPrincipalRef(person), evaluatorRef = memoryEvaluatorPrincipalRef(person), aggregatorRef = catalogAggregatorPrincipalRef(person);
 const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
 const distiller = memoryDistillerPrincipal(person, ['installation', 'other']), evaluator = memoryEvaluatorPrincipal(person, ['installation', 'other']);
-const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
+const { readToolNames, scratchToolNames, editShellToolNames, scratchWriteOperationId, writeOperationId, shellOperationId } = FIRST_RUN_TOOL_NAMES;
+const names = { readToolNames, scratchToolNames, editShellToolNames, scratchWriteOperationId, writeOperationId, shellOperationId, proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
   policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds, recoveryRules: FIRST_RUN_RECOVERY_RULES };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
 const current = firstRunPolicyTemplate(input), ids: readonly string[] = FIRST_RUN_V15_RULE_IDS, v16ids: readonly string[] = POST_V15_RULE_IDS;
@@ -94,8 +95,8 @@ it('exact v14 and v15 become exactly the current template; edited and hand-built
   const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
   for (const plan of [firstRunTemplateAdditions(edited, { ...names, person }), namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' })]) {
     // The person's own `extra` rule covers their propose cell, never the distiller's: only the distiller and catalog rules are added.
-    expect(plan.status === 'plan' ? plan.rules : null).toEqual([...v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose), ...v16]);
+    expect(plan.status === 'plan' ? plan.rules : null).toEqual([...v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose), ...v16].slice(0, POLICY_CHANGE_MAX));
   }
-  expect(firstRunTemplateRollback(current.policy, person, 'installation', FIRST_RUN_RECOVERY_RULES).rules.some(rule => ids.includes(rule.id))).toBe(false);
+  expect(firstRunTemplateRollback(current.policy, person, 'installation', input).rules.some(rule => ids.includes(rule.id))).toBe(false);
   expect(matchFirstRunPolicyTemplate('first-run-template-v15')).toEqual({ id: 'first-run-template', version: 15 });
 });

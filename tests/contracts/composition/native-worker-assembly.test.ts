@@ -6,7 +6,8 @@ import * as adapters from '#adapters/index.js';
 import * as runs from '#composition/core/runs/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
-import { modelInvocationProfileDigest } from '#engine/index.js';
+import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest } from '#engine/index.js';
+import { firstRunPolicyTemplate } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { connection, cleanupConnections } from '../../fixtures/native-headless/connection.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
@@ -74,13 +75,10 @@ it('K21: K1 tools use the exact Attempt tree with an MCP workload session and du
   const f = await brainProviderFixture(), c = await connection(), attempt = await mkdtemp(join(tmpdir(), 'k21-tools-')); temporary.push(attempt);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
-    const owner = adapters.readLocalOsIdentity(), policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    const principals = [{ issuer: `${owner.issuer}/mcp`, subject: owner.subject }];
-    policy.grants.push(...[
-      { id: 'tools', actions: ['invoke'], resource: { kind: 'agent-tool', ids: 'all' } },
-      { id: 'files', actions: ['execute'], resource: { kind: 'operation', ids: ['workspace.file.write'] } },
-    ].map(row => ({ ...row, effect: 'allow', principals, scopes: ['s'] })));
-    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); await writeFile(join(attempt, 'note.txt'), 'attempt-only'); clearConfigCache();
+    // R4a: the real first-run template (v19), never injected MCP grants: the worker's tool session runs as the MCP actor on its v19 rules.
+    const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 });
+    await writeFile(join(attempt, 'note.txt'), 'attempt-only'); clearConfigCache();
     vi.spyOn(runs, 'recheckNativeWorkerUse').mockResolvedValue({ profile: c.profile } as never);
     const runtime = createConfiguredNativeCliWorkerRuntime(f.project, f.options)!;
     const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
@@ -147,9 +145,9 @@ it('K22: K1 reads scoped inputs, predecessor handoff and dependency views; rejec
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.execution = { docker: { ...fixtureDockerRegistry(['custom']).profiles[0]!.parameters, executable: '/unavailable/docker' }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } };
     delete config.execution.docker.argv; await writeFile(configPath, JSON.stringify(config));
-    const owner = adapters.readLocalOsIdentity(), policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    policy.grants.push({ id: 'input-tools', actions: ['invoke'], resource: { kind: 'agent-tool', ids: 'all' }, effect: 'allow', scopes: ['s'],
-      principals: [{ issuer: `${owner.issuer}/mcp`, subject: owner.subject }] }); await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+    // R4a: the real first-run template (v19), no injected MCP grant.
+    const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 }); clearConfigCache();
     const context = await loadConfiguredScopeContext(f.project, 's', f.options, 'read');
     const { productResourcePath } = await import('#platform/index.js');
     await mkdir(productResourcePath(context.layout, 'artifacts'), { recursive: true, mode: 0o700 });
@@ -270,11 +268,9 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.execution = { docker: { executable: '/unavailable/docker', imageId: 'sha256:' + 'a'.repeat(64) }, git: { gitExecutable: '/usr/bin/git' } };
     await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
-    const owner = adapters.readLocalOsIdentity(), policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    const principals = [{ issuer: `${owner.issuer}/mcp`, subject: owner.subject }];
-    policy.grants.push({ id: 'readonly-shell', actions: ['invoke'], resource: { kind: 'agent-tool', ids: ['run_shell'] }, effect: 'require-approval', scopes: ['s'], principals },
-      { id: 'shell-effects', actions: ['execute'], resource: { kind: 'operation', ids: ['host.shell.run'] }, effect: 'allow', scopes: ['s'], principals });
-    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+    // R4a: the real first-run template (v19), no injected MCP grant: the shell card comes from its edit/shell rule.
+    const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 }); clearConfigCache();
     const context = await loadConfiguredScopeContext(f.project, 's', f.options, 'read'), artifactsRoot = productResourcePath(context.layout, 'artifacts');
     await mkdir(artifactsRoot, { recursive: true, mode: 0o700 });
     const artifacts = new adapters.FileArtifactStore({ root: artifactsRoot, maxBytes: context.config.artifacts.maxBytes }), receipt = await artifacts.put('s', Buffer.from('immutable-input'));

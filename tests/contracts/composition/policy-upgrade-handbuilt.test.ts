@@ -1,10 +1,10 @@
-import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
+import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS } from '../support/first-run-v16.js';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, readLocalOsIdentity } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V19_RULE_IDS, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 /** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
 const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
   'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
@@ -15,7 +15,7 @@ import { clearConfigCache } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS];
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
@@ -156,7 +156,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
     // R3-B: unapplied BeUser system rows share this one installer publication, keyed spr1-…; otherwise the template-upgrade key.
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^(policy-template-upgrade-v18-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^(policy-template-upgrade-v19-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
     // The same upgrade run again adds the remaining v15 and v16 rules (each run add-only and idempotent); a third run is current.
@@ -169,9 +169,10 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await f.archive()).toHaveLength(2);
     // After: the mcp-server resource allows; the call itself still asks on its card (the `mcp-call` hard-floor cell raises an allow).
     expect(await f.mcp()).toEqual({ server: 'allow', call: 'require-approval' });
-    // v9: the MCP actor observes, but a mutation the person holds (live-invoke, owner-model-catalog) is refused without a grant naming `<issuer>/mcp`.
+    // v9: the MCP actor observes, but a mutation the person holds (owner-model-catalog) is refused without a grant naming `<issuer>/mcp`.
+    // v19 (owner 2026-11-05 option 3): the upgrade's own named MCP rule now lets the MCP actor invoke models in the installed scope.
     expect(await f.mcpActor('inspect', 'run')).toBe('allow');
-    expect(await f.mcpActor('invoke', 'model-invocation')).toBe('deny');
+    expect(await f.mcpActor('invoke', 'model-invocation')).toBe('allow');
     expect(await f.mcpActor('activate', 'model-activation')).toBe('deny');
   });
 
@@ -193,7 +194,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 18 } });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 19 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
@@ -277,9 +278,8 @@ describe.skipIf(process.platform !== 'linux')('POLICY-V12 option A (owner 2026-1
     const V12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
     // The live shape without its own scope/service rules, upgraded to the v11 level under the previous release (the v12 rules removed again).
     const f = await installation(handBuilt(HAND_BUILT.filter(rule => !['live-scope', 'live-service-shutdown'].includes(rule.id))));
-    // Since v15 the full add-only plan takes two runs (POLICY_CHANGE_MAX).
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    // Since v15 the full add-only plan takes two runs (POLICY_CHANGE_MAX); for this shape since v19 three.
+    for (let run = 0; run < 3; run++) expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
     const upgraded = JSON.parse(await f.bytes()) as { revision: string; grants: { id: string }[] };
     await writeFile(f.policyPath, JSON.stringify({ ...upgraded, revision: 'a-live-v11', grants: upgraded.grants.filter(rule => !V12.includes(rule.id)) }), { mode: 0o600 });
     const before = await f.bytes();

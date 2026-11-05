@@ -10,17 +10,18 @@ import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgen
   resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
-import { modelInvocationProfileDigest } from '#engine/index.js';
-import { modelInvocationProfileSchema } from '#domain/index.js';
+import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest } from '#engine/index.js';
+import { FIRST_RUN_UPGRADE_RULE_IDS, firstRunPolicyTemplate, modelInvocationProfileSchema } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
 it('K17: worker ports use fresh K5 workload authority and the existing K6 reservation without an invocation claim', async () => {
   const owner = readLocalOsIdentity(), f = await brainProviderFixture({ headless: { executable: process.execPath,
     configDir: '/synthetic/login', stateDir: '/synthetic/state', delegatedUse: { consentedBy: { issuer: owner.issuer, subject: owner.subject }, atMs: 1, classes: ['ai'] } } });
   try {
-    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    policy.grants.push({ ...policy.grants.find((row: { id: string }) => row.id === 'invocation'), id: 'ai-invoke', principals: [{ issuer: `${owner.issuer}/mcp`, subject: owner.subject }] });
-    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+    // R4a: the real first-run template (v19), never an injected MCP grant: the worker pin runs as the MCP actor on its v19 model rule.
+    const policyPath = join(f.data, 'policy.json'), firstRun = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+    const policy = JSON.parse(JSON.stringify(firstRun.policy)) as { grants: { id: string }[] };
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 }); clearConfigCache();
     const context = await loadConfiguredScopeContext(f.project, 's', f.options, 'write'), profile = modelInvocationProfileSchema.parse(f.config.provider_invocation_profiles.profiles[0]);
     const db = openSqliteLedgerReadOnly(f.path, context.config.storage.sqlite);
     let resource;
@@ -65,7 +66,8 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     // Preserve the pinned principal/profile/company snapshot; changing it never silently repins it.
     await expect(ports.recheck(request, { ...frozen, modelUsePin: { ...frozen.modelUsePin, companyId: 'other' } }, signal)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
     await expect(ports.prepare!({ ...frozen, modelUsePin: { ...frozen.modelUsePin, companyId: 'other' } })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
-    policy.grants = policy.grants.filter((row: { id: string }) => row.id !== 'ai-invoke');
+    // Withdrawing the MCP actor's v19 model rule (what `policy upgrade --rollback` removes) stops every later spawn and tool session.
+    policy.grants = policy.grants.filter(row => row.id !== FIRST_RUN_UPGRADE_RULE_IDS.mcpModelInvocation);
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
     await expect(ports.openTools(request, frozen, signal, {})).rejects.toBeTruthy(); expect(runtime.openTools).toHaveBeenCalledOnce(); expect(runtime.driver).not.toHaveBeenCalled();
     await expect(ports.prepare!(frozen)).rejects.toBeTruthy(); expect(runtime.prepare).toHaveBeenCalledOnce();

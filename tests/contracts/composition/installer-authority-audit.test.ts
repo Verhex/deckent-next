@@ -40,19 +40,19 @@ it.skipIf(process.platform === 'win32').each([false, true])('installer template/
   expect(await readFile(f.path, 'utf8')).toBe(before);
   const applied = await f.upgrade(true, preview.expect!);
   expect(applied.status).toBe('upgraded');
-  // A named person's add-only plan is batched by POLICY_CHANGE_MAX: since S8-5/S8-3 the missing rules take a second batch (its own sealed event).
+  // A named person's add-only plan is batched by POLICY_CHANGE_MAX: since S8-5/S8-3 a second batch, since v19 a third (each its own sealed event).
   let batches = 1;
   for (let next = await f.upgrade(true); next.status !== 'current'; next = await f.upgrade(true)) { expect(next.status).toBe('upgraded'); batches++; }
-  expect(batches).toBe(named ? 2 : 1);
+  expect(batches).toBe(named ? 3 : 1);
   const store = await openSqliteAuditStore(productResourcePath(f.config.productLayout, 'ledger'), f.config.storage.sqlite);
   try {
     const integrity = await openLocalIntegrityAuthority(f.config.productLayout, f.config.approvals.keyFile);
     const records = new AuditApplication(store, integrity).list('s', 0, 100);
-    expect(records).toHaveLength(named ? 4 : 2); // original init, optional named-person data, then the template batches
+    expect(records).toHaveLength(named ? 5 : 2); // original init, optional named-person data, then the template batches
     const dataRecords = records.filter(record => record.event.subject.kind === 'authority-change' && record.event.subject.installer?.basis === 'system-policy-rows');
     expect(dataRecords).toHaveLength(named ? 2 : 1);
     const templateRecords = records.filter(record => record.event.subject.kind === 'authority-change' && record.event.subject.installer?.basis !== 'system-policy-rows');
-    expect(templateRecords).toHaveLength(named ? 2 : 1);
+    expect(templateRecords).toHaveLength(named ? 3 : 1);
     for (const record of records) expect(verifyAuditRecord(record, integrity)).toEqual(record);
     const record = templateRecords[0]!;
     expect(record.event.subject).toMatchObject({ kind: 'authority-change', installer: { basis: named ? 'named-person' : 'first-run', person: f.person },

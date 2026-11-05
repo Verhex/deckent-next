@@ -1,12 +1,12 @@
-import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
+import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V19_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS];
 
 // S4 (lead 2026-10-23): one bump v13 → v14 with two add-only rules — the named person reads the installed scope's memory journal, the MCP actor
 // gets the same read (observation). No memory change for the person or the MCP actor (propose/verify/retire stay ungranted). S4B-1's v15 delta
@@ -15,7 +15,8 @@ const person = { issuer: 'host', subject: 'owner' };
 const mcpRef = mcpPrincipalRef(person);
 const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
 const mcp = { ...owner, ...mcpRef, assurance: 'workload-verified' as const };
-const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
+const { readToolNames, scratchToolNames, editShellToolNames, scratchWriteOperationId, writeOperationId, shellOperationId } = FIRST_RUN_TOOL_NAMES;
+const names = { readToolNames, scratchToolNames, editShellToolNames, scratchWriteOperationId, writeOperationId, shellOperationId, proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
   policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
 const current = firstRunPolicyTemplate(input), v15ids: readonly string[] = [...FIRST_RUN_V15_RULE_IDS, ...POST_V15_RULE_IDS];
@@ -56,7 +57,7 @@ it('exact v13 becomes exactly the current template; edited and hand-built polici
     expect(plan.status === 'plan' ? plan.rules.slice(0, 2) : null).toEqual(v14);
   }
   // The rollback delta is v15's now: a v14 policy holds none of it, and keeps its v14 reads.
-  expect(firstRunTemplateRollback(built.policy, person, 'installation').rules).toEqual([]);
+  expect(firstRunTemplateRollback(built.policy, person, 'installation', input).rules).toEqual([]);
   expect(matchFirstRunPolicyTemplate('first-run-template-v14')).toEqual({ id: 'first-run-template', version: 14 });
 });
 

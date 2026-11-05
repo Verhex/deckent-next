@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
-import { modelInvocationProfileSchema, type AgentTurnStreamEvent, type AgentToolCall } from '#domain/index.js';
+import { firstRunPolicyTemplate, modelInvocationProfileSchema, type AgentTurnStreamEvent, type AgentToolCall } from '#domain/index.js';
 import { createRuntimeChatTurnHost, runPeerConfiguredChatTurn, cancelPeerConfiguredChatTurn, type NativeChatRuntime } from '#composition/core/agent-turn/index.js';
 import { describeTerminalChat, inspectNativeChat } from '#composition/core/terminal-chat/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
@@ -15,7 +15,7 @@ import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/ind
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
-import { ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
+import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
 import { clearConfigCache, redactForRecord, SystemTrustedClock } from '#platform/index.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -28,7 +28,7 @@ async function unsupportedPeer() {
     variant: 'native-chat-linux-PTY', reason: 'platform-unsupported', platform: process.platform }));
   return true;
 }
-async function fixture() {
+async function fixture(askEdits = true) {
   const owner = readLocalOsIdentity();
   const f = await brainProviderFixture({ headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state',
     delegatedUse: { consentedBy: { issuer: owner.issuer, subject: owner.subject }, atMs: 1, classes: ['ai'] } } });
@@ -40,12 +40,11 @@ async function fixture() {
     flagSetDigest: nativeAgentFlagSetDigest(entry), profileDigest: modelInvocationProfileDigest(profile), ownerUid: process.getuid!() };
   const readiness = { read: vi.fn(async () => ({ cli: true, login: true, environment: true, plugins: true, toolSurface: true, bridge: true, execution })) };
   const person = readLocalOsIdentity(), ai = { issuer: `${person.issuer}/mcp`, subject: person.subject };
-  const policy = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'));
-  const invoke = policy.grants.find((g: { id: string }) => g.id === 'invocation');
-  policy.grants.push({ ...invoke, id: 'ai-invoke', principals: [ai] },
-    { id: 'ai-tools', effect: 'require-approval', scopes: ['s'], principals: [ai], actions: ['invoke'], resource: { kind: 'agent-tool', ids: ['write_file'] } },
-    { id: 'ai-write', effect: 'allow', scopes: ['s'], principals: [ai], actions: ['execute'], resource: { kind: 'operation', ids: ['workspace.file.write'] } });
-  await writeFile(join(f.data, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
+  // R4a: the real first-run template (v19), no injected MCP grant; the person chose "ask for edits too", which the AI turn they start follows.
+  const template = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: person.issuer, subject: person.subject }, ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy), { mode: 0o600 });
+  await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 3, revision: 'person-ask-edits', bindings: [],
+    modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
   const state = { servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', channels: [] as (string | undefined)[] };
@@ -128,6 +127,21 @@ it('keeps an AI requester, witnessed person decider, real write, durable replay 
   const db = new DatabaseSync(h.f.path, { readOnly: true });
   try { expect(db.prepare('SELECT COUNT(*) AS n FROM agent_turn_tool_calls').get()).toEqual(expect.objectContaining({ n: 1 })); }
   finally { db.close(); }
+});
+
+it('R4a: in the person\'s default standart the AI write runs without a card and is audited as the person\'s mode relaxation', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(false);
+  expect(await h.run()).toMatchObject({ finish: 'stop', toolCalls: 1 });
+  expect(h.events.some(event => event.kind === 'approval.requested')).toBe(false);
+  expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('approved business result\n');
+  const db = new DatabaseSync(h.f.path, { readOnly: true });
+  try {
+    const records = (db.prepare("SELECT record FROM audit_events WHERE kind = 'permission-mode'").all() as { record: string }[]).map(row => JSON.parse(row.record));
+    expect(records).toHaveLength(1);
+    expect(JSON.stringify(records[0])).toMatch(/"mode":"standart","cell":"edit-non-floor"/u);
+    expect(JSON.stringify(records[0])).toContain('"company":"first-run-mcp-edit-shell-tools"');
+  } finally { db.close(); }
 });
 
 it('lease revocation during the unchanged approval card prevent the exact requested write', async () => {

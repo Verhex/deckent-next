@@ -245,7 +245,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   beklemede kalır. Sonrasında `deckent secret store` (çalışma zamanı depo geçişi) bir yetki değişikliğidir ve yukarıdaki
   değişiklikler gibi terminal tanığı ister. Verilen bir profil (`deckent init apply --profile` ya da `init resume`) yalnız taşıdığı
   her kural şablonun kuran kişiye vereceğinin içinde kaldığı sürece tanıksız yayımlanır; daha genişi (sormadan izin verilen düzenleme
-  ya da kabuk araçları, MCP aktörüne ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
+  ya da kabuk araçları, şablonun kendi v19 kurallarını aşan MCP aktörü izinleri ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
   yazmadan önce `AUTHORITY_WITNESS_REQUIRED` ile reddedilir. *Etki:* yeni bir projede ilk kurulumu çalıştırabilen kişi şablonun
   başlangıç yetkisini alır (fazlasını değil) ve bir ajan şablonla sınırlı verilen bir kurulumu gözetimsiz çalıştırabilir; bu kapı
   yapay zekâ ajanı işaretine değil terminale bakar, `init policy --upgrade --apply` ile aynı. *Geçici çözüm:* ilk kurulumları
@@ -440,6 +440,16 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   tanığını geçer. Çıplak (bare) bir deponun worktree'leri ayrı proje kasası alır (paylaşılacak ana çalışma ağacı yok). `.deck` ajan araçlarına kapalıdır ama işçiyi durdurmaz.
 - **Adında secret, token ya da password geçen ve değeri düz metin gibi görünen müşteri yapılandırma anahtarı yine reddedilir**; değer
   bir sır AD referansı olsa bile (örneğin `"secretName": "DB_PASS"`). *Yol:* anahtarı yeniden adlandırın ya da yolu onaylayın.
+- **AI aktörünün model ve araç kuralları (şablon v19) yerel ajan ile her dış MCP istemcisi arasında ortaktır.** V19'dan beri ilk
+  kurulum politikası kişinin MCP aktörüne (`<host>/mcp`) kurulu kapsamda model çağırma ve okuma, karalama, düzenleme ve kabuk
+  araçlarını kullanma izni verir; mevcut kurulum bunları yalnız kişinin kendi `policy upgrade` kartıyla alır. Aynı aktör
+  `deckent-mcp`'ye de hizmet eder; bu yüzden dış bir MCP istemcisi de bütçe, abonelik kotası ve `ai` devir onayı içinde
+  `invoke_model` çağırabilir. Düzenleme/kabuk kuralı moda açıktır: yerel sohbet turu onu başlatan kişinin modunu izler (varsayılan
+  `standart`ta sıradan proje düzenlemesi kartsız çalışır ve mod gevşetmesi olarak denetim kaydına yazılır; "düzenlemeleri de sor"
+  açıksa kart çıkar). Yerel işçinin kayıtlı kişi modu yoktur ve her zaman varsayılan `standart` ile çalışır; bu yüzden Attempt
+  çalışma alanındaki sıradan düzenlemeleri, kişi "düzenlemeleri de sor" seçmiş olsa bile kartsız çalışır. Kabuk komutları, yazma
+  tabanı ve diğer sert taban hücreleri yine sorar ya da reddeder. Yeni bir v19 kurulumunda geri alınacak yükseltme yoktur. *Yol:* model
+  çağırmasını istemediğiniz MCP istemcisini bağlamayın; MCP aktörü için `model-invocation` üzerindeki şirket deny'ı yerel ajanı da durdurur.
 
 ## Bütçe ve harcama
 
@@ -659,12 +669,12 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   klasördeki unix soketi denetlenmez. *Yol:* başka bir servisin soketini tutan klasörleri bağlamayın. İşçilerin dış sistemlerde
   kendilerinin işlem yapması henüz sunulmuyor.
 - **Kurtarma yalnız kendi kesin politika hücrelerinizle açılır.** V16 şablonu kişinin onay gerektiren kurtarma
-  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v18 bunları korur, v17'nin ilk commit hakkını ve v18'in kaldırma
-  haklarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
+  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v19 bunları, v17'nin ilk commit hakkını ve v18'in kaldırma
+  haklarını korur, v19'un MCP aktörü araç kurallarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
   Eski kurulum yalnız açık yükseltmeyle değişir; yönetilen `deckent policy upgrade` yolu kişide olmayan yetkiyi ekleyemiyorsa
-  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v18 farkını kaldırır;
-  tarihsel v16 kurtarma haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
-  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17/v18 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
+  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v19 farkını kaldırır;
+  tarihsel v16–v18 haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
+  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17–v19 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
   politika revizyonuna bağlıdır, sonra mühürlenen ölçümlere değil. Alpha.56 öncesi kaybolan işçinin yalıtım kaydı yoktur;
   vaka kişiye gider ve gölge ölçümü yeniden başlar.
 

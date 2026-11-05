@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { firstRunPolicyTemplate, mcpPrincipalRef } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, mcpPrincipalRef } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
@@ -39,7 +39,7 @@ describe.skipIf(process.platform !== 'linux')('MCP authority through the actual 
     const client = new Client({ name: 'external-ai', version: '1' }); await client.connect(ct);
     try {
       for (const version of [7, 8, 9]) {
-        const grants = template.policy.grants.filter(rule => version >= 9 || !rule.id.startsWith('first-run-mcp-observe-'));
+        const grants = template.policy.grants.filter(rule => (version >= 9 || !rule.id.startsWith('first-run-mcp-observe-')) && !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id));
         await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...template.policy, revision: `first-run-template-v${version}`, grants }));
         for (const [name, args] of [['manage_provider_spending', revise], ['admit_model_activation', activation], ['invoke_model', {
           schemaVersion: 1, commandId: 'mcp-paid', scopeId: 'scope', reference, catalogRevision: 'catalog-1', expectedBinding: f.binding,
@@ -49,9 +49,15 @@ describe.skipIf(process.platform !== 'linux')('MCP authority through the actual 
           expect(result.isError).toBe(true); expect(JSON.stringify(result)).toContain('POLICY_DENIED');
         }
       }
+      // v19 (R4a, owner 2026-11-05 option 3): the external client shares the MCP actor, so its model call passes policy (budget, quota and the
+      // request's own checks still decide); budget changes and activation stay refused.
+      await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy));
+      expect(JSON.stringify(await client.callTool({ name: 'invoke_model', arguments: { schemaVersion: 1, commandId: 'mcp-v19', scopeId: 'scope', reference,
+        catalogRevision: 'catalog-1', expectedBinding: f.binding, nativeRequest: { model: 'native-chat', messages: [{ role: 'user', content: 'v19 call' }], max_tokens: 128 } } }))).not.toContain('POLICY_DENIED');
+      for (const [name, args] of [['manage_provider_spending', revise], ['admit_model_activation', activation]] as const)
+        expect(JSON.stringify(await client.callTool({ name, arguments: args }))).toContain('POLICY_DENIED');
       expect(f.state.requests).toHaveLength(0);
       expect(f.rows('SELECT command_id FROM provider_spend_management')).toEqual([{ command_id: 'owner-create' }]);
-      await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy));
       await owner.manageProviderSpend(scopeBudgetRevisionCommand(current, 35, true, 'cli', 'owner-revise'));
       const after = await owner.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', current: true });
       const mcp = mcpPrincipalRef(me[0]!);

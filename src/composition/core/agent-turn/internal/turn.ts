@@ -255,7 +255,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush;
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, ...(native ? { person: native.witness } : {}), standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush;
     // NATIVE-BAGLAM: the descriptive session snapshot over one fresh policy snapshot (mode, thinking, model facts, each tool's effect now); the prompt states it, `session_state` returns it fresh.
     const posture = shell ? await shell.posture() : null, sessionOf = async () => { const policy = await context.policy.load().catch(() => null); return agentSessionSnapshot({ policy, principal: context.principal, scopeId: command.scopeId, sessionId: command.sessionId ?? null, fullAccess, tools, shell: posture,
       thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => decisions.probe(policy, tool, cell, shellInput) }); };
@@ -378,7 +378,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
           const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject }, subject: callSubject, facts,
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: agentToolApprovalSummary({ tool: tool.name, resource, argsDigest, cell: decisions.cell(tool, args), selfSourceReason: decisions.cell(tool, args) === 'edit-self-source' ? t('terminal.approval.selfSource',
-              { path: resource, mode: fullAccess ? 'full-access' : agentCallPermissionMode(policy, context.principal, command.scopeId) }, language) : '' }), createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
+              { path: resource, mode: fullAccess ? 'full-access' : agentCallPermissionMode(policy, native?.witness ?? context.principal, command.scopeId) }, language) : '' }), createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           const diff = editsOf(tool.name)?.preview(tool.name, args);
           const offer = await decisions.sessionOffer(tool, args);
           if (offer) answer = host.answers.register({ record, principal: native?.witness ?? context.principal, peerPid: peer.pid,

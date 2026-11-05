@@ -23,13 +23,10 @@ it('K23 measures real worker cards in disposable customer and self-source Attemp
     const projectOptions = { ...f.options, env: { ...f.options.env, DECKENT_GLOBAL_HOME: join(f.data, 'global') } };
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.approvals = { requestTtlMs: 2000 }; await writeFile(configPath, JSON.stringify(config));
-    const owner = adapters.readLocalOsIdentity(), principals = [{ issuer: `${owner.issuer}/mcp`, subject: owner.subject }];
-    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    policy.grants.push(...[
-      { id: 'tools', actions: ['invoke'], resource: { kind: 'agent-tool', ids: 'all' } },
-      { id: 'effects', actions: ['execute'], resource: { kind: 'operation', ids: 'all' } },
-    ].map(row => ({ ...row, effect: 'allow', principals, scopes: ['s'] })));
-    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+    // R4a: the real first-run template (v19), no injected MCP grant.
+    const owner = adapters.readLocalOsIdentity(), { firstRunPolicyTemplate } = await import('#domain/index.js'), { FIRST_RUN_TOOL_NAMES } = await import('#engine/index.js');
+    const template = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(template.bindings), { mode: 0o600 }); clearConfigCache();
     vi.spyOn(runs, 'recheckNativeWorkerUse').mockResolvedValue({ profile: c.profile } as never);
     const source = vi.spyOn(adapters, 'isSelfSourceProject');
     const sqlite = (await loadComposedConfig(f.project, projectOptions)).storage.sqlite;
@@ -75,12 +72,12 @@ it('K23 measures real worker cards in disposable customer and self-source Attemp
 }, 30_000);
 
 async function workerFixture(ttl = 5000) {
-  const { modeRuntime, rule, principal } = await import('../support/agent-turn-modes.js');
-  const f = await modeRuntime({ mode: null, grants: [
-    { id: 'worker-approval', actions: ['inspect', 'decide'], resource: { kind: 'approval', ids: 'all' }, effect: 'allow', scopes: ['scope'], principals: [{ issuer: `${principal.issuer}/mcp`, subject: principal.subject }] },
-    ...[rule('worker-tools', 'agent-tool', ['write_file', 'read_file'], 'allow'), rule('worker-effects', 'operation', ['workspace.file.write'], 'allow')]
-      .map(row => ({ ...row, principals: [{ issuer: `${principal.issuer}/mcp`, subject: principal.subject }] })),
-  ] });
+  const { modeRuntime, principal } = await import('../support/agent-turn-modes.js');
+  // R4a: the real first-run template (v19) for the person, no injected MCP grant.
+  const f = await modeRuntime({ mode: null, grants: [] });
+  const { firstRunPolicyTemplate } = await import('#domain/index.js'), { FIRST_RUN_TOOL_NAMES } = await import('#engine/index.js');
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: principal.issuer, subject: principal.subject }, ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(template.bindings), { mode: 0o600 });
   const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
   config.approvals = { requestTtlMs: ttl }; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
   execFileSync('git', ['init', '-q', f.project]); const common = await realpath(join(f.project, '.git'));
@@ -127,7 +124,8 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
       const ai = await terminalProgram([process.execPath, resolve('tests/fixtures/approval-terminal-peer.mjs'), endpoint,
         JSON.stringify({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'mcp-worker-' + decision, channel: 'mcp', operation: 'decideApproval', delivery: { maxResultBytes: 65536 },
           input: { ...command, decision, commandId: 'mcp-tty-worker-' + decision, channel: 'local-terminal-card' } }), ''], f.env);
-      expect(ai.status).toBe(0); expect(ai.output).toContain('AI_AUTHORITY_NON_DELEGABLE');
+      // Real v19: the MCP actor holds no approval-decide rule (MCP-NO-DECIDE); the floor with a grant is engine/mcp-ai-actor.test.ts.
+      expect(ai.status).toBe(0); expect(ai.output).toContain('APPROVAL_DENIED');
     }
     const allowed = await terminalRequest(f, 'decideApproval', { ...command, commandId: 'human-worker', channel: 'local-terminal-card' });
     expect(allowed.response).toMatchObject({ ok: true, result: { decision: { assurance: 'turn-bound', deciderClass: 'human-tty' } } });

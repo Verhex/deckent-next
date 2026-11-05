@@ -64,6 +64,8 @@ export interface AgentToolCallRequest {
   readonly standing?: { readonly key: string; readonly session: boolean } | null;
   /** MODES-3: the turn was launched in full access (`chatTurn.fullAccess`). It counts only while a company grant allows full access. */
   readonly fullAccess?: boolean;
+  /** R4a: the person whose terminal session started an AI actor's turn; their mode (and its company grant) applies to its calls. Never an AI. */
+  readonly person?: VerifiedPrincipal;
 }
 /** A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
 export interface StandingApproval { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null }
@@ -130,7 +132,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   const grant = request.fullAccess === true ? fullAccessGrant(policy, request.principal, request.scopeId) : null;
   const access = grant?.decision === 'allow' && grant.ruleId !== undefined ? grant.ruleId : null;
   // PRE-9 (b): a stored full-auto counts only while its grant allows it on this very snapshot (like full access): revoked, the call is standart's.
-  const person = access ? null : effectivePermissionMode(policy, request.principal, request.scopeId);
+  const person = access ? null : effectivePermissionMode(policy, request.person && !isAiPrincipal(request.person) ? request.person : request.principal, request.scopeId);
   // A stored full-access start mode without a launched turn is standart (MODES-3: an explicit parameter, never implied by bindings).
   const mode = person === null ? null : person.mode === 'full-access' ? { mode: 'standart' as const, askEdits: person.askEdits, id: person.id } : person;
   // A standing approval names a persistable cell's pattern (self-source only names a session pattern). It is asked like any other rule (a company deny or require-approval on the

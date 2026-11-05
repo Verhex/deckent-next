@@ -245,7 +245,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   stay pending until the person's first witnessed terminal open. Afterwards `deckent secret store` (the runtime store switch) is an
   authority change and needs the terminal witness like the changes above. A supplied profile (`deckent init apply --profile`, or
   `init resume`) is published without a witness only while every rule it carries stays inside what the template would give the
-  installing person; anything wider (edit or shell tools allowed without asking, grants to the MCP actor or to everyone) is refused
+  installing person; anything wider (edit or shell tools allowed without asking, MCP actor grants beyond the template's own v19 rules, or grants to everyone) is refused
   with `AUTHORITY_WITNESS_REQUIRED` off an interactive terminal, before any evidence step or write. *Impact:* whoever can run a first
   install on a fresh project gets the template's starting authority (never more), and an agent can still run a template-bounded
   supplied install unattended; this gate checks the terminal, not the AI-agent marker, the same as `init policy --upgrade --apply`.
@@ -446,6 +446,16 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `approval decide`. Worktrees of a bare repository each get their own project vault (no main working tree to share). `.deck` is closed to agent tools but does not stop a worker.
 - **A customer config key whose name contains secret, token or password and whose value looks like a literal is still refused**, even
   when the value is a secret NAME reference (for example `"secretName": "DB_PASS"`). *Workaround:* rename the key or acknowledge the path.
+- **The AI actor's model and tool rules (template v19) are shared by the native agent and every external MCP client.** Since v19
+  the first-run policy lets the person's MCP actor (`<host>/mcp`) call models and use the read, scratch, edit and shell tools in the
+  installed scope; an existing installation gets them only from the person's own `policy upgrade` card. The same actor serves
+  `deckent-mcp`, so an external MCP client can also call `invoke_model`, inside the budget, the subscription quota and the `ai`
+  delegation consent. The edit/shell rule is mode-eligible: a native chat turn follows the mode of the person who started it (in
+  the default `standart` an ordinary project edit runs without a card and is audited as a mode relaxation; with "ask for edits too"
+  it shows the card). A native worker has no recorded person mode and always runs as the default `standart`, so its ordinary
+  edits in the Attempt workspace run without a card even when the person chose "ask for edits too". Shell commands, the write
+  floor and every other hard-floor cell still ask or refuse. A fresh v19 install has no upgrade to roll back. *Workaround:* do not connect an MCP client you do not want
+  to call models; a company deny for the MCP actor on `model-invocation` stops the native agent as well.
 
 ## Budgets and spend
 
@@ -664,13 +674,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   a unix socket inside a read-only folder bound into the worker is not checked. *Workaround:* do not bind folders that hold another
   service's socket. Letting workers act on outside systems themselves is not offered yet.
 - **Recovery is turned on only through your own exact policy cells.** Template v16 introduced the named person's
-  require-approval recovery-action and Nervous-promotion cells; current template v18 retains them, adds v17's first-commit
-  grant and v18's uninstall grants. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
+  require-approval recovery-action and Nervous-promotion cells; current template v19 retains them, v17's first-commit
+  grant and v18's uninstall grants, and adds v19's MCP actor tool rules. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
   overlapping require-approval cells. Old installations change only through explicit upgrade; use the witnessed
   `deckent init policy --upgrade` path when the managed `deckent policy upgrade` path cannot add authority the caller lacks.
-  Current rollback removes only the content-equal v18 delta, not historical v16 recovery grants; customized rows are kept
+  Current rollback removes only the content-equal v19 delta, not historical v16–v18 grants; customized rows are kept
   and reported. Adding a Nervous/recovery rule or version still needs a template version and policy upgrade: this remains
-  an OPEN owner issue, also after v17/v18. Measured-exit rechecks bind the policy revision, not later sealed measurements.
+  an OPEN owner issue, also after v17–v19. Measured-exit rechecks bind the policy revision, not later sealed measurements.
   Lost workers dispatched before alpha.56 have no isolation record; they go to a person and shadow measurement restarts.
 
 - **Full clean-machine acceptance remains open.** The 2026-10-15/16 rehearsal stopped before the model/first-job chain.
