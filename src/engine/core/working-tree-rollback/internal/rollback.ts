@@ -12,7 +12,7 @@ export const workingTreeRollbackCommandSchema = z.strictObject({ schemaVersion: 
   identity: attemptIdentitySchema, deliveryCommandId: identitySchema }).readonly();
 export type WorkingTreeRollbackCommand = z.infer<typeof workingTreeRollbackCommandSchema>;
 /** The working-tree target's undo: the delivered patch's `before` contents back, only while every path still holds its `after` (same lock and writer). */
-export interface WorkingTreeRollbackTarget extends Pick<IntegrationDeliveryTarget, 'delivered'> { rollback(plan: IntegrationDeliveryPlan, patch: WorkspacePatch): Promise<void> }
+export interface WorkingTreeRollbackTarget extends Pick<IntegrationDeliveryTarget, 'delivered'> { rollback(plan: IntegrationDeliveryPlan, patch: WorkspacePatch): Promise<readonly string[] | void> }
 
 /**
  * The one owner of a working-tree delivery's rollback. The same authority, session and card as the delivery it undoes (`deliver-integration`; the
@@ -38,7 +38,7 @@ export class WorkingTreeRollbackApplication {
       resource: plan.ref, from: plan.commit, to: plan.schemaVersion === 2 ? plan.effectiveBaseCommit : plan.baseCommit, runId: identity.runId, taskId: identity.taskId,
       ...summary, added: summary.removed, removed: summary.added, changes: preview.patch.changes.map(change => ({ path: change.path, before: change.after?.digest ?? null, after: change.before?.digest ?? null })) });
     await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock); await confirm();
-    await this.target.rollback(plan, preview.patch);
-    return Object.freeze({ schemaVersion: 1 as const, status: 'working-tree-rolled-back' as const, command, plan, paths: summary.files });
+    const setAside = await this.target.rollback(plan, preview.patch);
+    return Object.freeze({ schemaVersion: 1 as const, status: 'working-tree-rolled-back' as const, command, plan, paths: summary.files, ...(setAside?.length ? { setAside } : {}) });
   }
 }

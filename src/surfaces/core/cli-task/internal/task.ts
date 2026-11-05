@@ -241,7 +241,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
     if (!context.deliverWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.deliverWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, identity, commandId, integrationCommandId }, options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
-      t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale) }); return;
+      [t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale), ...data.setAside?.length ? [t('cli.task.integration.setAside', { files: data.setAside.join(', ') }, locale)] : []].join('\n') }); return;
   }
   if (action === 'integration-adopt' || action === 'integration-rollback') {
     const commandId = values.get('--command-id') ?? (lightAdopt ? `cli-${action === 'integration-adopt' ? 'adopt' : 'rollback'}-${randomUUID()}` : undefined); if (!commandId) throw usage('--command-id');
@@ -266,7 +266,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
     if (!adoptionCommandId && deliveryCommandId) { // L1c: a working-tree delivery's files go back (the same card and authority as the delivery)
       if (!context.rollbackWorkingTreeDelivery) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
       emit(await context.rollbackWorkingTreeDelivery(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, deliveryCommandId }, options), { ...sinks,
-        render: data => t('cli.task.integration.filesRolledBack', { count: data.paths.length, files: data.paths.join(', ') }, locale) }); return;
+        render: data => [t('cli.task.integration.filesRolledBack', { count: data.paths.length, files: data.paths.join(', ') }, locale), ...data.setAside?.length ? [t('cli.task.integration.setAside', { files: data.setAside.join(', ') }, locale)] : []].join('\n') }); return;
     }
     if (!adoptionCommandId) throw usage('--adoption-command-id');
     if (!context.rollbackWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

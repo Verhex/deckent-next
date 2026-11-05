@@ -2,6 +2,8 @@
   "schemaVersion": 1,
   "deliveries": "working-tree-deliveries",
   "locks": "working-tree-locks",
+  "pending": "working-tree-pending",
+  "journalVersion": 2,
   "lockOwner": "owner-",
   "journal": "journal.json",
   "original": "original-",

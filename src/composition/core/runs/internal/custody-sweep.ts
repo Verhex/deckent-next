@@ -1,5 +1,5 @@
 import { userInfo } from 'node:os'; import { resolve } from 'node:path'; import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget, removeRunBase, sweepRunBases } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget, removeRunBase, sweepRunBases, sweepSetAside } from '#adapters/index.js';
 import { validateExecutionSupervisorProfile, recordedTaskSupervisor, taskProfileObservesWorker, gitDockerAttemptCustody } from '#adapters/index.js';
 import { AttemptCustodyReleaseApplication, DispatchPolicyAuthorization, sweepAttemptCustodyScopes } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js'; import { queryFailure } from '#composition/core/query-errors/index.js'; import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -16,7 +16,7 @@ export async function sweepConfiguredAttemptCustody(root: string, scopeIds: read
 }
 import { inspectConfiguredRun } from './inspect.js';
 import { inspectConfiguredDismissedDeliveries } from '#composition/core/workspace-patch/index.js';
-/** L1c start sweep of working-tree Runs' private bases (one installation workspace root): stale capture/removal remnants go, and a recorded Run's base goes
+/** L1c start sweep of working-tree Runs' private bases (and R1 set-aside files) (one installation workspace root): stale capture/removal remnants go, and a recorded Run's base goes
  * once its Run is terminal and none of its tasks still awaits delivery (the same result view /deliver offers from); a set-aside one counts as settled only
  * after `retention.setAsideDays` from its latest set-aside record (M-33 return window). Bounded by `retention.sweepLimit`; an unreadable Run keeps its base. */
 export async function sweepConfiguredRunBases(root: string, scopeIds: readonly string[], options: ConfigLoadOptions = {}) {
@@ -27,7 +27,9 @@ export async function sweepConfiguredRunBases(root: string, scopeIds: readonly s
     const aside = await inspectConfiguredDismissedDeliveries(root, run.scopeId, c.config.inspection.maxPageSize, options).then(rows => rows.filter(row => row.runId === run.runId), () => null);
     if (view && aside && runBaseSettled(view, aside, since) && await removeRunBase(workspaceRoot, run).catch(() => null) === 'removed') released++;
   }
-  return Object.freeze({ removed: swept.removed, kept: swept.kept, released });
+  // R1 (Astra 3017): files a working-tree delivery left beside their names (another filesystem) go after the same window, only while unchanged.
+  const setAside = await sweepSetAside(workspaceRoot, Date.now() - execution.retention.setAsideDays * 86_400_000, { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, execution.git.timeoutMs).catch(() => null);
+  return Object.freeze({ removed: swept.removed, kept: swept.kept, released, setAside });
 }
 /** L1c: settled only on positive evidence: a terminal Run that is closed (not completed), or whose every accepted task is delivered, owes nothing, or was set
  * aside before `since` (its latest set-aside record, M-33 return window); an unknown outlook (unread output, older evidence) keeps the base. */

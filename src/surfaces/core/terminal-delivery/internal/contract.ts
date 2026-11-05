@@ -26,7 +26,8 @@ export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
   verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null; workingTree?: true; changes?: EffectConfirmationView['changes'] }>;
-export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
+/** `setAside` (R1, Astra 3017): files a working-tree delivery left beside their names; the person is told. */
+export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string; setAside?: readonly string[] | undefined }>;
 /** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
 export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
 /** An accepted Run of the configured verification kind with one task (the bar's shape). Whether it ran on this delivered commit and meets the

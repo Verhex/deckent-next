@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
+import { sweepSetAside, GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
   GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
@@ -22,6 +22,7 @@ vi.mock('node:fs/promises', async importOriginal => {
     open: (async (path: string, ...rest: unknown[]) => { await fsHook.open?.(String(path), ''); return (actual.open as (...args: unknown[]) => unknown)(path, ...rest); }) as typeof actual.open };
 });
 const exec = promisify(execFile), roots: string[] = [];
+const once = (kind: 'link' | 'rename' | 'open', match: (from: string, to: string) => boolean, run: () => Promise<void>) => { fsHook[kind] = async (from, to) => { if (match(from, to)) { fsHook[kind] = null; await run(); } }; };
 afterEach(async () => { vi.restoreAllMocks(); fsHook.link = fsHook.rename = fsHook.open = null; for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const limits = { maxBytes: 65536, maxEntries: 1000, maxDepth: 32, maxPathBytes: 1024 };
 const confirmation = { async assertAvailable() {}, async confirm(card: import('#engine/index.js').EffectConfirmationView) {
@@ -450,7 +451,6 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     const s = f.sourceRoot, kept = join(f.workspaceRoot, 'working-tree-deliveries', plan.ref.split('/').pop()!), file = (name: string) => readFile(join(s, name), 'utf8');
     const reset = () => Promise.all([writeFile(join(s, 'a.txt'), 'a before\n'), writeFile(join(s, 'b.txt'), 'b before\n'), writeFile(join(s, 'old.txt'), 'remove\n')]);
     const save = async (name: string, text: string) => { await writeFile(join(s, 'saved.tmp'), text); await rename(join(s, 'saved.tmp'), join(s, name)); }; // an editor's atomic save
-    const once = (kind: 'link' | 'rename' | 'open', match: (from: string, to: string) => boolean, run: () => Promise<void>) => { fsHook[kind] = async (from, to) => { if (match(from, to)) { fsHook[kind] = null; await run(); } }; };
     const taking = (name: string) => (from: string, to: string) => from.endsWith(`/${name}`) && to.endsWith('.aside'), placing = (from: string) => from.endsWith('.tmp');
     const conflict = async (text: string) => { await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); expect(await file('a.txt')).toBe(text); };
     const clean = async () => expect((await readdir(s)).filter(name => name.startsWith('.deckent-') || name === 'saved.tmp')).toEqual([]);
@@ -466,19 +466,29 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     await reset(); once('rename', taking('old.txt'), () => save('old.txt', 'person D\n'));
     await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt, b.txt', pending: 'old.txt' } });
     expect(await file('old.txt')).toBe('person D\n'); await clean();
-    // (f) lead 2026-11-06, EXDEV (journal on another filesystem, e.g. a WSL /mnt/c project): the handle writes after the taken file was compared and
-    // copied; the second comparison catches it, the taken file is not unlinked but kept in place, and the person is told its full path.
-    await reset(); once('rename', taking('a.txt'), async () => { handle = await open(join(s, 'a.txt'), 'r+');
-      once('rename', (from, to) => from.endsWith('.aside') && to.startsWith(kept), () => Promise.reject(Object.assign(new Error('EXDEV'), { code: 'EXDEV' })));
-      once('open', path => path.startsWith(kept) && path.endsWith('.aside'), async () => { await handle!.write('exdev!!!\n', 0); await handle!.close(); }); });
-    await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_KEPT', params: { written: 'a.txt', pending: 'b.txt, old.txt', kept: expect.stringMatching(/^\.deckent-[0-9a-f-]{36}\.aside$/) } });
-    const left = (await readdir(s)).filter(name => name.startsWith('.deckent-'));
-    expect([left.length, await file(left[0]!), await file('a.txt')]).toEqual([1, 'exdev!!!\n', 'a after\n']); await rm(join(s, left[0]!));
     // (e) the remaining window, such a handle writing after the last compare: the taken inode itself moves into the journal directory, so the bytes stay.
     await reset(); once('rename', taking('a.txt'), async () => { handle = await open(join(s, 'a.txt'), 'r+');
       once('rename', (from, to) => from.endsWith('.aside') && to.startsWith(kept), async () => { await handle!.write('late!!!!\n', 0); await handle!.close(); }); });
     await f.files.publish(plan, manifest, p); expect([await file('a.txt'), await file('b.txt')]).toEqual(['a after\n', 'b after\n']); await clean();
     expect(await Promise.all((await readdir(kept)).filter(name => name.endsWith('.aside')).map(name => readFile(join(kept, name), 'utf8')))).toContain('late!!!!\n');
+    // (f) R1 (Astra 3017), EXDEV (the journal directory on another filesystem, e.g. a WSL /mnt/c project): the handle writes AFTER the last comparison, as the
+    // taken file would leave. Nothing is unlinked: both taken files stay beside their names, are returned for the person's note and named in the journal; the
+    // sweep after the window removes only the one still unchanged and keeps the one written meanwhile.
+    await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt4' }, limits, workerTreeDenied);
+    const q = f.patch('wt4', 'a.txt', 'a before\n', 'a fourth\n'); q.changes.push(f.patch('wt4', 'b.txt', 'b before\n', 'b fourth\n').changes[0]!); await reset();
+    const exdev = await planned(f, q), moved = join(f.workspaceRoot, 'working-tree-deliveries', exdev.plan.ref.split('/').pop()!), aside = /^\.deckent-[0-9a-f-]{36}\.aside$/;
+    handle = undefined;
+    fsHook.rename = async (from, to) => {
+      if (from.endsWith('/a.txt') && to.endsWith('.aside') && !handle) handle = await open(join(s, 'a.txt'), 'r+'); // an editor's handle, opened before the take
+      if (!from.endsWith('.aside') || !to.startsWith(moved)) return;
+      if (handle) { await handle.write('exdev!!!\n', 0); await handle.close(); handle = undefined; }
+      throw Object.assign(new Error('EXDEV'), { code: 'EXDEV' });
+    };
+    expect(await f.files.publish(exdev.plan, exdev.manifest, q)).toEqual([expect.stringMatching(aside), expect.stringMatching(aside)]); fsHook.rename = null;
+    const beside = async () => Promise.all((await readdir(s)).filter(name => aside.test(name)).map(file)), recorded = async () => JSON.parse(await readFile(join(moved, 'journal.json'), 'utf8')).setAside;
+    expect([(await beside()).sort(), (await recorded()).length, await file('a.txt'), await file('b.txt')]).toEqual([['b before\n', 'exdev!!!\n'], 2, 'a fourth\n', 'b fourth\n']);
+    expect(await sweepSetAside(f.workspaceRoot, Date.now() + 1000, limits, 10000)).toEqual({ removed: 1, kept: 1 });
+    expect([await beside(), (await recorded()).length]).toEqual([['exdev!!!\n'], 1]);
   });
   it('refuses a symlinked directory on the way (PATCH_UNSAFE); nothing is written outside the checkout', async () => {
     const f = await fixture(false, 'sha1', true), outside = join(f.workspaceRoot, 'outside'); await mkdir(outside); await exec('ln', ['-s', outside, join(f.sourceRoot, 'link')]);
@@ -503,7 +513,7 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     const seen = (text: string, mode = '100644') => ({ digest: patchDigest(text), mode }), journal = async () => JSON.parse(await readFile(join(crashed, 'journal.json'), 'utf8'));
     const crash = async (changes: object[]) => { await mkdir(lock);
       await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: `refs/deckent/deliveries/${'c'.repeat(64)}`, operation: 'deliver' }));
-      await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 1, state: 'writing', written: [], changes })); return f.files.publish(second.plan, second.manifest, other); };
+      await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 2, state: 'writing', written: [], changes })); return f.files.publish(second.plan, second.manifest, other); };
     await writeFile(join(f.sourceRoot, 'a.txt'), 'a third\n'); // the crashed delivery wrote a.txt, not yet old.txt: mixed
     await expect(crash([{ path: 'a.txt', before: seen('a after\n'), after: seen('a third\n') }, { path: 'old.txt', before: seen('remove\n'), after: null }]))
       .rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
@@ -522,6 +532,25 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect([await readFile(join(f.sourceRoot, 'a.txt'), 'utf8'), await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')]).toEqual(['a third\n', 'b after\n']);
     expect((await readdir(f.sourceRoot)).filter(name => name.startsWith('.deckent-'))).toEqual([]); expect(await readdir(crashed)).toContain(`.deckent-${token(1)}.aside`);
     await f.files.publish(second.plan, second.manifest, other); // the lock is free again
+    // R2 (Astra 3017): A died mid-write (mixed); B took A's lock over and died too before settling A, leaving its own record that names only B's delivery.
+    // A's operation stayed in durable custody, so C finds and settles it: PARTIAL, and C writes nothing.
+    const custody = join(f.workspaceRoot, 'working-tree-pending', patchDigest(f.sourceRoot)), owner = (n: number, ref: string, operation?: string) =>
+      writeFile(join(lock, `owner-00000000-0000-4000-8000-00000000000${n}.json`), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref, ...operation ? { operation } : {} }));
+    once('open', path => path === f.sourceRoot, () => Promise.reject(new Error('B died before settling A'))); // B's first open after taking the lock is A's settle
+    await expect(crash([{ path: 'a.txt', before: seen('a after\n'), after: seen('a third\n') }, { path: 'old.txt', before: seen('remove\n'), after: null }])).rejects.toThrow('B died');
+    expect([await readdir(custody), (await journal()).state]).toEqual([['c'.repeat(64)], 'writing']);
+    await mkdir(lock); await owner(1, second.plan.ref, 'deliver');
+    await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt5' }, limits, workerTreeDenied);
+    await writeFile(join(f.sourceRoot, 'b.txt'), 'b before\n'); const late = f.patch('wt5', 'b.txt', 'b before\n', 'b fifth\n'), third = await planned(f, late);
+    await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
+    expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), (await journal()).state, await readdir(custody)]).toEqual(['b before\n', 'partial', []]);
+    // R3017: a journal or a gone holder's record of another version is an explicit typed refusal (nothing settled or written) naming what to check and remove.
+    await mkdir(lock); await owner(2, `refs/deckent/deliveries/${'c'.repeat(64)}`, 'deliver'); await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 1, state: 'writing', changes: [] }));
+    await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: crashed } });
+    await rm(crashed, { recursive: true }); await mkdir(lock); await owner(3, second.plan.ref);
+    await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: lock } });
+    await rm(lock, { recursive: true }); await f.files.publish(third.plan, third.manifest, late);
+    expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), await readdir(custody)]).toEqual(['b fifth\n', []]);
   });
   it('L1c rollback: the yes puts the delivery\'s originals back with the delivery\'s card and authority; a file changed since is refused and nothing is written', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'); p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!);
@@ -549,7 +578,7 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     for (const [a, added, state] of [['a before\n', 'added\n', 'partial'], ['a after\n', 'added\n', 'interrupted'], ['a before\n', null, 'written']] as const) {
       await writeFile(join(f.sourceRoot, 'a.txt'), a); await (added ? writeFile(join(f.sourceRoot, 'dir/new.txt'), added) : rm(join(f.sourceRoot, 'dir/new.txt'), { force: true }));
       await mkdir(lock); await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: record.intent.plan.ref, operation: 'rollback' }));
-      await writeFile(join(f.workspaceRoot, 'working-tree-deliveries', record.intent.plan.ref.split('/').pop()! + '.rollback', 'journal.json'), JSON.stringify({ schemaVersion: 1, state: 'writing', written: [],
+      await writeFile(join(f.workspaceRoot, 'working-tree-deliveries', record.intent.plan.ref.split('/').pop()! + '.rollback', 'journal.json'), JSON.stringify({ schemaVersion: 2, state: 'writing', written: [],
         changes: [{ path: 'a.txt', before: seen('a after\n'), after: seen('a before\n') }, { path: 'dir/new.txt', before: seen('added\n'), after: null }] }));
       const taken = f.files.publish(next.plan, next.manifest, other);
       if (state === 'partial') { await expect(taken).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'dir/new.txt' } }); expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b before\n'); }

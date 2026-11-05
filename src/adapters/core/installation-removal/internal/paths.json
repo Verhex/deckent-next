@@ -109,6 +109,7 @@
       "^workspaces/(integrations/)?[0-9a-f]{64}/(lease\\.json|gitconfig|hooks/.+|tree/.+)$",
       "^workspaces/run-bases/([0-9a-f]{64}|\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/.+$",
       "^workspaces/working-tree-deliveries/[0-9a-f]{64}(\\.rollback)?/(journal\\.json|original-[0-9]+|\\.deckent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(aside|ours))$",
+      "^workspaces/working-tree-pending/[0-9a-f]{64}/[0-9a-f]{64}(\\.rollback)?$",
       "^workspaces/working-tree-locks/[0-9a-f]{64}/owner-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$",
       "^workspaces/toolchains/(refresh-state|worker-image-state)\\.json$",
       "^workspaces/toolchains/receipts/(r[1-9][0-9]*-\\d{8}|adopted-\\d{1,16})\\.json(\\.failed-\\d+)?$",

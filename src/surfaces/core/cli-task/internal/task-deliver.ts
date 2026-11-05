@@ -78,6 +78,7 @@ export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTa
   }
   const delivered = await port.deliver(preview, { candidate: `cli-candidate-${randomUUID()}`, delivery: `cli-delivery-${randomUUID()}` }, answer);
   print(t('cli.task.integration.delivered', { ref: delivered.ref, commit: delivered.commit }, locale));
+  if (delivered.setAside?.length) print(t('cli.task.integration.setAside', { files: delivered.setAside.join(', ') }, locale));
   if (!preview.adoptionTargets.length) return;
   const targetRef = await ask({ title: t('cli.task.menu.adopt.title', { commit: delivered.commit.slice(0, 12) }, locale), body: [t('cli.task.menu.adopt.body', {}, locale)],
     options: [...preview.adoptionTargets.map(ref => ({ id: `ref:${ref}`, label: ref })), { id: 'no', label: t('cli.task.menu.adopt.later', {}, locale), key: 'n' }] });

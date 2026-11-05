@@ -1206,9 +1206,13 @@ turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-e
 also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
 the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by an
 exclusive lock directory in Deckent's workspace root (bounded wait; the lock holds its owner record naming the delivery and the operation it
-runs, delivery or rollback, and only a holder proven gone by pid and start bound is taken over: the journal of that operation, still `writing`,
-is first recovered and classified from the files: all `before` = nothing written, all `after` = written, a mix = PATCH_WORKING_TREE_PARTIAL
-with both lists; an ownerless or operation-less lock is never taken), and writes nothing to the person's repository: no
+runs, delivery or rollback, and only a holder proven gone by pid and start bound is taken over: the journal of that operation first enters a
+durable custody entry (`working-tree-pending/<checkout>/<journal>`, directory fsynced) before the gone record is removed, and every holder,
+before its own work, recovers and classifies each custody journal still `writing` from the files: all `before` = nothing written, all
+`after` = written, a mix = PATCH_WORKING_TREE_PARTIAL with both lists, and the entry goes only once its journal no longer reads `writing`, so
+a taker that dies too leaves the operation for the next one (Astra 3017 R2); an ownerless or live lock is never taken (BUSY), and a gone
+holder's record or a journal of another version (journal `schemaVersion` 2 is read) is the typed refusal
+PATCH_WORKING_TREE_RECORD_UNSUPPORTED naming the record to check and remove, nothing settled or written), and writes nothing to the person's repository: no
 reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
 anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
 PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
@@ -1222,10 +1226,11 @@ PATCH_CONFLICT; a write into the taken file through an editor's open handle is c
 over Deckent's. A taken file that cannot return because a newer file of the person's took its name is kept beside it and named
 (PATCH_WORKING_TREE_KEPT). A taken file that still holds `before` leaves the checkout by a rename into the journal directory (the inode
 itself, so a write through a handle opened before the take still lands there). On another filesystem (EXDEV, e.g. a WSL `/mnt/c` project;
-lead 2026-11-06, never a refusal) it is first copied into the journal directory (O_EXCL, fsynced), then compared again with `before` and with
-that copy, and unlinked only when both hold; otherwise it stays in place under its `.deckent-<uuid>.aside` name and the person is told its
-full path (PATCH_WORKING_TREE_KEPT). One residual window remains there: a handle opened before the take writing between that last
-comparison and the unlink. A removal is the same take, comparison and
+never a refusal) it is never unlinked (Astra 3017 R1): it stays beside its name as `.deckent-<uuid>.aside`, the journal records its path,
+the state it was compared at and the time (`setAside`), and the result returns it so the terminal and CLI tell the person what it is; a
+stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. It leaves only through the service-start sweep
+(`sweepSetAside`, with the Run-base sweep) once `execution.retention.setAsideDays` has passed and only while it still holds that recorded
+state; a changed or unreadable one stays, counted and still named in its journal. A removal is the same take, comparison and
 departure. Settling a crashed journal first puts a taken file back into its empty name and removes Deckent's temporary name. An existing
 file keeps its permission bits. The trace is the Deckent delivery record and that journal.
 

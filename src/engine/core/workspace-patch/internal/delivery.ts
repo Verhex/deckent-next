@@ -38,7 +38,7 @@ export interface IntegrationDeliveryTarget {
   readonly application?: 'working-tree';
   plan(command: IntegrationDeliveryCommand, manifest: IntegrationManifest, patch: WorkspacePatch, metadata: IntegrationCommitMetadata): Promise<IntegrationDeliveryPlan>;
   delivered(plan: IntegrationDeliveryPlan): Promise<boolean>;
-  publish(plan: IntegrationDeliveryPlan, manifest: IntegrationManifest, patch: WorkspacePatch): Promise<void>;
+  publish(plan: IntegrationDeliveryPlan, manifest: IntegrationManifest, patch: WorkspacePatch): Promise<readonly string[] | void>; // working-tree: the files set aside (R1, Astra 3017)
 }
 /** Delivers through its target: an immutable Git reference, or (a working-tree target) the patch written into the checkout's files. Never accepts a Task. */
 export class WorkspaceDeliveryApplication {
@@ -60,8 +60,8 @@ export class WorkspaceDeliveryApplication {
     const previous = await this.store.loadDelivery(command);
     if (previous && JSON.stringify(previous.intent.actor) !== JSON.stringify(actor)) throw new WorkspacePatchError('PATCH_CONFLICT');
     const files = this.target.application === 'working-tree';
-    const result = (record: IntegrationDeliveryRecord) => Object.freeze({ schemaVersion: 1 as const, status: files ? 'working-tree-delivered' as const : 'reference-delivered' as const,
-      command: record.intent.command, plan: record.intent.plan, manifest: record.intent.manifest, application: files ? 'working-tree' as const : 'reference-only' as const });
+    const result = (record: IntegrationDeliveryRecord, setAside: readonly string[] | void = []) => Object.freeze({ schemaVersion: 1 as const, status: files ? 'working-tree-delivered' as const : 'reference-delivered' as const,
+      command: record.intent.command, plan: record.intent.plan, manifest: record.intent.manifest, application: files ? 'working-tree' as const : 'reference-only' as const, ...(setAside?.length ? { setAside } : {}) });
     if (previous?.delivered) return result(previous);
     // A crash after atomic Git publication can settle from exact reference custody, without rebuilding or reapplying.
     if (previous && await this.target.delivered(previous.intent.plan)) {
@@ -94,7 +94,7 @@ export class WorkspaceDeliveryApplication {
     await this.assertObservation(inspected.manifest, preview.patch);
     await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock);
     await confirm();
-    await this.target.publish(plan, inspected.manifest, preview.patch);
-    return result(await this.store.finishDelivery(intent));
+    const setAside = await this.target.publish(plan, inspected.manifest, preview.patch);
+    return result(await this.store.finishDelivery(intent), setAside);
   }
 }

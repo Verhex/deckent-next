@@ -17,6 +17,7 @@
   "cli.task.integration.adopted": "Benimsendi: {ref}, {from} → {to} taşındı (sıra {sequence}). Dayanak: kayıtlı görev kabulü, doğrulama değil; checkout, index ve çalışma dosyaları değişmedi.",
   "cli.task.integration.rolledBack": "Geri alındı: {ref}, {from} → {to} taşındı (sıra {sequence}). Checkout, index ve çalışma dosyaları değişmedi.",
   "cli.task.integration.filesRolledBack": "Geri kondu: {count} dosya teslimden önceki hâlinde ({files}). Commit, dal ya da index değişmedi.",
+  "cli.task.integration.setAside": "Bu proje Deckent'in verilerinden farklı bir dosya sisteminde (örneğin WSL altında bir Windows sürücüsü); bu yüzden değişen her dosyanın bu adımdan hemen önceki sürümü Deckent'in klasörüne taşınmak yerine yanında gizli bir dosya olarak bırakıldı: {files}. Deckent her birini kenara ayırma süresi (execution.retention.setAsideDays) dolunca, yalnızca hâlâ değişmemişse kaldırır; artık gerekmediğinde kendiniz de silebilirsiniz.",
   "cli.task.integration.adoptedVerified": "Benimsendi: {ref}, {from} → {to} taşındı (sıra {sequence}). Bu commit üzerinde iş {run} ({kind}, deneme {attempt}) ile doğrulandı; checkout, index ve çalışma dosyaları değişmedi.",
   "cli.task.patch.scope.directoryHint": "{declared} yerine {suggested} mi demek istediniz? Bir dizin /** ile bildirilmelidir; bu öneri görevin kapsamını değiştirmez.",
   "queue.cli.summary.enqueue": "Kabul edilen denemeyi hedefe teslim için sıraya al",

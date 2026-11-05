@@ -24,7 +24,7 @@ export interface DeliveryWindowLabels {
   /** BeUser M-25: an already-delivered task in the /deliver list (`{title}`), and the adoption step with no adoption target configured. */
   readonly deliveredTitle: string; readonly adoptNone: string;
   /** R9p working-tree mode: where the yes writes, the confirm line, the result row and summary, and the next step of a file conflict. */
-  readonly whereFiles: string; readonly confirmFiles: string; readonly deliveredFiles: string; readonly summaryWritten: string; readonly nextConflictFiles: string;
+  readonly whereFiles: string; readonly confirmFiles: string; readonly deliveredFiles: string; readonly summaryWritten: string; readonly setAside: string; readonly nextConflictFiles: string;
   /** L1c (owner "güncel hâle göre yeniden yap sunar"): the `r` hint of a working-tree conflict whose task request the Run recorded. */ readonly redoFiles: string;
   /** BeUser M-33: the x hint, the set-aside summary, a set-aside row in /deliver (`{title}`) and the brought-back summary. */
   readonly dismissHint: string; readonly dismissed: string; readonly dismissedTitle: string; readonly restored: string;
@@ -185,7 +185,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       entry.stage = { kind: preview.adoptionTargets.length ? 'delivered' : 'done' };
       if (!preview.adoptionTargets.length) entry.settled = true;
       latest.current.summary(fillTemplate(preview.workingTree ? words.summaryWritten : words.summaryDelivered, { title: humanRecordText(entry.target.title, latest.current.known), commit: outcome.commit.slice(0, 12), ref: outcome.ref,
-        command: outcome.commandId }));
+        command: outcome.commandId }) + (outcome.setAside?.length ? `\n${fillTemplate(words.setAside, { files: outcome.setAside.join(', ') })}` : ''));
       changed();
     }, error => { entry.consent = null; fail(entry, error); });
   }, [answer, changed, fail, prepareCurrent]);

@@ -133,7 +133,7 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       await handlers.assertAvailable();
       await prepareWorkspaceIntegration(root, { schemaVersion: 1, commandId: ids.candidate, identity: preview.identity, proposal: preview.proposal }, options);
       const delivered = await handlers.deliver(root, { schemaVersion: 1, commandId: ids.delivery, identity: preview.identity, integrationCommandId: ids.candidate }, options);
-      return Object.freeze({ ref: delivered.plan.ref, commit: delivered.plan.commit, commandId: ids.delivery });
+      return Object.freeze({ ref: delivered.plan.ref, commit: delivered.plan.commit, commandId: ids.delivery, setAside: delivered.setAside });
     },
     async adopt(preview, delivery, targetRef, commandId, answer, verificationRunId) {
       // `task integration-adopt --verification-run`: the verifying kind is the installation's (config, read now); the adoption application

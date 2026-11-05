@@ -43,12 +43,22 @@ export async function readTreeFile(root: FileHandle, path: string, budget: Snaps
   } finally { for (const handle of opened.reverse()) await handle.close(); }
 }
 /** A file's observed state (absent, or content digest and Git mode): what the journal keeps and the one equality both writing and settling use. */
-type Observed = Pick<PatchFile, 'digest' | 'mode'> | null;
-type Read = (path: string) => ReturnType<typeof readTreeFile>;
+type Observed = Pick<PatchFile, 'digest' | 'mode'> | null; type Read = (path: string) => ReturnType<typeof readTreeFile>;
+/** R1 (Astra 3017): a file moved aside that stays in the checkout (journal directory on another filesystem), with the state it was compared at. */
+type SetAside = { path: string; expected: Observed; atMs: number }; type Custody = { journal: string; kept: string[]; setAside: SetAside[] };
+type Journal = { state?: unknown; root?: unknown; changes: { path: string; token?: unknown; before: Observed; after: Observed }[]; setAside?: SetAside[] };
 const observed = (file: Observed): Observed => file && { digest: file.digest, mode: file.mode };
 const holds = (file: Awaited<ReturnType<typeof readTreeFile>> | false, expected: Observed) =>
   file === null ? expected === null : !!file && expected !== null && file.mode === expected.mode && patchDigest(file.bytes) === expected.digest;
 const names = (token: string) => ['.tmp', '.aside', '.ours'].map(suffix => `${format.aside}${token}${suffix}`) as [string, string, string];
+const JOURNAL = /^[0-9a-f]{64}(\.rollback)?$/, ENTRY = new RegExp(`^${format.aside.replace(/\./g, '\\.')}[0-9a-f-]{36}\\.(aside|ours)$`);
+const unsupported = (path: string) => new WorkspacePatchError('PATCH_WORKING_TREE_RECORD_UNSUPPORTED', undefined, { path });
+/** A delivery's journal (null when absent). R3017: a record of another version is an explicit refusal, never settled or written over. */
+async function journalAt(directory: string) {
+  let journal: { schemaVersion?: unknown; changes?: unknown }; try { journal = JSON.parse(await readFile(join(directory, format.journal), 'utf8')) as typeof journal; } catch (error) { if (code(error) === 'ENOENT') return null; throw new WorkspacePatchError('PATCH_CORRUPT'); }
+  if (journal?.schemaVersion !== format.journalVersion || !Array.isArray(journal.changes)) throw unsupported(directory);
+  return journal as Journal;
+}
 /** The directory holding `path`, opened through descriptors (owned, no symlink); created on the way when `create`, else null when absent. */
 async function directoryOf(root: FileHandle, path: string, create: boolean, handles: FileHandle[]) {
   let parent = root;
@@ -60,59 +70,55 @@ async function directoryOf(root: FileHandle, path: string, create: boolean, hand
   }
   return parent;
 }
-/**
- * F1 (Astra 3015): the steps on an entry Deckent moved aside from `path` in its directory. It goes back only by a no-clobber link (a name the person
- * filled meanwhile is never written over; the entry is then kept and named); it leaves the checkout only while it still holds `expected`, moved
- * into the journal directory as the very inode (a late write through an old handle stays there). Lead 2026-11-06 (EXDEV, e.g. a WSL /mnt/c
- * project): a fsynced O_EXCL copy first, then the entry is compared again with `expected` and with that copy; unlinked only if both hold, else kept.
- */
-function entries(parent: FileHandle, path: string, read: Read, journal: string, kept: string[]) {
+/** F1 (Astra 3015): an entry Deckent moved aside from `path` goes back only by a no-clobber link (a filled name is never written over: it is kept and
+ * named) and leaves only while it holds `expected`, as the very inode into the journal directory; R1 (Astra 3017): on another filesystem it is never
+ * unlinked but stays, named in the journal and to the person, for `sweepSetAside`. */
+function entries(parent: FileHandle, path: string, read: Read, custody: Custody) {
   const dir = path.slice(0, path.lastIndexOf('/') + 1), name = path.slice(dir.length), at = (entry: string) => `/proc/self/fd/${parent.fd}/${entry}`;
   const same = (entry: string, expected: Observed) => read(dir + entry).then(file => holds(file, expected), () => false);
-  const retire = (entry: string, expected: Observed) => rename(at(entry), join(journal, entry)).catch(async (error: unknown) => {
-    if (code(error) !== 'EXDEV') throw error;
-    const first = await read(dir + entry).catch(() => null), copy = join(journal, entry);
-    if (first && holds(first, expected)) {
-      const file = await open(copy, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-      try { await file.writeFile(first.bytes); await file.sync(); } finally { await file.close(); }
-      const again = await read(dir + entry).catch(() => null);
-      if (again && holds(again, expected) && Buffer.compare(again.bytes, await readFile(copy)) === 0) return unlink(at(entry));
-    }
-    kept.push(dir + entry);
-  });
+  const retire = (entry: string, expected: Observed) => rename(at(entry), join(custody.journal, entry))
+    .catch((error: unknown) => { if (code(error) !== 'EXDEV') throw error; custody.setAside.push({ path: dir + entry, expected, atMs: Date.now() }); });
   const recover = async (entry: string, expected: Observed) => {
     try { await link(at(entry), at(name)); } catch (error) {
       if (code(error) === 'ENOENT') return;
       const [moved, held] = code(error) === 'EEXIST' ? await Promise.all([lstat(at(entry)), lstat(at(name))]) : [];
       if (moved && held && moved.ino === held.ino && moved.dev === held.dev) return unlink(at(entry)); // a crash between the link back and its unlink
       if (code(error) === 'EEXIST' && await same(entry, expected)) return retire(entry, expected);
-      kept.push(dir + entry); return;
+      custody.kept.push(dir + entry); return;
     }
     await unlink(at(entry));
   };
   return { at, name, same, retire, recover };
 }
+const syncDirectory = async (directory: string) => { const handle = await open(directory, DIRECTORY); try { await handle.sync(); } finally { await handle.close(); } };
 /** A small private record replaced atomically (0600 temporary file, fsync, rename, directory fsync). */
 async function record(directory: string, name: string, data: string | Uint8Array) {
   const temporary = join(directory, `.${randomUUID()}.tmp`), file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try { await file.writeFile(data); await file.sync(); } finally { await file.close(); }
-  await rename(temporary, join(directory, name));
-  const handle = await open(directory, DIRECTORY); try { await handle.sync(); } finally { await handle.close(); }
+  await rename(temporary, join(directory, name)); await syncDirectory(directory);
 }
-
-/**
- * Owner 2026-11-05 (R9p): the working-tree delivery target. A person's yes writes the accepted patch into the checkout's files: no commit, no
- * reference and no object in the person's repository, index and HEAD untouched. Deliveries into one checkout are serialized by an exclusive
- * lock directory in Deckent's workspace root (bounded wait, never broken). Every path is read first and must hold exactly its `before`, or
- * every path already its `after` (this delivery was written); otherwise nothing is written. The bytes a write replaces or removes are kept in
- * Deckent's own delivery directory before the write. Each path is taken aside, compared and only then replaced or removed (`replace`): no step
- * writes over or unlinks a file the person saved meanwhile. A failure in between stops at once: the journal names the written paths and the
- * delivery is refused as partial; nothing is rewritten blindly. Plan and diff are the reference target's own (`delegate`).
- * L1c: the lock names its holder (pid, time, delivery and operation); a holder proven gone is taken over, and the journal of the operation it was
- * running (the delivery's, or its rollback's) still `writing` is settled from the files first (all before: nothing written; all after: written;
- * mixed: partial, refused with the lists). `rollback` puts a written delivery's `before` contents back through the same lock and writer, only
- * while every path still holds the delivery's `after`.
- */
+/** R1 (Astra 3017), the controlled cleanup: a set-aside file recorded before `since` is unlinked only while it still holds the state it was set aside
+ * with; a changed, unreadable or unreachable one stays, counted and still named in its journal; one already gone is dropped from it. */
+export async function sweepSetAside(workspaceRoot: string, since: number, limits: PatchLimits, timeoutMs: number) {
+  const deliveries = join(workspaceRoot, format.deliveries), result = { removed: 0, kept: 0 };
+  for (const name of (await readdir(deliveries).catch(() => [] as string[])).filter(name => JOURNAL.test(name))) {
+    const directory = join(deliveries, name), journal = await journalAt(directory).catch(() => null), due = journal?.setAside?.filter(entry => entry.atMs < since) ?? []; if (!journal || !due.length) continue;
+    const root = typeof journal.root === 'string' ? await open(journal.root, DIRECTORY).catch(() => null) : null, left = journal.setAside!.filter(entry => !due.includes(entry));
+    try { for (const entry of due) {
+      const handles: FileHandle[] = [], base = entry.path.slice(entry.path.lastIndexOf('/') + 1);
+      try {
+        const parent = root && ENTRY.test(base) ? await directoryOf(root, entry.path, false, handles).catch(() => null) : null;
+        const file = parent ? await readTreeFile(root!, entry.path, new SnapshotBudget(limits, Date.now() + timeoutMs)).catch(() => false as const) : false;
+        if (file !== null && holds(file, entry.expected)) { await unlink(`/proc/self/fd/${parent!.fd}/${base}`); result.removed++; } else if (file !== null) { left.push(entry); result.kept++; }
+      } finally { for (const handle of handles.reverse()) await handle.close(); }
+    } } finally { await root?.close(); }
+    await record(directory, format.journal, JSON.stringify({ ...journal, setAside: left }));
+  }
+  return result;
+}
+/** Owner 2026-11-05 (R9p): a person's yes writes the accepted patch into the checkout's files (nothing in their repository), one delivery or rollback at a
+ * time per checkout, never over or unlinking a file saved meanwhile; `publish`/`rollback` return the files set aside (R1, Astra 3017) for the person's
+ * note. Protocol, crash recovery and limits: ARCHITECTURE approval-and-delivery.md "Working-tree delivery"; plan and diff are `delegate`'s. */
 export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
   readonly application = 'working-tree' as const;
   private readonly delegate: GitIntegrationDelivery;
@@ -121,54 +127,58 @@ export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
   describe(from: string, to: string) { return this.delegate.describe(from, to); }
   /** The plan's reference names this delivery's private journal (a rollback's: beside it); never written to the person's repository. */
   private journal(ref: string, suffix = '') { return join(this.options.workspaceRoot, format.deliveries, ref.slice(ref.lastIndexOf('/') + 1) + suffix); }
-  private async state(directory: string) {
-    try { return JSON.parse(await readFile(join(directory, format.journal), 'utf8')) as { state?: unknown; changes?: unknown }; }
-    catch (error) { if (code(error) === 'ENOENT') return null; throw new WorkspacePatchError('PATCH_CORRUPT'); }
-  }
-  async delivered(plan: IntegrationDeliveryPlan) { return (await this.state(this.journal(plan.ref)))?.state === 'written'; }
-  async publish(plan: IntegrationDeliveryPlan, _manifest: IntegrationManifest, patch: WorkspacePatch) {
-    await this.locked(plan.ref, 'deliver', async deadline => { if (!await this.delivered(plan)) await this.write(plan, this.journal(plan.ref), patch.changes, deadline); });
+  async delivered(plan: IntegrationDeliveryPlan) { return (await journalAt(this.journal(plan.ref)))?.state === 'written'; }
+  publish(plan: IntegrationDeliveryPlan, _manifest: IntegrationManifest, patch: WorkspacePatch) {
+    return this.locked(plan.ref, 'deliver', async deadline => await this.delivered(plan) ? [] : this.write(plan, this.journal(plan.ref), patch.changes, deadline));
   }
   /** Puts back what a written delivery replaced: the inverse patch through the same writer (every path must still hold the delivery's `after`). */
-  async rollback(plan: IntegrationDeliveryPlan, patch: WorkspacePatch) {
-    await this.locked(plan.ref, 'rollback', async deadline => {
+  rollback(plan: IntegrationDeliveryPlan, patch: WorkspacePatch) {
+    return this.locked(plan.ref, 'rollback', async deadline => {
       if (!await this.delivered(plan)) throw new WorkspacePatchError('PATCH_WORKING_TREE_NOT_WRITTEN');
-      await this.write(plan, this.journal(plan.ref, format.rollback), patch.changes.map(change => ({ path: change.path, before: change.after, after: change.before })), deadline, 'PATCH_WORKING_TREE_CHANGED');
+      return this.write(plan, this.journal(plan.ref, format.rollback), patch.changes.map(change => ({ path: change.path, before: change.after, after: change.before })), deadline, 'PATCH_WORKING_TREE_CHANGED');
     });
   }
   /** One delivery or rollback at a time per checkout: an exclusive lock directory holding its owner record (bounded wait, taken over only from a holder proven gone). */
-  private async locked(ref: string, operation: 'deliver' | 'rollback', work: (deadline: number) => Promise<void>) {
+  private async locked(ref: string, operation: 'deliver' | 'rollback', work: (deadline: number) => Promise<string[]>) {
     // Descriptor-relative paths and O_NOFOLLOW are Linux guarantees here: refused elsewhere before any file is touched.
     if (process.platform !== 'linux') throw new WorkspacePatchError('PATCH_WORKING_TREE_UNSUPPORTED');
-    const locks = join(this.options.workspaceRoot, format.locks), lock = join(locks, patchDigest(this.options.sourceRoot)), deadline = Date.now() + this.options.timeoutMs;
-    const owner = `${format.lockOwner}${randomUUID()}.json`, interrupted: string[] = [];
+    const digest = patchDigest(this.options.sourceRoot), locks = join(this.options.workspaceRoot, format.locks), lock = join(locks, digest), deadline = Date.now() + this.options.timeoutMs;
+    const owner = `${format.lockOwner}${randomUUID()}.json`, pending = join(this.options.workspaceRoot, format.pending, digest);
     await mkdir(locks, { recursive: true, mode: 0o700 });
     for (;;) {
       try { await mkdir(lock, { mode: 0o700 }); await writeFile(join(lock, owner), JSON.stringify({ schemaVersion: 1, pid: process.pid, atMs: Date.now(), ref, operation }), { flag: 'wx', mode: 0o600 }); break; }
       catch (error) { if (code(error) !== 'EEXIST') throw error; }
-      const gone = await this.takeOver(lock); if (gone) { interrupted.push(gone); continue; }
+      if (await this.takeOver(lock, pending)) continue;
       if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_WORKING_TREE_BUSY');
       await sleep(format.lockPollMs);
     }
-    // The work gets its own full time budget once the lock is held: a long wait for it never cuts a write short.
-    try { for (const gone of interrupted) await this.settle(gone, Date.now() + this.options.timeoutMs); await work(Date.now() + this.options.timeoutMs); }
-    finally { await unlink(join(lock, owner)); await rmdir(lock); }
+    // R2 (Astra 3017): every holder first settles gone holders' custody (an entry goes once its journal no longer reads `writing`); then the work, with its own full time budget.
+    try {
+      let stop: unknown = null;
+      for (const name of (await readdir(pending).catch(() => [] as string[])).filter(name => JOURNAL.test(name))) {
+        const directory = join(this.options.workspaceRoot, format.deliveries, name);
+        await this.settle(directory, Date.now() + this.options.timeoutMs).catch((error: unknown) => { stop ??= error; });
+        if (await journalAt(directory).then(journal => journal?.state !== 'writing', () => false)) await unlink(join(pending, name));
+      }
+      if (stop) throw stop;
+      return await work(Date.now() + this.options.timeoutMs);
+    } finally { await unlink(join(lock, owner)); await rmdir(lock); }
   }
-  /** The held lock's one owner record names a process proven gone (pid and start bound, `recordedProcessState`): its record and the empty lock are
-   * removed exactly (never recursively) and the journal of the operation it ran returned (F3: a rollback's, not its delivery's). An ownerless, extra,
-   * unreadable or operation-less lock is never taken (BUSY, as before). */
-  private async takeOver(lock: string) {
+  /** A lock whose one owner record names a process proven gone (`recordedProcessState`): the journal of its operation (F3) enters durable custody (R2), then its
+   * record and the empty lock go exactly. Ownerless, extra, unreadable or live: never taken (BUSY); a gone holder of another version: explicit refusal. */
+  private async takeOver(lock: string, pending: string) {
     const names = await readdir(lock).catch(() => [] as string[]), name = names.length === 1 && names[0]!.startsWith(format.lockOwner) ? names[0]! : null;
     const held = name ? await readFile(join(lock, name), 'utf8').then(text => JSON.parse(text) as { pid?: unknown; atMs?: unknown; ref?: unknown; operation?: unknown }, () => null) : null;
-    if (!held || typeof held.pid !== 'number' || !Number.isSafeInteger(held.pid) || held.pid <= 0 || typeof held.atMs !== 'number' || typeof held.ref !== 'string'
-      || (held.operation !== 'deliver' && held.operation !== 'rollback') || recordedProcessState(held.pid, held.atMs) !== 'gone') return null;
-    try { await unlink(join(lock, name!)); await rmdir(lock); return this.journal(held.ref, held.operation === 'rollback' ? format.rollback : ''); } catch { return null; }
+    if (!held || typeof held.pid !== 'number' || !Number.isSafeInteger(held.pid) || held.pid <= 0 || typeof held.atMs !== 'number' || recordedProcessState(held.pid, held.atMs) !== 'gone') return false;
+    const journal = typeof held.ref === 'string' && (held.operation === 'deliver' || held.operation === 'rollback') ? held.ref.slice(held.ref.lastIndexOf('/') + 1) + (held.operation === 'rollback' ? format.rollback : '') : '';
+    if (!JOURNAL.test(journal)) throw unsupported(lock);
+    await mkdir(pending, { recursive: true, mode: 0o700 }); await writeFile(join(pending, journal), '', { mode: 0o600 }); await syncDirectory(pending); await syncDirectory(join(pending, '..'));
+    try { await unlink(join(lock, name!)); await rmdir(lock); return true; } catch { return false; }
   }
-  /** A gone holder's journal still `writing` is classified from the files, never completed blindly: what its crash left beside a name is recovered
-   * first (a taken file back to its empty name, Deckent's temporary file removed), then every path is compared in full (existence, digest, Git mode). */
+  /** A gone holder's `writing` journal: what its crash left beside a name is recovered first, then every path is classified in full, never completed blindly. */
   private async settle(directory: string, deadline: number) {
-    const journal = await this.state(directory); if (journal?.state !== 'writing' || !Array.isArray(journal.changes)) return;
-    const changes = journal.changes as { path: string; token?: unknown; before: Observed; after: Observed }[], kept: string[] = [], seen = [];
+    const journal = await journalAt(directory); if (journal?.state !== 'writing') return;
+    const changes = journal.changes, custody: Custody = { journal: directory, kept: [], setAside: [] }, seen = [];
     const root = await open(this.options.sourceRoot, DIRECTORY), read = (path: string) => readTreeFile(root, path, new SnapshotBudget(this.limits, deadline));
     try {
       for (const change of changes) {
@@ -176,7 +186,7 @@ export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
         try {
           const parent = token && await directoryOf(root, change.path, false, handles).catch(() => null);
           if (token && parent) {
-            const [temp, aside, ours] = names(token), { at: entry, recover } = entries(parent, change.path, read, directory, kept);
+            const [temp, aside, ours] = names(token), { at: entry, recover } = entries(parent, change.path, read, custody);
             await unlink(entry(temp)).catch(() => undefined); await recover(aside, change.before); await recover(ours, change.after);
           }
         } finally { for (const handle of handles.reverse()) await handle.close(); }
@@ -185,54 +195,53 @@ export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
     } finally { await root.close(); }
     const paths = changes.map(change => change.path), written = seen.filter(({ change, file }) => holds(file, change.after)).map(({ change }) => change.path);
     const before = seen.every(({ change, file }) => holds(file, change.before));
-    await record(directory, format.journal, JSON.stringify({ ...journal, state: written.length === changes.length ? 'written' : before ? 'interrupted' : 'partial', written, kept }));
-    if (kept.length || (written.length !== changes.length && !before)) throw this.stopped(paths, written, kept);
+    await record(directory, format.journal, JSON.stringify({ ...journal, state: written.length === changes.length ? 'written' : before ? 'interrupted' : 'partial', written,
+      kept: custody.kept, setAside: [...journal.setAside ?? [], ...custody.setAside] }));
+    if (custody.kept.length || (written.length !== changes.length && !before)) throw this.stopped(paths, written, custody);
   }
-  /** PATCH_WORKING_TREE_PARTIAL with the written and unwritten lists; PATCH_WORKING_TREE_KEPT when a file moved aside could not return to its name. */
-  private stopped(paths: readonly string[], written: readonly string[], kept: readonly string[]) {
-    const params = { written: written.join(', '), pending: paths.filter(path => !written.includes(path)).join(', ') };
+  /** PATCH_WORKING_TREE_PARTIAL with the written and unwritten lists; PATCH_WORKING_TREE_KEPT when a file moved aside stays beside its name. */
+  private stopped(paths: readonly string[], written: readonly string[], custody: Custody) {
+    const params = { written: written.join(', '), pending: paths.filter(path => !written.includes(path)).join(', ') }, kept = [...custody.kept, ...custody.setAside.map(entry => entry.path)];
     return kept.length ? new WorkspacePatchError('PATCH_WORKING_TREE_KEPT', undefined, { ...params, kept: kept.join(', ') }) : new WorkspacePatchError('PATCH_WORKING_TREE_PARTIAL', undefined, params);
   }
   private async write(plan: IntegrationDeliveryPlan, directory: string, changes: WorkspacePatch['changes'], deadline: number, changed: 'PATCH_CONFLICT' | 'PATCH_WORKING_TREE_CHANGED' = 'PATCH_CONFLICT') {
+    const carried = (await journalAt(directory))?.setAside ?? [], custody: Custody = { journal: directory, kept: [], setAside: [...carried] };
     const root = await open(this.options.sourceRoot, DIRECTORY), read = (path: string) => readTreeFile(root, path, new SnapshotBudget(this.limits, deadline));
-    const written: string[] = [], kept: string[] = [], paths = changes.map(change => change.path);
+    const written: string[] = [], paths = changes.map(change => change.path);
     // F2: each path's full before/after state and the token naming what it moves aside, so a crash settles with the writer's own equality.
     const journaled = changes.map(change => ({ path: change.path, token: randomUUID(), before: observed(change.before), after: observed(change.after) }));
-    const note = (state: string) => record(directory, format.journal, JSON.stringify({ schemaVersion: 1, state, ref: plan.ref, commit: plan.commit, paths, written, kept, changes: journaled }));
+    const note = (state: string) => record(directory, format.journal, JSON.stringify({ schemaVersion: format.journalVersion, state, root: this.options.sourceRoot, ref: plan.ref,
+      commit: plan.commit, paths, written, kept: custody.kept, setAside: custody.setAside, changes: journaled }));
     try {
       const pending = [];
       for (const change of changes) pending.push({ change, file: await read(change.path) });
       await mkdir(directory, { recursive: true, mode: 0o700 });
       // The files are the evidence: all `after` = written (a resumed delivery); `before`/`after` mixed = an interrupted one, never completed blindly.
       const done = pending.filter(({ change, file }) => holds(file, change.after)).map(({ change }) => change.path);
-      if (done.length === paths.length) { written.push(...paths); await note('written'); return; }
+      if (done.length === paths.length) { written.push(...paths); await note('written'); return []; }
       if (!pending.every(({ change, file }) => holds(file, change.before) || done.includes(change.path))) throw new WorkspacePatchError(changed);
-      if (done.length) { written.push(...done); await note('partial'); throw this.stopped(paths, done, []); }
+      if (done.length) { written.push(...done); await note('partial'); throw this.stopped(paths, done, { ...custody, setAside: [] }); }
       for (const [index, { file }] of pending.entries()) if (file) await record(directory, `${format.original}${index}`, file.bytes);
       await note('writing');
       for (const [index, { change, file }] of pending.entries()) {
         try {
-          await this.replace(root, change, journaled[index]!.token, file?.permissions ?? 0o644, read, directory, kept); written.push(change.path);
-          if (kept.length) throw new WorkspacePatchError('PATCH_WORKING_TREE_KEPT'); // written, but a file it moved aside stays beside it (named below)
-        }
-        catch (error) {
+          await this.replace(root, change, journaled[index]!.token, file?.permissions ?? 0o644, read, custody); written.push(change.path);
+          if (custody.kept.length) throw new WorkspacePatchError('PATCH_WORKING_TREE_KEPT'); // written, but a file it moved aside stays beside it (named below)
+        } catch (error) {
           await note('partial').catch(() => undefined);
-          throw written.length || kept.length ? this.stopped(paths, written, kept) : error;
+          throw written.length || custody.kept.length || custody.setAside.length > carried.length ? this.stopped(paths, written, { ...custody, setAside: custody.setAside.slice(carried.length) }) : error;
         }
       }
-      await note('written');
+      await note('written'); return custody.setAside.slice(carried.length).map(entry => entry.path);
     } finally { await root.close(); }
   }
-  /**
-   * F1 (Astra 3015): one path. Its name is first taken by an atomic rename (whatever is there at that instant, the person's newest save included,
-   * keeps its inode) and compared; the new file goes in only by a no-clobber link. The person's file found at any step goes back to its name and
-   * nothing is written for it (PATCH_CONFLICT); a write into the taken file through an editor's open handle puts the person's file back over ours.
-   */
-  private async replace(root: FileHandle, change: WorkspacePatch['changes'][number], token: string, permissions: number, read: Read, journal: string, kept: string[]) {
+  /** F1 (Astra 3015): one path, taken aside by an atomic rename and compared, then the new file placed by a no-clobber link; a file saved meanwhile goes back
+   * to its name and nothing is written for it (PATCH_CONFLICT), a write into the taken file through an open handle puts it back over ours. */
+  private async replace(root: FileHandle, change: WorkspacePatch['changes'][number], token: string, permissions: number, read: Read, custody: Custody) {
     const handles: FileHandle[] = [];
     try {
       const parent = (await directoryOf(root, change.path, true, handles))!, [temp, aside, ours] = names(token);
-      const { at, name, same, retire, recover } = entries(parent, change.path, read, journal, kept), conflict = new WorkspacePatchError('PATCH_CONFLICT');
+      const { at, name, same, retire, recover } = entries(parent, change.path, read, custody), conflict = new WorkspacePatchError('PATCH_CONFLICT');
       try {
         if (change.after) {
           const file = await open(at(temp), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
