@@ -15,7 +15,7 @@ type OpenTools = NativeCliWorkerPorts['openTools'];
 export async function openConfiguredNativeWorkerTools(root: string, request: Parameters<OpenTools>[0], binding: Parameters<OpenTools>[1],
   signal: AbortSignal, resources: Parameters<OpenTools>[3], options: ConfigLoadOptions): Promise<ToolSessionPort> {
   const { scopeId, generation } = request.identity, turnId = sha256(JSON.stringify(request.identity));
-  const { current, context, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
+  const { current, context, person, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
   const clock = new SystemTrustedClock();
   const sessions = () => LocalOsSessionAuthority.create(context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
   const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority,
@@ -26,7 +26,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
     selfSource, writeFloor, writeSetRoot: () => sandboxWriteSetRoot(request.workspace, context.layout, env), sealed: sealedRootEntryRefused(request.workspace, sandbox.hardFloor) });
   const tools = [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC], describe = describeAgentCall;
   const approvals = createAgentCallApprovals({ context, clock, scopeId, turnId, describe });
-  const decisions = createAgentCallDecisions({ context, clock, scopeId, turnId, edits: () => edits, shell, approvals, fetch: null });
+  const decisions = createAgentCallDecisions({ context, clock, scopeId, turnId, edits: () => edits, shell, approvals, fetch: null, person });
   const store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
   const lifetime = nativeWorkerToolLifetime();
   let failure: 'approval-expired' | null = null;

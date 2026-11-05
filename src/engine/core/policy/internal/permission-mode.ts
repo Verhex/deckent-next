@@ -1,6 +1,7 @@
-import { isAiPrincipal, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
+import { isAiPrincipal, mcpPrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
+const sameActor = (a: { issuer: string; subject: string }, b: { issuer: string; subject: string }) => a.issuer === b.issuer && a.subject === b.subject;
 
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
@@ -64,7 +65,7 @@ export interface AgentToolCallRequest {
   readonly standing?: { readonly key: string; readonly session: boolean } | null;
   /** MODES-3: the turn was launched in full access (`chatTurn.fullAccess`). It counts only while a company grant allows full access. */
   readonly fullAccess?: boolean;
-  /** R4a: the person whose terminal session started an AI actor's turn; their mode (and its company grant) applies to its calls. Never an AI. */
+  /** R4a: the person who owns this AI actor (its `<issuer>/mcp`) and started its turn or Run; their mode and its company grant apply. Never an AI. */
   readonly person?: VerifiedPrincipal;
 }
 /** A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
@@ -132,7 +133,10 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   const grant = request.fullAccess === true ? fullAccessGrant(policy, request.principal, request.scopeId) : null;
   const access = grant?.decision === 'allow' && grant.ruleId !== undefined ? grant.ruleId : null;
   // PRE-9 (b): a stored full-auto counts only while its grant allows it on this very snapshot (like full access): revoked, the call is standart's.
-  const person = access ? null : effectivePermissionMode(policy, request.person && !isAiPrincipal(request.person) ? request.person : request.principal, request.scopeId);
+  // R4a: an AI actor follows only the person whose MCP actor it is; without that person no mode relaxes anything (fail closed).
+  const owner = request.person && !isAiPrincipal(request.person) && sameActor(mcpPrincipalRef(request.person), request.principal) ? request.person : null;
+  const modeActor = isAiPrincipal(request.principal) ? owner : request.principal;
+  const person = access || !modeActor ? null : effectivePermissionMode(policy, modeActor, request.scopeId);
   // A stored full-access start mode without a launched turn is standart (MODES-3: an explicit parameter, never implied by bindings).
   const mode = person === null ? null : person.mode === 'full-access' ? { mode: 'standart' as const, askEdits: person.askEdits, id: person.id } : person;
   // A standing approval names a persistable cell's pattern (self-source only names a session pattern). It is asked like any other rule (a company deny or require-approval on the

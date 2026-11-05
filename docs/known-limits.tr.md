@@ -446,9 +446,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   `deckent-mcp`'ye de hizmet eder; bu yüzden dış bir MCP istemcisi de bütçe, abonelik kotası ve `ai` devir onayı içinde
   `invoke_model` çağırabilir. Düzenleme/kabuk kuralı moda açıktır: yerel sohbet turu onu başlatan kişinin modunu izler (varsayılan
   `standart`ta sıradan proje düzenlemesi kartsız çalışır ve mod gevşetmesi olarak denetim kaydına yazılır; "düzenlemeleri de sor"
-  açıksa kart çıkar). Yerel işçinin kayıtlı kişi modu yoktur ve her zaman varsayılan `standart` ile çalışır; bu yüzden Attempt
-  çalışma alanındaki sıradan düzenlemeleri, kişi "düzenlemeleri de sor" seçmiş olsa bile kartsız çalışır. Kabuk komutları, yazma
-  tabanı ve diğer sert taban hücreleri yine sorar ya da reddeder. Yeni bir v19 kurulumunda geri alınacak yükseltme yoktur. *Yol:* model
+  açıksa kart çıkar). Yerel işçi de AI aktörünün sahibi olan kurulum kişisinin modunu aynı şekilde izler. Sahibi olan kişi
+  olmadan bir AI aktörü hiçbir mod gevşetmesi almaz. Aktör model çağırabilir ve meta verisini okuyabilir, ama başka bir kimliğin
+  model içeriğini okuyamaz ve çağrılarını iptal edemez. Kabuk komutları, yazma tabanı ve diğer sert taban hücreleri yine sorar ya
+  da reddeder. Yeni bir v19 kurulumunda geri alınacak yükseltme yoktur. *Yol:* model
   çağırmasını istemediğiniz MCP istemcisini bağlamayın; MCP aktörü için `model-invocation` üzerindeki şirket deny'ı yerel ajanı da durdurur.
 
 ## Bütçe ve harcama

@@ -452,9 +452,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `deckent-mcp`, so an external MCP client can also call `invoke_model`, inside the budget, the subscription quota and the `ai`
   delegation consent. The edit/shell rule is mode-eligible: a native chat turn follows the mode of the person who started it (in
   the default `standart` an ordinary project edit runs without a card and is audited as a mode relaxation; with "ask for edits too"
-  it shows the card). A native worker has no recorded person mode and always runs as the default `standart`, so its ordinary
-  edits in the Attempt workspace run without a card even when the person chose "ask for edits too". Shell commands, the write
-  floor and every other hard-floor cell still ask or refuse. A fresh v19 install has no upgrade to roll back. *Workaround:* do not connect an MCP client you do not want
+  it shows the card). A native worker follows the mode of the installation's person who owns its AI actor the same way. An AI
+  actor without its owning person gets no mode relaxation at all. The actor may call models and read their metadata, but it
+  cannot read another principal's model content or cancel its calls. Shell commands, the write floor and every other hard-floor
+  cell still ask or refuse. A fresh v19 install has no upgrade to roll back. *Workaround:* do not connect an MCP client you do not want
   to call models; a company deny for the MCP actor on `model-invocation` stops the native agent as well.
 
 ## Budgets and spend

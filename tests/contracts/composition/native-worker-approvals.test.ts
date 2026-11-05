@@ -71,6 +71,40 @@ it('K23 measures real worker cards in disposable customer and self-source Attemp
   } finally { if (port) await adapters.withMcpPrincipal(() => port!.cancel()); await f.close(); }
 }, 30_000);
 
+it('R4a: a customer worker edit follows its owning person\'s mode: default standart runs audited without a card, ask-edits shows a card', async () => {
+  const f = await brainProviderFixture(), c = await connection();
+  let port: Awaited<ReturnType<adapters.NativeCliWorkerPorts['openTools']>> | undefined;
+  try {
+    const projectOptions = { ...f.options, env: { ...f.options.env, DECKENT_GLOBAL_HOME: join(f.data, 'global') } };
+    const owner = adapters.readLocalOsIdentity(), { firstRunPolicyTemplate } = await import('#domain/index.js'), { FIRST_RUN_TOOL_NAMES } = await import('#engine/index.js');
+    const template = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+    const bindings = (modes: unknown[]) => writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 3, revision: `b-${modes.length}`, bindings: [], modes }), { mode: 0o600 });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy), { mode: 0o600 }); await bindings([]); clearConfigCache();
+    vi.spyOn(runs, 'recheckNativeWorkerUse').mockResolvedValue({ profile: c.profile } as never);
+    const attempt = join(f.project, '..', 'customer-attempt'); await mkdir(join(attempt, 'src'), { recursive: true });
+    port = await adapters.withMcpPrincipal(() => createConfiguredNativeCliWorkerRuntime(f.project, projectOptions)!.openTools({ protocolVersion: 1,
+      identity: { scopeId: 's', runId: 'r', taskId: 'mode', attemptId: 'a', generation: 1, layoutRevision: 'l' }, workspace: attempt, argv: [] },
+    {} as adapters.NativeCliWorkerBinding, new AbortController().signal, {}));
+    const propose = (id: string, path: string, signal = new AbortController().signal) => adapters.withMcpPrincipal(() => port!.propose({ id, name: 'write_file',
+      argumentsJson: JSON.stringify({ path, content: id }) }, { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, signal));
+    const sqlite = (await loadComposedConfig(f.project, projectOptions)).storage.sqlite;
+    const pending = () => { const journal = adapters.openSqliteApprovalStore(f.path, sqlite); try { return journal.store.list('s', null, 100).filter(row => row.status === 'pending'); } finally { journal.close(); } };
+    expect((await propose('default-write', 'src/default.ts')).outcome.status).toBe('ok');
+    expect(pending()).toEqual([]); expect(await readFile(join(attempt, 'src/default.ts'), 'utf8')).toBe('default-write');
+    const { DatabaseSync } = await import('node:sqlite'), db = new DatabaseSync(f.path, { readOnly: true });
+    try { expect((db.prepare("SELECT record FROM audit_events WHERE kind = 'permission-mode'").all() as { record: string }[]).map(row => row.record).join()).toMatch(/"mode":"standart","cell":"edit-non-floor"/u); }
+    finally { db.close(); }
+    await bindings([{ id: 'person-ask', principal: { issuer: owner.issuer, subject: owner.subject }, scopes: ['s'], mode: 'standart', askEdits: true }]); clearConfigCache();
+    const stop = new AbortController(), asked = propose('asked-write', 'src/asked.ts', stop.signal);
+    let card: unknown[] = [];
+    for (let n = 0; n < 200 && !card.length; n++) { card = pending(); if (!card.length) await new Promise(resolve => setTimeout(resolve, 10)); }
+    expect(card).toHaveLength(1); stop.abort();
+    expect((await asked).outcome.status).toBe('error');
+    await expect(readFile(join(attempt, 'src/asked.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(f.posts).toBe(0);
+  } finally { if (port) await adapters.withMcpPrincipal(() => port!.cancel()); await f.close(); }
+}, 30_000);
+
 async function workerFixture(ttl = 5000) {
   const { modeRuntime, principal } = await import('../support/agent-turn-modes.js');
   // R4a: the real first-run template (v19) for the person, no injected MCP grant.

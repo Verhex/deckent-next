@@ -519,7 +519,7 @@ type V19Names = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'proposeMcpT
 function v19Rules(person: Person, scopes: readonly string[], names: V19Names): readonly PolicyGrant[] {
   if (isMcpPrincipal(person) || isWorkloadPrincipalRef(person)) return [];
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, { agentTool: tool, modelInvocation, operation } = policyResources;
-  return ([[ids.mcpModelInvocation, 'allow', modelInvocation.kind, MODEL_INVOCATION_ACTIONS, 'all'], [ids.mcpReadTools, 'allow', tool.kind, tool.actions, [...names.readToolNames, names.proposeMcpToolName]],
+  return ([[ids.mcpModelInvocation, 'allow', modelInvocation.kind, ['invoke'], 'all'], [ids.mcpReadTools, 'allow', tool.kind, tool.actions, [...names.readToolNames, names.proposeMcpToolName]],
     [ids.mcpScratchTools, 'allow', tool.kind, tool.actions, names.scratchToolNames], [ids.mcpEditShellTools, 'require-approval', tool.kind, tool.actions, names.editShellToolNames],
     [ids.mcpToolOperations, 'allow', operation.kind, ['execute'], [names.writeOperationId, names.shellOperationId, names.scratchWriteOperationId]]] as const).map(([id, effect, kind, actions, resource]) => policyGrantSchema.parse({
     id, effect, actions: [...actions], scopes: [...scopes], principals: [mcpPrincipalRef(person)], resource: { kind, ids: resource === 'all' ? 'all' : [...resource] }, ...(effect === 'require-approval' ? { modeEligible: true } : {}) }));

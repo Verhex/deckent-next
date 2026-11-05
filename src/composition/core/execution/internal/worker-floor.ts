@@ -1,7 +1,7 @@
 import { prepareNativeWorkerInputs, nativeWorkerViewSandboxes } from './worker-inputs.js';
 import { ErrorRegistry, getConfigKnownSecrets, globalStateRoot, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { agentWorkspaceDeny, createWorkspaceReadTools, agentAuthorityPaths, agentTurnWriteFloor, isSelfSourceProject,
-  agentShellSandboxLayout, shippedShellSandboxes, nativeCodingEnvironmentProbes, nativeCliAgent, resolveShellRealm, shellSandboxCapabilities,
+  agentShellSandboxLayout, shippedShellSandboxes, nativeCodingEnvironmentProbes, nativeCliAgent, resolveShellRealm, shellSandboxCapabilities, withLocalPrincipalChannel,
   type NativeCliWorkerPorts, type ShellCapabilities, type ShellSandbox } from '#adapters/index.js';
 import { nativeWorkerEnvironmentProbe, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, nativeWorkerToolBounds } from '#capabilities/index.js';
 import { assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
@@ -14,7 +14,7 @@ type OpenTools = NativeCliWorkerPorts['openTools'];
 export async function nativeWorkerToolFloor(root: string, request: Parameters<OpenTools>[0], binding: Parameters<OpenTools>[1],
   resources: Parameters<OpenTools>[3], options: ConfigLoadOptions) {
   const { scopeId } = request.identity;
-  const current = await recheckNativeWorkerUse(root, scopeId, binding, options), loaded = await loadConfiguredScopeContext(root, scopeId, options, 'write');
+  const current = await recheckNativeWorkerUse(root, scopeId, binding, options), loaded = await loadConfiguredScopeContext(root, scopeId, options, 'write'), person = (await withLocalPrincipalChannel(undefined, () => loadConfiguredScopeContext(root, scopeId, options, 'read'))).principal;
   const context = { ...loaded, policy: createLayoutPolicySource(loaded.layout, userInfo().uid, loaded.config.inspection.policyMaxBytes),
     async freshConfig() { const config = await loadComposedConfig(root, { ...options, heal: false });
       if (JSON.stringify(config.productLayout) !== JSON.stringify(loaded.layout)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED'); return config; } };
@@ -25,7 +25,7 @@ export async function nativeWorkerToolFloor(root: string, request: Parameters<Op
   const authority = agentAuthorityPaths(request.workspace, context.layout);
   const selfSource = await isSelfSourceProject(root), writeFloor = agentTurnWriteFloor(authority, false, selfSource);
   const sandbox = nativeWorkerContainedLayout(agentShellSandboxLayout(request.workspace, context.layout, workspace.scope, writeFloor, false, null, env), context.layout.root, productResourcePath(context.layout, 'workspaces'));
-  return { current, context, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox,
+  return { current, context, person, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox,
     sandboxes: nativeWorkerBoundSandboxes<ShellCapabilities, Extract<ReturnType<ShellSandbox['usable']>, { ok: true }>>(nativeWorkerViewSandboxes(sandbox, inputs, shippedShellSandboxes(sandbox)), nativeWorkerToolBounds(nativeCliAgent(current.profile.protocol.family)?.headless.isolation.limits)) };
 }
 

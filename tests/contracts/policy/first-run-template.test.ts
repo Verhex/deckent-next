@@ -454,7 +454,7 @@ it('U10C v18: named-person lifecycle and exact operation grants upgrade add-only
 it('R4a v19 (owner 2026-11-05 option 3): the MCP actor gets the person\'s first-run tool rules from the same names, in the installed scope only; upgrade and rollback carry exactly them', () => {
   const current = firstRunPolicyTemplate(input), ai = mcpPrincipalRef(me), rule = (id: string, effect: string, kind: string, actions: string[], ids: string[] | 'all', extra = {}) =>
     ({ id, effect, actions, scopes: ['installation'], principals: [ai], resource: { kind, ids }, ...extra });
-  const wanted = [rule('first-run-mcp-model-invocation', 'allow', 'model-invocation', ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], 'all'),
+  const wanted = [rule('first-run-mcp-model-invocation', 'allow', 'model-invocation', ['invoke'], 'all'),
     rule('first-run-mcp-read-tools', 'allow', 'agent-tool', ['invoke'], [...READ_TOOLS, 'propose_mcp_server']), rule('first-run-mcp-scratch-tools', 'allow', 'agent-tool', ['invoke'], SCRATCH_TOOLS),
     rule('first-run-mcp-edit-shell-tools', 'require-approval', 'agent-tool', ['invoke'], EDIT_SHELL_TOOLS, { modeEligible: true }),
     rule('first-run-mcp-tool-operations', 'allow', 'operation', ['execute'], ['workspace.file.write', 'host.shell.run', 'workspace.scratch.write'])];
@@ -462,6 +462,9 @@ it('R4a v19 (owner 2026-11-05 option 3): the MCP actor gets the person\'s first-
   const policy = resolvePolicyBindings(current.policy, current.bindings), mcp = { ...principal, id: 'mcp', ...ai };
   const ask = (action: string, kind: string, id: string, actor = mcp, scopeId = 'installation') => evaluatePolicy(policy, { principal: { ...actor, scopeIds: ['installation', 'other'] }, scopeId, action, resource: { kind, id } }).decision;
   expect(ask('invoke', 'model-invocation', 'any')).toBe('allow'); expect(ask('invoke', 'model-invocation', 'any', mcp, 'other')).toBe('deny');
+  // Round 3: the shared actor reads metadata only (v9), never another principal's content, and cancels nothing it was not given.
+  expect(ask('inspect', 'model-invocation', 'any')).toBe('allow');
+  for (const action of ['inspect-content', 'cancel-invocation']) expect(ask(action, 'model-invocation', 'any'), action).toBe('deny');
   // Never config, secret, policy, approval decisions, backup, uninstall, MCP servers, fetch or session_state for the MCP actor.
   for (const [action, kind, id] of [['execute', 'operation', 'policy.administer'], ['decide', 'approval', 'any'], ['write', 'config', 'project:terminal.chat'], ['set', 'secret', 'any'],
     ['create', 'backup', 'any'], ['uninstall', 'installation', 'any'], ['invoke', 'mcp-server', 'any'], ['execute', 'operation', 'mcp.tool.call'], ['invoke', 'agent-tool', 'fetch_url'],
@@ -470,8 +473,8 @@ it('R4a v19 (owner 2026-11-05 option 3): the MCP actor gets the person\'s first-
   expect(call('read_file', 'read', null).decision).toBe('allow'); expect(call('scratch_write', 'edit', 'workspace.scratch.write').decision).toBe('allow');
   expect(call('run_shell', 'shell-narrow-mutating', 'host.shell.run').decision).toBe('require-approval');
   expect(call('write_file', 'edit-floor', 'workspace.file.write').decision).toBe('deny');
-  // modeEligible: without the starting person the MCP actor reads as the default standart (the native worker's recorded limit).
-  expect(call('write_file', 'edit', 'workspace.file.write')).toMatchObject({ decision: 'allow', relaxation: { mode: 'standart', cell: 'edit-non-floor', person: null } });
+  // Round 3 fail closed: without its owning person an AI actor gets no mode relaxation at all.
+  expect(call('write_file', 'edit', 'workspace.file.write')).toMatchObject({ decision: 'require-approval', relaxation: null });
   // R4a (owner: "by card, or by the mode you chose"): an AI turn follows the starting person's mode and its company grant, never one of its own.
   const as = (modes: unknown[], open = false) => resolvePolicyBindings(open ? openFullAuto(current.policy) : current.policy, { schemaVersion: 3, revision: 'b', bindings: [], modes });
   const personal = (snapshot: unknown, tool: string, cell: AgentToolCallCell, operation: string) => decideAgentToolCall(snapshot, { principal: mcp, person: principal, scopeId: 'installation', tool: { name: tool }, operation: { id: operation }, cell });
@@ -482,8 +485,10 @@ it('R4a v19 (owner 2026-11-05 option 3): the MCP actor gets the person\'s first-
   expect(personal(as(fullAuto), 'run_shell', 'shell-narrow-mutating', 'host.shell.run')).toMatchObject({ decision: 'require-approval', relaxation: null }); // no full-auto grant: standart
   expect(personal(as(fullAuto, true), 'run_shell', 'shell-narrow-mutating', 'host.shell.run')).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'shell-modify', person: 'me-auto' } });
   expect(personal(as(fullAuto, true), 'run_shell', 'shell-destructive', 'host.shell.run').decision).toBe('require-approval');
-  // An AI named as the person carries no mode, and a mode entry naming the MCP actor is not the person's.
-  expect(decideAgentToolCall(askEdits, { principal: mcp, person: mcp, scopeId: 'installation', tool: { name: 'write_file' }, operation: { id: 'workspace.file.write' }, cell: 'edit' }).decision).toBe('allow');
+  // An AI named as the person, or a person who does not own this AI actor, carries no mode: the call asks (fail closed).
+  const standartEdit = (person: typeof principal) => decideAgentToolCall(as([]), { principal: mcp, person, scopeId: 'installation', tool: { name: 'write_file' }, operation: { id: 'workspace.file.write' }, cell: 'edit' });
+  expect(standartEdit(mcp).decision).toBe('require-approval');
+  expect(standartEdit({ ...principal, id: 'other', subject: 'colleague' }).decision).toBe('require-approval');
   // The template for an MCP principal adds nothing for it; an exact v18 template upgrades to v19; edited policies get exactly the five rules add-only.
   expect(firstRunPolicyTemplate({ ...input, principal: ai }).policy.grants.some(grant => FIRST_RUN_V19_RULE_IDS.includes(grant.id))).toBe(false);
   const v18 = { ...current.policy, revision: 'first-run-template-v18', grants: current.policy.grants.filter(grant => !FIRST_RUN_V19_RULE_IDS.includes(grant.id)) };
