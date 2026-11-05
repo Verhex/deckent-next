@@ -105,7 +105,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(await f.refs()).toEqual(before); expect(await f.git('rev-parse', 'HEAD')).toBe(head); expect(await readFile(join(f.project, '.git/index'))).toEqual(index);
     // L1c: the delivered row names the rollback. This fixture's ledger Run is still `running` (only its view is finished), so its private base is kept:
     // a base goes only once the Run is terminal and nothing of it awaits delivery.
-    expect(result.output.replace(/[│┃\s]+/gu, '')).toContain('toputthefilesback:deckenttaskintegration-rollback--scopes--runr--taskt'); // the window wraps the exact line
+    expect(result.output.replace(/[│┃\s]+/gu, '')).toContain('toputthefilesback:`deckenttaskintegration-rollback--scopes--runr--taskt`'); // the window wraps the exact line
     expect(JSON.parse(await readFile(join(runBase, 'deckent-base.json'), 'utf8'))).toMatchObject({ run: { scopeId: 's', runId: 'r' } });
   });
 

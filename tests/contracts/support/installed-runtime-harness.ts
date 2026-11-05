@@ -144,7 +144,7 @@ export async function installedScenario(mode: string, observed: { root?: string;
   const docker = profile.configuration.execution.docker;
   Object.assign(docker, { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 });
-  profile.configuration.execution.git.gitExecutable = '/usr/bin/git';
+  profile.configuration.execution.git.gitExecutable = '/usr/bin/git'; profile.configuration.execution.deliveryMode = 'reference'; // R9p: HEAD base, the owner's WIP stays out
   const configured = profile.configuration as typeof profile.configuration & {
     cancellation: { maxConcurrentDeliveries: number; maxAttempts: number; retryDelayMs: number; claimTtlMs: number; recoveryPageSize: number };
     cancellationRuntime: { scopeIds: string[]; pollIntervalMs: number; failureBackoffMs: number };

@@ -115,7 +115,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     // `adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] })` is an incomplete literal: `protectedTargets: []` and `verification: null` come from the inner schema.
     // EXEC-RELEASE: `retention` is a versioned sub-object whose defaults come from the inner schema too.
     expect(parsed.execution).toEqual({ docker, git: { gitExecutable: 'git', timeoutMs: 1, outputBytes: 4_194_304 }, adoption: { targets: [], protectedTargets: [], verification: null },
-      retention: { schemaVersion: 1, release: 'after-retained-patch', sweepLimit: 16 },
+      retention: { schemaVersion: 1, release: 'after-retained-patch', sweepLimit: 16, setAsideDays: 14 },
       // S6: the secret gate's acknowledgements default empty (refuse by default) and its bounds come from the inner schema.
       secretGate: { schemaVersion: 1, allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 200_000, maxFileBytes: 16_777_216, maxTotalBytes: 1_073_741_824, timeoutMs: 120_000,
         // R2 (D3a): scan admission per process, the bounded slot wait and the deferred `time` refusals per Attempt.

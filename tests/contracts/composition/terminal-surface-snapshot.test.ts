@@ -22,6 +22,9 @@ async function fixture(initialWorker = true) { const f = await surfaceSnapshotFi
 const labels = { ...WORKLINE_TEST_LABELS, watchStep: 'STEP {status}', watchAccessStopped: 'ACCESS-STOPPED {kinds}', watchAccessDenied: 'ACCESS-DENIED {kinds}', watchDelivery: 'DELIVERY {mode}' };
 async function type(stdin: { write(text: string): unknown }, text: string) { for (const char of text) { stdin.write(char); await settle(2); } }
 
+// The fixture's claimed worker is live, so the open tasks window re-reads ['worker'] every 100 ms once the read queue drains; on a slow
+// host that heartbeat interleaves with push reads. Push/resync assertions count the reads without it.
+const pushReads = (read: { mock: { calls: unknown[][] } }) => read.mock.calls.map(call => call[0] as string[]).filter(kinds => kinds.join() !== 'worker');
 async function snapshotDone(read: { mock: { results: { value: unknown }[] } }, count: number) {
   await until(() => read.mock.results.length >= count, 'snapshot called'); await read.mock.results[count - 1]!.value; await settle(10);
 }
@@ -172,7 +175,7 @@ it('resynchronizes a real two-revision Run gap once, then renders subsequent rev
   f.advanceRun(6); await until(() => view.stdout.text.includes('rev 6'), 'next normal publication');
   // Latest debug frame contains each static entry once; accumulated writes repeat old frames.
   expect(view.stdout.frame.match(/STEP gap/g)).toHaveLength(1);
-  expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker'], ['approval', 'run', 'worker'], ['run', 'worker'], ['approval', 'run', 'worker'], ['run', 'worker'], ['run', 'worker']]);
+  expect(pushReads(read)).toEqual([['approval', 'run', 'worker'], ['approval', 'run', 'worker'], ['run', 'worker'], ['approval', 'run', 'worker'], ['run', 'worker'], ['run', 'worker']]);
   expect(view.stdout.text).not.toContain('rev 3');
 });
 
@@ -236,7 +239,7 @@ it('refuses foreign principal snapshots, startup and resync before publication S
 it('stops on a denied gap resync without falling back into unguarded data ports', async () => {
   const f = await fixture();
   const read = vi.fn(async (kinds: Parameters<NonNullable<typeof f.ports.readSurfaceSnapshot>>[0], signal: AbortSignal) => {
-    if (read.mock.calls.length === 4) await f.setGrants(undefined, true);
+    if (kinds.join() !== 'worker' && pushReads(read).length === 4) await f.setGrants(undefined, true);
     return f.ports.readSurfaceSnapshot!(kinds, signal);
   });
   const follow = vi.fn(f.follow);
@@ -245,8 +248,9 @@ it('stops on a denied gap resync without falling back into unguarded data ports'
   await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'first');
   f.advanceRun(4); await until(() => view.stdout.text.includes('ACCESS-STOPPED'), 'resync denied');
-  await settle(80);
-  expect(read).toHaveBeenCalledTimes(4); expect(follow).toHaveBeenCalledTimes(2);
+  const atDenial = read.mock.calls.length; await settle(80);
+  // No read of any kind follows the denial, and exactly four push/resync reads happened.
+  expect(read).toHaveBeenCalledTimes(atDenial); expect(pushReads(read)).toHaveLength(4); expect(follow).toHaveBeenCalledTimes(2);
   expect(view.stdout.text).not.toContain('rev 4');
   expect(view.stdout.frame).not.toContain('LIVE-PANEL');
 });
