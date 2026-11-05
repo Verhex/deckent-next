@@ -10,7 +10,7 @@ import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgen
   resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
-import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest } from '#engine/index.js';
+import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest, connectedModelProfile } from '#engine/index.js';
 import { FIRST_RUN_UPGRADE_RULE_IDS, firstRunPolicyTemplate, modelInvocationProfileSchema } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
@@ -36,6 +36,13 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
       model: { channelId: profile.reference.providerId, modelId: 'vendor/model', auxiliaryModelIds: [] } });
     const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['criterion'] }],
       criterionDefinitions: [{ id: 'criterion', version: 1, description: 'Evidence', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
+    // R9: an assigned model runs on the same login's connected profile for it; another login or an undeclared model has none.
+    const model = { channelId: profile.reference.providerId, modelId: 'vendor/model' };
+    expect(await connectedModelProfile(context.config, 's', binding, model)).toEqual({ profileDigest: binding.profileDigest, definition: binding.definition });
+    // Same login, another profile's own state dir: still that login's profile; another login dir or an undeclared model: none.
+    expect(await connectedModelProfile(context.config, 's', { ...binding, definition: { ...binding.definition, stateDir: '/synthetic/other-state' } }, model)).toMatchObject({ profileDigest: binding.profileDigest });
+    expect(await connectedModelProfile(context.config, 's', binding, { ...model, modelId: 'vendor/other' })).toBeNull();
+    expect(await connectedModelProfile(context.config, 's', { ...binding, definition: { ...binding.definition, configDir: '/other/login' } }, model)).toBeNull();
     const admission = nativeWorkerAdmission(f.project, 's', f.options);
     const execution = await admission.modelUse.pin({ ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, context.principal);
     const frozen = resolveNativeCliWorkerProfile(execution.tasks[0]!.profile).binding;

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { immutableJsonObjectSchema, type RunExecutionSnapshot, type VerifiedPrincipal } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelUseProfiles, resolveModelUse, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
+import { modelInvocationProfileDigest, modelUseProfiles, resolveModelUse, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
 import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile, withMcpPrincipal,
   headlessCapacityBinding, openSqliteInventoryReader, type SqliteAttemptStore, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -50,11 +50,11 @@ export function nativeWorkerAdmission(root: string, scopeId: string, options: Co
         const tasks = [];
         for (const task of execution.tasks) {
           if (!isNativeCliWorkerProfile(task.profile)) { tasks.push(task); continue; }
-          const resolved = resolveNativeCliWorkerProfile(task.profile), current = await nativeWorkerResource(root, scopeId, resolved.binding, options);
-          const model = resolved.nativeSubscription!.model!;
-          if (current.profile.reference.providerId !== model.channelId || current.nativeId !== model.modelId)
-            throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH');
-          const profile = createNativeCliWorkerProfile(resolved.base, { ...resolved.binding, modelUsePin: immutableJsonObjectSchema.parse(current.pin) });
+          const resolved = resolveNativeCliWorkerProfile(task.profile), model = resolved.nativeSubscription!.model!; // R9: the same login's profile for the assigned model
+          const sibling = await connectedModelProfile((await loadConfiguredScopeContext(root, scopeId, options, 'read')).config, scopeId, resolved.binding, model);
+          const binding = sibling ? { ...resolved.binding, ...sibling } : resolved.binding, current = await nativeWorkerResource(root, scopeId, binding, options);
+          if (current.profile.reference.providerId !== model.channelId || current.nativeId !== model.modelId) throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH');
+          const profile = createNativeCliWorkerProfile(resolved.base, { ...binding, modelUsePin: immutableJsonObjectSchema.parse(current.pin) });
           tasks.push({ ...task, profile: { ...profile, id: task.profile.id, version: task.profile.version } });
         }
         return { ...execution, tasks };

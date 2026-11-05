@@ -1,5 +1,7 @@
+import { isDeepStrictEqual } from 'node:util';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
-import { nativeCliHeadlessDefinitionSchema, nativeCliWorkerBindingSchema, type NativeCliHeadlessDefinition } from '#capabilities/index.js';
+import { nativeCliHeadlessDefinitionSchema, nativeCliWorkerBindingSchema, type NativeCliHeadlessDefinition, type NativeCliWorkerBinding } from '#capabilities/index.js';
+import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { ErrorRegistry, type DeckentConfig } from '#platform/index.js';
 import { modelUseProfiles, resolveModelUse } from './read.js';
 import type { ModelUseReadPorts, ModelUseContext } from './ports.js';
@@ -25,4 +27,18 @@ export async function resolveNativeTemplateConnection(root: string, config: Deck
   // K6b's persisted UUID identifies this login connection across profiles; it is not a new random identity or a credential.
   return nativeCliWorkerBindingSchema.parse({ schemaVersion: 1, connectionId: capacity.resourceKey, resourceKey: capacity.resourceKey,
     protocolFamily: profile.protocol.family, profileDigest: modelInvocationProfileDigest(profile), definition: definition.data });
+}
+
+/** R9 (owner 2026-11-05): a worker template names a login connection (owner uid + login dir + executable, its capacity identity); an assigned model
+ * runs on that login's connected profile for it, with that profile's own definition (state dir, consent) and checks. Null when none is declared. */
+export async function connectedModelProfile(config: DeckentConfig, scopeId: string, binding: NativeCliWorkerBinding, model: { channelId: string; modelId: string }) {
+  const login = (value: unknown) => { const parsed = nativeCliHeadlessDefinitionSchema.safeParse(value); return parsed.success ? [parsed.data.ownerUid, parsed.data.configDir, parsed.data.executable] : null; };
+  for (const profile of modelUseProfiles(config)) {
+    if (profile.scopeId !== scopeId || profile.protocol.family !== binding.protocolFamily || profile.reference.providerId !== model.channelId
+      || profile.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || !isDeepStrictEqual(login(profile.adapter.definition), login(binding.definition))) continue;
+    const catalog = await new ModelBindingApplication({ read: async () => config.provider_catalog }).inspect(profile.reference);
+    if (catalog.status === 'declared' && catalog.binding.digest === profile.bindingDigest && catalog.definition.model.nativeId === model.modelId)
+      return { profileDigest: modelInvocationProfileDigest(profile), definition: nativeCliHeadlessDefinitionSchema.parse(profile.adapter.definition) };
+  }
+  return null;
 }
