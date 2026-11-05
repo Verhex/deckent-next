@@ -5,10 +5,10 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FilePolicySource } from '#adapters/index.js';
+import { FilePolicySource, withMcpPrincipal } from '#adapters/index.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
-  FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS } from '#engine/index.js';
+  FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { openPermissionModesInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { closeModeRuntimes, me, modeRuntime } from '../support/agent-turn-modes.js';
@@ -248,6 +248,26 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(bytes()).toBe(before);
     // Security: the governed path writes nothing and records no authority change for a person without policy.administer.
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toEqual([]);
+  }, 120_000);
+});
+
+describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner 2026-11-05)', () => {
+  it('R4a (owner 2026-11-05): a fresh v19 install withdraws exactly its MCP-actor rules on the person\'s card; a non-terminal or MCP rollback is refused; --apply re-adds them', async () => {
+    const { f, upgrade, grants, bytes } = await project('pure');
+    const fresh = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, ...FIRST_RUN_TOOL_NAMES });
+    writeFileSync(join(f.data, 'policy.json'), JSON.stringify(fresh.policy), { mode: 0o600 }); writeFileSync(join(f.data, 'bindings.json'), JSON.stringify(fresh.bindings), { mode: 0o600 }); clearConfigCache();
+    const before = bytes(), changes = () => f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
+    await expect(configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'headless' })).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
+    // The MCP actor owns no template delta and cannot administer policy: its rollback finds nothing it may remove and writes nothing.
+    expect(await withMcpPrincipal(() => configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'mcp' })))
+      .toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
+    expect(bytes()).toBe(before); expect(changes()).toBe(0);
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(','), conflicts: [] });
+    expect(grants()).toEqual(fresh.policy.grants.filter(rule => !DELTA.includes(rule.id)));
+    expect(changes()).toBe(1);
+    expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
+    expect(grants().filter(rule => DELTA.includes(rule.id))).toEqual(fresh.policy.grants.filter(rule => DELTA.includes(rule.id)));
+    expect(await upgrade('apply')).toMatchObject({ status: 'current' });
   }, 120_000);
 });
 

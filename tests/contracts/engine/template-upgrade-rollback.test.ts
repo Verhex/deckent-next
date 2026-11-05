@@ -10,7 +10,8 @@ import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationAp
   upgradePolicyTemplate } from '#engine/index.js';
 import { createHmacIntegrity, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
+import { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 
 const names = { firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'],
   recoveryRules: RECOVERY_ROLLOUT.rules.map(id => ({ id, version: 1 })), readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
@@ -175,16 +176,29 @@ it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `l
   expect(after.grants.some(rule => deltaIds.includes(rule.id))).toBe(false);
 });
 
-it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
-  // J3: a fresh install written by the current template has no upgrade to undo — "nothing to roll back" with its typed reason, never "not a first-run policy".
-  const fresh = await fixture(undefined, false), initial = await fresh.bytes();
-  expect(await fresh.rollback()).toMatchObject({ status: 'nothing-to-roll-back', reason: 'no-upgrade-recorded' });
-  expect(await fresh.bytes()).toBe(initial); expect(fresh.cards).toBe(0);
+it.skipIf(process.platform !== 'linux')('rollback removes a fresh install\'s own v19 delta, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
+  // Owner 2026-11-05 (R4a, amends J3): on a provably fresh install the same card removes exactly the v19 MCP-actor rules; the person's rules stay,
+  // the MCP actor's model call is refused by policy afterwards, and `--apply` re-adds the same rules (a later rollback recognizes that upgrade).
+  const fresh = await fixture(undefined, false), initial = JSON.parse(await fresh.bytes()) as { grants: { id: string }[] };
+  const mcp = { ...fresh.principal, id: 'mcp', ...mcpPrincipalRef(fresh.principal), assurance: 'workload-verified' as const };
+  const invoke = () => new ModelInvocationPolicyAuthorization(fresh.source).authorize('invoke', { scopeId: 's', reference: { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 } }, mcp);
+  expect(await invoke()).toMatchObject({ ruleId: 'first-run-mcp-model-invocation' });
+  expect(await fresh.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  expect(fresh.cards).toBe(1);
+  expect((JSON.parse(await fresh.bytes()) as typeof initial).grants).toEqual(initial.grants.filter(rule => !deltaIds.includes(rule.id)));
+  await expect(invoke()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(await fresh.apply()).toMatchObject({ status: 'upgraded' }); expect(fresh.cards).toBe(2);
+  const readded = (JSON.parse(await fresh.bytes()) as typeof initial).grants;
+  expect(readded.filter(rule => deltaIds.includes(rule.id))).toEqual(initial.grants.filter(rule => deltaIds.includes(rule.id)));
+  expect(readded.filter(rule => !deltaIds.includes(rule.id))).toEqual(initial.grants.filter(rule => !deltaIds.includes(rule.id)));
+  expect(await invoke()).toMatchObject({ ruleId: 'first-run-mcp-model-invocation' });
+  expect(await fresh.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') });
   // NEGATIVE: the same template policy with an older bindings revision (an exact installer upgrade whose archive is gone) is not provably fresh.
-  const bindingsPath = join(dirname(fresh.archive), 'bindings.json'), bindings = JSON.parse(await readFile(bindingsPath, 'utf8'));
+  const stale = await fixture(undefined, false), staleBytes = await stale.bytes();
+  const bindingsPath = join(dirname(stale.archive), 'bindings.json'), bindings = JSON.parse(await readFile(bindingsPath, 'utf8'));
   await writeFile(bindingsPath, JSON.stringify({ ...bindings, revision: 'first-run-template-v12-bindings' }), { mode: 0o600 });
-  expect(await fresh.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
-  expect(await fresh.bytes()).toBe(initial); expect(fresh.cards).toBe(0);
+  expect(await stale.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
+  expect(await stale.bytes()).toBe(staleBytes); expect(stale.cards).toBe(0);
   // NEGATIVE (Astra 2672 N1): the template's revision and bindings but one expected v15 rule deleted by hand, no archive: not provably fresh.
   const edited = await fixture(undefined, false), policyPath = join(dirname(edited.archive), 'policy.json'), held = JSON.parse(await readFile(policyPath, 'utf8'));
   await writeFile(policyPath, JSON.stringify({ ...held, grants: held.grants.filter((rule: { id: string }) => rule.id !== deltaIds[0]) }), { mode: 0o600 });

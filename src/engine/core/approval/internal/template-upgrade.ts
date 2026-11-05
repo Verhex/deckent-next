@@ -13,7 +13,7 @@ export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;
   /** `preview`: would add `rules`; `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
    * `unavailable`: not a first-run lineage, or (rollback) its archived history is missing (`reason`); `rolled-back` / `nothing-to-roll-back`: upgrade
-   * rules removed / none held (`reason` `no-upgrade-recorded`: a current-template policy with no archived upgrade). */
+   * rules removed (a provably fresh install's own delta too, owner 2026-11-05) / none held (`no-upgrade-recorded` is no longer produced). */
   readonly status: 'preview' | 'upgraded' | 'current' | 'refused' | 'unavailable' | 'rolled-back' | 'nothing-to-roll-back' | 'conflict';
   readonly revision: string;
   readonly rules: readonly PolicyGrant[];
@@ -85,9 +85,9 @@ export class PolicyTemplateUpgrade {
     if (input.mode === 'rollback') {
       const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names);
       const history = await this.deps.policy.authorityHistory?.();
-      // J3: a policy at a template's own revision that already carries the delta (v13+; no `a-`/`m-` write since) with no archived upgrade has nothing
-      // provable to undo (a fresh install) → `nothing-to-roll-back`
-      // `no-upgrade-recorded`, nothing written. Any other policy without archived history stays `history-unavailable` (fail closed).
+      // J3, amended by the owner 2026-11-05 (R4a) for the v19 MCP-actor delta: a policy at a template's own revision that carries the whole delta
+      // (no `a-`/`m-` write since) is a provably fresh install, and the installer wrote that delta, so the same card removes it. Any other policy
+      // without archived history stays `history-unavailable` (fail closed).
       const template = policy.revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-')) ? null : matchFirstRunPolicyTemplate(policy.policyRevision);
       // The whole expected delta held, none differing from the template's and none removed (a hand edit that kept the revision is not "the
       // template's own version"; review 2672).
@@ -120,7 +120,8 @@ export class PolicyTemplateUpgrade {
         if (changes[0] === added && JSON.stringify(added.after.grants.find(item => item.id === rule.id)) === JSON.stringify(rule)) held.push(rule.id);
         else conflicts.push(rule.id);
       }
-      if (!held.length) return result('nothing-to-roll-back', { conflicts, ...(installed && chain.length === 0 ? { reason: 'no-upgrade-recorded' } : {}) });
+      if (installed && chain.length === 0) held.push(...delta.rules.map(rule => rule.id));
+      if (!held.length) return result('nothing-to-roll-back', { conflicts });
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
       const planned = planPolicyChange(files.policy, files.bindings, change);
       const missing = this.missing(policy, input.principal, input.scopeId, planned.touched);

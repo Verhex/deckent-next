@@ -110,7 +110,7 @@ it('R5b: retains which Claude stream check refused and identifier-only facts, ne
   const h = await f.start(), result = await h.run();
   expect(result).toMatchObject({ kind: 'rejected' });
   const body = result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null;
-  expect(body).toMatchObject({ refusal: 'guard', field: 'agent-surface:tool-use', subtype: `name=${f.entry.bridge.toolPrefix}list_dir prefix=1 offered=0` });
+  expect(body).toMatchObject({ refusal: 'guard', field: 'agent-surface:tool-use', subtype: "name=? prefix=1 offered=0" });
   expect(JSON.stringify(body)).not.toContain('secret-argument-canary');
   expect(f.propose).not.toHaveBeenCalled();
   expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });

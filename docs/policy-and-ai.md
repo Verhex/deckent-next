@@ -219,7 +219,7 @@ is not business acceptance. The existing CLI is
 
 **“MCP read-only observer.”** Since template v19 the first-run policy also lets the MCP actor
 call models and use agent tools; a company deny for the MCP actor on `model-invocation` and
-`agent-tool` keeps it an observer but also stops the native agent (or keep a pre-v19 policy). Inspect `policy mcp list` and grant
+`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the v19 AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
 no write groups. On an existing installation revoke each unwanted managed group
 with the preview/apply sequence above and review custom/role grants too. “No managed groups”
 does not prove read-only when other grants exist. Tool discovery is not authority; ordinary

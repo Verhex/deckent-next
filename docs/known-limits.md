@@ -455,8 +455,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   it shows the card). A native worker follows the mode of the installation's person who owns its AI actor the same way. An AI
   actor without its owning person gets no mode relaxation at all. The actor may call models and read their metadata, but it
   cannot read another principal's model content or cancel its calls. Shell commands, the write floor and every other hard-floor
-  cell still ask or refuse. A fresh v19 install has no upgrade to roll back. *Workaround:* do not connect an MCP client you do not want
-  to call models; a company deny for the MCP actor on `model-invocation` stops the native agent as well.
+  cell still ask or refuse. Turning these rules off also stops the native agent. *Workaround:* run `deckent policy upgrade --template current
+  --rollback` in your own terminal (your card; on a fresh v19 install too) to remove exactly the v19 AI-actor rules, and
+  `--apply` to add them back; or do not connect an MCP client you do not want to call models.
 
 ## Budgets and spend
 

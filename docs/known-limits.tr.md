@@ -449,8 +449,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   açıksa kart çıkar). Yerel işçi de AI aktörünün sahibi olan kurulum kişisinin modunu aynı şekilde izler. Sahibi olan kişi
   olmadan bir AI aktörü hiçbir mod gevşetmesi almaz. Aktör model çağırabilir ve meta verisini okuyabilir, ama başka bir kimliğin
   model içeriğini okuyamaz ve çağrılarını iptal edemez. Kabuk komutları, yazma tabanı ve diğer sert taban hücreleri yine sorar ya
-  da reddeder. Yeni bir v19 kurulumunda geri alınacak yükseltme yoktur. *Yol:* model
-  çağırmasını istemediğiniz MCP istemcisini bağlamayın; MCP aktörü için `model-invocation` üzerindeki şirket deny'ı yerel ajanı da durdurur.
+  da reddeder. Bu kuralları kapatmak yerel ajanı da durdurur. *Yol:* kendi terminalinizde `deckent policy upgrade --template current
+  --rollback` çalıştırın (kendi kartınız; yeni bir v19 kurulumunda da), tam olarak v19 AI aktörü kuralları kalkar; `--apply` onları geri
+  ekler. Ya da model çağırmasını istemediğiniz MCP istemcisini bağlamayın.
 
 ## Bütçe ve harcama
 

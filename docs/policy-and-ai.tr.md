@@ -219,7 +219,7 @@ değildir. Mevcut CLI:
 
 **“MCP salt okunur gözlemci olsun.”** Şablon v19'dan beri ilk kurulum politikası MCP aktörüne model
 çağırma ve ajan araçlarını da açar; MCP aktörü için `model-invocation` ve `agent-tool` üzerindeki şirket
-deny'ı onu gözlemci tutar ama yerel ajanı da durdurur (ya da v19 öncesi politikayı tutun). `policy mcp list` çıktısını inceleyip
+deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak v19 AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
 yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
 yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol grant'lerini de inceleyin. Başka
 grant'ler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;

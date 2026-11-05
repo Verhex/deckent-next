@@ -40,11 +40,14 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }) }; controller.abort(); return 'stop';
   };
   const charge = (size: number) => { bytes += size; return Number.isSafeInteger(bytes) && bytes <= options.outputMaxBytes; };
+  // A model-chosen name is echoed only when it is a tool Deckent offered: an arbitrary name could carry anything.
+  const offeredName = (value: unknown) => typeof value === 'string' && value.startsWith(entry.bridge.toolPrefix)
+    && session.tools.some(tool => tool.name === value.slice(entry.bridge.toolPrefix.length)) ? value : '?';
   const checkCall = (name: unknown, input: unknown): input is Record<string, unknown> => typeof name === 'string'
     && session.tools.some(tool => tool.name === name) && record(input) !== null;
   const addStreamCall = (block: Record<string, unknown>) => {
     const prefixed = typeof block.name === 'string' && block.name.startsWith(entry.bridge.toolPrefix), offered = prefixed && session.tools.some(tool => tool.name === (block.name as string).slice(entry.bridge.toolPrefix.length));
-    const toolFacts = () => facts([`name=${fact(block.name)}`, `prefix=${prefixed ? 1 : 0}`, `offered=${offered ? 1 : 0}`]);
+    const toolFacts = () => facts([`name=${offeredName(block.name)}`, `prefix=${prefixed ? 1 : 0}`, `offered=${offered ? 1 : 0}`]);
     if (typeof block.id !== 'string' || !block.id || block.id.length > 256 || block.id.includes('\0') || typeof block.name !== 'string'
       || !prefixed) return fail('tool-use', undefined, toolFacts());
     const name = block.name.slice(entry.bridge.toolPrefix.length), input = block.input;
@@ -103,7 +106,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (value.type !== 'result') return fail('event', undefined, facts([`${fact(value.type)}/${value.subtype === undefined ? '-' : fact(value.subtype)}`]));
     terminal = true;
     if (!Array.isArray(value.permission_denials) || value.permission_denials.length) return fail('permission-denials', undefined, Array.isArray(value.permission_denials)
-      ? facts(value.permission_denials.map(denial => fact(record(denial)?.tool_name))) : 'shape');
+      ? facts(value.permission_denials.map(denial => offeredName(record(denial)?.tool_name))) : 'shape');
     if (typeof value.is_error !== 'boolean' || typeof value.subtype !== 'string') return fail('result');
     result = value;
     if (value.is_error || value.subtype !== 'success') return;
