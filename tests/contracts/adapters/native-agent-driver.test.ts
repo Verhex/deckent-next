@@ -51,6 +51,11 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
   return { c, profile, entry, start, propose, port };
 }
 
+/** Owner 2026-11-05: a refused turn writes no negative observation, so the next turn is not paused. */
+async function notPaused(profile: Parameters<typeof readNativeAgentObservation>[0]) {
+  const observed = await readNativeAgentObservation(profile);
+  expect(observed?.toolSurface).not.toBe(false); expect(observed?.plugins).not.toBe(false);
+}
 it('keeps no-model preflight observations incomplete, never upgrades text seals, and invalidates executable metadata changes', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   const f = await fixture(families[0]!);
@@ -92,7 +97,7 @@ it('runs both real isolated CLI drivers through R with exact correlation, readon
   }
 });
 
-it('stops unexpected Claude plugins and Codex native items before accepting tools; persists a visible refusal', async () => {
+it('stops unexpected Claude plugins and Codex native items before accepting tools; the refusal stops only that turn', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {
     const f = await fixture(family!, { pluginMismatch: true, nativeItem: true, calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }] });
@@ -100,7 +105,7 @@ it('stops unexpected Claude plugins and Codex native items before accepting tool
     expect(await h.run()).toMatchObject({ kind: 'rejected' });
     expect(f.propose).not.toHaveBeenCalled();
     expect(h.driver.refusal()).toBe(f.entry.agent.transport.kind === 'claude-mcp' ? 'NATIVE_AGENT_PLUGIN_UNEXPECTED' : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
-    expect(await readNativeAgentObservation(f.profile)).toMatchObject(f.entry.agent.transport.kind === 'claude-mcp' ? { plugins: false } : { toolSurface: false });
+    await notPaused(f.profile);
   }
 });
 
@@ -113,7 +118,7 @@ it('R5b: retains which Claude stream check refused and identifier-only facts, ne
   expect(body).toMatchObject({ refusal: 'guard', field: 'agent-surface:tool-use', subtype: "name=? prefix=1 offered=0" });
   expect(JSON.stringify(body)).not.toContain('secret-argument-canary');
   expect(f.propose).not.toHaveBeenCalled();
-  expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
+  await notPaused(f.profile);
 });
 it('R6b/R5b: Claude keepalive and thinking-token notices keep the turn; a keepalive naming an unknown call still stops it', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
@@ -122,6 +127,16 @@ it('R6b/R5b: Claude keepalive and thinking-token notices keep the turn; a keepal
   expect(await ok.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
   const foreign = await fixture(family, { heartbeat: 'foreign', calls }), h = await foreign.start(), result = await h.run();
   expect(result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null).toMatchObject({ field: 'agent-surface:subagent' });
+});
+it('owner 2026-11-05: an unrecognised Claude event is a turn note; a registry stop event stops only that turn', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const calls = [{ name: 'read_file', arguments: { path: 'scoped.txt' } }], family = registry.adapters.claude.capabilities.eventStream!;
+  const noted = await (await fixture(family, { events: [{ type: 'system', subtype: 'future_notice', text: 'never echoed' }], calls })).start();
+  expect(await noted.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
+  expect(noted.driver.notices()).toEqual(['system/future_notice']);
+  const f = await fixture(family, { events: [{ type: 'system', subtype: 'permission_denied' }], calls }), h = await f.start(), result = await h.run();
+  expect(result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null).toMatchObject({ field: 'agent-surface:event', subtype: 'system/permission_denied' });
+  await notPaused(f.profile);
 });
 it('keeps cancelled calls unknown, closes the process and removes token-bearing files for both CLI families', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
@@ -141,7 +156,7 @@ it('refuses a Codex collaboration item before a Deckent proposal even when the f
   expect(await h.run()).toMatchObject({ kind: 'rejected' });
   expect(f.propose).not.toHaveBeenCalled();
   expect(h.driver.refusal()).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
-  expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
+  await notPaused(f.profile);
   expect(f.entry.agent.args).toContain('agents.enabled=false');
   expect(f.entry.agent.args).toContain('features.plugins=false');
 });
@@ -153,5 +168,5 @@ it('refuses a Codex MCP proposal before its guarded item instead of delegating i
   expect(await h.run()).toMatchObject({ kind: 'rejected' });
   expect(f.propose).not.toHaveBeenCalled();
   expect(h.driver.refusal()).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
-  expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: false });
+  await notPaused(f.profile);
 });

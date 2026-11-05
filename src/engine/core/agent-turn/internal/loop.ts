@@ -30,6 +30,8 @@ export interface AgentTurnPorts {
   contextFailure?(): AgentContextFailure | null;
   /** BeUser M-10: true when the runtime service itself is stopping (not the person's cancel); such a turn ends as an error that says so. */
   serviceStopping?(): boolean;
+  /** A host fact for the closure note (e.g. unrecognised CLI notices the turn went on through); null when none. */
+  hostNote?(): string | null;
   invokeRound(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Native driver owns model transport only; every proposal goes through this turn's single call coordinator. */
@@ -397,7 +399,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       value = 'error'; closure = agentContextFailureNote('AGENT_CONTEXT_REQUEST_TOO_LARGE', input.language);
     }
     // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
-    const extra = [...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : [])];
+    const host = ports.hostNote?.() ?? null;
+    const extra = [...(host ? [host] : []), ...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : [])];
     const note = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
     emit({ kind: 'done', finish: value, note });
     const final = last as AgentTurnMessage | null;

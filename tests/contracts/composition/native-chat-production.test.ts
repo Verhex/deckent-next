@@ -47,7 +47,7 @@ async function fixture(family: string) {
     { when: 'K16-ATTACK', answer: 'K16-ATTACK-DONE', calls: [{ name: 'run_shell', arguments: { command: `cd /; cat '${credential.slice(1)}'` } }] },
     { when: 'K16-REVOKE', answer: 'K16-REVOKE-DONE', calls: [{ name: 'run_shell', arguments: { command: "printf '%s\\n' must-not-happen > revoked.txt" } }] },
     { when: 'K16-ASK-DENY', answer: 'K16-ASK-DENY-OK', calls: [{ name: 'write_file', arguments: { path: 'ask-denied.txt', content: 'must not happen\n' } }] },
-    { when: 'K16-WAIT', hang: true }, { when: 'K16-PLUGIN', pluginMismatch: true, nativeItem: true },
+    { when: 'K16-WAIT', hang: true }, { when: 'K16-PLUGIN', pluginMismatch: true, nativeItem: true }, { when: 'after mismatch', answer: 'K16-TOOLS-AGAIN' },
   ] });
   const owner = readLocalOsIdentity();
   const f = await brainProviderFixture({ headless: { executable, configDir, stateDir, protocolFamily: family,
@@ -166,13 +166,13 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
   }
 }, 150_000);
 
-it('compiled Workline in a real PTY cancels with Esc, stops plugin/native-surface mismatch and continues text chat for both CLIs', async () => {
+it('compiled Workline in a real PTY cancels with Esc, stops a plugin/native-surface mismatch turn and runs the next turn with tools for both CLIs (owner 2026-11-05: no pause)', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {
     for (const walk of ['plugin', 'cancel']) {
     const h = await fixture(family);
     const steps = walk === 'cancel' ? [['Deckent workline', 'K16-WAIT\r'], ['K16-WAITING', '\u001b'], ['cancelled', '/exit\r']]
-      : [['Deckent workline', 'K16-PLUGIN\r'], [family === families[0] ? 'The CLI loaded a plugin' : 'The CLI exposed an unexpected tool', 'after mismatch\r'], ['text-only still available', '/exit\r']];
+      : [['Deckent workline', 'K16-PLUGIN\r'], [family === families[0] ? 'The CLI loaded a plugin' : 'The CLI exposed an unexpected tool', 'after mismatch\r'], ['K16-TOOLS-AGAIN', '/exit\r']];
     const { stdout } = await execute('python3', ['-c', DRIVER.replaceAll('time.time() + 40', 'time.time() + 15'), JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 's']), JSON.stringify(steps), 'tty', 'until-exit'],
       { cwd: h.f.project, env: { ...h.options.env, TERM: 'xterm-256color', NO_COLOR: '1', DECKENT_LANGUAGE: 'en' }, timeout: 100_000, maxBuffer: 16 * 1024 * 1024 });
     const result = JSON.parse(stdout) as { status: number; timeout?: string; output: string };
@@ -180,7 +180,7 @@ it('compiled Workline in a real PTY cancels with Esc, stops plugin/native-surfac
     expect(result.timeout, result.output.slice(-5000)).toBeUndefined(); expect(result.status).toBe(0);
     expect(result.output).not.toContain(h.canary);
     expect(await readFile(h.traceFile, 'utf8')).not.toContain(h.canary);
-    expect(await readNativeAgentObservation(h.profile)).not.toMatchObject({ toolSurface: true });
+    expect(await readNativeAgentObservation(h.profile)).not.toMatchObject(walk === 'plugin' ? { plugins: false } : { toolSurface: true });
     }
   }
 }, 150_000);

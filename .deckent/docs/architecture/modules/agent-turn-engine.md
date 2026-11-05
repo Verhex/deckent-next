@@ -459,8 +459,10 @@ known negative observations keep tools closed. Readiness readers remain read onl
 cancellation controller owns the no-model probe too; it transfers into the admitted turn, and an early
 cancellation records a cancelled turn without model/tool work. Steering explicitly waits for admission. Claude init/plugin guards
 and Codex item order/allowlists precede proposals; the ordinary policy, approval and effect owners remain
-unchanged. A completed guarded turn records the current profile/agent-flag digests; a surface refusal records
-a negative observation and subsequent messages use text chat. No alternate tool envelope is introduced.
+unchanged. A completed guarded turn records the current profile/agent-flag digests. A surface refusal (unoffered
+tool, plugin, parented event, registry `stopEvents`) stops only that turn and writes no negative observation
+(owner 2026-11-05); an unrecognised CLI event is kept as an identifier in the turn's note and the turn goes on.
+No alternate tool envelope is introduced.
 The same retained observation is readable for workers; it is prerequisite evidence, never the separate F08
 worker execution/settlement proof. Registry capability lookup includes agent-capable headless chat families.
 Pure command schemas, environment/argv shaping, Claude stream validation and diagnostic projection live in

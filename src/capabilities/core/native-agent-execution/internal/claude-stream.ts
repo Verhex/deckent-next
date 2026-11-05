@@ -15,7 +15,7 @@ type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; f
 export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
 export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
-  finish(exit: StreamExit): ClaudeAgentResult }>;
+  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[] }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
 /** R5b: shape facts for a refusal's record. Identifier-shaped names and codes only (never arguments, text or CLI output), at most 64 characters. */
@@ -35,6 +35,13 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   if (entry.agent.transport.kind !== 'claude-mcp' || !Number.isSafeInteger(options.outputMaxBytes) || options.outputMaxBytes <= 0) invalid('definition');
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
+  // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
+  const notices = new Set<string>(), stopEvents = new Set(entry.agent.transport.kind === 'claude-mcp' ? entry.agent.transport.guards.stopEvents : []);
+  const notice = (value: Record<string, unknown>): 'stop' | undefined => {
+    const name = `${fact(value.type)}${value.subtype === undefined ? '' : `/${fact(value.subtype)}`}`;
+    if (stopEvents.has(name) || stopEvents.has(fact(value.type))) return fail('event', undefined, facts([name]));
+    if (notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
+  };
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
   const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string): 'stop' => {
     failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }) }; controller.abort(); return 'stop';
@@ -73,7 +80,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     }
     // Only A0's inert UI invalidation may precede init. Unknown notices, retries and permission denials stop the run.
     if (value.type === 'system' && value.subtype === 'ui_invalidate') return;
-    if (!init) return fail('before-init');
+    if (!init) return value.type === 'system' ? notice(value) : fail('before-init');
     // CLI 2.1.318 thinking progress: two token estimates, no content.
     if (value.type === 'system' && value.subtype === 'thinking_tokens' && value.parent_tool_use_id == null
       && [value.estimated_tokens, value.estimated_tokens_delta].every(n => typeof n === 'number' && Number.isFinite(n))) return;
@@ -110,7 +117,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       const info = record(value.rate_limit_info);
       return info?.status === 'allowed' || info?.status === 'allowed_warning' ? undefined : fail('rate-limit');
     }
-    if (value.type !== 'result') return fail('event', undefined, facts([`${fact(value.type)}/${value.subtype === undefined ? '-' : fact(value.subtype)}`]));
+    if (value.type !== 'result') return notice(value);
     terminal = true;
     if (!Array.isArray(value.permission_denials) || value.permission_denials.length) return fail('permission-denials', undefined, Array.isArray(value.permission_denials)
       ? facts(value.permission_denials.map(denial => offeredName(record(denial)?.tool_name))) : 'shape');
@@ -153,7 +160,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     });
     return current.promise;
   };
-  return Object.freeze({ session, signal: controller.signal, line, propose,
+  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => [...notices],
     async cancel() { ended = true; controller.abort(); return port.cancel(); },
     async revoke() { ended = true; controller.abort(); return port.revoke(); },
     finish(exit: StreamExit): ClaudeAgentResult {

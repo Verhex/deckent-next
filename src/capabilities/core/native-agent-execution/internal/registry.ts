@@ -28,7 +28,9 @@ const streamJsonTransportSchema = z.strictObject({ kind: z.literal('claude-mcp')
     server: z.strictObject({ type: z.literal('http'), url: z.literal('{bridgeUrl}'), headers: z.record(z.string(), z.enum(['{turnTokenHeader}', '${turnTokenHeader}'])).readonly(),
       timeout: z.literal('{approvalTtlMs}') }).readonly() }).readonly(),
   guards: z.strictObject({ permissionMode: text, apiKeySources: z.array(text).min(1).readonly(),
-    plugins: z.array(z.strictObject({ name: text, path: text, source: text }).readonly()).readonly(), source: text }).readonly(),
+    plugins: z.array(z.strictObject({ name: text, path: text, source: text }).readonly()).readonly(), source: text,
+    // Owner 2026-11-05: an unrecognised CLI event is a turn note; only these (type or type/subtype) stop the turn.
+    stopEvents: z.array(z.string().regex(/^[a-z_]{1,48}(?:\/[a-z_]{1,48})?$/u)).max(64).readonly() }).readonly(),
 }).readonly();
 const execJsonTransportSchema = z.strictObject({ kind: z.literal('codex-mcp'), source: text, configFlag: z.literal('-c'),
   mcpConfig: z.strictObject({ url: z.literal('{bridgeUrl}'), bearer_token_env_var: z.literal('{turnTokenEnv}'), required: z.literal(true),

@@ -899,7 +899,20 @@
                 "source": "cc-plugin-plugin-authoring@builtin"
               }
             ],
-            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-2(c) init; owner plugin exception limited to these builtin identities; no arbitrary plugin paths"
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-2(c) init; owner plugin exception limited to these builtin identities; no arbitrary plugin paths; stopEvents: owner 2026-11-05 (R5b/R6b) — other unrecognised events are turn notes, these stop the turn: CLI-side permission denial, model substitution, out-of-band execution (task, local command, hook, plugin install) and a host control request",
+            "stopEvents": [
+              "system/permission_denied",
+              "system/model_fallback",
+              "system/model_refusal_fallback",
+              "system/model_consent_fallback",
+              "system/task_started",
+              "system/local_command",
+              "system/hook_started",
+              "system/hook_progress",
+              "system/hook_response",
+              "system/plugin_install",
+              "control_request"
+            ]
           }
         }
       }

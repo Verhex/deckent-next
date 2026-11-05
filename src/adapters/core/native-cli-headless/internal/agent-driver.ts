@@ -65,7 +65,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
     }
     return sealed.preflight;
   };
-  return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck,
+  return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck, notices: () => claude?.notices() ?? [],
     async close() { lifetime.abort(); calls.clear(); },
     native(bridge: Bridge, secrets: { configured: KnownSecretSnapshot; turn: KnownSecretSnapshot }): ModelInvocationNativePort {
       const known = knownPair(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation });
@@ -123,12 +123,13 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             raw => { if (claude) return claude.line(raw); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);
             if (finished?.kind === 'refused') {
-              refusal = finished.reason; await recordNativeAgentObservation(profile, preflight, execution, input.now, refusal);
+              // Owner 2026-11-05: a refused turn stops only itself; no negative observation pauses later turns.
+              refusal = finished.reason;
               const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
               return rejectResult(reject('invalid-response', { refusal: 'guard', field, ...(finished.detail ? { subtype: finished.detail } : {}) }));
             }
             if (stopped || refusal) {
-              refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'; await recordNativeAgentObservation(profile, preflight, execution, input.now, refusal);
+              refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
               return rejectResult(stopped ?? reject('invalid-response', { refusal: 'guard', field: 'proposal-order' }));
             }
             if (combined.aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') throw new Error('HEADLESS_OUTCOME_UNKNOWN');

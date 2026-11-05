@@ -32,6 +32,8 @@ export interface FakeAgentScenario {
   /** Claude CLI keepalive during a pending call; 'foreign' names an unknown parent. */
   readonly heartbeat?: 'known' | 'foreign';
   readonly thinkingTokens?: boolean;
+  /** Claude stream lines emitted right after init. */
+  readonly events?: readonly Record<string, unknown>[];
 }
 export async function writeFakeAgentCli(dir: string, family: string, scenario: FakeAgentScenario = {}) {
   const entry = nativeCliAgent(family)!;
@@ -68,6 +70,7 @@ async function main() {
  if (!claude && x.proposalBeforeItem) { const call=x.calls[0]; try { await rpc('tools/call',{name:call.name,arguments:call.arguments,_meta:{callId:'call-early',itemId:'fc-early'}}); } catch {} await new Promise(r=>setTimeout(r,100)); return; }
  if (claude) { await line({...s.init,cwd:process.cwd(),model,tools:listed.tools.map(t=>e.bridge.toolPrefix+t.name),mcp_servers:[{name:e.bridge.serverName,status:'connected'}],...(x.pluginMismatch?{plugins:[{name:'unexpected',path:'fixture',source:'fixture'}]}:{})}); await new Promise(r=>setTimeout(r,100)); }
  else { await line(s.codex[0]); await line(s.codex[1]); if(x.nativeItem) { await line({type:'item.started',item:{id:'native-bad',type:x.nativeItem===true?'command_execution':x.nativeItem,command:'unchanged risky request'}}); await new Promise(r=>setTimeout(r,100)); } }
+ if (claude) for (const event of x.events ?? []) await line({...event,session_id:'s-1',uuid:'u-ev'});
  if (claude && x.thinkingTokens) await line({type:'system',subtype:'thinking_tokens',estimated_tokens:40,estimated_tokens_delta:40,session_id:'s-1',uuid:'u-tt'});
  if (x.hang) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:'K16-WAITING '}]}}); else await line({type:'item.completed',item:{id:'waiting',type:'agent_message',text:'K16-WAITING '}}); await new Promise(()=>setInterval(()=>{},1000)); }
  if (x.preamble) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:x.preamble}]}}); else await line({type:'item.completed',item:{id:'preamble',type:'agent_message',text:x.preamble}}); }

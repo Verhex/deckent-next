@@ -1,13 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import { ModelInvocationError, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
-import type { ModelInvocationNativePort } from '#engine/index.js';
-import { modelInvocationProfileDigest } from '#engine/index.js';
-import { nativeCliAgent } from '#adapters/index.js';
-import { createNativeToolBridge, type NativeToolBridgeLimits } from '#adapters/index.js';
-import { withMcpPrincipal } from '#adapters/index.js';
+import { modelInvocationProfileDigest, type ModelInvocationNativePort } from '#engine/index.js';
+import { nativeCliAgent, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import type { NativeAgentExecution, NativeAgentReadinessReason, ToolSessionPort } from '#capabilities/index.js';
-import { formatDuration, snapshotKnownSecrets, t, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
+import { snapshotKnownSecrets, t, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 
 type Bridge = Awaited<ReturnType<typeof createNativeToolBridge>>;
 /** Code-only fan-in ports. Observations never spawn or confer consent. K5b owns the opaque admission pin. */
@@ -23,7 +20,8 @@ export interface NativeChatRuntime {
     readonly port: ToolSessionPort;
     admit(signal?: AbortSignal): Promise<void>;
     native(bridge: Bridge, secrets: { readonly configured: KnownSecretSnapshot; readonly turn: KnownSecretSnapshot }): ModelInvocationNativePort;
-    refusal(): NativeAgentReadinessReason | null; refusalCheck?(): string | null; // R5b: the refused stream check, identifier-only facts
+    // R5b: the refused stream check; owner 2026-11-05: unrecognised CLI events the turn went on through (identifier-only facts)
+    refusal(): NativeAgentReadinessReason | null; refusalCheck?(): string | null; notices?(): readonly string[];
     close(): Promise<void>;
   }>;
 }
@@ -32,7 +30,7 @@ export async function withNativeChatInvocation<T>(input: { readonly runtime: Nat
   readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly signal: AbortSignal;
   readonly knownSecrets: KnownSecretSnapshot; recheck(): Promise<void> },
   invoke: (binding: { readonly profileDigest: string; readonly port: ModelInvocationNativePort; admit(signal?: AbortSignal): Promise<void>;
-    recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null }) => Promise<T>): Promise<T> {
+    recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; notices(): readonly string[] }) => Promise<T>): Promise<T> {
   const entry = nativeCliAgent(input.profile.protocol.family);
   if (!entry) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const recheck = async () => { try { await input.recheck(); } catch (error) { await input.session.revoke(); throw error; } };
@@ -49,12 +47,12 @@ export async function withNativeChatInvocation<T>(input: { readonly runtime: Nat
     const turn = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: bridge.turnToken }]);
     const port = driver.native(bridge, { configured: input.knownSecrets, turn });
     return await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
-      recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, admit: signal => driver.admit(signal) });
+      recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });
   } finally { try { await bridge?.close(); } finally { await driver.close(); } }
 }
 
-/** The readiness and current driver's sticky refusal use the same catalog renderer; a refused surface names the registry ceiling after which a turn re-checks it (R5b). */
-export const nativeChatReasonText = (reason: NativeAgentReadinessReason, language: Locale, unknown = false, profile?: ModelInvocationProfile): string => { const ceilingMs = !unknown && reason === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' && profile ? nativeCliAgent(profile.protocol.family)?.agent.observationMaxAgeMs : undefined; return ceilingMs ? t('headless.agent.k13.surfacePaused', { duration: formatDuration(ceilingMs) }, language) : unknown ? ({
+/** The readiness and current driver's refusal use the same catalog renderer; a stream refusal stops only its own turn (owner 2026-11-05). */
+export const nativeChatReasonText = (reason: NativeAgentReadinessReason, language: Locale, unknown = false, stopped = false): string => { return stopped && reason === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' ? t('headless.agent.k13.surfaceStopped', {}, language) : unknown ? ({
   NATIVE_AGENT_CLI_UNAVAILABLE: t('headless.agent.k13.unknown.cli', {}, language),
   NATIVE_AGENT_LOGIN_REQUIRED: t('headless.agent.k13.unknown.login', {}, language),
   NATIVE_AGENT_CAPABILITY_UNSEALED: t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, language),

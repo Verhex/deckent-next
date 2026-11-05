@@ -119,7 +119,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
       const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown', profile) + '\n' });
+      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
       await channel.drained();
       return runChatTurn(projectRoot, input, peer, options, delivery, host, channel, undefined, controller);
     };
@@ -276,7 +276,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     // The largest result before any steer id, answer or note (every count at its bound): what steer admission leaves room for.
     const floor = resultBytes({ schemaVersion: 1, turnId: command.turnId, finish: 'cancelled', note: null, rounds: Number.MAX_SAFE_INTEGER, toolCalls: Number.MAX_SAFE_INTEGER,
       answer: null, answerBytes: Number.MAX_SAFE_INTEGER, replayed: false, recorded: false, notices, steer: { joined: [], returned: [] } });
-    const steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
+    const cliNotices = new Set<string>(), steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
     if (registered) host.running.set(key, { principalKey: principalKeyOf(native?.witness ?? context.principal), controller: cancel, steer });
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
       onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], roundSignal: AbortSignal,
@@ -284,7 +284,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, native?.profile)}${check ? ` (${check})` : ''}` : null; };
+        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, true)}${check ? ` (${check})` : ''}` : null; };
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
@@ -299,6 +299,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
           // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
           return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : nativeRefusal() ?? queryFailure(error).code };
         }
+        for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
         const refusalReason = nativeRefusal();
         if (refusalReason) return { status: 'failed', state: refusalReason };
         const outcome = result.receipt.outcome;
@@ -357,6 +358,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
         ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
+        hostNote: () => cliNotices.size ? t('headless.agent.k13.cliNotices', { events: [...cliNotices].join(', ') }, language) : null,
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       authorize: (tool, args, call) => decisions.authorize(tool, args, call),

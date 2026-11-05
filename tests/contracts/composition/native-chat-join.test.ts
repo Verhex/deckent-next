@@ -185,6 +185,16 @@ it('refuses a driver returning another tool session before any model send or eff
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
 });
 
+it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the turn\'s recorded note, not a pause', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(false), driver = h.runtime.driver;
+  h.runtime.driver = async input => ({ ...await driver(input), notices: () => ['system/future_notice'] });
+  const result = await h.run();
+  expect(result).toMatchObject({ finish: 'stop', answer: 'finished', recorded: true });
+  expect(result.note).toContain('system/future_notice');
+  expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('approved business result\n');
+});
+
 it('shows a plugin mismatch and keeps the same subscription text path usable with tools off', async () => {
   if (await unsupportedPeer()) return;
   const h = await fixture(), bin = join(h.f.data, 'fake-bin'), login = join(h.f.data, 'fake-login');

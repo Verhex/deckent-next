@@ -1957,7 +1957,7 @@
       "plan": "PROVIDERS"
     },
     "src/composition/core/agent-turn": {
-      "dependencies": ["src/platform/core/utils", 
+      "dependencies": [
         "src/platform/core/redaction",
         "src/adapters/core/approval-store",
         "src/adapters/core/local-keyring",
