@@ -1195,3 +1195,22 @@ is a person's to lift: resuming a Run held by any source other than the public `
 plainly allowed agent tool decisions are summarised in at most one `policy-turn` audit record per turn, written best effort after the
 turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-evaluator`, `<person>/recovery` and
 `<person>/catalog-aggregator`) get only their exact rights through first-run template v15.
+
+## Working-tree delivery (R9p, owner 2026-11-05; alpha.63 L1)
+
+`execution.deliveryMode` chooses where a person's delivery yes lands. Unset, it is derived: a work target or a non-empty
+`execution.adoption.targets` means `reference` (the Git reference path above, unchanged; live and N1 both stay there), otherwise
+`working-tree`; a work target is always `reference`. In `working-tree` the composition picks `GitWorkingTreeDelivery`, a separate
+`IntegrationDeliveryTarget` (`application: 'working-tree'`): the engine stays generic and only reports the target's result
+(`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
+also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
+the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by an
+exclusive lock directory in Deckent's workspace root (bounded wait, never broken), and writes nothing to the person's repository: no
+reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
+anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
+PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
+`working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`); each write is a same-directory temporary file,
+fsynced, compared once more and renamed; a removal is compared and unlinked; an existing file keeps its permission bits. The trace is the
+Deckent delivery record and that journal. Open (see the alpha.63 L1 handoff): a worker still starts from the Run's HEAD (uncommitted work
+is not in its base until a Deckent-private base repository lands), no policy action of its own for file delivery, the kept originals are
+not yet wired to a rollback command.

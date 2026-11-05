@@ -21,9 +21,10 @@ export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
 /** `reattempt`: with a queue target, the enqueue carries the bounded service re-attempt intent (`targetQueue.reattempts` > 0). */
 /** `summary`: TESLIM-KARTI-OZET, what the Attempt claims, what acceptance rests on, model and risk (null: not readable; absent: no reader bound). */
+/** `workingTree`: the installation's delivery writes into the project's files (`execution.deliveryMode`); `changes`: each path's before/after digest the yes binds. */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
-  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null }>;
+  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null; workingTree?: true; changes?: EffectConfirmationView['changes'] }>;
 export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
 /** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
 export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
@@ -48,6 +49,8 @@ export interface TerminalDeliveryPort {
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
   previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** Whether deliveries write into the project's files (then a delivered result is finished: no adoption step is offered). */
+  workingTree?(): Promise<boolean>;
   /** BeUser M-32: the retained patch's read-only per-file diffs without the integration check, so a refused check still shows what the worker changed. */
   patchOnly?(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card); the Run view then says `set-aside`. */
@@ -67,7 +70,7 @@ export interface TerminalDeliveryPort {
  * for adoption the same target branch and delivered commit. Anything else is shown to the person as the port's exact card and needs a fresh `y`.
  */
 export type DeliveryConsent = Readonly<{ operation: 'deliver-integration' | 'adopt-integration'; scopeId: string; runId: string; taskId: string; commandId: string;
-  files?: readonly string[]; from?: string; resource?: string; to?: string }>;
+  files?: readonly string[]; from?: string; resource?: string; to?: string; changes?: EffectConfirmationView['changes'] }>;
 export function consentMatches(consent: DeliveryConsent, view: EffectConfirmationView): boolean {
   if (view.operation !== consent.operation || view.scopeId !== consent.scopeId || view.runId !== consent.runId || view.taskId !== consent.taskId
     || view.commandId !== consent.commandId) return false;
@@ -75,6 +78,7 @@ export function consentMatches(consent: DeliveryConsent, view: EffectConfirmatio
     const shown = [...new Set(consent.files)].sort(), asked = [...new Set(view.files)].sort();
     if (shown.length !== asked.length || shown.some((path, index) => path !== asked[index])) return false;
   }
+  if (consent.changes && JSON.stringify(consent.changes) !== JSON.stringify(view.changes)) return false;
   return (consent.from === undefined || consent.from === view.from) && (consent.resource === undefined || consent.resource === view.resource)
     && (consent.to === undefined || consent.to === view.to);
 }

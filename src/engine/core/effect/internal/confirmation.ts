@@ -5,6 +5,8 @@ export interface EffectConfirmationView {
   readonly resource: string; readonly from: string; readonly to: string;
   readonly runId: string; readonly taskId: string; readonly title: string;
   readonly files: readonly string[]; readonly added: number; readonly removed: number;
+  /** A delivery that writes files (working-tree target): every path with its before and after content digest (null = absent). */
+  readonly changes?: readonly Readonly<{ path: string; before: string | null; after: string | null }>[];
 }
 export interface EffectConfirmation {
   /** Refuse unavailable authority before candidate preparation or a journal claim. */

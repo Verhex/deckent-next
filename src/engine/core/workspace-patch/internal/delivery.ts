@@ -34,11 +34,13 @@ export interface IntegrationDeliveryStore {
   finishDelivery(intent: IntegrationDeliveryIntent): Promise<IntegrationDeliveryRecord>;
 }
 export interface IntegrationDeliveryTarget {
+  /** Absent: a reference only. `working-tree`: `publish` writes the patch into the source checkout's files (no reference there). */
+  readonly application?: 'working-tree';
   plan(command: IntegrationDeliveryCommand, manifest: IntegrationManifest, patch: WorkspacePatch, metadata: IntegrationCommitMetadata): Promise<IntegrationDeliveryPlan>;
   delivered(plan: IntegrationDeliveryPlan): Promise<boolean>;
   publish(plan: IntegrationDeliveryPlan, manifest: IntegrationManifest, patch: WorkspacePatch): Promise<void>;
 }
-/** Delivers an immutable Git reference. It never updates the live source checkout or accepts a Task. */
+/** Delivers through its target: an immutable Git reference, or (a working-tree target) the patch written into the checkout's files. Never accepts a Task. */
 export class WorkspaceDeliveryApplication {
   constructor(private readonly patches: WorkspacePatchApplication, private readonly inspection: WorkspaceIntegrationInspection,
     private readonly candidate: IntegrationTarget, private readonly target: IntegrationDeliveryTarget,
@@ -57,8 +59,9 @@ export class WorkspaceDeliveryApplication {
     const actor = verified.session.principalRef;
     const previous = await this.store.loadDelivery(command);
     if (previous && JSON.stringify(previous.intent.actor) !== JSON.stringify(actor)) throw new WorkspacePatchError('PATCH_CONFLICT');
-    const result = (record: IntegrationDeliveryRecord) => Object.freeze({ schemaVersion: 1 as const, status: 'reference-delivered' as const,
-      command: record.intent.command, plan: record.intent.plan, manifest: record.intent.manifest, application: 'reference-only' as const });
+    const files = this.target.application === 'working-tree';
+    const result = (record: IntegrationDeliveryRecord) => Object.freeze({ schemaVersion: 1 as const, status: files ? 'working-tree-delivered' as const : 'reference-delivered' as const,
+      command: record.intent.command, plan: record.intent.plan, manifest: record.intent.manifest, application: files ? 'working-tree' as const : 'reference-only' as const });
     if (previous?.delivered) return result(previous);
     // A crash after atomic Git publication can settle from exact reference custody, without rebuilding or reapplying.
     if (previous && await this.target.delivered(previous.intent.plan)) {
@@ -81,7 +84,8 @@ export class WorkspaceDeliveryApplication {
     const confirm = await this.confirmation.confirm({ operation: 'deliver-integration', scopeId: command.identity.scopeId,
       commandId: command.commandId, actor, resource: plan.ref,
       from: plan.schemaVersion === 2 ? plan.effectiveBaseCommit : plan.baseCommit, to: plan.commit,
-      runId: command.identity.runId, taskId: command.identity.taskId, ...summary });
+      runId: command.identity.runId, taskId: command.identity.taskId, ...summary,
+      ...(files ? { changes: preview.patch.changes.map(change => ({ path: change.path, before: change.before?.digest ?? null, after: change.after?.digest ?? null })) } : {}) });
     await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock); await confirm();
     const intent = integrationDeliveryIntentSchema.parse({ schemaVersion: 1, command, manifest: inspected.receipt, patch: preview.receipt, plan, actor });
     const claimed = await this.store.claimDelivery(intent);

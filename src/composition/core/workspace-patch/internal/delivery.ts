@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { GitIntegrationTarget, GitIntegrationDelivery, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
+import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { assertAuthorityWitness, deliveryDismissalEvent, dismissedDeliveries, WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -50,14 +50,14 @@ export async function deliverWorkspaceIntegrationWithConfirmation(root: string, 
     await c.authorization.authorizeIdentity('deliver-integration', command.identity, c.principal);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
     const git = { ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
-    const target = new GitIntegrationTarget(git, { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes });
+    const limits = { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, target = new GitIntegrationTarget(git, limits);
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     try { await c.sameWorkSource(store);
       const patches = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
       const inspection = new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes);
-      return await new WorkspaceDeliveryApplication(patches, inspection, target, new GitIntegrationDelivery(git), store,
+      return await new WorkspaceDeliveryApplication(patches, inspection, target, git.workingTree ? new GitWorkingTreeDelivery(git, limits) : new GitIntegrationDelivery(git), store,
         sessions, c.authorization, clock, confirmation, getConfigKnownSecrets(c.config)).deliver(command);
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

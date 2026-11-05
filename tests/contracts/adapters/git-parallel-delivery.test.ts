@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
-  GitQueueTarget, openSqliteAttemptStore, type GitWorkspaceOptions } from '#adapters/index.js';
+  GitQueueTarget, GitWorkingTreeDelivery, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
+import { deliveryMode } from '#platform/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
   targetQueueKey, assertIntegrationBase, SnapshotBudget, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
@@ -18,7 +19,7 @@ const confirmation = { async assertAvailable() {}, async confirm(card: import('#
   expect(card.resource).toMatch(/^refs\//); expect(card.to).toMatch(/^[a-f0-9]{40,64}$/); return async () => {};
 } };
 const actor = { id: 'owner', issuer: 'test', subject: 'owner' };
-async function fixture(refOnly: boolean, format = 'sha1') {
+async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-parallel-delivery-')); roots.push(root);
   const sourceRoot = join(root, 'source'), workspaceRoot = join(root, 'workspaces');
   await mkdir(sourceRoot, { mode: 0o700 }); await mkdir(workspaceRoot, { mode: 0o700 });
@@ -30,8 +31,8 @@ async function fixture(refOnly: boolean, format = 'sha1') {
   const base = await git('rev-parse', 'HEAD'), targetRef = 'refs/heads/adopted';
   await git('branch', 'adopted', base);
   const options: GitWorkspaceOptions = { sourceRoot, workspaceRoot, gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536,
-    ...(refOnly ? { baseRef: targetRef } : {}) };
-  const target = new GitIntegrationTarget(options, limits), delivery = new GitIntegrationDelivery(options), adoption = new GitIntegrationAdoption(options);
+    ...(refOnly ? { baseRef: targetRef } : {}), ...(workingTree ? { workingTree: true as const } : {}) };
+  const target = new GitIntegrationTarget(options, limits), delivery = new GitIntegrationDelivery(options), adoption = new GitIntegrationAdoption(options), files = new GitWorkingTreeDelivery(options, limits);
   const file = (text: string) => patchFile(Buffer.from(text), '100644');
   const patch = (id: string, path: string, before: string | null, after: string | null): WorkspacePatch => workspacePatchSchema.parse({
     schemaVersion: 1, kind: 'workspace-patch', identity: { scopeId: 's', runId: id, taskId: 't', attemptId: id, layoutRevision: 'l', generation: 1 },
@@ -55,10 +56,10 @@ async function fixture(refOnly: boolean, format = 'sha1') {
     const clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, sessions = await LocalOsSessionAuthority.create(['s'], 10000, clock);
     const patches = { async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; }, assertScope() {} };
     const inspection = { async inspect() { return { manifest, receipt }; } };
-    const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, delivery, store, sessions,
+    const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, workingTree ? files : delivery, store, sessions,
       { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, confirmation);
     const result = await app.deliver(command), plan = result.plan;
-    expect(result.status).toBe('reference-delivered'); expect(await delivery.delivered(plan)).toBe(true);
+    expect(result.status).toBe(workingTree ? 'working-tree-delivered' : 'reference-delivered'); expect(await (workingTree ? files : delivery).delivered(plan)).toBe(true);
     expect(record!.delivered).toBe(true);
     return { manifest, plan, record: record! };
   };
@@ -85,7 +86,7 @@ async function fixture(refOnly: boolean, format = 'sha1') {
   const state = async () => ({ head: await git('rev-parse', 'HEAD'), tip: await git('rev-parse', targetRef),
     index: await readFile(join(sourceRoot, '.git/index')), status: await git('status', '--porcelain'),
     refs: await git('for-each-ref', '--format=%(refname) %(objectname)'), candidates: await readdir(workspaceRoot) });
-  return { sourceRoot, workspaceRoot, options, git, base, targetRef, target, delivery, adoption, patch, prepare, deliver, adopt, advance, state };
+  return { sourceRoot, workspaceRoot, options, git, base, targetRef, target, delivery, files, adoption, patch, prepare, deliver, adopt, advance, state };
 }
 
 describe.skipIf(process.platform !== 'linux').each([false, true])('parallel delivery (ref-only = %s)', refOnly => {
@@ -360,5 +361,62 @@ describe.skipIf(process.platform !== 'linux')('adoption custody stays with the c
       expect(await f.git('rev-parse', f.targetRef)).toBe(plan.commit); expect(await gitB('rev-parse', f.targetRef)).toBe(f.base);
       expect(await journal.loadAdoption('s', 'adopt-a')).toMatchObject({ settled: true, repository: claimed.repository });
     } finally { journal.close(); }
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026-11-05 R9p)', () => {
+  const metadata = { title: 't', acceptance: { phase: 'accepted', criteria: 1, runRevision: 1, modelUnverified: false }, deliveredAtMs: 1000 };
+  const objects = async (root: string) => (await exec('find', [join(root, '.git', 'objects'), '-type', 'f'])).stdout.split('\n').sort();
+  const planned = async (f: Awaited<ReturnType<typeof fixture>>, p: WorkspacePatch) => { const { manifest } = await f.prepare(p);
+    return { manifest, plan: await f.files.plan({ schemaVersion: 1, commandId: p.identity.runId, identity: p.identity, integrationCommandId: manifest.command.commandId }, manifest, p, metadata) }; };
+  it('writes the accepted change into the files only; other WIP, index, HEAD, refs and the object store stay; originals and permissions are kept', async () => {
+    const f = await fixture(false, 'sha1', true);
+    await exec('chmod', ['600', join(f.sourceRoot, 'a.txt')]); await writeFile(join(f.sourceRoot, 'b.txt'), 'b person WIP\n'); await writeFile(join(f.sourceRoot, 'notes.txt'), 'untracked\n');
+    const p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n');
+    p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!, f.patch('wt', 'old.txt', 'remove\n', null).changes[0]!);
+    const before = await f.state(), index = await readFile(join(f.sourceRoot, '.git/index')), stored = await objects(f.sourceRoot), { plan } = await f.deliver(p);
+    expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a after\n'); expect(await readFile(join(f.sourceRoot, 'dir/new.txt'), 'utf8')).toBe('added\n');
+    await expect(readFile(join(f.sourceRoot, 'old.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await exec('stat', ['-c', '%a', join(f.sourceRoot, 'a.txt')])).stdout.trim()).toBe('600');
+    expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b person WIP\n'); expect(await readFile(join(f.sourceRoot, 'notes.txt'), 'utf8')).toBe('untracked\n');
+    expect(await readFile(join(f.sourceRoot, '.git/index'))).toEqual(index); const after = await f.state();
+    expect([after.head, after.tip, after.refs]).toEqual([before.head, before.tip, before.refs]); expect(after.refs).not.toContain('refs/deckent/');
+    expect(await objects(f.sourceRoot)).toEqual(stored);
+    const journal = join(f.workspaceRoot, 'working-tree-deliveries', plan.ref.split('/').pop()!);
+    expect(JSON.parse(await readFile(join(journal, 'journal.json'), 'utf8'))).toMatchObject({ state: 'written', written: ['a.txt', 'dir/new.txt', 'old.txt'] });
+    expect([await readFile(join(journal, 'original-0'), 'utf8'), await readFile(join(journal, 'original-2'), 'utf8')]).toEqual(['a before\n', 'remove\n']);
+  });
+  it('one touched path differing from its base writes nothing (PATCH_CONFLICT before any write)', async () => {
+    const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n');
+    p.changes.push(f.patch('wt', 'b.txt', 'b before\n', 'b after\n').changes[0]!);
+    const { manifest, plan } = await planned(f, p);
+    await writeFile(join(f.sourceRoot, 'b.txt'), 'saved by the person meanwhile\n');
+    await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n'); expect(await f.files.delivered(plan)).toBe(false);
+  });
+  it('refuses a symlinked directory on the way (PATCH_UNSAFE); nothing is written outside the checkout', async () => {
+    const f = await fixture(false, 'sha1', true), outside = join(f.workspaceRoot, 'outside'); await mkdir(outside); await exec('ln', ['-s', outside, join(f.sourceRoot, 'link')]);
+    const p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'), { manifest, plan } = await planned(f, p);
+    p.changes.push(f.patch('wt', 'link/x.txt', null, 'escaped\n').changes[0]!);
+    await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
+    expect(await readdir(outside)).toEqual([]); expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
+  });
+  it('serializes deliveries into one checkout: a held lock is waited for, and still held at the bound it is a typed refusal', async () => {
+    const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'), { manifest, plan } = await planned(f, p);
+    const lock = join(f.workspaceRoot, 'working-tree-locks', patchDigest(f.sourceRoot)); await mkdir(lock, { recursive: true });
+    const quick = new GitWorkingTreeDelivery({ ...f.options, timeoutMs: 150 }, limits);
+    await expect(quick.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_BUSY' });
+    expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
+    const waiting = f.files.publish(plan, manifest, p); setTimeout(() => void rm(lock, { recursive: true }), 200); await waiting;
+    expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a after\n'); expect(await f.files.delivered(plan)).toBe(true);
+  });
+  it('the mode: live and N1 (work target + adoption targets) stay reference; a project with neither writes its files; an explicit field wins without a work target', async () => {
+    const git = { gitExecutable: '/usr/bin/git', timeoutMs: 1000, outputBytes: 65536 }, adoption = { targets: ['refs/heads/deckent/teslim'] };
+    const target = { schemaVersion: 2 as const, targets: [{ id: 'teslim-n1', kind: 'git' as const, path: '/nonexistent', baseRef: 'refs/heads/deckent/teslim', scope: { mode: 'warn' as const } }] };
+    expect([deliveryMode({ adoption, workTargets: target }), deliveryMode({ adoption, workTargets: target, deliveryMode: 'working-tree' }), deliveryMode({ adoption }),
+      deliveryMode({ adoption: { targets: [] } }), deliveryMode({ adoption, deliveryMode: 'working-tree' })]).toEqual(['reference', 'reference', 'reference', 'working-tree', 'working-tree']);
+    const layout = { root: '/nonexistent', bootstrapConfigPath: '/nonexistent/config.json' };
+    expect((await resolveGitWorkTarget('/p', { git, adoption }, layout)).git).toEqual({ sourceRoot: '/p' });
+    expect((await resolveGitWorkTarget('/p', { git, adoption: { targets: [] } }, layout)).git).toEqual({ sourceRoot: '/p', workingTree: true });
   });
 });

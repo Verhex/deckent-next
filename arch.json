@@ -1457,6 +1457,7 @@
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
         "src/surfaces/core/terminal-beuser",
+        "src/platform/core/config-fields",
         "src/surfaces/core/terminal-host",
         "src/domain/core/primitives",
         "src/engine/core/config",
@@ -5168,7 +5169,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 41700,
+      "adapters": 41816,
       "surfaces": 45000,
       "composition": 13400
     },

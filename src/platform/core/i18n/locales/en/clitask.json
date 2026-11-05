@@ -66,6 +66,7 @@
   "cli.task.menu.decide.closed": "Task {task} no longer awaits a decision ({phase}); nothing was written.",
   "cli.task.menu.decide.done": "Task {task}: {phase}.",
   "cli.task.menu.confirm.deliver": "Write {ref}?",
+  "cli.task.menu.confirm.files": "Write the change into these {count} files (no commit)?",
   "cli.task.menu.confirm.move": "Move {ref} to this commit?",
   "cli.task.menu.deliver.title": "Deliver task {task}: {title}",
   "cli.task.menu.deliver.moreFiles": "… {count} more file(s)",
