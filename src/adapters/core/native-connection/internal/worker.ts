@@ -833,9 +833,10 @@ export function nativeReportArguments(capabilities: NativeWorkerCapabilities, sc
 }
 /** Flagless report channel: the instruction and schema appended to the task prompt (the last argv element); null for flag channels. */
 export function nativeReportInstruction(capabilities: NativeWorkerCapabilities, schema: string): string | null {
-  return capabilities.structuredReport?.channel === 'final-text-json' ? '### report:final-text-json@1\nWhen the task is finished, your final answer must be '
-    + 'your final report: exactly one JSON object that matches the JSON Schema below, with no other text before or after it, no Markdown and no code fence.\n' + schema : null;
+  return capabilities.structuredReport?.channel === 'final-text-json' ? finalTextReportInstruction(schema) : null;
 }
+export const finalTextReportInstruction = (schema: string) => '### report:final-text-json@1\nWhen the task is finished, your final answer must be '
+  + 'your final report: exactly one JSON object that matches the JSON Schema below, with no other text before or after it, no Markdown and no code fence.\n' + schema;
 
 async function main() {
   const socketPath = '/run/deckent-connection.sock';

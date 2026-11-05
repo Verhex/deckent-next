@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
-import { nativeProjectionDispatch } from '#adapters/core/native-connection/index.js';
+import { finalReportTextInstruction, nativeProjectionDispatch } from '#adapters/core/native-connection/index.js';
 import { createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker,
   validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence, recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, createNativeWorkerEvents,
   createNativeCliWorkerDriver, type NativeCliWorkerTransport,
@@ -113,6 +113,8 @@ it('K12: output stays under DispatchApplication custody; transport receives no w
   expect(f.ports.openTools).toHaveBeenCalledWith(request, binding, expect.any(AbortSignal), {});
   const input = vi.mocked(f.ports.driver).mock.calls[0]![0];
   expect(input.model).toBe('fixture-exact-model'); expect(input.user).toContain(workInput.task);
+  // R9k: a bridge worker has no CLI report flag, so the task itself asks for the report contract the host reads.
+  expect(input.user.endsWith(`\n\n${finalReportTextInstruction()}`)).toBe(true);
   expect(JSON.stringify(input)).not.toContain(request.workspace); expect(input).not.toHaveProperty('argv');
   expect(f.release).not.toHaveBeenCalled();
   await f.supervisor.release(request); await f.supervisor.release(request); expect(f.release).toHaveBeenCalledTimes(1);

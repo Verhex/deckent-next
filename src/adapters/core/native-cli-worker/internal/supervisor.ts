@@ -6,7 +6,7 @@ import { executionProfileDefinitionSchema, type ExecutionProfileDefinition, type
 import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError,
   type ExecutionSupervisor, type SandboxRequest, type SandboxResult, type SupervisorProfileSource } from '#engine/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
-import { readFinalReportText } from '#adapters/core/native-connection/index.js';
+import { finalReportTextInstruction, readFinalReportText } from '#adapters/core/native-connection/index.js';
 import { collectDockerOutputFiles } from '#adapters/core/docker-supervisor/index.js';
 import { resolveNativeCliWorkerProfile } from './profile.js';
 import { inspectNativeCliWorker } from './readiness.js';
@@ -99,7 +99,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       }, cancel: () => delegate.cancel(), revoke: () => delegate.revoke() };
       const binding = this.resolved.nativeSubscription!, delivery = binding.promptDelivery!;
       this.driver = await this.input.ports.driver({ binding: this.resolved.binding, tools: guarded, model: binding.model!.modelId,
-        system: delivery.core, user: delivery.task + (this.input.dependencyContext ? `\n\n${this.input.dependencyContext}` : ''),
+        system: delivery.core, user: delivery.task + (this.input.dependencyContext ? `\n\n${this.input.dependencyContext}` : '') + (binding.finalReport ? `\n\n${finalReportTextInstruction()}` : ''),
         deadlineMs: this.resolved.options.deadlineMs, outputBytes: this.resolved.options.outputBytes, execution: ready.execution,
         ...(binding.reasoningEffort ? { effort: binding.reasoningEffort } : {}),
         ...(this.input.onEvents ? { onEvents: batch => {

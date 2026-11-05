@@ -3,7 +3,7 @@ export type { NativeSubscription } from './internal/credential.js';
 export { openNativeConnection, isPublicNativeAddress, nativeWorkerEventRetentionBytes, nativeQuotaPolicy } from './internal/gateway.js';
 export { inspectNativeClientHello } from './internal/tls-hello.js';
 export { openNativeEgressGateway, nativeEgressLimits, privateSocketDirectory } from './internal/egress.js';
-export { validateFinalReport, finalReportJsonSchema, readFinalReportText } from './internal/report.js';
+export { validateFinalReport, finalReportJsonSchema, finalReportTextInstruction, readFinalReportText } from './internal/report.js';
 export { parseClaudeStreamLine, parseCodexExecLine, normalizeClaudeLine, normalizeCodexLine, normalizeCursorLine, createCodexState, createCursorState, createClientModelReport, readCodexRolloutModel, createNativeLineObserver, createNormalizerState, flushUnmapped, redactText, secretValues } from './internal/worker.js';
 export type { ClaudeStreamLine, CodexExecLine, QuotaPolicy, NormalizerState, CursorNormalizerState, ClientModelReportLimits, ClientModelRead } from './internal/worker.js';
 export { nativePromptArguments, nativePreflightCapabilities, nativeReportArguments, nativeReportInstruction } from './internal/worker.js';
