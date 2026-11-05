@@ -2,7 +2,7 @@ import { persistedString, persistedInteger, persistedUrl } from '#platform/core/
 import { workerImageConsentSchema } from './worker-consent.js';
 import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
-import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, WORKER_INSTRUCTION_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS, STALL_RECOVERY_SETTINGS } from './execution.js';
+import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, WORKER_INSTRUCTION_SETTINGS, DELIVERY_MODE, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS, STALL_RECOVERY_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
 import { z } from 'zod';
@@ -29,7 +29,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   artifacts: field('config.field.artifacts', { state: 'bound', consumers: ['src/composition/core/artifacts'] }, 'restart', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(64), patchPreview: z.strictObject({ get maxEntries() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(10000); }, get maxDepth() { return persistedInteger().positive().max(128).prefault(32); }, get maxPathBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1024); } }).prefault({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).prefault({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   targetQueue: field('config.field.targetQueue', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', TARGET_QUEUE_SETTINGS.prefault({})),
   execution: field('config.field.execution', { state: 'bound', consumers: ['src/composition/core/execution', 'src/composition/core/runs'] }, 'restart', z.strictObject({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS, get adoption() { return ADOPTION_TARGET_SETTINGS.prefault({ targets: [] }); },
-    get workTargets() { return WORK_TARGET_SETTINGS.optional(); }, get workerInstructions() { return WORKER_INSTRUCTION_SETTINGS.optional(); }, get retention() { return EXECUTION_RETENTION_SETTINGS.prefault({ schemaVersion: 1 }); },
+    get workTargets() { return WORK_TARGET_SETTINGS.optional(); }, get workerInstructions() { return WORKER_INSTRUCTION_SETTINGS.optional(); }, get deliveryMode() { return DELIVERY_MODE.optional(); }, get retention() { return EXECUTION_RETENTION_SETTINGS.prefault({ schemaVersion: 1 }); },
     get secretGate() { return EXECUTION_SECRET_GATE_SETTINGS.prefault({ schemaVersion: 1 }); } }).nullable().prefault(null), [], LAYOUT_CONTRACT_SINCE),
   backup: field('config.field.backup', { state: 'bound', consumers: ['src/composition/core/backup'] }, 'restart', z.strictObject({
     get schedule() { return z.enum(['off', 'daily', 'before-upgrade']).prefault('off'); },

@@ -66,6 +66,7 @@
   "cli.task.menu.decide.closed": "{task} görevi artık karar beklemiyor ({phase}); hiçbir şey yazılmadı.",
   "cli.task.menu.decide.done": "{task} görevi: {phase}.",
   "cli.task.menu.confirm.deliver": "{ref} yazılsın mı?",
+  "cli.task.menu.confirm.files": "Değişiklik bu {count} dosyaya yazılsın mı (commit atılmaz)?",
   "cli.task.menu.confirm.move": "{ref} bu commit'e taşınsın mı?",
   "cli.task.menu.deliver.title": "{task} görevini teslim et: {title}",
   "cli.task.menu.deliver.moreFiles": "… {count} dosya daha",

@@ -18,10 +18,10 @@ export interface WorkspacePatchFixtureOptions { readonly restartable?: boolean; 
   /** Extra tracked files of the base commit (relative path → content). */
   readonly baseFiles?: Readonly<Record<string, string>>;
   /** EXEC-RELEASE C2 (owner B): the `coding` kind declares `workspaceDelivery: 'none'` in the admission registry. */
-  readonly noWorkspaceDelivery?: boolean }
+  readonly noWorkspaceDelivery?: boolean; readonly deliveryMode?: 'reference' | 'working-tree' }
 
 /** Real Git project, configured Docker execution and one reserved coding attempt whose worker edits note/removed/added files. */
-export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {}, noWorkspaceDelivery = false }: WorkspacePatchFixtureOptions = {}) {
+export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {}, noWorkspaceDelivery = false, deliveryMode = 'reference' }: WorkspacePatchFixtureOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-patch-')); track.roots.push(root);
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
@@ -40,7 +40,8 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
   await writeFile(configPath, JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 4_227_072 },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { ...registry, kinds } },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
-      ...(adoptionTargets ? { adoption: { targets: adoptionTargets } } : {}) } }));
+      // These fixtures prove the reference path; working-tree delivery (R9p) is proven by git-parallel-delivery.
+      deliveryMode, ...(adoptionTargets ? { adoption: { targets: adoptionTargets } } : {}) } }));
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];

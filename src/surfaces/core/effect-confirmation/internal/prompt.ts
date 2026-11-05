@@ -12,7 +12,7 @@ export async function askDeliveryConfirmation(view: EffectConfirmationView, loca
   const operation = view.operation === 'deliver-integration' ? t('cli.help.action.integration-deliver', {}, locale)
     : view.operation === 'rollback-integration' ? t('cli.help.action.integration-rollback', {}, locale) : t('cli.help.action.integration-adopt', {}, locale);
   output.write(t('cli.task.delivery.card', { operation,
-    title: text(view.title), run: text(view.runId), task: text(view.taskId), ref: text(view.resource),
+    title: text(view.title), run: text(view.runId), task: text(view.taskId), ref: view.changes ? t('cli.task.delivery.files', {}, locale) : text(view.resource),
     from: text(view.from), to: text(view.to), count: view.files.length, added: view.added, removed: view.removed,
     files: view.files.slice(0, preview.maxFiles).map(text).join('\n'), omitted: Math.max(0, view.files.length - preview.maxFiles) }, locale) + '\n');
   return askLine(locale, input, output, control);

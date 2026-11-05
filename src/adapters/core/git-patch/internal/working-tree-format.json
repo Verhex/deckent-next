@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "deliveries": "working-tree-deliveries",
+  "locks": "working-tree-locks",
+  "journal": "journal.json",
+  "original": "original-",
+  "lockPollMs": 50
+}

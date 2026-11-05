@@ -71,6 +71,16 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(await f.source()).toEqual(before);
   });
 
+  it('working-tree mode (R9p): y writes the change into the project files; no reference or object in the repository, HEAD and index unchanged, no adoption step', async () => {
+    const f = await fixture({ deliveryMode: 'working-tree' }), before = await f.refs(), head = await f.git('rev-parse', 'HEAD'), index = await readFile(join(f.project, '.git/index'));
+    const result = await inPty(f.project, f.options.env, 'window', [...opening, ...decide('y'), ['no commit, index and branches unchanged.', '']]);
+    expect(result.output).toContain('Yes: the change is written into your files (no commit'); expect(result.output).not.toContain('refs/deckent/deliveries/');
+    expect(result.output).not.toContain('Adopt commit'); expect(result.output).toContain('Written into your files (no commit)');
+    expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('after\n'); expect(await readFile(join(f.project, 'added.txt'), 'utf8')).toBe('new\n');
+    await expect(readFile(join(f.project, 'removed.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await f.refs()).toEqual(before); expect(await f.git('rev-parse', 'HEAD')).toBe(head); expect(await readFile(join(f.project, '.git/index'))).toEqual(index);
+  });
+
   it('n writes nothing: no candidate, no reference, no object', async () => {
     const f = await fixture(), before = await f.refs(), source = await f.source();
     const result = await inPty(f.project, f.options.env, 'window', [...opening, ...decide('n'), ['Delivery left waiting: Ship useful change', '']]);
