@@ -9,7 +9,8 @@ import { ErrorRegistry } from '#platform/index.js';
  */
 /** `delivered` (BeUser M-25/DR2-07): the task's result is already at its delivery ref and not adopted; the window offers the adoption step only. */
 /** `setAside` (BeUser M-33): a set-aside row in /deliver carrying its own title; opening it brings the result back first. */
-export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string }>;
+/** `request`: the task's request as the Run recorded it (L1c: `r` on a working-tree conflict prepares `/do <request>`). */
+export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string; request?: string }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /**
  * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
@@ -49,8 +50,6 @@ export interface TerminalDeliveryPort {
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
   previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
-  /** Whether deliveries write into the project's files (then a delivered result is finished: no adoption step is offered). */
-  workingTree?(): Promise<boolean>;
   /** BeUser M-32: the retained patch's read-only per-file diffs without the integration check, so a refused check still shows what the worker changed. */
   patchOnly?(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card); the Run view then says `set-aside`. */
@@ -108,7 +107,7 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
       const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
       if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
       const key = `${run.scopeId}:${run.runId}:${task.id}`, title = instruction.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle;
-      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, ...(aside ? { setAside: title } : {}) }));
+      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(aside ? { setAside: title } : {}) }));
     }
   }
   return Object.freeze([...targets.values()]);

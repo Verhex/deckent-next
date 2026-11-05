@@ -64,9 +64,12 @@ export function workingTreeDeliveryAuthorization(attempts: DispatchIdentityAutho
   return { async authorizeIdentity(action, identity, principal) {
     await attempts.authorizeIdentity(action, identity, principal);
     if (action !== 'deliver-integration') return;
-    let denied;
-    try { denied = matchingRuleIds(await source.load(), { principal, action: 'deliver-working-tree', scopeId: identity.scopeId, resource: { kind: policyResources.attempt.kind, id: identity.attemptId } }, 'deny'); }
+    // L1c: a company `require-approval` here would need a second approver this delivery has no path for: refused typed, never ignored.
+    let denied, asked;
+    try { const policy = await source.load(), request = { principal, action: 'deliver-working-tree', scopeId: identity.scopeId, resource: { kind: policyResources.attempt.kind, id: identity.attemptId } };
+      denied = matchingRuleIds(policy, request, 'deny'); asked = matchingRuleIds(policy, request, 'require-approval'); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     if (denied.length) throw new PolicyAuthorizationError('DELIVERY_WORKING_TREE_DENIED');
+    if (asked.length) throw new PolicyAuthorizationError('DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED');
   } };
 }

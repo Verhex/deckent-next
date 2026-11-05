@@ -16,6 +16,7 @@
   "cli.task.integration.delivered": "Delivered commit {commit} at {ref}. Source HEAD, index and working files are unchanged.",
   "cli.task.integration.adopted": "Adopted: {ref} moved from {from} to {to} (sequence {sequence}). Basis: recorded Task acceptance, not verification; checkout, index and working files are unchanged.",
   "cli.task.integration.rolledBack": "Rolled back: {ref} moved from {from} to {to} (sequence {sequence}). Checkout, index and working files are unchanged.",
+  "cli.task.integration.filesRolledBack": "Put back: {count} file(s) are as they were before the delivery ({files}). No commit, branch or index changed.",
   "cli.task.integration.adoptedVerified": "Adopted: {ref} moved from {from} to {to} (sequence {sequence}). Verified by Run {run} ({kind}, attempt {attempt}) on this commit; checkout, index and working files are unchanged.",
   "cli.task.patch.scope.directoryHint": "Did you mean {suggested} instead of {declared}? A directory must be declared with /**; this suggestion does not change the task's scope.",
   "queue.cli.summary.enqueue": "Queue an accepted Attempt for delivery to a target",

@@ -7,6 +7,11 @@ import { createDeliveryRun, deliverConfiguredWorkspaceIntegration, evaluateTask,
 import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { DockerSupervisor, type SqliteAttemptStore } from '#adapters/index.js';
+import { createHash } from 'node:crypto';
+import { lstat } from 'node:fs/promises';
+import { deliveryDismissalEvent } from '#engine/index.js';
+import { evaluateConfiguredTask, runBaseSettled } from '../../../src/composition/core/runs/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '../../../src/composition/core/scoped-request/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { readyDeliveryFixture, type FixtureTracker } from '../support/workspace-patch-fixture.js';
 import { deliveryTerminalCli } from '../support/delivery-cli-terminal.js';
@@ -163,5 +168,27 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(f.runs('w')).toBe(0);
     await f.policy(['execute', 'recover-output']);
     await expect(f.create('v')).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  });
+  it('L1c: a set-aside working-tree result keeps its Run base for the M-33 return window and, brought back, still delivers; then the base goes at once', async () => {
+    // The start sweep's rule (positive evidence only): within the window a set-aside result keeps its base, after it the base goes; unknown keeps it.
+    const now = Date.now(), since = now - 14 * 86_400_000, view = (brief: object, state: object = { kind: 'terminal', outcome: 'completed' }) => ({ state, tasks: [{ id: 't', phase: 'accepted', resultBrief: brief }] });
+    const awaiting = { deliveryOutlook: 'awaiting-delivery', setAside: true };
+    expect([runBaseSettled(view(awaiting), [{ taskId: 't', atMs: now }], since), runBaseSettled(view(awaiting), [{ taskId: 't', atMs: since - 1 }], since),
+      runBaseSettled(view({ ...awaiting, setAside: false }), [], since), runBaseSettled(view({}), [], since), runBaseSettled(view({ runDelivery: { state: 'delivered' } }), [], since),
+      runBaseSettled(view({}, { kind: 'terminal', outcome: 'cancelled' }), [], since), runBaseSettled(view({ deliveryOutlook: 'none' }, { kind: 'running' }), [], since)])
+      .toEqual([false, true, false, false, true, true, false]);
+    // On the real composition: a finished working-tree Run set aside and brought back delivers into the files; that delivery removes its base.
+    const f = await readyDeliveryFixture(track, { deliveryMode: 'working-tree' }); await f.policy(['read-output', 'prepare-integration', 'deliver-integration', 'evaluate']);
+    await evaluateConfiguredTask(f.project, { schemaVersion: 1, commandId: 'eval', identity: f.identity, expectedRevision: (await f.runtime.store.loadRun('s', 'r'))!.revision }, f.options);
+    expect((await f.runtime.store.loadRun('s', 'r'))!.state.kind).toBe('terminal');
+    const base = join(productResourcePath(f.runtime.layout, 'workspaces'), 'run-bases', createHash('sha256').update(JSON.stringify({ scopeId: 's', runId: 'r' })).digest('hex'));
+    const c = await loadConfiguredScopeContext(f.project, 's', f.options, 'write');
+    for (const action of ['dismiss', 'restore'] as const) await withScopeAudit(c, audit => audit.record(deliveryDismissalEvent({ scopeId: 's', runId: 'r', taskId: f.identity.taskId,
+      attemptId: f.identity.attemptId, action, principal: c.principal, policyRevision: c.document.revision, atMs: Date.now() })));
+    expect((await lstat(base)).isDirectory()).toBe(true); await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
+    const delivered = await deliveryTerminalCli(f.project, f.options.env, ['task', 'integration-deliver', '--scope', 's', '--run', 'r', '--task', f.identity.taskId, '--attempt', f.identity.attemptId,
+      '--generation', String(f.identity.generation), '--layout-revision', f.identity.layoutRevision, '--command-id', 'delivery', '--candidate-command-id', 'candidate', '--json'], 'y');
+    expect(delivered.exit, delivered.output).toBe(0); expect(JSON.parse(delivered.stdout)).toMatchObject({ status: 'working-tree-delivered' });
+    await expect(lstat(base)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

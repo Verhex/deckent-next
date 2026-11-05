@@ -16,6 +16,7 @@
   "cli.task.integration.delivered": "Commit {commit}, {ref} referansına teslim edildi. Kaynak HEAD, index ve çalışma dosyaları değişmedi.",
   "cli.task.integration.adopted": "Benimsendi: {ref}, {from} → {to} taşındı (sıra {sequence}). Dayanak: kayıtlı görev kabulü, doğrulama değil; checkout, index ve çalışma dosyaları değişmedi.",
   "cli.task.integration.rolledBack": "Geri alındı: {ref}, {from} → {to} taşındı (sıra {sequence}). Checkout, index ve çalışma dosyaları değişmedi.",
+  "cli.task.integration.filesRolledBack": "Geri kondu: {count} dosya teslimden önceki hâlinde ({files}). Commit, dal ya da index değişmedi.",
   "cli.task.integration.adoptedVerified": "Benimsendi: {ref}, {from} → {to} taşındı (sıra {sequence}). Bu commit üzerinde iş {run} ({kind}, deneme {attempt}) ile doğrulandı; checkout, index ve çalışma dosyaları değişmedi.",
   "cli.task.patch.scope.directoryHint": "{declared} yerine {suggested} mi demek istediniz? Bir dizin /** ile bildirilmelidir; bu öneri görevin kapsamını değiştirmez.",
   "queue.cli.summary.enqueue": "Kabul edilen denemeyi hedefe teslim için sıraya al",

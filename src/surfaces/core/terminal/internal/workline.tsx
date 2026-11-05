@@ -260,7 +260,7 @@ export function WorklineApp(props: WorklineProps) {
   const completion = useRunCompletion({ limit: props.maxTrackedRuns, labels: labels.work?.jobs, ledger, pollMs, refused: completionRefused, push, errorText });
   const trackedRuns = useMemo(() => completion.tracked.map(item => item.run), [completion.tracked]);
   const deliveries = useDeliveryWindows({ port: props.delivery?.port, labels: labels.delivery, runs: trackedRuns, summary: (text, level) => push([systemSummaryEntry(text, level)]),
-    errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0 });
+    errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0, redo: text => setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })) });
   const workNote = useRef({ active: activeDo, runs: completion.tracked, deliveries: deliveries.pending });
   workNote.current = { active: activeDo, runs: completion.tracked, deliveries: deliveries.pending };
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
@@ -501,7 +501,8 @@ export function WorklineApp(props: WorklineProps) {
         if (result.run) completion.register(result.run);
         setPlanning(false); onboarding.settled(execution.input.inputId);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
-        if (!isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval) {
+        // L1c: a plan whose basis changed while its card was open (the person's mode) comes back with a fresh card; the person decides on that one.
+        for (let cards = 0; cards < 3 && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; cards++) {
           const expiresAtMs = result.proposal.approval.expiresAt;
           setActiveDo(current => current && { ...current, phase: 'waiting', expiresAtMs });
           await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, props.doPlan.lines(result).join('\n'));

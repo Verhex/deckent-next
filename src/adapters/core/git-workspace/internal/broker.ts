@@ -15,8 +15,9 @@ const SOURCE_BASE_NAME = new RegExp(`^${format.sourceBase.replace('.', '\\.')}[0
 export type { GitWorkspaceOptions } from '#engine/index.js';
 export interface GitWorkspaceLease extends WorkspaceLease { readonly sourceBase: GitSourceBase }
 /** Owner 2026-11-05 (R9n): the one private base repository of a Run (Deckent-owned, beside the attempt clones). */
+export const runBasesRoot = (workspaceRoot: string) => join(workspaceRoot, format.runBases);
 export const runBaseRepository = (workspaceRoot: string, run: Readonly<{ scopeId: string; runId: string }>) =>
-  join(workspaceRoot, format.runBases, createHash('sha256').update(JSON.stringify({ scopeId: run.scopeId, runId: run.runId })).digest('hex'));
+  join(runBasesRoot(workspaceRoot), createHash('sha256').update(JSON.stringify({ scopeId: run.scopeId, runId: run.runId })).digest('hex'));
 function code(error: unknown): unknown { return error && typeof error === 'object' && 'code' in error ? error.code : null; }
 /** Lease records are custody evidence: file data and the directory entry are flushed before the step that relies on them. */
 async function syncPath(path: string, directory = false) {
@@ -114,7 +115,9 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       const source = gitSourcePreimageSchema.parse({ schemaVersion: 1, sourceRoot: canonicalSource, repositoryRoot: canonicalRepository });
       const revision = explicitCommit === undefined ? `${this.options.baseRef ?? 'HEAD'}^{commit}` : `${explicitCommit}^{commit}`;
       if (this.privateSource && explicitCommit !== this.privateSource.baseCommit) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
-      const objectSource = this.privateSource?.repositoryRoot ?? this.runBase ?? canonicalSource; await this.checkedDirectory(objectSource);
+      const objectSource = this.privateSource?.repositoryRoot ?? this.runBase ?? canonicalSource;
+      // L1c: a settled Run's private base is removed (finished, set aside or closed); its later use is a typed refusal, never a bare filesystem error.
+      await this.checkedDirectory(objectSource).catch((error: unknown) => { throw objectSource === this.runBase && code(error) === 'ENOENT' ? new WorkspaceError('WORKSPACE_RUN_BASE_REMOVED') : error; });
       const commit = await this.git(temporary, ['-C', objectSource, 'rev-parse', '--verify', revision], true);
       if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspaceError('WORKSPACE_GIT_FAILED');
       if (explicitCommit !== undefined && commit !== explicitCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');

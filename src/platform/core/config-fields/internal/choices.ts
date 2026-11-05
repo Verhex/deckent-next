@@ -103,6 +103,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'execution.retention.schemaVersion': { kind: 'schema' },
   'execution.retention.release': { kind: 'schema' },
   'execution.retention.sweepLimit': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
+  'execution.retention.setAsideDays': { kind: 'numeric', unit: 'days', step: 1, presets: [1, 3, 7, 14, 30, 90, 365] },
   'execution.secretGate.schemaVersion': { kind: 'schema' },
   'execution.secretGate.allowPatternPaths': { kind: 'document' },
   'execution.secretGate.acknowledgedDenyPaths': { kind: 'document' },

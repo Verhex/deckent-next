@@ -55,10 +55,11 @@ export function deliveryMode(execution: Readonly<{ deliveryMode?: 'reference' | 
 }
 /** EXEC-RELEASE (owner 2026-10-01 D8 A): when Deckent reclaims an attempt's stopped container and Git clone. `after-retained-patch`
  * releases only once the attempt's verified patch is retained (patch preparation, then the bounded service-start sweep); `keep` never
- * releases. `sweepLimit` bounds release attempts per scope at each service start. Versioned; unknown keys stay refused. */
+ * releases. `sweepLimit` bounds release attempts per scope at each service start. `setAsideDays` (L1c): how long a set-aside working-tree result
+ * keeps its Run's private base so it can be brought back and delivered (M-33); the start sweep removes it after. Versioned; unknown keys stay refused. */
 export const EXECUTION_RETENTION_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); },
   get release() { return z.enum(['after-retained-patch', 'keep']).prefault('after-retained-patch'); },
-  get sweepLimit() { return persistedInteger().positive().max(10_000).prefault(16); } });
+  get sweepLimit() { return persistedInteger().positive().max(10_000).prefault(16); }, get setAsideDays() { return persistedInteger().positive().max(3650).prefault(14); } });
 /** S6 (owner 2026-10-14): the pre-dispatch secret gate over the tree a worker receives. The deny paths and the content rules are not
  * configurable here (the Core credential floor and the redaction table's `gate` rows). Two small, explicit acknowledgements, empty by default:
  * `allowPatternPaths` lifts content-pattern hits under these workspace-relative globs (test fixtures); `acknowledgedDenyPaths` lifts the

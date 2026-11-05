@@ -137,8 +137,18 @@ it.each(['graph', 'run', 'actor', 'layout', 'policy'] as const)('approve-card-th
   if (changed === 'actor') f.state.principal = { ...actor, id: 'another', subject: 'another' };
   if (changed === 'layout') f.state.layout = 'another-layout';
   if (changed === 'policy') f.state.revision = 'p2';
-  await expect(f.app().create(altered)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); noEffects(f);
-  expect(f.approvals.list('s', null, 10)).toHaveLength(1);
+  // L1c: the same plan with a changed basis (policy/bindings revision, as a mode change makes, or layout) gets a fresh card; the old decision stays unused.
+  const superseded = changed === 'policy' || changed === 'layout', first = f.approvals.list('s', null, 10)[0]!;
+  await expect(f.app().create(altered)).rejects.toMatchObject({ code: superseded ? 'RUN_APPROVAL_REQUIRED' : 'APPROVAL_CONFLICT' }); noEffects(f);
+  expect(f.approvals.list('s', null, 10)).toHaveLength(superseded ? 2 : 1); if (!superseded) return;
+  const fresh = f.approvals.findRunCreate('s', 'create')!; expect([fresh.status, fresh.request.approvalId === first.request.approvalId]).toEqual(['pending', false]);
+  expect(f.approvals.load('s', first.request.approvalId)!.status).toBe('decided'); // an allowed old card stays as history (retired, cannot admit)
+  // A still pending card whose basis changes again ends expired (never answerable); the third card is the one the person decides.
+  if (changed === 'policy') f.state.revision = 'p3'; else f.state.layout = 'third-layout';
+  await expect(f.app().create(altered)).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' }); expect(f.approvals.load('s', fresh.request.approvalId)!.status).toBe('expired');
+  const third = f.approvals.findRunCreate('s', 'create')!;
+  await f.approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: third.request.approvalId, commandId: 'decide-fresh', expectedRevision: 0, decision: 'allow', reason: 'Reviewed the redrawn card' });
+  expect((await f.app().create(altered)).run.authority!.approval!.approvalId).toBe(third.request.approvalId);
 });
 it('deny-card-then-assert: a denied request creates no Run', async () => {
   const f = await fixture(); await pending(f); await f.decide('deny');

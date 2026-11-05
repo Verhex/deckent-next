@@ -350,7 +350,10 @@ exactly as before. **Ceiling.** When the run-create card is required, admission 
 `{ mode: standart|full-auto, askEdits }` (full access is recorded as full-auto only while the company full-auto grant allows it, else
 standart): the plan card shows it (`approval.plan.workerMode`), and it sits in the admission basis that the authority decision seals
 and the card's approval binds. A mode change after the card was drawn changes the effective `policy+bindings` revision, so the
-approved card no longer admits the Run (`APPROVAL_CONFLICT`). The shown mode and the recorded mode are therefore the same. A Run
+unused card (pending or allowed) cannot admit the Run: it is retired and a fresh card with the new basis and mode line is opened for the
+same plan (alpha.63 L1c, `RunCreateApprovalBroker` + `supersedeRunCreate`); the terminal shows it in the same /do flow and the person decides
+there, so the Run is never dropped silently. A changed graph, Run, requester, or a denied card still refuse (`APPROVAL_CONFLICT`/`APPROVAL_DENIED`).
+The shown mode and the recorded mode are therefore the same. A Run
 admitted without a card (policy allow, CLI/SDK), an AI-created Run and any older Run record no ceiling. Their worker follows the
 person's current effective mode, as before. On every call with a ceiling, the person's current mode is recomputed (stored full
 access capped at full-auto under `fullAutoGrant` on that snapshot, else standart). The mode applied is the lower of the two;

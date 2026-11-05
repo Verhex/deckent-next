@@ -121,7 +121,6 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       return Object.freeze({ target, identity, ...patchStat(patch.changes, renderUnifiedDiff), diffs: patchDiffs(patch.changes, renderUnifiedDiff), source: '', base: patch.baseCommit,
         proposal: '', outOfScope: [], adoptionTargets: [], verification: null, ...(workingTreeSource(patch.source) ? { workingTree: true as const } : {}) });
     },
-    async workingTree() { return deliveryMode((await loadConfig(root, options)).execution) === 'working-tree'; },
     // BeUser M-25/DR2-07: an already-delivered result needs only its attempt, its changed files and the configured adoption step.
     async previewDelivered(target) { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const patch = await previewWorkspacePatch(root, identity, options).then(preview => preview.patch, () => null), bar = config.execution?.adoption.verification;

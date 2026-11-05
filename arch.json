@@ -2308,7 +2308,8 @@
         "src/domain/core/effect",
         "src/capabilities/core/artifacts",
         "src/engine/core/runs",
-        "src/adapters/core/native-cli-worker"
+        "src/adapters/core/native-cli-worker",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -2338,7 +2339,8 @@
         "src/engine/core/delivery-summary",
         "src/engine/core/audit",
         "src/engine/core/runtime",
-        "src/adapters/core/native-cli-worker"
+        "src/adapters/core/native-cli-worker",
+        "src/engine/core/working-tree-rollback"
       ],
       "plan": "ISOLATION"
     },
@@ -3735,7 +3737,8 @@
         "src/surfaces/core/terminal-delivery",
         "src/engine/core/effect",
         "src/engine/core/delivery-summary",
-        "src/surfaces/core/delivery-summary"
+        "src/surfaces/core/delivery-summary",
+        "src/engine/core/working-tree-rollback"
       ],
       "plan": "SURFACES"
     },
@@ -5137,6 +5140,20 @@
         "src/platform/core/utils"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/engine/core/working-tree-rollback": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/platform/core/clock",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/effect",
+        "src/engine/core/workspace-patch"
+      ],
+      "plan": "ISOLATION"
     }
   },
   "composition": {
@@ -5171,9 +5188,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 41910,
+      "adapters": 42008,
       "surfaces": 45000,
-      "composition": 13408
+      "composition": 13465
     },
     "totalSrcLines": 200000,
     "testCases": 8200,

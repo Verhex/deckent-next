@@ -3,7 +3,7 @@ export { gitDockerAttemptCustody } from './internal/custody.js';
 export { GitIntegrationTarget } from './internal/integration-target.js';
 export { GitIntegrationDelivery } from './internal/delivery.js';
 export { GitWorkingTreeDelivery } from './internal/working-tree.js';
-export { captureWorkingTreeBase, type WorkingTreeBase } from './internal/working-tree-base.js';
+export { captureWorkingTreeBase, removeRunBase, sweepRunBases, type WorkingTreeBase } from './internal/working-tree-base.js';
 export { GitIntegrationAdoption } from './internal/adoption.js';
 export { GIT_QUEUE_DISPLAY, GitQueueTarget } from './internal/queue-target.js';
 export { gitQueueCandidateSource } from './internal/queue-source.js';

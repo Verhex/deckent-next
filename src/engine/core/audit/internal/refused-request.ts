@@ -33,6 +33,13 @@ export function deliveryDismissalEvent(input: { readonly scopeId: string; readon
   return auditEventSchema.parse({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId,
     principal: { issuer: input.principal.issuer, subject: input.principal.subject }, policyRevision: input.policyRevision, atMs: input.atMs, subject });
 }
+/** L1c: the sealed event of a person putting back the files a working-tree delivery wrote. */
+export function deliveryRollbackEvent(input: { readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly policyRevision: string; readonly atMs: number;
+  readonly identity: Readonly<{ runId: string; taskId: string; attemptId: string }>; readonly deliveryCommandId: string; readonly commandId: string; readonly paths: number }): AuditEvent {
+  return auditEventSchema.parse({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId, principal: { issuer: input.principal.issuer, subject: input.principal.subject },
+    policyRevision: input.policyRevision, atMs: input.atMs, subject: { kind: 'delivery-rolled-back', runId: input.identity.runId, taskId: input.identity.taskId, attemptId: input.identity.attemptId,
+      deliveryCommandId: input.deliveryCommandId, commandId: input.commandId, paths: input.paths } });
+}
 /** The tasks of one scope whose latest dismissal record is `dismiss` (newest records first, at most `limit` read). */
 export function dismissedDeliveries(audit: AuditApplication, scopeId: string, limit: number): readonly Readonly<{ runId: string; taskId: string; atMs: number }>[] {
   const latest = new Map<string, Readonly<{ runId: string; taskId: string; atMs: number; action: string }>>();

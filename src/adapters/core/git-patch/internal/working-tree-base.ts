@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
-import { runBaseRepository, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
+import { runBaseRepository, runBasesRoot, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { isPatchExcluded, SnapshotBudget, WorkspacePatchError, type PatchLimits } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
 import { copyPrivateCommit } from './copy-private.js';
 import { readTreeFile } from './working-tree.js';
 import format from './working-tree-format.json' with { type: 'json' };
 const recordSchema = z.strictObject({ schemaVersion: z.literal(1), commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/), count: z.number().int().nonnegative(),
-  excluded: z.array(z.strictObject({ path: z.string().min(1), rule: z.string().min(1) }).readonly()).readonly() }).readonly();
+  excluded: z.array(z.strictObject({ path: z.string().min(1), rule: z.string().min(1) }).readonly()).readonly(),
+  /** L1c: the Run the repository belongs to (the start sweep reads it; a record without it is never removed by the sweep). */
+  run: z.strictObject({ scopeId: z.string().min(1), runId: z.string().min(1) }).readonly().optional() }).readonly();
 export type WorkingTreeBase = z.infer<typeof recordSchema> & Readonly<{ options: GitWorkspaceOptions }>;
 const code = (error: unknown) => (error as { code?: unknown } | null)?.code;
 /** Why a path was not read: what the descriptor-relative reader refused, named from its (non-followed) directory entry. */
@@ -31,13 +33,17 @@ async function unsafeKind(path: string) {
  */
 export async function captureWorkingTreeBase(options: GitWorkspaceOptions, run: Readonly<{ scopeId: string; runId: string }>, limits: PatchLimits,
   deny: (path: string) => string | null): Promise<WorkingTreeBase> {
+  if (process.platform !== 'linux') throw new WorkspacePatchError('PATCH_WORKING_TREE_UNSUPPORTED'); // descriptor-relative reads need /proc: never a silently empty base
   const repository = runBaseRepository(options.workspaceRoot, run), recorded = async () => ({ ...recordSchema.parse(JSON.parse(await readFile(join(repository, format.base), 'utf8'))), options: { ...options, runBase: repository } });
   try { return await recorded(); } catch (error) { if (code(error) !== 'ENOENT') throw new WorkspacePatchError('PATCH_CORRUPT'); }
   const source = new GitCommand(options), deadline = Date.now() + options.timeoutMs, list = (output: string) => output.split('\0').filter(Boolean);
-  if (await realpath(await source.run(['rev-parse', '--show-toplevel'])) !== await realpath(options.sourceRoot)) throw new WorkspacePatchError('PATCH_UNSAFE');
+  // Typed and permanent (never retried): a subfolder project (Git lists paths from the top folder) and an unignored file list over `outputBytes`.
+  if (await realpath(await source.run(['rev-parse', '--show-toplevel'])) !== await realpath(options.sourceRoot)) throw new WorkspacePatchError('PATCH_WORKING_TREE_SUBFOLDER');
+  const listed = (args: string[]) => source.run(args).then(list, (error: unknown) => {
+    throw error instanceof WorkspacePatchError && error.detail === 'git-output' ? new WorkspacePatchError('PATCH_WORKING_TREE_LISTING_LIMIT', undefined, { limit: options.outputBytes, maxEntries: limits.maxEntries }) : error; });
   const head = await source.run(['rev-parse', '--verify', 'HEAD^{commit}']);
-  const tracked = new Set(list(await source.run(['diff-index', '-z', '--name-only', '--no-renames', '--ignore-submodules', head, '--'])));
-  const paths = [...new Set([...tracked, ...list(await source.run(['ls-files', '-z', '--others', '--exclude-standard']))])].sort();
+  const tracked = new Set(await listed(['diff-index', '-z', '--name-only', '--no-renames', '--ignore-submodules', head, '--']));
+  const paths = [...new Set([...tracked, ...await listed(['ls-files', '-z', '--others', '--exclude-standard'])])].sort();
   await mkdir(dirname(repository), { recursive: true, mode: 0o700 });
   const temporary = join(dirname(repository), `.${randomUUID()}`), index = join(temporary, format.baseIndex);
   try {
@@ -64,9 +70,46 @@ export async function captureWorkingTreeBase(options: GitWorkspaceOptions, run: 
     const tree = await base.run(['write-tree'], '', index, deadline);
     const commit = tree === await base.run(['rev-parse', `${head}^{tree}`]) ? head : await base.run(['commit-tree', tree, '-p', head], format.baseMessage, undefined, deadline);
     await base.run(['update-ref', '--no-deref', 'HEAD', commit]); await rm(index);
-    await writeFile(join(temporary, format.base), JSON.stringify({ schemaVersion: 1, commit, count: excluded.length, excluded }), { flag: 'wx', mode: 0o600 });
+    await writeFile(join(temporary, format.base), JSON.stringify({ schemaVersion: 1, commit, count: excluded.length, excluded, run: { scopeId: run.scopeId, runId: run.runId } }), { flag: 'wx', mode: 0o600 });
     // A concurrent first attempt of the same Run that won keeps its base; this one is discarded.
     await rename(temporary, repository).catch((error: unknown) => { if (code(error) !== 'ENOTEMPTY' && code(error) !== 'EEXIST') throw error; });
   } finally { await rm(temporary, { recursive: true, force: true }); }
   return recorded();
+}
+
+type RunRef = Readonly<{ scopeId: string; runId: string }>;
+const TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+/** A directory Deckent made here: real (no link), owned by this uid, private (no group/other bits); null when absent. Anything else is PATCH_UNSAFE (kept). */
+async function privateDirectory(path: string) {
+  const stat = await lstat(path).catch((error: unknown) => { if (code(error) === 'ENOENT') return null; throw error; });
+  if (stat && (!stat.isDirectory() || stat.uid !== process.getuid!() || stat.mode & 0o077 || await realpath(path) !== path)) throw new WorkspacePatchError('PATCH_UNSAFE');
+  return stat;
+}
+/**
+ * L1c: a settled Run's private base repository is Deckent data and goes: verified (private, owned, under `run-bases`, its base record naming this Run),
+ * detached by one rename into a temporary name, then removed recursively. Never a path outside `run-bases`; the person's repository is never touched.
+ */
+export async function removeRunBase(workspaceRoot: string, run: RunRef): Promise<'removed' | 'absent'> {
+  const repository = runBaseRepository(workspaceRoot, run);
+  if (!await privateDirectory(repository)) return 'absent';
+  const record = recordSchema.safeParse(JSON.parse(await readFile(join(repository, format.base), 'utf8').catch(() => 'null')));
+  if (!record.success || record.data.run?.scopeId !== run.scopeId || record.data.run.runId !== run.runId) throw new WorkspacePatchError('PATCH_UNSAFE');
+  const detached = join(dirname(repository), `.${randomUUID()}`); await rename(repository, detached); await rm(detached, { recursive: true, force: true });
+  return 'removed';
+}
+/** L1c start sweep: crash remnants (`.<uuid>` temporaries of a capture or a removal) older than `staleAfterMs` are removed (verified private, owned);
+ * the Runs of recorded bases are returned (at most `limit`) for the caller's ledger check. A missing `run-bases` is an empty sweep. */
+export async function sweepRunBases(workspaceRoot: string, gitTimeoutMs: number, limit: number) {
+  const staleAfterMs = format.baseStaleAfterGitTimeouts * gitTimeoutMs; // a capture makes a bounded number of Git calls, each within `timeoutMs`
+  const root = runBasesRoot(workspaceRoot), runs: RunRef[] = []; let removed = 0, kept = 0;
+  for (const name of await readdir(root).catch((error: unknown) => { if (code(error) === 'ENOENT') return [] as string[]; throw error; })) {
+    const path = join(root, name);
+    try {
+      if (TEMPORARY.test(name)) { const stat = await privateDirectory(path); if (stat && stat.mtimeMs < Date.now() - staleAfterMs && removed < limit) { await rm(path, { recursive: true, force: true }); removed++; } else kept++; continue; }
+      if (runs.length >= limit || !/^[0-9a-f]{64}$/u.test(name) || !await privateDirectory(path)) continue;
+      const record = recordSchema.safeParse(JSON.parse(await readFile(join(path, format.base), 'utf8')));
+      if (record.success && record.data.run && runBaseRepository(workspaceRoot, record.data.run) === path) runs.push(record.data.run);
+    } catch { kept++; }
+  }
+  return Object.freeze({ removed, kept, runs: Object.freeze(runs) });
 }

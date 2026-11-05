@@ -1,15 +1,15 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
-  GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
+  GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
-  targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
+  targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
 
 const exec = promisify(execFile), roots: string[] = [];
@@ -406,6 +406,26 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     await f.deliver(workspacePatchSchema.parse({ ...f.patch('r9n', 'a.txt', 'a before\nikinci satır\n', 'a before\nikinci satır\nworker\n'), baseCommit: base.commit }));
     expect(await readFile(join(s, 'a.txt'), 'utf8')).toBe('a before\nikinci satır\nworker\n'); expect(await readFile(join(s, 'todo.txt'), 'utf8')).toBe('untracked\n');
     expect(await person()).toEqual(before);
+    // L1c: a subfolder project and an unignored file list over `outputBytes` are typed permanent refusals before any private repository exists.
+    const bases = await readdir(join(f.workspaceRoot, 'run-bases')); await mkdir(join(s, 'sub')); await mkdir(join(s, 'build'));
+    for (let index = 0; index < 40; index++) await writeFile(join(s, 'build', `generated-output-file-with-a-long-name-${index}.js`), '');
+    await expect(captureWorkingTreeBase({ ...f.options, sourceRoot: join(s, 'sub') }, { scopeId: 's', runId: 'sub' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_SUBFOLDER' });
+    await expect(captureWorkingTreeBase({ ...f.options, outputBytes: s.length + 200 }, { scopeId: 's', runId: 'big' }, limits, workerTreeDenied))
+      .rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_LISTING_LIMIT', params: { limit: s.length + 200, maxEntries: limits.maxEntries } });
+    expect([classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_SUBFOLDER')).disposition, classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_LISTING_LIMIT')).disposition]).toEqual(['permanent', 'permanent']);
+    expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases); await rm(join(s, 'build'), { recursive: true });
+    // L1c lifecycle: a settled Run's base goes (verified, detached, removed); its later use is typed; a stale capture remnant is swept, a fresh one kept.
+    const stale = join(f.workspaceRoot, 'run-bases', '.00000000-0000-4000-8000-000000000000'), young = join(f.workspaceRoot, 'run-bases', '.00000000-0000-4000-8000-000000000001');
+    await mkdir(join(stale, 'objects'), { recursive: true, mode: 0o700 }); await mkdir(young, { mode: 0o700 }); await utimes(stale, new Date(0), new Date(0));
+    expect(await sweepRunBases(f.workspaceRoot, f.options.timeoutMs, 16)).toEqual({ removed: 1, kept: 1, runs: expect.arrayContaining([{ scopeId: 's', runId: 'r9n' }, { scopeId: 's', runId: 'wt' }]) });
+    expect([await removeRunBase(f.workspaceRoot, { scopeId: 's', runId: 'r9n' }), await removeRunBase(f.workspaceRoot, { scopeId: 's', runId: 'r9n' })]).toEqual(['removed', 'absent']);
+    await expect(new GitWorkspaceBroker(base.options).captureSourceBase()).rejects.toMatchObject({ code: 'WORKSPACE_RUN_BASE_REMOVED' });
+    expect((await readdir(join(f.workspaceRoot, 'run-bases'))).sort()).toEqual([...bases.filter(name => !name.startsWith('.') && name !== base.options.runBase!.split('/').pop()), '.00000000-0000-4000-8000-000000000001'].sort());
+    expect(await person()).toEqual(before);
+    // A non-Linux host is refused before anything is read (no silently empty base).
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!; Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try { await expect(captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'mac' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_UNSUPPORTED' }); }
+    finally { Object.defineProperty(process, 'platform', platform); }
   });
   it('one touched path differing from its base writes nothing (PATCH_CONFLICT before any write)', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n');
@@ -430,6 +450,36 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
     const waiting = f.files.publish(plan, manifest, p); setTimeout(() => void rm(lock, { recursive: true }), 200); await waiting;
     expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a after\n'); expect(await f.files.delivered(plan)).toBe(true);
+    // L1c: a lock whose recorded holder is gone (a crash mid-write) is taken over; its `writing` journal is classified from the files first, never rewritten.
+    await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt2' }, limits, workerTreeDenied);
+    const gone = (await exec('sh', ['-c', 'echo $$'])).stdout.trim(), other = f.patch('wt2', 'b.txt', 'b before\n', 'b after\n'), second = await planned(f, other);
+    const crashed = join(f.workspaceRoot, 'working-tree-deliveries', 'c'.repeat(64)); await mkdir(crashed, { recursive: true }); await mkdir(lock);
+    await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: `refs/deckent/deliveries/${'c'.repeat(64)}` }));
+    await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 1, state: 'writing', paths: ['a.txt', 'old.txt'], written: [],
+      changes: [{ path: 'a.txt', before: patchDigest('a after\n'), after: patchDigest('a third\n') }, { path: 'old.txt', before: patchDigest('remove\n'), after: null }] }));
+    await writeFile(join(f.sourceRoot, 'a.txt'), 'a third\n'); // the crashed delivery wrote a.txt, not yet old.txt: mixed
+    await expect(f.files.publish(second.plan, second.manifest, other)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
+    expect(JSON.parse(await readFile(join(crashed, 'journal.json'), 'utf8'))).toMatchObject({ state: 'partial', written: ['a.txt'] });
+    expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), await readFile(join(f.sourceRoot, 'old.txt'), 'utf8')]).toEqual(['b before\n', 'remove\n']);
+    await f.files.publish(second.plan, second.manifest, other); expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b after\n'); // the lock is free again
+  });
+  it('L1c rollback: the yes puts the delivery\'s originals back with the delivery\'s card and authority; a file changed since is refused and nothing is written', async () => {
+    const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'); p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!);
+    const { record } = await f.deliver(p), receipt = record.intent.patch, clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, cards: import('#engine/index.js').EffectConfirmationView[] = [];
+    const store = { async findDelivery() { return record; }, async loadRun() { return { revision: 1, graph: { tasks: [{ id: 't', acceptanceCriteria: ['exit'] }] }, progress: [{ taskId: 't', phase: 'accepted' }] } as RunSnapshot; } };
+    const app = new WorkingTreeRollbackApplication({ async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; } } as never, f.files, store, await LocalOsSessionAuthority.create(['s'], 10000, clock),
+      { async authorizeIdentity(action) { expect(action).toBe('deliver-integration'); } }, clock, { async assertAvailable() {}, async confirm(card) { cards.push(card); return async () => {}; } });
+    const command = { schemaVersion: 1 as const, commandId: 'undo', identity: p.identity, deliveryCommandId: record.intent.command.commandId };
+    await writeFile(join(f.sourceRoot, 'a.txt'), 'changed by the person\n');
+    await expect(app.rollback(command)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_CHANGED' });
+    expect([await readFile(join(f.sourceRoot, 'a.txt'), 'utf8'), await readFile(join(f.sourceRoot, 'dir/new.txt'), 'utf8')]).toEqual(['changed by the person\n', 'added\n']);
+    await writeFile(join(f.sourceRoot, 'a.txt'), 'a after\n');
+    expect(await app.rollback(command)).toMatchObject({ status: 'working-tree-rolled-back', paths: ['a.txt', 'dir/new.txt'] });
+    expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n'); await expect(readFile(join(f.sourceRoot, 'dir/new.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(cards.at(-1)).toMatchObject({ operation: 'rollback-working-tree', changes: [{ path: 'a.txt', before: patchDigest('a after\n'), after: patchDigest('a before\n') }, { path: 'dir/new.txt', before: patchDigest('added\n'), after: null }] });
+    expect(await app.rollback({ ...command, commandId: 'undo-again' })).toMatchObject({ status: 'working-tree-rolled-back' }); // already back: nothing rewritten
+    await expect(new WorkingTreeRollbackApplication({} as never, f.files, store, await LocalOsSessionAuthority.create(['s'], 10000, clock), { async authorizeIdentity() {} }, clock, undefined).rollback(command))
+      .rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
   });
   it('the mode: live and N1 (work target + adoption targets) stay reference; a project with neither writes its files; an explicit field wins without a work target', async () => {
     const git = { gitExecutable: '/usr/bin/git', timeoutMs: 1000, outputBytes: 65536 }, adoption = { targets: ['refs/heads/deckent/teslim'] };

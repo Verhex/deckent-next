@@ -75,7 +75,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     countMemoryPurgesPending: countConfiguredMemoryPurgesPending,
     ...configuredTargetQueueTerminal(root),
     deliverWorkspaceIntegration: delivery.deliver,
-    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
+    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, rollbackWorkingTreeDelivery: delivery.rollbackFiles, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
     inspectWorkerTranscript: inspectConfiguredWorkerTranscript, executeOperation: executeConfiguredOperation, compensateOperation: compensateConfiguredOperation, inspectOperation: inspectConfiguredOperation,
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration, describeDeliverySummaries: describeConfiguredDeliverySummaries, // TESLIM-KARTI-OZET card summaries
     // OTONOM-TESLIM shadow (B1 store): read only for tickets the service already returned to this person (list/inspect); never on a consent card.

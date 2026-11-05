@@ -25,6 +25,7 @@ export interface DeliveryWindowLabels {
   readonly deliveredTitle: string; readonly adoptNone: string;
   /** R9p working-tree mode: where the yes writes, the confirm line, the result row and summary, and the next step of a file conflict. */
   readonly whereFiles: string; readonly confirmFiles: string; readonly deliveredFiles: string; readonly summaryWritten: string; readonly nextConflictFiles: string;
+  /** L1c (owner "güncel hâle göre yeniden yap sunar"): the `r` hint of a working-tree conflict whose task request the Run recorded. */ readonly redoFiles: string;
   /** BeUser M-33: the x hint, the set-aside summary, a set-aside row in /deliver (`{title}`) and the brought-back summary. */
   readonly dismissHint: string; readonly dismissed: string; readonly dismissedTitle: string; readonly restored: string;
   readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string; readonly summaryNotAdopted: string;
@@ -72,6 +73,8 @@ export interface DeliveryWindowsInput {
   readonly position: string; readonly known?: KnownSecretSnapshot | undefined;
   /** Bounded wait for a fresh `y` on the port's exact card (the session approval time); silence declines. */
   readonly confirmTimeoutMs: number;
+  /** L1c: puts a line into the person's composer (never sends it): `r` on a working-tree conflict prepares `/do <the task's recorded request>`. */
+  readonly redo?: (text: string) => void;
 }
 
 /**
@@ -83,9 +86,7 @@ export interface DeliveryWindowsInput {
 export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const { port, labels } = input;
   const entries = useRef(new Map<string, Entry>()), order = useRef<string[]>([]), seen = useRef(new Set<string>()), deliveredKeys = useRef(new Set<string>());
-  const [, rerender] = useState(0), [files, setFiles] = useState(false);
-  // R9p: in working-tree mode a delivered result is finished (written into the files), so it is never offered for adoption.
-  useEffect(() => { void port?.workingTree?.().then(setFiles, () => undefined); }, [port]);
+  const [, rerender] = useState(0);
   const changed = useCallback(() => rerender(value => value + 1), []);
   const latest = useRef(input); latest.current = input;
   // TESLIM-KARTI-OZET: the ticket's summary follows its last view (read-only; a failed read leaves the status card alone).
@@ -246,6 +247,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
         if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
+        if (text === 'r' && !key.ctrl && !key.meta && redoable(visible) && input.redo) { input.redo(`/do ${visible.target.request}`); close(visible); return true; }
         if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
           if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && QUEUE_REPREPARE.has(stage.code ?? '') && visible.queueBlocked === undefined) prepareCurrent(visible);
           return true;
@@ -314,12 +316,15 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     if (!labels) return [];
     const awaiting = awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered);
     // BeUser M-25/DR2-07: delivered results not adopted yet are offered too (their window opens on the adoption step).
-    return [...awaiting, ...(files ? [] : deliveredTargets([...fresh.values()], labels.fallbackTitle)).filter(target => !entries.current.get(target.key)?.adopted
+    return [...awaiting, ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
       && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
     target: (key: string) => entries.current.get(key)?.target ?? null,
     /** BeUser M-33: the candidates with the set-aside ones (the Run view's `set-aside` outlook) moved last as their own rows. */
-    async offered(targets: readonly DeliveryTarget[]): Promise<readonly DeliveryTarget[]> { if (!labels) return targets;
+    async offered(input: readonly DeliveryTarget[]): Promise<readonly DeliveryTarget[]> { if (!labels) return input;
+      // L1c: a delivered result is offered for adoption only when its own Run delivered a reference (its pinned mode, never today's config); unread keeps it.
+      const kept = await Promise.all(input.map(async target => !target.delivered || !port?.previewDelivered || !(await port.previewDelivered(target).then(view => view.workingTree, () => false))));
+      const targets = input.filter((_, index) => kept[index]);
       return [...targets.filter(target => target.setAside === undefined), ...targets.filter(target => target.setAside !== undefined).map(target => Object.freeze({ ...target, title: fillTemplate(labels.dismissedTitle, { title: target.setAside! }) }))]; } };
 }
 
@@ -327,6 +332,8 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
 const dismissable = (entry: Entry) => !entry.delivered && !entry.target.delivered && (entry.stage.kind === 'ready' || entry.stage.kind === 'failed');
 const withDismiss = (entry: Entry, labels: DeliveryWindowLabels, hints: string, available: boolean) => available && dismissable(entry) ? `${hints} · ${labels.dismissHint}` : hints;
 
+/** A working-tree conflict (the person's files changed while the worker ran) of a task whose request the Run recorded: `r` prepares the same request again. */
+const redoable = (entry: Pick<Entry, 'stage' | 'preview' | 'patch' | 'target'>) => entry.stage.kind === 'failed' && entry.stage.code === 'PATCH_CONFLICT' && !!(entry.preview ?? entry.patch)?.workingTree && !!entry.target.request;
 function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boolean): string {
   switch (entry.stage.kind) {
     case 'queue': return labels.queue?.hints ?? '';
@@ -337,7 +344,8 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
     // The re-prepare key is offered only where `r` acts (the same rule as the key handler); closing stays visible on every failure.
-    case 'failed': if (!entry.preview && entry.patch?.diffs?.length) return entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : labels.failedDiffHints;
+    case 'failed': if (redoable(entry)) return `${labels.redoFiles} · ${labels.failedHints}`;
+      if (!entry.preview && entry.patch?.diffs?.length) return entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : labels.failedDiffHints;
       return labels.queue && queueAvailable && !entry.queue && entry.queueBlocked === undefined && QUEUE_REPREPARE.has(entry.stage.code ?? '')
       ? `${labels.queue.reprepare} · ${labels.failedHints}` : labels.failedHints;
     default: return '';
@@ -383,7 +391,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     }
   }
   if (stage.kind === 'working' || stage.kind === 'adopting') rows.push(line(stage.kind === 'working' ? labels.working : labels.adopting, { role: 'accent' }));
-  if (delivered) rows.push(exact(fillTemplate(preview?.workingTree ? labels.deliveredFiles : labels.delivered, { commit: delivered.commit, ref: delivered.ref, command: delivered.commandId }), { role: 'success' }));
+  if (delivered) rows.push(exact(fillTemplate(preview?.workingTree ? labels.deliveredFiles : labels.delivered, { commit: delivered.commit, ref: delivered.ref, command: delivered.commandId, scope: target.scopeId, run: target.runId, task: target.taskId }), { role: 'success' }));
   if (stage.kind === 'delivered' && preview && delivered) {
     rows.push(line(fillTemplate(labels.adoptPrompt, { commit: delivered.commit.slice(0, 12) }), { bold: true }));
     if (!preview.adoptionTargets.length) rows.push(line(labels.adoptNone, { role: 'muted' }));

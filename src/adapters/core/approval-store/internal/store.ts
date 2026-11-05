@@ -116,6 +116,19 @@ export class SqliteApprovalStore implements ApprovalStore {
       this.event(next); return next;
     });
   }
+  supersedeRunCreate(previous: ApprovalRecord, next: ApprovalRecord): ApprovalRecord {
+    approvalRecordSchema.parse(next);
+    if (approvalSubject(previous.request).kind !== 'run-create' || approvalSubject(next.request).kind !== 'run-create' || next.status !== 'pending' || next.request.scopeId !== previous.request.scopeId
+      || !(previous.status === 'expired' || (previous.status === 'decided' && previous.decision?.decision === 'allow'))) throw new ApprovalError('APPROVAL_CONFLICT');
+    return this.transaction(() => {
+      if (JSON.stringify(this.load(previous.request.scopeId, previous.request.approvalId)) !== JSON.stringify(previous)) throw new ApprovalError('APPROVAL_CONFLICT');
+      if (this.db.prepare('UPDATE approvals SET current=0 WHERE scope_id=? AND approval_id=? AND current=1').run(previous.request.scopeId, previous.request.approvalId).changes !== 1) throw new ApprovalError('APPROVAL_CONFLICT');
+      const r = next.request, [kind, runId, taskId] = this.columns(next);
+      this.db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
+        .run(r.scopeId, r.approvalId, kind, runId, taskId, r.actionDigest, next.revision, JSON.stringify(next));
+      this.event(next); return next;
+    });
+  }
   transition(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalRecord {
     return this.transitionWithSettlement(previous, next, receipt).record;
   }

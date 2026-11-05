@@ -397,6 +397,8 @@ export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   /** BeUser M-33 (owner 2026-10-28, Jev c10e0946): a person sets an accepted task's undelivered result aside (`dismiss`) or brings it back
    * (`restore`); the latest record per task decides whether /deliver and the monitor offer it. Patch and custody are untouched. */
   z.strictObject({ get kind() { return z.literal('delivery-dismissed'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, get action() { return z.enum(['dismiss', 'restore']); } }),
+  /** L1c (lead 2026-11-05): a person put back the files one working-tree delivery wrote (`paths` written back); the ledger delivery stays. */
+  z.strictObject({ get kind() { return z.literal('delivery-rolled-back'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, deliveryCommandId: identitySchema, commandId: identitySchema, paths: counterSchema }),
   z.strictObject({ get kind() { return z.literal('run-request-refused'); }, commandId: identitySchema, requestDigest: digest,
     get title() { return persistedString(z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS)); }, get code() { return z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/); } }),
   /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */

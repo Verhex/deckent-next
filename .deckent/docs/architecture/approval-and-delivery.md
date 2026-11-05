@@ -1205,13 +1205,29 @@ turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-e
 (`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
 also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
 the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by an
-exclusive lock directory in Deckent's workspace root (bounded wait, never broken), and writes nothing to the person's repository: no
+exclusive lock directory in Deckent's workspace root (bounded wait; the lock holds its owner record, and only a holder proven gone by pid and
+start bound is taken over, its journal still `writing` first classified from the files: all `before` = nothing written, all `after` =
+written, a mix = PATCH_WORKING_TREE_PARTIAL with both lists; an ownerless lock is never taken), and writes nothing to the person's repository: no
 reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
 anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
 PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
 `working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`); each write is a same-directory temporary file,
 fsynced, compared once more and renamed; a removal is compared and unlinked; an existing file keeps its permission bits. The trace is the
-Deckent delivery record and that journal. Open: the kept originals are not yet wired to a rollback command.
+Deckent delivery record and that journal.
+
+Rollback (alpha.63 L1c): `deckent task integration-rollback --scope --run [--task]` (no `--adoption-command-id`; the delivered task, its
+attempt and delivery are found as for the light adoption) puts a written delivery's `before` contents back through the same lock and writer
+(`WorkingTreeRollbackApplication`, engine unit `working-tree-rollback`). The same authority (`deliver-integration` plus the
+`deliver-working-tree` lever), session and terminal card as the delivery; the card's `changes` show every path going from `after` back to
+`before`. It writes only while every path still holds the delivery's `after`; a path changed since refuses typed
+(PATCH_WORKING_TREE_CHANGED) and nothing is written. Its journal is `working-tree-deliveries/<id>.rollback/`; a repeat is a no-op; the
+ledger delivery stays delivered and the rollback is sealed as the `delivery-rolled-back` audit event. The terminal's delivered row names the
+command. A company `require-approval` on `deliver-working-tree` is refused typed (DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED): a second
+approver has no path here, and the rule is never ignored.
+
+A working-tree conflict in the delivery window says the person's file changed while the worker ran; `r` puts `/do <the task's recorded
+request>` into the composer (owner "güncel hâle göre yeniden yap sunar"): Enter shows a new plan card, nothing starts by itself. `/deliver`
+offers a delivered result for adoption from its own Run's pinned mode, never from today's config.
 
 ## Working-tree base (R9n, owner 2026-11-05; alpha.63 L1b)
 
@@ -1240,5 +1256,18 @@ Company policy can close file delivery: a deny grant or restriction on the attem
 Run's delivery at every `deliver-integration` check with the typed `DELIVERY_WORKING_TREE_DENIED` (EN/TR text); nothing is written and
 there is no fall back to a reference. The action needs no grant (default open: it rides on `deliver-integration`), so no template version
 or upgrade step exists for it. Reference mode (work target or adoption targets: live and N1) is unchanged: base HEAD of the person's
-repository, adapter version 1. Open (alpha.63 L1b handoff): a Run's private base repository is never removed (a full HEAD history copy
-per working-tree Run), interrupted build directories are not swept, and a project root below its repository root is refused.
+repository, adapter version 1.
+
+Lifecycle and refusals (alpha.63 L1c). A Run's private base is Deckent data (uninstall classifies `workspaces/run-bases`,
+`working-tree-deliveries` and `working-tree-locks` as archive members). It is removed (verified private, owned, its record naming this Run;
+detached by rename, then removed recursively) once nothing of its Run can still be delivered: right after a working-tree delivery of a
+terminal Run whose other accepted tasks with work input have no retained patch, and at service start (bounded by
+`execution.retention.sweepLimit`) for every recorded base whose Run is terminal and settled on positive evidence: closed (not completed), or
+every accepted task delivered, owing nothing, or set aside longer than `execution.retention.setAsideDays` (default 14) ago; an unknown outcome
+keeps it. A set-aside result therefore keeps its base through the M-33 return window: brought back, it still delivers. The same start sweep
+removes capture/removal remnants `run-bases/.<uuid>` older than `baseStaleAfterGitTimeouts` × `execution.git.timeoutMs`. A later use of a
+removed base is the typed WORKSPACE_RUN_BASE_REMOVED with the `/do` next step. A project below its repository's top folder (PATCH_WORKING_TREE_SUBFOLDER), an unignored
+changed/untracked file list over `execution.git.outputBytes` (PATCH_WORKING_TREE_LISTING_LIMIT, naming `.gitignore`) and a non-Linux host
+(PATCH_WORKING_TREE_UNSUPPORTED) refuse the base before anything is read; all three are permanent launch refusals (the attempt closes, no
+retry loop). A subfolder is refused rather than supported: Git lists changed paths from the top folder while the reader, writer and patch
+paths are rooted at the project folder, so support needs a path-prefix mapping through every site.

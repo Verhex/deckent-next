@@ -15,7 +15,7 @@ import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRu
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
 import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
-import { sweepConfiguredAttemptCustody } from '#composition/core/runs/index.js';
+import { sweepConfiguredAttemptCustody, sweepConfiguredRunBases } from '#composition/core/runs/index.js';
 import { releaseConfiguredPreflightProbes } from '#composition/core/execution/index.js';
 import { startToolchainRefresh, type ToolchainRefreshDependencies, type ToolchainRefreshObserver } from '#composition/core/toolchains/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
@@ -99,7 +99,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const auditMonitor = new AuditCheckpointMonitor(() => checkpointConfiguredAudit(projectRoot, installation.status === 'available' ? installation.value.installationId : null, options),
     status => observer.onAuditIntegrity?.(status)); await auditMonitor.check();
   await interruptAgentTurnsAtStart(config, observer, guard.custodyId, options);
-  const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody); /* REVISE 2691: no probe is live at a start; this installation's leftover probe containers are removed (proven) or reported. */ const probes = await releaseConfiguredPreflightProbes(projectRoot, options).catch(() => ({ removed: 0, unsettled: [], unlisted: true as const })); if (probes && (probes.removed || probes.unsettled.length || 'unlisted' in probes || ('released' in probes && (probes.released || probes.held.length)))) await observer.onPreflightProbesSwept?.(probes);
+  const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody); /* L1c: settled working-tree Run bases */ await sweepConfiguredRunBases(projectRoot, [...scopes?.pins.keys() ?? []], options).catch(() => null); /* REVISE 2691: no probe is live at a start; this installation's leftover probe containers are removed (proven) or reported. */ const probes = await releaseConfiguredPreflightProbes(projectRoot, options).catch(() => ({ removed: 0, unsettled: [], unlisted: true as const })); if (probes && (probes.removed || probes.unsettled.length || 'unlisted' in probes || ('released' in probes && (probes.released || probes.held.length)))) await observer.onPreflightProbesSwept?.(probes);
   /* SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held). The one scratch custody of this service: start sweep, periodic sweep and turns claim and hold areas through it (Astra 2149). */ const scratchRoot = await scratchResource(config.productLayout), scratchLimits = readTerminalScratchConfig(config as unknown as Record<string, unknown>);
   const scratchActivity = createScratchActivity();
   const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), scratchActivity) : null;

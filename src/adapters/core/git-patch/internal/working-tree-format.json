@@ -2,10 +2,13 @@
   "schemaVersion": 1,
   "deliveries": "working-tree-deliveries",
   "locks": "working-tree-locks",
+  "lockOwner": "owner-",
   "journal": "journal.json",
   "original": "original-",
+  "rollback": ".rollback",
   "lockPollMs": 50,
   "base": "deckent-base.json",
   "baseIndex": "deckent-index",
-  "baseMessage": "Deckent: the project's current files (working-tree base of one Run)\n"
+  "baseMessage": "Deckent: the project's current files (working-tree base of one Run)\n",
+  "baseStaleAfterGitTimeouts": 10
 }

@@ -90,6 +90,9 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const grants = JSON.parse(await readFile(productResourcePath(f.runtime.layout, 'policy'), 'utf8'));
     await writeFile(productResourcePath(f.runtime.layout, 'policy'), JSON.stringify({ ...grants, restrictions: [{ id: 'no-files', actions: ['deliver-working-tree'], scopes: 'all', principals: 'all', resource: { kind: 'attempt', ids: 'all' } }] }), { mode: 0o600 });
     await expect(deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'denied', identity: f.identity, integrationCommandId: 'candidate' }, f.options)).rejects.toMatchObject({ code: 'DELIVERY_WORKING_TREE_DENIED' });
+    // L1c: a company require-approval on it has no approval path here: a typed refusal, never silently ignored.
+    await writeFile(productResourcePath(f.runtime.layout, 'policy'), JSON.stringify({ ...grants, grants: [...grants.grants, { id: 'ask-files', effect: 'require-approval', actions: ['deliver-working-tree'], scopes: 'all', principals: 'all', resource: { kind: 'attempt', ids: 'all' } }] }), { mode: 0o600 });
+    await expect(deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'asked', identity: f.identity, integrationCommandId: 'candidate' }, f.options)).rejects.toMatchObject({ code: 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED' });
     await writeFile(productResourcePath(f.runtime.layout, 'policy'), JSON.stringify(grants), { mode: 0o600 });
     // Mode pinning: the config changes back to reference after the Run began; the Run still delivers into the files.
     await writeFile(f.configPath, JSON.stringify({ ...JSON.parse(await readFile(f.configPath, 'utf8')), execution: { ...JSON.parse(await readFile(f.configPath, 'utf8')).execution, deliveryMode: 'reference' } })); clearConfigCache();
@@ -100,6 +103,10 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('after\n'); expect(await readFile(join(f.project, 'added.txt'), 'utf8')).toBe('new\n');
     await expect(readFile(join(f.project, 'removed.txt'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(f.project, 'todo.txt'), 'utf8')).toBe('untracked\n');
     expect(await f.refs()).toEqual(before); expect(await f.git('rev-parse', 'HEAD')).toBe(head); expect(await readFile(join(f.project, '.git/index'))).toEqual(index);
+    // L1c: the delivered row names the rollback. This fixture's ledger Run is still `running` (only its view is finished), so its private base is kept:
+    // a base goes only once the Run is terminal and nothing of it awaits delivery.
+    expect(result.output.replace(/[│┃\s]+/gu, '')).toContain('toputthefilesback:deckenttaskintegration-rollback--scopes--runr--taskt'); // the window wraps the exact line
+    expect(JSON.parse(await readFile(join(runBase, 'deckent-base.json'), 'utf8'))).toMatchObject({ run: { scopeId: 's', runId: 'r' } });
   });
 
   it('n writes nothing: no candidate, no reference, no object', async () => {
