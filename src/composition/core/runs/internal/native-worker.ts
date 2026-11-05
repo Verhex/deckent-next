@@ -44,7 +44,7 @@ export function nativeWorkerAdmission(root: string, scopeId: string, options: Co
   };
   return {
     modelUse: {
-      async pin(execution: RunExecutionSnapshot, principal: VerifiedPrincipal): Promise<RunExecutionSnapshot> {
+      async pin(execution: RunExecutionSnapshot, principal: VerifiedPrincipal, workerMode?: RunExecutionSnapshot['workerMode']): Promise<RunExecutionSnapshot> {
         if (!execution.tasks.some(row => isNativeCliWorkerProfile(row.profile))) return execution;
         await owner(principal);
         const tasks = [];
@@ -57,7 +57,7 @@ export function nativeWorkerAdmission(root: string, scopeId: string, options: Co
           const profile = createNativeCliWorkerProfile(resolved.base, { ...binding, modelUsePin: immutableJsonObjectSchema.parse(current.pin) });
           tasks.push({ ...task, profile: { ...profile, id: task.profile.id, version: task.profile.version } });
         }
-        return { ...execution, tasks };
+        return { ...execution, tasks, ...(workerMode ? { workerMode } : {}) };
       },
       async recheck(execution: RunExecutionSnapshot, principal: VerifiedPrincipal) {
         if (!execution.tasks.some(row => isNativeCliWorkerProfile(row.profile))) return;

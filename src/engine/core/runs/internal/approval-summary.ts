@@ -52,7 +52,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   const asked = askedAtExecution.length ? [t('approval.plan.askedAtExecution', { tasks: askedAtExecution.slice(0, limits.taskRows).map(title).join(', ')
     + (askedAtExecution.length > limits.taskRows ? ' ' + t('approval.plan.moreTasks', { count: askedAtExecution.length - limits.taskRows }, locale) : '') }, locale)] : [];
   const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale), ...asked] : [];
-  const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale),
+  const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale), ...(create.execution.workerMode ? [t('approval.plan.workerMode', { mode: create.execution.workerMode.mode === 'full-auto' ? t('terminal.mode.stop.full-auto', {}, locale) : create.execution.workerMode.askEdits ? t('terminal.mode.stop.ask-edits', {}, locale) : t('terminal.mode.stop.standart', {}, locale) }, locale)] : []), // R9 worker ceiling
     t('approval.plan.budget', { ceiling: ceiling ? currencyAmountText(ceiling.limitMinorUnits, ceiling.currency, locale) : unknown }, locale),
     command.proposal?.admission?.budgetSemantics === 'not-metered' ? t('proposal.budget.notMetered', {}, locale) : t('approval.plan.budgetNotice', {}, locale),
     t('approval.plan.decision', { decision: t('approval.plan.required', {}, locale),

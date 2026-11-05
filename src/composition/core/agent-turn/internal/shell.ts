@@ -41,7 +41,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** SHELL-OVERLAY: where this turn's write-set directories live (outside the project), or null when nowhere can (no write sets). */
   readonly writeSetRoot?: () => Promise<string | null>;
   /** The person's locale (the turn's reply language): the language of the notes a result explains itself with (B3). */
-  readonly language?: Locale }) {
+  readonly language?: Locale; /** R9: a Run worker's shell (the read-only classifier owns `safe-read`). */ readonly worker?: true }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState), floorNames = createShellProtectedNames(scope.root, [], input.writeFloor ?? (() => false));
   const namesProductState = (detail: string | undefined) => detail !== undefined
@@ -84,7 +84,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
-    const risk = classifyShellRisk(command, readOnly);
+    const risk = classifyShellRisk(command, readOnly, input.worker === true);
     // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
     const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
       : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor));

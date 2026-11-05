@@ -152,7 +152,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ get kind() { return z.literal('skill-signer'); }, get action() { return z.enum(['enrol', 'add', 'revoke']); }, keyId: digest, get purpose() { return z.enum(['action', 'import', 'publish', 'hub']); },
     get custody() { return z.enum(['host', 'external']); }, commandId: identitySchema, get revision() { return counterSchema.positive(); }, get basis() { return z.enum(['person-card', 'revocation-log']); } }),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
-  z.strictObject({ get kind() { return z.literal('permission-mode'); }, get mode() { return z.enum(['auto-edit', 'full-auto', 'standart']); }, get cell() { return z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']); },
+  z.strictObject({ get kind() { return z.literal('permission-mode'); }, get mode() { return z.enum(['auto-edit', 'full-auto', 'standart']); }, get cell() { return z.enum(['edit-non-floor', 'shell-modify', 'shell-read', 'mcp-call']); }, // R9 `shell-read`: a Run worker's read-only shell
     tool: toolRef, call: callRef, get grants() { return z.strictObject({ company: identitySchema, person: identitySchema.nullable() }); },
     get decision() { return z.strictObject({ previous: z.literal('require-approval'), next: z.literal('allow') }); },
     summary: auditSummarySchema }),

@@ -9,12 +9,12 @@ const me = { issuer: 'host', subject: '1000' };
 const principal = { id: 'os:1000', ...me, assurance: 'os-user' as const, scopeIds: ['scope'] };
 const rule = (id: string, kind: string, ids: string[], effect: string, eligible?: boolean) => ({ id, effect, actions: [kind === 'operation' ? 'execute' : 'invoke'],
   scopes: ['scope'], principals: [me], resource: { kind, ids }, ...(eligible === undefined ? {} : { modeEligible: eligible }) });
-const policy = (mode: string, toolEffect = 'require-approval', eligible = true) => resolvePolicyBindings(
+const policy = (mode: string, toolEffect = 'require-approval', eligible = true, v3?: { askEdits?: true }, fullAuto = true) => resolvePolicyBindings(
   { schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [rule('shell-tool', 'agent-tool', ['run_shell'], toolEffect, toolEffect === 'require-approval' ? eligible : undefined),
     rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
     // PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call).
-    { id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] },
-  { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode }] });
+    ...(fullAuto ? [{ id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] : [])] },
+  { schemaVersion: v3 ? 3 : 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode, ...v3 }] });
 const decide = (snapshot: unknown, cell: AgentToolCallCell, realm?: ShellRealmContainment, contained = true) => decideAgentToolCall(snapshot, { principal,
   scopeId: 'scope', tool: { name: 'run_shell' }, operation: { id: 'host.shell.run' }, cell, ...(realm ? { shell: { realm, contained } } : {}) });
 const UNBOUNDED: readonly AgentToolCallCell[] = ['shell-read-none', 'shell-read-low', 'shell-other-modify', 'shell-always-ask'];
@@ -42,6 +42,42 @@ describe('full-auto inside an enforced sandbox (SHELL-AUTONOMY decision)', () =>
   it('keeps the narrow mutating set as before: full-auto, any realm', () => {
     for (const realm of ['sandbox', 'degraded', 'host'] as const) expect(decide(policy('full-auto'), 'shell-narrow-mutating', realm, false)).toMatchObject({ decision: 'allow' });
     expect(decide(policy('auto-edit'), 'shell-narrow-mutating', 'sandbox')).toMatchObject({ decision: 'require-approval' });
+  });
+});
+
+describe('R9 background worker (owner 2026-11-05): plan-moment mode and read-only shell', () => {
+  it('lowers a read-only shell command for a Run worker only, caps full access at full-auto and takes the lower of ceiling and current mode', () => {
+    const worker = (snapshot: unknown, cell: AgentToolCallCell, ceiling: { mode: 'standart' | 'full-auto'; askEdits: boolean } | null, realm: ShellRealmContainment = 'host', contained = true) =>
+      decideAgentToolCall(snapshot, { principal, scopeId: 'scope', tool: { name: 'run_shell' }, operation: { id: 'host.shell.run' }, cell, shell: { realm, contained }, origin: { kind: 'run', ceiling } });
+    const standart = { mode: 'standart', askEdits: false } as const, auto = { mode: 'full-auto', askEdits: false } as const;
+    const read = { decision: 'allow', relaxation: { mode: 'standart', cell: 'shell-read', company: 'shell-tool', person: 'me-mode' } };
+    // read-none: card-free and audited as shell-read for a worker in standart and careful (askEdits), with or without a ceiling, in any realm;
+    // read-low only in an enforced sandbox for a contained command. A terminal turn (no origin) is unchanged: both ask outside full-auto.
+    for (const snapshot of [policy('auto-edit'), policy('ask')]) for (const ceiling of [null, standart]) {
+      for (const realm of ['host', 'degraded', 'sandbox'] as const) expect(worker(snapshot, 'shell-read-none', ceiling, realm)).toMatchObject(read);
+      expect(worker(snapshot, 'shell-read-low', ceiling, 'sandbox')).toMatchObject(read);
+      for (const [realm, contained] of [['host', true], ['degraded', true], ['sandbox', false]] as const) expect(worker(snapshot, 'shell-read-low', ceiling, realm, contained)).toMatchObject({ decision: 'require-approval', relaxation: null });
+      for (const cell of ['shell-read-none', 'shell-read-low'] as const) for (const realm of ['host', 'sandbox'] as const) expect(decide(snapshot, cell, realm)).toMatchObject({ decision: 'require-approval', relaxation: null });
+    }
+    expect(worker(policy('full-auto'), 'shell-read-low', auto, 'sandbox')).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'shell-read' } });
+    expect(decide(policy('full-auto'), 'shell-read-low', 'sandbox')).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'shell-modify' } });
+    for (const cell of ['shell-other-modify', 'shell-destructive', 'shell-always-ask'] as const) expect(worker(policy('auto-edit'), cell, standart, 'sandbox')).toMatchObject({ decision: 'require-approval' });
+    // full access stored and in the plan: the worker gets full-auto (never a full-access decision); the destructive table still asks.
+    const fullAccess = policy('full-access', 'require-approval', true, {});
+    expect(worker(fullAccess, 'shell-narrow-mutating', auto)).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto' } });
+    expect(worker(fullAccess, 'shell-destructive', auto, 'sandbox')).toMatchObject({ decision: 'require-approval', relaxation: null });
+    expect(worker(fullAccess, 'shell-destructive', auto, 'sandbox').fullAccess).toBeUndefined();
+    expect(decide(fullAccess, 'shell-narrow-mutating', 'host')).toMatchObject({ decision: 'require-approval' });
+    // full-auto still needs its company grant on this call: full access stored, ceiling full-auto, no full-auto grant → standart.
+    expect(worker(policy('full-access', 'require-approval', true, {}, false), 'shell-narrow-mutating', auto)).toMatchObject({ decision: 'require-approval', relaxation: null });
+    // the lower of the two: plan full-auto + current standart, plan standart + current full-auto → standart; no plan → current (as before).
+    expect(worker(policy('auto-edit'), 'shell-narrow-mutating', auto)).toMatchObject({ decision: 'require-approval' });
+    expect(worker(policy('full-auto'), 'shell-narrow-mutating', standart)).toMatchObject({ decision: 'require-approval' });
+    expect(worker(policy('full-auto'), 'shell-narrow-mutating', null)).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto' } });
+    // askEdits from either side asks for edits.
+    expect(worker(policy('full-auto'), 'edit', { mode: 'full-auto', askEdits: true })).toMatchObject({ decision: 'require-approval' });
+    expect(worker(policy('full-access', 'require-approval', true, { askEdits: true }), 'edit', auto)).toMatchObject({ decision: 'require-approval' });
+    expect(worker(policy('full-auto'), 'edit', auto)).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'edit-non-floor' } });
   });
 });
 

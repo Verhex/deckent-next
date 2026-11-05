@@ -58,23 +58,22 @@ export class RunCreationAuthority {
     if (command.proposal && (!command.proposal.admission!.standingAdmission || command.proposal.delivery || standingAgentsChanged(command.proposal.admission!.agents, create.execution.tasks)) && evaluation.verdict.decision === 'allow') {
       evaluation = { ...evaluation, verdict: { decision: 'require-approval', revision: evaluation.verdict.revision, reason: 'APPROVAL_REQUIRED' } };
     }
-    const record = this.seal(command, principal, evaluation, this.basis(create, workspace));
-    const reference = { eventId: record.event.eventId, sequence: record.sequence };
+    // R9 (owner 2026-11-05): the worker ceiling belongs to a plan the person approves on its card (shown there, sealed in its basis); a Run admitted without a card keeps the current mode alone.
+    if (evaluation.verdict.decision === 'allow' && create.execution.workerMode) create = { ...create, execution: Object.fromEntries(Object.entries(create.execution).filter(([key]) => key !== 'workerMode')) as RunCreate['execution'] };
+    const record = this.seal(command, principal, evaluation, this.basis(create, workspace)), reference = { eventId: record.event.eventId, sequence: record.sequence };
     const approvalInput = { ...this.approvalInput(record, evaluation.policy), summary: renderRunCreateApprovalSummary(command, create,
       evaluation.verdict, this.presentation.locale, this.presentation.known, this.presentation.registry, evaluation.askedAtExecution) };
     if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
     const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
       : { decision: reference, approval: this.approve(approvalInput) };
-    return { authority, assert: () => {
+    return { authority, create, assert: () => {
       this.records.verify(record);
       if (!authority.approval) this.approvals.assertUnrequested(command.scopeId, command.commandId);
       if (authority.approval && encodeCommandProjection('approval-reference:1', this.approve(approvalInput)) !== encodeCommandProjection('approval-reference:1', authority.approval)) throw new AuditError('AUDIT_INTEGRITY');
     } };
   }
   /** A evaluated Run policy remains evidence even when another admission prerequisite refuses the effect. */
-  recordUnapplied(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): void {
-    this.seal(command, principal, evaluation, null);
-  }
+  recordUnapplied(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): void { this.seal(command, principal, evaluation, null); }
   verifyReplay(command: BoundRunAdmission, principal: VerifiedPrincipal, create: RunCreate, workspace?: RunWorkspaceCustody): void {
     if (!create.authority) return; // Historical pre-v52 receipts stay byte-exact; no invented decision.
     const record = this.records.load(command.scopeId, create.authority.decision.eventId);

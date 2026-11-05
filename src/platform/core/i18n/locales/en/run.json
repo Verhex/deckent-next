@@ -417,6 +417,7 @@
   "approval.plan.permission.unrecognised": "• Permission (not recognised by this installation): {kind} / {action} / {resource}",
   "proposal.permissions.unrecognised": "Not recognised by this installation (advisory, not evaluated, grants nothing): {permissions}",
   "approval.plan.authorityNotice": "Titles and declared permissions come from the proposal; each action is still authorized by policy when it runs.",
+  "approval.plan.workerMode": "Background worker: at most {mode} (your mode as you approve this plan; if you lower your mode later, the worker follows). Full access never passes to a worker; destructive commands always ask.",
   "approval.plan.moreTasks": "… {count} more tasks not shown",
   "approval.plan.morePermissions": "… {count} more permissions not shown",
   "approval.plan.budget": "Declared budget ceiling: {ceiling}",

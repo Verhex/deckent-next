@@ -13,20 +13,20 @@ import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 type OpenTools = NativeCliWorkerPorts['openTools'];
 /** The K1 coordinator owns proposals and durable settlement. The model CLI never receives this workspace. */
 export async function openConfiguredNativeWorkerTools(root: string, request: Parameters<OpenTools>[0], binding: Parameters<OpenTools>[1],
-  signal: AbortSignal, resources: Parameters<OpenTools>[3], options: ConfigLoadOptions): Promise<ToolSessionPort> {
+  signal: AbortSignal, resources: Parameters<OpenTools>[3], options: ConfigLoadOptions, plan: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null = null): Promise<ToolSessionPort> {
   const { scopeId, generation } = request.identity, turnId = sha256(JSON.stringify(request.identity));
   const { current, context, person, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
   const clock = new SystemTrustedClock();
   const sessions = () => LocalOsSessionAuthority.create(context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
   const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority,
     selfSource: selfSource ? isSelfSourceWriteFloored : () => false });
-  const shell = createAgentShell({ scope: workspace.scope, context, sessions, scopeId, turnId, config: readTerminalShellConfig(context.config as unknown as Record<string, unknown>),
+  const shell = createAgentShell({ worker: true, scope: workspace.scope, context, sessions, scopeId, turnId, config: readTerminalShellConfig(context.config as unknown as Record<string, unknown>),
     channel: { signal, emit() {}, async drained() {}, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes, profile: current.profile,
     globalStateRoots: agentGlobalStateRoots([env, process.env]), productState: agentProductStateDeny(request.workspace, context.layout, env), authority,
     selfSource, writeFloor, writeSetRoot: () => sandboxWriteSetRoot(request.workspace, context.layout, env), sealed: sealedRootEntryRefused(request.workspace, sandbox.hardFloor) });
   const tools = [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC], describe = describeAgentCall;
   const approvals = createAgentCallApprovals({ context, clock, scopeId, turnId, describe });
-  const decisions = createAgentCallDecisions({ context, clock, scopeId, turnId, edits: () => edits, shell, approvals, fetch: null, person });
+  const decisions = createAgentCallDecisions({ context, clock, scopeId, turnId, edits: () => edits, shell, approvals, fetch: null, person, origin: { kind: 'run', ceiling: plan } });
   const store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
   const lifetime = nativeWorkerToolLifetime();
   let failure: 'approval-expired' | null = null;

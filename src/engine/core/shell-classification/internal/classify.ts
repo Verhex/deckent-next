@@ -26,7 +26,7 @@ function programFailure(name: string): StageVerdict | null {
 }
 
 async function classifyStage(stage: ShellStage, paths: ShellPathContext): Promise<{ readonly program: string; readonly verdict: StageVerdict }> {
-  const [head, ...args] = stage.words;
+  const [head, ...words] = stage.words, args = head?.text === '[' && words.at(-1)?.text === ']' ? words.slice(0, -1) : words; // `[ … ]` is `test …`
   if (head === undefined) return { program: '', verdict: stageFail('UNPARSEABLE') };
   if (!head.quoted && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(head.text)) return { program: head.text, verdict: stageFail('ENV_ASSIGNMENT', head.text) };
   const raw = head.text;

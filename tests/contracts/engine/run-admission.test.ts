@@ -95,13 +95,15 @@ it('freezes trusted model-use evidence in every execution profile and leaves rep
   let pins = 0, rechecks = 0;
   const pin = { schemaVersion: 1, companyId: 'fixture-company', profileDigest: 'a'.repeat(64), leaseId: 'fixture-lease' };
   const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, { ...context, modelUse: {
-    async pin(execution, principal) { pins++; expect(principal.subject).toBe('1');
-      return { ...execution, tasks: execution.tasks.map(task => ({ ...task, profile: { ...task.profile, parameters: { ...task.profile.parameters, modelUse: pin } } })) }; },
+    // R9: the creator's mode at admission (v1 policy: standart) is offered for the worker ceiling; this Run needs no card, so none is kept.
+    async pin(execution, principal, workerMode) { pins++; expect(principal.subject).toBe('1'); expect(workerMode).toEqual({ mode: 'standart', askEdits: false });
+      return { ...execution, workerMode, tasks: execution.tasks.map(task => ({ ...task, profile: { ...task.profile, parameters: { ...task.profile.parameters, modelUse: pin } } })) }; },
     async recheck(execution, principal) { rechecks++; expect(principal.subject).toBe('1');
       expect(execution.tasks.map(task => task.profile.parameters.modelUse)).toEqual([pin]); },
   } });
   const result = await app.create(command);
   expect((await store.loadRun('s', 'r'))!.execution.tasks[0]!.profile.parameters.modelUse).toEqual(pin);
+  expect((await store.loadRun('s', 'r'))!.execution.workerMode).toBeUndefined();
   expect(await app.create(command)).toEqual(result); expect({ pins, rechecks }).toEqual({ pins: 1, rechecks: 1 });
 });
 it('records no Run when model-use consent disappears between pinning and the last admission check', async () => {
