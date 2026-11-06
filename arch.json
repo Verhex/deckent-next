@@ -2098,7 +2098,8 @@
         "src/domain/core/principal",
         "src/domain/core/model-activation",
         "src/domain/core/provider-catalog",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "PROVIDERS"
     },
@@ -5190,10 +5191,10 @@
       "engine": 60000,
       "adapters": 42081,
       "surfaces": 45000,
-      "composition": 13465
+      "composition": 13469
     },
     "totalSrcLines": 200000,
-    "testCases": 8200,
+    "testCases": 8202,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

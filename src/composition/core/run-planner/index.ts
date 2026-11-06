@@ -1,6 +1,6 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { SIWC_INFERENCE, FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -15,7 +15,7 @@ import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.
 import { configuredWorkerSetupFact } from './internal/intent-facts.js';
 import { preflightConfiguredRunIntent, transitionConfiguredRunIntent } from './internal/intents.js';
 import { gateConfiguredBrainModel } from './internal/model-roles.js';
-export { inspectConfiguredRoleModels } from './internal/model-roles.js';
+export { inspectConfiguredRoleModels, inspectConfiguredBrainModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. `observe`: a caller that
  * shows planning progress (a quota wait, owner Q-H4) passes it; without it a quota refusal is the typed refusal at once. */
 export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
@@ -71,7 +71,8 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       async prepare(command) {
         const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
-        const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference);
+        // R9b (owner D3): the caller's model, else the person's Brain model (project over user), else the chat model; the gate below decides, never a swap.
+        const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference ?? configuredBrainModel(context.config['brain_planner']));
         await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
         const configured = context.config['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
         const profile = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === command.scopeId

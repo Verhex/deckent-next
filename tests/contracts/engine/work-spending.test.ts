@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { modelInvocationProfileSchema, nativeCliIds, executionProfileDefinitionSchema } from '#domain/index.js';
 import { classifyWorkSpending, workSpendingBasis, workerBillingAxis } from '#engine/index.js';
+import { nativeCliWorkerProfile } from '#capabilities/index.js';
 const worker = executionProfileDefinitionSchema.parse({ id: 'worker', version: 1, adapter: { id: 'fixture', version: 1 }, parameters: {} });
 const model = modelInvocationProfileSchema.parse({ schemaVersion: 1, id: 'local', version: 1, scopeId: 's',
   reference: { providerId: 'fixture', providerVersion: 1, modelId: 'local', modelVersion: 1 }, bindingDigest: 'a'.repeat(64),
@@ -35,6 +36,14 @@ it('only subscription-only selections waive the budget; a mixed or unresolved ta
   expect(workSpendingBasis([subscription, worker]).semantics).toBe('metered');
   expect(workSpendingBasis([subscription, null]).semantics).toBe('metered');
   expect(workSpendingBasis([subscription]).digest).not.toBe(workSpendingBasis([worker]).digest);
+  // R9d: a connected CLI worker (the base wrapped with its connection) keeps its base's subscription axis; an invalid wrapper stays metered.
+  const binding = { schemaVersion: 1 as const, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64),
+    resourceKey: 'opaque-subscription-fixture', definition: { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: '/fixture/state', ownerUid: 1000, minCliVersion: '2.1.0', delegatedUse: null } };
+  const wrapped = nativeCliWorkerProfile(subscription, binding);
+  expect(workerBillingAxis(wrapped)).toBe('subscription');
+  expect(workSpendingBasis([wrapped]).semantics).toBe('not-metered');
+  expect(classifyWorkSpending({ kind: 'worker', profile: nativeCliWorkerProfile(worker, binding) })).toBe('metered');
+  expect(classifyWorkSpending({ kind: 'worker', profile: { ...wrapped, parameters: { schemaVersion: 1, base: subscription } } })).toBe('metered');
 });
 
 it('a worker declaring the local billing axis is not metered; an absent, malformed or subscription-mixed declaration keeps today\'s class', () => {
@@ -53,3 +62,4 @@ it('a worker declaring the local billing axis is not metered; an absent, malform
   expect(workSpendingBasis([local, worker]).semantics).toBe('metered');
   expect(workSpendingBasis([local]).digest).not.toBe(workSpendingBasis([worker]).digest);
 });
+

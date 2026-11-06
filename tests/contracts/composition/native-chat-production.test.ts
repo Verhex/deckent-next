@@ -67,7 +67,7 @@ async function fixture(family: string) {
   await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy)); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(template.bindings), { mode: 0o600 }); clearConfigCache();
   await writeFile(join(f.project, 'input.txt'), 'BUSINESS-READBACK\n');
   const profile = modelInvocationProfileSchema.parse(config.provider_invocation_profiles.profiles[0]);
-  expect((await describeTerminalChat(f.project, options)).tools).toBe('none');
+  expect((await describeTerminalChat(f.project, options)).tools).toBe('unverified');
   expect(await readNativeAgentObservation(profile)).toBeNull();
   await settleOnboarding(resolveProductLayout({ projectRoot: f.project, root: f.data }));
   const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: f.project, env: options.env, stdio: ['ignore', 'pipe', 'pipe'] });

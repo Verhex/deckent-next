@@ -1,7 +1,7 @@
 import { nativeCliAgent } from '#adapters/index.js';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
-import { inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
+import { inspectConfiguredBrainModels, inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, steerRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions, inspectLegacyProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
@@ -184,6 +184,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
     siwc: { connection: PROVIDER_CONNECT_KINDS.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id)!.id, usageUrl: SIWC_USAGE_SUMMARY.manageUrl, execute: executeConfiguredSiwc },
     inspectSiwcConnections: inspectConfiguredSiwcConnections,
+    inspectBrainModels: inspectConfiguredBrainModels, // R9b: /model marks the Brain's models
     inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, person(options)), assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
     /* T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state. */ planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels,

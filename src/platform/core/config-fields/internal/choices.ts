@@ -257,6 +257,10 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'brain_planner.quotaWait.marginMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [0, 5000, 15000, 60000] },
   'brain_planner.quotaWait.maxAttempts': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 3] },
   'brain_planner.correctionRetries': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1] },
+  'brain_planner.reference.providerId': { kind: 'hidden' },
+  'brain_planner.reference.providerVersion': { kind: 'hidden' },
+  'brain_planner.reference.modelId': { kind: 'hidden' },
+  'brain_planner.reference.modelVersion': { kind: 'hidden' },
   'brain_planner.context.tokenFramingAllowance': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 256, 512, 1024, 2048, 4096] },
   'provider_invocation_profiles.schemaVersion': { kind: 'schema' },
   'provider_invocation_profiles.profiles': { kind: 'document' },
@@ -334,6 +338,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'service.identity': { kind: 'container' },
   'terminal.chat.reference': { kind: 'reference', source: 'models' },
   'terminal.defaultModel': { kind: 'reference', source: 'models' },
+  'brain_planner.reference': { kind: 'reference', source: 'models' },
   'identity.profile': { kind: 'reference', source: 'identity-profiles' },
   'execution.workTargets.targets.*.baseRef': { kind: 'reference', source: 'branches' },
 });

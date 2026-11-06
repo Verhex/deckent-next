@@ -133,6 +133,9 @@ describe('/model window', () => {
     const labels = terminalPanelLabels('en').model;
     const tree = modelPanelTree({ ...MODELS, defaultBlocked: 'DECISION-PENDING' }, null, labels, 'T', false);
     expect(tree.scopes).toEqual([{ id: 'session', label: labels.session }, { id: 'default', label: labels.sessionAndDefault, blocked: { reason: 'DECISION-PENDING' } }]);
+    // R2d: an offered default comes first while no model is chosen; once one is (a configured choice), this session comes first again.
+    expect(modelPanelTree({ ...MODELS, choices: MODELS.choices.map(choice => ({ ...choice, configured: false })) }, null, labels, 'T', true).scopes.map(scope => scope.id)).toEqual(['default', 'session']);
+    expect(modelPanelTree(MODELS, null, labels, 'T', true).scopes.map(scope => scope.id)).toEqual(['session', 'default']);
     expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat (local-openai) · default', 'coder (local-openai)', 'fast (local-openai) · this session']);
     // More than one provider: one section per provider.
     const two = modelPanelTree({ ...MODELS, choices: [...MODELS.choices, { ...MODELS.choices[0]!, reference: ref('chat', 'anthropic'), group: 'anthropic' }] }, null, labels, 'T', true);

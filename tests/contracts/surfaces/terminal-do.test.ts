@@ -5,7 +5,7 @@ import { DeckentError, formatHumanError } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
+import { brainProposalCardLines, brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -45,12 +45,13 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
     inputHistory: { load: async () => [], append: entry => { history.push(entry.text); } }, doPlan: { ...words,
       async plan(intent, id) { plans.push({ intent, id }); return decision ? { ...pending, run: decision === 'allow' ? run : null,
         proposal: { ...pending.proposal, status: decision === 'allow' ? 'accepted' : 'rejected', approval: null } } : pending; },
-      lines: result => brainProposalLines(result, 'en') } }); mounted.push(view);
+      lines: result => brainProposalLines(result, 'en'), cardLines: result => brainProposalCardLines(result, 'en') } }); mounted.push(view);
   await settle(40); view.stdin.write('/do Prepare purchase api_key=sk-fixture\r');
   await until(() => view.stdout.frame.includes('Durable business evidence'), 'actual approval preview');
   expect(decisions).toEqual([]); expect(plans).toHaveLength(1); expect(plans[0]!.intent).toBe('Prepare purchase api_key=[REDACTED]');
   expect(history).toEqual(['/do Prepare purchase api_key=[REDACTED]']);
-  expect(view.stdout.frame).toContain('no total Run spending limit is enforced');
+  // R9f: the card's preview adds only what its summary does not say (criteria here); budget, scope and the plan header stay out.
+  expect(view.stdout.frame).not.toContain('no total Run spending limit is enforced'); expect(view.stdout.frame).not.toContain('Plan for Run r');
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO approval ${key}\n${view.stdout.frame}\n`);
   await settle(40); view.stdin.write(key); // slice 2: the card holds the keyboard by itself; approve/deny it, then assert the effect.
   await until(() => plans.length === 2 && view.stdout.frame.includes(key === 'y' ? 'Admitted; task outcomes are not yet accepted' : 'Rejected'), 'recorded result window');

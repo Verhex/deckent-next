@@ -4,10 +4,11 @@ import { currencyAmountText, terminalSafeText, redactForRecord, t, ErrorRegistry
 const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => terminalSafeText(rows.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ')) || '-';
 /** BeUser DR3-02: the configured pool's hold as read for the card (`deckent pool status`'s view); a held pool never refuses the Run, it waits. */
 export type PlanningPoolHold = Readonly<{ state: string; poolId: string; hold: Readonly<{ changedBy: Readonly<{ issuer: string; subject: string }>; reason: string | null }> | null }>;
+const heldPool = (pool?: PlanningPoolHold | null) => pool?.state === 'held' ? { pool: terminalSafeText(pool.poolId), by: terminalSafeText(pool.hold ? `${pool.hold.changedBy.issuer}/${pool.hold.changedBy.subject}` : '-'),
+  reason: terminalSafeText(redactForRecord(pool.hold?.reason ?? '-')) } : null;
 export function brainProposalLines(result: RunPlanningResult, locale: Locale, pool?: PlanningPoolHold | null): readonly string[] {
   if (isRunIntentResult(result)) return runIntentLines(result, locale);
-  const held = pool?.state === 'held' ? { pool: terminalSafeText(pool.poolId), by: terminalSafeText(pool.hold ? `${pool.hold.changedBy.issuer}/${pool.hold.changedBy.subject}` : '-'),
-    reason: terminalSafeText(redactForRecord(pool.hold?.reason ?? '-')) } : null;
+  const held = heldPool(pool);
   const record = result.proposal, proposal = record.proposal, unrecognised = result.unrecognisedPermissions ?? [];
   // Unrecognised entries get their own advisory line (accept_mark, owner 2026-10-18); every entry appears once.
   const marked = new Set(unrecognised.map(row => JSON.stringify(row))), advisory = advisoryProposalPermissions(proposal.requiredPermissions, proposal.graph).filter(row => !marked.has(JSON.stringify(row)));
@@ -33,6 +34,13 @@ export function brainProposalLines(result: RunPlanningResult, locale: Locale, po
     ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: proposal.source.receipt.invocationId, template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
     ...planningMemoryLines(result, locale),
   ];
+}
+/** R9f: the plan approval card's preview — only what the card's own summary (tasks, permissions, budget, decision) does not say. */
+export function brainProposalCardLines(result: RunPlanningResult, locale: Locale, pool?: PlanningPoolHold | null): readonly string[] {
+  if (isRunIntentResult(result)) return runIntentLines(result, locale);
+  const proposal = result.proposal.proposal, held = heldPool(pool);
+  return [...(held ? [t('brain.poolHeld', held, locale)] : []), ...proposal.graph.tasks.flatMap(task => task.acceptanceCriteria.map(id => t('brain.criterion', { text: proposal.graph.criterionDefinitions.find(row => row.id === id)?.description ?? id }, locale))),
+    ...planningSpendingLines(result, locale)];
 }
 /** S4B-6: what project memory the planning call used (counts only, never which entries); nothing when memory is off or on a replay. */
 export function planningMemoryLines(result: RunProposalResult, locale: Locale): readonly string[] {

@@ -31,9 +31,12 @@ export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference
     ? groups.map(group => { const children = view.choices.filter(choice => choice.group === group).map(node);
       return { id: `group:${group}`, label: group, detail: String(children.length), childTitle: group, children }; })
     : view.choices.map(node);
-  const blocked = defaultOffered && view.defaultBlocked === null ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
-  return { title, items, scopes: [{ id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
-    { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked },
+  const offered = defaultOffered && view.defaultBlocked === null, blocked = offered ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
+  const session = { id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
+    fallback = { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked };
+  // R2d: with no model chosen yet, the first pick is the default (the one Enter makes it), so the next terminal starts with it too.
+  const first = offered && !view.choices.some(choice => choice.configured);
+  return { title, items, scopes: [...(first ? [fallback, session] : [session, fallback]),
     ...(largeContext ? [{ id: FRESH, label: `${labels.session} · ${labels.switch.fresh}` }, { id: FRESH_DEFAULT, label: `${labels.sessionAndDefault} · ${labels.switch.fresh}`, ...blocked }] : [])] };
 }
 
@@ -97,6 +100,15 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       const choice = view.choices.find(choice => keyOf(choice.reference) === parts.join(':'));
       if (action === 'provider') { setProviderOpen(true); return; }
       if (action === 'budget') { setBudgetOpen(true); return; }
+      // R9b (owner D3): the Brain's own model through the governed writer; one summary line, a held write opens its approval.
+      if (choice && port.setBrain && (action === 'brain-global' || action === 'brain-project')) {
+        setPreparing(true);
+        port.setBrain(choice, action === 'brain-global' ? 'global' : 'project').then(outcome => {
+          push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]); onClose();
+          if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
+        }, error => { onError(error); onClose(); }).finally(() => { if (mounted.current) setPreparing(false); });
+        return;
+      }
       if (choice && port.fix && ['activate', 'deactivate', 'reconcile'].includes(action!)) setFix({ choice, action: action as 'activate' | 'deactivate' | 'reconcile' });
       return;
     }

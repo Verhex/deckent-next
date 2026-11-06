@@ -303,11 +303,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       return { level: 'warning' as const, text: typeof family === 'string' && typeof field === 'string' ? t('onboarding.session.unavailableField', { code, family, field }, locale) : t('onboarding.session.unavailable', { code }, locale) };
     };
     // P2: the settled opening snapshot when no step is shown; after a person's answer or action the state is observed again.
-    const deferred = (snapshot: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot) => { const text = !snapshot.modelUsable ? t('onboarding.welcome.noModel', {}, locale) : surface.deferredOnboardingNotice(snapshot, locale); return text ? { level: 'info' as const, text } : null; };
+    // R2d: a connected model that is not chosen yet is picked with /model; /provider is for connecting the first one.
+    const connected = async () => context.inspectDeclaredModels ? await context.inspectDeclaredModels(root, options).then(declared => declared.status === 'declared' && declared.catalog.providers.some(provider => provider.models.length > 0), () => false) : false;
+    const deferred = async (snapshot: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot) => { const text = !snapshot.modelUsable ? (await connected() ? t('tui.model.notChosen', {}, locale) : t('onboarding.welcome.noModel', {}, locale)) : surface.deferredOnboardingNotice(snapshot, locale); return text ? { level: 'info' as const, text } : null; };
     const opening = settled.then(async () => {
       closing.signal.throwIfAborted(); const prepared = await (await surface.loadOnboardingScreens()).prepareOnboardingSession(await port(), false, undefined, closing.signal);
-      return { total: prepared.total, welcome: prepared.welcome, notice: prepared.total || prepared.welcome ? null : deferred(prepared.snapshot), show: async (signal: AbortSignal) => {
-        try { return { intent: await prepared.show(ui(), { ...io, signal }, await previous()), notice: deferred(await (await port()).observe({})) }; } catch (error) { return { intent: null, notice: unavailable(error) }; }
+      return { total: prepared.total, welcome: prepared.welcome, notice: prepared.total || prepared.welcome ? null : await deferred(prepared.snapshot), show: async (signal: AbortSignal) => {
+        try { return { intent: await prepared.show(ui(), { ...io, signal }, await previous()), notice: await deferred(await (await port()).observe({})) }; } catch (error) { return { intent: null, notice: unavailable(error) }; }
       } };
     }).catch((error: unknown) => ({ total: 0, notice: unavailable(error), unavailable: true as const, show: async () => ({ intent: null, notice: null }) }));
     onboarding = { opening, modelDraft: t('onboarding.model.draft', {}, locale), waiting: count => t('terminal.opening.setupWaiting', { count }, locale), pending: () => io.stdin.readableLength > 0,
@@ -435,12 +437,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
       plan: async (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) => {
+        // R9b (owner D3): a chosen Brain model (`brain_planner.reference`) plans; the chat model is passed only when there is none.
         const result = await (pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal))
-          : hereModel(reference).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)));
+          : (((await loadConfig(root, options))['brain_planner'] as { reference?: unknown } | undefined)?.reference ? Promise.resolve(undefined) : hereModel(reference)).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)));
         await readPoolHold();
         return result;
       },
-      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale, poolHold) } } : {}),
+      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale, poolHold), cardLines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalCardLines(result, locale, poolHold) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
@@ -490,4 +493,4 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.signal ? { signal: context.signal } : {}), ...(context.terminalShell ? { shell: context.terminalShell } : {}),
   }); } finally { if (beat) clearInterval(beat); closing.abort(); await sessionStore?.idle(); } // a setup observation still running ends now; a session write in flight settles first
 }
-import { brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';
+import { brainProposalCardLines, brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';
