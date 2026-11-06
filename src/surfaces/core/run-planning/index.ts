@@ -32,7 +32,7 @@ export function brainProposalLines(result: RunPlanningResult, locale: Locale, po
     ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale, ...(result.reasonParams ? { params: result.reasonParams } : {}) }).message] : []),
     ...(record.approval ? [t('brain.waiting', { id: record.approval.approvalId, expires: new Date(record.approval.expiresAt).toISOString() }, locale), t('brain.revise', {}, locale)] : []),
     ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: proposal.source.receipt.invocationId, template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
-    ...planningMemoryLines(result, locale),
+    ...planningMemoryLines(result, locale), ...brainModelLines(result, locale),
   ];
 }
 /** R9f: the plan approval card's preview — only what the card's own summary (tasks, permissions, budget, decision) does not say. */
@@ -40,8 +40,10 @@ export function brainProposalCardLines(result: RunPlanningResult, locale: Locale
   if (isRunIntentResult(result)) return runIntentLines(result, locale);
   const proposal = result.proposal.proposal, held = heldPool(pool);
   return [...(held ? [t('brain.poolHeld', held, locale)] : []), ...proposal.graph.tasks.flatMap(task => task.acceptanceCriteria.map(id => t('brain.criterion', { text: proposal.graph.criterionDefinitions.find(row => row.id === id)?.description ?? id }, locale))),
-    ...planningSpendingLines(result, locale)];
+    ...planningSpendingLines(result, locale), ...brainModelLines(result, locale)];
 }
+/** Owner 2026-11-06: one information line when a model below the recommended Brain class made the plan (never a refusal). */
+const brainModelLines = (result: RunProposalResult, locale: Locale) => result.brainBelowRecommended ? [t('assignment.brain.belowRecommended', {}, locale)] : [];
 /** S4B-6: what project memory the planning call used (counts only, never which entries); nothing when memory is off or on a replay. */
 export function planningMemoryLines(result: RunProposalResult, locale: Locale): readonly string[] {
   const memory = result.planningMemory;

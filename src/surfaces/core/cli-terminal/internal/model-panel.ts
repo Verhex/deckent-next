@@ -100,8 +100,9 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           }
         } catch { /* names only; the reference stays the text */ }
       }
-      const reservationBlocked = new Set<string>();
-      // R9b (owner D3): which models the Brain role may use today (tier or a current exception) and the one chosen; marks only, the /do gate decides.
+      const reservationBlocked = new Set<string>(), recommended = new Set<string>();
+      // R9b (owner D3, 2026-11-06): the models recommended for the Brain role (tier or a current exception) and the one chosen; every model may be
+      // chosen, the /do gate decides (an installation's written model_roles policy binds there).
       const brainRows = await host.inspectBrainModels?.(root, scopeId, options).catch(() => null), brainNow = await brainModel(root, options);
       const writer = Boolean(host.configApplication && host.resolveConfigPrincipal), axes = await billingAxes(root, options);
       const choices = await Promise.all(declared.catalog.providers.flatMap(provider => provider.models.map(async (model): Promise<ModelPanelChoice> => {
@@ -119,7 +120,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const axis = axes.find(row => row.scopeId === scopeId && sameReference(row.reference, reference))?.billingAxis;
         const billing = axis === 'subscription' || axis === 'local' || axis === 'metered' ? { billing: axis } as const : {};
         const brain = brainRows?.models.some(row => row.channelId === provider.id && row.modelId === model.nativeId) ?? false, isBrain = brainNow !== null && sameReference(brainNow, reference);
-        if (brain && state.invocable && writer) fixes.push({ id: 'brain-global', label: t('tui.model.brain.setGlobal', {}, locale) }, { id: 'brain-project', label: t('tui.model.brain.setProject', {}, locale) });
+        if (brain) recommended.add(exact);
+        if (state.invocable && writer) fixes.push({ id: 'brain-global', label: t('tui.model.brain.setGlobal', {}, locale) }, { id: 'brain-project', label: t('tui.model.brain.setProject', {}, locale) });
         const cliPlan = host.providerConnect?.kinds.find(kind => kind.headlessLogin && (kind.catalogProviderId ?? kind.id) === provider.id);
         const readiness = !state.invocable && state.reason.code === 'MODEL_INVOCATION_UNAVAILABLE' && cliPlan && !cliPlan.terminalTextChat
           ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(state, locale);
@@ -147,8 +149,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
       const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
       choices.sort((left, right) => Number(left.blocked !== null) - Number(right.blocked !== null));
-      // R9b: with no Brain model chosen, the models that could plan are suggested (never chosen for the person).
-      const planners = brainNow ? [] : choices.filter(choice => choice.blocked === null && choice.fixes?.some(fix => fix.id === 'brain-project'));
+      // R9b: with no Brain model chosen, the recommended models that can run now are suggested (never chosen for the person).
+      const planners = brainNow ? [] : choices.filter(choice => choice.blocked === null && choice.fixes?.some(fix => fix.id === 'brain-project') && recommended.has(`${choice.reference.providerId}@${choice.reference.providerVersion}/${choice.reference.modelId}@${choice.reference.modelVersion}`));
       if (planners.length) notes.push(t('tui.model.brain.suggest', { models: planners.map(choice => choice.label).join(', ') }, locale));
       return { title, choices, fixTitle: t('tui.model.reconcile.title', {}, locale), fixApply: t('cli.init.policyModes.cardApply', {}, locale), fixKeep: t('tui.model.reconcile.keep', {}, locale), notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };
     },

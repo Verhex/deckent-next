@@ -73,7 +73,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
         // R9b (owner D3): the caller's model, else the person's Brain model (project over user), else the chat model; the gate below decides, never a swap.
         const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference ?? configuredBrainModel(context.config['brain_planner']));
-        await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
+        const gate = await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
         const configured = context.config['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
         const profile = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === command.scopeId
           && JSON.stringify(value.reference) === JSON.stringify(selected.command.reference)) ?? null;
@@ -109,7 +109,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
         const note = memory.note();
         return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), ...(note ? { planningMemory: note } : {}),
-          quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']), correctionRetries: brainCorrectionRetries(context.config['brain_planner']) };
+          quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']), correctionRetries: brainCorrectionRetries(context.config['brain_planner']), brainBelowRecommended: gate.belowRecommended };
       },
     }).plan(input, undefined, signal, observe);
   } catch (error) {

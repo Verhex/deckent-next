@@ -30,7 +30,9 @@ export interface RunProposalResult { readonly schemaVersion: 1; readonly proposa
   /** S4B-6: the project memory of the planning call that recorded this proposal (response-only, never stored; a replay carries none). `selected`:
    * entries sealed for the call (sent with `on`, only sealed with `shadow`); `omitted`: left out by the size limits; `withheld`: from work the
    * person may not read; `reason`: why no memory was read at all. Absent when memory is off. */
-  readonly planningMemory?: PlanningMemoryNote }
+  readonly planningMemory?: PlanningMemoryNote;
+  /** Owner 2026-11-06: the planning model is below the built-in recommended Brain class (response-only, never stored; a replay carries none). */
+  readonly brainBelowRecommended?: true }
 export type PlanningMemoryNote = Readonly<{ mode: 'shadow' | 'on'; selected: number; omitted: number; withheld: number; reason: 'policy' | 'contests' | 'template' | null }>;
 const result = (registry: WorkClassRegistry | undefined, proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => {
   const unrecognised = unrecognisedRunProposalPermissions(proposal.proposal, registry);
