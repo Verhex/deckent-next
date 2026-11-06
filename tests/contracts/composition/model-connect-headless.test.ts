@@ -126,9 +126,10 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await main(['coding', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
     expect(JSON.parse(output).profiles[0]).toMatchObject({ runtime: 'subscription', connection: profile.id });
     // R8c: people see the connection as CLI · model (its id only in --json); R8b: `--connection` alone names the provider.
-    output = ''; expect(await main(['coding'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
+    const host = { workerCliOf: (family: string) => adapters.nativeCliAgent(family)?.id ?? null, configureCodingTemplate: configureNativeCodingTemplate };
+    output = ''; expect(await main(['coding'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
-    output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
+    output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(JSON.parse(output)).toMatchObject({ status: 'unchanged', connection: profile.id });
     const back = await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, apply: false }, options, person);
     expect(back.profile.adapter.version).toBe(1); expect(back.profile.parameters).not.toHaveProperty('worker');
