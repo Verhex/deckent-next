@@ -265,14 +265,15 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const active = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === (kind.catalogProviderId ?? kind.id)), on = active && active.access === 'allowed' ? active.models.filter(model => model.activation?.state === 'active').length : 0;
         const stateDetail = !kind.available ? '' : keyName === null ? (on ? t('tui.provider.state.models', { count: on }, locale) : '-') : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
-        const detail = kind.terminalTextChat ? `${t('tui.provider.login.ownSubscriptionNote', {}, locale)} · ${stateDetail}` : stateDetail;
+        const join = (lead: string) => stateDetail && stateDetail !== '-' ? `${lead} · ${stateDetail}` : lead; // BeUser r-rest 4: no dangling "· -"
+        const detail = kind.terminalTextChat ? join(t('tui.provider.login.ownSubscriptionNote', {}, locale)) : stateDetail;
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
           grantBlocked = errorText(error); grantRequired = (error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED';
         } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
-        return { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.terminalTextChat ? detail : kind.presentation === 'beta' ? `${t('tui.provider.beta', {}, locale)} · ${detail}` : kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
+        return { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.terminalTextChat ? detail : kind.presentation === 'beta' ? join(t('tui.provider.beta', {}, locale)) : kind.billing === 'subscription' && kind.available ? join(t('tui.provider.billing.subscription', {}, locale)) : detail,
           blocked: !kind.available ? `${t('tui.provider.unavailable', {}, locale)} ${t('siwc.card.apiKey', {}, locale)}` : kind.headlessLogin && isolation ? isolationReason : null, keyName, keyStored: stored, grantRequired,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),

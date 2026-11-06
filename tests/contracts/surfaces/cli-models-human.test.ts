@@ -117,7 +117,7 @@ it('the retirement warning threshold is the config field (law 6): 30 days warns 
   const f = await project({ terminal: { scopeId: 'live' }, models: { retirementWarningDays: 30 } }, 'tr'), h = host(f);
   expect(await main(['models'], h.context)).toBe(0);
   const text = h.out.text();
-  expect(text).toContain('Kapsam: live · kullanılabilir modeller');
+  expect(text).toContain('live kapsamında kullanılabilir modeller');
   expect(text).toMatch(/Model kimliği\s+Kanal\s+Durum\s+Effort düzeyi/u);
   expect(text).toMatch(/model-a-old\s+abonelik claude\s+emekli \(2026-10-15\)/u);
   expect(text).toMatch(/model-b-later.*2026-11-08.*20 gün/u);

@@ -761,7 +761,7 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
     connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher' } }),
     loginDir: async () => ({ owned: '/x' }), login: async () => null } };
   const blocked = providerPanelPort(root, 'scope', host, options, 'en', errorText), listed = await blocked.inspect();
-  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.HEADLESS_ISOLATION_UNAVAILABLE', {}, 'en') }); expect(listed.kinds[0]!.detail).toMatch(/^subscription: no API key, uses your plan's usage quota · /u);
+  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.HEADLESS_ISOLATION_UNAVAILABLE', {}, 'en') }); expect(listed.kinds[0]!.detail).toBe("subscription: no API key, uses your plan's usage quota"); // BeUser r-rest 4: no dangling "· -"
   expect(listed.kinds[1]!.blocked).toBeNull();
   const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
   expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);

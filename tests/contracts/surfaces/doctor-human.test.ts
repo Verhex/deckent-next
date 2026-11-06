@@ -231,6 +231,19 @@ describe('deckent doctor (command)', () => {
       if (warned) expect(text).toContain(`model-later (api-b)`); else expect(text).not.toContain('model-later');
       expect(text).toContain(warned ? 'warning' : 'No active model is being retired');
     }
+    // BeUser r-rest 3: a scope without a budget is warned about only when it has a metered model connection; subscription or no model: no money row.
+    const reference = { providerId: 'remote-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
+    const metered = { schemaVersion: 1, id: 'p-chat', version: 1, scopeId: 'live', reference, bindingDigest: 'b'.repeat(64), protocol: { family: 'openai-chat-completions', version: 'v1' },
+      adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint: 'https://api.example.test/v1/chat/completions', maxOutputTokens: 256, authentication: { type: 'none' },
+        tariff: { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 100, outputMinorUnitsPerMillionTokens: 100 } } },
+      allocation: { id: 'a-chat', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 1024, responseMaxBytes: 1024, timeoutMs: 1000 } };
+    for (const [profiles, warned] of [[[], false], [[metered], true]] as const) {
+      clearConfigCache();
+      const root = await project({ terminal: { scopeId: 'live' }, provider_invocation_profiles: { schemaVersion: 1, profiles } }), out: string[] = [];
+      await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, inspectProviderSpendAccount: async () => ({ checkpoint: null }),
+        stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } } as never).catch((error: unknown) => out.push(`[${(error as { code?: string }).code}]`));
+      expect(out.join('').includes('Scope live has no API budget yet')).toBe(warned);
+    }
   });
   it('negative: doctor never heals (rewrites) a corrupt project config; it fails typed and the bytes stay', async () => {
     const root = await project('{broken');

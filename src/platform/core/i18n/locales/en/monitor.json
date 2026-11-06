@@ -165,6 +165,7 @@
   "monitor.installState.unavailable": "UNREACHABLE",
   "monitor.installState.denied": "ACCESS REFUSED",
   "monitor.install.noProblems": "no problems",
+  "monitor.install.noModel": "no model connected yet (/provider)",
   "monitor.check.serviceRunning": "Service running",
   "monitor.check.serviceStopped": "Service stopped",
   "monitor.check.serviceUnknown": "Service state unknown",
