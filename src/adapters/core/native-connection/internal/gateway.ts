@@ -21,7 +21,7 @@ export { isPublicNativeAddress } from './egress.js';
 /** Receives validated worker events (untrusted, worker-reported evidence) for live observation and retention. */
 export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
-  onEvents?: WorkerEventSink; dependencyContext?: Readonly<{ text: string; sha256: string }> }) {
+  onEvents?: WorkerEventSink; dependencyContext?: Readonly<{ text: string; sha256: string }>; /** D4: the person's report language (ISO 639-1). */ language?: string }) {
   if (input.dependencyContext && (Buffer.byteLength(input.dependencyContext.text) > workerReportLimits.promptBytes
     || createHash('sha256').update(input.dependencyContext.text).digest('hex') !== input.dependencyContext.sha256)) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
   const binding = nativeSubscriptionSchema.parse(input.binding);
@@ -91,7 +91,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     statistics.bootstrapReads++;
     response.setHeader('Cache-Control', 'no-store');
     response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, capabilities, home: spec.home, file: spec.file,
-      credential, quotaPolicy: catalog.quotaPolicy, preflight: binding.preflight, promptDelivery: binding.promptDelivery, dependencyContext: input.dependencyContext ? { ...input.dependencyContext, maxBytes: workerReportLimits.promptBytes } : undefined, finalReport: binding.finalReport ? { ...binding.finalReport, limits: workerReportLimits } : undefined,
+      credential, quotaPolicy: catalog.quotaPolicy, preflight: binding.preflight, promptDelivery: binding.promptDelivery, dependencyContext: input.dependencyContext ? { ...input.dependencyContext, maxBytes: workerReportLimits.promptBytes } : undefined, finalReport: binding.finalReport ? { ...binding.finalReport, limits: workerReportLimits, ...(input.language ? { language: input.language } : {}) } : undefined,
       ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
     credential = undefined;
   });

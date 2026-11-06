@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
-import { finalReportTextInstruction, nativeProjectionDispatch } from '#adapters/core/native-connection/index.js';
+import { finalReportTextInstruction, nativeProjectionDispatch, reportLanguageInstruction } from '#adapters/core/native-connection/index.js';
 import { createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker,
   validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence, recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, createNativeWorkerEvents,
   createNativeCliWorkerDriver, type NativeCliWorkerTransport,
@@ -61,8 +61,8 @@ function fixture() {
   const fence = vi.fn(async () => true);
   return { ports, release, run, tools, fence };
 }
-async function prepared(f = fixture()) {
-  const result = await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence });
+async function prepared(f = fixture(), language?: string) {
+  const result = await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence, ...(language ? { language } : {}) });
   expect(result.state).toBe('ready'); if (result.state !== 'ready') throw new Error('fixture-not-ready');
   return { ...f, supervisor: result.supervisor };
 }
@@ -115,6 +115,10 @@ it('K12: output stays under DispatchApplication custody; transport receives no w
   expect(input.model).toBe('fixture-exact-model'); expect(input.user).toContain(workInput.task);
   // R9k: a bridge worker has no CLI report flag, so the task itself asks for the report contract the host reads.
   expect(input.user.endsWith(`\n\n${finalReportTextInstruction()}`)).toBe(true);
+  // D4: with the person's language the instruction ends with the language line (schema unchanged before it).
+  const tr = await prepared(fixture(), 'tr'); await tr.supervisor.execute(request);
+  const user = vi.mocked(tr.ports.driver).mock.calls[0]![0].user;
+  expect(user.endsWith(`\n\n${finalReportTextInstruction()}\n\n${reportLanguageInstruction('tr')}`)).toBe(true); expect(user).toContain('ISO 639-1 code "tr"');
   expect(JSON.stringify(input)).not.toContain(request.workspace); expect(input).not.toHaveProperty('argv');
   expect(f.release).not.toHaveBeenCalled();
   await f.supervisor.release(request); await f.supervisor.release(request); expect(f.release).toHaveBeenCalledTimes(1);

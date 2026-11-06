@@ -374,6 +374,7 @@
         "src/engine/core/workspaces",
         "src/platform/core/config",
         "src/platform/core/errors",
+        "src/platform/core/i18n",
         "src/platform/core/managed-files",
         "src/engine/core/task-inputs",
         "src/adapters/core/native-connection",
@@ -3527,6 +3528,7 @@
         "src/adapters/core/sqlite-model-activation",
         "src/composition/core/toolchains",
         "src/composition/core/memory",
+        "src/platform/core/i18n",
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store",
         "src/platform/core/integrity",
@@ -5188,9 +5190,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42081,
+      "adapters": 42091,
       "surfaces": 45000,
-      "composition": 13465
+      "composition": 13466
     },
     "totalSrcLines": 200000,
     "testCases": 8200,

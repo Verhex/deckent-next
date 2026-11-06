@@ -332,7 +332,7 @@
   "terminal.approval.window.what.changes": " (+{added} −{removed} lines)",
   "terminal.approval.window.where": "project {path}",
   "terminal.approval.window.whereUnknown": "this terminal's project",
-  "terminal.approval.window.onBehalfSelf": "you — the user of this terminal",
+  "terminal.approval.window.onBehalfSelf": "the AI in this chat, on your behalf (you decide)",
   "terminal.approval.window.scope": "this project · this session · only this one call",
   "terminal.approval.window.why": "Rule: {rule} · Mode: {mode}",
   "terminal.approval.window.rule.read": "reading tools ask for approval here",

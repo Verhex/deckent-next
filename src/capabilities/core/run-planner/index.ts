@@ -9,7 +9,9 @@ const selected = z.strictObject({ id: identitySchema, version: persistedInteger(
 const template = selected.extend({ instruction: persistedString(z.string().min(1).max(16_384)), summaryChars: persistedInteger().min(1).max(1024),
   modelAssignment: z.enum(['brain', 'system']).optional(),
   /** S4B-6: the planning context version the template is written for. Absent = 2 (v1–v3 rows keep their bytes and digest); 3 adds `memory`. */
-  contextVersion: z.literal(3).optional() }).strict();
+  contextVersion: z.literal(3).optional(),
+  /** D4 (owner 2026-11-06): the user message names the person's `language` (v5). A goal for the model, not a guarantee; keys and ids unchanged. Absent = earlier bytes. */
+  personLanguage: z.literal(true).optional() }).strict();
 type BrainReasoning = 'model-default' | 'off';
 const reasoning = z.enum(templates.reasoningModes as [BrainReasoning, ...BrainReasoning[]]);
 export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.literal(1).prefault(1),
@@ -87,7 +89,7 @@ function supportsTurnLimit(context: unknown): boolean {
   if (!Array.isArray(kinds) || !kinds.some(row => row.turnLimit !== undefined)) return true;
   return kinds.some(row => row.turnLimit === 'supported');
 }
-export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot) {
+export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot, language?: string) {
   const config = brainPlannerConfigSchema.parse(configInput), chosenTemplate = selectedBrainTemplate(config), intent = redactForRecord(command.intent, known);
   const modelAssignment = chosenTemplate.modelAssignment ?? 'brain';
   const projected = JSON.stringify(redactJson({ scopeId: command.scopeId, workClasses: brainWorkClassView(policy), context }, known));
@@ -97,7 +99,7 @@ export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassP
     digest: sha256(encodeCommandProjection('brain-template:1', chosenTemplate)) }, summaryChars: chosenTemplate.summaryChars, modelAssignment,
     inputDigest: brainInputDigest(command, known), contextDigest: sha256(projected), intent,
     messages: [{ role: 'system' as const, content: redactForRecord(chosenTemplate.instruction, known) },
-      { role: 'user' as const, content: JSON.stringify({ intent, context: JSON.parse(projected) as unknown,
+      { role: 'user' as const, content: JSON.stringify({ intent, ...(chosenTemplate.personLanguage && language ? { language } : {}), context: JSON.parse(projected) as unknown,
         schema: brainDraftJsonSchema(supportsTurnLimit(context), modelAssignment === 'system') }) }] });
 }
 /** A reply that is exactly one Markdown code fence around the object (```json … ``` or ``` … ```) is read as its body; anything else is

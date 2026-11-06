@@ -2,6 +2,7 @@ import { delegationOwner, executionProfileDefinitionSchema, modelInvocationProfi
 import type { SandboxRequest, SandboxResult, SupervisorLaunchHooks } from '#engine/index.js';
 import { DockerSupervisor, resolveDockerTaskProfile, validateDockerTaskProfile, type DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 import { SIWC_INFERENCE, SIWC_WORKER_RELAY as R, siwcResponsesDefinitionSchema } from '#adapters/core/provider-siwc/index.js';
+import { reportLanguageInstruction } from '#adapters/core/native-connection/index.js';
 import { stopSiwcWorker, siwcWorkerResultError } from './launch.js';
 import type { openSiwcWorkerRelay } from './relay.js';
 
@@ -50,10 +51,11 @@ export function bindSiwcWorker(profile: ExecutionProfileDefinition, connections:
 /**
  * The one turn as the native Codex worker of the same frozen profile runs it: the core prompt in its instructions file, the task plus the admitted
  * predecessor context as the prompt, and the profile's own `-c` config (discovery, instructions file, effort) taken from its frozen argv.
+ * D4: a turn that asks for the report also names the person's report language, as the native worker's prompt does.
  */
-export function siwcWorkerTurn(argv: readonly string[], delivery: Readonly<{ core: string; task: string }>, context?: Readonly<{ text: string }> | null) {
+export function siwcWorkerTurn(argv: readonly string[], delivery: Readonly<{ core: string; task: string }>, context?: Readonly<{ text: string }> | null, language?: string) {
   const end = argv.indexOf('--'), options = end < 0 ? argv : argv.slice(0, end);
-  return Object.freeze({ prompt: `${delivery.task}${context ? `\n\n${context.text}` : ''}`, instructions: delivery.core,
+  return Object.freeze({ prompt: `${delivery.task}${context ? `\n\n${context.text}` : ''}${language ? `\n\n${reportLanguageInstruction(language)}` : ''}`, instructions: delivery.core,
     config: Object.freeze(options.flatMap((arg, at) => at > 0 && options[at - 1] === '-c' ? [arg] : [])) });
 }
 

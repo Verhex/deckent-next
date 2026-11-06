@@ -18,4 +18,5 @@ export function readFinalReportText(text: string | null, secrets: readonly strin
   return validateFinalReport(value, secrets);
 }
 
-/** R9k: a bridge worker (no CLI report flag) asks for the same report contract in its last answer, read by `readFinalReportText`. */ export const finalReportTextInstruction = () => finalTextReportInstruction(JSON.stringify(createFinalReportJsonSchema(workerReportLimits, false)));
+/** R9k: a bridge worker (no CLI report flag) asks for the same report contract in its last answer, read by `readFinalReportText`; D4: in the person's language. */
+export const finalReportTextInstruction = (language?: string) => finalTextReportInstruction(JSON.stringify(createFinalReportJsonSchema(workerReportLimits, false)), language);

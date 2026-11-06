@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
-import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
+import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, resolveLocale, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
@@ -38,6 +38,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
+    const language = resolveLocale(undefined, options.env ?? process.env, config.language); // D4: the person's report language for every worker path
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
@@ -149,9 +150,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
       connection = profile.nativeSubscription && !relayed && !native ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
-        deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}) }) : undefined; await preparation.enter('dispatch');
+        deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}), language }) : undefined; await preparation.enter('dispatch');
       relay = relayed ? await openConfiguredSiwcWorker(projectRoot, options, { identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: profile.options.imageId,
-        codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext), finalReport: !!relayed.finalReport },
+        codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext, relayed.finalReport ? language : undefined), finalReport: !!relayed.finalReport },
         deadlineMs: profile.options.deadlineMs, directory: workspaceRoot, policyRevision: document.revision, audit,
         fence: async () => { const current = await store.loadRun(identity.scopeId, identity.runId); return current?.state.kind === 'running' && !current.cancelRequested; } }) : undefined;
       const dockerOptions = { ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
@@ -159,7 +160,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (native) {
         const prepared = await prepareNativeCliWorker({ profile: selected, request, ports: nativePorts!, custody: nativeWorkerCustodyFile(request),
           onEvents: batch => nativeEvents!.accept(batch),
-          ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), knownSecrets: getConfigKnownSecrets(config),
+          ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), language, knownSecrets: getConfigKnownSecrets(config),
           toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
           fence: () => nativeCliWorkerFence(store, identity) });
         if (prepared.state !== 'ready') { await release(); return await waiting(prepared.reason); }

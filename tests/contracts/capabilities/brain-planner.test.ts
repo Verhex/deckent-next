@@ -64,15 +64,20 @@ it.each([
   expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, tasks: [task] } })))
     .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule } }));
 });
-it('supplies criterion-id annotation and selects v4 (S4B-6 memory context) while keeping v1–v3 available', () => {
+it('supplies criterion-id annotation and selects v5 (D4 person language) while keeping v1–v4 available', () => {
   const current = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
-  expect(current.template.version).toBe(4);
+  expect(current.template.version).toBe(5);
+  expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 4 } }).template.version).toBe(4);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 3 } }).template.version).toBe(3);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).template.version).toBe(2);
   const schema = JSON.parse(current.messages[1]!.content).schema;
   expect(schema.properties.graph.properties.tasks.items.properties.acceptanceCriteria.description).toContain('criterionDefinitions ids');
   const old = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 1 } });
   expect(old.template.version).toBe(1);
+  // D4: v5 names the person's language in the user message and asks for titles, tasks and criterion text in it; v4 and no language keep the old bytes.
+  const user = (config: unknown, language?: string) => JSON.parse(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, config, undefined, language).messages[1]!.content);
+  expect(user({}, 'tr').language).toBe('tr'); expect(user({ selected: { id: 'run-proposal', version: 4 } }, 'tr')).not.toHaveProperty('language'); expect(user({})).not.toHaveProperty('language');
+  expect(current.messages[0]!.content).toContain('workInput.title, workInput.task and criterionDefinitions description in that language');
 });
 it('masks both credential-shaped and known escaped secrets before model context, output graph or summary can retain them', () => {
   const secret = 'opaque"and\\quoted', known = snapshotKnownSecrets([{ name: 'FIXTURE', value: secret }]);
