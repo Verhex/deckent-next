@@ -97,6 +97,10 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
       }
       const unknown = approvalCardLines(base({ tool: 'fixture_tool', risk: null }), work, '', null, {}, NOW);
       expect(unknown.find(line => line.startsWith(w.field.why))).toContain(w.rule['unknown']);
+      // R9e: a plan's Run-create card (no call, cell or setting) leaves out the tool rule, risk and undo rows; its summary is the what.
+      const plan = approvalCardLines(base({ runId: 'r', risk: null, summary: 'Tasks: 1\nDeclared budget ceiling: $2.00' }), work, '', null, { project: '/home/u/acme', mode: 'standart' }, NOW).join('\n');
+      for (const field of ['why', 'risk', 'undo'] as const) expect(plan).not.toContain(w.field[field]);
+      for (const field of ['what', 'where', 'onBehalf', 'scope', 'time'] as const) expect(plan).toContain(w.field[field]);
     }
   });
 

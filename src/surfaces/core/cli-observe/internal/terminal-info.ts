@@ -4,7 +4,7 @@ import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 
 /** The chat plan the terminal reports (the `cli-terminal` view, read structurally; no field is added to it). */
 type ChatPlan = Readonly<{ status: string; reference: Readonly<{ providerId: string; modelId: string; modelVersion: number }> | null;
-  tools?: 'available' | 'none' | 'unknown'; source?: string | null; catalogRevision: string | null; maxCompletionTokens: number | null; historyMessages: number | null }>;
+  tools?: 'available' | 'none' | 'unknown' | 'unverified'; source?: string | null; catalogRevision: string | null; maxCompletionTokens: number | null; historyMessages: number | null }>;
 export interface TerminalInfoContext extends CliBaseContext {
   describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<ChatPlan>;
 }

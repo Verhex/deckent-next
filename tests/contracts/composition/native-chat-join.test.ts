@@ -47,7 +47,7 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', channels: [] as (string | undefined)[] };
+  const state = { servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -58,7 +58,7 @@ async function fixture(askEdits = true) {
   const call: AgentToolCall = { id: 'unused', name: 'write_file', argumentsJson: JSON.stringify({ path: 'result.txt', content: 'approved business result\n' }) };
   const runtime: NativeChatRuntime = { readiness, limits: { idleMs: 30_000, maxConnections: 4, replayMaxEntries: 8, replayMaxBytes: 16 * entry.bridge.frameMaxBytes }, resolveModelUse,
     driver: async ({ session }) => ({ port: session, admit: async () => undefined,
-      native: (bridge, secrets) => ({ billingAxis: 'subscription', prepare: async () => ({}),
+      native: (bridge, secrets) => ({ billingAxis: 'subscription', prepare: async (_profile, _definition, request) => { state.prompt = JSON.stringify(request); return {}; },
         async send(_prepared, signal) {
           state.calls++; state.token = bridge.turnToken;
           expect(redactForRecord(bridge.turnToken, secrets.turn)).not.toContain(bridge.turnToken);
@@ -100,10 +100,12 @@ async function fixture(askEdits = true) {
 it('shows tools only for a matching capability, and does not spawn on inspection', async () => {
   if (await unsupportedPeer()) return;
   const h = await fixture();
-  expect((await describeTerminalChat(h.f.project, h.f.options)).tools).toBe('none');
+  // R4b: not yet observed is "unverified" (the first turn verifies it), never "no tools"; a known refusal is "none".
+  expect((await describeTerminalChat(h.f.project, h.f.options)).tools).toBe('unverified');
   expect((await describeTerminalChat(h.f.project, h.f.options, h.runtime)).tools).toBe('available');
   h.execution.profileDigest = '0'.repeat(64);
   expect(await inspectNativeChat(h.profile, h.runtime)).toMatchObject({ state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+  expect((await describeTerminalChat(h.f.project, h.f.options, h.runtime)).tools).toBe('none');
   expect(h.state.calls).toBe(0); expect(h.runtime.resolveModelUse).not.toHaveBeenCalled();
 });
 
@@ -111,6 +113,8 @@ it('keeps an AI requester, witnessed person decider, real write, durable replay 
   if (await unsupportedPeer()) return;
   const h = await fixture(), running = h.run(), event = await Promise.race([h.offered, running.then(result => { throw new Error(JSON.stringify({ result, events: h.events, calls: h.state.calls })); })]);
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
+  // R5c: the prompt states the witnessed person's mode (ask for edits too), not the MCP actor's plain standart.
+  expect(h.state.prompt).toContain('- Permission mode: standart (the person also asks for every edit)');
   const decided = await h.decide(event, 'allow');
   const result = await running;
   expect(decided).toMatchObject({ request: { requester: { issuer: expect.stringMatching(/\/mcp$/u) } }, decision: { deciderClass: 'human-tty' } });

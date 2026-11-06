@@ -81,6 +81,9 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
         const result = await f.call('run_shell', { command }, warned ? 'allow' : 'deny');
         expect({ realm, command, ...result }).toMatchObject({ realm, command, card: true, status: warned ? 'ok' : 'denied' });
         if (warned) expect(result.events).toContainEqual(expect.objectContaining({ kind: 'approval.requested', preview: expect.stringContaining('The working directory could not be verified;') }));
+        // R7a: the card words the structured posture in the person's language; the English realm sentence stays out of the preview.
+        const card = (result.events as { kind: string; preview?: string; posture?: unknown }[]).find(event => event.kind === 'approval.requested');
+        expect(card?.posture).toMatchObject({ containment: realm === 'degraded' ? 'sandbox' : 'host' }); expect(card?.preview).not.toMatch(/Runs on this machine|Runs in the|sandbox: none/u);
       }
       expect(f.audit().filter(row => row.event.subject.kind === 'permission-mode')).toEqual([]);
     }

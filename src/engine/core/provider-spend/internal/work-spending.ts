@@ -6,6 +6,7 @@ import { providerSpendEvidenceDigest, createProviderSpendAccount, parseProviderS
 import { createProviderSpendCheckpoint } from './checkpoint.js';
 import type { ProviderSpendBudget } from '#domain/index.js';
 import { providerSpendLocalZeroTariffProfile } from './no-charge.js';
+import { isNativeCliWorkerProfile, nativeCliWorkerParameters } from '#capabilities/index.js';
 export type WorkSpending = 'metered' | 'not-metered';
 const subscription = z.looseObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema });
 /** Trusted selected bindings only; never a model-authored billing claim. Unknown bindings stay metered. */
@@ -44,6 +45,9 @@ export function modelInvocationBillingAxis(profile: ModelInvocationProfile): Mod
  * provider connection), never by its name or adapter (owner 2026-10-17, Jev d8b2a0ce); the installed adapter refuses the declaration
  * beside a subscription binding. */
 export function workerBillingAxis(profile: ExecutionProfileDefinition): ModelInvocationBillingAxis | null {
-  if (subscription.safeParse(profile.parameters['nativeSubscription']).success) return 'subscription';
-  return profile.parameters['billingAxis'] === 'local' ? 'local' : null;
+  // R9d: a connected CLI worker (`--connection`) wraps its base profile; the subscription binding is the base's. An invalid wrapper stays metered.
+  const parameters = isNativeCliWorkerProfile(profile) ? (() => { try { return nativeCliWorkerParameters(profile).base.parameters; } catch { return null; } })() : profile.parameters;
+  if (!parameters) return null;
+  if (subscription.safeParse(parameters['nativeSubscription']).success) return 'subscription';
+  return parameters['billingAxis'] === 'local' ? 'local' : null;
 }

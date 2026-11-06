@@ -816,6 +816,7 @@
   "tui.model.state.ready": "hazır (bağlantı denenmedi)",
   "tui.model.state.blocked": "şu an seçilemez",
   "tui.model.noneDeclared": "Henüz bağlı bir model yok. Bağlamak için aşağıdaki “Model bağla…” satırını seçin (/provider ile aynı); bu bilgisayardaki bir model için oradan yerel sunucuyu seçin.",
+  "tui.model.notChosen": "Bağlı bir model var ama henüz seçilmedi. Başlamak için /model ile birini seç.",
   "tui.model.noneDeclaredNoConnect": "Henüz bağlı model yok. `deckent models connect --scope <kimlik> --connection <tür> --command-id <kimlik>` ile bağlayın (bkz. `deckent models connect --help`).",
   "tui.model.reason.noProfile": "Bu kapsamda bağlı değil: bu modeli adlandıran bir çağrı profili yok. /provider içinde sağlayıcısını seçin, sonra \"Model bağla\".",
   "tui.model.reason.keyMissing": "Anahtarı {name} gizli depoda yok. Sağlayıcıyı /provider ile bağlayın.",

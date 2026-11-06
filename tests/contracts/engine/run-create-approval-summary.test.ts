@@ -73,6 +73,7 @@ it.each(['en', 'tr'] as const)('subscription approval summary declares budget ex
   expect(text).toContain(locale === 'tr' ? 'İşçiler: abonelik veya ek ücret gerektirmeyen model — API bütçesi uygulanmaz' : 'Workers: subscription or local model — no extra cost; budget check does not apply');
   expect(text).toContain('owner-purchase'); expect(text).toContain('run-business');
   expect(text).not.toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
+  expect(text).not.toContain(locale === 'tr' ? 'bütçe tavanı' : 'budget ceiling'); // R9d: no API ceiling row for not-metered workers
 });
 it('proposer-authored long titles cannot push declared permissions off the card; the authority notice stays', () => {
   const graph = { ...command.graph, tasks: Array.from({ length: 40 }, (_, i) => ({ ...command.graph.tasks[0]!, id: `harmless-read-only-check-${i}-` + 'x'.repeat(400) })) };

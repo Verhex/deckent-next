@@ -31,9 +31,12 @@ export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference
     ? groups.map(group => { const children = view.choices.filter(choice => choice.group === group).map(node);
       return { id: `group:${group}`, label: group, detail: String(children.length), childTitle: group, children }; })
     : view.choices.map(node);
-  const blocked = defaultOffered && view.defaultBlocked === null ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
-  return { title, items, scopes: [{ id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
-    { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked },
+  const offered = defaultOffered && view.defaultBlocked === null, blocked = offered ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
+  const session = { id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
+    fallback = { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked };
+  // R2d: with no model chosen yet, the first pick is the default (the one Enter makes it), so the next terminal starts with it too.
+  const first = offered && !view.choices.some(choice => choice.configured);
+  return { title, items, scopes: [...(first ? [fallback, session] : [session, fallback]),
     ...(largeContext ? [{ id: FRESH, label: `${labels.session} · ${labels.switch.fresh}` }, { id: FRESH_DEFAULT, label: `${labels.sessionAndDefault} · ${labels.switch.fresh}`, ...blocked }] : [])] };
 }
 

@@ -20,7 +20,7 @@ export type TerminalChatPlan = Readonly<{
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
-  tools: 'available' | 'none' | 'unknown';
+  tools: 'available' | 'none' | 'unknown' | 'unverified'; // R4b `unverified`: a subscription CLI's tools not observed yet (its first turn verifies them)
   skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
@@ -59,7 +59,7 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
-    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
+    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more });
 }
 /**

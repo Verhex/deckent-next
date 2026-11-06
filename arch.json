@@ -2098,7 +2098,8 @@
         "src/domain/core/principal",
         "src/domain/core/model-activation",
         "src/domain/core/provider-catalog",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "PROVIDERS"
     },
