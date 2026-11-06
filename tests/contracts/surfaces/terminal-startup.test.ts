@@ -34,7 +34,7 @@ describe('opening frame (T2 T-STARTUP)', () => {
     expect(en.split('\n').slice(0, 4).map(line => line.trimEnd())).toEqual([
       '╭──╮   Deckent 1.0.0-alpha.9',
       '│  ╰╮  Project deckent-next · ~/deckent-next',
-      '│  ╭╯  Model local-openai/chat@1',
+      '│  ╭╯  Model: local-openai/chat@1',
       '╰──╯   /help · Shift+Tab mode · ? shortcuts',
     ]);
     const tr = stripVTControlCharacters(startupFrame(startup('tr', { clear: false }), plain, 100, 30));

@@ -445,7 +445,7 @@
   "terminal.admin.usage.completion": "  Yanıt: {tokens} token",
   "terminal.admin.usage.reasoning": "  Akıl yürütme: {reasoning}",
   "terminal.admin.status.service": "Çalışma servisi şimdi: örnek {instance}, pid {pid}, sürüm {build}",
-  "terminal.slash.provider": "Sağlayıcı bağla (gizli anahtar, ücretsiz deneme) ya da bağlantıyı kaldır",
+  "terminal.slash.provider": "Model bağla (abonelikle giriş ya da API anahtarı) veya bağlantıyı kaldır",
   "terminal.info.usage.section.live": "Canlı harcama hesabı",
   "terminal.info.usage.key.budget": "Bütçe",
   "terminal.info.usage.key.revision": "Bütçe revizyonu",

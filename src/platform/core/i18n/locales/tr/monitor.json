@@ -165,6 +165,7 @@
   "monitor.installState.unavailable": "ERİŞİLEMİYOR",
   "monitor.installState.denied": "ERİŞİM YOK",
   "monitor.install.noProblems": "sorun yok",
+  "monitor.install.noModel": "henüz model bağlı değil (/provider)",
   "monitor.check.serviceRunning": "Servis açık",
   "monitor.check.serviceStopped": "Servis kapalı",
   "monitor.check.serviceUnknown": "Servis durumu bilinmiyor",

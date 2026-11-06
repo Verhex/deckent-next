@@ -961,7 +961,7 @@
     "cli.human.scope.pickBodyRead": {"before": "Okunacak scope'u seçin. Hiçbir şey değişmez.","after": "Okunacak kapsamı seçin. Hiçbir şey değişmez."},
     "models.catalog.notice": {"before": "Katalog kayıtları ve etkinleştirme, yeni worker Run'larının hangi tam modelleri kullanabileceğini belirler; sağlayıcının modeli sunduğunu kanıtlamaz.","after": "Katalog kayıtları ve etkinleştirme, yeni işçi işlerinin hangi tam modelleri kullanabileceğini belirler; sağlayıcının modeli sunduğunu kanıtlamaz."},
     "models.activation.persisted": {"before": "{scope} kapsamındaki {reference}: revizyon {revision} için kayıtlı {state} aktivasyonu.","after": "{scope} kapsamındaki {reference}: kayıtlı etkinlik durumu: {state} (revizyon {revision})."},
-    "climodels.models.heading": {"before": "Scope {scope}'da kullanılabilir modeller","after": "Kapsam: {scope} · kullanılabilir modeller"},
+    "climodels.models.heading": {"before": "Scope {scope}'da kullanılabilir modeller","after": "{scope} kapsamında kullanılabilir modeller"},
     "climodels.models.declared.heading": {"before": "Bağlı sağlayıcıların beyanı (terminalin sohbet modelleri; worker'lar kataloğu kullanır: deckent models)","after": "Bağlı sağlayıcıların beyanı (terminalin sohbet modelleri; işçiler kataloğu kullanır: deckent models)"},
     "climodels.models.card.connectWhat": {"before": "Modeli beyan eder, scope'un çağrı profilini yazar ve etkinleştirir; her adım kendi yönetilen yolunda.","after": "Modeli beyan eder, kapsamın çağrı profilini yazar ve etkinleştirir; her adım kendi yönetilen yolunda."},
     "climodels.models.card.where": {"before": "Scope {scope} · sağlayıcı {provider}","after": "Kapsam {scope} · sağlayıcı {provider}"},

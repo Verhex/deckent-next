@@ -363,6 +363,12 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     expect(text).toMatch(/│ ! not invocable\s+│ stale\s+│/u); expect(text).toMatch(/│ ! not invocable\s+│ legacy\s+│/u);
     expect(text).toContain(`→ 1 model(s): ${t('model.invocable.stale', {}, 'en')}`);
     expect(text).toContain(t('monitor.map.models', { count: 3, active: 1 }, 'en'));
+    // BeUser r-rest 5: an install with no problem but no catalog model never reads "no problems"; it names the next step.
+    const quiet = { ...install, diagnostics: [], runs: [], workers: [], approvals: [], pools: [] };
+    for (const [list, said] of [[[], 'monitor.install.noModel'], [models, 'monitor.install.noProblems']] as const) {
+      const shown = surface.renderMonitorText({ ...fullSnapshot, installs: [{ ...quiet, map: { ...install.map!, models: list } }] }, { locale: 'tr', width: 200, ascii: false });
+      expect(shown).toContain(t(said, {}, 'tr'));
+    }
   });
   it('lists Runs newest first with a duration column, unknown admission last; workers newest first with the attempt model', () => {
     const text = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: false });

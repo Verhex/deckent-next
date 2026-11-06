@@ -18,10 +18,12 @@ export function installState(w: Words, install: MonitorInstall): MonitorSpan {
   return state === 'running' ? span(t('monitor.installState.running', {}, locale), 'success') : state === 'stopped' ? span(t('monitor.installState.stopped', {}, locale), 'muted')
     : state === 'unknown' ? span(t('monitor.installState.unknown', {}, locale), 'warning') : span(t('monitor.installState.none', {}, locale), 'muted');
 }
-/** The warning count (or "no problems") the header and the card heading show. */
+/** The warning count (or "no problems") the header and the card heading show; BeUser r-rest 5: a read map with no catalog model says that instead. */
 export function problemsSpan(w: Words, install: MonitorInstall): MonitorSpan {
   const count = w.problemCount(install);
-  return count ? span(`${w.marks.warn} ${t('monitor.diagnostics', { count }, w.locale)}`, 'warning') : span(`${w.marks.ok} ${t('monitor.install.noProblems', {}, w.locale)}`, 'success');
+  return count ? span(`${w.marks.warn} ${t('monitor.diagnostics', { count }, w.locale)}`, 'warning')
+    : install.map && !install.map.models.length ? span(`${w.marks.warn} ${t('monitor.install.noModel', {}, w.locale)}`, 'warning')
+      : span(`${w.marks.ok} ${t('monitor.install.noProblems', {}, w.locale)}`, 'success');
 }
 
 /** Durum: service, ledger and worker image as ✓/!/○ checks (the image check only when the install reports one). */

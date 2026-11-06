@@ -12,4 +12,4 @@ export { modelRetirementWarnings, renderRetirementWarning, type ModelRetirementW
 export type { ModelRoleAssignHandler, ModelRoleInspectionHandler } from './internal/model-roles.js';
 export { renderModelRoleInspection } from './internal/model-roles.js';
 
-export { spendPeriodLines } from './internal/spend-period.js';
+export { scopeHasMeteredModel, spendPeriodLines } from './internal/spend-period.js';

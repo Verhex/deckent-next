@@ -234,6 +234,13 @@ describe('/provider window', () => {
     await settle(80);
     expect(view.frame()).toContain('Anthropic API'); expect(view.frame()).toContain('DECKENT_LOCAL_ENDPOINT_KEY');
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(80);
+    // BeUser r-rest 3: with a budget action offered, the window still opens on the first connection row; the budget row comes after the connections.
+    const budget: BudgetPanelPort = { inspect: async () => ({ action: 'create', current: null, note: null, frozen: false, presets: [5], min: 1, max: 100, step: 1, start: 5 }), apply: async () => ({ ok: true, line: '' }) };
+    const priced = mount(panel('provider', { provider: { ...port, budget } }).element, 100, 40);
+    await settle(80);
+    const rows = priced.frame().split('\n');
+    expect(rows.find(line => /│ ?>/u.test(line))).toContain('Anthropic API');
+    expect(rows.findIndex(line => line.includes('Create budget'))).toBeGreaterThan(rows.findIndex(line => line.includes('DeepSeek API')));
   });
 
   it('connect: the key is typed masked under the transparency note, goes only to the port, and the typed result is shown; the key is never drawn or pushed', async () => {
