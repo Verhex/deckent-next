@@ -20,7 +20,7 @@ export function validateNativeCliWorkerSupervisorProfile(input: unknown): undefi
   return undefined;
 }
 export async function prepareNativeCliWorker(input: Readonly<{ profile: ExecutionProfileDefinition; request: SandboxRequest; ports: NativeCliWorkerPorts;
-  fence(): Promise<boolean>; dependencyContext?: string; knownSecrets?: KnownSecretSnapshot; toolContext?: NativeCliWorkerToolContext;
+  fence(): Promise<boolean>; dependencyContext?: string; /** D4: the person's report language (ISO 639-1). */ language?: string; knownSecrets?: KnownSecretSnapshot; toolContext?: NativeCliWorkerToolContext;
   custody?: JsonRecordFile; onEvents?: (events: readonly WorkerEvent[]) => void }>, signal: AbortSignal = new AbortController().signal) {
   const frozen = Object.freeze({ ...input, request: sandboxRequestSchema.parse(input.request), profile: executionProfileDefinitionSchema.parse(input.profile) });
   const resolved = resolveNativeCliWorkerProfile(frozen.profile), ready = await inspectNativeCliWorker(resolved.binding, frozen.ports);
@@ -99,7 +99,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       }, cancel: () => delegate.cancel(), revoke: () => delegate.revoke() };
       const binding = this.resolved.nativeSubscription!, delivery = binding.promptDelivery!;
       this.driver = await this.input.ports.driver({ binding: this.resolved.binding, tools: guarded, model: binding.model!.modelId,
-        system: delivery.core, user: delivery.task + (this.input.dependencyContext ? `\n\n${this.input.dependencyContext}` : '') + (binding.finalReport ? `\n\n${finalReportTextInstruction()}` : ''),
+        system: delivery.core, user: delivery.task + (this.input.dependencyContext ? `\n\n${this.input.dependencyContext}` : '') + (binding.finalReport ? `\n\n${finalReportTextInstruction(this.input.language)}` : ''),
         deadlineMs: this.resolved.options.deadlineMs, outputBytes: this.resolved.options.outputBytes, execution: ready.execution,
         ...(binding.reasoningEffort ? { effort: binding.reasoningEffort } : {}),
         ...(this.input.onEvents ? { onEvents: batch => {

@@ -90,5 +90,8 @@ describe('registry capability routing in the mounted worker, without a provider 
     expect(instruction).toMatch(/^### report:final-text-json@1\n.*exactly one JSON object.*no code fence\.\n\{"type":"object"\}$/s);
     expect(worker.nativeReportInstruction(base, '{}')).toBeNull();
     expect(worker.nativeReportInstruction({ ...base, structuredReport: { flag: '--fixture-schema', channel: 'inline-json' as const } }, '{}')).toBeNull();
+    // D4: a flag channel (Claude --json-schema, Codex --output-schema) gets only the person's language line; the flagless one ends with it.
+    expect(worker.nativeReportInstruction({ ...base, structuredReport: { flag: '--fixture-schema', channel: 'inline-json' as const } }, '{}', 'tr')).toBe(worker.reportLanguageInstruction('tr'));
+    expect(worker.nativeReportInstruction(text, '{}', 'tr')!.endsWith('{}\n\n' + worker.reportLanguageInstruction('tr'))).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
 import { listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
-import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { SIWC_INFERENCE, FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -100,7 +100,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         const memory = await prepareConfiguredPlanningMemory(context, { scopeId: command.scopeId, runId: brainRunId(command), commandId: command.commandId, intent: command.intent,
           takesMemory: brainTakesMemory(context.config['brain_planner']), workClasses: registry.workClasses });
         const prompt = prepareBrainRegistryPrompt(command, registry, budget,
-          context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels, memory: memory.block });
+          context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels, memory: memory.block, language: resolveLocale(undefined, options.env ?? process.env, context.config.language) });
         const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
         assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
         await memory.seal(prompt.memory, prompt.contextDigest);

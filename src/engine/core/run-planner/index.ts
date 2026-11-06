@@ -19,7 +19,7 @@ export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandPro
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
-  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels']; memory?: BrainMemoryContext | null }>) {
+  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels']; memory?: BrainMemoryContext | null; language?: string }>) {
   // The context bound measures the same WorkClass view the prompt carries (brainWorkClassView: no scoring, admission or worker lists).
   const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
   const settings = brainPlannerConfigSchema.parse(config), limits = settings.context;
@@ -35,7 +35,7 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
     // Only stable budget facts enter the prompt: the remaining money moves with every charge (this call's own included), and a retried
     // plan must resend the byte-identical request; the system caps the ceiling at the remaining money after the call instead.
     permissions: getPolicyVocabulary().resources, budget: budget && { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits }, scopePaths: { state: 'not-inspected' } }, limits);
-  const prompt = prepareBrainPrompt(command, workClasses, context, config, known);
+  const prompt = prepareBrainPrompt(command, workClasses, context, config, known, selections?.language);
   const bytes = new TextEncoder().encode(JSON.stringify(prompt.messages)).length;
   if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
   // The memory that actually went into the prompt (after the planning byte bound), for the seal and the card; null: no memory block.

@@ -831,12 +831,17 @@ export function nativeReportArguments(capabilities: NativeWorkerCapabilities, sc
   const report = capabilities.structuredReport;
   return report && report.flag !== null ? [report.flag, report.channel === 'inline-json' ? schema : '/tmp/deckent-report-schema.json'] : [];
 }
-/** Flagless report channel: the instruction and schema appended to the task prompt (the last argv element); null for flag channels. */
-export function nativeReportInstruction(capabilities: NativeWorkerCapabilities, schema: string): string | null {
-  return capabilities.structuredReport?.channel === 'final-text-json' ? finalTextReportInstruction(schema) : null;
+/** Text appended to the task prompt (the last argv element): the flagless channel's instruction and schema, and for every channel the person's
+ * report language (D4); null when there is nothing to append. */
+export function nativeReportInstruction(capabilities: NativeWorkerCapabilities, schema: string, language?: string): string | null {
+  return capabilities.structuredReport?.channel === 'final-text-json' ? finalTextReportInstruction(schema, language) : language ? reportLanguageInstruction(language) : null;
 }
-export const finalTextReportInstruction = (schema: string) => '### report:final-text-json@1\nWhen the task is finished, your final answer must be '
-  + 'your final report: exactly one JSON object that matches the JSON Schema below, with no other text before or after it, no Markdown and no code fence.\n' + schema;
+export const finalTextReportInstruction = (schema: string, language?: string) => '### report:final-text-json@1\nWhen the task is finished, your final answer must be '
+  + 'your final report: exactly one JSON object that matches the JSON Schema below, with no other text before or after it, no Markdown and no code fence.\n' + schema
+  + (language ? '\n\n' + reportLanguageInstruction(language) : '');
+/** D4 (owner 2026-11-06): the person's language for the report's prose. A goal for the model, not a guarantee; the schema and its keys are unchanged. */
+export const reportLanguageInstruction = (language: string) => `### report:language@1\nWrite the report's text for the person (summary, openIssues, the handoff summary `
+  + `and openQuestions, an exit question) in the language with ISO 639-1 code "${language}". JSON keys, enum values, file paths, commands and check ids stay exactly as they are.`;
 
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
@@ -854,7 +859,7 @@ async function main() {
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; capabilities: NativeWorkerCapabilities; home: string; file: string;
     quotaPolicy?: QuotaPolicy; credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>;
     limits: { connections: number; idleMs: number; clientModelReport?: ClientModelReportLimits };
-    finalReport?: { schemaVersion: 1; limits: ReportLimits };
+    finalReport?: { schemaVersion: 1; limits: ReportLimits; language?: string };
     dependencyContext?: { text: string; sha256: string; maxBytes: number };
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[]; discovery?: string };
     promptDelivery?: { schemaVersion: number; channel: string; core: string; task: string;
@@ -895,11 +900,13 @@ async function main() {
   }
   if (setup.finalReport && reportSupported) {
     const schema = JSON.stringify(createFinalReportJsonSchema(setup.finalReport.limits, setup.capabilities.structuredReport?.channel === 'schema-file'));
-    const extra = nativeReportArguments(setup.capabilities, schema), instruction = nativeReportInstruction(setup.capabilities, schema);
+    const language = /^[a-z]{2}$/u.test(setup.finalReport.language ?? '') ? setup.finalReport.language : undefined;
+    const extra = nativeReportArguments(setup.capabilities, schema), instruction = nativeReportInstruction(setup.capabilities, schema, language);
     if (setup.capabilities.structuredReport?.channel === 'schema-file') await writeFile('/tmp/deckent-report-schema.json', schema, { mode: 0o600, flag: 'wx' });
     const end = argv.lastIndexOf('--'); argv.splice(end < 0 ? argv.length : end, 0, ...extra);
     // The prompt is the argument after the end-of-options marker; without that shape the instruction cannot be delivered (no report).
-    if (instruction !== null) { if (argv.at(-2) === '--') argv[argv.length - 1] += '\n\n' + instruction; else reportSupported = false; }
+    // A flag channel's report does not depend on the language line, so an undeliverable language line leaves that report in place.
+    if (instruction !== null) { if (argv.at(-2) === '--') argv[argv.length - 1] += '\n\n' + instruction; else if (setup.capabilities.structuredReport?.channel === 'final-text-json') reportSupported = false; }
   }
   const authRoot = join(home, setup.home); await mkdir(authRoot, { recursive: true, mode: 0o700 });
   await writeFile(join(authRoot, setup.file), JSON.stringify(setup.credential), { mode: 0o600, flag: 'wx' });

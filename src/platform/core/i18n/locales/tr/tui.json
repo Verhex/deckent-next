@@ -332,7 +332,7 @@
   "terminal.approval.window.what.changes": " (+{added} −{removed} satır)",
   "terminal.approval.window.where": "proje {path}",
   "terminal.approval.window.whereUnknown": "bu terminalin projesi",
-  "terminal.approval.window.onBehalfSelf": "sen — bu terminalin kullanıcısı",
+  "terminal.approval.window.onBehalfSelf": "bu sohbetteki yapay zekâ, senin adına (kararı sen verirsin)",
   "terminal.approval.window.scope": "bu proje · bu oturum · yalnız bu çağrı",
   "terminal.approval.window.why": "Kural: {rule} · Mod: {mode}",
   "terminal.approval.window.rule.read": "okuma araçları burada onay ister",

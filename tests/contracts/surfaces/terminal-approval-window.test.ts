@@ -47,6 +47,9 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
         expect(text).toContain('4:32');
         expect(text).toContain(w.rule[fixture.approval.risk!]!); expect(text).toContain(w.risk[fixture.approval.risk!]!);
         expect(text).toContain(w.mode['standart']!);
+        // R6a (owner D5): an AI-turn card ('-') says the AI in this chat asks on your behalf; a listed card keeps its requester.
+        expect(text).toContain({ en: 'the AI in this chat, on your behalf (you decide)', tr: 'bu sohbetteki yapay zekâ, senin adına (kararı sen verirsin)' }[locale]);
+        expect(approvalCardLines({ ...fixture.approval, requester: 'alperen@host' }, work, fixture.preview, null, { project: '/home/u/acme', mode: 'standart' }, NOW).join('\n')).not.toContain(w.onBehalfSelf);
         // Raw codes stay out of the primary rows: the digest and the policy cell appear only after the details heading.
         const details = lines.indexOf(w.field.detail);
         expect(details).toBeGreaterThan(0);
