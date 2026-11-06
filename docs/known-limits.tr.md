@@ -541,7 +541,23 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.
 - **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
   kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
-  dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın.
+  dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın. Çalışma ağacına teslim
+  `deckent task integration-rollback --scope <kimlik> --run <kimlik>` ile geri alınır (teslim satırı komutu yazar); yalnız her dosya
+  hâlâ teslim edilen içeriği taşıyorsa yazar.
+- **Çalışma ağacına teslimin (tek kişilik proje) açık sınırları var.** Çalışma hedefi ve dala alma hedefi yoksa teslimde "evet"
+  dosyalarınıza yazar (`execution.deliveryMode`; Git referans yolunda kalmak için `reference` yapın). Yalnız Linux'ta ve yalnız proje
+  klasörü deponun en üst klasörüyken çalışır; aksi hâlde Run başlamadan reddedilir (`PATCH_WORKING_TREE_UNSUPPORTED`,
+  `PATCH_WORKING_TREE_SUBFOLDER`). Deponuza iz referansı yazılmaz: iz, Deckent'in teslim kaydı ve onun günlüğüdür (owner kararı
+  2026-11-06). Run'ın tabanı şimdiki dosyalarınızdan, deponun `.gitignore` ve
+  `.git/info/exclude` kurallarıyla kurulur; global excludes dosyanız (`core.excludesFile`) okunmaz, bu yüzden yalnız orada yok
+  sayılan bir dosya, red listesi ya da bir boyut sınırı dışarıda tutmadıkça tabana girer. Dışarıda tutulan dosyaların adları
+  (içerikleri değil) işçiye tek bir not satırıyla gider. Kenara konan bir Run tabanını `execution.retention.setAsideDays` (varsayılan
+  14) gün tutar; daha sonra geri getirilirse sonucu artık teslim edilemez (`WORKSPACE_RUN_BASE_REMOVED`; `/do` ile yeniden isteyin).
+- **Başka dosya sistemindeki kenar dosya sizin için silinmez.** Deckent'in durumu ile proje farklı dosya sistemlerindeyse (örneğin
+  `/mnt/c` altındaki bir WSL projesi), teslimin ya da geri almanın değiştirdiği dosya yanında gizli `.deckent-<uuid>.aside` olarak
+  kalır ve not onu adlandırır. Deckent bunu hiç silmez; bu dosyalar birikir ve `git status`'ta izlenmeyen dosya olarak görünür.
+  Çökmeden sonra devam eden teslim notu tekrarlamaz; günlük dosyayı yine adlandırır. *Yol:* gerekmeyen kenar dosyalarını kendiniz
+  silin.
 - **Dala alma penceresi doğrulama Run'larını commit'e göre önceden süzemez.** Yapılandırılmış türdeki kabul edilmiş
   doğrulama Run'larını listeler; başka bir commit'i doğrulamış olan dala almada reddedilir ve pencere seçime döner.
 - **Doğrulama Run'ı terminalden oluşturulamaz.** *Yol:* pencerenin gösterdiği `deckent run create ... --delivery-command-id

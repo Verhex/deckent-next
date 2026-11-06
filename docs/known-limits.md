@@ -546,7 +546,23 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   *Workaround:* re-run the request on the current source.
 - **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
   adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
-  command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line.
+  command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line. A working-tree delivery is
+  rolled back with `deckent task integration-rollback --scope <id> --run <id>` (the delivered row names it); it writes only while
+  every file still holds the delivered content.
+- **Working-tree delivery (solo projects) has open limits.** With no work target and no adoption targets, a delivery yes writes
+  into your files (`execution.deliveryMode`; set `reference` to keep the Git reference path). It runs only on Linux and only when
+  the project folder is the repository's top folder; elsewhere the Run is refused before it starts (`PATCH_WORKING_TREE_UNSUPPORTED`,
+  `PATCH_WORKING_TREE_SUBFOLDER`). No trace reference is written in your repository: the trace is Deckent's delivery record and its
+  journal (owner decision 2026-11-06). The Run's base is built from your
+  current files with the repository's `.gitignore` and `.git/info/exclude`; your global excludes file (`core.excludesFile`) is not
+  read, so a file ignored only there enters the base unless the deny list or a size limit keeps it out. The names (not the contents)
+  of withheld files reach the worker as one note line. A dismissed Run keeps its base for `execution.retention.setAsideDays` (default
+  14); brought back later, its result can no longer be delivered (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`).
+- **A cross-device aside is never deleted for you.** When Deckent's state and the project are on different filesystems (for
+  example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
+  `.deckent-<uuid>.aside`, and the note names it. Deckent never deletes it, so these files accumulate and show as untracked in
+  `git status`. A delivery resumed after a crash does not repeat the note; the journal still names the file. *Workaround:* delete
+  the aside files you do not need yourself.
 - **The adoption window cannot pre-filter verification Runs by commit.** It lists accepted verification Runs of the configured
   kind; one that verified a different commit is refused at adoption and the window returns to the choice.
 - **A verification Run cannot be created from the terminal.** *Workaround:* run the `deckent run create ...
