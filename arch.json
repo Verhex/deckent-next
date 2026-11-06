@@ -5188,9 +5188,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42100,
+      "adapters": 42081,
       "surfaces": 45000,
-      "composition": 13467
+      "composition": 13465
     },
     "totalSrcLines": 200000,
     "testCases": 8200,

@@ -549,7 +549,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_WORKING_TREE_PARTIAL: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_PARTIAL', p, l) }) },
   // F1 (Astra 3015): a file moved aside could not return to its name (the person's newer file is there); `kept` names it, `written` may be empty.
   PATCH_WORKING_TREE_KEPT: { category: 'error', render: (p, l) => ({ message: p['written'] ? t('error.PATCH_WORKING_TREE_KEPT.partial', p, l) : t('error.PATCH_WORKING_TREE_KEPT', p, l) }) },
-  // R3017: a journal or lock record of another version (`path`): an explicit refusal, nothing settled or written.
+  // R3017/R3019: a journal, lock record or recovery custody that is unreadable or of another version (`path`): an explicit refusal, nothing settled or written.
   PATCH_WORKING_TREE_RECORD_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_RECORD_UNSUPPORTED', p, l) }) },
   PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
   PATCH_WORKING_TREE_SUBFOLDER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_SUBFOLDER', p, l) }) },

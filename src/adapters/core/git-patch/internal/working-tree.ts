@@ -46,12 +46,12 @@ export async function readTreeFile(root: FileHandle, path: string, budget: Snaps
 type Observed = Pick<PatchFile, 'digest' | 'mode'> | null; type Read = (path: string) => ReturnType<typeof readTreeFile>;
 /** R1 (Astra 3017): a file moved aside that stays in the checkout (journal directory on another filesystem), with the state it was compared at. */
 type SetAside = { path: string; expected: Observed; atMs: number }; type Custody = { journal: string; kept: string[]; setAside: SetAside[] };
-type Journal = { state?: unknown; root?: unknown; changes: { path: string; token?: unknown; before: Observed; after: Observed }[]; setAside?: SetAside[] };
+type Journal = { state?: unknown; changes: { path: string; token?: unknown; before: Observed; after: Observed }[]; setAside?: SetAside[] };
 const observed = (file: Observed): Observed => file && { digest: file.digest, mode: file.mode };
 const holds = (file: Awaited<ReturnType<typeof readTreeFile>> | false, expected: Observed) =>
   file === null ? expected === null : !!file && expected !== null && file.mode === expected.mode && patchDigest(file.bytes) === expected.digest;
 const names = (token: string) => ['.tmp', '.aside', '.ours'].map(suffix => `${format.aside}${token}${suffix}`) as [string, string, string];
-const JOURNAL = /^[0-9a-f]{64}(\.rollback)?$/, ENTRY = new RegExp(`^${format.aside.replace(/\./g, '\\.')}[0-9a-f-]{36}\\.(aside|ours)$`);
+const JOURNAL = /^[0-9a-f]{64}(\.rollback)?$/;
 const unsupported = (path: string) => new WorkspacePatchError('PATCH_WORKING_TREE_RECORD_UNSUPPORTED', undefined, { path });
 /** A delivery's journal (null when absent). R3017: a record of another version is an explicit refusal, never settled or written over. */
 async function journalAt(directory: string) {
@@ -72,7 +72,7 @@ async function directoryOf(root: FileHandle, path: string, create: boolean, hand
 }
 /** F1 (Astra 3015): an entry Deckent moved aside from `path` goes back only by a no-clobber link (a filled name is never written over: it is kept and
  * named) and leaves only while it holds `expected`, as the very inode into the journal directory; R1 (Astra 3017): on another filesystem it is never
- * unlinked but stays, named in the journal and to the person, for `sweepSetAside`. */
+ * unlinked: it stays, named in the journal and to the person, and Deckent never deletes it (lead, Astra 3019). */
 function entries(parent: FileHandle, path: string, read: Read, custody: Custody) {
   const dir = path.slice(0, path.lastIndexOf('/') + 1), name = path.slice(dir.length), at = (entry: string) => `/proc/self/fd/${parent.fd}/${entry}`;
   const same = (entry: string, expected: Observed) => read(dir + entry).then(file => holds(file, expected), () => false);
@@ -96,25 +96,6 @@ async function record(directory: string, name: string, data: string | Uint8Array
   const temporary = join(directory, `.${randomUUID()}.tmp`), file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try { await file.writeFile(data); await file.sync(); } finally { await file.close(); }
   await rename(temporary, join(directory, name)); await syncDirectory(directory);
-}
-/** R1 (Astra 3017), the controlled cleanup: a set-aside file recorded before `since` is unlinked only while it still holds the state it was set aside
- * with; a changed, unreadable or unreachable one stays, counted and still named in its journal; one already gone is dropped from it. */
-export async function sweepSetAside(workspaceRoot: string, since: number, limits: PatchLimits, timeoutMs: number) {
-  const deliveries = join(workspaceRoot, format.deliveries), result = { removed: 0, kept: 0 };
-  for (const name of (await readdir(deliveries).catch(() => [] as string[])).filter(name => JOURNAL.test(name))) {
-    const directory = join(deliveries, name), journal = await journalAt(directory).catch(() => null), due = journal?.setAside?.filter(entry => entry.atMs < since) ?? []; if (!journal || !due.length) continue;
-    const root = typeof journal.root === 'string' ? await open(journal.root, DIRECTORY).catch(() => null) : null, left = journal.setAside!.filter(entry => !due.includes(entry));
-    try { for (const entry of due) {
-      const handles: FileHandle[] = [], base = entry.path.slice(entry.path.lastIndexOf('/') + 1);
-      try {
-        const parent = root && ENTRY.test(base) ? await directoryOf(root, entry.path, false, handles).catch(() => null) : null;
-        const file = parent ? await readTreeFile(root!, entry.path, new SnapshotBudget(limits, Date.now() + timeoutMs)).catch(() => false as const) : false;
-        if (file !== null && holds(file, entry.expected)) { await unlink(`/proc/self/fd/${parent!.fd}/${base}`); result.removed++; } else if (file !== null) { left.push(entry); result.kept++; }
-      } finally { for (const handle of handles.reverse()) await handle.close(); }
-    } } finally { await root?.close(); }
-    await record(directory, format.journal, JSON.stringify({ ...journal, setAside: left }));
-  }
-  return result;
 }
 /** Owner 2026-11-05 (R9p): a person's yes writes the accepted patch into the checkout's files (nothing in their repository), one delivery or rollback at a
  * time per checkout, never over or unlinking a file saved meanwhile; `publish`/`rollback` return the files set aside (R1, Astra 3017) for the person's
@@ -155,7 +136,7 @@ export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
     // R2 (Astra 3017): every holder first settles gone holders' custody (an entry goes once its journal no longer reads `writing`); then the work, with its own full time budget.
     try {
       let stop: unknown = null;
-      for (const name of (await readdir(pending).catch(() => [] as string[])).filter(name => JOURNAL.test(name))) {
+      for (const name of (await readdir(pending).catch((error: unknown) => { if (code(error) === 'ENOENT') return [] as string[]; throw unsupported(pending); })).filter(name => JOURNAL.test(name))) {
         const directory = join(this.options.workspaceRoot, format.deliveries, name);
         await this.settle(directory, Date.now() + this.options.timeoutMs).catch((error: unknown) => { stop ??= error; });
         if (await journalAt(directory).then(journal => journal?.state !== 'writing', () => false)) await unlink(join(pending, name));
@@ -210,7 +191,7 @@ export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
     const written: string[] = [], paths = changes.map(change => change.path);
     // F2: each path's full before/after state and the token naming what it moves aside, so a crash settles with the writer's own equality.
     const journaled = changes.map(change => ({ path: change.path, token: randomUUID(), before: observed(change.before), after: observed(change.after) }));
-    const note = (state: string) => record(directory, format.journal, JSON.stringify({ schemaVersion: format.journalVersion, state, root: this.options.sourceRoot, ref: plan.ref,
+    const note = (state: string) => record(directory, format.journal, JSON.stringify({ schemaVersion: format.journalVersion, state, ref: plan.ref,
       commit: plan.commit, paths, written, kept: custody.kept, setAside: custody.setAside, changes: journaled }));
     try {
       const pending = [];

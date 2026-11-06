@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sweepSetAside, GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
+import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
   GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
@@ -472,8 +472,8 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     await f.files.publish(plan, manifest, p); expect([await file('a.txt'), await file('b.txt')]).toEqual(['a after\n', 'b after\n']); await clean();
     expect(await Promise.all((await readdir(kept)).filter(name => name.endsWith('.aside')).map(name => readFile(join(kept, name), 'utf8')))).toContain('late!!!!\n');
     // (f) R1 (Astra 3017), EXDEV (the journal directory on another filesystem, e.g. a WSL /mnt/c project): the handle writes AFTER the last comparison, as the
-    // taken file would leave. Nothing is unlinked: both taken files stay beside their names, are returned for the person's note and named in the journal; the
-    // sweep after the window removes only the one still unchanged and keeps the one written meanwhile.
+    // taken file would leave. Nothing is unlinked: both taken files stay beside their names, are returned for the person's note and named in the journal,
+    // and Deckent never deletes them (lead, Astra 3019: no automatic cleanup).
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt4' }, limits, workerTreeDenied);
     const q = f.patch('wt4', 'a.txt', 'a before\n', 'a fourth\n'); q.changes.push(f.patch('wt4', 'b.txt', 'b before\n', 'b fourth\n').changes[0]!); await reset();
     const exdev = await planned(f, q), moved = join(f.workspaceRoot, 'working-tree-deliveries', exdev.plan.ref.split('/').pop()!), aside = /^\.deckent-[0-9a-f-]{36}\.aside$/;
@@ -487,8 +487,6 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect(await f.files.publish(exdev.plan, exdev.manifest, q)).toEqual([expect.stringMatching(aside), expect.stringMatching(aside)]); fsHook.rename = null;
     const beside = async () => Promise.all((await readdir(s)).filter(name => aside.test(name)).map(file)), recorded = async () => JSON.parse(await readFile(join(moved, 'journal.json'), 'utf8')).setAside;
     expect([(await beside()).sort(), (await recorded()).length, await file('a.txt'), await file('b.txt')]).toEqual([['b before\n', 'exdev!!!\n'], 2, 'a fourth\n', 'b fourth\n']);
-    expect(await sweepSetAside(f.workspaceRoot, Date.now() + 1000, limits, 10000)).toEqual({ removed: 1, kept: 1 });
-    expect([await beside(), (await recorded()).length]).toEqual([['exdev!!!\n'], 1]);
   });
   it('refuses a symlinked directory on the way (PATCH_UNSAFE); nothing is written outside the checkout', async () => {
     const f = await fixture(false, 'sha1', true), outside = join(f.workspaceRoot, 'outside'); await mkdir(outside); await exec('ln', ['-s', outside, join(f.sourceRoot, 'link')]);
@@ -551,6 +549,13 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: lock } });
     await rm(lock, { recursive: true }); await f.files.publish(third.plan, third.manifest, late);
     expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), await readdir(custody)]).toEqual(['b fifth\n', []]);
+    // R3019: custody that cannot be read (anything but absent) is a typed refusal before any work; nothing is written.
+    await writeFile(join(f.sourceRoot, 'b.txt'), 'b before\n'); const sixth = f.patch('wt6', 'b.txt', 'b before\n', 'b sixth\n');
+    await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt6' }, limits, workerTreeDenied); const blocked = await planned(f, sixth); await exec('chmod', ['000', custody]);
+    try { await expect(f.files.publish(blocked.plan, blocked.manifest, sixth)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: custody } }); }
+    finally { await exec('chmod', ['700', custody]); }
+    expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b before\n'); await f.files.publish(blocked.plan, blocked.manifest, sixth);
+    expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b sixth\n');
   });
   it('L1c rollback: the yes puts the delivery\'s originals back with the delivery\'s card and authority; a file changed since is refused and nothing is written', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'); p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!);

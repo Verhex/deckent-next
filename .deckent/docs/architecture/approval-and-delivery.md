@@ -1210,7 +1210,8 @@ runs, delivery or rollback, and only a holder proven gone by pid and start bound
 durable custody entry (`working-tree-pending/<checkout>/<journal>`, directory fsynced) before the gone record is removed, and every holder,
 before its own work, recovers and classifies each custody journal still `writing` from the files: all `before` = nothing written, all
 `after` = written, a mix = PATCH_WORKING_TREE_PARTIAL with both lists, and the entry goes only once its journal no longer reads `writing`, so
-a taker that dies too leaves the operation for the next one (Astra 3017 R2); an ownerless or live lock is never taken (BUSY), and a gone
+a taker that dies too leaves the operation for the next one (Astra 3017 R2), and custody that cannot be read (anything but absent) stops the
+work (Astra 3019); an ownerless or live lock is never taken (BUSY), and a gone
 holder's record or a journal of another version (journal `schemaVersion` 2 is read) is the typed refusal
 PATCH_WORKING_TREE_RECORD_UNSUPPORTED naming the record to check and remove, nothing settled or written), and writes nothing to the person's repository: no
 reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
@@ -1228,9 +1229,8 @@ over Deckent's. A taken file that cannot return because a newer file of the pers
 itself, so a write through a handle opened before the take still lands there). On another filesystem (EXDEV, e.g. a WSL `/mnt/c` project;
 never a refusal) it is never unlinked (Astra 3017 R1): it stays beside its name as `.deckent-<uuid>.aside`, the journal records its path,
 the state it was compared at and the time (`setAside`), and the result returns it so the terminal and CLI tell the person what it is; a
-stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. It leaves only through the service-start sweep
-(`sweepSetAside`, with the Run-base sweep) once `execution.retention.setAsideDays` has passed and only while it still holds that recorded
-state; a changed or unreadable one stays, counted and still named in its journal. A removal is the same take, comparison and
+stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. Deckent never deletes it (no automatic cleanup,
+Astra 3019; the note says so): it stays until the person deletes it. A removal is the same take, comparison and
 departure. Settling a crashed journal first puts a taken file back into its empty name and removes Deckent's temporary name. An existing
 file keeps its permission bits. The trace is the Deckent delivery record and that journal.
 
