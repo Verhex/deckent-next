@@ -8,7 +8,7 @@ Codex ajan profili, sürüm kaynağı belirtilmiş registry ayarlarıyla alt aja
 
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)
 
-Abonelikle araçlı ajan yürütme alpha.63’te inşa ediliyor.
+alpha.63'ten beri kendi Claude ya da ChatGPT (Codex CLI) girişiniz araçlı sohbeti, işçileri ve Brain'i çalıştırır; sınırlar Sağlayıcılar altında.
 
 Bu sayfa Deckent'in henüz neyi yapmadığını, neyin denenmediğini ve onun yerine ne yapmanız gerektiğini açıkça söyler.
 Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
@@ -299,10 +299,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Sağlayıcılar ve abonelikler
 
-- **Claude aboneliğiyle metin sohbeti (A62):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. Native CLI araçları ve MCP kapalıdır; bu bağlantı sohbetten dosya yazamaz veya komut çalıştıramaz. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
+- **Claude aboneliğiyle sohbet (A62, araçlar alpha.63'ten beri):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. alpha.63'ten beri CLI'ın kendi araçları kapalı kalır; yalnız Deckent'in araçlarıyla, Deckent'in onay, sandbox, politika ve denetim sınırında çalışır. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
 
-- **ChatGPT girişi bu sürümde betada; Claude ve ChatGPT aboneliklerinin Deckent içinde tam ajan olarak (araçlı sohbet, işçi, Brain, ajan/skill)
-  çalışması alpha.63 için planlanmıştır.** Mevcut ChatGPT girişi betada notuyla seçilebilir kalır.
+- **ChatGPT'nin iki girişi var.** Codex CLI girişi (alpha.63) Claude gibi araçlı sohbeti, işçileri ve Brain'i çalıştırır; tarayıcı girişi
+  (SIWC) notuyla betada kalır ve işçisi hâlâ Docker ister.
 - **İlk kurulum ve yeni klasörler (A62):** kişinin tanığıyla tamamlanan sıfır kurulum, global kayıt yoksa kaynak olur. Eski kurulum otomatik
   kaydedilmez. Kurulu klasörde `deckent terminal attach --register --apply` çalıştırıp kaynağı onaylayın; sonra yeni klasörde `deckent` açın.
   Var olan kaynak kaydı korunur.
@@ -337,6 +337,25 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT abonelikleri metin sohbeti sağlar;
   kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
+- **Docker'sız abonelik işçisi (alpha.63, R8b; yazar kanıtı, gerçek hesap ve BeUser kabulü açık).** Bağlantınıza bağlı Claude ya da Codex
+  CLI işçisi Deckent'in bubblewrap sandbox'ında çalışır; bu yüzden `execution.docker` olmayabilir. Linux (ya da WSL) ve bubblewrap gerekir,
+  yoksa işçi reddedilir (`HEADLESS_ISOLATION_UNAVAILABLE`). Düz Docker işçileri ve ChatGPT tarayıcı girişi (SIWC) işçisi Docker ayarı ve imaj
+  ister (`EXECUTION_NOT_CONFIGURED`). *Etki:* kurulumdan ikinci sağlayıcı eklemek (`work.profile-add`) hâlâ işçi imajı ister;
+  `deckent coding template --connection <profil> --image <kimlik>`, `execution` Docker ayarı taşımıyorsa imajı yok sayar; kurulum profili
+  önizlemesi imajsız şablonu reddeder (`INSTALLATION_PROFILE_ADAPTER`). *Yol:* ikinci sağlayıcı ya da Docker işçisi için `/setup`'ta Docker'ı
+  ve imajını kurun.
+- **/provider ve /model son araç doğrulamasını gösterir.** Aboneliğin hazır işareti, bir sohbet turunun son kaydettiği doğrulamadır; ekranda
+  süre dolunca düşmez ve CLI'ın kendi giriş dosyası yazmalarını saymaz. Her tur ve her işçi çalışmadan önce yeniden doğrular. *Etki:* ekrandaki
+  "doğrulandı" şu an yapılmış bir kontrol değildir; sonraki tur yine tipli bir nedenle durabilir.
+- **Brain planı ve işçi raporunun sizin dilinizde olması istenir, garanti edilmez (alpha.63, D4).** Brain şablonu v5 ve işçi rapor talimatı
+  başlıkları, görev metnini, ölçüt açıklamalarını ve rapor özetini sizin dilinizde ister; JSON anahtarları ve kimlikler değişmez. Gerçek
+  modellerde ölçülmedi. *Etki:* model yine İngilizce cevap verebilir; Deckent model metnini çevirmez.
+- **Önerilen sınıfın altı notu ilk modele göre verilir (alpha.63).** Her etkin model plan yapabilir; plan yapan model önerilen sınıfın
+  altındaysa plan kartı ve `deckent do` not düşer. Abonelik kota reddinden sonra izin verdiğiniz API modeline devam edildiğinde
+  (`continueBilling`) not, devam modeline göre değil ilk seçilen modele göre verilir.
+- **Git deposunu görmeyen işçi (R9o) yeniden üretilmedi.** Owner yürüyüşünde bir Attempt `.git` varken "not a git repository" bildirdi;
+  hermetik işçi kabuğu kontrolü (yalıtılmış görünümde `git rev-parse --is-inside-work-tree`) geçiyor. *Etki:* neden bilinmiyor. *Yol:* görürseniz
+  Run kimliğini ve işçinin stderr çıktısını saklayıp bildirin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
 - **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
@@ -630,6 +649,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Kurtarma ve yükseltme
 
+- **Docker ayarı olmayan yapılandırmayı eski build okuyamaz (alpha.63, R8b).** `execution` yalnız `git` taşıdığında alpha.63 öncesi build
+  config'i katı şemayla reddeder ve açılmaz. *Yol:* geri dönmek için yükseltme öncesi yedeği geri yükleyin.
 - **alpha.56.1 yükseltmesinden sonra kaydında ana kasa anahtarı (`$DECK:AD`) geçen kişisel bir MCP sunucusu, bu anahtarın her projeye
   açılmasını ister** (KER-17, 2026-10-28): anahtar artık bir sağlayıcı anahtarıyla aynı proje izniyle kullanılır; izin olmayan projede
   sunucu başlamaz ve tur hangi anahtar olduğunu söyler. *Yol:* `deckent doctor` her anahtarı komutuyla listeler; her proje için bir kez
