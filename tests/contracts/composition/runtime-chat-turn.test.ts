@@ -743,8 +743,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
         commandId: 'allow-bwrap', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
     });
     await Promise.all(pending);
-    expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('bubblewrap sandbox') });
-    expect(events.find(event => event.kind === 'approval.requested')).not.toMatchObject({ preview: expect.stringContaining('not a sandbox') });
+    expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ posture: expect.objectContaining({ realm: 'bubblewrap', containment: 'sandbox' }) }); // R7a
+    expect(events.find(event => event.kind === 'approval.requested')).not.toMatchObject({ posture: expect.objectContaining({ containment: 'host' }) });
     expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok', cleanup: 'clean' });
     expect(JSON.stringify(events)).not.toContain('sandbox: none'); expect(JSON.stringify(events)).not.toContain('SECRET');
     expect(toolText(events)).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0 after [\d.]+s \(cat \.env/u);
@@ -785,7 +785,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     };
     const modify = await run('turn-touch', 'touch made.txt', 'allow');
     expect(modify.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('$ touch made.txt\nrisk: modify') });
-    expect(modify.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('not a sandbox') });
+    expect(modify.find(event => event.kind === 'approval.requested')).toMatchObject({ posture: expect.objectContaining({ containment: 'host' }) });
     expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('');
     const traversal = await run('turn-grep', 'grep -r a .', 'deny');
     expect(traversal.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: safe-read') });
@@ -1492,7 +1492,7 @@ describe.skipIf(process.platform !== 'linux')('agent shell in the Landlock realm
       expect(texts[0]).toMatch(/^\[deckent\] run_shell: sandbox: landlock; exit 0 after [\d.]+s \(cat src\/a\.ts\)\nexport const a = 1;\n$/u);
       expect(texts[1]).toMatch(/^\[deckent\] run_shell: sandbox: landlock; exit 1 /u);
       expect(texts[1]).toContain('Permission denied'); expect(texts[1]).not.toContain('OUTSIDE_SECRET');
-      expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('Landlock') });
+      expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ posture: expect.objectContaining({ realm: 'landlock' }) });
       expect(events.some(event => event.kind === 'tool.output' && event.text.includes('sandbox: none'))).toBe(false);
       expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }, { target_kind: 'host-shell', state: 'settled' }]);
     }

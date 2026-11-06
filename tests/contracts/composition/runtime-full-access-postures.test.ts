@@ -120,10 +120,9 @@ describe.skipIf(process.platform !== 'linux')('the approval card describes the w
       expect(approvedStandart.card).toBe(true);
       const standartCard = approvedStandart.events.find(event => event.kind === 'approval.requested');
       if (standartCard?.kind !== 'approval.requested') throw new Error('no card was requested');
-      expect(standartCard.preview).toContain(realm === 'bubblewrap' ? 'bubblewrap' : 'Landlock');
-      expect(standartCard.preview).toContain('the project is writable');
-      expect(standartCard.preview).toContain('.git read-only');
-      expect(standartCard.preview).not.toContain('.git writable');
+      // R7a: the card words the structured posture in the person's language; the English sentence stays out of an ordinary card.
+      expect(standartCard.posture).toMatchObject({ realm, project: 'writable', git: 'read-only' });
+      expect(standartCard.preview).not.toContain('.git');
 
       // Full access, a non-eligible company rule: the call still asks. Approved, it runs as `owner-approved` (never `full-access`), so
       // the card already said what the effect will do: the project (write floor included) writes, and this turn also writes `.git`.

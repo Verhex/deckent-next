@@ -71,7 +71,7 @@ describe.skipIf(process.platform !== 'linux')('approval card facts through the r
     const modify = await requested(f, 'turn-shell-card');
     expect(modify.undo).toBe('may-change');
     expect(modify.posture).toEqual({ realm: 'host', containment: 'host', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
-    expect(modify.preview).toContain('Runs on this machine as your user');
+    expect(modify.posture).toMatchObject({ containment: 'host' }); expect(modify.preview).not.toContain('Runs on this machine'); // R7a: structured, in the person's language
     const destructive = await requested(f, 'turn-shell-destructive');
     expect(destructive).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
   }, 60_000);

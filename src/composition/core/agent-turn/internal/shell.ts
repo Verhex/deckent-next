@@ -65,9 +65,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const realm = callRealm(planned.realm, write.open);
     return realm.ok ? { planned, view: sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write), realm } : null;
   };
-  const previewText = (tool: string, args: Record<string, unknown>, posture = true): string | undefined => { // R7a: `posture: false` where the card words `postureFacts` itself
+  const previewText = (tool: string, args: Record<string, unknown>, posture = true): string | undefined => { // R7a: `posture: false` where the card words `postureFacts` itself; an open (full-access) view keeps its HOME/network sentence the facts lack
     const card = cardView(tool, args);
-    return card ? `${card.planned.warning ? `${card.planned.warning}\n` : ''}$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})${posture ? `\n${card.realm.posture(card.view)}` : ''}` : undefined;
+    return card ? `${card.planned.warning ? `${card.planned.warning}\n` : ''}$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})${posture || card.view.open === true ? `\n${card.realm.posture(card.view)}` : ''}` : undefined;
   };
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
