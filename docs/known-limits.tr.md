@@ -542,7 +542,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
   kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
   dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın. Çalışma ağacına teslim
-  `deckent task integration-rollback --scope <kimlik> --run <kimlik>` ile geri alınır (teslim satırı komutu yazar); yalnız her dosya
+  `deckent task integration-rollback --scope <kimlik> --run <kimlik> --task <kimlik>` ile geri alınır (teslim satırı komutu yazar;
+  `--task` yalnız Run'da tek teslim edilmiş görev varsa atlanabilir); yalnız her dosya
   hâlâ teslim edilen içeriği taşıyorsa yazar.
 - **Çalışma ağacına teslimin (tek kişilik proje) açık sınırları var.** Çalışma hedefi ve dala alma hedefi yoksa teslimde "evet"
   dosyalarınıza yazar (`execution.deliveryMode`; Git referans yolunda kalmak için `reference` yapın). Yalnız Linux'ta ve yalnız proje
@@ -551,8 +552,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   2026-11-06). Run'ın tabanı şimdiki dosyalarınızdan, deponun `.gitignore` ve
   `.git/info/exclude` kurallarıyla kurulur; global excludes dosyanız (`core.excludesFile`) okunmaz, bu yüzden yalnız orada yok
   sayılan bir dosya, red listesi ya da bir boyut sınırı dışarıda tutmadıkça tabana girer. Dışarıda tutulan dosyaların adları
-  (içerikleri değil) işçiye tek bir not satırıyla gider. Kenara konan bir Run tabanını `execution.retention.setAsideDays` (varsayılan
-  14) gün tutar; daha sonra geri getirilirse sonucu artık teslim edilemez (`WORKSPACE_RUN_BASE_REMOVED`; `/do` ile yeniden isteyin).
+  (içerikleri değil) işçiye tek bir not satırıyla gider. Kenara konan bir teslim sonucunun özel Run tabanı
+  `execution.retention.setAsideDays` (varsayılan 14) günlük geri getirme penceresi boyunca saklanır; süre sonrası, başka bekleyen iş
+  tabana ihtiyaç duymuyorsa servis başlangıcındaki temizlikte kaldırılabilir. Taban kaldırıldıktan sonra geri getirilen sonuç teslim
+  edilemez (`WORKSPACE_RUN_BASE_REMOVED`; `/do` ile yeniden isteyin). Kapatılan ya da iptal edilen bir Run'ın tabanı için böyle bir pencere yoktur.
 - **Başka dosya sistemindeki kenar dosya sizin için silinmez.** Deckent'in durumu ile proje farklı dosya sistemlerindeyse (örneğin
   `/mnt/c` altındaki bir WSL projesi), teslimin ya da geri almanın değiştirdiği dosya yanında gizli `.deckent-<uuid>.aside` olarak
   kalır ve not onu adlandırır. Deckent bunu hiç silmez; bu dosyalar birikir ve `git status`'ta izlenmeyen dosya olarak görünür.

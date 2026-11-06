@@ -547,7 +547,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
   adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
   command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line. A working-tree delivery is
-  rolled back with `deckent task integration-rollback --scope <id> --run <id>` (the delivered row names it); it writes only while
+  rolled back with `deckent task integration-rollback --scope <id> --run <id> --task <id>` (the delivered row prints it; `--task` may be
+  left out only when the Run has one delivered task); it writes only while
   every file still holds the delivered content.
 - **Working-tree delivery (solo projects) has open limits.** With no work target and no adoption targets, a delivery yes writes
   into your files (`execution.deliveryMode`; set `reference` to keep the Git reference path). It runs only on Linux and only when
@@ -556,8 +557,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   journal (owner decision 2026-11-06). The Run's base is built from your
   current files with the repository's `.gitignore` and `.git/info/exclude`; your global excludes file (`core.excludesFile`) is not
   read, so a file ignored only there enters the base unless the deny list or a size limit keeps it out. The names (not the contents)
-  of withheld files reach the worker as one note line. A dismissed Run keeps its base for `execution.retention.setAsideDays` (default
-  14); brought back later, its result can no longer be delivered (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`).
+  of withheld files reach the worker as one note line. A set-aside delivery result keeps its Run's private base through a return window of
+  `execution.retention.setAsideDays` (default 14) days; after that, the start-of-service cleanup may remove the base when no other
+  pending work still needs it. A result brought back after its base was removed can no longer be delivered
+  (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window.
 - **A cross-device aside is never deleted for you.** When Deckent's state and the project are on different filesystems (for
   example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
   `.deckent-<uuid>.aside`, and the note names it. Deckent never deletes it, so these files accumulate and show as untracked in
