@@ -208,7 +208,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       await h.f.start();
       const cli = resolve('dist/composition/core/cli/internal/entry.js');
       const steps = [['Deckent workline', '/model\r'], ['Models · scope', '\r'], ['Agent readiness unknown:', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
-        ['Ready', '/provider\r', 'fresh'], ['Deckent never reads or copies it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
+        ['Ready', '/provider\r', 'fresh'], ['Deckent never reads, copies or shares it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
         ['CLAUDE-CHAT-WAIT', '\u001b'], ['cancelled (model response)', 'remember first hello\r'],
         ['CLAUDE-CHAT-SECOND', 'quota please\r'], ['Your subscription usage limit', '/exit\r', 'fresh']];
       const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 'scope']),
