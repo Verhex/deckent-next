@@ -71,6 +71,8 @@ const counter = (overlay: Readonly<{ revision: string }>) => {
   const rest = overlay.revision.startsWith(settings.ownedOverlayRevisionPrefix) ? overlay.revision.slice(settings.ownedOverlayRevisionPrefix.length) : '';
   return /^[1-9]\d*$/.test(rest) && Number.isSafeInteger(Number(rest)) ? Number(rest) : null;
 };
+/** Whether an overlay is the one a person's own role assignment (`models roles assign`, `/roles`) writes; the Brain gate never treats it as binding policy. */
+export const isOwnedRoleOverlay = (overlay: Readonly<{ revision: string }>) => counter(overlay) !== null;
 const fail = (code: ModelRoleErrorCode): never => { throw new ModelRoleError(code); };
 const sameRoles = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
 /** The Core seed with these overlays; a refusal is the merge's own typed code. */

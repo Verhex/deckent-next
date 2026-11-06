@@ -414,13 +414,13 @@ describe('/model source', () => {
     source = 'user-default';
     expect((await source0.inspect()).notes).toContain('In use: native-chat (your default model).');
   });
-  it('R9b: the Brain\'s models are marked and suggested while none is chosen; "Use as Brain model" writes brain_planner.reference on the chosen layer', async () => {
+  it('R9b (owner 2026-11-06): the recommended Brain models are marked and suggested while none is chosen, every runnable model can be chosen; "Use as Brain model" writes brain_planner.reference on the chosen layer', async () => {
     const { root, options } = await project({ terminal: { scopeId: 'scope' } });
     const writes: Record<string, unknown>[] = [];
     const host: Parameters<typeof modelPanelSource>[2] = {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
       inspectInvocableModels: async () => reading(id => id === 'fast' ? { invocable: false, reason: { kind: 'profile', code: 'MODEL_INVOCATION_UNAVAILABLE' } } : { invocable: true, reason: null }),
-      // `coder` holds the role by tier; `fast` by a current exception but cannot run now (marked, never offered).
+      // `coder` holds the role by tier; `fast` by a current exception but cannot run now (marked, never offered); `chat` is not recommended yet can be chosen.
       inspectBrainModels: async () => ({ models: [{ channelId: 'local-openai', modelId: 'native-coder', tier: 'frontier', basis: 'tier', measured: false, active: true },
         { channelId: 'local-openai', modelId: 'native-fast', tier: null, basis: 'exception', exceptionId: 'interim', expiresOn: '2099-01-01', active: false }] }),
       resolveConfigPrincipal: async () => ({ id: 'os:1', issuer: 'host', subject: '1', assurance: 'os-user', scopeIds: ['scope'] }) as never,
@@ -431,11 +431,11 @@ describe('/model source', () => {
       })) as never,
     };
     const source = modelPanelSource(root, 'scope', host, options, 'en'), view = await source.inspect(), row = (id: string) => view.choices.find(choice => choice.reference.modelId === id)!;
-    expect(row('coder').detail).toMatch(/ · can plan \/do work \(Brain\)$/u); expect(row('fast').detail).toMatch(/ · can plan \/do work \(Brain\)$/u);
+    expect(row('coder').detail).toMatch(/ · recommended for planning \/do work \(Brain\)$/u); expect(row('fast').detail).toMatch(/ · recommended for planning \/do work \(Brain\)$/u);
     expect(row('chat').detail).not.toContain('Brain');
-    expect(row('coder').fixes!.map(fix => fix.id)).toEqual(expect.arrayContaining(['brain-global', 'brain-project']));
-    expect([...row('fast').fixes!, ...row('chat').fixes!].some(fix => fix.id.startsWith('brain'))).toBe(false);
-    expect(view.notes).toContain('No Brain model chosen: /do plans with the chat model. Models that can plan work: native-coder. Open one and choose “Use as Brain model”.');
+    for (const id of ['coder', 'chat']) expect(row(id).fixes!.map(fix => fix.id)).toEqual(expect.arrayContaining(['brain-global', 'brain-project']));
+    expect(row('fast').fixes!.some(fix => fix.id.startsWith('brain'))).toBe(false);
+    expect(view.notes).toContain('No Brain model chosen: /do plans with the chat model. Recommended for planning: native-coder. Open one and choose “Use as Brain model”.');
     expect((await source.setBrain!(row('coder'), 'project')).lines[0]).toBe('native-coder now plans /do work. Chat keeps its own model.');
     expect(writes).toEqual([expect.objectContaining({ action: 'set', keyPath: 'brain_planner.reference', layer: 'project', scopeId: 'scope', value: ref('coder') })]);
     // A project Brain keeps winning over a user one: the window says so instead of claiming the switch; nothing is suggested once one is chosen.

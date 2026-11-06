@@ -7,9 +7,10 @@ import { inspectConfiguredRoleModels } from '#composition/core/run-planner/index
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { configCommand } from '#surfaces/core/config/index.js';
+import { brainProposalCardLines, brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 
-// S2 (owner A2, A3, BRAIN1): the Brain model is checked against the tier/role registry where the planner takes it, before the budget read, the
+// S2 (owner A2, A3; owner 2026-11-06 replaces BRAIN1): with a written `model_roles` section the Brain model is checked against the tier/role registry where the planner takes it, before the budget read, the
 // token count or the model POST. A refusal is typed and names the model; no other model is ever chosen in its place.
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); vi.restoreAllMocks(); });
@@ -24,7 +25,7 @@ function counts(path: string) { const db = new DatabaseSync(path, { readOnly: tr
 describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner composition', () => {
   it.each([
     ['tier', roles([{ channelId, modelId, version: 1, tier: 'worker', roles: ['worker'] }])],
-    ['model-unknown', null],
+    ['model-unknown', roles([])],
     ['role-not-held', roles([{ channelId, modelId, version: 1, tier: 'frontier', roles: ['worker'] }])],
     ['exception-not-current', roles([], [{ id: 'interim', version: 1, role: 'brain', channelId, modelId, source: 'owner-a3', declaredOn: shift(-20), expiresOn: shift(-1) }])],
   ] as const)('refuses a Brain whose registry decision is %s before any budget read, count or model POST', async (reason, modelRoles) => {
@@ -36,6 +37,20 @@ describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner co
       expect(message).toContain(modelId); expect(message).toContain(channelId); expect(message).toContain('/model'); // R9b: the next step is named
     }
     expect(f.posts).toBe(0); expect(f.counterBodies).toHaveLength(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+  });
+  it('owner 2026-11-06: with only the built-in role table or a person-owned role overlay a model below the recommended class plans with a note; an inactive one is still refused', async () => {
+    const f = await fixture({ modelRoles: null });
+    const result = await planRun(f.project, command, f.options);
+    expect(result).toMatchObject({ brainBelowRecommended: true, proposal: { proposal: { source: { kind: 'model' } } } });
+    expect(brainProposalLines(result, 'en')).toContain('A model below the recommended class made this plan; for a stronger model, use /model.');
+    expect(brainProposalCardLines(result, 'tr')).toContain('Bu plan önerilen sınıfın altındaki bir modelle yapıldı; daha güçlü bir model için /model.');
+    expect(f.posts).toBe(1);
+    const inactive = await fixture({ model: 'inactive', modelRoles: null });
+    await expect(planRun(inactive.project, command, inactive.options)).rejects.toMatchObject({ code: 'MODEL_NOT_ACTIVATED' });
+    expect(inactive.posts).toBe(0);
+    // Lead 2026-11-06: the person's own `models roles assign` overlay (here a worker row for this model) is not a binding Brain policy.
+    const owned = await fixture({ modelRoles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'installation-roles:1', roles: [], models: [{ channelId, modelId, version: 1, tier: 'worker', roles: ['worker'] }], exceptions: [] }] } });
+    expect(await planRun(owned.project, command, owned.options)).toMatchObject({ brainBelowRecommended: true });
   });
   it('plans with a dated exception while it is current, and keeps the inactive-model refusal for an eligible Brain', async () => {
     const exception = { id: 'interim', version: 1, role: 'brain', channelId, modelId, source: 'owner-a3', declaredOn: shift(-1), expiresOn: shift(10) };
