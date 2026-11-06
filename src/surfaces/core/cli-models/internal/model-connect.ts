@@ -38,7 +38,8 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale, r
   // steps. A single `--model`/`--reference` connect has no per-model rows and still opens with the reference line.
   const lines = (result.models ?? []).map(model => { const params = { model: terminalSafeText(model.nativeId) };
     return model.state === 'connected' ? t('models.connect.pull.connected', params, locale) : model.state === 'unpriced' ? t('models.connect.pull.unpriced', params, locale)
-      : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale) : t('models.connect.pull.notInCatalog', params, locale); });
+      : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale)
+      : billing === 'subscription' ? t('models.connect.pull.notInCatalogSubscription', params, locale) : t('models.connect.pull.notInCatalog', params, locale); });
   lines.push(result.status === 'connected' ? t('models.connect.connected', { reference, scope: result.scopeId }, locale)
     : resume ? t('models.connect.pendingResume', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-', command: resumeCommand(resume) }, locale) // Astra R3: the same id resumes
       : t('models.connect.pending', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-' }, locale),
@@ -53,9 +54,9 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale, r
   if (result.budget?.state === 'unknown') lines.push(t('models.connect.budgetUnknown', { scope: result.scopeId, code: result.budget.code ?? '-' }, locale));
   if (result.service === 'stale') lines.push(t('models.connect.restart', {}, locale));
   if (result.worker === 'image-required') lines.push(t('models.connect.workerImageRequired', {}, locale));
-  // S3-3: the CLI login it uses and who besides the person may spend it (the consent the person wrote).
+  // S3-3: the CLI login it uses and who besides the person may spend it (the consent the person wrote), in the consent card's words (R1b).
   if (result.cli) lines.push(result.cli.owned ? t('headless.connect.loginOwned', { dir: result.cli.configDir }, locale) : t('headless.connect.login', { dir: result.cli.configDir }, locale), result.cli.delegate.length
-    ? t('headless.connect.delegated', { classes: result.cli.delegate.join(', ') }, locale) : t('headless.connect.personOnly', {}, locale));
+    ? t('headless.connect.delegated', { classes: result.cli.delegate.map(id => id === 'ai' ? t('tui.provider.login.ai', {}, locale) : t('tui.provider.login.system', {}, locale)).join('; ') }, locale) : t('headless.connect.personOnly', {}, locale));
   return lines.join('\n');
 }
 
@@ -136,7 +137,7 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
     options: models.map(model => ({ id: model.nativeId, label: model.displayName && model.displayName !== model.nativeId
       ? `${terminalSafeText(model.nativeId)} · ${terminalSafeText(model.displayName)}` : terminalSafeText(model.nativeId) })) });
   if (nativeId === null || !pull && !models.some(model => model.nativeId === nativeId)) return cancelled();
-  const answer = await askModelsCard(context, locale, { title: pull ? t('climodels.models.card.connectAll', {}, locale) : t('climodels.models.card.connect', { model: terminalSafeText(nativeId) }, locale), // M-27: no "Connect Connect"
+  const answer = await askModelsCard(context, locale, { title: pull ? kind.billing === 'subscription' ? t('climodels.models.card.connectAllSubscription', {}, locale) : t('climodels.models.card.connectAll', {}, locale) : t('climodels.models.card.connect', { model: terminalSafeText(nativeId) }, locale), // M-27: no "Connect Connect"
     body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: catalog[kind.labelKey] ?? kind.id }, locale), t('climodels.models.card.connectWhat', {}, locale)],
     options: modelsConfirmOptions(locale) });
   if (answer !== 'apply') return cancelled();

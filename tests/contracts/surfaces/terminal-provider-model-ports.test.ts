@@ -1,17 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import * as adapters from '#adapters/index.js';
+import { brainProviderFixture } from '../support/brain-provider.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
-import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
-import { providerModelTree, providerPanelTree, subscriptionModelView } from '#surfaces/core/terminal-provider/index.js';
+import { modelInvocationProfileSchema, type ModelConnectCommand, type ModelConnectResult } from '#domain/index.js';
+import { providerModelTree, providerPanelTree, subscriptionModelView, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import type { NativeAgentReadiness } from '#capabilities/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
-import { ModelInvocableNowApplication, type ModelInvocability, type InvocableModels } from '#engine/index.js';
+import { ModelInvocableNowApplication, modelInvocationProfileDigest, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { main as runConfiguredCli } from '#composition/core/cli/index.js';
 import * as cliSurface from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
@@ -22,7 +23,7 @@ import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 // handler, and only when the check passes; `/model` lists declared models with the first missing precondition as the reason.
 const CANARY = 'sk-canary-T4-6f1d2e9c0b7a';
 // The provider sections are registered by the composition root in the product; here the test registers them once.
-registerProviderConfig();
+adapters.registerProviderConfig();
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project(config: Record<string, unknown>) {
@@ -567,11 +568,12 @@ it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothi
 
 it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-in, image), never "Connected, unusable"', async () => {
   const { root, options } = await project({});
-  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false, billing: 'subscription' as const };
+  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false, billing: 'subscription' as const, secretName: null };
   const ref = { providerId: 'codex-cli-subscription', providerVersion: 1, modelId: 'gpt-x', modelVersion: 1 };
-  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
+  const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex], probe: async () => { throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE'); } },
     connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'codex-cli-subscription', status: 'connected', reference: ref,
-      models: [{ nativeId: 'gpt-x', state: 'connected', reference: ref }], credentialRef: null, keyStored: null,
+      models: [{ nativeId: 'gpt-x', state: 'connected', reference: ref }, { nativeId: 'gpt-old', state: 'notInCatalog' }], credentialRef: null, keyStored: null,
       steps: { catalog: 'present', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' }) as never,
     inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [] }) as never,
     inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', channel: { kind: 'native-cli', cli: 'codex' },
@@ -583,6 +585,11 @@ it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-i
   expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
   // PV 2d: a subscription is worded as its CLI login and usage quota, never as a local server at a zero tariff.
   expect(text).toContain(t('models.connect.subscription', {}, 'en')); expect(text).not.toMatch(/local server|zero tariff/u);
+  // R2b: the title follows the connection's own status (here a worker row without a success tone), never "Not connected".
+  expect(outcome.title).toMatch(/^Connected: /u);
+  // R1a: a subscription has no key and no price list: "connect all" and an unadmitted model are worded as the subscription's.
+  expect(text).toContain(t('models.connect.pull.notInCatalogSubscription', { model: 'gpt-old' }, 'en')); expect(text).not.toMatch(/priced|on this key/u);
+  expect((await port.inspect()).kinds[0]!.models[0]!.label).toBe(t('tui.provider.pull.subscription', {}, 'en'));
 });
 
 it('BeUser M-01: Connect on a key-less CLI subscription runs its model connection and shows that check\'s cause, not "The chat turn failed"', async () => {
@@ -669,7 +676,9 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const first = await signIn.connect('claude-cli-subscription', null);
   expect(first.delegate).toEqual([]); expect(first).toMatchObject({ connected: true, summary: t('tui.provider.login.brainOnly', {}, 'en') });
   expect(first.lines.map(line => line.text)).toContain(t('tui.provider.login.brainOnly', {}, 'en'));
-  expect((await signIn.connect('claude-cli-subscription', '/state/logins/claude', ['ai'])).delegate).toEqual(['ai']);
+  const delegated = await signIn.connect('claude-cli-subscription', '/state/logins/claude', ['ai']);
+  expect(delegated.delegate).toEqual(['ai']); // R1b: who may use the login is said in the consent card's words, never the raw class id
+  expect(delegated.lines.map(line => line.text)).toContain(t('headless.connect.delegated', { classes: t('tui.provider.login.ai', {}, 'en') }, 'en'));
   await signIn.connect('claude-cli-subscription', '/home/person/.claude', []);
   expect(commands.map(command => [command.cli ?? null, command.delegate ?? null, command.model])).toEqual([[null, null, { pull: 'available' }], [null, ['ai'], { pull: 'available' }],
     [{ configDir: '/home/person/.claude' }, [], { pull: 'available' }]]);
@@ -736,6 +745,15 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
   const view = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
     inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', models: models(8) }] }) as never }, options, 'en', errorText).inspect();
   expect(view.kinds[0]!.detail).toBe('7 model(s) connected');
+  // R8e: four chat rows, one switched off in the catalog: the row says 3 connected and the notes show the fourth as Off (one source).
+  const chat = Array.from({ length: 4 }, (_, index) => ({ reference: { providerId: codex.id, providerVersion: 1, modelId: `c${index}`, modelVersion: 1 }, nativeId: `c${index}`,
+    availability: { invocable: true, reason: null } }));
+  const login = { ...codex, headlessLogin: true }, listed4 = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [login] },
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: chat }) as never, inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: codex.id,
+      access: 'allowed', models: chat.map((row, index) => ({ modelId: row.nativeId, activation: { state: index < 3 ? 'active' : 'inactive', revision: 1 } })) }] }) as never }, options, 'en', errorText).inspect();
+  const label = listed4.kinds[0]!.label, unsealed = subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en');
+  expect(listed4.kinds[0]!.detail).toContain('3 model(s) connected');
+  expect(listed4.notes.filter(note => note.startsWith(label))).toEqual([`${label} · 3 model(s) connected: ${unsealed}`, `${label} / c3: ${t('tui.model.state.off', {}, 'en')}`]);
   const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
   expect(none.kinds[0]!.detail).toBe('-');
   // PV 2a: without usable isolation the CLI subscription row is disabled with its reason before anything is chosen; its card names the typed cause and the rows usable here.
@@ -808,6 +826,31 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
     expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
   }
+  // R3c: a login with several models gives one note (onboarding pushes notes to scrollback), not one per model.
+  state = undefined;
+  const two = await providerPanelPort(root, 'scope', { ...host, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } },
+    { reference: { ...reference, modelId: 'fixture-2' }, nativeId: 'fixture-2', availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText).inspect();
+  expect(two.notes.filter(note => note.startsWith(two.kinds[0]!.label))).toEqual([`${two.kinds[0]!.label} · 2 model(s) connected: ${subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en')}`]);
+  // R8e: the production CLI host reads the seal a guarded turn wrote, so /provider says ready (without the host wiring it stayed "unknown").
+  const sealedRoot = await mkdtemp(join(tmpdir(), 'deckent-r8e-')); roots.push(sealedRoot);
+  const global = join(sealedRoot, 'global'), bin = join(sealedRoot, 'bin'), configDir = join(global, 'headless', 'logins', 'claude'), stateDir = join(global, 'headless', 'connections', 'r8e');
+  await mkdir(configDir, { recursive: true, mode: 0o700 }); await mkdir(stateDir, { recursive: true, mode: 0o700 }); await mkdir(bin);
+  const executable = join(bin, 'claude'); await writeFile(executable, '#!/bin/sh\n', { mode: 0o700 });
+  const f = await brainProviderFixture({ headless: { executable, configDir, stateDir } }), sealedOptions = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: global } };
+  const sealed = modelInvocationProfileSchema.parse(f.config.provider_invocation_profiles.profiles[0]);
+  const observation = vi.spyOn(adapters, 'readNativeAgentObservation').mockResolvedValue({ cli: true, login: true, environment: true, toolSurface: true, plugins: true, bridge: true,
+    execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: await realpath(executable), cliVersion: '9.0.0', ownerUid: process.getuid!(),
+      flagSetDigest: adapters.nativeAgentFlagSetDigest(nativeCliAgent(sealed.protocol.family)!), profileDigest: modelInvocationProfileDigest(sealed) } });
+  let cliHost: TerminalLaunchContext | undefined;
+  const entry = vi.spyOn(cliSurface, 'main').mockImplementation(async (_argv, context) => { cliHost = await context!.loadHost!() as TerminalLaunchContext; return 0; });
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(f.project);
+  try {
+    expect(await runConfiguredCli(['--lang', 'en'])).toBe(0);
+    const sealedPort = providerPanelPort(f.project, 's', { ...cliHost!, providerConnect: { ...base, kinds: [{ ...native, id: f.reference.providerId, catalogProviderId: f.reference.providerId }] } },
+      sealedOptions, 'en', errorText);
+    expect(subscriptionReadinessText(await sealedPort.subscriptionReadiness!.inspect('chat', f.reference), 'en')).toBe(t('headless.agent.k13.readiness.ready', {}, 'en'));
+    expect(observation).toHaveBeenCalled();
+  } finally { entry.mockRestore(); cwd.mockRestore(); observation.mockRestore(); await f.close(); }
 });
 
 it('K13: unavailable observation readers are bounded and never leak their error or keep a ready result', async () => {

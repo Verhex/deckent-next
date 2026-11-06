@@ -87,7 +87,7 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
       if (observationFailed) return { ...outcome, delegationBlocked: blocked, state: 'applied-unverified', delegate: null };
       const classes = (result.cli?.delegate ?? []) as readonly ProviderDelegateClass[];
       const lines: PanelLine[] = [...outcome.lines, ...(result?.cli ? [{ label: t('tui.provider.login.field.delegate', {}, locale),
-        text: classes.length ? t('headless.connect.delegated', { classes: classes.join(', ') }, locale) : t('tui.provider.login.personOnly', {}, locale) }] : [])];
+        text: classes.length ? t('headless.connect.delegated', { classes: classes.map(id => words[id]).join('; ') }, locale) : t('tui.provider.login.personOnly', {}, locale) }] : [])];
       return { ...outcome, delegationBlocked: blocked, state: 'applied', lines, delegate: classes };
     },
   };
