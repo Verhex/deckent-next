@@ -351,6 +351,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **/provider and /model show the last tool verification.** A subscription's ready mark is the verification a chat turn last recorded;
   it does not age out on screen and ignores the CLI's own login-file writes. Each turn and each worker still verifies again before it runs.
   *Impact:* "verified" on screen is not a check made now; a later turn can still stop with a typed reason.
+- **Model text can split around a tool line (alpha.63, R5d; owner 2026-11-06).** The display's secret filter holds the last word of a
+  text block until the turn ends, so a sentence may finish after the tool line. Keeping the filter's context across tools is a security
+  floor (Astra 3030); a safe display fix is planned for alpha.64. Rarely, the last letters of a reply show as `[REDACTED]` when they
+  match the start of the turn's random sign-in token; this is the filter being careful, not a leak (also planned for alpha.64).
 - **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 and the worker report
   instruction ask for titles, task text, criterion descriptions and the report summary in your language; JSON keys and ids stay unchanged.
   This has not been measured on real models. *Impact:* a model may still answer in English; Deckent does not translate model text.

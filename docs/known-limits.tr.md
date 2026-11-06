@@ -347,6 +347,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **/provider ve /model son araç doğrulamasını gösterir.** Aboneliğin hazır işareti, bir sohbet turunun son kaydettiği doğrulamadır; ekranda
   süre dolunca düşmez ve CLI'ın kendi giriş dosyası yazmalarını saymaz. Her tur ve her işçi çalışmadan önce yeniden doğrular. *Etki:* ekrandaki
   "doğrulandı" şu an yapılmış bir kontrol değildir; sonraki tur yine tipli bir nedenle durabilir.
+- **Model metni araç satırının iki yanına bölünebilir (alpha.63, R5d; owner 2026-11-06).** Ekrandaki gizli bilgi filtresi bir metin
+  bloğunun son kelimesini tur bitene kadar tutar; cümle araç satırından sonra bitebilir. Filtrenin araçlar arasında bağlamı koruması
+  güvenlik tabanıdır (Astra 3030); güvenli bir ekran düzeltmesi alpha.64'te. Nadiren bir cevabın son harfleri, turun rastgele giriş
+  anahtarının başıyla eşleşince `[REDACTED]` görünür; bu sızıntı değil, filtrenin temkinidir (o da alpha.64'te).
 - **Brain planı ve işçi raporunun sizin dilinizde olması istenir, garanti edilmez (alpha.63, D4).** Brain şablonu v5 ve işçi rapor talimatı
   başlıkları, görev metnini, ölçüt açıklamalarını ve rapor özetini sizin dilinizde ister; JSON anahtarları ve kimlikler değişmez. Gerçek
   modellerde ölçülmedi. *Etki:* model yine İngilizce cevap verebilir; Deckent model metnini çevirmez.

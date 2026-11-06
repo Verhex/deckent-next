@@ -39,10 +39,10 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   const lifetime = new AbortController(), calls = new Map<string, NonNullable<ReturnType<CodexAgentResultLookup>>>();
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
-  let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false, flushText = () => {};
+  let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
   const port: ToolSessionPort = { session: input.session.session,
     async propose(call, correlation, signal) {
-      if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' }); flushText();
+      if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
       if (entry.agent.transport.kind === 'claude-mcp') {
         if (!claude) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-order' });
         return claude.propose(call, correlation, signal);
@@ -86,7 +86,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           // Profiles sharing a login may wait for its lock. Each owns its files before entering that wait.
           const runDir = await realpath(await mkdtemp(join(definition.stateDir, 'agent-run-')));
           const env = buildHeadlessEnv(headless, runDir, definition.configDir);
-          let stream = EMPTY_RECORD_STREAM, text = ''; flushText = () => { emitDelta(onDelta, finishRecordStream(stream, known)); if (!stream.withheld) stream = EMPTY_RECORD_STREAM; }; // R5d: a proposal ends the text before it
+          let stream = EMPTY_RECORD_STREAM, text = '';
           const delta: ModelInvocationDeltaSink = part => { if (part.kind !== 'text') return; text += part.text;
             const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
@@ -155,7 +155,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             if (Buffer.byteLength(JSON.stringify(response)) > profile.limits.responseMaxBytes) return rejectResult(reject('response-limit', { refusal: 'response-limit' }));
             // A completed, guarded turn is current surface evidence; a preflight alone never sets these facts.
             await recordNativeAgentObservation(profile, preflight, execution, input.now, true);
-            flushText(); return response;
+            emitDelta(onDelta, finishRecordStream(stream, known)); return response;
           } finally { try { await dispose?.(); } finally { await rm(runDir, { recursive: true, force: true }); } }
         },
       });
