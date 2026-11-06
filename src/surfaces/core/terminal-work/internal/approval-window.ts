@@ -228,10 +228,12 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
     const rule = (!call && cell && labels.risk[`effect-${cell.split(' · ')[0]}`] !== undefined && labels.rule['effect-operation']) || (cell && labels.rule[cell]) || labels.rule['unknown']!, mode = (input.mode && labels.mode[input.mode]) || labels.mode['unknown']!;
     if (call || cell) rows.push(lineOf(approvalTemplateLine(labels.why, { rule, mode }).spans, [], f.why));
   }
-  // R9e: a card with no call, cell or setting (a plan's Run-create card) has no tool rule, risk or undo to name; its summary says what it starts.
-  if (call || cell || setting) rows.push(lineOf([span(riskText(cell, labels), { role: cell === 'shell-destructive' || cell === 'edit-authority' || cell === 'mcp-floor' ? 'warning' : 'muted' })], [], f.risk));
+  // R9e: a Run's card with no call, cell or setting (a plan's Run-create card) has no tool rule, risk or undo to name; its summary says what it
+  // starts. An in-turn card (runId '-', e.g. an MCP trust card) always says when the tool declared nothing.
+  const named = call || cell || setting || input.runId === '-';
+  if (named) rows.push(lineOf([span(riskText(cell, labels), { role: cell === 'shell-destructive' || cell === 'edit-authority' || cell === 'mcp-floor' ? 'warning' : 'muted' })], [], f.risk));
   // A config write keeps the previous value (the approval record's before copy; the write backs the layer up first): it can be put back.
-  if (call || cell || setting || input.undo) rows.push(lineOf([span(setting ? setting.words.undo : undoText(input.undo, call ? kind : null, cell, labels))], [], f.undo));
+  if (named || input.undo) rows.push(lineOf([span(setting ? setting.words.undo : undoText(input.undo, call ? kind : null, cell, labels))], [], f.undo));
   const left = input.expiresAt - now;
   rows.push(lineOf([span(left > 0 ? fillTemplate(labels.time, { clock: countdownClock(left) }) : labels.expired, { role: left > 0 ? 'accent' : 'error' })], [], f.time));
   if (input.assuranceLine || input.standing) rows.push(blank);
