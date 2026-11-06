@@ -445,7 +445,7 @@
   "terminal.admin.usage.completion": "  Yanıt: {tokens} token",
   "terminal.admin.usage.reasoning": "  Akıl yürütme: {reasoning}",
   "terminal.admin.status.service": "Çalışma servisi şimdi: örnek {instance}, pid {pid}, sürüm {build}",
-  "terminal.slash.provider": "Sağlayıcı bağla (gizli anahtar, ücretsiz deneme) ya da bağlantıyı kaldır",
+  "terminal.slash.provider": "Model bağla (abonelikle giriş ya da API anahtarı) veya bağlantıyı kaldır",
   "terminal.info.usage.section.live": "Canlı harcama hesabı",
   "terminal.info.usage.key.budget": "Bütçe",
   "terminal.info.usage.key.revision": "Bütçe revizyonu",
@@ -471,5 +471,9 @@
   "terminal.shell.queued": "{count} ileti gönderilmeyi bekliyor",
   "terminal.shell.dropped": "Deckent hazırlanırken yalnız ilk {count} gönderilen satır tutulur; sonrakiler alınmadı.",
   "terminal.info.doctor.poolSetup": "İşçi havuzu kurulmadan iş başlayamaz. Eksik işçi ve havuz adımlarını tamamlamak için /setup açın; terminal dışında deckent doctor adımları listeler.",
-  "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır."
+  "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır.",
+  "terminal.approval.k23.assurance": "Bu arka plan çağrısı terminalde kişi tanığıyla karar ister; servis kartı şu an kullandığınız terminale bağlar.",
+  "terminal.approval.k23.call": "İşçi denemesi (Attempt): {attempt} · argsDigest: {digest}",
+  "terminal.approval.k23.wait": "Onayınız bekleniyor · İş {run} · Görev {task} · Deneme {attempt} · {tool} → {target} · {reason} · {seconds} sn kaldı. /approvals açın.",
+  "terminal.approval.k23.expired": "Onay süresi doldu; görev tamamlanmadı."
 }

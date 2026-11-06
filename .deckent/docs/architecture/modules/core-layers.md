@@ -272,3 +272,20 @@ renumbers at landing if needed). Every step is additive; no earlier row is read 
 
 An older build refuses a newer ledger, so going back to alpha.54 means restoring the backup taken before the switch; the switch and
 rollback notes are in [known limits](../../../../docs/known-limits.md#core-layers).
+
+
+### Subscription source binding (alpha.63 K18 author candidate)
+
+The native headless v1 definition expands with optional `sourceBinding@1`: installation, company, scope and owning principal.
+Legacy definitions still parse. Connect reads catalog and activation facts through their existing policy-protected read-only owners,
+without treating a legacy profile as invocation authority. Only the person-witnessed connect writer establishes a missing binding; inspection and invocation
+refuse an unbound legacy profile with `NATIVE_AGENT_RECONNECT_REQUIRED`, without writing authority. Reconnect cannot move an already
+bound profile across these identities. Keeping an identical binding does not require a new witness; existing consent
+withdrawal and narrowing stay available, while extending consent still requires its own witness. Fresh direct subscription resolution checks the persisted source; ONCE use checks that same
+source in its original context before honoring the current target lease. Profile digests seal the full binding.
+
+Capacity identity is separate from authority. On first admitted legacy invocation, the existing ledger v74 resource writer may bind
+its sealed UID and canonical login directory using registry capacity, without reading credentials or granting consent. Missing,
+moved or invalid directory metadata gives the reconnect refusal, never a capacity-exhaustion diagnosis. The claim transaction owns
+this metadata write; occupancy observations do not bind resources. A failed claim rolls back a newly established resource.
+Author fixture evidence lives in external `proof/ALPHA63/k18`; assembled release, independent and live acceptance remain separate.

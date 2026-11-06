@@ -1,4 +1,4 @@
-import { evaluatePolicy, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import { evaluatePolicy, matchingRuleIds, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { PoolPolicyAuthorization, type PoolAuthorization } from './pool.js';
@@ -56,4 +56,20 @@ export function workTargetAttemptAuthorization<A extends DispatchAuthorization &
     if (targetAction) await target.authorize(targetAction, workTargetId, identity.scopeId, principal);
   };
   return { authorizeIdentity, authorize: (action, request, principal) => authorizeIdentity(action, request.identity, principal) };
+}
+/** Owner 2026-11-05 ("ayar + şirket politikası"): a delivery that writes the person's files rides on `deliver-integration` and is open by default
+ * (no new grant, no template or upgrade step); a company closes it with a deny grant or restriction on the attempt action `deliver-working-tree`,
+ * checked at every `deliver-integration` check of that delivery. A deny is a typed refusal, never a fall back to the reference path. */
+export function workingTreeDeliveryAuthorization(attempts: DispatchIdentityAuthorization, source: PolicySource): DispatchIdentityAuthorization {
+  return { async authorizeIdentity(action, identity, principal) {
+    await attempts.authorizeIdentity(action, identity, principal);
+    if (action !== 'deliver-integration') return;
+    // L1c: a company `require-approval` here would need a second approver this delivery has no path for: refused typed, never ignored.
+    let denied, asked;
+    try { const policy = await source.load(), request = { principal, action: 'deliver-working-tree', scopeId: identity.scopeId, resource: { kind: policyResources.attempt.kind, id: identity.attemptId } };
+      denied = matchingRuleIds(policy, request, 'deny'); asked = matchingRuleIds(policy, request, 'require-approval'); }
+    catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    if (denied.length) throw new PolicyAuthorizationError('DELIVERY_WORKING_TREE_DENIED');
+    if (asked.length) throw new PolicyAuthorizationError('DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED');
+  } };
 }

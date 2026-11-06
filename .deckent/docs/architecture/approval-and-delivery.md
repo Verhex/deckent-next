@@ -745,7 +745,7 @@ composeCore. `DockerSupervisor.probe` runs on the worker floor without workspace
 closes the attempt `launch-refused` (EXECUTION_ENVIRONMENT_NOT_READY + requirement); `observeRunAttemptClosure` parks the Run
 `environment-not-ready` (failure code = requirement, park deadline); resume (run-decision) checks again on a new generation; no automatic
 retry and no manual acceptance from the park. Report evidence `not-run` → task reason `acceptance-check-not-run` (a worker claim;
-`failed`/`unknown` outrank it). Worker core `deckent-worker-core@3`. Ledger v59 is an additive version step.
+`failed`/`unknown` outrank it). Worker core `deckent-worker-core@4` (R9 2026-11-05: read and edit tools for files, the shell only when the work needs it). Ledger v59 is an additive version step.
 
 ### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
 
@@ -1195,3 +1195,98 @@ is a person's to lift: resuming a Run held by any source other than the public `
 plainly allowed agent tool decisions are summarised in at most one `policy-turn` audit record per turn, written best effort after the
 turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-evaluator`, `<person>/recovery` and
 `<person>/catalog-aggregator`) get only their exact rights through first-run template v15.
+
+## Working-tree delivery (R9p, owner 2026-11-05; alpha.63 L1)
+
+`execution.deliveryMode` chooses where a person's delivery yes lands. Unset, it is derived: a work target or a non-empty
+`execution.adoption.targets` means `reference` (the Git reference path above, unchanged; live and N1 both stay there), otherwise
+`working-tree`; a work target is always `reference`. In `working-tree` the composition picks `GitWorkingTreeDelivery`, a separate
+`IntegrationDeliveryTarget` (`application: 'working-tree'`): the engine stays generic and only reports the target's result
+(`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
+also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
+the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by an
+exclusive lock directory in Deckent's workspace root (bounded wait; the lock holds its owner record naming the delivery and the operation it
+runs, delivery or rollback, and only a holder proven gone by pid and start bound is taken over: the journal of that operation first enters a
+durable custody entry (`working-tree-pending/<checkout>/<journal>`, directory fsynced) before the gone record is removed, and every holder,
+before its own work, recovers and classifies each custody journal still `writing` from the files: all `before` = nothing written, all
+`after` = written, a mix = PATCH_WORKING_TREE_PARTIAL with both lists, and the entry goes only once its journal no longer reads `writing`, so
+a taker that dies too leaves the operation for the next one (Astra 3017 R2), and custody that cannot be read (anything but absent) stops the
+work (Astra 3019); an ownerless or live lock is never taken (BUSY), and a gone
+holder's record or a journal of another version (journal `schemaVersion` 2 is read) is the typed refusal
+PATCH_WORKING_TREE_RECORD_UNSUPPORTED naming the record to check and remove, nothing settled or written), and writes nothing to the person's repository: no
+reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
+anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
+PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
+`working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`) that keeps each path's full `before`/`after` state
+(absent, or content digest and Git mode) and the token naming what it moves aside; crash settling uses the writer's own equality, so a
+mode-only change is never taken as written (Astra 3015 F2). Each path is written without ever writing over or unlinking a file the person
+saved meanwhile (Astra 3015 F1): the new bytes go to a same-directory temporary file (fsynced); the path's file is then taken aside by an
+atomic rename (whatever is there at that instant keeps its inode) and compared; the new file goes in only by a no-clobber link. The person's
+file found at the take or saved into the empty name goes back or stays (link back, EEXIST leaves theirs in place) and the result is
+PATCH_CONFLICT; a write into the taken file through an editor's open handle is caught by a second comparison and the person's file returns
+over Deckent's. A taken file that cannot return because a newer file of the person's took its name is kept beside it and named
+(PATCH_WORKING_TREE_KEPT). A taken file that still holds `before` leaves the checkout by a rename into the journal directory (the inode
+itself, so a write through a handle opened before the take still lands there). On another filesystem (EXDEV, e.g. a WSL `/mnt/c` project;
+never a refusal) it is never unlinked (Astra 3017 R1): it stays beside its name as `.deckent-<uuid>.aside`, the journal records its path,
+the state it was compared at and the time (`setAside`), and the result returns it so the terminal and CLI tell the person what it is; a
+stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. Deckent never deletes it (no automatic cleanup,
+Astra 3019; the note says so): it stays until the person deletes it. A removal is the same take, comparison and
+departure. Settling a crashed journal first puts a taken file back into its empty name and removes Deckent's temporary name. An existing
+file keeps its permission bits. The trace is the Deckent delivery record and that journal.
+
+Rollback (alpha.63 L1c): `deckent task integration-rollback --scope --run [--task]` (no `--adoption-command-id`; the delivered task, its
+attempt and delivery are found as for the light adoption) puts a written delivery's `before` contents back through the same lock and writer
+(`WorkingTreeRollbackApplication`, engine unit `working-tree-rollback`). The same authority (`deliver-integration` plus the
+`deliver-working-tree` lever), session and terminal card as the delivery; the card's `changes` show every path going from `after` back to
+`before`. It writes only while every path still holds the delivery's `after`; a path changed since refuses typed
+(PATCH_WORKING_TREE_CHANGED) and nothing is written. Its journal is `working-tree-deliveries/<id>.rollback/`; a repeat is a no-op; the
+ledger delivery stays delivered and the rollback is sealed as the `delivery-rolled-back` audit event. The terminal's delivered row names the
+command. A company `require-approval` on `deliver-working-tree` is refused typed (DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED): a second
+approver has no path here, and the rule is never ignored.
+
+A working-tree conflict in the delivery window says the person's file changed while the worker ran; `r` puts `/do <the task's recorded
+request>` into the composer (owner "güncel hâle göre yeniden yap sunar"): Enter shows a new plan card, nothing starts by itself. `/deliver`
+offers a delivered result for adoption from its own Run's pinned mode, never from today's config.
+
+## Working-tree base (R9n, owner 2026-11-05; alpha.63 L1b)
+
+A Run that starts in `working-tree` mode (no recorded custody yet and the config derives `working-tree`; never a queue verification Run)
+gets its base from the person's current files, not HEAD: `captureWorkingTreeBase` builds one private bare repository per Run under the
+workspace root (`run-bases/<sha256(scope, run)>`). Only the objects reachable from HEAD are streamed in (`pack-objects --revs` into
+`index-pack`; the person's unreachable objects never travel). Every tracked path that differs from HEAD (`diff-index`) and every untracked
+file outside `.gitignore`/`.git/info/exclude` (`ls-files --others --exclude-standard`; the person's global excludes file is not read) is read
+through `readTreeFile` (descriptor-relative, `O_NOFOLLOW`, owner, one link, regular file) and hashed into that repository only; the
+detached HEAD there is the base commit (HEAD itself on a clean tree). Before any read, a path on the S6 deny list
+(`workerTreeDenied`), under a patch exclusion, under a product-state root (layout root, configuration directory), a nested repository, a
+symlink, hard link, foreign-owned or special file, or one over the snapshot budget (`artifacts.maxBytes`, `patchPreview.maxEntries`) is
+withheld: never read or hashed anywhere; a tracked one keeps its HEAD version, an untracked one is absent. Each withheld path (path and
+rule) is audited as `worker-tree-excluded` with `by: working-tree-base` before the launch and reaches the worker as one data line
+`{"kind":"workspace-files-withheld",…}` after its context (workers that take Deckent's prompt context). The person's repository gets no
+object, reference or index write. Concurrent first attempts build in fresh directories and rename into place; the loser uses the winner.
+
+The base's adapter version is 2 (`workingTreeSource`); the Run custody, the attempt lease and every patch carry it, so the mode is pinned
+for the Run's life: the broker, patch capture (`listBase`/`readBaseBlobs`/`completeHiddenBase`), predecessor patches, the integration
+candidate clone, delivery planning and the delivery card read the base from the Run's private repository and choose the delivery target
+from the custody or patch, never from today's config. A later config change keeps the Run on its own mode. The working-tree delivery
+compares each touched file with the base content (the person's uncommitted bytes), so a yes writes onto an uncommitted line; a file the
+person saved again meanwhile is PATCH_CONFLICT, as before.
+
+Company policy can close file delivery: a deny grant or restriction on the attempt action `deliver-working-tree` refuses a working-tree
+Run's delivery at every `deliver-integration` check with the typed `DELIVERY_WORKING_TREE_DENIED` (EN/TR text); nothing is written and
+there is no fall back to a reference. The action needs no grant (default open: it rides on `deliver-integration`), so no template version
+or upgrade step exists for it. Reference mode (work target or adoption targets: live and N1) is unchanged: base HEAD of the person's
+repository, adapter version 1.
+
+Lifecycle and refusals (alpha.63 L1c). A Run's private base is Deckent data (uninstall classifies `workspaces/run-bases`,
+`working-tree-deliveries` and `working-tree-locks` as archive members). It is removed (verified private, owned, its record naming this Run;
+detached by rename, then removed recursively) once nothing of its Run can still be delivered: right after a working-tree delivery of a
+terminal Run whose other accepted tasks with work input have no retained patch, and at service start (bounded by
+`execution.retention.sweepLimit`) for every recorded base whose Run is terminal and settled on positive evidence: closed (not completed), or
+every accepted task delivered, owing nothing, or set aside longer than `execution.retention.setAsideDays` (default 14) ago; an unknown outcome
+keeps it. A set-aside result therefore keeps its base through the M-33 return window: brought back, it still delivers. The same start sweep
+removes capture/removal remnants `run-bases/.<uuid>` older than `baseStaleAfterGitTimeouts` × `execution.git.timeoutMs`. A later use of a
+removed base is the typed WORKSPACE_RUN_BASE_REMOVED with the `/do` next step. A project below its repository's top folder (PATCH_WORKING_TREE_SUBFOLDER), an unignored
+changed/untracked file list over `execution.git.outputBytes` (PATCH_WORKING_TREE_LISTING_LIMIT, naming `.gitignore`) and a non-Linux host
+(PATCH_WORKING_TREE_UNSUPPORTED) refuse the base before anything is read; all three are permanent launch refusals (the attempt closes, no
+retry loop). A subfolder is refused rather than supported: Git lists changed paths from the top folder while the reader, writer and patch
+paths are rooted at the project folder, so support needs a path-prefix mapping through every site.

@@ -47,6 +47,9 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
         expect(text).toContain('4:32');
         expect(text).toContain(w.rule[fixture.approval.risk!]!); expect(text).toContain(w.risk[fixture.approval.risk!]!);
         expect(text).toContain(w.mode['standart']!);
+        // R6a (owner D5): an AI-turn card ('-') says the AI in this chat asks on your behalf; a listed card keeps its requester.
+        expect(text).toContain({ en: 'the AI in this chat, on your behalf (you decide)', tr: 'bu sohbetteki yapay zekâ, senin adına (kararı sen verirsin)' }[locale]);
+        expect(approvalCardLines({ ...fixture.approval, requester: 'alperen@host' }, work, fixture.preview, null, { project: '/home/u/acme', mode: 'standart' }, NOW).join('\n')).not.toContain(w.onBehalfSelf);
         // Raw codes stay out of the primary rows: the digest and the policy cell appear only after the details heading.
         const details = lines.indexOf(w.field.detail);
         expect(details).toBeGreaterThan(0);
@@ -97,6 +100,10 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
       }
       const unknown = approvalCardLines(base({ tool: 'fixture_tool', risk: null }), work, '', null, {}, NOW);
       expect(unknown.find(line => line.startsWith(w.field.why))).toContain(w.rule['unknown']);
+      // R9e: a plan's Run-create card (no call, cell or setting) leaves out the tool rule, risk and undo rows; its summary is the what.
+      const plan = approvalCardLines(base({ runId: 'r', risk: null, summary: 'Tasks: 1\nDeclared budget ceiling: $2.00' }), work, '', null, { project: '/home/u/acme', mode: 'standart' }, NOW).join('\n');
+      for (const field of ['why', 'risk', 'undo'] as const) expect(plan).not.toContain(w.field[field]);
+      for (const field of ['what', 'where', 'onBehalf', 'scope', 'time'] as const) expect(plan).toContain(w.field[field]);
     }
   });
 
@@ -408,4 +415,23 @@ describe('approval window: reversibility by call kind and structured posture (T2
       expect(lines.findIndex(line => line.includes('ENGINE SENTENCE'))).toBeGreaterThan(lines.indexOf(heading));
     }
   });
+});
+
+it('K23 worker card shows exact Run/Task/Attempt and argsDigest with witnessed-terminal wording in both catalogs', async () => {
+  const { workerToolCardSummary } = await import('#capabilities/index.js');
+  const summary = workerToolCardSummary({ identity: { runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt', scopeId: 'scope', generation: 1, layoutRevision: 'l' },
+    turnId: 'worker-turn', tool: 'write_file', resource: 'src/result.ts', argsDigest: 'f'.repeat(64) });
+  for (const locale of ['en', 'tr'] as const) {
+    const lines = approvalCardLines(base({ summary, tool: 'write_file', target: 'src/result.ts', risk: 'edit-self-source', requiredAssurance: 'turn-bound', preview: '+exact worker content\n-last hidden payload' }),
+      workSurfaceLabels(locale), undefined, null, {}, NOW).join('\n');
+    for (const value of ['worker-run', 'worker-task', 'worker-attempt', 'src/result.ts', 'f'.repeat(64), '+exact worker content', '-last hidden payload']) expect(lines).toContain(value);
+    expect(lines).not.toContain(locale === 'tr' ? 'burada yalnız reddedebilirsiniz' : 'here you can only deny');
+    expect(lines).toContain(locale === 'tr' ? 'kişi tanığıyla' : 'witnessed terminal');
+    const { workerApprovalWaitLines } = await import('../../../src/surfaces/core/terminal-work/internal/job-windows.js');
+    const ledger = { scopeId: 'scope', listApprovalPage: async () => ({ items: [base({ summary, expiresAt: Date.now() + 60000, risk: 'edit-self-source' })], nextAfter: null }) };
+    const waits = await workerApprovalWaitLines(ledger as never, 'worker-run', workSurfaceLabels(locale));
+    expect(waits.map(line => plainText(line.spans)).join(' ')).toContain(locale === 'tr' ? 'Onayınız bekleniyor' : 'Waiting for your approval');
+    expect(waits.map(line => plainText(line.spans)).join(' ')).toContain('worker-attempt');
+    expect(await workerApprovalWaitLines(ledger as never, 'another-run', workSurfaceLabels(locale))).toEqual([]);
+  }
 });

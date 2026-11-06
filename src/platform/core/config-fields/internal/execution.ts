@@ -46,12 +46,20 @@ export const WORK_TARGET_SETTINGS = z.discriminatedUnion('schemaVersion', [
   z.strictObject({ get schemaVersion() { return z.literal(1); }, get targets() { return z.array(z.strictObject({ ...WORK_TARGET, scope: z.undefined().optional() })).min(1).max(1); } }),
   z.strictObject({ get schemaVersion() { return z.literal(2); }, get targets() { return z.array(z.strictObject({ ...WORK_TARGET,
     scope: z.strictObject({ mode: z.enum(['warn', 'enforce']) }).optional() })).min(1).max(1); } })]).describe('config.field.execution.workTargets');
+/** Owner 2026-11-05 (R9p): where a person's "yes" on a delivery lands. `working-tree`: the delivery writes the change into the project's files
+ * (no commit, reference or object in the person's repository); `reference`: a Git reference, then a separate branch adoption.
+ * Absent = derived: a work target or adoption targets mean `reference`, otherwise `working-tree`. A work target is always `reference`. */
+export const DELIVERY_MODE = z.enum(['reference', 'working-tree']).describe('config.field.execution.deliveryMode');
+export function deliveryMode(execution: Readonly<{ deliveryMode?: 'reference' | 'working-tree' | undefined; workTargets?: unknown; adoption?: { readonly targets: readonly string[] } | undefined }> | null | undefined) {
+  return execution?.workTargets ? 'reference' : execution?.deliveryMode ?? (execution?.adoption?.targets.length ? 'reference' : 'working-tree');
+}
 /** EXEC-RELEASE (owner 2026-10-01 D8 A): when Deckent reclaims an attempt's stopped container and Git clone. `after-retained-patch`
  * releases only once the attempt's verified patch is retained (patch preparation, then the bounded service-start sweep); `keep` never
- * releases. `sweepLimit` bounds release attempts per scope at each service start. Versioned; unknown keys stay refused. */
+ * releases. `sweepLimit` bounds release attempts per scope at each service start. `setAsideDays` (L1c): how long a set-aside working-tree result
+ * keeps its Run's private base so it can be brought back and delivered (M-33); the start sweep removes it after. Versioned; unknown keys stay refused. */
 export const EXECUTION_RETENTION_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); },
   get release() { return z.enum(['after-retained-patch', 'keep']).prefault('after-retained-patch'); },
-  get sweepLimit() { return persistedInteger().positive().max(10_000).prefault(16); } });
+  get sweepLimit() { return persistedInteger().positive().max(10_000).prefault(16); }, get setAsideDays() { return persistedInteger().positive().max(3650).prefault(14); } });
 /** S6 (owner 2026-10-14): the pre-dispatch secret gate over the tree a worker receives. The deny paths and the content rules are not
  * configurable here (the Core credential floor and the redaction table's `gate` rows). Two small, explicit acknowledgements, empty by default:
  * `allowPatternPaths` lifts content-pattern hits under these workspace-relative globs (test fixtures); `acknowledgedDenyPaths` lifts the

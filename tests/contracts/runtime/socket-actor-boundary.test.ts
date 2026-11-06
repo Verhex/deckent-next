@@ -28,11 +28,28 @@ const landlockAbi = (() => {
 })();
 const owned: string[] = [];
 // RESTART-HUNT (alpha.56.1): the kernel's bound-socket table can be made unreadable for one call; every other read is the real one.
-const procTable = vi.hoisted(() => ({ unreadable: false, deniedStat: '', beforeRealpath: null as null | { path: string; run: () => Promise<void> } }));
+// Hermetic table (alpha.63 fan-in, reproduced 2/4 with four concurrent copies of this file): every same-uid sandbox on the machine scans the
+// real table and masks every listed, present `/tmp/dk-<uid>-*` directory. A real listener left on a removed runtime directory is therefore seen
+// by concurrent sandboxes of other test files, whose bwrap then re-creates it on the host (the documented residual window), and their own
+// runtime directories leak into this test's views. While `hermetic` is set, this file sees only its own runtime directories (`keep`) plus the
+// synthetic rows in `listed`, and binds no real socket under `/tmp/dk-`; the kernel fact itself is still proven with a real listener elsewhere.
+const procTable = vi.hoisted(() => ({ unreadable: false, deniedStat: '', beforeRealpath: null as null | { path: string; run: () => Promise<void> },
+  hermetic: false, keep: new Set<string>(), listed: new Set<string>() }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  const readFile = ((path: unknown, ...rest: unknown[]) => procTable.unreadable && path === '/proc/net/unix'
-    ? Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })) : (actual.readFile as (...args: unknown[]) => unknown)(path, ...rest)) as typeof actual.readFile;
+  const readFile = (async (path: unknown, ...rest: unknown[]) => {
+    if (path !== '/proc/net/unix') return (actual.readFile as (...args: unknown[]) => unknown)(path, ...rest);
+    if (procTable.unreadable) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const table = String(await actual.readFile(path, 'utf8'));
+    if (!procTable.hermetic) return table;
+    const at = (line: string) => line.indexOf(' /'), rows = table.split('\n').filter(line => {
+      const listed = at(line) < 0 ? '' : line.slice(at(line) + 1);
+      return !listed.startsWith('/tmp/dk-') || [...procTable.keep].some(dir => listed.startsWith(`${dir}/`));
+    });
+    const template = rows.find(line => at(line) >= 0);
+    if (!template) throw new Error('no bound-socket row to copy');
+    return [...rows.filter(Boolean), ...[...procTable.listed].map(listed => `${template.slice(0, at(template))} ${listed}`)].join('\n') + '\n';
+  }) as typeof actual.readFile;
   const lstat = ((path: unknown, ...rest: unknown[]) => path === procTable.deniedStat
     ? Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })) : (actual.lstat as (...args: unknown[]) => unknown)(path, ...rest)) as typeof actual.lstat;
   const realpath = (async (path: unknown, ...rest: unknown[]) => {
@@ -44,6 +61,7 @@ vi.mock('node:fs/promises', async importOriginal => {
 const servers: LocalRuntimeSocketServer[] = [];
 afterEach(async () => {
   procTable.unreadable = false; procTable.deniedStat = ''; procTable.beforeRealpath = null;
+  procTable.hermetic = false; procTable.keep.clear(); procTable.listed.clear();
   await Promise.all(servers.splice(0).map(server => server.dispose().catch(() => undefined)));
   await Promise.all(owned.splice(0).map(path => rm(path, { recursive: true, force: true })));
 });
@@ -188,11 +206,14 @@ print('connected')"`,
     await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(home, { recursive: true }), mkdir(global, { recursive: true })]);
     const live = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: project })); owned.push(dirname(live));
     const { seen } = await serve(live);
+    procTable.hermetic = true; procTable.keep.add(dirname(live));
     // A stopping service: its socket file and empty directory are removed while its listener is still open, so /proc/net/unix still lists it.
+    // The gone service is a synthetic row (see the hermetic table above); the kernel fact behind it is proven below with a real listener.
     const goneLayout = resolveProductLayout({ projectRoot: join(root, 'other') }), gone = await prepareRuntimeSocket(goneLayout), goneDir = dirname(gone); owned.push(goneDir);
     const listeners: NetServer[] = [];
-    const bind = async () => { const server = createNetServer(); listeners.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(gone, resolve); }); };
-    const stop = async () => { await rm(gone); await rmdir(goneDir); };
+    const listen = async (path: string) => { const server = createNetServer(); listeners.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); }); };
+    const bind = async () => { procTable.listed.add(gone); };
+    const stop = async () => { await rm(gone, { force: true }); await rmdir(goneDir); };
     const credentials = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)).map(createGlobMatcher);
     const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project, DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern))),
       scratchDir: null, writeFloor: () => false, repositoryWritable: true,
@@ -200,6 +221,9 @@ print('connected')"`,
     const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     const openView = () => resolveBubblewrapView(layout, env, {}, { floorReadOnly: true, open: true });
     try {
+      // Kernel fact, with a real listener outside every runtime-socket name: removing the socket file leaves the row while the listener lives.
+      const plain = join(root, 'plain', 's'); await mkdir(dirname(plain)); await listen(plain); await rm(plain);
+      expect(await readFile('/proc/net/unix', 'utf8')).toContain(plain);
       await bind(); await stop();
       expect(await readFile('/proc/net/unix', 'utf8')).toContain(gone);
       const view = await openView(); if (!view.ok) throw new Error(view.reason);

@@ -181,7 +181,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
   if (!hasCliAction('task', action)) throw usage();
   const flags = action === 'patch-preview' ? ['--stat', '--diff'] : action === 'inspect' ? ['--verbose'] : [];
-  const allowed = ['evaluate', 'accept', 'reject'].includes(action ?? '') ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
+  const allowed = ['evaluate', 'accept', 'reject'].includes(action ?? '') ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id', '--delivery-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
   const values = new Map<string, string>(), switches = new Set<string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -203,8 +203,8 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   let taskId = values.get('--task');
   if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
   // BeUser M-25/DR2-07: `integration-adopt --scope --run [--task] --target` finds the delivered task, its attempt and delivery command itself.
-  const lightAdopt = action === 'integration-adopt' && !attemptId && !layoutRevision && !generation;
-  if (lightAdopt && scopeId && runId) { await fillDelivered(values, context); taskId = values.get('--task'); }
+  const lightAdopt = (action === 'integration-adopt' || (action === 'integration-rollback' && !values.has('--adoption-command-id'))) && !attemptId && !layoutRevision && !generation;
+  if (lightAdopt && scopeId && runId) { await fillDelivered(values, context); taskId = values.get('--task'); } // L1c: a light rollback is the files' one
   const resolveLatest = (['patch-preview', 'transcript', 'integration-inspect', 'integration-dismiss', 'integration-restore'].includes(action) || lightAdopt) && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity, resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
   if (action === 'inspect') {
@@ -241,10 +241,10 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
     if (!context.deliverWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.deliverWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, identity, commandId, integrationCommandId }, options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
-      t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale) }); return;
+      [t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale), ...data.setAside?.length ? [t('cli.task.integration.setAside', { files: data.setAside.join(', ') }, locale)] : []].join('\n') }); return;
   }
   if (action === 'integration-adopt' || action === 'integration-rollback') {
-    const commandId = values.get('--command-id') ?? (lightAdopt ? `cli-adopt-${randomUUID()}` : undefined); if (!commandId) throw usage('--command-id');
+    const commandId = values.get('--command-id') ?? (lightAdopt ? `cli-${action === 'integration-adopt' ? 'adopt' : 'rollback'}-${randomUUID()}` : undefined); if (!commandId) throw usage('--command-id');
     const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}) };
     const render = (data: Awaited<ReturnType<TaskIntegrationAdoptHandler>>) => {
       const params = { ref: data.targetRef, from: data.fromCommit, to: data.toCommit, sequence: data.sequence };
@@ -262,7 +262,13 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
       emit(await context.adoptWorkspaceIntegration(root, { schemaVersion: 2, commandId, identity, deliveryCommandId, targetRef,
         ...(verificationRunId === undefined || verificationKind === undefined ? {} : { verificationRunId, verificationKind }) }, options), { ...sinks, render }); return;
     }
-    const adoptionCommandId = values.get('--adoption-command-id'); if (!adoptionCommandId) throw usage('--adoption-command-id');
+    const adoptionCommandId = values.get('--adoption-command-id'), deliveryCommandId = values.get('--delivery-command-id');
+    if (!adoptionCommandId && deliveryCommandId) { // L1c: a working-tree delivery's files go back (the same card and authority as the delivery)
+      if (!context.rollbackWorkingTreeDelivery) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+      emit(await context.rollbackWorkingTreeDelivery(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, deliveryCommandId }, options), { ...sinks,
+        render: data => [t('cli.task.integration.filesRolledBack', { count: data.paths.length, files: data.paths.join(', ') }, locale), ...data.setAside?.length ? [t('cli.task.integration.setAside', { files: data.setAside.join(', ') }, locale)] : []].join('\n') }); return;
+    }
+    if (!adoptionCommandId) throw usage('--adoption-command-id');
     if (!context.rollbackWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     emit(await context.rollbackWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, adoptionCommandId }, options), { ...sinks, render }); return;
   }

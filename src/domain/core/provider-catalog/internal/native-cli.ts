@@ -13,7 +13,9 @@ export class NativeCliRegistryError extends Error {
   constructor() { super('NATIVE_CLI_REGISTRY_INVALID'); this.name = 'NativeCliRegistryError'; }
 }
 const vocabularyEnvelope = z.strictObject({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.unknown().optional())
-  .refine(value => Object.keys(value).length > 0), instructionSurface: z.strictObject({ hiddenPaths: workspaceHiddenPathsSchema }) });
+  .refine(value => Object.keys(value).length > 0), instructionSurface: z.strictObject({ hiddenPaths: workspaceHiddenPathsSchema }),
+  // Vocabulary only; the adapter's registry schema validates this optional agent transport data in full.
+  agentBridge: z.unknown().optional() });
 export function nativeCliVocabulary(input: unknown): readonly string[] {
   const parsed = vocabularyEnvelope.safeParse(input);
   if (!parsed.success) throw new NativeCliRegistryError();

@@ -239,7 +239,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!target || !action) { setState(at); back(); return; }
     connecting.current = target.id;
     // A filtered list's position is not the provider's position in the full list returned after a refusal.
-    const rootPos = view.kinds.indexOf(target) + Number(Boolean(budgetEntry(budget, labels.budget))) + Number(Boolean(cacheEntry(cache, labels.cache)));
+    const rootPos = view.kinds.indexOf(target);
     setState({ ...PICKER_INITIAL, pos: rootPos + Number(Boolean(laterLabel) && rootPos > 0) });
     if (action === 'grant' && target.keyName && port.secretGrant?.check) {
       setStep({ kind: 'busy' }); granting(() => port.secretGrant!.check!(target.keyName!), () => back()); return;
@@ -269,13 +269,14 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!row || !card?.kinds.includes(row.id)) return;
     setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
   };
-  return <PickerWindow title={title(listTitle)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
+  return <PickerWindow submitFilter title={title(listTitle)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
     tree={{ ...tree, items: [...(laterLabel ? [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] : tree.items), ...(!apiOnly ? [{ id: API, label: apiLabel }] : [])] }} onClose={apiOnly ? back : onClose} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
 const BODY_ROWS = 1, REFUSAL_BODY_ROWS = 6;
-/** Stage 1: the budget row first, when the window offers a budget action; then (CACHE-SLICE1) the cache migration row when one is offered. */
+/** The connection rows first (BeUser r-rest 3: a subscription person starts on a connection, not on money); then the budget row when the window
+ * offers a budget action, and (CACHE-SLICE1) the cache migration row when one is offered. */
 function withRows(tree: PickerTree, entry: ReturnType<typeof budgetEntry>, cacheRow: ReturnType<typeof cacheEntry>): PickerTree {
-  return { ...tree, items: [...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail }] : []),
-    ...(cacheRow ? [{ id: CACHE, label: cacheRow.label, detail: cacheRow.detail }] : []), ...tree.items] };
+  return { ...tree, items: [...tree.items, ...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail }] : []),
+    ...(cacheRow ? [{ id: CACHE, label: cacheRow.label, detail: cacheRow.detail }] : [])] };
 }

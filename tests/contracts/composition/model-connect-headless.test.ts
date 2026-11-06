@@ -19,6 +19,12 @@ import * as configComposition from '#composition/core/config/index.js';
 import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
+import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
+import { main } from '#surfaces/core/cli/index.js';
+import { Writable } from 'node:stream';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
+import { parseModelInvocationProfile } from '#domain/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -42,6 +48,7 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
   // S3-5: the CLI runs isolated, so the fake logs into its own state file in the login dir (the one place it may write).
   const f = await runtime({ extraGrants: grants, noServer: true }), configDir = join(f.data, 'claude-login'), bin = join(f.data, 'bin'), logPath = join(configDir, '.claude.json');
   await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
+  vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
   const executable = await writeFakeCli(bin, { logPath, ...(auth ? { auth } : {}) }), options = { env: f.env };
   // alpha.55.1: the retired key is protected, so the fixture sets it as the person at a terminal (the witness attests).
   if (preview !== null) await createConfiguredConfigApplication(f.project, options, undefined, { attest: async () => true }).submit('set', { keyPath: 'models.headless.preview', value: preview, layer: 'global',
@@ -55,6 +62,7 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
 }
 
 async function unwitnessedDelegation(h: Awaited<ReturnType<typeof harness>>) {
+  vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
   const path = join(h.f.project, '.deckent/config.json'), original = await readFile(path, 'utf8');
   const argv = ['models', 'connect', '--scope', 'scope', '--connection', 'claude-cli-subscription', '--model', nativeId,
     '--executable', h.executable, '--config-dir', h.configDir, '--delegate', 'ai,system', '--command-id', 'f11-cli', '--json'];
@@ -86,10 +94,95 @@ afterEach(() => vi.restoreAllMocks());
 const platformPrune = platform.pruneConfigBackups;
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
+  it('K29: connected profile authors v2 through governed config, lists its connection and returns the same kind to Docker', async () => {
+    const h = await harness(null); await h.connect('k29-connect');
+    const path = join(h.f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
+    const profile = config.provider_invocation_profiles.profiles.find((row: { adapter: { id: string } }) => row.adapter.id === 'native-cli-headless');
+    const docker = { imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64, logMaxSizeKiB: 64, logMaxFiles: 2,
+      tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
+    const template = adapters.createNativeCodingTemplate(docker, { provider: 'claude', cliVersion: '9.1.0 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' });
+    config.terminal.scopeId = 'scope';
+    config.execution = { docker: { ...docker, executable: 'docker' }, git: { gitExecutable: 'git', timeoutMs: 5000 } };
+    config.admission = { poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'k29-before', profiles: [template],
+      kinds: [{ kind: 'coding', profile: { id: template.id, version: template.version } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } };
+    await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const request = { provider: 'claude', kind: 'coding', connection: profile.id, apply: false }, options = { env: h.f.env }, person = { witness: { attest: async () => true } };
+    const before = await readFile(path, 'utf8'), spawns = await h.spawns();
+    const preview = await configureNativeCodingTemplate(h.f.project, request, options, person);
+    expect(preview.profile.adapter.version).toBe(2); expect(preview.profile.parameters['invocation']).toMatchObject({ discovery: { mode: 'disabled' } }); expect(await readFile(path, 'utf8')).toBe(before); expect(await h.spawns()).toEqual(spawns);
+    expect(preview.profile.parameters['worker']).toMatchObject({ definition: profile.adapter.definition, protocolFamily: profile.protocol.family });
+    await expect(configureNativeCodingTemplate(h.f.project, { ...request, discovery: 'repository' }, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED' });
+    // Owner 2026-11-05 (R8): without a Docker toolchain pin the template records the connection's CLI floor; the worker runs on the current sealed version.
+    const pinless = { ...config, admission: { ...config.admission, registry: { ...config.admission.registry, profiles: [{ ...template, parameters: { ...template.parameters,
+      invocation: { ...(template.parameters['invocation'] as object), provider: 'codex', cliVersion: 'codex-cli 9.1.0' } } }] } } };
+    await writeFile(path, JSON.stringify(pinless)); platform.clearConfigCache();
+    const floor = await configureNativeCodingTemplate(h.f.project, request, options, person).catch((error: unknown) => error);
+    expect(floor).toMatchObject({ profile: { parameters: { invocation: { cliVersion: profile.adapter.definition.minCliVersion } } } });
+    await writeFile(path, before); platform.clearConfigCache();
+    const applied = await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person);
+    expect(applied.registry).toEqual(preview.registry); expect(applied.status).toBe('applied');
+    expect((await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person)).status).toBe('unchanged');
+    let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } });
+    expect(await main(['coding', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
+    expect(JSON.parse(output).profiles[0]).toMatchObject({ runtime: 'subscription', connection: profile.id });
+    // R8c: people see the connection as CLI · model (its id only in --json); R8b: `--connection` alone names the provider.
+    const host = { workerCliOf: (family: string) => adapters.nativeCliAgent(family)?.id ?? null, configureCodingTemplate: configureNativeCodingTemplate };
+    output = ''; expect(await main(['coding'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
+    expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
+    output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
+    expect(JSON.parse(output)).toMatchObject({ status: 'unchanged', connection: profile.id });
+    const back = await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, apply: false }, options, person);
+    expect(back.profile.adapter.version).toBe(1); expect(back.profile.parameters).not.toHaveProperty('worker');
+    expect((await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, discovery: 'repository', apply: true }, options, person)).profile).toEqual(template);
+    const stable = await readFile(path, 'utf8');
+    await expect(adapters.withMcpPrincipal(() => configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(stable);
+    for (const connection of ['missing', profile.id]) {
+      if (connection === profile.id) { delete profile.adapter.definition.sourceBinding; config.provider_invocation_profiles.profiles = [profile]; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache(); }
+      await expect(configureNativeCodingTemplate(h.f.project, { ...request, connection }, options, person)).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+    }
+    const unsupported = { ...profile, protocol: { family: 'cursor-agent-stream-json', version: 'v1' } };
+    config.provider_invocation_profiles.profiles = [unsupported]; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const unsupportedBefore = await readFile(path, 'utf8');
+    await expect(configureNativeCodingTemplate(h.f.project, request, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_UNSUPPORTED' });
+    expect(await readFile(path, 'utf8')).toBe(unsupportedBefore);
+  });
+
+  it('K29: Codex connection selects its registry capability and refuses a different provider without writing', async () => {
+    const h = await harness(null), configDir = join(h.f.data, 'codex-k29'), path = join(h.f.project, '.deckent/config.json');
+    await mkdir(configDir, { mode: 0o700 });
+    const executable = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(configDir, 'config.toml') });
+    await connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId: 'codex-k29', scopeId: 'scope', connection: 'codex-cli-subscription',
+      model: { nativeId: codexSeed.recommendedActivations[0]!.modelIds[0]! }, cli: { executable, configDir }, delegate: ['ai', 'system'] }, { env: h.f.env });
+    const config = JSON.parse(await readFile(path, 'utf8')), profile = config.provider_invocation_profiles.profiles.find((row: { protocol: { family: string } }) => row.protocol.family === CODEX_FAMILY);
+    const docker = { imageId: `sha256:${'b'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64, logMaxSizeKiB: 64, logMaxFiles: 2,
+      tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
+    const template = adapters.createNativeCodingTemplate(docker, { provider: 'codex', cliVersion: 'codex-cli 9.1.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' });
+    config.terminal.scopeId = 'scope';
+    config.execution = { docker: { ...docker, executable: 'docker' }, git: { gitExecutable: 'git', timeoutMs: 5000 } };
+    config.admission = { poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'k29-codex', profiles: [template],
+      kinds: [{ kind: 'coding', profile: { id: template.id, version: template.version } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } };
+    await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const before = await readFile(path, 'utf8'), request = { provider: 'codex', kind: 'coding', connection: profile.id, apply: false }, options = { env: h.f.env };
+    const result = await configureNativeCodingTemplate(h.f.project, request, options);
+    expect(result.profile.adapter.version).toBe(2); expect(result.profile.parameters['worker']).toMatchObject({ protocolFamily: CODEX_FAMILY, definition: profile.adapter.definition });
+    await expect(configureNativeCodingTemplate(h.f.project, { ...request, provider: 'claude' }, options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_UNSUPPORTED' });
+    expect(await readFile(path, 'utf8')).toBe(before);
+    // R8b (owner D1): without Docker the first registry comes from the connection alone (its CLI floor, no image, no detection container);
+    // a plain Docker registry without an image stays refused.
+    config.execution = { git: { gitExecutable: 'git', timeoutMs: 5000 } }; delete config.admission; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const person = { witness: { attest: async () => true } }, init = { schemaVersion: 1, scopeId: 'scope', provider: 'codex', kind: 'coding', poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, apply: true };
+    await expect(initializeNativeCodingRegistry(h.f.project, init, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
+    const first = await initializeNativeCodingRegistry(h.f.project, { ...init, connection: profile.id }, options, { ...person, detect: async () => { throw new Error('no detection without Docker'); } });
+    expect(first.status).toBe('applied'); expect(first.profile.parameters['docker']).not.toHaveProperty('imageId');
+    expect(first.profile.parameters['invocation']).toMatchObject({ cliVersion: profile.adapter.definition.minCliVersion, discovery: { mode: 'disabled' } });
+    expect((await configureNativeCodingTemplate(h.f.project, { ...request, kind: 'review', apply: true }, options, person)).registry.kinds.map(row => row.kind)).toEqual(['coding', 'review']);
+  });
+
   it('S3-5/A62: connects without a preview switch; subscription text chat streams, carries history and Esc cancels in the built terminal', async () => {
     expect(textOnlyModelInvocationRequest({ model: 'fixture', max_completion_tokens: 1, messages: [{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }] })['messages']).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'raw role input' }]);
     expect(adapters.terminalTextChatFamilies).toContain(seed.providers[0]!.channel.protocolFamily);
-    expect(adapters.terminalTextChatFamilies).not.toContain(CODEX_FAMILY);
+    expect(adapters.terminalTextChatFamilies).toContain(CODEX_FAMILY);
     for (const preview of [null, false]) {
       const h = await harness(preview);
       await expect(h.connect('c-1')).resolves.toMatchObject({ status: 'connected' });
@@ -114,8 +207,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       await settleOnboarding(platform.resolveProductLayout({ projectRoot: h.f.project, root: h.f.data }));
       await h.f.start();
       const cli = resolve('dist/composition/core/cli/internal/entry.js');
-      const steps = [['Deckent workline', '/model\r'], ['Models · scope', '\r'], ['Subscription text chat', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
-        ['Ready', '/provider\r', 'fresh'], ['no login-token handling, sharing or resale.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
+      const steps = [['Deckent workline', '/model\r'], ['Models · scope', '\r'], ['Agent readiness unknown:', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
+        ['Ready', '/provider\r', 'fresh'], ['Deckent never reads, copies or shares it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
         ['CLAUDE-CHAT-WAIT', '\u001b'], ['cancelled (model response)', 'remember first hello\r'],
         ['CLAUDE-CHAT-SECOND', 'quota please\r'], ['Your subscription usage limit', '/exit\r', 'fresh']];
       const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 'scope']),
@@ -136,6 +229,38 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       expect(turns.map(turn => turn.outcome?.finish)).toEqual(expect.arrayContaining(['stop', 'cancelled', 'error']));
     }
   }, 120_000);
+  it('K18: reads the alpha.62 profile shape, refuses unwitnessed rebinding and seals it only on a witnessed reconnect', async () => {
+    const h = await harness(null);
+    await h.connect('k18-first');
+    const path = join(h.f.project, '.deckent/config.json'), original = JSON.parse(await readFile(path, 'utf8'));
+    const profile = original.provider_invocation_profiles.profiles.find((p: Profile) => p.adapter.id === 'native-cli-headless');
+    const bound = profile.adapter.definition.sourceBinding;
+    const context = await loadConfiguredScopeContext(h.f.project, 'scope', { env: h.f.env }, 'read');
+    expect(bound).toEqual({ schemaVersion: 1, installationId: context.installationId, companyId: context.config.company.id, scopeId: 'scope', principal: me[0] });
+    delete profile.adapter.definition.sourceBinding;
+    await writeFile(path, JSON.stringify(original)); platform.clearConfigCache();
+    const legacy = parseModelInvocationProfile(profile), before = await readFile(path, 'utf8');
+    await expect(resolveConfiguredModelUse(h.f.project, legacy, context.principal, { env: h.f.env })).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(before);
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
+    await expect(h.connect('k18-no-witness')).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(before);
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
+    await expect(h.connect('k18-reconnect')).resolves.toMatchObject({ status: 'connected', steps: { profile: 'written' } });
+    expect((await h.profile())!.adapter.definition.sourceBinding).toEqual(bound);
+    const fresh = parseModelInvocationProfile(await h.profile());
+    await expect(resolveConfiguredModelUse(h.f.project, fresh, context.principal, { env: h.f.env })).resolves.toBeNull();
+    // A witnessed reconnect cannot launder a source bound in another company/installation/scope/person.
+    for (const changed of [{ ...bound, installationId: 'another-installation' }, { ...bound, companyId: 'another-company' },
+      { ...bound, scopeId: 'another-scope' }, { ...bound, principal: { ...me[0], subject: 'another-person' } }]) {
+      const copied = JSON.parse(await readFile(path, 'utf8'));
+      copied.provider_invocation_profiles.profiles.find((p: Profile) => p.adapter.id === 'native-cli-headless').adapter.definition.sourceBinding = changed;
+      await writeFile(path, JSON.stringify(copied)); platform.clearConfigCache();
+      const unchanged = await readFile(path, 'utf8');
+      await expect(h.connect('k18-copied')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+      expect(await readFile(path, 'utf8')).toBe(unchanged);
+    }
+  });
   it('N19: an MCP actor can neither connect the person\'s login nor change its consent', async () => {
     const h = await harness(true);
     const path = join(h.f.project, '.deckent/config.json'), before = await readFile(path, 'utf8');
@@ -154,7 +279,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
   });
   it('the person connects: preflight without a model call, uid floor and login dir sealed, subscription profile with no key; consent is theirs to give, keep and withdraw', async () => {
     const h = await harness(true), { person, cli, argv } = await unwitnessedDelegation(h), path = join(h.f.project, '.deckent/config.json');
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
     const first = await h.connect('c-1');
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
     expect(first).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered', cli: { configDir: h.configDir, delegate: [] },
       steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
     expect(await h.spawns()).toEqual(expect.arrayContaining(['version', 'help', 'auth']));
@@ -261,6 +388,19 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.spawns()).toEqual(['login']);
     // The person's override signs a dir they name in instead (an AI actor never reaches this: refused above for every input).
     expect(await login(yes, true, { configDir: h.configDir })).toMatchObject({ configDir: h.configDir, owned: false });
+    // K3: the existing person witness and declined-card path also fence an explicit Codex login method.
+    const codexDir = join(h.f.data, 'codex-login'); await mkdir(codexDir, { mode: 0o700 });
+    const codexExe = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(codexDir, 'config.toml'), authFromLogin: true });
+    const codexLogin = (loginMethod: string, confirm = yes) => loginConfiguredHeadless({ connection: 'codex-cli-subscription', configDir: codexDir,
+      executable: codexExe, loginMethod }, { env: h.f.env }, confirm, { attest: async () => true });
+    await expect(withMcpPrincipal(() => codexLogin('device-auth'))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await codexLogin('device-auth', async () => false)).toBeNull();
+    expect(await readdir(codexDir)).toEqual([]);
+    for (const method of ['browser', 'device-auth']) expect(await codexLogin(method)).toMatchObject({ exit: 'completed', signedIn: true, authMethod: 'chatgpt' });
+    const logged = (await readFile(join(codexDir, 'config.toml'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[] });
+    expect(logged.filter(row => row.mode === 'login').map(row => row.argv)).toEqual([
+      ['-c', 'cli_auth_credentials_store="file"', 'login'], ['-c', 'cli_auth_credentials_store="file"', 'login', '--device-auth']]);
+    expect((await lstat(join(codexDir, 'auth.json'))).mode & 0o777).toBe(0);
   });
   it('N9: a CLI that is not logged in is refused typed and nothing is written; Codex: the headless profile connects without a worker image, the image gates only the worker activation', async () => {
     const h = await harness(true, { loggedIn: false });
@@ -280,6 +420,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     await expect(codex('x-0')).resolves.toMatchObject({ status: 'connected', cli: { configDir: codexDir, delegate: ['ai'] }, worker: 'image-required',
       steps: { declaration: 'written', profile: 'written', activation: 'written' } });
     expect(await workerModel()).not.toBe('active');
+    expect((await inspectConfiguredInvocableModels(h.f.project, 'scope', { env: h.f.env })).models.find(model => model.nativeId === codexModel)?.availability).toEqual({ invocable: true, reason: null });
     const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     const profiles = (written['provider_invocation_profiles'] as { profiles: (Profile & { protocol: { family: string } })[] }).profiles;
     expect(profiles.find(item => item.protocol.family === CODEX_FAMILY)).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', adapter: { id: 'native-cli-headless',

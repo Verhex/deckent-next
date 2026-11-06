@@ -1,4 +1,6 @@
 {
+  "agent.shell.subscriptionHostRefused": "No sandbox is available for this subscription agent; it cannot run commands on the host. Nothing was run.",
+  "agent.shell.productStateProtected": "Deckent's own state cannot be opened by any approval. Nothing was run.",
   "agent.shell.fullAccessUnavailable": "Full access requires an open sandbox; nothing was run.",
   "agent.shell.sandboxNotStarted": "The sandbox could not start this command: {reason}. Nothing ran and no host shell was used; `deckent doctor` runs the same sandbox self-test.",
   "error.RUNTIME_CHAT_EVENT_TOO_LARGE": "A required conversation event exceeds the single-frame capacity. Delivery stopped; some history may be missing. Check any tool effects before retrying. Start a new conversation with /clear and use smaller parts.",

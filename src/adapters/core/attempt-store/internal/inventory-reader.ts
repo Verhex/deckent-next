@@ -12,12 +12,14 @@ import { SqliteWorkerEventLogs } from './worker-events.js';
 import { SqliteRunProgression } from './progression.js';
 import { SqliteEffectJournal } from './effect.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
+import { findCapacityResource, type CapacityResourceBinding } from '#adapters/core/sqlite-ledger/index.js';
 export type SqliteInventoryOptions = Pick<SqliteLedgerOptions, 'busyTimeoutMs'>;
 /** Existing ledger only: no creation, migrations, journal-mode changes or write methods.
  * WAL readers may use SQLite shared-memory bookkeeping. Path custody belongs to composition.
  */
 export class SqliteInventoryReader implements DispatchInventoryStore {
   private readonly db: DatabaseSync;
+  async findCapacityResource(binding: CapacityResourceBinding) { return findCapacityResource(this.db, binding); }
   async loadEffect(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffect(scopeId, commandId); }
   /** BeUser DR2-05: where a Run's work was made (its recorded source), read without a writer. */
   async loadRunWorkspaceCustody(scopeId: string, runId: string) { return new SqliteRunWorkspaceCustody(this.db).loadRunWorkspaceCustody(scopeId, runId); }

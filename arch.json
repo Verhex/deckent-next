@@ -75,6 +75,23 @@
     "registry": "dependencies.json"
   },
   "units": {
+    "src/capabilities/core/native-agent-execution": {
+      "dependencies": [
+        "src/domain/core/agent-tool",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/capabilities/core/artifacts",
+        "src/domain/core/run",
+        "src/domain/core/attempt",
+        "src/domain/core/approval",
+        "src/domain/core/principal",
+        "src/platform/core/integrity"
+      ],
+      "plan": "PROVIDERS"
+    },
     "src/adapters/core/service-shutdown-store": {
       "dependencies": [
         "src/domain/core/primitives",
@@ -122,7 +139,8 @@
         "src/platform/core/clock",
         "src/domain/core/worker-event",
         "src/adapters/core/run-proposal-store",
-        "src/adapters/core/target-queue-store"
+        "src/adapters/core/target-queue-store",
+        "src/adapters/core/sqlite-model-invocation"
       ],
       "plan": "STORE"
     },
@@ -269,6 +287,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/native-cli-registry",
         "src/platform/core/state-root",
         "src/adapters/core/local-principal",
         "src/adapters/core/agent-workspace-floor",
@@ -338,6 +357,7 @@
     },
     "src/composition/core/execution": {
       "dependencies": [
+        "src/adapters/core/native-cli-headless",
         "src/platform/core/host",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
@@ -354,6 +374,7 @@
         "src/engine/core/workspaces",
         "src/platform/core/config",
         "src/platform/core/errors",
+        "src/platform/core/i18n",
         "src/platform/core/managed-files",
         "src/engine/core/task-inputs",
         "src/adapters/core/native-connection",
@@ -373,7 +394,30 @@
         "src/adapters/core/hub-client-store",
         "src/engine/core/hub-client",
         "src/adapters/core/siwc-worker",
-        "src/composition/core/siwc"
+        "src/composition/core/siwc",
+        "src/adapters/core/native-cli-worker",
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/native-cli-registry",
+        "src/composition/core/subscription-readiness",
+        "src/engine/core/supervisor",
+        "src/engine/core/worker-observation",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/platform/core/clock",
+        "src/platform/core/integrity",
+        "src/platform/core/redaction",
+        "src/engine/core/agent-turn",
+        "src/engine/core/approval",
+        "src/adapters/core/agent-workspace-floor",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/host-shell",
+        "src/adapters/core/contract",
+        "src/adapters/core/sqlite-agent-turn",
+        "src/adapters/core/approval-store",
+        "src/composition/core/agent-turn",
+        "src/composition/core/root",
+        "src/engine/core/model-invocation"
       ],
       "plan": "EXECUTION"
     },
@@ -498,7 +542,8 @@
         "src/adapters/core/beuser-surface",
         "src/engine/core/beuser-contract",
         "src/engine/core/beuser-realm",
-        "src/engine/core/project-attachment"
+        "src/engine/core/project-attachment",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "FOUNDATION"
     },
@@ -529,7 +574,9 @@
         "src/engine/core/agent-turn",
         "src/engine/core/model-invocation",
         "src/platform/core/config",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/capabilities/core/native-agent-execution",
+        "src/composition/core/subscription-readiness"
       ],
       "plan": "SURFACES"
     },
@@ -611,7 +658,14 @@
         "src/composition/core/siwc",
         "src/adapters/core/siwc-worker",
         "src/engine/core/run-limits",
-        "src/composition/core/supervisors"
+        "src/composition/core/supervisors",
+        "src/adapters/core/native-cli-worker",
+        "src/domain/core/primitives",
+        "src/engine/core/model-invocation",
+        "src/engine/core/model-use",
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-use",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "EXECUTION"
     },
@@ -696,7 +750,8 @@
         "src/adapters/core/git-patch",
         "src/adapters/core/target-queue-store",
         "src/engine/core/workspace-patch",
-        "src/adapters/core/autonomy-shadow"
+        "src/adapters/core/autonomy-shadow",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "EXECUTION"
     },
@@ -1238,7 +1293,8 @@
         "src/surfaces/core/monitor",
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
-        "src/surfaces/core/recovery-text"
+        "src/surfaces/core/recovery-text",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SURFACES"
     },
@@ -1401,7 +1457,9 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/surfaces/core/terminal-beuser",
+        "src/platform/core/config-fields",
         "src/surfaces/core/terminal-host",
         "src/domain/core/primitives",
         "src/engine/core/config",
@@ -1535,7 +1593,8 @@
         "src/engine/core/approval",
         "src/domain/core/attempt",
         "src/engine/core/bootstrap-identity",
-        "src/engine/core/system-policy-rows"
+        "src/engine/core/system-policy-rows",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "INSTALLATION"
     },
@@ -1702,7 +1761,8 @@
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
-        "src/adapters/core/sqlite-read-view"
+        "src/adapters/core/sqlite-read-view",
+        "src/engine/core/scheduling"
       ],
       "plan": "STORE"
     },
@@ -1725,7 +1785,8 @@
         "src/engine/core/authentication",
         "src/engine/core/provider-catalog",
         "src/domain/core/model-invocation",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/domain/core/worker-event"
       ],
       "plan": "PROVIDERS"
     },
@@ -1790,6 +1851,9 @@
     },
     "src/composition/core/model-connect": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/engine/core/model-use",
+        "src/adapters/core/sqlite-model-activation",
         "src/composition/core/installation",
         "src/composition/core/terminal-chat",
         "src/composition/core/runtime-service",
@@ -1828,7 +1892,8 @@
         "src/engine/core/provider-spend",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/secret-store",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/adapters/core/sqlite-ledger"
       ],
       "plan": "PROVIDERS"
     },
@@ -1861,6 +1926,7 @@
     },
     "src/adapters/core/sqlite-model-invocation": {
       "dependencies": [
+        "src/adapters/core/native-cli-registry",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
@@ -1870,7 +1936,11 @@
         "src/engine/core/provider-spend",
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/scheduling"
       ],
       "plan": "PROVIDERS"
     },
@@ -1945,7 +2015,17 @@
         "src/adapters/core/provider-siwc",
         "src/composition/core/secrets",
         "src/composition/core/scoped-request",
-        "src/adapters/core/mcp-start-diagnosis"
+        "src/adapters/core/mcp-start-diagnosis",
+        "src/domain/core/principal",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/native-tool-bridge",
+        "src/composition/core/subscription-readiness",
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/native-connection",
+        "src/composition/core/model-use",
+        "src/engine/core/model-use",
+        "src/engine/core/authentication"
       ],
       "plan": "SURFACES"
     },
@@ -2019,7 +2099,8 @@
         "src/domain/core/principal",
         "src/domain/core/model-activation",
         "src/domain/core/provider-catalog",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "PROVIDERS"
     },
@@ -2048,7 +2129,8 @@
         "src/domain/core/primitives",
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-anthropic-messages",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "PROVIDERS"
     },
@@ -2151,7 +2233,9 @@
         "src/adapters/core/native-cli-registry",
         "src/domain/core/provider-catalog",
         "src/domain/core/memory",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/adapters/core/native-cli-worker",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "PROVIDERS"
     },
@@ -2162,7 +2246,12 @@
         "src/adapters/core/native-coding",
         "src/platform/core/errors",
         "src/platform/core/config",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/composition/core/model-use",
+        "src/engine/core/model-use"
       ],
       "plan": "PROVIDERS"
     },
@@ -2220,12 +2309,15 @@
         "src/platform/core/redaction",
         "src/domain/core/effect",
         "src/capabilities/core/artifacts",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/adapters/core/native-cli-worker",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
     "src/composition/core/workspace-patch": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/domain/core/attempt",
         "src/platform/core/config",
         "src/platform/core/errors",
@@ -2248,7 +2340,9 @@
         "src/engine/core/effect",
         "src/engine/core/delivery-summary",
         "src/engine/core/audit",
-        "src/engine/core/runtime"
+        "src/engine/core/runtime",
+        "src/adapters/core/native-cli-worker",
+        "src/engine/core/working-tree-rollback"
       ],
       "plan": "ISOLATION"
     },
@@ -2316,6 +2410,7 @@
     },
     "src/adapters/core/workspace-read": {
       "dependencies": [
+        "src/adapters/core/native-cli-registry",
         "src/domain/core/agent-tool",
         "src/platform/core/common",
         "src/engine/core/workspaces"
@@ -2346,7 +2441,6 @@
     "src/composition/core/worker-observation": {
       "dependencies": [
         "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
         "src/adapters/core/file-artifacts",
         "src/adapters/core/worker-observation",
         "src/composition/core/policy",
@@ -2361,7 +2455,8 @@
         "src/platform/core/common",
         "src/composition/core/resource-observation",
         "src/engine/core/dispatch",
-        "src/engine/core/monitor"
+        "src/engine/core/monitor",
+        "src/adapters/core/native-cli-worker"
       ],
       "plan": "EXECUTION"
     },
@@ -2399,7 +2494,8 @@
     },
     "src/domain/core/approval": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SECURITY"
     },
@@ -2421,7 +2517,8 @@
         "src/domain/core/audit",
         "src/platform/core/redaction",
         "src/domain/core/agent-turn",
-        "src/domain/core/adapter-registry"
+        "src/domain/core/adapter-registry",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SECURITY"
     },
@@ -2577,6 +2674,7 @@
     },
     "src/engine/core/agent-turn": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
         "src/domain/core/policy",
@@ -3133,7 +3231,7 @@
     },
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
-        "src/domain/core/primitives",
+        "src/capabilities/core/native-agent-execution",
         "src/domain/core/provider-catalog"
       ],
       "plan": "HARDCODE-P1"
@@ -3411,6 +3509,7 @@
     },
     "src/composition/core/run-planner": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/domain/core/run",
         "src/domain/core/model-invocation",
         "src/engine/core/run-planner",
@@ -3431,6 +3530,7 @@
         "src/adapters/core/sqlite-model-activation",
         "src/composition/core/toolchains",
         "src/composition/core/memory",
+        "src/platform/core/i18n",
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store",
         "src/platform/core/integrity",
@@ -3641,7 +3741,8 @@
         "src/surfaces/core/terminal-delivery",
         "src/engine/core/effect",
         "src/engine/core/delivery-summary",
-        "src/surfaces/core/delivery-summary"
+        "src/surfaces/core/delivery-summary",
+        "src/engine/core/working-tree-rollback"
       ],
       "plan": "SURFACES"
     },
@@ -3690,7 +3791,10 @@
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
         "src/engine/core/config",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/engine/core/model-use",
+        "src/engine/core/model-invocation",
+        "src/domain/core/model-invocation"
       ],
       "plan": "SURFACES"
     },
@@ -4235,6 +4339,7 @@
     },
     "src/adapters/core/native-cli-headless": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/adapters/core/host-shell",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/native-connection",
@@ -4247,7 +4352,9 @@
         "src/engine/core/model-invocation",
         "src/engine/core/toolchain-currency",
         "src/platform/core/errors",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/utils"
       ],
       "plan": "PROVIDERS"
     },
@@ -4819,7 +4926,8 @@
         "src/platform/core/integrity",
         "src/platform/core/managed-files",
         "src/platform/core/errors",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/adapters/core/native-cli-worker"
       ],
       "plan": "EXECUTION"
     },
@@ -4834,6 +4942,7 @@
     },
     "src/surfaces/core/terminal-provider": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/platform/core/config",
         "src/surfaces/core/cli-models",
         "src/surfaces/core/terminal-panels",
@@ -4924,6 +5033,8 @@
     },
     "src/engine/core/model-use": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/errors",
         "src/domain/core/project-attachment",
         "src/domain/core/model-invocation",
         "src/engine/core/project-attachment",
@@ -4986,6 +5097,67 @@
         "src/platform/core/errors"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/adapters/core/native-tool-bridge": {
+      "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/agent-tool",
+        "src/platform/core/common",
+        "src/platform/core/redaction",
+        "src/platform/core/validate"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/subscription-readiness": {
+      "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/agent-workspace-floor",
+        "src/composition/core/root",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/native-cli-worker": {
+      "dependencies": [
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/native-connection",
+        "src/adapters/core/native-tool-bridge",
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/attempt",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/run",
+        "src/engine/core/dispatch",
+        "src/engine/core/supervisor",
+        "src/platform/core/redaction",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation",
+        "src/adapters/core/process-runner",
+        "src/domain/core/worker-event",
+        "src/engine/core/worker-observation",
+        "src/platform/core/utils"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/working-tree-rollback": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/platform/core/clock",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/effect",
+        "src/engine/core/workspace-patch"
+      ],
+      "plan": "ISOLATION"
     }
   },
   "composition": {
@@ -5020,12 +5192,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 40500,
+      "adapters": 42101,
       "surfaces": 45000,
-      "composition": 12500
+      "composition": 13491
     },
     "totalSrcLines": 200000,
-    "testCases": 8025,
+    "testCases": 8205,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

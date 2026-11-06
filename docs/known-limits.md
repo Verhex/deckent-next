@@ -1,6 +1,14 @@
 # Known limits
 
+The alpha.63 worker candidate verifies its first guarded Attempt before retaining worker evidence. An unreadable record or an unresolved verification claim keeps the worker waiting for reconciliation; it is never retried automatically. Task artifacts and predecessor outputs are read-only tool inputs and are absent from the CLI login realm. Real-account and assembled-release acceptance remain open.
+
+K23 adds a candidate connection for witnessed background-worker decisions and exact Run/Task/Attempt cards. Shared runtime/driver caller changes remain a lead integration patch; this branch alone does not enable the complete path. Worker cards currently offer one-time approval or denial; session and permanent scopes are not offered without a producer-owned standing answer. Self-source src/dist/scripts/assets writes still need approval even inside a separate Attempt workspace; static authority-floor writes by AI stay denied. Real-account and assembled-release acceptance remain open.
+
+Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it. The Codex text profile (subscription text chat and Brain) keeps the CLI's own subagents on by owner choice (2026-11-03): gpt-6.x catalog models ignore `features.multi_agent=false`, so the model may open helper agents whose turns and quota use Deckent does not see. Deckent-governed CLI subagents in the natural CLI flow are the first item of the next package.
+
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
+
+Since alpha.63 your own Claude or ChatGPT (Codex CLI) sign-in runs tool chat, workers and Brain; the limits are listed under Providers.
 
 This page says plainly what Deckent does not do yet, what has not been tried, and what you should do instead. It
 describes the current pre-release (the version is in the [README](../README.md) and the top line of the
@@ -13,6 +21,21 @@ Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-jo
 
 
 Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
+
+
+- **Agent tools protect Deckent's global state before approval (alpha.63 K15/K15B/K15C).** Named global-state paths, including the login tree,
+  are refused before a shell card. Subscription turns never use the host shell: they require OS containment. Their project MCP tools are
+  offered only in a sandbox that hides global state; host, remote and host-fallback tools are withheld with `SUBSCRIPTION_HOST_MCP_REFUSED`.
+  API MCP tool selection stays unchanged. *Impact:* with global state present, host shell commands using `cd`/`pushd`/`popd`, `find`/`xargs`,
+  command/parameter expansion, dynamic tilde names, braces, process substitution or unparseable syntax require a warning card for each call:
+  “The working directory could not be verified; this command may reach Deckent's state folder.” No automatic or standing approval applies.
+  The conservative check also warns on literal dollar/backtick text or operands named cd/find/xargs. This is the owner's 2026-11-03 warning-card
+  decision, replacing K15B's pre-approval refusal; a person approving a computed path can expose global state. Explicit global-root names
+  (absolute, `~`, `$HOME`, `$DECKENT_GLOBAL_HOME`) remain hard refusals even with approval armed. Use an enforcing sandbox for isolation. Ordinary
+  pnpm/cp-al names no longer hit the global-state hard-link refusal; other sandbox inode floors still apply; aliases of registry login identity files are refused by device/inode metadata, without
+  reading credentials. File tools still refuse all hard-linked files. **The host realm is not a security boundary; name checks are best
+  effort.** Paths computed inside arbitrary programs and concurrent replacements remain outside this check. Assembled subscription-bridge
+  and real CLI stdout canary acceptance are separate from these author checks.
 
 ## BeUser B1 journey walks (alpha.57)
 
@@ -101,6 +124,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   *Impact:* after "Copied … characters" or "Sent answer …" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
   terminal's own selection, or set `terminal.layout` to `inline`. The full window prints no unbroken plain sign-in link (owner choice):
   there the link is an OSC 8 link split over the card's rows; use Ctrl+Y, or the inline layout, where it is printed once unbroken.
+  Ctrl+Y includes the title, body and currently visible option labels; entry values (including masked inputs) stay excluded.
+  Dragging over a card selects its body only; mouse selection of options is deferred.
+
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
@@ -219,7 +245,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   stay pending until the person's first witnessed terminal open. Afterwards `deckent secret store` (the runtime store switch) is an
   authority change and needs the terminal witness like the changes above. A supplied profile (`deckent init apply --profile`, or
   `init resume`) is published without a witness only while every rule it carries stays inside what the template would give the
-  installing person; anything wider (edit or shell tools allowed without asking, grants to the MCP actor or to everyone) is refused
+  installing person; anything wider (edit or shell tools allowed without asking, MCP actor grants beyond the template's own v19 rules, or grants to everyone) is refused
   with `AUTHORITY_WITNESS_REQUIRED` off an interactive terminal, before any evidence step or write. *Impact:* whoever can run a first
   install on a fresh project gets the template's starting authority (never more), and an agent can still run a template-bounded
   supplied install unattended; this gate checks the terminal, not the AI-agent marker, the same as `init policy --upgrade --apply`.
@@ -272,15 +298,15 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Providers and subscriptions
 
-- **Claude subscription text chat (A62):** `/model` can use the existing isolated Claude CLI connection for streamed text replies,
-  conversation history and cancellation without an API budget. Native CLI tools and MCP remain disabled; this connection cannot write files
-  or run commands in chat. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
+- **Claude subscription chat (A62, tools since alpha.63):** `/model` uses the isolated Claude CLI connection for streamed replies,
+  conversation history and cancellation without an API budget. Since alpha.63 the CLI's own tools stay off and it works only through
+  Deckent's tools, under Deckent's approvals, sandbox, policy and audit. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
   store or intermediate OAuth/session tokens, share the profile with another principal, resell usage or bill on others' behalf.
   Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
   Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
 
-- **ChatGPT sign-in is beta in this release.** Full Claude and ChatGPT subscriptions as agents inside Deckent (tool-enabled chat, workers,
-  Brain, agents/skills) are planned for alpha.63. The current ChatGPT sign-in remains selectable with its beta note.
+- **ChatGPT has two sign-ins.** The Codex CLI sign-in (alpha.63) runs tool chat, workers and Brain like Claude; the browser sign-in
+  (SIWC) stays beta with its note and its worker still needs Docker.
 - **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global
   source is registered. Existing installations are not registered automatically. From the installed folder, run
   `deckent terminal attach --register --apply`, confirm the source, then open `deckent` in the new folder. An existing source is kept.
@@ -315,6 +341,29 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT subscriptions support text chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
+- **Subscription workers without Docker (alpha.63, R8b; author evidence, real-account and BeUser acceptance open).** A Claude or Codex CLI
+  worker bound to your connection runs in Deckent's bubblewrap sandbox, so `execution.docker` may be absent; it needs Linux (or WSL) with
+  bubblewrap, otherwise the worker is refused (`HEADLESS_ISOLATION_UNAVAILABLE`). Plain Docker workers and the ChatGPT browser sign-in (SIWC)
+  worker still need Docker settings and an image (`EXECUTION_NOT_CONFIGURED`). *Impact:* adding a second provider from setup
+  (`work.profile-add`) still needs a worker image; `deckent coding template --connection <profile> --image <id>` ignores the image when
+  `execution` has no Docker settings; the installation profile preview refuses a template without an image (`INSTALLATION_PROFILE_ADAPTER`).
+  *Workaround:* for a second provider or a Docker worker, set up Docker and its image in `/setup`.
+- **/provider and /model show the last tool verification.** A subscription's ready mark is the verification a chat turn last recorded;
+  it does not age out on screen and ignores the CLI's own login-file writes. Each turn and each worker still verifies again before it runs.
+  *Impact:* "verified" on screen is not a check made now; a later turn can still stop with a typed reason.
+- **Model text can split around a tool line (alpha.63, R5d; owner 2026-11-06).** The display's secret filter holds the last word of a
+  text block until the turn ends, so a sentence may finish after the tool line. Keeping the filter's context across tools is a security
+  floor (Astra 3030); a safe display fix is planned for alpha.64. Rarely, the last letters of a reply show as `[REDACTED]` when they
+  match the start of the turn's random sign-in token; this is the filter being careful, not a leak (also planned for alpha.64).
+- **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 and the worker report
+  instruction ask for titles, task text, criterion descriptions and the report summary in your language; JSON keys and ids stay unchanged.
+  This has not been measured on real models. *Impact:* a model may still answer in English; Deckent does not translate model text.
+- **The below-recommended Brain note follows the first model (alpha.63).** Every active model can plan; when the planning model is below the
+  recommended class, the plan card and `deckent do` add a note. When a subscription quota refusal continues on an API model you allowed
+  (`continueBilling`), the note is still decided from the first chosen model, not the continuation model.
+- **A worker that does not see its Git repository (R9o) was not reproduced.** One owner-walk Attempt reported "not a git repository" with
+  `.git` present; a hermetic worker-shell check (`git rev-parse --is-inside-work-tree` in the contained view) passes. *Impact:* the cause is
+  not known. *Workaround:* if you see it, keep the Run id and the worker's stderr and report it.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
 - **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
@@ -420,6 +469,18 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `approval decide`. Worktrees of a bare repository each get their own project vault (no main working tree to share). `.deck` is closed to agent tools but does not stop a worker.
 - **A customer config key whose name contains secret, token or password and whose value looks like a literal is still refused**, even
   when the value is a secret NAME reference (for example `"secretName": "DB_PASS"`). *Workaround:* rename the key or acknowledge the path.
+- **The AI actor's model and tool rules (template v19) are shared by the native agent and every external MCP client.** Since v19
+  the first-run policy lets the person's MCP actor (`<host>/mcp`) call models and use the read, scratch, edit and shell tools in the
+  installed scope; an existing installation gets them only from the person's own `policy upgrade` card. The same actor serves
+  `deckent-mcp`, so an external MCP client can also call `invoke_model`, inside the budget, the subscription quota and the `ai`
+  delegation consent. The edit/shell rule is mode-eligible: a native chat turn follows the mode of the person who started it (in
+  the default `standart` an ordinary project edit runs without a card and is audited as a mode relaxation; with "ask for edits too"
+  it shows the card). A native worker follows the mode of the installation's person who owns its AI actor the same way. An AI
+  actor without its owning person gets no mode relaxation at all. The actor may call models and read their metadata, but it
+  cannot read another principal's model content or cancel its calls. Shell commands, the write floor and every other hard-floor
+  cell still ask or refuse. Turning these rules off also stops the native agent. *Workaround:* run `deckent policy upgrade --template current
+  --rollback` in your own terminal (your card; on a fresh v19 install too) to remove exactly the v19 AI-actor rules, and
+  `--apply` to add them back; or do not connect an MCP client you do not want to call models.
 
 ## Budgets and spend
 
@@ -508,7 +569,26 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   *Workaround:* re-run the request on the current source.
 - **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
   adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
-  command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line.
+  command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line. A working-tree delivery is
+  rolled back with `deckent task integration-rollback --scope <id> --run <id> --task <id>` (the delivered row prints it; `--task` may be
+  left out only when the Run has one delivered task); it writes only while
+  every file still holds the delivered content.
+- **Working-tree delivery (solo projects) has open limits.** With no work target and no adoption targets, a delivery yes writes
+  into your files (`execution.deliveryMode`; set `reference` to keep the Git reference path). It runs only on Linux and only when
+  the project folder is the repository's top folder; elsewhere the Run is refused before it starts (`PATCH_WORKING_TREE_UNSUPPORTED`,
+  `PATCH_WORKING_TREE_SUBFOLDER`). No trace reference is written in your repository: the trace is Deckent's delivery record and its
+  journal (owner decision 2026-11-06). The Run's base is built from your
+  current files with the repository's `.gitignore` and `.git/info/exclude`; your global excludes file (`core.excludesFile`) is not
+  read, so a file ignored only there enters the base unless the deny list or a size limit keeps it out. The names (not the contents)
+  of withheld files reach the worker as one note line. A set-aside delivery result keeps its Run's private base through a return window of
+  `execution.retention.setAsideDays` (default 14) days; after that, the start-of-service cleanup may remove the base when no other
+  pending work still needs it. A result brought back after its base was removed can no longer be delivered
+  (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window.
+- **A cross-device aside is never deleted for you.** When Deckent's state and the project are on different filesystems (for
+  example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
+  `.deckent-<uuid>.aside`, and the note names it. Deckent never deletes it, so these files accumulate and show as untracked in
+  `git status`. A delivery resumed after a crash does not repeat the note; the journal still names the file. *Workaround:* delete
+  the aside files you do not need yourself.
 - **The adoption window cannot pre-filter verification Runs by commit.** It lists accepted verification Runs of the configured
   kind; one that verified a different commit is refused at adoption and the window returns to the choice.
 - **A verification Run cannot be created from the terminal.** *Workaround:* run the `deckent run create ...
@@ -577,6 +657,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Recovery and upgrades
 
+- **A configuration without Docker settings cannot be read by an older build (alpha.63, R8b).** Once `execution` holds only `git`, a build
+  before alpha.63 refuses the config with its strict schema and does not open. *Workaround:* to go back, restore the pre-upgrade backup.
 - **After the alpha.56.1 upgrade, a personal MCP server whose entry names a main-vault key (`$DECK:NAME`) needs that key granted to each
   project** (KER-17, 2026-10-28): the key is now used under the same project grant as a provider key, so the server does not start in a
   project without it and the turn says which key. *Workaround:* `deckent doctor` lists each such key with its command; run
@@ -638,13 +720,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   a unix socket inside a read-only folder bound into the worker is not checked. *Workaround:* do not bind folders that hold another
   service's socket. Letting workers act on outside systems themselves is not offered yet.
 - **Recovery is turned on only through your own exact policy cells.** Template v16 introduced the named person's
-  require-approval recovery-action and Nervous-promotion cells; current template v18 retains them, adds v17's first-commit
-  grant and v18's uninstall grants. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
+  require-approval recovery-action and Nervous-promotion cells; current template v19 retains them, v17's first-commit
+  grant and v18's uninstall grants, and adds v19's MCP actor tool rules. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
   overlapping require-approval cells. Old installations change only through explicit upgrade; use the witnessed
   `deckent init policy --upgrade` path when the managed `deckent policy upgrade` path cannot add authority the caller lacks.
-  Current rollback removes only the content-equal v18 delta, not historical v16 recovery grants; customized rows are kept
+  Current rollback removes only the content-equal v19 delta, not historical v16–v18 grants; customized rows are kept
   and reported. Adding a Nervous/recovery rule or version still needs a template version and policy upgrade: this remains
-  an OPEN owner issue, also after v17/v18. Measured-exit rechecks bind the policy revision, not later sealed measurements.
+  an OPEN owner issue, also after v17–v19. Measured-exit rechecks bind the policy revision, not later sealed measurements.
   Lost workers dispatched before alpha.56 have no isolation record; they go to a person and shadow measurement restarts.
 
 - **Full clean-machine acceptance remains open.** The 2026-10-15/16 rehearsal stopped before the model/first-job chain.

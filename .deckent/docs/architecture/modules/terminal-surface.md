@@ -549,10 +549,10 @@ every call. Onboarding is observed once per terminal open and again after a pers
 while no model is usable: the status row says "Model not connected — /setup" and `/setup` still offers the card; a message sent without a
 model in a person's Workline stays the draft (composer restore) and opens the model card through the `/setup` handoff (model focus), while
 agents, line mode and AI surfaces keep the typed `TERMINAL_CHAT_NOT_CONFIGURED`. Card copy (`terminal-window/internal/card-copy.ts`):
-Ctrl+Y on any card or onboarding step copies its drawn title and body; in the full window a left drag over a card's body copies the selected
+Ctrl+Y on any card or onboarding step copies its drawn title and body, plus its currently visible option labels (alpha.63 K9); in the full window a left drag over a card's body copies the selected
 body rows (the title is not selectable). Both pass the record redaction (`humanRecordText`: credential patterns and the known values) and the
-host's one `clipboardRequest` writer (byte-capped, TTY-only, tmux-wrapped), never the unbounded mouse `osc52Copy`; entry and option rows are
-never copied, so a masked value or typed input never reaches the copy; neither key nor pointer answers or re-arms a card. The sign-in link is an OSC 8
+host's one `clipboardRequest` writer (byte-capped, TTY-only, tmux-wrapped), never the unbounded mouse `osc52Copy`; entry values are
+never copied, so a masked value or typed input never reaches the copy; drag selection remains body-only; neither key nor pointer answers or re-arms a card. The sign-in link is an OSC 8
 link on every row it wraps over and, on the main screen only, one unbroken raw line above the live area. Tool calls: consecutive successful
 read-class calls (`toolClass` from `builtinAgentToolClass`; MCP tools never group) settle as one summary row; in the full window a plain left
 click on it shows or hides its calls, the inline layout lists them under it, and errors, approvals and writes keep their own line (presentation
@@ -580,3 +580,38 @@ model invocations own streaming, cancellation, usage, quota refusal and replay; 
 is text-only; it offers no file or shell tools. Other headless families retain their existing admission until explicitly opted in by registry.
 The account belongs to the person using Anthropic's unmodified binary and sign-in; Deckent never handles the OAuth/session token or resells
 or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.
+
+
+### Native subscription agent assembly (alpha.63 K16 source candidate)
+
+The runtime service supplies the shared Claude/Codex driver to the governed chat host. The driver uses the existing
+isolated spawn, login lock, K1 tool session, model-use admission pin and approval/effect owner. Claude's turn token stays
+in the private read-only MCP config; Codex receives it in the built environment. Both feed the known-secret projection.
+Registry values bound facade connections and replay; progress derives from the unchanged egress idle bound.
+
+Readiness reads existing exact-profile observations without spawning or granting authority. The agent preflight proves
+executable realpath/version, owner, flags and realm without a model call; it does not manufacture plugin/tool/bridge
+observations. A guarded, explicitly admitted verification turn must supply those observations before tool-bearing chat
+is ready. Missing, expired or changed observations stay unknown. The reader also refuses tool readiness for login/state
+directories outside the installation-global roots protected by K15. The same selected model's text chat remains usable
+with the reason displayed. First real-provider verification and assembled-release acceptance are separate open gates.
+
+**Global state and subscription shell floor (alpha.63 K15).** Every agent shell realm refuses named global-state roots and descendants
+before an approval card, including configured `DECKENT_GLOBAL_HOME`, the configuration/process environments' roots and conventional
+`~/.deckent`. HOME spellings, traversal, bounded globs and existing filesystem aliases are checked without reading file contents.
+A selected subscription profile (billing axis or the native headless adapter contract) also refuses explicit/fallback host execution
+with `SUBSCRIPTION_HOST_SHELL_REFUSED`; its shell posture is unavailable. API host calls retain their existing approval path.
+The shared read/edit deny floor includes CLI-registry `configVisible` entries under the layout's login tree, including `auth.json`;
+ordinary application `auth.json` files remain usable. These are handler checks; assembled-release and bridge acceptance remain separate.
+
+**A63 K9 filter and copy.** Window question/arrow/list renderers register only their visible option labels for the shared `cardCopyText`
+projection; custom instruction choices and onboarding use that same text builder. Entries never enter the collection, and the final text
+keeps the existing record redaction, character count and clipboard byte cap. No new mouse selection is added.
+Only the `/provider` and `/model` navigation lists opt into treating plain filter text followed by exactly one trailing CR in a single Ink
+input event as filter then Enter. The picker reduces the text first and selects from that resulting state. Scope steps, mixed control input
+and every other picker keep the existing behavior; decision arming/burst/focus and onboarding's 500 ms Enter guard are unchanged.
+Author RED/GREEN and compiled CLI/PTY evidence are external in `proof/ALPHA63/k9/`; independent review and assembled-release acceptance are separate.
+
+### İşçi onay önizlemeleri (alpha.63 K24 yazar adayı)
+
+Kalıcı işçi kartı, sohbetle aynı sınırlı ve bilinen sırları redakte edilmiş komut/diff önizlemesini ve kesim bilgisini exact çağrının argsDigest değeriyle mühürlü taşır; büyük önizlemenin tam kopyası yalnız bekleme boyunca kişiye özel saklanır ve kesik veya eski önizlemesiz kart allow üretemez. Ön kontrol sırasındaki iptal, model süreci başlamadan iptal sonucuna bağlanır; gerçek ön kontrol hataları ve mevcut iptal süresi değişmez. Yazar kanıtı dış `proof/ALPHA63/k24/` alanındadır; monte sürüm kabulü ve bağımsız inceleme ayrıdır.

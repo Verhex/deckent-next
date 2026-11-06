@@ -16,6 +16,42 @@ import { measureTestShellHost } from '../../fixtures/shell-host.js';
 // S9 at the real boundary: the installed bubblewrap, a real bash, a real project with a `.git`, a real HOME with a secret, a scratch area.
 const capabilities = await measureTestShellHost();
 const sandboxReady = capabilities.bubblewrap.status === 'available';
+it('K27: a closed native Attempt hides its state ancestor and enforces inherited hard data and Node heap bounds', async () => {
+  const { nativeAgentRealmAvailable } = await import('../../fixtures/native-headless/agent.js');
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const { nativeWorkerBoundSandboxes, nativeWorkerToolBounds } = await import('#capabilities/index.js');
+  const { nativeCliAgent } = await import('#adapters/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'k27-closed-')); roots.push(root);
+  const state = join(root, 'state'), workspace = join(state, 'workspaces', 'attempt'), home = join(root, 'home');
+  await mkdir(workspace, { recursive: true }); await mkdir(home); await writeFile(join(state, 'private-state'), 'not-for-tools');
+  for (const args of [['init', '-q'], ['-c', 'user.name=k27', '-c', 'user.email=k27@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'base']]) execFileSync('git', args, { cwd: workspace });
+  const layout = { project: await createWorkspaceScope(workspace), scratchDir: null, writeFloor: () => false,
+    hardFloor: { roots: [state], homeDenied: () => false } };
+  const environment = { HOME: home, PATH: process.env.PATH ?? '' };
+  expect(await resolveBubblewrapView(layout, environment)).toMatchObject({ ok: false });
+  const contained = { ...layout, containedWorkspaceRoot: state };
+  expect(await resolveBubblewrapView(contained, environment, {}, { open: true })).toMatchObject({ ok: false });
+  expect(await resolveBubblewrapView({ ...contained, containedWorkspaceRoot: root }, environment)).toMatchObject({ ok: false });
+  const { nativeWorkerContainedLayout } = await import('#capabilities/index.js');
+  expect(nativeWorkerContainedLayout(layout, state, workspace)).not.toHaveProperty('containedWorkspaceRoot');
+  const bounds = nativeWorkerToolBounds(nativeCliAgent('claude-code-stream-json')!.headless.isolation.limits);
+  expect(() => nativeWorkerToolBounds(undefined)).toThrow(expect.objectContaining({ code: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' }));
+  const providers = nativeWorkerBoundSandboxes<ShellCapabilities, Extract<ReturnType<import('#adapters/index.js').ShellSandbox['usable']>, { ok: true }>>([bubblewrapShellSandbox(contained)], bounds);
+  const usable = providers[0]!.usable(capabilities); if (!usable.ok) throw Error(usable.reason);
+  const program = `const fs=require('node:fs'),cp=require('node:child_process'); console.log(JSON.stringify({heap:require('node:v8').getHeapStatistics().heap_size_limit,
+    options:process.env.NODE_OPTIONS,own:fs.readFileSync('/proc/self/limits','utf8'),child:cp.execFileSync(process.execPath,['-e',"console.log(require('node:fs').readFileSync('/proc/self/limits','utf8'))"],{encoding:'utf8'}),
+    sibling:fs.existsSync(${JSON.stringify(join(state, 'private-state'))}),raise:cp.spawnSync(${JSON.stringify(bounds.limiter)},['--data=2147483649','--','true']).status}))`;
+  const request = { command: `node -e '${program.replaceAll("'", "'\\''")}'`, cwd: workspace, environment, projectReadOnly: true, writeFloorReadOnly: true };
+  const actual = await usable.realm.run(request); expect(actual, actual.output).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'clean' });
+  // R9o: the contained view keeps the Attempt clone's own `.git`; Git in the worker shell sees its repository.
+  expect((await usable.realm.run({ ...request, command: 'git rev-parse --is-inside-work-tree 2>&1' })).output.trim()).toBe('true');
+  const observed = JSON.parse(actual.output) as { heap: number; options: string; own: string; child: string; sibling: boolean; raise: number };
+  expect(observed.options).toBe('--max-old-space-size=1536'); expect(observed.heap).toBeGreaterThanOrEqual(1610612736); expect(observed.heap).toBeLessThan(2147483648);
+  for (const limits of [observed.own, observed.child]) expect(limits).toMatch(/Max data size\s+2147483648\s+2147483648/u);
+  expect(observed.sibling).toBe(false); expect(observed.raise).not.toBe(0);
+  expect(() => usable.realm.run({ ...request, open: true })).toThrow(expect.objectContaining({ code: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' }));
+  expect(await readFile(join(state, 'private-state'), 'utf8')).toBe('not-for-tools');
+});
 const roots: string[] = [], servers: Server[] = [], locked: string[] = [];
 const DEEP = Array.from({ length: 34 }, () => 'd').join('/');
 afterEach(async () => {

@@ -122,7 +122,7 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
 }
 
 export type HeadlessSpawn = Readonly<{ executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
-  promptFile?: string | undefined; now: () => number }>;
+  promptFile?: string | undefined; mcpConfigFile?: string | undefined; mcp?: Parameters<typeof openNativeEgressGateway>[0]['mcp']; now: () => number }>;
 /** f5: the connection's refusal record beside `preflight.json` (doctor reads it without a spawn). */
 export const HEADLESS_EGRESS_RECORD = 'egress.json';
 /**
@@ -174,13 +174,13 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
     // f5: the limiter sets the realm's CPU, data and task bounds before the relay starts; without it the CLI never runs (no unbounded fallback).
     const limiter = await realpath(caps.limiter).catch(() => null);
     if (!limiter || !await access(limiter, constants.X_OK).then(() => true, () => false)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
-    gateway = await openNativeEgressGateway({ provider: provider.data, directory: spawn.stateDir }).catch(() => refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'gateway' }));
+    gateway = await openNativeEgressGateway({ provider: provider.data, directory: spawn.stateDir, ...(spawn.mcp ? { mcp: spawn.mcp } : {}) }).catch(() => refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'gateway' }));
     const cpu = `${caps.cpuSeconds}:${caps.cpuSeconds + caps.cpuGraceSeconds}`, egress = nativeEgressLimits();
     const relay = JSON.stringify({ socket: realm.socketPath, host: realm.proxy.host, port: realm.proxy.port, connections: egress.connections, idleMs: egress.idleMs,
       cpu, processes: `${caps.processes}:${caps.processes}`, data: `${caps.dataBytes}:${caps.dataBytes}`, ticks: USER_HZ,
       sampleMs: caps.sampleMs, permille: caps.attributionPermille, exits: caps.exits });
     const command = isolatedProcessCommand({ shell: realm.shell, launcher: seal.path, fileSizeBlocks: realm.limits.fileSizeBlocks, openFiles: realm.limits.openFiles,
-      view: { workDir: spawn.runDir, workFiles: spawn.promptFile ? [spawn.promptFile] : [], executables: [...new Set([spawn.executable, node, limiter])], stateDir: spawn.configDir,
+      view: { workDir: spawn.runDir, workFiles: [spawn.promptFile, spawn.mcpConfigFile].filter((file): file is string => file !== undefined), executables: [...new Set([spawn.executable, node, limiter])], stateDir: spawn.configDir,
         stateMasks: masks, stateCopies: masks.copies, sockets: [{ source: gateway.socketPath, target: realm.socketPath }], tmpfsBytes: realm.limits.tmpfsBytes },
       command: [limiter, `--cpu=${cpu}`, `--nproc=${caps.processes}`, `--data=${caps.dataBytes}`, '--', node, '-e', RELAY, relay, spawn.executable, ...spawn.args] });
     if (!command) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });

@@ -6,6 +6,8 @@ import { vi } from 'vitest';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { readLocalOsIdentity, openSqliteModelActivationStore, compileNativeCodingDockerProfile } from '#adapters/index.js';
+import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -24,7 +26,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   /** S2 tier/role registry overlay for the fixture Brain (installation layer): a frontier Brain row by default; `null` writes none. */
   modelRoles?: unknown;
   /** S3-4: the Brain model speaks the CLI stream family through a v2 subscription profile of the headless adapter (a fake CLI; no real CLI). */
-  headless?: Readonly<{ executable: string; configDir: string; stateDir: string; delegatedUse?: unknown }> } = {}) {
+  headless?: Readonly<{ executable: string; configDir: string; stateDir: string; delegatedUse?: unknown; protocolFamily?: string }> } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true });
@@ -56,7 +58,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     return parsed.response;
   });
   const reference = { providerId: 'test-operator', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
-  const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: options.headless ? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
+  const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: options.headless ? options.headless.protocolFamily ?? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
     capabilities: [...(options.jsonOutput ? [{ id: 'response-format-json-object', version: 1, state: 'supported' }] : []), ...(options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }]),
       ...(options.thinking && options.thinking !== 'wrong-protocol' ? [{ id: 'chat-template-enable-thinking',
         version: options.thinking === 'wrong-version' ? 2 : 1, state: options.thinking === 'wrong-version' ? 'supported' : options.thinking }] : [])] },
@@ -73,7 +75,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
           cachedInputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 50, outputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 128_000, responseMaxBytes: options.responseMaxBytes ?? 16_384, timeoutMs: 2_000 },
     ...(options.contextWindow ? { contextWindowTokens: options.contextWindow } : {}),
-    ...(options.headless ? { schemaVersion: 2, billingAxis: 'subscription', protocol: { family: 'claude-code-stream-json', version: 'v1' }, adapter: { id: 'native-cli-headless', version: 1,
+    ...(options.headless ? { schemaVersion: 2, billingAxis: 'subscription', protocol: { family: options.headless.protocolFamily ?? 'claude-code-stream-json', version: 'v1' }, adapter: { id: 'native-cli-headless', version: 1,
       definition: { schemaVersion: 1, executable: options.headless.executable, configDir: options.headless.configDir, stateDir: options.headless.stateDir,
         ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: options.headless.delegatedUse ?? null } }, limits: { requestMaxBytes: 128_000, responseMaxBytes: 65_536, timeoutMs: 10_000 } } : {}) };
   const workClasses = { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
@@ -105,6 +107,13 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   await loadComposedConfig(project, loadOptions);
   const { store, path } = await openConfiguredAttemptStore(project, loadOptions);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } }); store.close();
+  if (options.headless) {
+    // Direct fixture setup bypasses models connect, which persists the shared subscription resource.
+    const db = openSqliteLedger(path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }, 'forbid');
+    try { bindCapacityResource(db, headlessCapacityBinding(profile.adapter.definition), {
+      executionSlots: profile.allocation.maxInFlight, inFlightSlots: profile.allocation.maxInFlight,
+    }); } finally { db.close(); }
+  }
   const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] };
   const activation = new ModelActivationApplication({ verify: async () => principal }, { authorize: async () => ({ revision: 'seed', ruleId: 'seed' }) },
     new ModelBindingApplication({ read: async () => catalog }), () => openSqliteModelActivationStore(path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }), () => 1);
@@ -119,6 +128,15 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     { id: 'approval', actions: ['inspect', 'decide'], resource: { kind: 'approval', ids: 'all' } },
   ].map(grant => ({ ...grant, effect: 'allow', scopes: grant.id === 'catalog' ? 'all' : ['s'], principals: [{ issuer: principal.issuer, subject: principal.subject }] }));
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'fixture-policy', restrictions: [], grants }), { mode: 0o600 });
+  if (options.headless) {
+    // Trusted fixture setup mirrors the source identities sealed by witnessed models connect; no production authority is bypassed.
+    const scoped = await vi.importActual<typeof import('#composition/core/scoped-request/index.js')>('#composition/core/scoped-request/index.js');
+    const context = await scoped.loadConfiguredScopeContext(project, 's', loadOptions, 'write');
+    if (!context.installationId) throw new Error('FIXTURE_INSTALLATION_MISSING');
+    Object.assign(profile.adapter.definition, { sourceBinding: { schemaVersion: 1, installationId: context.installationId,
+      companyId: context.config.company.id, scopeId: 's', principal: { issuer: principal.issuer, subject: principal.subject } } });
+    await writeFile(join(project, '.deckent', 'config.json'), JSON.stringify(config)); clearConfigCache();
+  }
   if (seed) {
     await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-seed', scopeId: 's', action: 'register', catalog: seed }, loadOptions);
     for (const modelId of [null, workerModel.nativeId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-activate-' + modelId,

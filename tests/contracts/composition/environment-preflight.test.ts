@@ -43,7 +43,7 @@ async function fixture(context: TestContext, environment: object, slots = 1) {
   const { argv: _argv, ...docker } = parameters; void _argv;
   Object.assign(parameters, { readOnlyMounts: [{ source: 'deps', target: '/deps' }], environment });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: { maxAttempts: 3, retryDelayMs: 100, claimTtlMs: 1000, maxConcurrentDeliveries: 1, recoveryPageSize: 10 }, admission: { poolId: 'p', executionSlots: slots, inFlightSlots: slots,
-    ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
+    ordering: 'input-order', registry }, execution: { deliveryMode: 'reference', docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: slots, inFlightSlots: slots } });
   const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] }, principals = [{ issuer: principal.issuer, subject: principal.subject }];

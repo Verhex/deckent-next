@@ -1,6 +1,14 @@
 # Bilinen sınırlar
 
+Alpha.63 işçi adayı, kalıcı işçi kanıtını ilk korumalı Attempt ile üretir. Okunamayan kayıt veya sonucu belirsiz doğrulama kilidi uzlaştırma bekletir; kendiliğinden yeniden denenmez. Görev girdileri ve önceki görevin çıktıları yalnız araçların salt okunur görünümündedir; CLI giriş realm’ine girmez. Gerçek hesap ve monte sürüm kabulü açıktır.
+
+K23, işçi kararını terminalde kişi tanığına bağlayan ve exact Run/Task/Attempt kimliğini gösteren bir aday ekler. Ortak runtime/driver çağırıcı değişiklikleri lead montaj patch’indedir; bu dal tek başına tam yolu açmaz. İşçi kartları şu an bir kez izin veya red sunar; üreticiye bağlı standing cevap olmadan oturum/kalıcı seçenek sunulmaz. Self-source src/dist/scripts/assets yazmaları ayrı Attempt workspace’inde de onay ister; statik yetki tabanındaki AI yazmaları kesin red kalır. Gerçek hesap ve monte sürüm kabulü açıktır.
+
+Codex ajan profili, sürüm kaynağı belirtilmiş registry ayarlarıyla alt ajanları ve eklentileri kapatır. Gerçek CLI’de alt ajanların kapalı olduğu owner R / monte BeUser yürüyüşünde doğrulanacaktır; fake CLI bunu kanıtlamaz. Codex metin profili (abonelik metin sohbeti ve Brain), owner tercihiyle (2026-11-03) CLI'nin kendi alt ajanlarını açık tutar: gpt-6.x katalog modelleri `features.multi_agent=false` ayarını yok sayar; model, turlarını ve kota kullanımını Deckent'in görmediği yardımcı ajanlar açabilir. CLI alt ajanlarının doğal CLI akışında Deckent tarafından yönetilmesi sonraki paketin ilk maddesidir.
+
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)
+
+alpha.63'ten beri kendi Claude ya da ChatGPT (Codex CLI) girişiniz araçlı sohbeti, işçileri ve Brain'i çalıştırır; sınırlar Sağlayıcılar altında.
 
 Bu sayfa Deckent'in henüz neyi yapmadığını, neyin denenmediğini ve onun yerine ne yapmanız gerektiğini açıkça söyler.
 Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
@@ -13,6 +21,21 @@ Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUse
 
 
 Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminal sohbet hatalarını ham kod olmadan katalog mesajıyla gösterir. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
+
+
+- **Ajan araçları Deckent global durumunu onaydan önce korur (alpha.63 K15/K15B/K15C).** Giriş ağacı dahil global durum yolunu adlandıran
+  komut kabuk kartından önce reddedilir. Abonelik turları host kabuğunu hiç kullanmaz; OS düzeyinde yalıtım gerekir. Proje MCP araçları
+  yalnız global durumu gizleyen sandbox'ta sunulur; host, uzak sunucu ve host'a düşen araçlar `SUBSCRIPTION_HOST_MCP_REFUSED` nedeniyle
+  sunulmaz. API MCP araç seçimi değişmez. *Etki:* global durum kökü varken `cd`/`pushd`/`popd`, `find`/`xargs`, komut/parametre açılımı,
+  dinamik tilde, süslü parantez, süreç ikamesi veya çözülemeyen sözdizimi kullanan host kabuk komutları her çağrıda uyarılı kart ister:
+  “Çalışma yeri doğrulanamadı; Deckent durum klasörüne ulaşabilir.” Otomatik veya kalıcı/oturumluk izin bu kartı kaldırmaz.
+  Tutucu denetim düz metindeki dolar/ters tırnağa ve cd/find/xargs adlı operandlara da uyarı verir. Owner'ın 2026-11-03 kararı uyarılı karttır;
+  K15B'nin onay öncesi reddi owner'ın kabul ettiği kırılma değildir. Hesaplanmış yolu onaylamak global durumu açabilir. Global kökü açıkça
+  adlandıran mutlak/`~`/`$HOME`/`$DECKENT_GLOBAL_HOME` yolları, onay cevabı hazır olsa da kesin reddedilir. Yalıtım için gerçek sandbox kullanın. Meşru pnpm/cp-al hard
+  link adları global durum ad denetimince topluca reddedilmez; diğer sandbox inode sınırları sürer; registry giriş kimlik dosyalarıyla aynı aygıt/inode'a bağlı adlar içerik okunmadan reddedilir. Dosya
+  araçları tüm hard link'leri reddetmeye devam eder. **Host realm bir güvenlik sınırı değildir; ad denetimi en iyi çabadır.** Programın içinde
+  üretilen yollar ve eşzamanlı yol değiştirme bu denetimin dışındadır. Monte abonelik köprüsü ve gerçek CLI stdout kanaryası kabulü,
+  bu yazar kontrollerinden ayrıdır.
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
@@ -101,6 +124,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın. Tam pencere bölünmemiş düz giriş
   bağlantısı yazmaz (owner tercihi): orada bağlantı kart satırlarına bölünmüş bir OSC 8 bağlantısıdır; Ctrl+Y'yi ya da bağlantıyı bir kez
   bölünmeden yazan satır içi düzeni kullanın.
+  Ctrl+Y başlığı, gövdeyi ve o anda görünen seçenek etiketlerini içerir; girdi değerleri (maskeli girdiler dahil) dışarıda kalır.
+  Kart üzerinde sürükleme yalnız gövdeyi seçer; seçeneklerin fareyle seçimi ertelenmiştir.
+
 - **arm64 yayımlanmıyor.** Kilitli bubblewrap paketi x86_64 için gelir; arm64 derleme kontrolü arm64 çalışma kanıtı değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
@@ -219,7 +245,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   beklemede kalır. Sonrasında `deckent secret store` (çalışma zamanı depo geçişi) bir yetki değişikliğidir ve yukarıdaki
   değişiklikler gibi terminal tanığı ister. Verilen bir profil (`deckent init apply --profile` ya da `init resume`) yalnız taşıdığı
   her kural şablonun kuran kişiye vereceğinin içinde kaldığı sürece tanıksız yayımlanır; daha genişi (sormadan izin verilen düzenleme
-  ya da kabuk araçları, MCP aktörüne ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
+  ya da kabuk araçları, şablonun kendi v19 kurallarını aşan MCP aktörü izinleri ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
   yazmadan önce `AUTHORITY_WITNESS_REQUIRED` ile reddedilir. *Etki:* yeni bir projede ilk kurulumu çalıştırabilen kişi şablonun
   başlangıç yetkisini alır (fazlasını değil) ve bir ajan şablonla sınırlı verilen bir kurulumu gözetimsiz çalıştırabilir; bu kapı
   yapay zekâ ajanı işaretine değil terminale bakar, `init policy --upgrade --apply` ile aynı. *Geçici çözüm:* ilk kurulumları
@@ -273,10 +299,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Sağlayıcılar ve abonelikler
 
-- **Claude aboneliğiyle metin sohbeti (A62):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. Native CLI araçları ve MCP kapalıdır; bu bağlantı sohbetten dosya yazamaz veya komut çalıştıramaz. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
+- **Claude aboneliğiyle sohbet (A62, araçlar alpha.63'ten beri):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. alpha.63'ten beri CLI'ın kendi araçları kapalı kalır; yalnız Deckent'in araçlarıyla, Deckent'in onay, sandbox, politika ve denetim sınırında çalışır. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
 
-- **ChatGPT girişi bu sürümde betada; Claude ve ChatGPT aboneliklerinin Deckent içinde tam ajan olarak (araçlı sohbet, işçi, Brain, ajan/skill)
-  çalışması alpha.63 için planlanmıştır.** Mevcut ChatGPT girişi betada notuyla seçilebilir kalır.
+- **ChatGPT'nin iki girişi var.** Codex CLI girişi (alpha.63) Claude gibi araçlı sohbeti, işçileri ve Brain'i çalıştırır; tarayıcı girişi
+  (SIWC) notuyla betada kalır ve işçisi hâlâ Docker ister.
 - **İlk kurulum ve yeni klasörler (A62):** kişinin tanığıyla tamamlanan sıfır kurulum, global kayıt yoksa kaynak olur. Eski kurulum otomatik
   kaydedilmez. Kurulu klasörde `deckent terminal attach --register --apply` çalıştırıp kaynağı onaylayın; sonra yeni klasörde `deckent` açın.
   Var olan kaynak kaydı korunur.
@@ -311,6 +337,29 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT abonelikleri metin sohbeti sağlar;
   kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
+- **Docker'sız abonelik işçisi (alpha.63, R8b; yazar kanıtı, gerçek hesap ve BeUser kabulü açık).** Bağlantınıza bağlı Claude ya da Codex
+  CLI işçisi Deckent'in bubblewrap sandbox'ında çalışır; bu yüzden `execution.docker` olmayabilir. Linux (ya da WSL) ve bubblewrap gerekir,
+  yoksa işçi reddedilir (`HEADLESS_ISOLATION_UNAVAILABLE`). Düz Docker işçileri ve ChatGPT tarayıcı girişi (SIWC) işçisi Docker ayarı ve imaj
+  ister (`EXECUTION_NOT_CONFIGURED`). *Etki:* kurulumdan ikinci sağlayıcı eklemek (`work.profile-add`) hâlâ işçi imajı ister;
+  `deckent coding template --connection <profil> --image <kimlik>`, `execution` Docker ayarı taşımıyorsa imajı yok sayar; kurulum profili
+  önizlemesi imajsız şablonu reddeder (`INSTALLATION_PROFILE_ADAPTER`). *Yol:* ikinci sağlayıcı ya da Docker işçisi için `/setup`'ta Docker'ı
+  ve imajını kurun.
+- **/provider ve /model son araç doğrulamasını gösterir.** Aboneliğin hazır işareti, bir sohbet turunun son kaydettiği doğrulamadır; ekranda
+  süre dolunca düşmez ve CLI'ın kendi giriş dosyası yazmalarını saymaz. Her tur ve her işçi çalışmadan önce yeniden doğrular. *Etki:* ekrandaki
+  "doğrulandı" şu an yapılmış bir kontrol değildir; sonraki tur yine tipli bir nedenle durabilir.
+- **Model metni araç satırının iki yanına bölünebilir (alpha.63, R5d; owner 2026-11-06).** Ekrandaki gizli bilgi filtresi bir metin
+  bloğunun son kelimesini tur bitene kadar tutar; cümle araç satırından sonra bitebilir. Filtrenin araçlar arasında bağlamı koruması
+  güvenlik tabanıdır (Astra 3030); güvenli bir ekran düzeltmesi alpha.64'te. Nadiren bir cevabın son harfleri, turun rastgele giriş
+  anahtarının başıyla eşleşince `[REDACTED]` görünür; bu sızıntı değil, filtrenin temkinidir (o da alpha.64'te).
+- **Brain planı ve işçi raporunun sizin dilinizde olması istenir, garanti edilmez (alpha.63, D4).** Brain şablonu v5 ve işçi rapor talimatı
+  başlıkları, görev metnini, ölçüt açıklamalarını ve rapor özetini sizin dilinizde ister; JSON anahtarları ve kimlikler değişmez. Gerçek
+  modellerde ölçülmedi. *Etki:* model yine İngilizce cevap verebilir; Deckent model metnini çevirmez.
+- **Önerilen sınıfın altı notu ilk modele göre verilir (alpha.63).** Her etkin model plan yapabilir; plan yapan model önerilen sınıfın
+  altındaysa plan kartı ve `deckent do` not düşer. Abonelik kota reddinden sonra izin verdiğiniz API modeline devam edildiğinde
+  (`continueBilling`) not, devam modeline göre değil ilk seçilen modele göre verilir.
+- **Git deposunu görmeyen işçi (R9o) yeniden üretilmedi.** Owner yürüyüşünde bir Attempt `.git` varken "not a git repository" bildirdi;
+  hermetik işçi kabuğu kontrolü (yalıtılmış görünümde `git rev-parse --is-inside-work-tree`) geçiyor. *Etki:* neden bilinmiyor. *Yol:* görürseniz
+  Run kimliğini ve işçinin stderr çıktısını saklayıp bildirin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
 - **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
@@ -414,6 +463,18 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   tanığını geçer. Çıplak (bare) bir deponun worktree'leri ayrı proje kasası alır (paylaşılacak ana çalışma ağacı yok). `.deck` ajan araçlarına kapalıdır ama işçiyi durdurmaz.
 - **Adında secret, token ya da password geçen ve değeri düz metin gibi görünen müşteri yapılandırma anahtarı yine reddedilir**; değer
   bir sır AD referansı olsa bile (örneğin `"secretName": "DB_PASS"`). *Yol:* anahtarı yeniden adlandırın ya da yolu onaylayın.
+- **AI aktörünün model ve araç kuralları (şablon v19) yerel ajan ile her dış MCP istemcisi arasında ortaktır.** V19'dan beri ilk
+  kurulum politikası kişinin MCP aktörüne (`<host>/mcp`) kurulu kapsamda model çağırma ve okuma, karalama, düzenleme ve kabuk
+  araçlarını kullanma izni verir; mevcut kurulum bunları yalnız kişinin kendi `policy upgrade` kartıyla alır. Aynı aktör
+  `deckent-mcp`'ye de hizmet eder; bu yüzden dış bir MCP istemcisi de bütçe, abonelik kotası ve `ai` devir onayı içinde
+  `invoke_model` çağırabilir. Düzenleme/kabuk kuralı moda açıktır: yerel sohbet turu onu başlatan kişinin modunu izler (varsayılan
+  `standart`ta sıradan proje düzenlemesi kartsız çalışır ve mod gevşetmesi olarak denetim kaydına yazılır; "düzenlemeleri de sor"
+  açıksa kart çıkar). Yerel işçi de AI aktörünün sahibi olan kurulum kişisinin modunu aynı şekilde izler. Sahibi olan kişi
+  olmadan bir AI aktörü hiçbir mod gevşetmesi almaz. Aktör model çağırabilir ve meta verisini okuyabilir, ama başka bir kimliğin
+  model içeriğini okuyamaz ve çağrılarını iptal edemez. Kabuk komutları, yazma tabanı ve diğer sert taban hücreleri yine sorar ya
+  da reddeder. Bu kuralları kapatmak yerel ajanı da durdurur. *Yol:* kendi terminalinizde `deckent policy upgrade --template current
+  --rollback` çalıştırın (kendi kartınız; yeni bir v19 kurulumunda da), tam olarak v19 AI aktörü kuralları kalkar; `--apply` onları geri
+  ekler. Ya da model çağırmasını istemediğiniz MCP istemcisini bağlamayın.
 
 ## Bütçe ve harcama
 
@@ -503,7 +564,26 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.
 - **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
   kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
-  dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın.
+  dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın. Çalışma ağacına teslim
+  `deckent task integration-rollback --scope <kimlik> --run <kimlik> --task <kimlik>` ile geri alınır (teslim satırı komutu yazar;
+  `--task` yalnız Run'da tek teslim edilmiş görev varsa atlanabilir); yalnız her dosya
+  hâlâ teslim edilen içeriği taşıyorsa yazar.
+- **Çalışma ağacına teslimin (tek kişilik proje) açık sınırları var.** Çalışma hedefi ve dala alma hedefi yoksa teslimde "evet"
+  dosyalarınıza yazar (`execution.deliveryMode`; Git referans yolunda kalmak için `reference` yapın). Yalnız Linux'ta ve yalnız proje
+  klasörü deponun en üst klasörüyken çalışır; aksi hâlde Run başlamadan reddedilir (`PATCH_WORKING_TREE_UNSUPPORTED`,
+  `PATCH_WORKING_TREE_SUBFOLDER`). Deponuza iz referansı yazılmaz: iz, Deckent'in teslim kaydı ve onun günlüğüdür (owner kararı
+  2026-11-06). Run'ın tabanı şimdiki dosyalarınızdan, deponun `.gitignore` ve
+  `.git/info/exclude` kurallarıyla kurulur; global excludes dosyanız (`core.excludesFile`) okunmaz, bu yüzden yalnız orada yok
+  sayılan bir dosya, red listesi ya da bir boyut sınırı dışarıda tutmadıkça tabana girer. Dışarıda tutulan dosyaların adları
+  (içerikleri değil) işçiye tek bir not satırıyla gider. Kenara konan bir teslim sonucunun özel Run tabanı
+  `execution.retention.setAsideDays` (varsayılan 14) günlük geri getirme penceresi boyunca saklanır; süre sonrası, başka bekleyen iş
+  tabana ihtiyaç duymuyorsa servis başlangıcındaki temizlikte kaldırılabilir. Taban kaldırıldıktan sonra geri getirilen sonuç teslim
+  edilemez (`WORKSPACE_RUN_BASE_REMOVED`; `/do` ile yeniden isteyin). Kapatılan ya da iptal edilen bir Run'ın tabanı için böyle bir pencere yoktur.
+- **Başka dosya sistemindeki kenar dosya sizin için silinmez.** Deckent'in durumu ile proje farklı dosya sistemlerindeyse (örneğin
+  `/mnt/c` altındaki bir WSL projesi), teslimin ya da geri almanın değiştirdiği dosya yanında gizli `.deckent-<uuid>.aside` olarak
+  kalır ve not onu adlandırır. Deckent bunu hiç silmez; bu dosyalar birikir ve `git status`'ta izlenmeyen dosya olarak görünür.
+  Çökmeden sonra devam eden teslim notu tekrarlamaz; günlük dosyayı yine adlandırır. *Yol:* gerekmeyen kenar dosyalarını kendiniz
+  silin.
 - **Dala alma penceresi doğrulama Run'larını commit'e göre önceden süzemez.** Yapılandırılmış türdeki kabul edilmiş
   doğrulama Run'larını listeler; başka bir commit'i doğrulamış olan dala almada reddedilir ve pencere seçime döner.
 - **Doğrulama Run'ı terminalden oluşturulamaz.** *Yol:* pencerenin gösterdiği `deckent run create ... --delivery-command-id
@@ -573,6 +653,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Kurtarma ve yükseltme
 
+- **Docker ayarı olmayan yapılandırmayı eski build okuyamaz (alpha.63, R8b).** `execution` yalnız `git` taşıdığında alpha.63 öncesi build
+  config'i katı şemayla reddeder ve açılmaz. *Yol:* geri dönmek için yükseltme öncesi yedeği geri yükleyin.
 - **alpha.56.1 yükseltmesinden sonra kaydında ana kasa anahtarı (`$DECK:AD`) geçen kişisel bir MCP sunucusu, bu anahtarın her projeye
   açılmasını ister** (KER-17, 2026-10-28): anahtar artık bir sağlayıcı anahtarıyla aynı proje izniyle kullanılır; izin olmayan projede
   sunucu başlamaz ve tur hangi anahtar olduğunu söyler. *Yol:* `deckent doctor` her anahtarı komutuyla listeler; her proje için bir kez
@@ -633,12 +715,12 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   klasördeki unix soketi denetlenmez. *Yol:* başka bir servisin soketini tutan klasörleri bağlamayın. İşçilerin dış sistemlerde
   kendilerinin işlem yapması henüz sunulmuyor.
 - **Kurtarma yalnız kendi kesin politika hücrelerinizle açılır.** V16 şablonu kişinin onay gerektiren kurtarma
-  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v18 bunları korur, v17'nin ilk commit hakkını ve v18'in kaldırma
-  haklarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
+  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v19 bunları, v17'nin ilk commit hakkını ve v18'in kaldırma
+  haklarını korur, v19'un MCP aktörü araç kurallarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
   Eski kurulum yalnız açık yükseltmeyle değişir; yönetilen `deckent policy upgrade` yolu kişide olmayan yetkiyi ekleyemiyorsa
-  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v18 farkını kaldırır;
-  tarihsel v16 kurtarma haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
-  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17/v18 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
+  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v19 farkını kaldırır;
+  tarihsel v16–v18 haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
+  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17–v19 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
   politika revizyonuna bağlıdır, sonra mühürlenen ölçümlere değil. Alpha.56 öncesi kaybolan işçinin yalıtım kaydı yoktur;
   vaka kişiye gider ve gölge ölçümü yeniden başlar.
 

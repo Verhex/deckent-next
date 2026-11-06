@@ -1,9 +1,10 @@
 import { clientCommandIdSchema, branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import type { PoolAuthorization } from '#engine/core/policy/index.js';
+import { runWorkerMode, type PoolAuthorization } from '#engine/core/policy/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/core/workspaces/index.js';
 import { runCreateSchema, RunStoreError, type RunStore, type RunCreate, type RunReceipt } from './store.js';
+import { runCapacityBindingsSchema, type RunCapacityBinding } from './capacity-resource.js';
 import { RunCreationAuthority, type RunAdmissionEvaluation } from './authority.js';
 import { projectRunView } from './view.js';
 export const runAdmissionSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
@@ -11,8 +12,7 @@ export const runAdmissionSchema = z.strictObject({ schemaVersion: z.literal(1), 
 export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 /** Engine-only deterministic provenance, never an ingress field of run create. */
 export type BoundRunAdmission = RunAdmission & { readonly proposal?: RunProposalBinding };
-/** D7a: the system, never the author, inserts scope-conflict order edges once at ingress, so the sealed admission input, the card, the
- * Run and every replay see the same graph. A branch Run keeps its exact compiled diamond (runtime exclusion still applies). */
+/** D7a: system-owned conflict edges are frozen at ingress and replayed; branch Runs retain their compiled diamond and runtime exclusion. */
 export function systemOrderedGraph(graph: RunAdmission['graph'], branch?: unknown): RunAdmission['graph'] {
   if (hasConflictEdges(graph)) throw new TaskGraphError('TASK_GRAPH_INVALID');
   return branch ? graph : withConflictEdges(graph);
@@ -20,10 +20,16 @@ export function systemOrderedGraph(graph: RunAdmission['graph'], branch?: unknow
 /** Local SDK ingress for a Run pinned to a completed delivery of the same scope; the commit is resolved by trusted composition. */
 export const runDeliveryAdmissionSchema = runAdmissionSchema.extend({ deliveryCommandId: identitySchema }).strict();
 export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
-/** Trusted composition resolves the pinned workspace custody after `run:create` authorization. Never a wire field. `replay` is true
- * when the command already has a receipt: the answer then comes from recorded state, never from a live reference that may have moved. */
+/** Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
+  /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
+  modelUse?: {
+    pin(execution: RunCreate['execution'], principal: VerifiedPrincipal, workerMode?: RunCreate['execution']['workerMode']): Promise<RunCreate['execution']>; // R9: recorded for a Run with a worker
+    recheck(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<void>;
+  };
+  /** General resource bindings, resolved by trusted adapters after model-use authorization; never an ingress field. */
+  resources?(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<readonly RunCapacityBinding[]>;
   /** Trusted composition resolves installation layout, clock and execution policy. Never read them from model wire fields. */
   resolve(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy' | 'execution'> & { layoutRevision: string }>;
 }
@@ -80,15 +86,18 @@ export class RunAdmissionApplication {
       const graph = resolved?.graph ?? command.graph;
       const context = await this.context.resolve({ ...command, graph }, principal);
       await this.poolAuthorization.authorize(context.policy.poolId, command.scopeId, principal);
+      const execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal, runWorkerMode(evaluation.policy, principal, command.scopeId)) : context.execution;
       create = runCreateSchema.parse({ commandId: command.commandId, actor, graph, ...(command.proposal ? { proposal: command.proposal } : {}), ...(resolved ? { branch: resolved.decision } : {}),
-        identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution: context.execution });
+        identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution });
     } catch (error) {
       this.authorization.recordUnapplied(command, principal, evaluation);
       throw error;
     }
-    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace);
+    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace); create = admitted.create; // R9: without a card, no worker ceiling
     try {
-      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert);
+      await this.context.modelUse?.recheck(create.execution, principal);
+      const resources = this.context.resources ? runCapacityBindingsSchema.parse(await this.context.resources(create.execution, principal)) : undefined;
+      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert, resources);
       return await this.pinned(receipt, command, principal, workspace);
     } catch (error) {
       // A concurrent identical admission may have won using a different sampled clock/config snapshot.

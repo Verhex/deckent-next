@@ -1,13 +1,16 @@
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { ModelConnectCommand } from '#domain/index.js';
-import { ModelConnectError, assertAuthorityWitness, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
+import { ModelConnectError, assertAuthorityWitness, modelUseProfiles, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessConsent, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
+  bindCapacityResource, headlessCapacityBinding, openSqliteLedger,
   prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, shellSandboxCapabilities, type HeadlessLoginResult,
   type ProviderConnectKind } from '#adapters/index.js';
+import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
 import { ErrorRegistry, automationMarker, globalStateRoot, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
-  resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions } from '#platform/index.js';
+  resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 
 type Env = NodeJS.ProcessEnv;
 const stateRoot = (env: Env) => resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env).stateDir;
@@ -33,7 +36,8 @@ export const headlessPersonWitness = (env: Env, agents: readonly string[]): Auth
  * first, then executable, login dir — s3c: the Brain's own unless the person names one —, uid, preflight inside the realm; no model call), and the
  * consent is the person's own choice on each written layer. State lives under the person's global state dir, one fixed dir per connection.
  */
-export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>) {
+export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>,
+  ledger: () => Promise<Readonly<{ installationId: string | null; config: ResolvedConfig; path: () => Promise<string>; }>>) {
   const env = options.env ?? process.env;
   const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>>>();
   const prepare = (kind: ProviderConnectKind, nativeId: string) => {
@@ -50,8 +54,30 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
   };
   return {
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
-      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, await person(), Date.now());
-      return { ...headlessConnectionAdapter({ ...base, delegatedUse: consent }, protocol), cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [] } };
+      const context = await ledger();
+      if (!context.installationId) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
+      const principal = await person(), sourceBinding = { schemaVersion: 1 as const, installationId: context.installationId,
+        companyId: context.config.company.id, scopeId: command.scopeId, principal: { issuer: principal.issuer, subject: principal.subject } };
+      const seed = await readProviderConnectSeed(kind.connect!.seed!);
+      const references = seed.providers.flatMap(provider => provider.models.filter(model => model.nativeId === value.nativeId)
+        .map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version })));
+      const profiles = modelUseProfiles(context.config);
+      const existing = [value.existing, ...profiles.filter(profile => profile.scopeId === command.scopeId
+        && references.some(reference => isDeepStrictEqual(reference, profile.reference))).map(profile => profile.adapter.definition)];
+      if (existing.some(definition => {
+        if (definition?.['sourceBinding'] === undefined) return false;
+        const parsed = nativeCliHeadlessDefinitionSchema.safeParse(definition);
+        return !parsed.success || !isDeepStrictEqual(parsed.data.sourceBinding, sourceBinding);
+      }))
+        throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED');
+      if (!existing.some(Boolean) || existing.some(definition => definition && definition['sourceBinding'] === undefined))
+        await assertAuthorityWitness('models.connect', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
+          headlessPersonWitness(env, context.config.cli.agentEnvironment));
+      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, principal, Date.now());
+      const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = headlessConnectionAdapter(definition, protocol);
+      const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
+      try { bindCapacityResource(db, headlessCapacityBinding(definition), { executionSlots: adapter.maxInFlight, inFlightSlots: adapter.maxInFlight }); } finally { db.close(); }
+      return { ...adapter, cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [] } };
     },
   };
 }
@@ -67,7 +93,7 @@ export async function readConfiguredHeadlessLogins(section: unknown, scopeId: st
   const root = await realpath(configuredHeadlessLoginRoot(options)).catch(() => null);
   return readHeadlessLogins(section, scopeId, root);
 }
-export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined }>;
+export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined; loginMethod?: string | undefined }>;
 /**
  * s3c `deckent models login`: the person signs the Brain's login dir in with the CLI's own sign-in in their terminal. A person's terminal act: an
  * MCP actor, or a caller without the local interactive-terminal witness, is refused before anything is created or started. `confirm` shows the
@@ -81,5 +107,5 @@ export async function loginConfiguredHeadless(command: HeadlessLoginCommand, opt
   if (!await confirm({ configDir, owned: configDir === owned })) return null;
   // Deckent's own state for this sign-in sits beside the connections' (the same per-login-dir lock), never in the login dir.
   const stateDir = join(stateRoot(env), 'headless', `login-${createHash('sha256').update(configDir).digest('hex').slice(0, 16)}`);
-  return runHeadlessLogin({ family, stateDir, configDir, owned: configDir === owned, executable: command.executable, sso: command.sso === true, env, now: Date.now, isolation: isolation(env) });
+  return runHeadlessLogin({ family, stateDir, configDir, owned: configDir === owned, executable: command.executable, sso: command.sso === true, loginMethod: command.loginMethod, env, now: Date.now, isolation: isolation(env) });
 }

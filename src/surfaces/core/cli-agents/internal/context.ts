@@ -5,10 +5,14 @@ import type { AgentCatalogMutation, AgentDefineCommand, AgentInspectQuery, Agent
   SignerListing, SignerMutation, SignerRepairCommand, SignerRevokeCommand, SkillDefineCommand, SkillImportCommand, SkillInspectQuery, SkillInspection, SkillListQuery, SkillListing, AgentStatsQuery, AgentStatsView,
   CatalogDraft, CatalogSuggestionInspection, CatalogSuggestionListing, CatalogSuggestionState, CatalogSuggestionView, StandingBulkCommand, StandingChangeCommand, SuggestionDismissCommand, SuggestionInspectQuery,
   SuggestionListQuery } from '#engine/index.js';
-import type { AgentDefinition, AgentStanding, ReadableSkillDefinition } from '#domain/index.js';
+import type { AgentDefinition, AgentStanding, ReadableSkillDefinition, TaskAgentSeal } from '#domain/index.js';
+
+/** K8 preview, carried unchanged to the work-input owner; not execution readiness or authority. */
+export type AgentUsePreview = Pick<TaskAgentSeal, 'schemaVersion' | 'agentId' | 'revision' | 'personaDigest' | 'skillSetDigest' | 'skills'> & Readonly<{ scopeId: string; taskId: string }>;
 
 /** S7 agent/skill catalog: reads use the application's `inspect` authorization; define and define-skill run only from a person's terminal card. */
 export interface AgentsCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'configChoiceSources'> {
+  prepareAgentUse?: (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; taskId: string; agentId: string; expectedRevision: number }>, options: ConfigLoadOptions) => Promise<AgentUsePreview>;
   inspectCatalogMonitor?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   listAgents?: (root: string, input: AgentListQuery, options: ConfigLoadOptions) => Promise<AgentListing>;
   inspectAgent?: (root: string, input: AgentInspectQuery, options: ConfigLoadOptions) => Promise<AgentInspection>;

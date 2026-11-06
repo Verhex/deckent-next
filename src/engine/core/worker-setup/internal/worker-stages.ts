@@ -11,6 +11,8 @@ export const workerFactsSchema = z.strictObject({ configured: imageId.nullable()
   durationMs: z.number().nonnegative().finite().optional(),
   images: z.array(z.looseObject({ imageId, providers: z.array(z.string()), tagVersion: z.string().regex(/^r[1-9][0-9]*(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u).nullable().optional() })).optional() }).nullable(),
   provider: z.string().optional(), providerPending: z.boolean().optional(), acquisition: workerImageStateSchema.nullable().optional(),
+  /** R8b: the worker runs on a connected subscription (no image); `configured` once `execution` exists, `pending` before its Git settings. */
+  connection: z.enum(['pending', 'configured']).optional(),
   image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: persistedString(z.string().min(1).max(4096)).nullable() });
 type WorkerFacts = z.infer<typeof workerFactsSchema>;
 /** The part of the execution family's facts these stages read (the family validates the whole shape with its own schema). */
@@ -33,6 +35,7 @@ function workerFacts(context: SetupStageContext): SetupDecision | Readonly<{ fac
 }
 /** Image acquisition is an onboarding job: this stage reads consent-bound facts and never starts it. */
 function worker(context: SetupStageContext): SetupDecision {
+  if ((context.facts as Facts | undefined)?.worker?.connection) return { state: 'done', reason: reason('workerConnection') };
   if (!hasWorkerKind(context)) return { state: 'skipped', reason: reason('noWorkKind') };
   const facts = (context.facts as Facts | undefined)?.worker, acquisition = facts?.acquisition;
   const ready = acquisition?.images.find(image => image.provider === facts?.provider);
@@ -52,8 +55,12 @@ function worker(context: SetupStageContext): SetupDecision {
 }
 /** BR1: the execution settings composed from the runtime and Git paths detected here and the built image, through `config.set` (the existing owner). */
 function settings(context: SetupStageContext): SetupDecision {
+  const observedFacts = (context.facts as Facts | undefined)?.worker, connected = observedFacts?.connection;
+  // R8b: a connection needs only the Git the coding detection found (`execution` without Docker settings).
+  if (connected === 'configured') return { state: 'done', reason: reason('workerConnection') };
+  if (connected) return !context.scopeId ? blocked('workerWaits', { stage: 'core:policy' }) : !observedFacts.git ? blocked('workerGitMissing') : { state: 'ready', reason: reason('connectionSettings', { git: observedFacts.git }),
+    operation: { id: 'config.set', version: 1, input: { scopeId: context.scopeId, keyPath: 'execution', value: { git: { gitExecutable: observedFacts.git } }, layer: 'project' } }, cli: null };
   if (!hasWorkerKind(context)) return { state: 'skipped', reason: reason('noWorkKind') };
-  const observedFacts = (context.facts as Facts | undefined)?.worker;
   if (observedFacts?.configured && observedFacts.image === 'present') return { state: 'done', reason: reason('settingsWritten') };
   if (observedFacts?.configured && observedFacts.image !== 'missing') return blocked('workerUnknown', { image: short(observedFacts.configured) });
   const configured = observedFacts?.configured;

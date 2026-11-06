@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { connect, isIPv4, isIPv6, BlockList, type Socket } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { networkInterfaces } from 'node:os';
@@ -86,18 +86,37 @@ export const nativeEgressLimits = () => Object.freeze({ connections: catalog.lim
   refusedHostsMax: catalog.limits.refusedHostsMax });
 /**
  * S3-5: the only way out of an isolated CLI's empty network namespace. A Unix-socket HTTP server in a fresh 0700 directory under the private IPC root
- * that answers nothing but CONNECT to the provider's `providers.json` destinations (the same allowlist, address check and ClientHello check as a
- * worker's gateway), bounded in connections, idle time and traffic; no credential, no bootstrap, no event channel.
+ * that answers CONNECT to the provider's `providers.json` destinations and, only when explicitly supplied, the turn's exact sentinel HTTP MCP
+ * route. Both share connection/idle/traffic bounds; CONNECT checks are unchanged. No subscription credential or bootstrap is handled here.
  */
-export async function openNativeEgressGateway(input: { readonly provider: NativeSubscription['provider']; readonly directory: string }) {
+export async function openNativeEgressGateway(input: { readonly provider: NativeSubscription['provider']; readonly directory: string;
+  readonly mcp?: { readonly sentinelHost: string; readonly path: string; readonly maxConnections: number; readonly progressIntervalMs: number;
+    readonly handle: (request: IncomingMessage, response: ServerResponse, count: (bytes: number) => boolean) => Promise<void>;
+    readonly close: () => Promise<void> } }) {
   const spec = nativeProviderSpec(input.provider), limits = catalog.limits;
+  if (input.mcp && (!Number.isSafeInteger(input.mcp.maxConnections) || input.mcp.maxConnections < 1 || input.mcp.maxConnections >= limits.connections
+    || !Number.isSafeInteger(input.mcp.progressIntervalMs) || input.mcp.progressIntervalMs < 1 || input.mcp.progressIntervalMs >= limits.idleMs)) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
   const directory = await privateSocketDirectory('egress-');
   const socketPath = join(directory, 'gateway.sock');
-  let closed = false, transferred = 0;
+  let closed = false, transferred = 0, mcpActive = 0;
+  const mcpStatistics = { requests: 0, refused: 0 };
   const sockets = new Set<Socket>(), statistics = { connected: 0, rejected: 0, bytes: 0 }, refused = refusedHosts(limits.refusedHostsMax);
   const reject = (target?: string, reason: HeadlessEgressReason = 'unknown') => { statistics.rejected++; refused.add(target, reason); };
-  const server = createServer({ maxHeaderSize: limits.headerBytes }, (_request, response) => { reject(); response.writeHead(403).end(); });
+  const count = (bytes: number) => { transferred += bytes; statistics.bytes = transferred; return transferred <= limits.trafficBytes; };
+  const server = createServer({ maxHeaderSize: limits.headerBytes }, (request, response) => {
+    const route = input.mcp;
+    // Absolute form only: no DNS, forwarding, credentials, alternate port, encoded host, query or fragment.
+    if (!route || request.url !== `http://${route.sentinelHost}${route.path}` || request.headers.host !== route.sentinelHost) {
+      reject(); response.writeHead(403).end(); return;
+    }
+    mcpStatistics.requests++;
+    if (closed || mcpActive >= route.maxConnections) { mcpStatistics.refused++; response.writeHead(429).end(); return; }
+    mcpActive++;
+    response.once('finish', () => { if (response.statusCode >= 400) mcpStatistics.refused++; });
+    void route.handle(request, response, count).catch(() => { mcpStatistics.refused++; response.destroy(); }).finally(() => { mcpActive--; });
+  });
   server.maxConnections = limits.connections;
+  // Node's request/header timers bound receipt, not response duration. SSE writes keep the existing socket idle timer alive.
   server.headersTimeout = limits.idleMs; server.requestTimeout = limits.idleMs; server.keepAliveTimeout = 1;
   server.on('clientError', (_error, socket) => socket.destroy());
   server.on('connection', socket => {
@@ -105,13 +124,16 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
     socket.on('error', () => socket.destroy()); socket.on('close', () => sockets.delete(socket));
   });
   server.on('connect', (request, client, head) => tunnelNativeConnect(request, client as Socket, head, { destinations: spec.destinations, closed: () => closed, sockets,
-    count: bytes => { transferred += bytes; statistics.bytes = transferred; return transferred <= limits.trafficBytes; },
+    count,
     connected: () => { statistics.connected++; }, rejected: reject }));
   const close = async () => {
     if (closed) return; closed = true;
-    for (const socket of sockets) socket.destroy();
-    await new Promise<void>(resolve => server.close(() => resolve()));
-    await rm(directory, { recursive: true, force: true });
+    try { await input.mcp?.close(); }
+    finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    }
   };
   if (Buffer.byteLength(socketPath) > 103) { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
   try {
@@ -120,5 +142,5 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
   } catch { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
   /** The call's gateway summary (counts and refused host names only; `HeadlessEgress` shape). */
   const egress = (): HeadlessEgress => Object.freeze({ connected: statistics.connected, refused: statistics.rejected, ...refused.view() });
-  return Object.freeze({ socketPath, statistics: () => Object.freeze({ ...statistics, closed }), egress, close });
+  return Object.freeze({ socketPath, statistics: () => Object.freeze({ ...statistics, closed }), mcpStatistics: () => Object.freeze({ ...mcpStatistics }), egress, close });
 }

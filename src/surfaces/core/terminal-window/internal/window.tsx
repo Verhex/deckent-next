@@ -6,7 +6,7 @@ import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, W
 import { useWindowNote } from './window-note.js';
 import { DecisionArmContext, DecisionArmLabelsContext, useQuietArming } from './arming.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
-import { CardCopyContext, cardCopyText, cardRowRange, cardSelectionText, hyperlinkEnds, isCardCopyKey, type CardSelection } from './card-copy.js';
+import { CardCopyContext, CardCopyOptionsContext, cardCopyText, cardRowRange, cardSelectionText, hyperlinkEnds, isCardCopyKey, type CardSelection } from './card-copy.js';
 import { PointerContext } from './fullscreen-workline.js';
 import { highlightCells } from './selection.js';
 
@@ -86,6 +86,8 @@ export interface WindowProps {
   /** Content under the body that does not scroll (a picker, a reason field); `rows` counts its height for the cap. */
   readonly footer?: (focused: boolean) => ReactNode;
   readonly footerRows?: number;
+  /** Visible labels of a custom option footer; entries must never be included. Shared pickers register their own labels. */
+  readonly copyOptions?: readonly string[];
   readonly hints: string;
   /** `{from}`, `{to}`, `{total}`: shown when the body does not fit. */
   readonly position: string;
@@ -115,12 +117,13 @@ export interface WindowProps {
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
 export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
-  onFocusChange, onPaste, burstText = false }: WindowProps) {
+  onFocusChange, onPaste, burstText = false, copyOptions = [] }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const acceptsInput = useWindowLayerGuard(id);
-  // Card copy (card-copy.ts): Ctrl+Y sends the drawn, redacted title and body; it never reaches the owner, decides or touches the arming.
+  // Card copy (card-copy.ts): Ctrl+Y sends the drawn, redacted title, body and option labels; it never reaches the owner, decides or touches the arming.
+  const optionLabels = useRef(new Map<string, readonly string[]>());
   const copy = useContext(CardCopyContext), known = useHumanTextSecrets(), [copied, setCopied] = useState<string | null>(null);
   useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_MS); return () => clearTimeout(timer); }, [copied]);
   const owner = useFocusOwner(), queue = useDecisionQueue(id, priority);
@@ -159,12 +162,12 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (revealRow === undefined) return;
     setOffset(value => revealRow < value ? revealRow : revealRow >= value + visible ? revealRow - visible + 1 : value);
   }, [revealRow, visible]);
-  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy });
-  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy };
+  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy, copyOptions });
+  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy, copyOptions };
   const copyCard = () => {
     const { copy: writer, title: shownTitle, body: shownBody } = latest.current;
     if (!writer) return;
-    const text = humanRecordText(cardCopyText(shownTitle, shownBody), known), result = writer.write(text);
+    const text = humanRecordText(cardCopyText(shownTitle, shownBody, [...latest.current.copyOptions, ...[...optionLabels.current.values()].flat()]), known), result = writer.write(text);
     setCopied(result.ok ? fillTemplate(writer.labels.sent, { count: [...text].length })
       : result.reason === 'too-large' ? fillTemplate(writer.labels.tooLarge, { bytes: result.bytes, max: writer.maxBytes }) : writer.labels.unavailable);
   };
@@ -261,7 +264,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
       {rows.slice(first, first + visible).map((row, index) => (ends => { const range = picked ? cardRowRange(picked, first + index) : null;
         return <Text key={first + index} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end) : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>; })(hyperlinkEnds(links[first + index])))}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
-      {footer ? <WindowInputContext.Provider value={acceptsInput}>{footer(focused)}</WindowInputContext.Provider> : null}
+      {footer ? <WindowInputContext.Provider value={acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
       {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}
       {hintRows.map((row, index) => <Text key={`hint:${index}`} {...palette.muted} wrap="truncate">{row}</Text>)}
     </Box>

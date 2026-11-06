@@ -275,6 +275,8 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     delivered: t('terminal.delivery.delivered', {}, locale), adoptPrompt: t('terminal.delivery.adoptPrompt', {}, locale),
     adoptTarget: t('terminal.delivery.adoptTarget', {}, locale), adoptHints: t('terminal.delivery.adoptHints', {}, locale),
     adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), deliveredTitle: t('terminal.delivery.deliveredTitle', {}, locale), adoptNone: t('terminal.delivery.adoptNone', {}, locale),
+    whereFiles: t('terminal.delivery.whereFiles', {}, locale), confirmFiles: t('terminal.delivery.confirmFiles', {}, locale), deliveredFiles: t('terminal.delivery.deliveredFiles', {}, locale),
+    summaryWritten: t('terminal.delivery.summaryWritten', {}, locale), setAside: t('cli.task.integration.setAside', {}, locale), nextConflictFiles: t('terminal.delivery.nextConflictFiles', {}, locale), redoFiles: t('terminal.delivery.redoFiles', {}, locale),
     dismissHint: t('terminal.delivery.dismissHint', {}, locale), dismissed: t('terminal.delivery.dismissed', {}, locale), dismissedTitle: t('terminal.delivery.dismissedTitle', {}, locale), restored: t('terminal.delivery.restored', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
     failedHints: t('terminal.delivery.failedHints', {}, locale), summaryDelivered: t('terminal.delivery.summaryDelivered', {}, locale),
     summaryAdopted: t('terminal.delivery.summaryAdopted', {}, locale), summaryLeft: t('terminal.delivery.summaryLeft', {}, locale),

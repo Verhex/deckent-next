@@ -1,3 +1,5 @@
+import { readWorkerToolCard } from '#capabilities/index.js';
+import { t } from '#platform/index.js';
 import { useEffect, useState } from 'react';
 import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import { Window, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
@@ -21,10 +23,15 @@ const SECOND = 1000;
 export type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;
   risk: string | null | undefined; undo: string | null | undefined; requiredAssurance: string | undefined; expiresAt: number; hasDecisionCapability: boolean;
   tool: string | undefined; target: string | null | undefined; posture: AgentShellPosture | undefined;
-  call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; config: WorklineApproval['config'] }>;
-export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPresentation => ({ displayId: item.approvalId, displayRun: item.runId, displayTask: item.taskId,
-  displayRequester: item.requester, summary: item.summary, risk: item.risk, undo: item.undo, requiredAssurance: item.requiredAssurance, expiresAt: item.expiresAt, hasDecisionCapability: Boolean(item.decisionCapability),
-  tool: item.tool, target: item.target, posture: item.posture, call: item.call, previewCut: item.previewCut, config: item.config });
+  call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; preview: string | undefined; config: WorklineApproval['config']; displayAttempt: string | null; displayArgsDigest: string | null }>;
+export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPresentation => {
+  const worker = readWorkerToolCard(item.summary);
+  return { displayId: item.approvalId, displayRun: worker?.identity.runId ?? item.runId, displayTask: worker?.identity.taskId ?? item.taskId,
+    displayRequester: item.requester, summary: worker ? `${worker.tool} · ${worker.resource} · ${worker.argsDigest.slice(0, 12)}` : item.summary,
+    risk: item.risk, undo: item.undo, requiredAssurance: item.requiredAssurance, expiresAt: item.expiresAt, hasDecisionCapability: Boolean(item.decisionCapability),
+    tool: worker?.tool ?? item.tool, target: worker?.resource ?? item.target, posture: item.posture, call: item.call, previewCut: item.previewCut, preview: item.preview, config: item.config,
+    displayAttempt: worker?.identity.attemptId ?? null, displayArgsDigest: worker?.argsDigest ?? null };
+};
 /** The list row's "what": the tool's sentence with its target (a task approval keeps its summary). */
 function rowWhat(item: WorklineApproval, work: WorkSurfaceLabels): string {
   const call = approvalCallOf(item);
@@ -63,11 +70,14 @@ type Scoped = Readonly<{ scopes: readonly StandingScope[]; pattern: string; labe
 export function approvalDecisionCardLines(approval: ApprovalCardPresentation, work: WorkSurfaceLabels, preview: string | undefined, standing: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null,
   known?: KnownSecretSnapshot, context: ApprovalWindowContext = {}, now = Date.now()) {
   const p = (text: string) => projectApprovalDecisionText(text, known), card = work.approvalCard, required = approval.requiredAssurance;
-  const assurance = required === undefined ? null : required === 'peer-session' ? approvalTemplateLine(card.assurancePeer, {}) : required === 'turn-bound'
+  const assurance = approval.displayAttempt !== null && required === 'turn-bound' ? approvalTemplateLine(t('terminal.approval.k23.assurance', {}, work.jobs?.locale), {})
+    : required === undefined ? null : required === 'peer-session' ? approvalTemplateLine(card.assurancePeer, {}) : required === 'turn-bound'
     ? approvalTemplateLine(approval.hasDecisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere, {}) : approvalTemplateLine(card.assuranceOther, { level: p(required) });
-  return approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
-    expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
+  const lines = approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
+    expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview: preview ?? approval.preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
     standing, project: context.project, home: context.home, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config }, work.approvalWindow, now, known);
+  return approval.displayAttempt === null ? lines : [...lines, { ...approvalTemplateLine(t('terminal.approval.k23.call', {}, work.jobs?.locale),
+    { attempt: p(approval.displayAttempt), digest: p(approval.displayArgsDigest ?? '') }), exact: true }];
 }
 /** The live clock of a window: re-renders once a second until `until`, then stops. */
 function useNow(until: number): number {

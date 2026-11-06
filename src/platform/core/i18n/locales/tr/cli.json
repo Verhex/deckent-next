@@ -457,6 +457,7 @@
   "cli.run.inspect.workspaceStartedFromPatch": "Çalışma alanı {source} görevinin kabul edilmiş patch’inden başlatıldı (deneme {attempt}, patch özeti {digest})",
   "mcp.tool.releaseQuota": "Seçilen havuz ve etkilenen her havuz için kurulum düzeyi pool/release-quota yetkisiyle abonelik kota beklemelerini serbest bırakır; provider reset kanıtı değişmez.",
   "cli.task.delivery.card": "{operation}: {title}\nKoşum {run} · Görev {task}\n{ref}\n{from} → {to}\n{count} dosya; +{added} / -{removed} satır\n{files}\nGösterilmeyen ek dosya: {omitted}",
+  "cli.task.delivery.files": "Dosyalarınıza yazılır (commit atılmaz)",
   "cli.task.delivery.prompt": "Bu referans yazılsın mı? y/N: ",
   "git.delivery.message": "{title}\n\nKoşum: {run}\nGörev: {task}\nKabul: Görev {phase}{unverified}; kriter {criteria}; koşum revision {revision}\n",
   "cli.human.numberLocale": "tr-TR",

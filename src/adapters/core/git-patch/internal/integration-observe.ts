@@ -1,43 +1,15 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, realpath, lstat, type FileHandle } from 'node:fs/promises';
+import { open, realpath, lstat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fingerprintGitSource, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { patchFile, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
+import { patchFile, patchDigest, workingTreeSource, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
 import { gitFailure, SnapshotBudget } from './snapshot.js';
+import { readTreeFile } from './working-tree.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 import { assertIntegrationBase } from './integration-base.js';
 const exec = promisify(execFile);
-function missing(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'; }
-/** Read only the affected paths: unrelated source WIP and node_modules are not scanned. */
-async function touched(root: FileHandle, path: string, budget: SnapshotBudget) {
-  budget.entry(); budget.path(path);
-  const parts = path.split('/'); let parent = root; const opened: FileHandle[] = [];
-  try {
-    for (let index = 0; index < parts.length; index++) {
-      const directory = index < parts.length - 1;
-      let handle: FileHandle;
-      try { handle = await open(`/proc/self/fd/${parent.fd}/${parts[index]}`, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK | (directory ? constants.O_DIRECTORY : 0)); }
-      catch (error) { if (missing(error)) return null; throw new WorkspacePatchError('PATCH_UNSAFE'); }
-      opened.push(handle); const before = await handle.stat();
-      if (before.uid !== process.getuid!()) throw new WorkspacePatchError('PATCH_UNSAFE');
-      if (directory) { if (!before.isDirectory()) throw new WorkspacePatchError('PATCH_UNSAFE'); parent = handle; continue; }
-      if (!before.isFile() || before.nlink !== 1) throw new WorkspacePatchError('PATCH_UNSAFE');
-      budget.size(before.size);
-      const bytes = Buffer.alloc(before.size); let offset = 0;
-      while (offset < bytes.length) {
-        budget.time(); const read = await handle.read(bytes, offset, bytes.length - offset, offset);
-        if (!read.bytesRead) break; offset += read.bytesRead;
-      }
-      const after = await handle.stat();
-      if (offset !== before.size || after.size !== before.size || before.ctimeMs !== after.ctimeMs || before.mtimeMs !== after.mtimeMs || after.nlink !== 1)
-        throw new WorkspacePatchError('PATCH_CONFLICT');
-      return patchFile(bytes, before.mode & 0o111 ? '100755' : '100644');
-    }
-    throw new WorkspacePatchError('PATCH_UNSAFE');
-  } finally { for (const handle of opened.reverse()) await handle.close(); }
-}
 export async function observeIntegration(options: GitWorkspaceOptions, limits: PatchLimits, patch: WorkspacePatch) {
   const budget = new SnapshotBudget(limits, Date.now() + options.timeoutMs);
   const source = options.sourceRoot;
@@ -62,12 +34,13 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
     await assertIntegrationBase(git, patch, tip, budget);
     return Object.freeze({ source, head: tip, digest: patchDigest(JSON.stringify({ source, baseRef: options.baseRef, head: tip })) });
   }
-  const head = (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
+  // Working-tree Run (pinned by its patch's source): the base is the Run's own commit of the files (never compared with HEAD), the index is not consulted.
+  const files = workingTreeSource(patch.source), head = files ? patch.baseCommit : (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
   if (source !== repository || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
     throw new WorkspacePatchError('PATCH_CONFLICT');
   await assertIntegrationBase(git, patch, head, budget);
   const index = new Map<string, string>();
-  for (const entry of (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)) {
+  for (const entry of files ? [] : (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)) {
     budget.time();
     const tab = entry.indexOf('\t'); const path = entry.slice(tab + 1);
     if (!patch.changes.some(change => path === change.path || path.startsWith(change.path + '/') || change.path.startsWith(path + '/'))) continue;
@@ -80,10 +53,11 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
     for (const change of patch.changes) {
       const expected = change.before ? change.before.mode + ' ' + createHash(head.length === 40 ? 'sha1' : 'sha256')
         .update(`blob ${Buffer.byteLength(change.before.text)}\0`).update(change.before.text).digest('hex') : undefined;
-      if (index.get(change.path) !== expected || [...index.keys()].some(path => path !== change.path && (path.startsWith(change.path + '/') || change.path.startsWith(path + '/'))))
+      if (!files && (index.get(change.path) !== expected || [...index.keys()].some(path => path !== change.path && (path.startsWith(change.path + '/') || change.path.startsWith(path + '/')))))
         throw new WorkspacePatchError('PATCH_CONFLICT');
-      const file = await touched(root, change.path, budget);
-      if (JSON.stringify(file) !== JSON.stringify(change.before)) throw new WorkspacePatchError('PATCH_CONFLICT');
+      const read = await readTreeFile(root, change.path, budget), file = JSON.stringify(read && patchFile(read.bytes, read.mode));
+      // A working-tree path already holding its `after` is an interrupted delivery's own write; the writer leaves it as it is.
+      if (file !== JSON.stringify(change.before) && !(files && file === JSON.stringify(change.after))) throw new WorkspacePatchError('PATCH_CONFLICT');
     }
   } finally { await root.close(); }
   return Object.freeze({ source, head, digest: patchDigest(JSON.stringify({ source, head, index: [...index].sort(),

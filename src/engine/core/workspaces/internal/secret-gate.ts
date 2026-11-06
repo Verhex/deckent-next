@@ -38,6 +38,14 @@ export interface WorkerTreeGateContext {
   readonly journal: AttemptStore;
 }
 
+/** Owner 2026-11-05 (R9n): the project paths a working-tree Run base withheld, audited before the launch as `worker-tree-excluded` with
+ * `by: working-tree-base` (path and rule, never content). Unlike a lifted hit, the worker never received these paths. */
+export function withheldBaseEvent(context: Omit<WorkerTreeGateContext, 'journal'>, count: number, excluded: readonly WorkerTreeFinding[]): AuditEvent {
+  const { identity, principal } = context;
+  return { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: identity.scopeId, principal: { issuer: principal.issuer, subject: principal.subject },
+    policyRevision: context.policyRevision, atMs: context.now(), subject: { kind: 'worker-tree-excluded', runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId, count,
+      entries: excluded.slice(0, AUDIT_TRACKED_PATHS_MAX).map(({ path, rule }) => ({ path: path.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), rule, by: 'working-tree-base' })) } };
+}
 /**
  * S6 (owner 2026-10-14): the one decision of the pre-dispatch secret gate. A clean tree passes (its config exclusions audited and journalled
  * first). Otherwise the refusal is recorded

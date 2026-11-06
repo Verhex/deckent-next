@@ -3,6 +3,9 @@ import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { PickerWindow, useLoadingText, BudgetWindow, budgetEntry, WorkspaceWindow, CacheWindow, cacheEntry, type BudgetPanelView, type CachePanelView, type ModelPanelChoice, type ModelPanelLabels, type ModelPanelPort, type ModelPanelReference, type ModelPanelView, type PanelLabels, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { ProviderPanel } from './provider-panel.js';
+import { ErrorRegistry } from '#platform/index.js';
+import type { ProviderWindowPort } from './context.js';
+import { subscriptionModelView, subscriptionReadinessText } from './readiness.js';
 
 const SESSION = 'session', DEFAULT = 'default', CONNECT = ':connect', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', WORKSPACE = ':workspace', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
 /** Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed). */
@@ -28,9 +31,12 @@ export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference
     ? groups.map(group => { const children = view.choices.filter(choice => choice.group === group).map(node);
       return { id: `group:${group}`, label: group, detail: String(children.length), childTitle: group, children }; })
     : view.choices.map(node);
-  const blocked = defaultOffered && view.defaultBlocked === null ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
-  return { title, items, scopes: [{ id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
-    { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked },
+  const offered = defaultOffered && view.defaultBlocked === null, blocked = offered ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
+  const session = { id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
+    fallback = { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked };
+  // R2d: with no model chosen yet, the first pick is the default (the one Enter makes it), so the next terminal starts with it too.
+  const first = offered && !view.choices.some(choice => choice.configured);
+  return { title, items, scopes: [...(first ? [fallback, session] : [session, fallback]),
     ...(largeContext ? [{ id: FRESH, label: `${labels.session} · ${labels.switch.fresh}` }, { id: FRESH_DEFAULT, label: `${labels.sessionAndDefault} · ${labels.switch.fresh}`, ...blocked }] : [])] };
 }
 
@@ -38,6 +44,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval: (approvalId: string) => void; readonly onError: (error: unknown) => void;
   readonly onClose: () => void }) {
   const words = labels.model;
+  const provider = port.provider as ProviderWindowPort | undefined, locale = provider?.locale ?? 'en';
+  const inspect = () => port.inspect().then(view => subscriptionModelView(view, provider, locale));
   const [workspaces, setWorkspaces] = useState<Awaited<ReturnType<NonNullable<ModelPanelPort['workspace']>['inspect']>>>([]);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [view, setView] = useState<ModelPanelView | null>(null);
@@ -57,7 +65,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   useEffect(() => {
     mounted.current = true;
     let live = true;
-    port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
+    port.inspect().then(view => subscriptionModelView(view, port.provider, (port.provider as ProviderWindowPort | undefined)?.locale ?? 'en')).then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
     port.cache?.inspect().then(value => { if (live) setCache(value); }, () => undefined);
     port.workspace?.inspect().then(value => { if (live) setWorkspaces(value); }, () => undefined);
@@ -67,14 +75,16 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const loading = useLoadingText(labels, !view || preparing);
   if (!view) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={onClose} onResult={onClose} />;
-  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void port.inspect().then(setView, onError); }} />;
+  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void inspect().then(setView, onError); }} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   if (workspaceOpen && port.workspace && labels.workspace) return <WorkspaceWindow port={port.workspace} profiles={workspaces} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   const tokens = port.largeContext?.() ?? null;
   if (protocolOpen && protocol && port.protocol && labels.protocol) return <CacheWindow port={port.protocol} view={protocol} words={labels.protocol} labels={labels}
     push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
-  const entry = budgetEntry(budget, labels.budget), cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault), tokens !== null);
+  // R2c: a USD budget limits metered calls only; with every listed model on a subscription or local axis the row is not offered.
+  const metered = !view.choices.length || view.choices.some(choice => choice.billing === undefined || choice.billing === 'metered');
+  const entry = metered ? budgetEntry(budget, labels.budget) : null, cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault), tokens !== null);
   // BeUser alpha.56.1 (3t): with nothing to pick, the first row is the way to connect a model (the same `/provider` flow), like an empty state's action.
   const connect = !view.choices.length && port.provider && words.connect ? [{ id: CONNECT, label: words.connect, unscoped: true }] : [];
   const tree: PickerTree = { ...listed, items: [...connect, ...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }] : []),
@@ -92,6 +102,15 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       const choice = view.choices.find(choice => keyOf(choice.reference) === parts.join(':'));
       if (action === 'provider') { setProviderOpen(true); return; }
       if (action === 'budget') { setBudgetOpen(true); return; }
+      // R9b (owner D3): the Brain's own model through the governed writer; one summary line, a held write opens its approval.
+      if (choice && port.setBrain && (action === 'brain-global' || action === 'brain-project')) {
+        setPreparing(true);
+        port.setBrain(choice, action === 'brain-global' ? 'global' : 'project').then(outcome => {
+          push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]); onClose();
+          if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
+        }, error => { onError(error); onClose(); }).finally(() => { if (mounted.current) setPreparing(false); });
+        return;
+      }
       if (choice && port.fix && ['activate', 'deactivate', 'reconcile'].includes(action!)) setFix({ choice, action: action as 'activate' | 'deactivate' | 'reconcile' });
       return;
     }
@@ -102,7 +121,13 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     if (preparingRef.current) return;
     preparingRef.current = true; setPreparing(true);
     // Recheck at confirmation; only a successful governed preparation can change the session pin.
-    Promise.resolve().then(() => port.prepare?.(choice, port.reasoning?.())).then(async () => {
+    Promise.resolve().then(async () => {
+      if (provider?.subscriptionReadiness?.recognizes(choice.reference)) {
+        const readiness = await provider.subscriptionReadiness.inspect('chat', choice.reference);
+        if (readiness.state === 'unavailable') throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: subscriptionReadinessText(readiness, locale) } });
+      }
+      await port.prepare?.(choice, port.reasoning?.());
+    }).then(async () => {
       if (!mounted.current) return;
       port.pin(choice, fresh === true);
       push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label, provider: choice.providerLabel ?? choice.group }),
@@ -122,7 +147,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       { id: 'keep', label: view.fixKeep ?? words.shadowKeep, unscoped: true }] }} body={[{ spans: [span(fix.choice.detail)] }, { spans: [span(fix.choice.exact)] }]}
     onResult={result => { if (result.kind !== 'selected' || result.id !== 'apply') { setFix(null); return; }
       setPreparing(true); const selected = fix; setFix(null);
-      port.fix!(selected.choice, selected.action).then(() => port.inspect()).then(setView, onError).finally(() => setPreparing(false)); }} />;
+      port.fix!(selected.choice, selected.action).then(inspect).then(setView, onError).finally(() => setPreparing(false)); }} />;
   if (preparing) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={() => { mounted.current = false; onClose(); }} onResult={() => undefined} />;
   if (shadow) {
@@ -144,6 +169,6 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const body = [...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     ...(tokens !== null && focused ? [{ spans: [span(fillTemplate(words.switch.title, { model: focused.label, tokens }), { role: 'warning' as const })] }] : []),
     ...(focused ? [{ spans: [span(focused.exact, { role: 'muted' as const })] }, ...(focused.command ? [{ spans: [span(focused.command, { role: 'muted' as const })] }] : [])] : [])];
-  return <PickerWindow title={[span(view.title, { bold: true })]} body={body} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} position={labels.position}
+  return <PickerWindow submitFilter title={[span(view.title, { bold: true })]} body={body} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} position={labels.position}
     initial={state} onState={setState} onResult={result => chosen(result)} />;
 }

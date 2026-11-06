@@ -20,7 +20,7 @@ export type { AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, Age
 export type { ServicePolicyTarget, ServicePolicyGrant } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
-export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engine/core/scheduling/index.js';
+export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, capacityResourceKeySchema, SchedulingError } from '#engine/core/scheduling/index.js';
 export type { ReservationDiagnostic, ReservationDiagnosticReason, ReservationDiagnosticSite } from '#engine/core/scheduling/index.js';
 export * from '#engine/core/runs/index.js';
 export * from '#engine/core/run-proposal/index.js';
@@ -44,7 +44,7 @@ export * from '#engine/core/model-invocation/index.js';
 export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ProviderSpendAccountPolicyAuthorization, AgentToolPolicyAuthorization } from '#engine/core/policy/index.js';
-export { WorkTargetPolicyAuthorization, executionResourceAuthorization, workTargetAttemptAuthorization, authorizeWorkTargetUse } from '#engine/core/policy/index.js';
+export { WorkTargetPolicyAuthorization, executionResourceAuthorization, workTargetAttemptAuthorization, authorizeWorkTargetUse, workingTreeDeliveryAuthorization } from '#engine/core/policy/index.js';
 export type { WorkTargetAction } from '#engine/core/policy/index.js';
 export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';
@@ -61,6 +61,7 @@ export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchem
 export type { CollectedOutputFile } from '#engine/core/supervisor/index.js';
 
 export * from '#engine/core/workspace-patch/index.js';
+export * from '#engine/core/working-tree-rollback/index.js';
 export * from '#engine/core/delivery-summary/index.js';
 export * from '#engine/core/effect/index.js';
 export * from '#engine/core/adapter-registry/index.js';

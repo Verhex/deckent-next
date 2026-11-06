@@ -166,3 +166,14 @@ secret-store data and encryption key separately. Monitor refuses an unknown scop
 evidence or unknown, never an execution backend. The CLI Run report includes read-only per-channel totals of visible attempts; missing values,
 partial coverage and measured-tariff versus provider billing remain explicit, with no period or reset semantics. These are source/author claims;
 independent, hosted and live acceptance remain separate.
+
+K29 authoring: `coding template --provider <id> --kind <kind> --connection <profile-id> --preview|--apply`
+selects one connected headless invocation profile in the current scope. Trusted composition reuses model-use source/person/policy/activation
+checks and reads its persisted login-capacity resource; callers cannot supply a worker binding or model-use pin. The resource UUID is the
+worker connection identity; the profile digest pins the selected model profile. Missing source binding/capacity requires reconnect; no agent
+capability or a provider mismatch is a typed refusal. Preview launches nothing. The existing person witness, governed config writer and CAS
+remain mandatory for apply. Explicit `--connection` or `--docker` can replace a coding-template kind binding; other profile kinds remain protected,
+and immutable historical profiles/Run snapshots are retained. `--docker` restores v1 through the same preview/apply path. The coding list and
+preview show the worker path and connection. Mounted BeUser, independent review and live/N1 acceptance remain separate from author checks.
+Subscription bindings use `disabled` CLI discovery (Deckent worker instructions remain governed); an explicit repository mode is refused
+before publication. Explicit rebind/rollback derives from that kind's bound profile, so retained historical profiles cannot make it ambiguous.

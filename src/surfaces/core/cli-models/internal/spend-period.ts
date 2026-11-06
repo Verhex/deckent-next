@@ -1,5 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
-import type { ProviderSpendAccountInspection } from '#engine/index.js';
+import { modelInvocationBillingAxis, type ProviderSpendAccountInspection } from '#engine/index.js';
+import type { ModelInvocationProfile } from '#domain/index.js';
 
 /** The installation's period, not the observer machine's time zone. The canonical checkpoint remains immutable. */
 export function spendPeriodLines(result: ProviderSpendAccountInspection, locale: Locale): string[] {
@@ -11,4 +12,9 @@ export function spendPeriodLines(result: ProviderSpendAccountInspection, locale:
   return [state.calendarMonths === 1 ? t('models.spending.period.monthly', { date, zone }, locale)
     : t('models.spending.period.calendar', { date, zone, months: state.calendarMonths }, locale),
     ...(state.legacyTransition ? [t('models.spending.period.legacy', {}, locale)] : [])];
+}
+
+/** BeUser r-rest 3: whether a scope has a metered model connection (an API budget then matters); subscription and local ones never need one. */
+export function scopeHasMeteredModel(profiles: readonly ModelInvocationProfile[], scopeId: string | null): boolean {
+  return profiles.some(profile => profile.scopeId === scopeId && modelInvocationBillingAxis(profile) === 'metered');
 }

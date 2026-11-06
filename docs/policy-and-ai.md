@@ -92,7 +92,10 @@ or `actions: "all"` does not delegate a step. Resource ids/scopes can be selecte
 narrowest set. Generic `evaluate` or `reserve` is not permission to accept or resume failure.
 
 Fresh first-run policy gives the installing human authority and the MCP actor observation
-rules only. No AI decision step or write capability group is delegated by default. Existing
+rules plus, since template v19 (owner 2026-11-05), the person's own tool rules in the installed
+scope: model calls, read and scratch tools, edit/shell tools behind the card, and their three
+operations. The native agent and external MCP clients share this actor. No AI decision step,
+configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.
 
 ## Inspect, grant and revoke using available surfaces
@@ -214,8 +217,10 @@ is not business acceptance. The existing CLI is
 `deckent approval inspect --input approval-query.json --json`; query shape is
 `{"schemaVersion":1,"scopeId":"SCOPE_ID","approvalId":"APPROVAL_ID"}`.
 
-**“MCP read-only observer.”** Retain the first-run observation rules; inspect `policy mcp list`
-and grant no write groups. On an existing installation revoke each unwanted managed group
+**“MCP read-only observer.”** Since template v19 the first-run policy also lets the MCP actor
+call models and use agent tools; a company deny for the MCP actor on `model-invocation` and
+`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the v19 AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
+no write groups. On an existing installation revoke each unwanted managed group
 with the preview/apply sequence above and review custom/role grants too. “No managed groups”
 does not prove read-only when other grants exist. Tool discovery is not authority; ordinary
 inspection still needs the applicable scope and grants. MCP exposes no approval-decision tool.

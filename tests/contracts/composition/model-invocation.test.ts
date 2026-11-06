@@ -8,9 +8,10 @@ import { invokeConfiguredModel, inspectConfiguredModelInvocation, invokePeerConf
   inspectPeerConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationStore, openSqliteModelActivationReader, createOpenRouterPricedNative,
-  fetchOpenRouterTariff, readLocalOsIdentity, derivePrefixCacheSalt, PREFIX_CACHE_SALT_KEY_FILE } from '#adapters/index.js';
+  fetchOpenRouterTariff, readLocalOsIdentity, withMcpPrincipal, derivePrefixCacheSalt, PREFIX_CACHE_SALT_KEY_FILE } from '#adapters/index.js';
 import { ModelInvocationApplication, ModelInvocationCancellationApplication, ModelActivationApplication, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
-  verifyModelInvocationReceipt } from '#engine/index.js';
+  verifyModelInvocationReceipt, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
+import { firstRunPolicyTemplate } from '#domain/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
@@ -125,6 +126,16 @@ describe('configured native model invocation', () => {
     await f.policy(true, true);
     expect(await inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env }))
       .toMatchObject({ invocation: first.receipt, contentStatus: 'retained', responseContent: { kind: 'native-response', response: first.response } });
+  });
+
+  it('R4a: on the real first-run template v19 the MCP actor reads metadata of the person\'s invocation but never its content', async () => {
+    const f = await fixture(), first = await invokeConfiguredModel(f.project, f.command('person-call'), { env: f.env }), identity = readLocalOsIdentity();
+    const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: identity.issuer, subject: identity.subject }, ...FIRST_RUN_TOOL_NAMES });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(template.bindings), { mode: 0o600 }); clearConfigCache();
+    const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference };
+    expect(await inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env })).toMatchObject({ contentStatus: 'retained', responseContent: { kind: 'native-response' } });
+    expect(await withMcpPrincipal(() => inspectConfiguredModelInvocation(f.project, query, { env: f.env }))).toMatchObject({ invocation: first.receipt });
+    await expect(withMcpPrincipal(() => inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env }))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
 
   it('rejects accessors at the public boundary and validates persisted response limits without imposing clock ordering', async () => {

@@ -14,6 +14,12 @@ export interface WorkerTreeGateOptions {
 /** S6: the deny paths the gate refuses are the terminal's credential floor (`CREDENTIAL_WORKSPACE_DENY`) — the same list, never a copy. */
 export const WORKER_TREE_DENY: readonly string[] = CREDENTIAL_WORKSPACE_DENY;
 export { WORKER_TREE_PATTERN_RULES } from './content.js';
+/** Owner 2026-11-05 (R9n): the deny rule (`deny-path:<glob>`) a repository-relative path meets in any normalized form, or null. */
+export function workerTreeDenied(path: string): string | null {
+  const forms = workerTreeDenyForms(path), hit = DENIED.find(entry => forms.some(form => entry.match(form)));
+  return hit === undefined ? null : `deny-path:${hit.pattern}`;
+}
+const DENIED = WORKER_TREE_DENY.map(pattern => ({ pattern, match: createGlobMatcher(pattern.toLowerCase()) }));
 const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 /** The clone's object store (history) and its index (the tree's own paths again) are the only entries not read; see the S6 report. */
 const UNREAD_GIT_ENTRIES: ReadonlySet<string> = new Set(['.git/objects', '.git/index']);

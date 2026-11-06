@@ -1,7 +1,7 @@
 import { mkdir, lstat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
-import { GitWorkspaceBroker, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { prepareIntegrationSnapshot, assertIntegrationBefore, assertIntegrationSnapshot, patchDigest, WorkspacePatchError, type IntegrationIntent, type IntegrationManifest, type IntegrationTarget, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
+import { GitWorkspaceBroker, runBaseRepository, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
+import { prepareIntegrationSnapshot, workingTreeSource, assertIntegrationBefore, assertIntegrationSnapshot, patchDigest, WorkspacePatchError, type IntegrationIntent, type IntegrationManifest, type IntegrationTarget, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
 import { hashAlgorithmOf, readWorkspace, snapshotDigest, SnapshotBudget } from './snapshot.js';
 import { parseBaseListing } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
@@ -28,11 +28,14 @@ export class GitIntegrationTarget implements IntegrationTarget {
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || stat.mode & 0o022 || await realpath(path) !== path)
       throw new WorkspacePatchError('PATCH_UNSAFE');
   }
-  private broker(command: IntegrationIntent['command']) { return new GitWorkspaceBroker({ ...this.options, workspaceRoot: this.location(command) }); }
+  /** R9n: a working-tree patch's candidate is cloned out of its Run's private base repository (the patch's source pins the mode). */
+  private broker(command: IntegrationIntent['command'], patch: WorkspacePatch) {
+    return new GitWorkspaceBroker({ ...this.options, workspaceRoot: this.location(command), ...workingTreeSource(patch.source) ? { runBase: runBaseRepository(this.options.workspaceRoot, patch.identity) } : {} });
+  }
   private budget() { return new SnapshotBudget(this.limits, Date.now() + this.options.timeoutMs); }
   private async expected(command: IntegrationIntent['command'], patch: WorkspacePatch, baseCommit: string) {
     await this.directory(join(this.options.workspaceRoot, 'integrations')); await this.directory(this.location(command));
-    const lease = await this.broker(command).openRecorded(command.identity);
+    const lease = await this.broker(command, patch).openRecorded(command.identity);
     if (!lease || lease.sourceBase.sourceFingerprint !== patch.source.sourceFingerprint) throw new WorkspacePatchError('PATCH_CONFLICT');
     // Base identity only: every `before` must be exactly the base object (mode and blob id); no base content is read.
     const git = new GitCommand({ ...this.options, sourceRoot: lease.workspace }); await git.custody();
@@ -50,7 +53,7 @@ export class GitIntegrationTarget implements IntegrationTarget {
     // Exclusive directory is a second fence against unknown filesystem residue.
     await mkdir(this.location(intent.command), { mode: 0o700 });
     const actual = await observeIntegration(this.options, this.limits, patch);
-    const lease = await this.broker(intent.command).allocate({ schemaVersion: 1, identity: intent.command.identity, baseCommit: actual.head });
+    const lease = await this.broker(intent.command, patch).allocate({ schemaVersion: 1, identity: intent.command.identity, baseCommit: actual.head });
     if (this.prospective) {
       await copyPrivateCommit(this.options, this.prospective.repository, lease.workspace, observation.head, actual.head);
       await new GitCommand({ ...this.options, sourceRoot: lease.workspace }).run(['checkout', '--detach', observation.head]);

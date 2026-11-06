@@ -353,7 +353,7 @@
   "terminal.banner.logoAscii": " __\n|  \\\n|  |\n|__/",
   "terminal.banner.title": "Deckent {version}",
   "terminal.banner.project": "Project {name} · {path}",
-  "terminal.banner.model": "Model {model}",
+  "terminal.banner.model": "Model: {model}",
   "terminal.banner.hint": "/help · Shift+Tab mode · ? shortcuts",
   "terminal.banner.compact": "Deckent {version} · {name} · /help · ? shortcuts",
   "terminal.fullAccess.banner": "Full access is on: tool calls run without asking — host shell, destructive commands, the write floor, .git. Deckent's own state, policy, approvals, audit and credentials stay closed; deny rules still hold; every call is audited; for this session only. It suits an isolated environment best.",
@@ -445,7 +445,7 @@
   "terminal.admin.usage.completion": "  Completion: {tokens} tokens",
   "terminal.admin.usage.reasoning": "  Reasoning: {reasoning}",
   "terminal.admin.status.service": "Runtime service now: instance {instance}, pid {pid}, build {build}",
-  "terminal.slash.provider": "Connect a provider (masked key, free check) or disconnect it",
+  "terminal.slash.provider": "Connect a model (subscription sign-in or API key) or disconnect it",
   "terminal.info.usage.section.live": "Live spend account",
   "terminal.info.usage.key.budget": "Budget",
   "terminal.info.usage.key.revision": "Budget revision",
@@ -471,5 +471,9 @@
   "terminal.shell.queued": "{count} waiting to send",
   "terminal.shell.dropped": "While Deckent prepares, only the first {count} sent lines are kept; later ones were not taken.",
   "terminal.info.doctor.poolSetup": "Work cannot start until the worker pool is set up. Open /setup to complete the missing worker and pool steps; deckent doctor lists them outside the terminal.",
-  "terminal.info.doctor.sandbox.selection": "This is the current selection, checked again for each command. Starting the runtime can prepare bundled bubblewrap, which then takes precedence over Landlock."
+  "terminal.info.doctor.sandbox.selection": "This is the current selection, checked again for each command. Starting the runtime can prepare bundled bubblewrap, which then takes precedence over Landlock.",
+  "terminal.approval.k23.assurance": "This background call needs your witnessed terminal decision; the service binds this card to your current terminal.",
+  "terminal.approval.k23.call": "Attempt: {attempt} · argsDigest: {digest}",
+  "terminal.approval.k23.wait": "Waiting for your approval · Run {run} · Task {task} · Attempt {attempt} · {tool} → {target} · {reason} · {seconds}s left. Open /approvals.",
+  "terminal.approval.k23.expired": "Approval expired; the task did not complete."
 }

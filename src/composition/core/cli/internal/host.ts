@@ -1,6 +1,7 @@
+import { nativeCliAgent } from '#adapters/index.js';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
-import { inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
+import { inspectConfiguredBrainModels, inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, steerRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions, inspectLegacyProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
@@ -15,7 +16,7 @@ import { inspectConfiguredMemoryRollout } from '#composition/core/memory-rollout
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory, proposeConfiguredMemory, verifyConfiguredMemory, retireConfiguredMemory, inspectConfiguredMemoryEvaluators,
   reviewConfiguredMemory, listConfiguredMemorySource, purgeConfiguredMemory, resolveConfiguredMemoryContest, countConfiguredMemoryPurgesPending } from '#composition/core/memory/index.js';
-import { listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, inspectConfiguredSkill, defineConfiguredAgent, defineConfiguredSkill, importConfiguredSkill,
+import { prepareConfiguredAgentUse, listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, inspectConfiguredSkill, defineConfiguredAgent, defineConfiguredSkill, importConfiguredSkill,
   listConfiguredSigners, enrolConfiguredSigner, addConfiguredSigner, revokeConfiguredSigner, repairConfiguredSigners, inspectConfiguredAgentStats, listConfiguredSuggestions, inspectConfiguredSuggestion,
   changeConfiguredStanding, dismissConfiguredSuggestion, bulkConfiguredStanding, listConfiguredRevokedPromotions, draftConfiguredSuggestion, defineConfiguredFromSuggestion, inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
@@ -40,7 +41,7 @@ import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
-import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat, terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
+import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat, terminalSecretGrantOffer, inspectConfiguredNativeChat } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
@@ -67,14 +68,14 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     listBeuserJourneys: async () => (await import('#composition/core/beuser/index.js')).listConfiguredBeuserJourneys(),
     verifyAudit: verifyConfiguredAudit, listAudit: listConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
-    executeHub: (root, request, options, signal) => executeConfiguredHub(root, request, options, {}, signal), prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions, listAgents: listConfiguredAgents, inspectAgent: inspectConfiguredAgent, listSkills: listConfiguredSkills, inspectSkill: inspectConfiguredSkill, defineAgent: defineConfiguredAgent, defineSkill: defineConfiguredSkill, inspectAgentStats: inspectConfiguredAgentStats, inspectCatalogMonitor: inspectConfiguredCatalogMonitor, importSkill: importConfiguredSkill, listSigners: listConfiguredSigners, enrolSigner: enrolConfiguredSigner, addSigner: addConfiguredSigner, revokeSigner: revokeConfiguredSigner, repairSigners: repairConfiguredSigners, listSuggestions: listConfiguredSuggestions, inspectSuggestion: inspectConfiguredSuggestion, changeStanding: changeConfiguredStanding, dismissSuggestion: dismissConfiguredSuggestion, bulkStanding: bulkConfiguredStanding, listRevokedPromotions: listConfiguredRevokedPromotions, draftSuggestion: draftConfiguredSuggestion, defineFromSuggestion: defineConfiguredFromSuggestion,
+    executeHub: (root, request, options, signal) => executeConfiguredHub(root, request, options, {}, signal), prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions, prepareAgentUse: prepareConfiguredAgentUse, listAgents: listConfiguredAgents, inspectAgent: inspectConfiguredAgent, listSkills: listConfiguredSkills, inspectSkill: inspectConfiguredSkill, defineAgent: defineConfiguredAgent, defineSkill: defineConfiguredSkill, inspectAgentStats: inspectConfiguredAgentStats, inspectCatalogMonitor: inspectConfiguredCatalogMonitor, importSkill: importConfiguredSkill, listSigners: listConfiguredSigners, enrolSigner: enrolConfiguredSigner, addSigner: addConfiguredSigner, revokeSigner: revokeConfiguredSigner, repairSigners: repairConfiguredSigners, listSuggestions: listConfiguredSuggestions, inspectSuggestion: inspectConfiguredSuggestion, changeStanding: changeConfiguredStanding, dismissSuggestion: dismissConfiguredSuggestion, bulkStanding: bulkConfiguredStanding, listRevokedPromotions: listConfiguredRevokedPromotions, draftSuggestion: draftConfiguredSuggestion, defineFromSuggestion: defineConfiguredFromSuggestion,
     listMemory: listConfiguredMemory, searchMemory: searchConfiguredMemory, inspectMemory: inspectConfiguredMemory, proposeMemory: proposeConfiguredMemory, verifyMemory: verifyConfiguredMemory, retireMemory: retireConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
     reviewMemory: reviewConfiguredMemory, listMemorySource: listConfiguredMemorySource, purgeMemory: purgeConfiguredMemory, resolveMemoryContest: resolveConfiguredMemoryContest,
     inspectMemoryRollout: inspectConfiguredMemoryRollout,
     countMemoryPurgesPending: countConfiguredMemoryPurgesPending,
     ...configuredTargetQueueTerminal(root),
     deliverWorkspaceIntegration: delivery.deliver,
-    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
+    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, rollbackWorkingTreeDelivery: delivery.rollbackFiles, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
     inspectWorkerTranscript: inspectConfiguredWorkerTranscript, executeOperation: executeConfiguredOperation, compensateOperation: compensateConfiguredOperation, inspectOperation: inspectConfiguredOperation,
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration, describeDeliverySummaries: describeConfiguredDeliverySummaries, // TESLIM-KARTI-OZET card summaries
     // OTONOM-TESLIM shadow (B1 store): read only for tickets the service already returned to this person (list/inspect); never on a consent card.
@@ -122,6 +123,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       headlessLogin: Boolean(kind.connect?.personOnly && (kind.connect.adapter === 'native-cli-headless' || kind.connect.headless)) })),
     /* PV 2a/3: the isolation check before a row is offered, the Brain's own login dir before the sign-in, and the sign-in itself (the existing
        `models login` path: person check, realm seal, registry argv and time bound; the window owns the terminal hand-over around it). */
+    loginMethods: connection => {
+      const family = PROVIDER_CONNECT_KINDS.find(kind => kind.id === connection)?.connect?.protocolFamily;
+      return family ? nativeCliAgent(family)?.agent.loginMethods.map(row => row.method) ?? [] : [];
+    },
     isolationRefusal: options => headlessIsolationRefusal(options), loginDir: (connection, options) => headlessLoginDir(connection, options, person(options)),
     login: (command, options) => loginConfiguredHeadless(command, options, async () => true, person(options)),
     endpoint: providerEndpoint, probe: async (input, signal) => { const result = await probeProviderConnection(input, signal ? { signal } : {});
@@ -144,7 +149,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
     inspectWorkerInstructions: (projectRoot, options) => inspectConfiguredWorkerInstructions(projectRoot, options).catch(error => { throw queryFailure(error); }),
     changeWorkerInstructionTrust: (projectRoot, input, options) => changeConfiguredWorkerInstructionTrust(projectRoot, input, options).catch(error => { throw queryFailure(error); }),
-    inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,
@@ -179,9 +184,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
     siwc: { connection: PROVIDER_CONNECT_KINDS.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id)!.id, usageUrl: SIWC_USAGE_SUMMARY.manageUrl, execute: executeConfiguredSiwc },
     inspectSiwcConnections: inspectConfiguredSiwcConnections,
+    inspectBrainModels: inspectConfiguredBrainModels, // R9b: /model marks the Brain's models
     inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, person(options)), assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
     /* T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state. */ planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
-    inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels,
+    inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels, inspectSubscriptionReadiness: inspectConfiguredNativeChat, // R8e: the seal a guarded turn wrote
     planProfileProtocol: planConfiguredProfileProtocol, openProviderWorkspaces: openConfiguredProviderWorkspaces,
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),

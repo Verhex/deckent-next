@@ -12,7 +12,7 @@ const oid = 'a'.repeat(40);
 // Source checked 2026-09-30: https://github.com/git/git/blob/v2.55.0/builtin/ls-tree.c
 async function listing(record: string) {
   fixture.stdout = Buffer.from(record);
-  const lease = { baseCommit: oid, sourceBase: { source: { repositoryRoot: '/repo' } } } as unknown as GitWorkspaceLease;
+  const lease = { baseCommit: oid, sourceBase: { adapter: { id: 'git', version: 1 }, source: { repositoryRoot: '/repo' } } } as unknown as GitWorkspaceLease;
   const options = { gitExecutable: '/usr/bin/git', outputBytes: 65536 } as GitWorkspaceOptions;
   return listBase(lease, options, new SnapshotBudget({ maxBytes: 65536, maxEntries: 10, maxDepth: 10, maxPathBytes: 1024 }, Date.now() + 10_000));
 }

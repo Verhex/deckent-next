@@ -162,6 +162,7 @@ export const CLI_CATALOG = [
   // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
   { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
     action('inspect', 'observe', 'agents.help.action.inspect', 'agents.help.detail', { requires: ['<id>'] }),
+    action('use', 'observe', 'headless.agent.k13.agents.action', 'headless.agent.k13.agents.help', { requires: ['<id>', '--task <id>', '--revision <number>'] }),
     action('skills', 'observe', 'agents.help.action.skills', 'agents.help.detail'),
     action('skill', 'observe', 'agents.help.action.skill', 'agents.help.detail', { requires: ['<id>'] }),
     action('define', 'observe', 'agents.help.action.define', 'agents.help.detail', { requires: ['--input <file>'] }),
@@ -287,9 +288,9 @@ export const CLI_CATALOG = [
     action('shutdown', 'developer', 'cli.help.action.shutdown', 'cli.help.runtime'),
     action('restart', 'developer', 'cli.help.action.restart', 'cli.help.runtime'),
   ] },
-  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
+  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'k29.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
     action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help', { requires: ['--input <file|->'] }),
-    action('template', 'developer', 'cli.help.action.codingTemplate', 'cli.coding.template.help'),
+    action('template', 'developer', 'cli.help.action.codingTemplate', 'k29.coding.template.help'),
     { name: 'instructions', group: 'developer', summary: 'cli.help.action.coding.instructions', detail: 'cli.coding.instructions.help', children: [
       action('status', 'developer', 'cli.help.action.coding.instructions.status', 'cli.coding.instructions.help'),
       action('trust', 'developer', 'cli.help.action.coding.instructions.trust', 'cli.coding.instructions.help'),

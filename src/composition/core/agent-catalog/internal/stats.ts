@@ -26,11 +26,7 @@ export async function inspectConfiguredAgentStats(root: string, input: unknown, 
     return await application(c, await c.path()).inspectStats(query);
   } catch (error) { throw queryFailure(error); }
 }
-/**
- * S8-2/S8-3 aggregator pass off the hot path (F8 memory-distiller pattern): one bounded page per scope per reconciliation pass, after Nervous, recovery
- * and memory. `catalogEvolution.mode` off (default: nothing loads) | shadow (sealed suggestions, no narrowing, no card) | on; no model call. Its failure is
- * reported by the loop, never a reconciliation failure; Runs and selection never read its record.
- */
+/** Off: no loads; shadow/on: one bounded page off the hot path, no model call. The loop reports failures; Runs never read this record. */
 export function prepareConfiguredCatalogAggregation(projectRoot: string, options: ConfigLoadOptions, mode: string) {
   if (mode !== 'shadow' && mode !== 'on') return null;
   return Object.freeze({ async run(scopeId: string) {
@@ -38,11 +34,7 @@ export function prepareConfiguredCatalogAggregation(projectRoot: string, options
     catch (error) { throw queryFailure(error); }
   } });
 }
-/**
- * S8-3: the aggregator's own workload identity `<owner>/catalog-aggregator` (composition root only, held to its floor's exact list): it writes through the
- * catalog's standing application, signed by its own enrolled key (none: the pass writes nothing), and counts verified lesson refs under its own
- * `memory`/`inspect` (refs and digests only; a refused or held read counts none).
- */
+/** The aggregator uses its own workload principal, enrolled key and memory read filter; no key means no write, refused/held lessons count none. */
 function aggregatorOf(c: Context, scopeId: string): Pick<CatalogEvolutionDependencies, 'writer' | 'lessons'> {
   const principal = catalogAggregatorFor(c.principal, scopeId), standing = new AgentStandingApplication(catalogDependencies(c, principal));
   return { writer: { producer: { issuer: principal.issuer, subject: principal.subject }, ready: id => standing.ready(id), record: (id, change) => standing.record(id, change) },

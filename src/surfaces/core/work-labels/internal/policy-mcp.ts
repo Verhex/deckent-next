@@ -34,9 +34,11 @@ export function mcpCapabilityWords(locale: Locale) {
   };
 }
 
-export function modelConnectPullWords(locale: Locale) {
+/** R1a: a subscription has neither a key nor a price list, so its "not in catalog" row never speaks of either. */
+export function modelConnectPullWords(locale: Locale, subscription = false) {
   return { connected: t('models.connect.pull.connected', { model: '{model}' }, locale), unpriced: t('models.connect.pull.unpriced', { model: '{model}' }, locale),
-    notOnKey: t('models.connect.pull.notOnKey', { model: '{model}' }, locale), notInCatalog: t('models.connect.pull.notInCatalog', { model: '{model}' }, locale) };
+    notOnKey: t('models.connect.pull.notOnKey', { model: '{model}' }, locale),
+    notInCatalog: subscription ? t('models.connect.pull.notInCatalogSubscription', { model: '{model}' }, locale) : t('models.connect.pull.notInCatalog', { model: '{model}' }, locale) };
 }
 
 /** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service.
@@ -45,7 +47,7 @@ export function modelConnectLines(result: ModelConnectResult, label: string, loc
   const subscription = billing === 'subscription';
   const step = (state: string) => state === 'written' ? t('models.connect.step.written', {}, locale) : state === 'present' ? t('models.connect.step.present', {}, locale)
     : t('models.connect.step.skipped', {}, locale);
-  return [...(result.models ?? []).map(model => ({ label: '', text: modelConnectPullWords(locale)[model.state].replace('{model}', model.nativeId) })), { label: t('tui.provider.model.field.model', {}, locale), text: label },
+  return [...(result.models ?? []).map(model => ({ label: '', text: modelConnectPullWords(locale, subscription)[model.state].replace('{model}', model.nativeId) })), { label: t('tui.provider.model.field.model', {}, locale), text: label },
     { label: t('tui.provider.model.field.steps', {}, locale), text: t('models.connect.steps', { catalog: step(result.steps.catalog), declaration: step(result.steps.declaration),
       profile: step(result.steps.profile), activation: step(result.steps.activation), carried: result.steps.carried }, locale), tone: 'muted' },
     { label: t('tui.provider.field.key', {}, locale), text: result.credentialRef === null ? subscription ? t('models.connect.keySubscription', {}, locale) : t('models.connect.keyNone', {}, locale) : result.keyStored === false

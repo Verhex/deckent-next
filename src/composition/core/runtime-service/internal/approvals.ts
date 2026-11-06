@@ -3,6 +3,7 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import { RuntimeServiceProtocolError, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, runtimeServiceResultCapacity, type RuntimeServiceRequest,
   clearSessionStandingSchema, sessionStandingClearanceSchema, SessionStanding, type SessionApprovalAnswers, type TurnDecisionCapabilities } from '#engine/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
+import { attendedWorkerApprovalInput } from './operations.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 
 /** Runtime approval operations, answered in the request's protocol shape (C12 G1/G2: a released client never receives a record it cannot parse). */
@@ -23,5 +24,6 @@ export async function executeRuntimeApproval(projectRoot: string, request: Runti
   const action = actions[request.operation as keyof typeof actions];
   // Subjects the client cannot parse are excluded in the page selection (LIMIT counts visible records) and the capacity applies to that page.
   const view = { excludeSubjects: approvalSubjectsHiddenFromProtocol(request.schemaVersion) };
-  return approvalResultForProtocol(request.schemaVersion, action, await configuredApproval(projectRoot, action, request.input, options, peer, capacity, view, decisions, answers));
+  const input = action === 'decide' ? await attendedWorkerApprovalInput(projectRoot, request.input, peer, options, decisions) : request.input;
+  return approvalResultForProtocol(request.schemaVersion, action, await configuredApproval(projectRoot, action, input, options, peer, capacity, view, decisions, answers));
 }

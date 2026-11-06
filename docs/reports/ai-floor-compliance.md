@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=379 floor=279 policy=2274 steps=48 uyumlu=2322 İHLAL=0
+ai-floor: routes=380 floor=279 policy=2280 steps=48 uyumlu=2328 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -207,6 +207,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | attempt / fixture-target / deliver-integration | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | attempt / fixture-target / deliver-integration | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | attempt / fixture-target / deliver-integration | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| attempt / fixture-target / deliver-working-tree | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| attempt / fixture-target / deliver-working-tree | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| attempt / fixture-target / deliver-working-tree | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| attempt / fixture-target / deliver-working-tree | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| attempt / fixture-target / deliver-working-tree | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| attempt / fixture-target / deliver-working-tree | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | attempt / fixture-target / evaluate | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | attempt / fixture-target / evaluate | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | attempt / fixture-target / evaluate | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -2345,8 +2351,17 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 ## Source custody (LF-normalized SHA-256)
 
-- `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
-- `src/domain/core/approval/internal/contract.ts`: `f9a1ea3267e7aa943f35ff9d4cd7f27eab878a3adf6c2a602aea1b18b8861928`
+- `src/domain/core/agent-tool/index.ts`: `ee21687140f2ad66c4dc91b70c2047cbac9a97890fda524b69f7100395270549`
+- `src/domain/core/agent-tool/internal/contract.ts`: `4c587623e4e422972c3256b7de84d99ab9f7b38a919b1ae18a061b5ad5200735`
+- `src/domain/core/agent-tool/internal/text.ts`: `9ee5a731b6745d74c261e71c0f805494ca206474a632513f237e792e308192d2`
+- `src/domain/core/agent-turn/index.ts`: `a2eaa7a3fae83e76dfbf80e957d8fe2770a76e728246753189289697013c1a3b`
+- `src/domain/core/agent-turn/internal/card-facts.ts`: `639d6a00c50c9f5a15ed5822cb7dfcbfdd3487480c20ab00d389aebf24376930`
+- `src/domain/core/agent-turn/internal/continuation.ts`: `29d689f7e5f0f1ad5eb4baa2d15ea69c06030e0dd359f1de8d011c197d859c35`
+- `src/domain/core/agent-turn/internal/contract.ts`: `199e57c9d672f85fd45ebe6a88a516463703c0ee3e7b26a42292b949b1ab0ee4`
+- `src/domain/core/agent-turn/internal/scratch.ts`: `e3823e693b8452d50006bdd95d1b2f65d37530b499802c32739a73dfc787a4f4`
+- `src/domain/core/agent-turn/internal/workspace-files.ts`: `ae38afcf5d38a97f0b4f468c70091ce1e449c2d3e10f11677a2116eb2fcfeb31`
+- `src/domain/core/approval/index.ts`: `28a736f944f2774fab323cb5eff739c87eade4d6f9ce9f241181dfdcdfe817a3`
+- `src/domain/core/approval/internal/contract.ts`: `969a1cac9ef5ea2f6e3c4223425de61ccd5cc45911cbd52eecf4266ff512633f`
 - `src/domain/core/attempt/index.ts`: `a2234fa31bde2aa77747a7ffe545103827e75935bcf3762be241cdd0928873a9`
 - `src/domain/core/attempt/internal/contract.ts`: `b22f69acb87323015b0f971f7137b2ad8b7ace0d2924434fcb6514f28bf765b0`
 - `src/domain/core/attempt/internal/dispatch-loss.ts`: `d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f`
@@ -2355,7 +2370,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/audit/index.ts`: `d9c5969bbd2bebfe163fe6af7f406622180a44bcfd3b8f0568069a40b0c3523a`
 - `src/domain/core/audit/internal/authority-decision.ts`: `b5f08e4469690230080daf67076d4031dc10d067f5caa8c3f027456cd529965d`
 - `src/domain/core/audit/internal/checkpoint.ts`: `c722e6d1c3dc88659787c02935e4e51a9017dae814d9cf3d901cabd079b3159c`
-- `src/domain/core/audit/internal/contract.ts`: `69bd5357f10ebeaa6caa4e5f45d9834e193f65e6a7cdb8d74ab46fd199157fae`
+- `src/domain/core/audit/internal/contract.ts`: `04fb01e678e8e9dd16aeaffcdcef09327fd259ba5c4da8ad55f25c78dfdb7bde`
 - `src/domain/core/audit/internal/follow.ts`: `cacdcb809b11e1adbc771abb152e5370a8940c33ea51211024592d2f3b595665`
 - `src/domain/core/command/index.ts`: `720255d242c75b6e1b82cef56eda2997afccfcb429185d340bd0ce5d36159723`
 - `src/domain/core/command/internal/command.ts`: `506b6aef4f3b00b190d9328056273ca099d0751c2c3b2941585498155172bd0e`
@@ -2364,6 +2379,21 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/effect/internal/contract.ts`: `5a77a060cdd1f24d1ac26e4bd0837c37103099abced89e18cfc78a0e08ad2e59`
 - `src/domain/core/effect/internal/operation-input.ts`: `a70ab4e9d030af5576ea27c068213cbf594736f3cbef5c296304cc7ca5447504`
 - `src/domain/core/effect/internal/queue.ts`: `f408237a4c7eac31eb1df284872eecdd8c673aac6f00371a0791c35263a49c34`
+- `src/domain/core/model-activation/index.ts`: `7de4042b3f42dcd25f0e2d0761b8d5badf145b8728c9f43305f1532c12f67d24`
+- `src/domain/core/model-activation/internal/catalog.ts`: `e54b82759947f853ef3efa9707d1b7a8fa1a69010c93144517130f05160bbfb0`
+- `src/domain/core/model-activation/internal/connect.ts`: `4f43f9531e6592ef328eb0b478eeb9ff2f029182f305299ffb46768bd09d4859`
+- `src/domain/core/model-activation/internal/contract.ts`: `bb4a3c52119219751e36c872631f3b356b6bfcc2efc0852d3bdca4e5ea0f9a3a`
+- `src/domain/core/model-activation/internal/query.ts`: `0bb322eac9c158a10361d080b3d226b201a86e8ec3f1ea9dafc45e2b301f5386`
+- `src/domain/core/model-activation/internal/transition.ts`: `e59b1cee0249011fae07d8bbba9fe147dc92b389d9481433b51a1a5c84c6e8c4`
+- `src/domain/core/model-invocation/index.ts`: `5b9fbc5be25a62180521f0fa39056585e3a5d8abd090251d94684a18a3e47103`
+- `src/domain/core/model-invocation/internal/cancellation.ts`: `c4b9a97fc8cf59ff5119e5f798f8e11f550e82065d51047ad86bb4dca598ab00`
+- `src/domain/core/model-invocation/internal/chat-request.ts`: `b64e903c1c0f4d76a1c6167362b53003ec346572419d0fed4cd442c7e9e9ff27`
+- `src/domain/core/model-invocation/internal/contract.ts`: `ca9e705e68b303f87f4543cac107cfcb1037cb29b3ecebb36223f0f498063027`
+- `src/domain/core/model-invocation/internal/delegation.ts`: `c74ecd6e9c8adb022e4daaf199781321691209138f390ecc367e0d24bd5dfe12`
+- `src/domain/core/model-invocation/internal/delta.ts`: `b4597026961baa1951dc00db8df5eadf7398d8e07a3af43ea4a00f1dc43b33a6`
+- `src/domain/core/model-invocation/internal/headless-rejection.ts`: `a9f7d53e4f9ec8e51770997f288e9f497a90f8bf808dfcf26b2fb82b516c984c`
+- `src/domain/core/model-invocation/internal/plan-usage.ts`: `38fd6eb92cb63cbec1e5c5f168a0845c700c82f9a3b0cc6db97f1910f760070c`
+- `src/domain/core/model-invocation/internal/response-evidence.ts`: `d4301b490989dfa21af479b13bf5a8ee966d607a3de218bb0b97e84cd00c60d2`
 - `src/domain/core/policy/index.ts`: `1dc2a50e569e944b552fdf474935f62ae34c02bb23e6b1a9ff9080ed44519a3c`
 - `src/domain/core/policy/internal/administer.ts`: `ee739d69d7090ed64479adf55e9e7d16e3c1c86f222608e62c20adabb410c99b`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
@@ -2372,7 +2402,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/delegations.ts`: `4d25449ab3e8d129c6969c0f7a57ecab657c8e4c034b16460fb142821113db60`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `fe3a96a8833ebf599ff2cdfa408979817413f044468dfc38d98c897e7e692cbd`
-- `src/domain/core/policy/internal/first-run-template.ts`: `a5d4bc8c30ddd06e1d97959818dace12ba3d6ec2023cc48e430179ba232b0f5a`
+- `src/domain/core/policy/internal/first-run-template.ts`: `ee112302432a354dac96b328909f580ef7a0f7c46ede0cb0f13641dedede208a`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `4d86bea76446cf118025ed9e207e3bf6ea73163e3b9a3b153a81ec1aa411c90a`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `a8fe9c7e856e448a08c4fbfaf8faadf790457aaf53e699df43f9d7a2328fc117`
@@ -2381,7 +2411,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/schema.ts`: `82ac99e4ffbc9f47e1b214b6181002b129a44b51b26b0b79170e4ae31d939c26`
 - `src/domain/core/policy/internal/scope.ts`: `83aae1c222a28bcc1897fa9791fb2bf161f07ad9155c4b26155a70829287ef26`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `22cd392649d4ac22c230d7f71123ff2dc046e157014221e2d8e7687dfd23a044`
+- `src/domain/core/policy/internal/vocabulary.ts`: `7c3898d398aa39b4d0548cf26eb18f5bc55d987ddb125e5d60355100b33eee48`
 - `src/domain/core/primitives/index.ts`: `1219c370affc304e22468acc310ab3a09231f86e49c29bd9ebe2cd9daa06699a`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `7b1caed16bde5e58724f1613234068f329eed79f59b2c9170522241359b226b8`
@@ -2402,7 +2432,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/provider-catalog/internal/endpoint-key.ts`: `c8dd1bc19a4d4a92776062154ebd4b367930cdee6a682e16e5726f756fea258a`
 - `src/domain/core/provider-catalog/internal/model-maker.ts`: `f21deeedab722f6f50bb21f268d9aa9bbd1f31049683bd9e85cbeeaf9d8c019c`
 - `src/domain/core/provider-catalog/internal/model-role.ts`: `6e46ed55632273ae8d5f5ad5e7242246c3b65b3940b8708248ddef289c5a0f16`
-- `src/domain/core/provider-catalog/internal/native-cli.ts`: `84d614f156c438109e52e24c81472c053e2341ae80e6a173b7ca9ad2e76e28d2`
+- `src/domain/core/provider-catalog/internal/native-cli.ts`: `0f0de18486e9abe7c6a7bee0132e291f93e9fceb9c6789af48188086b1bdfedb`
 - `src/domain/core/provider-catalog/internal/worker-effort.ts`: `18072f14a324e255c663dec0e94fb29199e2d58304f5532222b95399208b2458`
 - `src/domain/core/recovery/index.ts`: `8dba4782e7fe0c7cd7ba1b22e3a08a4dfa6ca40391fa419bfeefe9e4db350fa7`
 - `src/domain/core/recovery/internal/case.ts`: `28f46f6e1ebc68b7e028ea9e429f528e4e4109d976cd87a27df212f235c5fdaf`
@@ -2411,8 +2441,8 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/recovery/internal/hold-note.ts`: `e6b900015b11ff80ecbfe0ef8afd696fdbbbdf27a902939bc8dc5d79b22e56ce`
 - `src/domain/core/recovery/internal/policy.ts`: `eda53aff41c8819cf9e3e6d86ae9ed7a84f3813596916550082b8816b9c67c8a`
 - `src/domain/core/recovery/internal/rollout.ts`: `a87b41b87cf318005c140e200ca166dd3f0b62858f7d9b4212565714ce50e9b3`
-- `src/domain/core/worker-event/index.ts`: `f61bccb50dc563df8bacaf8d355a6b575b0ec8e15112c83477674f6118e2fa61`
+- `src/domain/core/worker-event/index.ts`: `9ce6ebec3f207fe86e9347ffb6fc6718a840e26dcb786189f18783235e61848a`
 - `src/domain/core/worker-event/internal/contract.ts`: `b8b3ca24ec2fa15b9f9f037ab3bbcd4b4aa2c1640b81103497ebcbee5bc330ab`
-- `src/domain/core/worker-event/internal/models.ts`: `0fd0be806721a12b042fa7089726a0f8a9eb77b3a38582e982313736ebeead3e`
+- `src/domain/core/worker-event/internal/models.ts`: `fa02a493b17d14be5136dc82b9439df12ad4dfb323ab91851175b5b5c7704ae7`
 - `src/domain/core/worker-event/internal/quota.ts`: `30587994086aa7f9b8639bc37f187cfaa3aabe5f2ab48088b1fb527abcf79e7b`
 - `src/domain/core/worker-event/internal/report.ts`: `801aeb9141aeca8d2b4adf8f3c9ed1368221a2d4c06659c504db09a6bb3c509d`

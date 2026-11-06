@@ -7,6 +7,7 @@ import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index
 import { RunAdmissionApplication } from '#engine/index.js';
 import { fixtureRunAuthority } from '../support/run-authority.js';
 import { fixtureExecution } from '../support/execution-registry.js';
+import { bindCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = []; const authorities: ReturnType<typeof fixtureRunAuthority>[] = [];
 afterEach(async () => { for (const entry of authorities.splice(0)) entry.close(); for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const command = { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r',
@@ -87,4 +88,55 @@ it('admits nothing when the pinned custody cannot be written: Run row, progressi
   const check = new DatabaseSync(path, { readOnly: true });
   try { expect.soft(check.prepare('SELECT count(*) AS n FROM run_execution_intents').get()).toEqual({ n: 0 }); } finally { check.close(); }
   expect(outcome).toBe('RUN_WORKSPACE_CUSTODY_CONFLICT');
+});
+
+it('freezes trusted model-use evidence in every execution profile and leaves replay byte-exact', async () => {
+  const { store, verifier, authorization, poolAuthorization, context } = await fixture();
+  let pins = 0, rechecks = 0;
+  const pin = { schemaVersion: 1, companyId: 'fixture-company', profileDigest: 'a'.repeat(64), leaseId: 'fixture-lease' };
+  const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, { ...context, modelUse: {
+    // R9: the creator's mode at admission (v1 policy: standart) is offered for the worker ceiling; this Run needs no card, so none is kept.
+    async pin(execution, principal, workerMode) { pins++; expect(principal.subject).toBe('1'); expect(workerMode).toEqual({ mode: 'standart', askEdits: false });
+      return { ...execution, workerMode, tasks: execution.tasks.map(task => ({ ...task, profile: { ...task.profile, parameters: { ...task.profile.parameters, modelUse: pin } } })) }; },
+    async recheck(execution, principal) { rechecks++; expect(principal.subject).toBe('1');
+      expect(execution.tasks.map(task => task.profile.parameters.modelUse)).toEqual([pin]); },
+  } });
+  const result = await app.create(command);
+  expect((await store.loadRun('s', 'r'))!.execution.tasks[0]!.profile.parameters.modelUse).toEqual(pin);
+  expect((await store.loadRun('s', 'r'))!.execution.workerMode).toBeUndefined();
+  expect(await app.create(command)).toEqual(result); expect({ pins, rechecks }).toEqual({ pins: 1, rechecks: 1 });
+});
+it('records no Run when model-use consent disappears between pinning and the last admission check', async () => {
+  const { store, verifier, authorization, poolAuthorization, context } = await fixture();
+  let pinned = false;
+  const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, { ...context, modelUse: {
+    async pin(execution) { pinned = true; return execution; },
+    async recheck() { expect(pinned).toBe(true); throw Object.assign(new Error('PROJECT_ATTACHMENT_DENIED'), { code: 'PROJECT_ATTACHMENT_DENIED' }); },
+  } });
+  await expect(app.create(command)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect(await store.loadRun('s', 'r')).toBeNull(); expect(await store.loadRunReceipt('s', 'create')).toBeNull();
+});
+it('K17: resource bindings cross the fourth createRun argument into the same transaction and replay never repins them', async () => {
+  const f = await fixture(), db = new DatabaseSync(f.path);
+  let resourceKey: string;
+  try { resourceKey = bindCapacityResource(db, { kind: 'native-cli-headless', id: 'synthetic-login' }, { executionSlots: 1, inFlightSlots: 1 }).resourceKey; }
+  finally { db.close(); }
+  const calls: string[] = [];
+  const app = new RunAdmissionApplication(f.store, f.verifier, f.authorization, f.poolAuthorization, { ...f.context,
+    modelUse: { pin: async execution => execution, async recheck() { calls.push('recheck'); } },
+    async resources(execution, principal) { calls.push('resources'); expect(principal.subject).toBe('1'); expect(execution.tasks[0]!.taskId).toBe('t');
+      return [{ taskId: 't', resourceKey }]; } });
+  const result = await app.create(command), run = await f.store.loadRun('s', 'r');
+  expect((await f.store.loadRunResourceCapacity(run!)).bindings).toEqual([{ taskId: 't', resourceKey }]);
+  expect(await app.create(command)).toEqual(result); expect(calls).toEqual(['recheck', 'resources']);
+});
+it('K17: an unavailable capacity resource rolls back Run, receipt and progression intent together', async () => {
+  const f = await fixture();
+  const app = new RunAdmissionApplication(f.store, f.verifier, f.authorization, f.poolAuthorization, { ...f.context,
+    resources: async () => [{ taskId: 't', resourceKey: '12345678-1234-4234-8234-123456789abc' }] });
+  await expect(app.create(command)).rejects.toThrow('RUN_STORE_CORRUPT');
+  expect(await f.store.loadRun('s', 'r')).toBeNull(); expect(await f.store.loadRunReceipt('s', 'create')).toBeNull();
+  const db = new DatabaseSync(f.path, { readOnly: true });
+  try { expect(db.prepare('SELECT count(*) AS n FROM run_execution_intents').get()).toEqual({ n: 0 }); }
+  finally { db.close(); }
 });

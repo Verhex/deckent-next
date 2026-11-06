@@ -13,10 +13,13 @@ export type { Snapshot, BaseEntry, BaseListing } from '#engine/index.js';
 export { gitFailure } from '#engine/index.js';
 const decode = (bytes: Uint8Array) => new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
 function sourceGit(lease: GitWorkspaceLease, options: GitWorkspaceOptions, budget: SnapshotBudget) {
+  // R9n: a version-2 base lives only in the Run's private base repository; the caller's options must name it.
+  const root = lease.sourceBase.adapter.version === 2 ? options.runBase : lease.sourceBase.source.repositoryRoot;
+  if (!root) throw new WorkspacePatchError('PATCH_CONFLICT');
   return async (args: string[], maxBuffer: number) => {
     budget.time();
     try {
-      return (await exec(options.gitExecutable, localGitArgs(lease.sourceBase.source.repositoryRoot, args),
+      return (await exec(options.gitExecutable, localGitArgs(root, args),
       { env: GIT_LOCAL_ENV, timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer, encoding: 'buffer' })).stdout;
     } catch (error) { throw gitFailure(error); }
   };

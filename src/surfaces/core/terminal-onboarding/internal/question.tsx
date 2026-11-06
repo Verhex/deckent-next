@@ -4,7 +4,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cardCopyLabels, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import presentation from './presentation.json' with { type: 'json' };
 import { fillTemplate, humanRecordText, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
-import { isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
+import { cardCopyText, isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];
   step: number; total: number; initial?: string | null; text?: boolean }>;
@@ -21,7 +21,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
   readonly welcome?: WelcomeInput | undefined; readonly guard?: CardGuard | undefined;
   /** The process's known secrets: the Ctrl+Y copy passes the same record projection as every card's copy (`humanRecordText`). */ readonly known?: CliCardIo['known'];
   /** What the card says while that work runs: a write (`applying`) or a preview or check that writes nothing (`preparing`). */ readonly work?: CardWork;
-  /** Ctrl+Y sends the step's title and body (never the typed text) through the host's clipboard writer; absent off a TTY. */ readonly copy?: CardCopy | null }) {
+  /** Ctrl+Y sends the step's title, body and visible option labels (never the typed text) through the host's clipboard writer; absent off a TTY. */ readonly copy?: CardCopy | null }) {
   const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
   const [at, select] = useState(initial), [text, setText] = useState(''), [empty, setEmpty] = useState(false), [bodyAt, scroll] = useState(0), done = useRef(false), busy = useRef(false);
   const [applying, setApplying] = useState(false), [refused, setRefused] = useState(false), spinner = useSpinnerGlyph(applying);
@@ -32,6 +32,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
   usePaste(text => { if (text) yieldToTyping(); }, { isActive: welcome !== undefined });
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_MS); return () => clearTimeout(timer); }, [copied]);
+  const start = Math.max(0, at - height + 1);
   useInput((input, key) => {
     if (done.current) { if (busy.current) setRefused(true); return; }
     if (welcome && !key.ctrl && !key.meta && /[^\p{C}]/u.test(input)) { yieldToTyping(); return; }
@@ -39,7 +40,8 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
     if (input.length > 1 && !question.text) return;
     if (copy && isCardCopyKey(input, key)) {
       // Astra 2834 R1: file names and error messages reach this body unprojected; the copy redacts like the Window cards' copy (patterns + known values).
-      const text = humanRecordText([question.title, ...question.body].join('\n'), known), result = copy.write(text);
+      const text = humanRecordText(cardCopyText([{ text: question.title }], question.body.map(text => ({ spans: [{ text }] })),
+        question.text ? [] : question.choices.slice(start, start + height).map(row => row.label)), known), result = copy.write(text);
       setCopied(result.ok ? fillTemplate(copy.labels.sent, { count: [...text].length }) : result.reason === 'too-large' ? fillTemplate(copy.labels.tooLarge, { bytes: result.bytes, max: copy.maxBytes }) : copy.labels.unavailable);
       return;
     }
@@ -56,7 +58,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
     } else if (question.text && (key.backspace || key.delete)) setText(value => Array.from(value).slice(0, -1).join(''));
     else if (question.text && !key.ctrl && !key.meta && !input.includes('\u001b')) setText(value => (value + terminalSafeText(input)).slice(0, 4096));
   });
-  const start = Math.max(0, at - height + 1), body = bodyLines.slice(Math.min(bodyAt, Math.max(0, bodyLines.length - bodyHeight)), bodyAt + bodyHeight);
+  const body = bodyLines.slice(Math.min(bodyAt, Math.max(0, bodyLines.length - bodyHeight)), bodyAt + bodyHeight);
   return <Box flexDirection="column" paddingX={1} paddingY={1}>
     {question.step > 0 && <Text>{t('onboarding.session.step', { n: question.step, total: question.total }, locale)}</Text>}
     <Text> </Text><Text bold>{terminalSafeText(question.title)}</Text><Text> </Text>

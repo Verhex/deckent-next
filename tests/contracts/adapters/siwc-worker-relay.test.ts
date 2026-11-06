@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { transform } from 'esbuild';
 import { DockerSupervisor, dockerTaskHiddenPaths } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile } from '#adapters/core/native-coding/index.js';
+import { reportLanguageInstruction } from '#adapters/core/native-connection/index.js';
 import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, siwcWorkerConnections, bindSiwcWorker, siwcWorkerTurn, SiwcWorkerSupervisor,
   type SiwcUpstream, type SiwcRelayRecord, type SiwcNativeApproval, type SiwcRelayAuditSubject } from '#adapters/core/siwc-worker/index.js';
 import { auditEventSchema, instructionSurfacePaths, readWorkerFinalReport } from '#domain/index.js';
@@ -348,5 +349,7 @@ it('U9F discovery: a relay worker keeps its native profile\'s instruction discov
     expect(turn.config).toContain('project_doc_max_bytes=0');
     expect(turn.config.includes('skills.include_instructions=false')).toBe(mode === 'disabled');
     expect(turn).toMatchObject({ instructions: delivery.core, prompt: `${delivery.task}\n\ncontext` });
+    // D4: a report-asking turn names the person's report language last, as the native worker's prompt does.
+    expect(siwcWorkerTurn(argv, delivery, { text: 'context' }, 'tr').prompt).toBe(`${delivery.task}\n\ncontext\n\n${reportLanguageInstruction('tr')}`);
   }
 });

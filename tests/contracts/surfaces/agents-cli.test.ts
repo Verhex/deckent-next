@@ -146,3 +146,28 @@ it('BeUser E-02: --example shows a filled file with this installation\'s WorkCla
     .rejects.toMatchObject({ code: 'AGENT_WORK_CLASS_UNKNOWN', params: { known: expect.stringContaining('feature') } });
   expect(card.asked).toHaveLength(0); expect(calls).toHaveLength(0);
 });
+
+it('K13: use prepares the exact task/agent/skill pin without a witnessed write; invalid revisions and conflicts never select a replacement', async () => {
+  const f = await project(), requests: unknown[] = [], writes: unknown[] = [];
+  const preview = { schemaVersion: 1 as const, scopeId: 'scope', taskId: 'invoice-task', agentId: agent.agentId, revision: agent.revision,
+    personaDigest: agent.personaDigest, skillSetDigest: agent.skillSetDigest, skills: agent.content.skills };
+  const prepareAgentUse = async (_root: string, request: unknown) => { requests.push(request); return preview; };
+  const args = ['agents', 'use', agent.agentId, '--task', 'invoice-task', '--revision', '1', '--scope', 'scope'];
+  for (const locale of ['en', 'tr'] as const) {
+    const out = capture();
+    await agentsCommand([...args, '--lang', locale], { root: f.root, env: f.env, stdout: out.sink, ...handlers(writes), prepareAgentUse });
+    expect(requests.at(-1)).toEqual({ schemaVersion: 1, scopeId: 'scope', taskId: 'invoice-task', agentId: agent.agentId, expectedRevision: 1 });
+    expect(out.text()).toContain(`${skill.skillId}@3`); expect(out.text()).toContain(locale === 'en' ? 'not execution readiness or consent' : 'çalışma hazırlığı veya izin değildir');
+  }
+  const json = capture();
+  await agentsCommand([...args, '--json'], { root: f.root, env: { ...f.env, CLAUDECODE: '1' }, stdout: json.sink, prepareAgentUse });
+  expect(JSON.parse(json.text())).toEqual(preview); expect(writes).toEqual([]); expect(card.asked).toEqual([]);
+  for (const revision of ['0', '-1', '1.5', '1e2', '9007199254740992']) {
+    const before = requests.length;
+    await expect(agentsCommand([...args.slice(0, 6), revision, '--scope', 'scope'], { root: f.root, env: f.env, prepareAgentUse })).rejects.toMatchObject({ code: 'CLI_USAGE' });
+    expect(requests).toHaveLength(before);
+  }
+  await expect(agentsCommand(args, { root: f.root, env: f.env, prepareAgentUse: async () => { throw Object.assign(new Error('changed'), { code: 'AGENT_CATALOG_REVISION_CONFLICT' }); } }))
+    .rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(agentsCommand(args, { root: f.root, env: f.env })).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
+});

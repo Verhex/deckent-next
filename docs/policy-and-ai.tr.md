@@ -89,8 +89,11 @@ Karar adımında allow, aktörü ve eylemi açıkça adlandırmalıdır: `princi
 `actions: "all"` adım devretmez. Kaynak kimliği/kapsam seçilebilir; en dar kümeyi kullanın.
 Genel `evaluate` veya `reserve`, kabul veya başarısızlıktan devam yetkisi değildir.
 
-Yeni ilk kurulum politikası kuran insana yetki, MCP aktörüne yalnız gözlem kuralları verir.
-Varsayılanda AI karar adımı veya yazma yetki grubu devredilmez. Mevcut özel kurulumlar kendi
+Yeni ilk kurulum politikası kuran insana yetki, MCP aktörüne gözlem kurallarını ve şablon v19'dan
+beri (owner 2026-11-05) kurulu kapsamda kişinin kendi araç kurallarını verir: model çağrısı, okuma ve
+karalama araçları, kartın arkasında düzenleme/kabuk araçları ve bunların üç operasyonu. Yerel ajan ve
+dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, yapılandırma, sır, politika,
+yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 grant'lerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
 
 ## Mevcut yüzeylerle inceleme, yetki verme ve geri alma
@@ -214,8 +217,10 @@ değildir. Mevcut CLI:
 `deckent approval inspect --input approval-query.json --json`; sorgu şekli
 `{"schemaVersion":1,"scopeId":"SCOPE_ID","approvalId":"APPROVAL_ID"}` olur.
 
-**“MCP salt okunur gözlemci olsun.”** İlk kurulum gözlem kurallarını koruyun; `policy mcp list`
-çıktısını inceleyip yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
+**“MCP salt okunur gözlemci olsun.”** Şablon v19'dan beri ilk kurulum politikası MCP aktörüne model
+çağırma ve ajan araçlarını da açar; MCP aktörü için `model-invocation` ve `agent-tool` üzerindeki şirket
+deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak v19 AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
+yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
 yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol grant'lerini de inceleyin. Başka
 grant'ler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;
 sıradan inceleme de uygun kapsam ve grant ister. MCP onay-karar aracı sunmaz.

@@ -704,3 +704,175 @@ it('appends no assistant message for a round cancelled before any text streamed'
   expect(result).toMatchObject({ finish: 'cancelled', appendedCount: 0 });
   expect(events.some(event => event.kind === 'message')).toBe(false);
 });
+
+// K1: native drivers submit proposals only; the same coordinator owns every call lifecycle.
+const nativeShell: AgentToolSpec = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'Run a command.',
+  inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } } };
+const nativeSession = (offered: readonly AgentToolSpec[] = [nativeShell]) => ({ schemaVersion: 1 as const,
+  turnId: 'native-turn', generation: 1, tools: offered, approvalTtlMs: 60_000 });
+const nativeCorrelation = (id: string) => ({ kind: 'codex-mcp' as const, callId: `wire-${id}`, itemId: `fc-${id}`, deckentCallId: id });
+async function nativeRun(p: AgentTurnPorts, offered: readonly AgentToolSpec[] = [nativeShell]) {
+  let failure: unknown;
+  const invokeAgent = p.invokeAgent;
+  const result = await runAgentTurn({ messages: user, tools: offered, nativeSession: nativeSession(offered),
+    signal: new AbortController().signal, emit() {} }, { ...p, ...(invokeAgent ? { invokeAgent: async (...args: Parameters<typeof invokeAgent>) => {
+      try { return await invokeAgent(...args); } catch (error) { failure = error; throw error; }
+    } } : {}) });
+  // Driver errors are intentionally caught by the engine; assertions in this fixture must still fail the test.
+  if (failure) throw failure;
+  return result;
+}
+
+it('native proposals approve the original command, execute once and settle before returning an enveloped result', async () => {
+  const p = ports([]), stages: string[] = [];
+  const command = 'cat /protected/login-canary';
+  p.value.authorize = async () => { stages.push('authorize'); return 'require-approval'; };
+  p.value.prepare = async () => { stages.push('prepare'); return { ok: true }; };
+  p.value.requestApproval = async input => { expect(input.args).toEqual({ command }); stages.push('approved-card'); return 'allow'; };
+  p.value.execute = async (_tool, args, _signal, id, execution) => {
+    expect(stages).toEqual(['authorize', 'prepare', 'approved-card']); expect(args).toEqual({ command });
+    expect(id).toBe('n1'); expect(execution).toEqual({ round: 1, index: 0 }); stages.push('execute');
+    // Adapter refuses the original protected read after approval; no safe-command substitution.
+    return { status: 'error', text: '[deckent] error=PRODUCT_STATE_PROTECTED', cleanup: 'clean' };
+  };
+  p.value.settled = async settled => { expect(settled.call.argumentsJson).toBe(JSON.stringify({ command })); stages.push('settle'); };
+  p.value.invokeAgent = async ({ session }) => {
+    const result = await session.propose(call('n1', 'run_shell', { command }), nativeCorrelation('n1'), new AbortController().signal);
+    expect(stages).toEqual(['authorize', 'prepare', 'approved-card', 'execute', 'settle']);
+    expect(Object.isFrozen(result.outcome)).toBe(true);
+    expect(result).toEqual({ schemaVersion: 1, turnId: 'native-turn', generation: 1, deckentCallId: 'n1',
+      outcome: { status: 'error', text: '[deckent] error=PRODUCT_STATE_PROTECTED', cleanup: 'clean' } });
+    return answer('protected');
+  };
+  expect(await nativeRun(p.value)).toMatchObject({ finish: 'stop', toolCalls: 1, rounds: 1 }); expect(p.invoked).toEqual([]);
+});
+
+it('native replay joins concurrent duplicates, freezes accepted input and rejects conflicting reuse or correlation before another effect', async () => {
+  const p = ports([]), proposed = call('n1', 'run_shell', { command: 'original' }); let executions = 0, settlements = 0;
+  p.value.execute = async (_tool, args) => { expect(args).toEqual({ command: 'original' }); executions++; return { status: 'ok', text: 'recorded' }; };
+  p.value.settled = async () => { settlements++; };
+  p.value.invokeAgent = async ({ session }) => {
+    const correlation = nativeCorrelation('n1'), signal = new AbortController().signal;
+    const first = session.propose(proposed, correlation, signal), duplicate = session.propose(proposed, correlation, signal);
+    proposed.argumentsJson = '{"command":"mutated"}';
+    const [one, two] = await Promise.all([first, duplicate]); expect(two).toBe(one);
+    expect(await session.propose(call('n1', 'run_shell', { command: 'original' }), correlation, signal)).toBe(one);
+    expect((await session.propose(proposed, correlation, signal)).outcome.text).toContain('tool-call-conflict');
+    expect((await session.propose(call('n2', 'run_shell', { command: 'x' }), correlation, signal)).outcome.text).toContain('tool-correlation-invalid');
+    return answer('done');
+  };
+  await nativeRun(p.value); expect(executions).toBe(1); expect(settlements).toBe(1);
+});
+
+it('native calls retain denial, preparation and ingress gates without exposing the target or invoking an effect', async () => {
+  const p = ports([]), prepared: string[] = [], authorized: string[] = [];
+  p.value.authorize = async (_tool, args) => { authorized.push(String(args?.['command'])); return args?.['command'] === 'denied' ? 'deny' : 'allow'; };
+  p.value.prepare = async (_tool, args) => { prepared.push(String(args['command'])); return { ok: false, text: 'prepare-refused' }; };
+  p.value.invokeAgent = async ({ session }) => {
+    const signal = new AbortController().signal;
+    const invoke = (id: string, command: string) => session.propose(call(id, 'run_shell', { command }), nativeCorrelation(id), signal);
+    expect((await invoke('deny', 'denied')).outcome.text).toContain('denied-by-policy');
+    expect((await invoke('prepare', 'bad-plan')).outcome.text).toBe('prepare-refused');
+    const hidden = await invoke('hidden', 'private\u202epayload');
+    expect(hidden.outcome.text).toContain('ingress-refused:arguments'); expect(hidden.outcome.text).not.toContain('private');
+    return answer('done');
+  };
+  await nativeRun(p.value); expect(authorized).toEqual(['denied', 'bad-plan']); expect(prepared).toEqual(['bad-plan']); expect(p.executed).toEqual([]);
+});
+
+it('native cancel during authorization fences queued proposals and an eventual allow never executes', async () => {
+  const p = ports([]); let checked = false, entered!: () => void, allow!: (value: 'allow') => void;
+  const entering = new Promise<void>(resolve => { entered = resolve; });
+  p.value.authorize = async () => { entered(); return new Promise(resolve => { allow = resolve; }); };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    const first = session.propose(call('n1', 'run_shell', { command: 'first' }), nativeCorrelation('n1'), signal);
+    const queued = session.propose(call('n2', 'run_shell', { command: 'queued' }), nativeCorrelation('n2'), signal);
+    await entering;
+    expect(await session.cancel()).toMatchObject({ kind: 'cancelled', pendingCallIds: ['n1', 'n2'], effects: 'unknown', termination: 'unverified' });
+    expect(signal.aborted).toBe(true); allow('allow');
+    expect((await first).outcome.status).toBe('error'); expect((await queued).outcome.status).toBe('error');
+    expect((await session.propose(call('late', 'run_shell', { command: 'late' }), nativeCorrelation('late'), signal)).outcome.text).toContain('tool-session-closed');
+    expect(await session.cancel()).toMatchObject({ pendingCallIds: [], effects: 'settled', termination: 'unverified' });
+    checked = true; throw new Error('native driver rejects on abort');
+  };
+  expect(await runAgentTurn({ messages: user, tools: [nativeShell], nativeSession: nativeSession(),
+    signal: new AbortController().signal, emit() {} }, p.value)).toMatchObject({ finish: 'cancelled', toolCalls: 0 });
+  expect(checked).toBe(true); expect(p.executed).toEqual([]);
+});
+
+it('native revoke preserves unknown effects after a partial execution and never replays by executing again', async () => {
+  const p = ports([]); let started!: () => void, finish!: () => void;
+  const running = new Promise<void>(resolve => { started = resolve; }); let executions = 0;
+  p.value.execute = async () => { executions++; started(); await new Promise<void>(resolve => { finish = resolve; }); return { status: 'error', text: 'effect=unknown', cleanup: 'unverified' }; };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    const result = session.propose(call('n1', 'run_shell', { command: 'partial' }), nativeCorrelation('n1'), signal);
+    await running;
+    expect(await session.revoke()).toMatchObject({ kind: 'revoked', effects: 'unknown', pendingCallIds: ['n1'], termination: 'unverified' });
+    finish(); expect((await result).outcome).toMatchObject({ status: 'error', text: 'effect=unknown' });
+    expect(await session.revoke()).toMatchObject({ effects: 'unknown', pendingCallIds: [] });
+    expect((await session.propose(call('n1', 'run_shell', { command: 'partial' }), nativeCorrelation('n1'), signal)).outcome.text).toContain('tool-session-closed');
+    return answer('done');
+  };
+  expect(await nativeRun(p.value)).toMatchObject({ finish: 'cancelled', toolCalls: 1 }); expect(executions).toBe(1);
+});
+
+it('native cancellation keeps a completed effect successful and process termination unverified', async () => {
+  const p = ports([]); let stop: (() => Promise<unknown>) | undefined;
+  p.value.execute = async () => { await stop!(); return { status: 'ok', text: 'committed', cleanup: 'clean' }; };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    stop = () => session.cancel();
+    const result = await session.propose(call('n1', 'run_shell', { command: 'effect' }), nativeCorrelation('n1'), signal);
+    expect(result.outcome).toEqual({ status: 'ok', text: 'committed', cleanup: 'clean' });
+    expect(await session.cancel()).toMatchObject({ effects: 'settled', termination: 'unverified' });
+    return answer('done');
+  };
+  expect(await nativeRun(p.value)).toMatchObject({ finish: 'cancelled', toolCalls: 1 });
+});
+
+it('native settlement failure is retained as unknown, fences new effects and cannot produce a successful turn', async () => {
+  const p = ports([]); let checked = false, executions = 0;
+  p.value.execute = async () => { executions++; return { status: 'ok', text: 'effect happened' }; };
+  p.value.settled = async () => { throw new Error('store unavailable'); };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    expect((await session.propose(call('n1', 'run_shell', { command: 'effect' }), nativeCorrelation('n1'), signal)).outcome.text).toContain('tool-settlement-unknown');
+    expect((await session.propose(call('n2', 'run_shell', { command: 'later' }), nativeCorrelation('n2'), signal)).outcome.text).toContain('tool-session-closed');
+    expect(await session.cancel()).toMatchObject({ effects: 'unknown', pendingCallIds: [] });
+    checked = true; throw new Error('native driver rejects after the settlement fence');
+  };
+  const result = await runAgentTurn({ messages: user, tools: [nativeShell], nativeSession: nativeSession(),
+    signal: new AbortController().signal, emit() {} }, p.value);
+  expect(result).toMatchObject({ finish: 'error' }); expect(result.note).toContain('unknown'); expect(checked).toBe(true); expect(executions).toBe(1);
+});
+
+it('native dispatch never falls back to pull and refuses returned tool calls as a second execution path', async () => {
+  const missing = ports([]); expect(await nativeRun(missing.value)).toMatchObject({ finish: 'error', toolCalls: 0 }); expect(missing.invoked).toEqual([]);
+  const extra = ports([]);
+  extra.value.invokeAgent = async () => answer('', [call('n1', 'run_shell', { command: 'not a proposal' })]);
+  expect(await nativeRun(extra.value)).toMatchObject({ finish: 'error', toolCalls: 0 }); expect(extra.executed).toEqual([]);
+});
+
+it('native session pins the admitted tool set and publishes only ingress-projected descriptions', async () => {
+  const p = ports([]), marked = { ...readFile, description: 'private\u202epayload' };
+  let offered: unknown;
+  p.value.invokeAgent = async ({ session }) => { expect(Object.isFrozen(session.session)).toBe(true); offered = session.session.tools; return answer('done'); };
+  expect(await nativeRun(p.value, [marked])).toMatchObject({ finish: 'stop' });
+  expect(JSON.stringify(offered)).toContain('private[hidden-unicode:'); expect(JSON.stringify(offered)).not.toContain('\u202e');
+  await expect(runAgentTurn({ messages: user, tools: [nativeShell], nativeSession: nativeSession([readFile]),
+    signal: new AbortController().signal, emit() {} }, p.value)).rejects.toThrow('TOOL_SESSION_TOOLS_CONFLICT');
+});
+
+it('native admission refuses oversized proposals before authorization and closes retained ports at driver end', async () => {
+  const p = ports([]); let late: (() => Promise<unknown>) | undefined, rejection: unknown;
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    const huge = call('huge', 'run_shell', { command: 'x'.repeat(2_000) });
+    rejection = await session.propose(huge, nativeCorrelation('huge'), signal);
+    late = () => session.propose(call('late', 'run_shell', { command: 'late' }), nativeCorrelation('late'), signal);
+    return answer('done');
+  };
+  expect(await runAgentTurn({ messages: user, tools: [nativeShell], nativeSession: nativeSession(),
+    admission: { outputReserveTokens: 0, safetyReserveTokens: 0, requestMaxBytes: 1_000 }, signal: new AbortController().signal, emit() {} }, p.value))
+    .toMatchObject({ finish: 'stop', toolCalls: 0 });
+  expect(rejection).toMatchObject({ deckentCallId: 'huge', outcome: { status: 'error', text: '[deckent] error=AGENT_CONTEXT_REQUEST_TOO_LARGE' } });
+  expect(await late!()).toMatchObject({ outcome: { status: 'error', text: '[deckent] error=tool-session-closed' } });
+  expect(p.authorized).toEqual([]); expect(p.executed).toEqual([]);
+});

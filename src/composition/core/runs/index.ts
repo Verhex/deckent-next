@@ -13,9 +13,11 @@ export { recoverConfiguredReconciliation } from './internal/recover-reconciliati
 export { prepareConfiguredNervous } from './internal/nervous.js';
 export { inspectConfiguredRecoveryMode, prepareConfiguredRecovery } from './internal/recovery.js';
 export { changeConfiguredRecoveryPolicy, configuredRecoveryReview, inspectConfiguredRecoveryPolicy, inspectConfiguredRecoveryRollout } from './internal/recovery-cards.js';
-export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';
+export { sweepConfiguredAttemptCustody, sweepConfiguredRunBases, runBaseSettled } from './internal/custody-sweep.js';
 export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle, parkConfiguredRunProgression } from './internal/lifecycle.js';
 export { proposeConfiguredRun, inspectConfiguredRunProposal } from './internal/proposals.js';
 export { releaseConfiguredQuota } from './internal/pool-hold.js';
 export { inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from './internal/worker-instructions.js';
 export { createRecordedCancellationDelivery } from './internal/cancellation-runtime.js';
+
+export { nativeWorkerAdmission, resolveNativeWorkerUse, recheckNativeWorkerUse, assertNativeWorkerReservation } from './internal/native-worker.js';

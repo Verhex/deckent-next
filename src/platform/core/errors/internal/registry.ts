@@ -494,6 +494,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORKSPACE_REQUEST_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_REQUEST_INVALID', p, l) }) },
   WORKSPACE_OPTIONS_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_OPTIONS_INVALID', p, l) }) },
   WORKSPACE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_UNSAFE', p, l) }) },
+  WORKSPACE_RUN_BASE_REMOVED: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_RUN_BASE_REMOVED', p, l) }) },
   WORKSPACE_IDENTITY_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_IDENTITY_CONFLICT', p, l) }) },
   WORKSPACE_ALLOCATION_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_ALLOCATION_INCOMPLETE', p, l) }) },
   WORKSPACE_GIT_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_GIT_FAILED', p, l) }) },
@@ -544,6 +545,20 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_BASE_ADVANCED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_BASE_ADVANCED', p, l) }) },
   // K6 (owner 2026-09-30 A): the work target enforces task scope; params count, paths (first 16, repository-relative), omitted.
   PATCH_SCOPE_VIOLATION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_VIOLATION', p, l) }) },
+  PATCH_WORKING_TREE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_BUSY', p, l) }) },
+  PATCH_WORKING_TREE_PARTIAL: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_PARTIAL', p, l) }) },
+  // F1 (Astra 3015): a file moved aside could not return to its name (the person's newer file is there); `kept` names it, `written` may be empty.
+  PATCH_WORKING_TREE_KEPT: { category: 'error', render: (p, l) => ({ message: p['written'] ? t('error.PATCH_WORKING_TREE_KEPT.partial', p, l) : t('error.PATCH_WORKING_TREE_KEPT', p, l) }) },
+  // R3017/R3019: a journal, lock record or recovery custody that is unreadable or of another version (`path`): an explicit refusal, nothing settled or written.
+  PATCH_WORKING_TREE_RECORD_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_RECORD_UNSUPPORTED', p, l) }) },
+  PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
+  PATCH_WORKING_TREE_SUBFOLDER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_SUBFOLDER', p, l) }) },
+  PATCH_WORKING_TREE_NOT_WRITTEN: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_NOT_WRITTEN', p, l) }) },
+  PATCH_WORKING_TREE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_CHANGED', p, l) }) },
+  // Params limit (bytes), maxEntries; without them (a later view of the recorded refusal) the summary stands.
+  PATCH_WORKING_TREE_LISTING_LIMIT: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.PATCH_WORKING_TREE_LISTING_LIMIT.summary', p, l) : t('error.PATCH_WORKING_TREE_LISTING_LIMIT', p, l) }) },
+  DELIVERY_WORKING_TREE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_DENIED', p, l) }) },
+  DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED', p, l) }) },
   PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },
   PATCH_INSTRUCTION_SURFACE_WRITE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INSTRUCTION_SURFACE_WRITE', p, l) }) },
   // S6 (owner 2026-10-14): the pre-dispatch secret gate; params count, paths (first 16 as `path (rule)`), omitted — never a value. Without

@@ -147,7 +147,9 @@ export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label:
   /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
    * reference, and for a locked row the governed command that would fix it. */
   exact: string; command: string | null; stateToken?: string;
-  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider'; label: string }>[];
+  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider' | 'brain-global' | 'brain-project'; label: string }>[];
+  /** R2c: the exact scoped profile's billing axis (absent: not declared, read as metered). */
+  billing?: 'subscription' | 'local' | 'metered';
   /** The configured default (`terminal.chat.reference`). */
   configured: boolean }>;
 export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPanelChoice[]; notes: readonly string[];
@@ -181,6 +183,8 @@ export interface ModelPanelSource {
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
   resolveShadow?(choice: ModelPanelChoice, action: 'remove' | 'align'): Promise<ConfigPanelOutcome>;
+  /** R9b (owner D3): make this model the Brain's (`brain_planner.reference`) on the user or project layer through the same governed writer. */
+  setBrain?(choice: ModelPanelChoice, layer: 'global' | 'project'): Promise<ConfigPanelOutcome>;
 }
 /** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). `fresh`: the
  * person chose a new context for the switch (the conversation keeps only their own instructions). */

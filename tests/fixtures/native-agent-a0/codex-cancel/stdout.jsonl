@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a1a0b9-885c-7e43-b03e-f6d3797f7f1a"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"I’ll call Deckent’s `slow_wait` with 60 seconds and report its response."}}
+{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"deckent","tool":"slow_wait","arguments":{"seconds":60},"result":null,"error":null,"status":"in_progress"}}

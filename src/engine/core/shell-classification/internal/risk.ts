@@ -322,12 +322,14 @@ function classifySegment(segment: string): ShellRiskClassification {
   return { risk: 'modify', reason: 'shell.modify.unknown-command' };
 }
 
-/** The risk of a command given its read-only verdict: destructive and modify from the scan are never demoted by the classifier. */
-export function classifyShellRisk(command: string, readOnly: ShellReadOnlyVerdict): ShellRiskClassification {
+/** The risk of a command given its read-only verdict: destructive and modify from the scan are never demoted by the classifier.
+ * R9 (`readOnlyOwnsRead`, a Run worker only): a program the legacy segment list does not know but the strict read-only classifier admitted
+ * (`od`, `sha256sum`, `test`, `sed -n`…) is not `modify` on that ground alone; every destructive and redirection signal still counts. */
+export function classifyShellRisk(command: string, readOnly: ShellReadOnlyVerdict, readOnlyOwnsRead = false): ShellRiskClassification {
   const scan = scanShell(command);
   let result: ShellRiskClassification = { risk: 'safe-read', reason: 'shell.safe-read.compound' };
   if (scan.segments.length === 0) result = { risk: 'modify', reason: 'shell.modify.empty-command' };
-  for (const segment of scan.segments) result = combine(result, classifySegment(segment));
+  for (const segment of scan.segments) { const part = classifySegment(segment); if (!(readOnlyOwnsRead && readOnly.readOnly && part.reason === 'shell.modify.unknown-command')) result = combine(result, part); }
   if (scan.malformed) result = combine(result, { risk: 'modify', reason: 'shell.modify.unparseable' });
   if (scan.truncatingRedirect) result = combine(result, { risk: 'destructive', reason: 'shell.destructive.output-truncation' });
   if (scan.outputRedirect) result = combine(result, { risk: 'modify', reason: 'shell.modify.output-redirection' });

@@ -57,7 +57,7 @@ describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot 
     await rm(join(f.origin, '.git', 'objects', f.blob.slice(0, 2), f.blob.slice(2)));
     const raw = await exec('/usr/bin/git', localGitArgs(f.origin, ['ls-tree', '-r', '-z', '-l', '--full-tree', f.head]), { env: GIT_LOCAL_ENV });
     expect(raw.stdout).toBe(`100644 blob ${f.blob}     BAD\tbig.txt\0`);
-    const lease = { baseCommit: f.head, sourceBase: { source: { repositoryRoot: f.origin } } } as unknown as GitWorkspaceLease;
+    const lease = { baseCommit: f.head, sourceBase: { adapter: { id: 'git', version: 1 }, source: { repositoryRoot: f.origin } } } as unknown as GitWorkspaceLease;
     const options = { gitExecutable: '/usr/bin/git', outputBytes: 65536 } as GitWorkspaceOptions;
     await expect(listBase(lease, options, new SnapshotBudget(limits, Date.now() + 10_000))).rejects.toMatchObject({ code: 'PATCH_UNAVAILABLE' });
     expect(await f.git(f.origin, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
@@ -66,7 +66,7 @@ describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot 
   it('refuses a promisor lazy fetch over file:// and leaves the object unfetched', async () => {
     const f = await promisorSource();
     expect(await f.git(f.source, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
-    const lease = { baseCommit: f.head, sourceBase: { source: { repositoryRoot: f.source } } } as unknown as GitWorkspaceLease;
+    const lease = { baseCommit: f.head, sourceBase: { adapter: { id: 'git', version: 1 }, source: { repositoryRoot: f.source } } } as unknown as GitWorkspaceLease;
     const options = { gitExecutable: '/usr/bin/git', timeoutMs: 10_000, outputBytes: 65536, sourceRoot: f.source, workspaceRoot: f.source } as unknown as GitWorkspaceOptions;
     const budget = new SnapshotBudget(limits, Date.now() + 10_000);
     // ls-tree -l needs the blob's size; on a promisor-missing object this is exactly the Git operation the
@@ -79,7 +79,7 @@ describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot 
   it('stays refused when the source repository\'s own local config re-permits the file protocol', async () => {
     const f = await promisorSource({ hostileLocalConfig: true });
     expect(await f.git(f.source, 'config', 'protocol.file.allow')).toBe('always');
-    const lease = { baseCommit: f.head, sourceBase: { source: { repositoryRoot: f.source } } } as unknown as GitWorkspaceLease;
+    const lease = { baseCommit: f.head, sourceBase: { adapter: { id: 'git', version: 1 }, source: { repositoryRoot: f.source } } } as unknown as GitWorkspaceLease;
     const options = { gitExecutable: '/usr/bin/git', timeoutMs: 10_000, outputBytes: 65536, sourceRoot: f.source, workspaceRoot: f.source } as unknown as GitWorkspaceOptions;
     const budget = new SnapshotBudget(limits, Date.now() + 10_000);
     // Measured 2026-09-29 (proof/GIT-NET-2026-09-29/protocol-matrix.log): `-c protocol.allow=never` alone is

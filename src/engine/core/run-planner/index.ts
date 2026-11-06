@@ -1,13 +1,13 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
-  parseModelInvocationCommand, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
+  parseModelInvocationCommand, modelRoleConfigSchema, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
   type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
   BRAIN_CORRECTION_TEMPLATE, prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
-import { composeModelRolePolicy, decideRoleModelInScope, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
+import { composeModelRolePolicy, decideRoleModelInScope, isOwnedRoleOverlay, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import { isRunIntentResult, type RunPlanningResult, type PlanningMemoryNote, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
 import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
@@ -19,7 +19,7 @@ export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandPro
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
-  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels']; memory?: BrainMemoryContext | null }>) {
+  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels']; memory?: BrainMemoryContext | null; language?: string }>) {
   // The context bound measures the same WorkClass view the prompt carries (brainWorkClassView: no scoring, admission or worker lists).
   const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
   const settings = brainPlannerConfigSchema.parse(config), limits = settings.context;
@@ -35,7 +35,7 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
     // Only stable budget facts enter the prompt: the remaining money moves with every charge (this call's own included), and a retried
     // plan must resend the byte-identical request; the system caps the ceiling at the remaining money after the call instead.
     permissions: getPolicyVocabulary().resources, budget: budget && { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits }, scopePaths: { state: 'not-inspected' } }, limits);
-  const prompt = prepareBrainPrompt(command, workClasses, context, config, known);
+  const prompt = prepareBrainPrompt(command, workClasses, context, config, known, selections?.language);
   const bytes = new TextEncoder().encode(JSON.stringify(prompt.messages)).length;
   if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
   // The memory that actually went into the prompt (after the planning byte bound), for the seal and the card; null: no memory block.
@@ -63,7 +63,8 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
 export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
   /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote;
   /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy;
-  /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number }
+  /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;
+  /** Owner 2026-11-06: the Brain model is below the recommended class (response-only note for the card). */ readonly brainBelowRecommended?: boolean }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
   inspect(query: RunProposalQuery): Promise<RunPlanningResult | null>;
@@ -86,26 +87,35 @@ export interface BrainPlanPorts {
   readonly quotaWaits?: BrainQuotaWaitStore;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
-/** The tier/role registry role a Brain model must hold (owner BRAIN1: frontier only). */
+/** The tier/role registry role of the recommended Brain models (owner 2026-11-06, replacing BRAIN1 "frontier only": every active model may plan). */
 export const BRAIN_MODEL_ROLE = 'brain';
 /** S2 Brain gate (owner A2, A3): the exact model the planner is about to call — its bound definition re-resolved from the same declared catalog
- * and digest-checked against the prepared command — must be eligible for the Brain role (tier, or a current dated exception) AND active in
- * the scope. An inactive eligible model keeps the existing inactive-model refusal; anything else is one typed BRAIN_TIER_REFUSED naming the
+ * and digest-checked against the prepared command — must be active in the scope (else the existing inactive-model refusal). Owner 2026-11-06:
+ * with the built-in role table alone (or only the person's own `models roles assign` overlay) the Brain role only recommends, and a model outside
+ * it plans with `belowRecommended`; any other written `model_roles` overlay binds, and a model it does not admit is one typed BRAIN_TIER_REFUSED naming the
  * model and the reason. Never another model in its place. */
-export async function assertBrainModelRole(sources: RoleModelSources, command: ModelInvocationCommand, nowMs: number) {
+export async function assertBrainModelRole(sources: RoleModelSources, command: ModelInvocationCommand, nowMs: number): Promise<Readonly<{ belowRecommended: boolean }>> {
   const definition = sources.providerCatalog === undefined ? null : resolveModelBindingDefinition(parseProviderCatalog(sources.providerCatalog), command.reference);
   if (!definition || sha256(encodeModelBindingDefinition(definition)) !== command.expectedBinding.digest) throw ErrorRegistry.createError('MODEL_INVOCATION_BINDING_CONFLICT');
   const target = { channelId: definition.provider.id, modelId: definition.model.nativeId }, ports = roleModelPorts(sources);
   const record = await ports.activation(command.scopeId, command.reference);
   const decision = await decideRoleModelInScope(composeModelRolePolicy(sources.modelRoles), BRAIN_MODEL_ROLE, command.scopeId, target, ports, nowMs, record?.state === 'active');
-  if (decision.state === 'eligible') return decision;
+  if (decision.state === 'eligible') return { belowRecommended: false };
   if (decision.reason === 'not-active') refuseInactiveModel(command, record);
-  throw ErrorRegistry.createError('BRAIN_TIER_REFUSED', { params: { ...target, reason: decision.reason } });
+  // Lead 2026-11-06: only a written overlay other than the person's own role assignments binds the Brain; those still apply to every other role.
+  if (sources.modelRoles !== undefined && modelRoleConfigSchema.parse(sources.modelRoles).overlays.some(overlay => !isOwnedRoleOverlay(overlay))) {
+    throw ErrorRegistry.createError('BRAIN_TIER_REFUSED', { params: { ...target, reason: decision.reason } });
+  }
+  // The built-in table decides tier before activation, so activation is checked here.
+  if (record?.state !== 'active') refuseInactiveModel(command, record);
+  return { belowRecommended: true };
 }
 /** S4B-6: whether the configured Brain template is written for context v3 (memory); an earlier one never reads memory. */
 export const brainTakesMemory = (config: unknown) => selectedBrainTemplate(config).contextVersion === 3;
 /** Whether the configured Brain template leaves worker assignment to the system (callers then skip the worker-model catalog read). */
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
+/** R9b (owner D3): the person's chosen Brain model from the merged `brain_planner` section (project over user), or undefined (the chat model is tried). */
+export const configuredBrainModel = (config: unknown): ModelReference | undefined => brainPlannerConfigSchema.parse(config ?? {}).reference;
 /**
  * S3-4: the typed cause of a rejected planning call. The subscription CLI step's own adapter body names it (quota with its reset, credits, login,
  * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried (a quota wait
@@ -270,6 +280,7 @@ export class BrainPlanApplication {
         usage: usage.success ? { inputTokens: usage.data.prompt_tokens, outputTokens: usage.data.completion_tokens, totalTokens: usage.data.total_tokens } : null } } };
     assertActive(signal);
     const recorded = await this.ports.propose(proposal);
-    return prepared.planningMemory ? { ...recorded, planningMemory: prepared.planningMemory } : recorded;
+    return prepared.planningMemory || prepared.brainBelowRecommended ? { ...recorded, ...(prepared.planningMemory ? { planningMemory: prepared.planningMemory } : {}),
+      ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;
   }
 }

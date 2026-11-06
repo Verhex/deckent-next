@@ -1,0 +1,2 @@
+# These retained wire bytes are SHA-256 pinned; checkout must not translate line endings.
+*.jsonl -text

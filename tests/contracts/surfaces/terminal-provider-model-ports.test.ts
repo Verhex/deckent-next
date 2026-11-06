@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import * as adapters from '#adapters/index.js';
+import { brainProviderFixture } from '../support/brain-provider.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
-import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
-import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
+import { modelInvocationProfileSchema, type ModelConnectCommand, type ModelConnectResult } from '#domain/index.js';
+import { providerModelTree, providerPanelTree, subscriptionModelView, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
+import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import type { NativeAgentReadiness } from '#capabilities/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
-import { ModelInvocableNowApplication, type ModelInvocability, type InvocableModels } from '#engine/index.js';
+import { ModelInvocableNowApplication, modelInvocationProfileDigest, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { main as runConfiguredCli } from '#composition/core/cli/index.js';
 import * as cliSurface from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
@@ -20,7 +23,7 @@ import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 // handler, and only when the check passes; `/model` lists declared models with the first missing precondition as the reason.
 const CANARY = 'sk-canary-T4-6f1d2e9c0b7a';
 // The provider sections are registered by the composition root in the product; here the test registers them once.
-registerProviderConfig();
+adapters.registerProviderConfig();
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project(config: Record<string, unknown>) {
@@ -411,6 +414,38 @@ describe('/model source', () => {
     source = 'user-default';
     expect((await source0.inspect()).notes).toContain('In use: native-chat (your default model).');
   });
+  it('R9b (owner 2026-11-06): the recommended Brain models are marked and suggested while none is chosen, every runnable model can be chosen; "Use as Brain model" writes brain_planner.reference on the chosen layer', async () => {
+    const { root, options } = await project({ terminal: { scopeId: 'scope' } });
+    const writes: Record<string, unknown>[] = [];
+    const host: Parameters<typeof modelPanelSource>[2] = {
+      inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
+      inspectInvocableModels: async () => reading(id => id === 'fast' ? { invocable: false, reason: { kind: 'profile', code: 'MODEL_INVOCATION_UNAVAILABLE' } } : { invocable: true, reason: null }),
+      // `coder` holds the role by tier; `fast` by a current exception but cannot run now (marked, never offered); `chat` is not recommended yet can be chosen.
+      inspectBrainModels: async () => ({ models: [{ channelId: 'local-openai', modelId: 'native-coder', tier: 'frontier', basis: 'tier', measured: false, active: true },
+        { channelId: 'local-openai', modelId: 'native-fast', tier: null, basis: 'exception', exceptionId: 'interim', expiresOn: '2099-01-01', active: false }] }),
+      resolveConfigPrincipal: async () => ({ id: 'os:1', issuer: 'host', subject: '1', assurance: 'os-user', scopeIds: ['scope'] }) as never,
+      configApplication: (() => ({
+        submit: async (action: string, input: Record<string, unknown>) => { writes.push({ action, ...input }); return { status: 'applied', approvalId: null,
+          result: { keyPath: input['keyPath'], layer: input['layer'], beforeDigest: null, afterDigest: 'a'.repeat(64), backupPath: null, overridden: false } }; },
+        explain: async () => ({ apply: 'live' }),
+      })) as never,
+    };
+    const source = modelPanelSource(root, 'scope', host, options, 'en'), view = await source.inspect(), row = (id: string) => view.choices.find(choice => choice.reference.modelId === id)!;
+    expect(row('coder').detail).toMatch(/ · recommended for planning \/do work \(Brain\)$/u); expect(row('fast').detail).toMatch(/ · recommended for planning \/do work \(Brain\)$/u);
+    expect(row('chat').detail).not.toContain('Brain');
+    for (const id of ['coder', 'chat']) expect(row(id).fixes!.map(fix => fix.id)).toEqual(expect.arrayContaining(['brain-global', 'brain-project']));
+    expect(row('fast').fixes!.some(fix => fix.id.startsWith('brain'))).toBe(false);
+    expect(view.notes).toContain('No Brain model chosen: /do plans with the chat model. Recommended for planning: native-coder. Open one and choose “Use as Brain model”.');
+    expect((await source.setBrain!(row('coder'), 'project')).lines[0]).toBe('native-coder now plans /do work. Chat keeps its own model.');
+    expect(writes).toEqual([expect.objectContaining({ action: 'set', keyPath: 'brain_planner.reference', layer: 'project', scopeId: 'scope', value: ref('coder') })]);
+    // A project Brain keeps winning over a user one: the window says so instead of claiming the switch; nothing is suggested once one is chosen.
+    const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(configPath, JSON.stringify({ ...config, brain_planner: { reference: ref('chat') } })); clearConfigCache();
+    expect((await source.setBrain!(row('coder'), 'global')).lines[0]).toBe('This project names its own Brain model, so the project setting still wins here.');
+    const after = await source.inspect();
+    expect(after.choices.find(choice => choice.reference.modelId === 'chat')!.detail).toMatch(/ · plans \/do work \(Brain model\)$/u);
+    expect(after.notes.some(note => note.startsWith('No Brain model chosen'))).toBe(false);
+  });
   it('OpenRouter carries the seed models and no next-slice note on its row or connect result', async () => {
     const { root, options } = await project({});
     const base = connectHost('ok');
@@ -533,11 +568,12 @@ it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothi
 
 it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-in, image), never "Connected, unusable"', async () => {
   const { root, options } = await project({});
-  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false, billing: 'subscription' as const };
+  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false, billing: 'subscription' as const, secretName: null };
   const ref = { providerId: 'codex-cli-subscription', providerVersion: 1, modelId: 'gpt-x', modelVersion: 1 };
-  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
+  const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex], probe: async () => { throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE'); } },
     connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'codex-cli-subscription', status: 'connected', reference: ref,
-      models: [{ nativeId: 'gpt-x', state: 'connected', reference: ref }], credentialRef: null, keyStored: null,
+      models: [{ nativeId: 'gpt-x', state: 'connected', reference: ref }, { nativeId: 'gpt-old', state: 'notInCatalog' }], credentialRef: null, keyStored: null,
       steps: { catalog: 'present', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' }) as never,
     inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [] }) as never,
     inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', channel: { kind: 'native-cli', cli: 'codex' },
@@ -549,6 +585,11 @@ it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-i
   expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
   // PV 2d: a subscription is worded as its CLI login and usage quota, never as a local server at a zero tariff.
   expect(text).toContain(t('models.connect.subscription', {}, 'en')); expect(text).not.toMatch(/local server|zero tariff/u);
+  // R2b: the title follows the connection's own status (here a worker row without a success tone), never "Not connected".
+  expect(outcome.title).toMatch(/^Connected: /u);
+  // R1a: a subscription has no key and no price list: "connect all" and an unadmitted model are worded as the subscription's.
+  expect(text).toContain(t('models.connect.pull.notInCatalogSubscription', { model: 'gpt-old' }, 'en')); expect(text).not.toMatch(/priced|on this key/u);
+  expect((await port.inspect()).kinds[0]!.models[0]!.label).toBe(t('tui.provider.pull.subscription', {}, 'en'));
 });
 
 it('BeUser M-01: Connect on a key-less CLI subscription runs its model connection and shows that check\'s cause, not "The chat turn failed"', async () => {
@@ -635,7 +676,9 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const first = await signIn.connect('claude-cli-subscription', null);
   expect(first.delegate).toEqual([]); expect(first).toMatchObject({ connected: true, summary: t('tui.provider.login.brainOnly', {}, 'en') });
   expect(first.lines.map(line => line.text)).toContain(t('tui.provider.login.brainOnly', {}, 'en'));
-  expect((await signIn.connect('claude-cli-subscription', '/state/logins/claude', ['ai'])).delegate).toEqual(['ai']);
+  const delegated = await signIn.connect('claude-cli-subscription', '/state/logins/claude', ['ai']);
+  expect(delegated.delegate).toEqual(['ai']); // R1b: who may use the login is said in the consent card's words, never the raw class id
+  expect(delegated.lines.map(line => line.text)).toContain(t('headless.connect.delegated', { classes: t('tui.provider.login.ai', {}, 'en') }, 'en'));
   await signIn.connect('claude-cli-subscription', '/home/person/.claude', []);
   expect(commands.map(command => [command.cli ?? null, command.delegate ?? null, command.model])).toEqual([[null, null, { pull: 'available' }], [null, ['ai'], { pull: 'available' }],
     [{ configDir: '/home/person/.claude' }, [], { pull: 'available' }]]);
@@ -702,6 +745,15 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
   const view = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
     inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', models: models(8) }] }) as never }, options, 'en', errorText).inspect();
   expect(view.kinds[0]!.detail).toBe('7 model(s) connected');
+  // R8e: four chat rows, one switched off in the catalog: the row says 3 connected and the notes show the fourth as Off (one source).
+  const chat = Array.from({ length: 4 }, (_, index) => ({ reference: { providerId: codex.id, providerVersion: 1, modelId: `c${index}`, modelVersion: 1 }, nativeId: `c${index}`,
+    availability: { invocable: true, reason: null } }));
+  const login = { ...codex, headlessLogin: true }, listed4 = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [login] },
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: chat }) as never, inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: codex.id,
+      access: 'allowed', models: chat.map((row, index) => ({ modelId: row.nativeId, activation: { state: index < 3 ? 'active' : 'inactive', revision: 1 } })) }] }) as never }, options, 'en', errorText).inspect();
+  const label = listed4.kinds[0]!.label, unsealed = subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en');
+  expect(listed4.kinds[0]!.detail).toContain('3 model(s) connected');
+  expect(listed4.notes.filter(note => note.startsWith(label))).toEqual([`${label} · 3 model(s) connected: ${unsealed}`, `${label} / c3: ${t('tui.model.state.off', {}, 'en')}`]);
   const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
   expect(none.kinds[0]!.detail).toBe('-');
   // PV 2a: without usable isolation the CLI subscription row is disabled with its reason before anything is chosen; its card names the typed cause and the rows usable here.
@@ -709,9 +761,111 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
     connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher' } }),
     loginDir: async () => ({ owned: '/x' }), login: async () => null } };
   const blocked = providerPanelPort(root, 'scope', host, options, 'en', errorText), listed = await blocked.inspect();
-  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.HEADLESS_ISOLATION_UNAVAILABLE', {}, 'en') }); expect(listed.kinds[0]!.detail).toMatch(/^subscription: no API key, uses your plan's usage quota · /u);
+  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.HEADLESS_ISOLATION_UNAVAILABLE', {}, 'en') }); expect(listed.kinds[0]!.detail).toBe("subscription: no API key, uses your plan's usage quota"); // BeUser r-rest 4: no dangling "· -"
   expect(listed.kinds[1]!.blocked).toBeNull();
   const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
   expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);
   expect((await providerPanelPort(root, 'scope', { ...host, providerConnect: { ...host.providerConnect, isolationRefusal: async () => null } }, options, 'en', errorText).inspect()).kinds[0]!.blocked).toBeNull();
+});
+
+it('K13: registry login methods reach the same typed login, Codex is visible and the SIWC beta stays hidden in EN/TR', async () => {
+  const { root, options } = await project({}), requests: unknown[] = [];
+  const base = connectHost('ok'), codex = { ...base.kinds[1]!, id: 'codex-cli-subscription', catalogProviderId: 'codex-cli-subscription',
+    labelKey: 'tui.provider.kind.codexCli', headlessLogin: true, billing: 'subscription' as const, presentation: 'hidden' as const, terminalTextChat: true };
+  const methods = nativeCliAgent('codex-jsonl')!.agent.loginMethods.map(row => row.method);
+  expect(methods).toEqual(['browser', 'device-auth']);
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', { connectModel: async () => { throw new Error('not a login'); }, providerConnect: { ...base,
+      kinds: [codex, { ...base.kinds[2]!, available: true, presentation: 'beta', billing: 'subscription' }], loginMethods: () => methods,
+      loginDir: async () => ({ owned: '/fixture/login' }), login: async request => { requests.push(request); return { configDir: '/fixture/login', owned: true,
+        signedIn: true, exit: 'completed', authMethod: 'chatgpt', subscriptionType: null }; } } }, options, locale, errorText);
+    const view = await port.inspect();
+    expect(view.kinds.map(row => row.id)).toEqual([codex.id]);
+    expect(view.kinds[0]!.label).toBe(locale === 'en' ? 'Sign in with ChatGPT (Codex CLI)' : 'ChatGPT ile giriş (Codex CLI)');
+    expect(port.subscription!.methods!(codex.id).map(row => row.command)).toEqual(methods.map(method => `deckent models login --connection ${codex.id} --login-method ${method}`));
+    expect(await port.subscription!.login(codex.id, null, 'device-auth')).toMatchObject({ signedIn: true, refused: false });
+    expect(requests.at(-1)).toEqual({ connection: codex.id, loginMethod: 'device-auth' });
+    const before = requests.length;
+    expect(await port.subscription!.login(codex.id, null, 'claudeai')).toMatchObject({ signedIn: false, refused: true });
+    expect(requests).toHaveLength(before);
+  }
+});
+
+it('K13: text invocability never mints agent readiness; the model and provider share unknown, refusal and verified prerequisites', async () => {
+  const { root, options } = await project({}), calls: unknown[] = [], base = connectHost('ok');
+  const native = { ...base.kinds[1]!, id: 'fixture-native', catalogProviderId: 'fixture-native', terminalTextChat: true, headlessLogin: true, keyRequired: false,
+    secretName: null, pull: 'available' as const, connectFamily: 'fixture-jsonl' };
+  const reference = { providerId: native.id, providerVersion: 1, modelId: 'fixture', modelVersion: 1 };
+  const choice = { reference, label: 'Fixture', detail: 'OLD TEXT READY', group: native.id, blocked: null, configured: false, exact: 'fixture', command: null };
+  let state: NativeAgentReadiness | undefined;
+  const host = { providerConnect: { ...base, kinds: [native] }, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } }] }) as never,
+    inspectSubscriptionReadiness: async (_root: string, query: unknown) => { calls.push(query); return state as NativeAgentReadiness; } };
+  const plain = { title: 'models', choices: [choice, { ...choice, reference: { ...reference, providerId: 'api-fixture' } }], notes: [], defaultBlocked: null };
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', host, options, locale, errorText);
+    state = undefined;
+    // R2a: unknown stays selectable (the guarded first turn verifies it); only unavailable blocks.
+    const unknown = await subscriptionModelView(plain, port, locale);
+    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect(unknown.choices[0]!.detail).not.toContain('OLD TEXT READY'); expect(unknown.choices[1]).toEqual(plain.choices[1]);
+    expect((await port.inspect()).notes.join('\n')).toContain(unknown.choices[0]!.detail);
+    state = { state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
+    const unchecked = await subscriptionModelView(plain, port, locale);
+    expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.cli', {}, locale));
+    expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale)); expect(unchecked.choices[0]!.blocked).toBeNull();
+    state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
+    state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
+      profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
+    const ready = await subscriptionModelView(plain, port, locale);
+    expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.k13.readiness.ready', {}, locale));
+    expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', reference });
+    // A later missing observation cannot retain an earlier ready projection.
+    state = undefined;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
+    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+  }
+  // R3c: a login with several models gives one note (onboarding pushes notes to scrollback), not one per model.
+  state = undefined;
+  const two = await providerPanelPort(root, 'scope', { ...host, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } },
+    { reference: { ...reference, modelId: 'fixture-2' }, nativeId: 'fixture-2', availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText).inspect();
+  expect(two.notes.filter(note => note.startsWith(two.kinds[0]!.label))).toEqual([`${two.kinds[0]!.label} · 2 model(s) connected: ${subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en')}`]);
+  // R8e: the production CLI host reads the seal a guarded turn wrote, so /provider says ready (without the host wiring it stayed "unknown").
+  const sealedRoot = await mkdtemp(join(tmpdir(), 'deckent-r8e-')); roots.push(sealedRoot);
+  const global = join(sealedRoot, 'global'), bin = join(sealedRoot, 'bin'), configDir = join(global, 'headless', 'logins', 'claude'), stateDir = join(global, 'headless', 'connections', 'r8e');
+  await mkdir(configDir, { recursive: true, mode: 0o700 }); await mkdir(stateDir, { recursive: true, mode: 0o700 }); await mkdir(bin);
+  const executable = join(bin, 'claude'); await writeFile(executable, '#!/bin/sh\n', { mode: 0o700 });
+  const f = await brainProviderFixture({ headless: { executable, configDir, stateDir } }), sealedOptions = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: global } };
+  const sealed = modelInvocationProfileSchema.parse(f.config.provider_invocation_profiles.profiles[0]);
+  const observation = vi.spyOn(adapters, 'readNativeAgentObservation').mockResolvedValue({ cli: true, login: true, environment: true, toolSurface: true, plugins: true, bridge: true,
+    execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: await realpath(executable), cliVersion: '9.0.0', ownerUid: process.getuid!(),
+      flagSetDigest: adapters.nativeAgentFlagSetDigest(nativeCliAgent(sealed.protocol.family)!), profileDigest: modelInvocationProfileDigest(sealed) } });
+  let cliHost: TerminalLaunchContext | undefined;
+  const entry = vi.spyOn(cliSurface, 'main').mockImplementation(async (_argv, context) => { cliHost = await context!.loadHost!() as TerminalLaunchContext; return 0; });
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(f.project);
+  try {
+    expect(await runConfiguredCli(['--lang', 'en'])).toBe(0);
+    const sealedPort = providerPanelPort(f.project, 's', { ...cliHost!, providerConnect: { ...base, kinds: [{ ...native, id: f.reference.providerId, catalogProviderId: f.reference.providerId }] } },
+      sealedOptions, 'en', errorText);
+    expect(subscriptionReadinessText(await sealedPort.subscriptionReadiness!.inspect('chat', f.reference), 'en')).toBe(t('headless.agent.k13.readiness.ready', {}, 'en'));
+    expect(observation).toHaveBeenCalled();
+  } finally { entry.mockRestore(); cwd.mockRestore(); observation.mockRestore(); await f.close(); }
+});
+
+it('K13: unavailable observation readers are bounded and never leak their error or keep a ready result', async () => {
+  const { root, options } = await project({}), base = connectHost('ok');
+  const reference = { providerId: 'fixture-native', providerVersion: 1, modelId: 'fixture', modelVersion: 1 };
+  const providerConnect = { ...base, kinds: [{ ...base.kinds[1]!, id: reference.providerId, headlessLogin: true }] };
+  const failed = providerPanelPort(root, 'scope', { providerConnect, inspectSubscriptionReadiness: async () => { throw new Error(CANARY); } }, options, 'en', errorText);
+  const refusal = await failed.subscriptionReadiness!.inspect('chat', reference);
+  expect(refusal).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' }); expect(JSON.stringify(refusal)).not.toContain(CANARY);
+  vi.useFakeTimers();
+  try {
+    const stalled = providerPanelPort(root, 'scope', { providerConnect, inspectSubscriptionReadiness: () => new Promise(() => {}) }, options, 'en', errorText);
+    const result = stalled.subscriptionReadiness!.inspect('chat', reference);
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
 });

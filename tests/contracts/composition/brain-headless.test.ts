@@ -6,6 +6,11 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planRun } from '../../../src/index.js';
+import { createHash } from 'node:crypto';
+import { encodeModelBindingDefinition } from '#domain/index.js';
+import { readLocalOsIdentity, openSqliteModelActivationStore } from '#adapters/index.js';
+import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
+import { CODEX_FAMILY, codexAnswer, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
 import { clearConfigCache } from '#platform/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
@@ -64,5 +69,41 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-4 Brain through th
     const h = await fixture([...steps]);
     for (let attempt = 0; attempt < 2; attempt++) await expect(planRun(h.f.project, command, h.f.options)).rejects.toMatchObject({ code, ...(params ? { params } : {}) });
     expect(await h.calls()).toHaveLength(1);
+  });
+});
+
+
+describe.skipIf(process.platform !== 'linux' || !sandbox)('K8 Brain on the second subscription text profile', () => {
+  it('plans through Codex with the existing role, activation and subscription path, no MCP/agent profile or HTTP fallback', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-brain-codex-'))); roots.push(root);
+    const bin = join(root, 'bin'), configDir = join(root, 'login'), logPath = join(configDir, 'config.toml');
+    await mkdir(bin); await mkdir(configDir, { mode: 0o700 });
+    const executable = await writeFakeCodexCli(bin, { logPath, steps: codexAnswer(draft).map(line => ({ line })) });
+    const f = await brainProviderFixture({ noCharge: true, headless: { executable, configDir, stateDir: join(root, 'state') } }); cleanups.push(f.close);
+    // Reuse the real fixture's stores and policy; install a separate model revision with the second registry protocol.
+    const reference = { ...f.reference, modelVersion: 2 };
+    const prior = f.config.provider_catalog.providers[0]!, oldModel = prior.models[0]!;
+    const model = { ...oldModel, version: 2, protocols: [{ ...oldModel.protocols[0]!, family: CODEX_FAMILY }] };
+    const catalog = { ...f.config.provider_catalog, revision: 'codex-fixture', providers: [{ ...prior, models: [model] }] };
+    const bindingDigest = createHash('sha256').update(encodeModelBindingDefinition({ encodingVersion: 1, provider: { id: prior.id, version: prior.version }, model })).digest('hex');
+    const profile = { ...f.config.provider_invocation_profiles.profiles[0]!, reference, bindingDigest, protocol: { family: CODEX_FAMILY, version: 'v1' } };
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ ...f.config, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
+      terminal: { ...f.config.terminal, chat: { ...f.config.terminal.chat, reference } } })); clearConfigCache();
+    const activation = new ModelActivationApplication({ verify: async () => ({ ...readLocalOsIdentity(), scopeIds: ['s'] }) },
+      { authorize: async () => ({ revision: 'seed', ruleId: 'seed' }) }, new ModelBindingApplication({ read: async () => catalog }),
+      () => openSqliteModelActivationStore(f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }), () => 1);
+    await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate-codex', scopeId: 's', reference, expectedRevision: 0, catalogRevision: catalog.revision,
+      expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: bindingDigest } });
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    policy.grants.find((grant: { id: string }) => grant.id === 'invocation').resource.ids = [modelInvocationTargetId(reference)];
+    await writeFile(policyPath, JSON.stringify(policy));
+    const result = await planRun(f.project, { ...command, commandId: 'plan-codex' }, f.options);
+    expect(result.proposal.proposal.source).toMatchObject({ kind: 'model', contribution: { billingAxis: 'subscription' } });
+    const calls = (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[]; stdin?: string }).filter(row => row.mode === 'call');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.argv).toEqual(expect.arrayContaining(['exec', '--json', '--sandbox', 'read-only', '--model', MODEL]));
+    expect(calls[0]!.argv.some(arg => arg.includes('mcp_servers.'))).toBe(false);
+    expect(calls[0]!.stdin).toContain(command.intent);
+    expect(f.posts).toBe(0);
   });
 });

@@ -9,7 +9,8 @@ import { ErrorRegistry } from '#platform/index.js';
  */
 /** `delivered` (BeUser M-25/DR2-07): the task's result is already at its delivery ref and not adopted; the window offers the adoption step only. */
 /** `setAside` (BeUser M-33): a set-aside row in /deliver carrying its own title; opening it brings the result back first. */
-export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string }>;
+/** `request`: the task's request as the Run recorded it (L1c: `r` on a working-tree conflict prepares `/do <request>`). */
+export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string; request?: string }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /**
  * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
@@ -21,10 +22,12 @@ export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
 /** `reattempt`: with a queue target, the enqueue carries the bounded service re-attempt intent (`targetQueue.reattempts` > 0). */
 /** `summary`: TESLIM-KARTI-OZET, what the Attempt claims, what acceptance rests on, model and risk (null: not readable; absent: no reader bound). */
+/** `workingTree`: the installation's delivery writes into the project's files (`execution.deliveryMode`); `changes`: each path's before/after digest the yes binds. */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
-  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null }>;
-export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
+  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null; workingTree?: true; changes?: EffectConfirmationView['changes'] }>;
+/** `setAside` (R1, Astra 3017): files a working-tree delivery left beside their names; the person is told. */
+export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string; setAside?: readonly string[] | undefined }>;
 /** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
 export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
 /** An accepted Run of the configured verification kind with one task (the bar's shape). Whether it ran on this delivered commit and meets the
@@ -67,7 +70,7 @@ export interface TerminalDeliveryPort {
  * for adoption the same target branch and delivered commit. Anything else is shown to the person as the port's exact card and needs a fresh `y`.
  */
 export type DeliveryConsent = Readonly<{ operation: 'deliver-integration' | 'adopt-integration'; scopeId: string; runId: string; taskId: string; commandId: string;
-  files?: readonly string[]; from?: string; resource?: string; to?: string }>;
+  files?: readonly string[]; from?: string; resource?: string; to?: string; changes?: EffectConfirmationView['changes'] }>;
 export function consentMatches(consent: DeliveryConsent, view: EffectConfirmationView): boolean {
   if (view.operation !== consent.operation || view.scopeId !== consent.scopeId || view.runId !== consent.runId || view.taskId !== consent.taskId
     || view.commandId !== consent.commandId) return false;
@@ -75,6 +78,7 @@ export function consentMatches(consent: DeliveryConsent, view: EffectConfirmatio
     const shown = [...new Set(consent.files)].sort(), asked = [...new Set(view.files)].sort();
     if (shown.length !== asked.length || shown.some((path, index) => path !== asked[index])) return false;
   }
+  if (consent.changes && JSON.stringify(consent.changes) !== JSON.stringify(view.changes)) return false;
   return (consent.from === undefined || consent.from === view.from) && (consent.resource === undefined || consent.resource === view.resource)
     && (consent.to === undefined || consent.to === view.to);
 }
@@ -104,7 +108,7 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
       const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
       if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
       const key = `${run.scopeId}:${run.runId}:${task.id}`, title = instruction.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle;
-      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, ...(aside ? { setAside: title } : {}) }));
+      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(aside ? { setAside: title } : {}) }));
     }
   }
   return Object.freeze([...targets.values()]);

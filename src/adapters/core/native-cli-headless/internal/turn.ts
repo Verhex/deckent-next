@@ -1,5 +1,5 @@
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { splitModelInvocationDelta, type HeadlessEgress, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationRejectionReason } from '#domain/index.js';
+import { type HeadlessEgress, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationRejectionReason } from '#domain/index.js';
 import type { HeadlessRejectionBody, NativeCliHeadlessDefinition } from './contract.js';
 import type { HeadlessEntry } from './env.js';
 import type { HeadlessPreflight } from './preflight.js';
@@ -18,19 +18,4 @@ export const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extrac
 export type HeadlessTurn = Readonly<{ line(raw: string): Refusal | null;
   end(exit: Readonly<{ exited: boolean; exitCode: number | null }>, egress: HeadlessEgress): Readonly<{ refusal: Refusal }> | Readonly<{ response: Exclude<ModelInvocationNativeResult, { kind: 'rejected' }> }> | null }>;
 export type HeadlessTurnFactory = (prepared: Prepared, preflight: HeadlessPreflight, runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets?: KnownSecretSnapshot) => HeadlessTurn;
-/** Presentation only: a failing sink never changes the call. */
-export function emitDelta(onDelta: ModelInvocationDeltaSink | undefined, text: string): void {
-  for (const delta of splitModelInvocationDelta('text', text)) { try { onDelta?.(delta); } catch { /* Presentation only. */ } }
-}
-/** Reported usage counters: each required one, and each optional one present, is a safe non-negative integer and their sum stays safe; otherwise
- * null (unknown consumption is never a measured zero, so the caller refuses and the reservation stays charged). An absent optional counter is none. */
-export function reportedCounters<K extends string>(usage: unknown, required: readonly K[], optional: readonly K[] = []): Readonly<Record<K, number>> | null {
-  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
-  const counters = {} as Record<K, number>; let sum = 0;
-  for (const key of [...required, ...optional]) {
-    const value = Object.hasOwn(usage, key) ? (usage as Record<string, unknown>)[key] : required.includes(key) ? undefined : 0;
-    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(sum += value)) return null;
-    counters[key] = value;
-  }
-  return counters;
-}
+export { emitDelta, reportedCounters } from '#capabilities/index.js';

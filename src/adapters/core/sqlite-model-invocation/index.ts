@@ -44,3 +44,5 @@ export async function openSqliteProviderSpendRecoveryStore(path: string, options
   return implementation.openSqliteProviderSpendRecoveryStore(path, options);
 }
 export { readSqliteSubscriptionUsageSummary } from './internal/subscription-usage.js';
+
+export { headlessCapacityBinding, invocationCapacityResource, readCapacityResourceOccupancy, readRunCapacityBindings, readRunResourceCapacity } from './internal/resource-capacity.js';

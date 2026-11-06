@@ -5,7 +5,8 @@ import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { ModelInvocationApplication } from '#engine/core/model-invocation/index.js';
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
-import { openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
+import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { headlessCapacityBinding, openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
 import { isNativeCliHeadlessAdapter, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
 import { bubblewrapObservation } from '#adapters/index.js';
 import { binding as definition, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -20,12 +21,13 @@ const expectedBinding = { encodingVersion: 1 as const, algorithm: 'sha256' as co
 const principal = { id: 'person', issuer: 'test', subject: '1', assurance: 'os-user' as const, scopeIds: ['scope'] };
 const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance }, authorization = { revision: 'policy', ruleId: 'invoke' };
 const steps = (text: string) => [uiLine(), initLine(), assistantLine(text), rateLimitLine(), resultLine(text)].map(line => ({ line }));
-async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}) {
+async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}, bound = true) {
   const c = await connection({ steps: lines }, {}, expectedBinding.digest, isolation), path = join(c.root, 'ledger.db');
   const activations = await openSqliteModelActivationStore(path, sqlite);
   const admitted = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: 'catalog', expectedBinding }, actor, authorization, admittedAtMs: 1, definition }); activations.close();
-  (await openSqliteModelInvocationStore(path, sqlite, 'forbid')).close();
+  const resources = openSqliteLedger(path, sqlite, 'forbid');
+  try { if (bound) bindCapacityResource(resources, headlessCapacityBinding(c.profile.adapter.definition), { executionSlots: c.profile.allocation.maxInFlight, inFlightSlots: c.profile.allocation.maxInFlight }); } finally { resources.close(); }
   // The registry shape the composition uses: resolve gives the headless port, admit (the credential-source decision) runs its preflight before any claim.
   const app = new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return authorization; } },
     { async inspect() { return { schemaVersion: 1, reference, status: 'declared', catalogRevision: 'catalog', definition, binding: expectedBinding, availability: 'not-observed' }; } },
@@ -84,4 +86,18 @@ it.skipIf(!sandbox)('records an in-run guard refusal as a rejected receipt with 
 it.skipIf(!sandbox)('N22: only this exact adapter id and version select the headless branch; any other version stays unavailable, as alpha.54 resolves this id', () => {
   expect(isNativeCliHeadlessAdapter(NATIVE_CLI_HEADLESS_ADAPTER)).toBe(true);
   for (const adapter of [{ ...NATIVE_CLI_HEADLESS_ADAPTER, version: 2 }, { id: 'native-cli-headless-next', version: 1 }]) expect(isNativeCliHeadlessAdapter(adapter)).toBe(false);
+});
+
+it.skipIf(!sandbox)('invokes an alpha.62-shaped connection without a capacity binding and persists only resource metadata', async () => {
+  const { c, app, path, command } = await fixture(steps('legacy-first-use'), testIsolation, () => {}, false);
+  expect(c.profile.adapter.definition).not.toHaveProperty('sourceBinding');
+  const before = JSON.stringify(c.profile);
+  expect(await app.invoke(command)).toMatchObject({ receipt: { outcome: { state: 'responded' } },
+    response: { native: { choices: [{ message: { content: 'legacy-first-use' } }] } } });
+  expect(await calls(c)).toBe(1); expect(JSON.stringify(c.profile)).toBe(before);
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    expect(db.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(1);
+    expect(db.prepare('SELECT count(*) AS n FROM model_invocation_spend_reservations').get()?.n).toBe(0);
+  } finally { db.close(); }
 });

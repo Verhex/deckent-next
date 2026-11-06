@@ -1,5 +1,9 @@
+import { inspectNativeChat } from './native.js';
+import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
+import { modelInvocationProfileSchema, NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -17,7 +21,7 @@ export type TerminalChatPlan = Readonly<{
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
-  tools: 'available' | 'none' | 'unknown';
+  tools: 'available' | 'none' | 'unknown' | 'unverified'; // R4b `unverified`: a subscription CLI's tools not observed yet (its first turn verifies them)
   skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
@@ -41,15 +45,29 @@ export interface TerminalChatTurnInput {
   readonly signal?: AbortSignal;
 }
 const describeModel = (reference: ModelReference): string => `${reference.providerId}/${reference.modelId}@${reference.modelVersion}`;
-export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalChatPlan> {
+/** The scope's native CLI profile of a reference: the one whose seal the chat plan and `/provider` read. */
+const nativeChatProfile = (config: Record<string, unknown>, scopeId: string | undefined, reference: ModelReference) => ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)
+  ?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value)).find(profile => profile.scopeId === scopeId && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
+    && isDeepStrictEqual(profile.reference, reference));
+/** R8e: the host's chat readiness read for `/provider` and `/model` (read only: no preflight, spawn or sign-in). */
+export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; reference: ModelReference }>, options: ConfigLoadOptions = {}) {
+  const profile = query.surface === 'chat' ? nativeChatProfile(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>, query.scopeId, query.reference) : undefined;
+  return profile ? inspectNativeChat(profile, { readiness: configuredNativeChatReadiness(projectRoot, options, true) }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
+}
+export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<TerminalChatPlan> {
+  runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options) };
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
   const { choice, skipped } = await terminalModelHere(projectRoot, options), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
   if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
   const binding = await inspectModelBinding(projectRoot, reference, options);
+  const config = await loadComposedConfig(projectRoot, options) as Record<string, unknown>;
+  const profile = nativeChatProfile(config, (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
+  const native = profile ? await inspectNativeChat(profile, runtime) : null;
+
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
-    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
+    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more });
 }
 /**

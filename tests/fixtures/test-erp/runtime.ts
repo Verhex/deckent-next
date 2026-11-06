@@ -7,6 +7,7 @@ import { terminalProgram } from '../../contracts/support/approval-terminal.js';
 import pkg from '../../../package.json' with { type: 'json' };
 import config from './config.json' with { type: 'json' };
 import { fixtureAvailability, type FixtureAvailability } from './availability.js';
+import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 
 const cli = resolve(pkg.bin.deckent);
 export async function runtimeBinaryAvailability(): Promise<FixtureAvailability> {
@@ -31,9 +32,10 @@ function refused(output: string): never {
   if (!code) throw new Error(`fixture CLI returned an untyped error: ${output}`);
   throw Object.assign(new Error(code), { code });
 }
-/** Executes the package's shipped entry: every operation and decision crosses the installed service socket. */
+/** Effects and decisions use the shipped CLI; observations use the SDK on the same installed service socket. */
 export async function startFixtureRuntime(project: string, root: string, fixtureEnv: NodeJS.ProcessEnv) {
   const env = { ...process.env, ...fixtureEnv };
+  const client = createConfiguredRuntimeClient(project, { env });
   let child: ChildProcess | undefined, done: Promise<void> = Promise.resolve(), sequence = 0;
   const calls: { argv: string[]; status: number; result: unknown }[] = [];
   const command = async <T>(argv: string[], input?: unknown, interactive = false): Promise<T> => {
@@ -112,7 +114,7 @@ export async function startFixtureRuntime(project: string, root: string, fixture
   await start();
   try {
     const identity = { cli, entrySha256: createHash('sha256').update(await readFile(cli)).digest('hex'),
-      descriptor: await command<unknown>(['runtime', 'describe']) };
-    return { command, human, identity, calls, close: stop, restart: async () => { await stop(); await start(); } };
+      descriptor: await client.describeService() };
+    return { command, human, client, identity, calls, close: stop, restart: async () => { await stop(); await start(); } };
   } catch (error) { await stop(); throw error; }
 }

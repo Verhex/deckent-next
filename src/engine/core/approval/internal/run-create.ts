@@ -23,16 +23,19 @@ export class RunCreateApprovalBroker {
     const digest = sha256(encodeCommandProjection('run-create-approval:1', { scopeId: input.scopeId, subject: input.subject, requester: input.requester }));
     const now = this.clock.sample().wallMs;
     let record = this.store.findRunCreate(input.scopeId, input.subject.commandId);
-    if (!record) {
-      const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId,
+    const fresh = () => sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId,
         subject: input.subject, requester: input.requester, policyRevision: input.policyRevision, actionDigest: digest,
         summary: input.summary ?? `${input.subject.runId} · ${input.subject.inputDigest.slice(0, 12)} · ${input.subject.decisionRecordId}`, createdAt: now,
         expiresAt: now + this.options.requestTtlMs, facts: { risk: null, reversibility: null, onExpiry: 'nothing-runs',
-          requiredAssurance: minimumApprovalAssurance(input.policy, input.scopeId, 'run-create', null) } });
-      try { record = this.store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, this.integrity)); }
-      catch (error) { const winner = this.store.findRunCreate(input.scopeId, input.subject.commandId); if (!winner) throw error; record = winner; }
-    }
+          requiredAssurance: minimumApprovalAssurance(input.policy, input.scopeId, 'run-create', null) } }), revision: 0, status: 'pending', decision: null }, this.integrity);
+    if (!record) try { record = this.store.create(fresh()); } catch (error) { const winner = this.store.findRunCreate(input.scopeId, input.subject.commandId); if (!winner) throw error; record = winner; }
     record = verifyApproval(record, this.integrity);
+    // L1c: the same plan (command, Run, input, requester) whose basis changed before it was used (the person's mode, the policy revision): the unused card is
+    // retired and a fresh card with the current basis and summary asks again. The old decision never admits the changed basis; a denial stands.
+    const held = approvalSubject(record.request) as Subject, same = held.kind === 'run-create' && held.commandId === input.subject.commandId && held.runId === input.subject.runId && held.inputDigest === input.subject.inputDigest;
+    if (record.request.actionDigest !== digest && same && encodeCommandProjection('requester:1', record.request.requester) === encodeCommandProjection('requester:1', input.requester) && (record.status === 'pending' || record.decision?.decision === 'allow')) {
+      try { record = this.store.supersedeRunCreate(record.status === 'pending' ? expireApproval(this.store, this.integrity, record) : record, fresh()); } /* an old pending card ends expired, never answerable */ catch (error) { const winner = this.store.findRunCreate(input.scopeId, input.subject.commandId); if (!winner || winner.request.actionDigest !== digest) throw error; record = verifyApproval(winner, this.integrity); }
+    }
     if (record.request.actionDigest !== digest || record.request.policyRevision !== input.policyRevision
       || encodeCommandProjection('run-create-subject:1', approvalSubject(record.request)) !== encodeCommandProjection('run-create-subject:1', input.subject)
       || encodeCommandProjection('requester:1', record.request.requester) !== encodeCommandProjection('requester:1', input.requester)) throw new ApprovalError('APPROVAL_CONFLICT');

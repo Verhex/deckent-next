@@ -46,7 +46,8 @@ export interface DoctorCheckFacts {
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
   readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
-  readonly firstJob?: Readonly<{ execution: boolean; registry: boolean }> | null;
+  /** `connection` (R8b): execution is configured without Docker, so work runs on a connected subscription. */
+  readonly firstJob?: Readonly<{ execution: boolean; registry: boolean; connection?: boolean }> | null;
   readonly toolchainUpdateEnabled: boolean;
   /** PRE-34: the configured worker image (evidence when the refresh marker names no version); null when no execution section sets one. */
   readonly imageId?: string | null;
@@ -247,6 +248,7 @@ function setupReasonText(key: string, params: Readonly<Record<string, string | n
 /** PRE-34: Docker (the execution environment) through the same detection and decision `deckent init` uses: ready is ok; not reachable is an
  * error when work is configured to run in it, else a warning; no answer in time is "not tested". The reason text is the setup's own. */
 function executionRow(f: DoctorCheckFacts, l: Locale): DoctorCheck {
+  if (f.firstJob?.connection) return row('work', 'work.docker', 'ok', t('doctor.check.docker.notNeeded', {}, l));
   const view = f.executionEnvironment;
   if (!view) return row('work', 'work.docker', 'untested', t('doctor.check.docker.unknown', {}, l));
   const text = setupReasonText(view.reason.code, view.reason.params, l);

@@ -18,10 +18,12 @@ export interface WorkspacePatchFixtureOptions { readonly restartable?: boolean; 
   /** Extra tracked files of the base commit (relative path → content). */
   readonly baseFiles?: Readonly<Record<string, string>>;
   /** EXEC-RELEASE C2 (owner B): the `coding` kind declares `workspaceDelivery: 'none'` in the admission registry. */
-  readonly noWorkspaceDelivery?: boolean }
+  readonly noWorkspaceDelivery?: boolean; readonly deliveryMode?: 'reference' | 'working-tree';
+  /** R9n: the person's uncommitted state beside `note.txt`'s WIP line (untracked files, links) before the worker starts. */
+  readonly beforeRun?: (project: string) => Promise<void> }
 
 /** Real Git project, configured Docker execution and one reserved coding attempt whose worker edits note/removed/added files. */
-export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {}, noWorkspaceDelivery = false }: WorkspacePatchFixtureOptions = {}) {
+export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {}, noWorkspaceDelivery = false, deliveryMode = 'reference', beforeRun }: WorkspacePatchFixtureOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-patch-')); track.roots.push(root);
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
@@ -29,7 +31,7 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
   await writeFile(join(project, 'note.txt'), 'before\n'); await writeFile(join(project, 'removed.txt'), 'remove\n');
   for (const [path, content] of Object.entries(baseFiles)) await writeFile(join(project, path), content);
   await git('add', 'note.txt', 'removed.txt', ...Object.keys(baseFiles)); await git('commit', '-m', 'base'); const base = await git('rev-parse', 'HEAD');
-  await writeFile(join(project, 'note.txt'), 'owner-wip\n');
+  await writeFile(join(project, 'note.txt'), 'owner-wip\n'); await beforeRun?.(project);
   const registry = fixtureDockerRegistry(['coding']); registry.profiles[0]!.parameters.argv = ['node', '-e',
     "const fs=require('node:fs');fs.writeFileSync('note.txt','after\\n');fs.unlinkSync('removed.txt');fs.writeFileSync('added.txt','new\\n');fs.mkdirSync('.codex');fs.writeFileSync('.codex/auth.json','synthetic-private');fs.appendFileSync('.git/config','\\n[diff]\\n external = touch /workspace/hook-fired\\n');"];
   if (restartable) registry.profiles[0]!.parameters.argv = ['node', '-e', "const fs=require('node:fs');if(fs.existsSync('.git/restarted'))setInterval(()=>{},1000);else fs.writeFileSync('.git/restarted','1')"];
@@ -40,7 +42,8 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
   await writeFile(configPath, JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 4_227_072 },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { ...registry, kinds } },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
-      ...(adoptionTargets ? { adoption: { targets: adoptionTargets } } : {}) } }));
+      // The reference path by default; `working-tree` (R9n/R9p) starts the worker from the uncommitted files and writes them on delivery.
+      deliveryMode, ...(adoptionTargets ? { adoption: { targets: adoptionTargets } } : {}) } }));
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
@@ -77,7 +80,8 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
 /** Executed attempt with a prepared patch, source restored and a check proposal for a candidate command. */
 export async function readyDeliveryFixture(track: FixtureTracker, options: WorkspacePatchFixtureOptions = {}) {
   const f = await workspacePatchFixture(track, options); await f.run(); await f.prepare();
-  await writeFile(join(f.project, 'note.txt'), 'before\n');
+  // Reference: the base is HEAD, so the WIP line is restored. Working tree (R9n): the WIP line is the base and stays the person's.
+  if (options.deliveryMode !== 'working-tree') await writeFile(join(f.project, 'note.txt'), 'before\n');
   await f.policy(['read-output', 'prepare-integration', 'deliver-integration']);
   const checked = await checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
   const command = { schemaVersion: 1 as const, commandId: 'candidate', identity: f.identity, proposal: checked.proposal };

@@ -1,6 +1,7 @@
-import { isAiPrincipal, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
+import { isAiPrincipal, mcpPrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
+const sameActor = (a: { issuer: string; subject: string }, b: { issuer: string; subject: string }) => a.issuer === b.issuer && a.subject === b.subject;
 
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
@@ -40,8 +41,27 @@ const RELAXABLE: Readonly<Partial<Record<AgentToolCallCell, Relaxable>>> = {
  */
 const SANDBOX_RELAXABLE: ReadonlySet<AgentToolCallCell> = new Set(['shell-read-none', 'shell-read-low', 'shell-narrow-mutating', 'shell-other-modify', 'shell-always-ask']);
 const SANDBOX_RELAXATION: Relaxable = { modes: ['full-auto'], audit: 'shell-modify' };
+/** R9 (owner 2026-11-05, lead checkpoint): a Run worker's read-only shell command is lowered in standart and full-auto whatever `askEdits`,
+ * audited as its own `shell-read` cell: `shell-read-none` (bounded local reads) in any realm, `shell-read-low` (repository-wide traversal,
+ * environment, processes) only in an enforced sandbox realm for a contained command. Terminal turns are unchanged (no `origin`). */
+const WORKER_READ: Relaxable = { modes: ['standart', 'full-auto'], audit: 'shell-read' };
+const workerRead = (request: AgentToolCallRequest) => request.origin?.kind === 'run'
+  && (request.cell === 'shell-read-none' || request.cell === 'shell-read-low' && request.shell?.realm === 'sandbox' && request.shell.contained);
 const relaxableFor = (request: AgentToolCallRequest, askEdits: boolean): Relaxable | undefined => request.cell === 'edit' && askEdits ? undefined : RELAXABLE[request.cell]
+  ?? (workerRead(request) ? WORKER_READ : undefined)
   ?? (SANDBOX_RELAXABLE.has(request.cell) && request.shell?.realm === 'sandbox' && request.shell.contained ? SANDBOX_RELAXATION : undefined);
+/** R9: the mode a background worker may use for this person now — full access never passes to a worker, its ceiling is full-auto under the
+ * company's full-auto grant (PRE-9), else standart; `askEdits` and the entry id are kept. The plan card records it for a person's Run. */
+export function workerPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string) {
+  const person = principalPermissionMode(policy, principal, scopeId);
+  return Object.freeze({ ...person, mode: person.mode !== 'standart' && fullAutoGrant(policy, principal, scopeId).decision === 'allow' ? 'full-auto' as const : 'standart' as const });
+}
+/** The plan card's worker ceiling for the Run's creator; an AI creator has no mode of its own, so nothing is recorded (the person's current mode applies). */
+export const runWorkerMode = (policy: unknown, principal: VerifiedPrincipal, scopeId: string): WorkerPlanMode | undefined => {
+  if (isAiPrincipal(principal)) return undefined;
+  const { mode, askEdits } = workerPermissionMode(policy, principal, scopeId); return Object.freeze({ mode, askEdits });
+};
+export type WorkerPlanMode = { readonly mode: 'standart' | 'full-auto'; readonly askEdits: boolean };
 
 // Card presentation reads the same policy-owned mode; composition never evaluates bindings itself.
 export function agentCallPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string): PermissionMode {
@@ -64,12 +84,18 @@ export interface AgentToolCallRequest {
   readonly standing?: { readonly key: string; readonly session: boolean } | null;
   /** MODES-3: the turn was launched in full access (`chatTurn.fullAccess`). It counts only while a company grant allows full access. */
   readonly fullAccess?: boolean;
+  /** R4a: the person who owns this AI actor (its `<issuer>/mcp`) and started its turn or Run; their mode and its company grant apply. Never an AI. */
+  readonly person?: VerifiedPrincipal;
+  /** R9 (owner 2026-11-05): the call is a Run worker's (`kind: 'run'`; absent = a terminal turn) with the ceiling the person approved on the
+   * plan card (null: none recorded — an older Run or one admitted without a card — so the person's current mode applies as before). With a
+   * ceiling the mode is the lower of the two (askEdits if either), the current one recomputed now with full access capped at full-auto. */
+  readonly origin?: { readonly kind: 'run'; readonly ceiling: WorkerPlanMode | null };
 }
 /** A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
 export interface StandingApproval { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null }
 export interface PermissionModeRelaxation {
   readonly mode: Exclude<PermissionMode, 'full-access'>;
-  readonly cell: 'edit-non-floor' | 'shell-modify' | 'mcp-call';
+  readonly cell: 'edit-non-floor' | 'shell-modify' | 'shell-read' | 'mcp-call';
   /** The lowered company `require-approval` rule ids (sorted, `+`-joined) and the person's mode entry id (null: the default standart). */
   readonly company: string;
   readonly person: string | null;
@@ -130,7 +156,11 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   const grant = request.fullAccess === true ? fullAccessGrant(policy, request.principal, request.scopeId) : null;
   const access = grant?.decision === 'allow' && grant.ruleId !== undefined ? grant.ruleId : null;
   // PRE-9 (b): a stored full-auto counts only while its grant allows it on this very snapshot (like full access): revoked, the call is standart's.
-  const person = access ? null : effectivePermissionMode(policy, request.principal, request.scopeId);
+  // R4a: an AI actor follows only the person whose MCP actor it is; without that person no mode relaxes anything (fail closed).
+  const owner = request.person && !isAiPrincipal(request.person) && sameActor(mcpPrincipalRef(request.person), request.principal) ? request.person : null;
+  const modeActor = isAiPrincipal(request.principal) ? owner : request.principal;
+  const plan = request.origin?.ceiling, now = access || !modeActor ? null : plan ? workerPermissionMode(policy, modeActor, request.scopeId) : effectivePermissionMode(policy, modeActor, request.scopeId);
+  const person = now && plan ? { ...now, mode: plan.mode === 'full-auto' ? now.mode : 'standart' as const, askEdits: now.askEdits || plan.askEdits } : now;
   // A stored full-access start mode without a launched turn is standart (MODES-3: an explicit parameter, never implied by bindings).
   const mode = person === null ? null : person.mode === 'full-access' ? { mode: 'standart' as const, askEdits: person.askEdits, id: person.id } : person;
   // A standing approval names a persistable cell's pattern (self-source only names a session pattern). It is asked like any other rule (a company deny or require-approval on the

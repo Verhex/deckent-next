@@ -22,7 +22,7 @@ shell `low`, destructive, always-ask, other modify, narrow mutating raise allow)
 itself is `require-approval`, every matching `require-approval` rule on each asking side is eligible, the cell is relaxable in the
 mode (ordinary edit: standart/full-auto unless `askEdits`; narrow mutating shell: full-auto) and the person's mode is unambiguous (two
 entries decide as standart with every edit asked). Allow rules
-never lower; a raised allow is never lowered; read tools and read-only shell commands under require-approval always ask. The narrow mutating shell tier is a separate classifier layer (`classifyShellMutation`): exactly one simple command (one pipeline of
+never lower; a raised allow is never lowered; read tools and read-only shell commands under require-approval always ask (a terminal turn; a Run worker since R9, see the R9 section). The narrow mutating shell tier is a separate classifier layer (`classifyShellMutation`): exactly one simple command (one pipeline of
 one stage; no `&&`, `;`, `||`, newline or pipe — an earlier part could change what a later part writes, Astra 2133) of `mkdir [-p -v]`,
 `touch [-c]`, `cp [-n -v] src dst`, `mv [-n -v] src dst` whose sources pass the read check and whose targets pass a write check
 (inside the workspace, not denied, not on the write floor, parent a real directory, target absent or a single-link regular file — an existing directory target is not narrow;
@@ -38,7 +38,7 @@ a decision that was silent without a mode increments `agent-tool.silent.edit|she
 not stop the call). Owner-approved calls keep the C12 G3 gate unchanged. The protocol and ledger v41 are unchanged by 4a; the
 mode is not on the wire yet (status row and `/mode` join the v15 package). Version note: a policy document carrying `modeEligible`, or
 bindings v2, is refused as a whole by a build before this slice (strict schemas) — fail closed, never a silent relaxation. Side effect: on an installation that never produced an approval, the first silent call creates the approval/audit
-integrity key through the counter path. Open (owner): read-only shell under an eligible rule still asks in full-auto (needs audit event v2);
+integrity key through the counter path. Open (owner): read-only shell under an eligible rule still asks in full-auto (needs audit event v2; closed for Run workers by R9 through the `shell-read` audit cell, still open for terminal turns);
 `rm` stays outside the narrow set; permanent exact resources are slice 4d.
 **Full-auto inside an enforced sandbox (SHELL-AUTONOMY, owner 2026-09-28 live test, lead decision).** The decision request carries,
 for a shell call, the planned realm's containment (`ShellRealmContainment`: `sandbox` = bubblewrap or Landlock at ABI ≥ 6, `degraded` =
@@ -342,3 +342,28 @@ The question states W3-SANDBOX: without a sandbox full-access shell calls are re
 MCP group catalog schema v2 uses `availability: default|opt-in`; the reader maps v1 `proposed: true` to opt-in. Views hide opt-in groups unless
 a managed group rule is already held (including partial/conflicting rules) or protected config `policy.mcp.optInGroups` names the group.
 Group cells, group versions and managed rule ids remain unchanged. Listing is not a policy change; an unambiguous read scope needs no change card.
+
+## R9 Run worker mode and read-only shell (alpha.63, owner 2026-11-05, lead checkpoint)
+
+A Run worker's tool call carries `origin: { kind: 'run', ceiling }` on `AgentToolCallRequest`; a terminal turn carries none and decides
+exactly as before. **Ceiling.** When the run-create card is required, admission records the creator's mode as `execution.workerMode`
+`{ mode: standart|full-auto, askEdits }` (full access is recorded as full-auto only while the company full-auto grant allows it, else
+standart): the plan card shows it (`approval.plan.workerMode`), and it sits in the admission basis that the authority decision seals
+and the card's approval binds. A mode change after the card was drawn changes the effective `policy+bindings` revision, so the
+unused card (pending or allowed) cannot admit the Run: it is retired and a fresh card with the new basis and mode line is opened for the
+same plan (alpha.63 L1c, `RunCreateApprovalBroker` + `supersedeRunCreate`); the terminal shows it in the same /do flow and the person decides
+there, so the Run is never dropped silently. A changed graph, Run, requester, or a denied card still refuse (`APPROVAL_CONFLICT`/`APPROVAL_DENIED`).
+The shown mode and the recorded mode are therefore the same. A Run
+admitted without a card (policy allow, CLI/SDK), an AI-created Run and any older Run record no ceiling. Their worker follows the
+person's current effective mode, as before. On every call with a ceiling, the person's current mode is recomputed (stored full
+access capped at full-auto under `fullAutoGrant` on that snapshot, else standart). The mode applied is the lower of the two;
+`askEdits` applies if either side sets it. The ceiling never raises anything and is never a source of authority. Full access never
+reaches a worker (no `fullAccess`), so the destructive table, always-ask, edit-self-source and the write floor ask or refuse as
+in full-auto. **Read-only shell.** For a Run worker only, the eligible-require-approval lowering covers two more cells in standart
+and full-auto, whatever `askEdits`. `shell-read-none` (every stage in the read table, bounded local paths) is covered in any realm.
+`shell-read-low` (repository traversal, `git status/log`, `env`, `ps`) is covered only in an enforced sandbox realm for a contained
+command; on the host, in a fallback or in a degraded sandbox it asks. Both are audited as the additive `permission-mode` cell
+`shell-read` (audit event schema 1, enum widened; ledger v74 of this release already refuses older builds). `test` and `[ … ]` (file
+tests and comparisons) joined the read table. Other-modify, destructive, always-ask, fetch, MCP and the floors are unchanged. The
+worker core prompt `deckent-worker-core@4` asks workers to read with the read tools and edit with the edit tools, and to use the shell
+only when the work needs it.

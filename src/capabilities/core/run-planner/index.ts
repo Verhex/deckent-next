@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { persistedString, persistedInteger, brainPlanCommandSchema, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { toInputJsonSchema, ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
@@ -9,7 +9,9 @@ const selected = z.strictObject({ id: identitySchema, version: persistedInteger(
 const template = selected.extend({ instruction: persistedString(z.string().min(1).max(16_384)), summaryChars: persistedInteger().min(1).max(1024),
   modelAssignment: z.enum(['brain', 'system']).optional(),
   /** S4B-6: the planning context version the template is written for. Absent = 2 (v1–v3 rows keep their bytes and digest); 3 adds `memory`. */
-  contextVersion: z.literal(3).optional() }).strict();
+  contextVersion: z.literal(3).optional(),
+  /** D4 (owner 2026-11-06): the user message names the person's `language` (v5). A goal for the model, not a guarantee; keys and ids unchanged. Absent = earlier bytes. */
+  personLanguage: z.literal(true).optional() }).strict();
 type BrainReasoning = 'model-default' | 'off';
 const reasoning = z.enum(templates.reasoningModes as [BrainReasoning, ...BrainReasoning[]]);
 export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.literal(1).prefault(1),
@@ -27,6 +29,9 @@ export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.litera
     maxAttempts: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).prefault(templates.quotaWait),
   /** D-02 (lead GO 2026-10-28, Jev c97aa511): corrective re-plans after a correctable validation refusal (0 disables; registry ceiling). */
   correctionRetries: persistedInteger().min(0).max(templates.correctionRetriesCeiling).prefault(templates.correctionRetries),
+  /** R9b (owner D3, 2026-11-06): the person's own Brain model, an exact catalog reference; a project value wins over the user's. Absent: the Brain
+   * tries the chat model. The tier/role gate still decides; nothing ever chooses another model. Additive optional key (schemaVersion stays 1). */
+  reference: brainPlanCommandSchema.unwrap().shape.reference, // the plan command's own exact-reference contract
 });
 /** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
 export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
@@ -87,7 +92,7 @@ function supportsTurnLimit(context: unknown): boolean {
   if (!Array.isArray(kinds) || !kinds.some(row => row.turnLimit !== undefined)) return true;
   return kinds.some(row => row.turnLimit === 'supported');
 }
-export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot) {
+export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot, language?: string) {
   const config = brainPlannerConfigSchema.parse(configInput), chosenTemplate = selectedBrainTemplate(config), intent = redactForRecord(command.intent, known);
   const modelAssignment = chosenTemplate.modelAssignment ?? 'brain';
   const projected = JSON.stringify(redactJson({ scopeId: command.scopeId, workClasses: brainWorkClassView(policy), context }, known));
@@ -97,7 +102,7 @@ export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassP
     digest: sha256(encodeCommandProjection('brain-template:1', chosenTemplate)) }, summaryChars: chosenTemplate.summaryChars, modelAssignment,
     inputDigest: brainInputDigest(command, known), contextDigest: sha256(projected), intent,
     messages: [{ role: 'system' as const, content: redactForRecord(chosenTemplate.instruction, known) },
-      { role: 'user' as const, content: JSON.stringify({ intent, context: JSON.parse(projected) as unknown,
+      { role: 'user' as const, content: JSON.stringify({ intent, ...(chosenTemplate.personLanguage && language ? { language } : {}), context: JSON.parse(projected) as unknown,
         schema: brainDraftJsonSchema(supportsTurnLimit(context), modelAssignment === 'system') }) }] });
 }
 /** A reply that is exactly one Markdown code fence around the object (```json … ``` or ``` … ```) is read as its body; anything else is

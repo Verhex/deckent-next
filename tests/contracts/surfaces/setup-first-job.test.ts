@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { doctorChecks, firstJobStages, firstJobSteps, onboardingNext, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { WORK_SETUP_FAMILY, workerSetupStages } from '#engine/core/worker-setup/index.js';
 
 // The work family's actual stage decisions replace the old parallel first-job registry.
 describe('U3-1a first-job states', () => {
@@ -23,6 +24,15 @@ describe('U3-1a first-job states', () => {
     const pool = doctorChecks(report, facts, 'en').find(row => row.id === 'work.pool');
     expect(pool).toMatchObject({ state: 'warning' });
     expect(pool?.next).toContain('/setup'); expect(pool?.next).not.toContain('deckent init');
+    // R8b (owner D1): a chosen subscription connection declares the first kind without an image; its execution stages need only the Git found here.
+    const connection = { id: 'claude-subscription', provider: 'claude' }, work = { execution: true, registry: false, pool: false, connection }, kind = WORK_SETUP_FAMILY.stages[0]!;
+    const answer = { connection: connection.id }, at = (facts: unknown) => ({ facts, scopeId: 'erp-demo', answer, states: new Map() });
+    expect(kind.evaluate(at(work))).toMatchObject({ state: 'ready', operation: { id: 'work.registry', input: { scopeId: 'erp-demo', provider: 'claude', connection: connection.id, kind: 'coding' } } });
+    expect(kind.evaluate(at({ ...work, connection: undefined })).state).toBe('needs-answer');
+    const [worker, settings] = workerSetupStages({ person: true, sizeGigabytes: 1 }), observed = { configured: null, receipt: null, image: 'not-run', git: '/usr/bin/git', connection: 'pending' };
+    expect(worker!.evaluate(at({ runtimes: [], worker: observed })).state).toBe('done');
+    expect(settings!.evaluate(at({ runtimes: [], worker: observed }))).toMatchObject({ state: 'ready', operation: { input: { keyPath: 'execution', value: { git: { gitExecutable: '/usr/bin/git' } } } } });
+    expect(settings!.evaluate(at({ runtimes: [], worker: { ...observed, connection: 'configured' } })).state).toBe('done');
   });
 
   it('no observation, apply-port or doctor unit starts a registry preview', async () => {

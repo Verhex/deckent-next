@@ -17,7 +17,7 @@ export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-worksp
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
 export { gitRefFileSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
 export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
-export { scanWorkerTree, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
+export { scanWorkerTree, workerTreeDenied, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
@@ -134,3 +134,8 @@ export * from '#adapters/core/beuser-surface/index.js';
 export * from '#adapters/core/project-attachment/index.js';
 export { withSiwcConnection } from '#adapters/core/siwc-connection/index.js';
 export { withSideEffectFreeSqliteReads } from '#adapters/core/sqlite-read-view/index.js';
+
+export { bindCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
+export * from '#adapters/core/native-cli-worker/index.js';
+export { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+export * from '#adapters/core/native-tool-bridge/index.js';

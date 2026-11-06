@@ -18,6 +18,11 @@ for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses 
   expect(text).toContain('task / execute / purchase'); expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00'); expect(text).toContain('owner-purchase');
   expect(text).toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
   expect(text).toContain('APPROVAL_REQUIRED'); expect(text).toContain('run-business');
+  // R9: a Run with a worker shows the recorded worker ceiling; without one the card has no such line.
+  const line = locale === 'tr' ? 'Arka plan işçisi en fazla şu modda çalışır: ' : 'Background worker: at most ';
+  expect(text).not.toContain(line);
+  for (const [workerMode, word] of [[{ mode: 'full-auto', askEdits: false }, locale === 'tr' ? 'tam otomatik' : 'full auto'], [{ mode: 'standart', askEdits: true }, locale === 'tr' ? 'dikkatli' : 'careful']] as const)
+    expect(renderRunCreateApprovalSummary(command, { ...create, execution: { ...create.execution, workerMode } }, verdict, locale)).toContain(line + word);
 });
 it('raw create reports undeclared permissions/ceiling/class; a registry gate is distinct from a policy rule', () => {
   const raw = { schemaVersion: command.schemaVersion, commandId: command.commandId, scopeId: command.scopeId, runId: command.runId, graph: command.graph };
@@ -68,6 +73,7 @@ it.each(['en', 'tr'] as const)('subscription approval summary declares budget ex
   expect(text).toContain(locale === 'tr' ? 'İşçiler: abonelik veya ek ücret gerektirmeyen model — API bütçesi uygulanmaz' : 'Workers: subscription or local model — no extra cost; budget check does not apply');
   expect(text).toContain('owner-purchase'); expect(text).toContain('run-business');
   expect(text).not.toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
+  expect(text).not.toContain(locale === 'tr' ? 'bütçe tavanı' : 'budget ceiling'); // R9d: no API ceiling row for not-metered workers
 });
 it('proposer-authored long titles cannot push declared permissions off the card; the authority notice stays', () => {
   const graph = { ...command.graph, tasks: Array.from({ length: 40 }, (_, i) => ({ ...command.graph.tasks[0]!, id: `harmless-read-only-check-${i}-` + 'x'.repeat(400) })) };

@@ -62,11 +62,16 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "Scheduling weights: ${key:-committed seed}"
       - if: steps.weights.outputs.key != ''
+        run: mkdir -p .pack && cp scripts/ci-test-durations.json .pack/ci-weights-seed.json
+      - if: steps.weights.outputs.key != ''
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: scripts/ci-test-durations.json
           key: ${{ steps.weights.outputs.key }}
           fail-on-cache-miss: true
+      # The restored main weights win unless the committed seed weighs more of this tree's test files (a PR that added tests and refreshed).
+      - if: steps.weights.outputs.key != ''
+        run: node scripts/ci-test-weights.mjs select .pack/ci-weights-seed.json
       - run: npm run build
       - run: npm run smoke
       - name: Record complete Vitest inventory and Node-specific build
@@ -137,6 +142,8 @@ jobs:
           DECKENT_TEST_STARTUP_COST: '1'
           DECKENT_TEST_TIMEOUT_MS: '30000'
           VITEST_MAX_FORKS: '${{ needs.prepare.outputs.max-forks }}'
+          K16_PROOF_DIR: '${{ github.workspace }}/.pack/ci-evidence'
+          DECKENT_TEST_ERP_PROOF: '${{ github.workspace }}/.pack/ci-evidence'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

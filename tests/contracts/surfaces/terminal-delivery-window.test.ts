@@ -38,7 +38,7 @@ const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 
 
 type PortOptions = { diffs?: readonly DeliveryFileDiff[]; targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
   /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
-  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>>; dismissable?: boolean; failPreview?: { code: string; message: string } };
+  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>>; dismissable?: boolean; failPreview?: { code: string; message: string }; workingTree?: boolean };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
 function recordingPort(options: PortOptions = {}) {
   const calls: string[] = [], views: EffectConfirmationView[] = [], adoptions: { commandId: string; verificationRunId: string | undefined }[] = [];
@@ -83,7 +83,7 @@ function recordingPort(options: PortOptions = {}) {
     // BeUser M-32: the retained patch alone (read-only), offered when the check refused.
     ...(options.failPreview ? { async patchOnly(target: { scopeId: string; runId: string; taskId: string }) { calls.push('patch-only');
       return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 }, files: [{ path: 'src.js', added: 1, removed: 1 }],
-        diffs: [{ path: 'src.js', lines: ['@@ -1 +1 @@', '-old line', '+WORKER LINE'], hidden: 0, unavailable: null }], added: 1, removed: 1, source: '', base: BASE, proposal: '', outOfScope: [], adoptionTargets: [], verification: null } as never; } } : {}),
+        diffs: [{ path: 'src.js', lines: ['@@ -1 +1 @@', '-old line', '+WORKER LINE'], hidden: 0, unavailable: null }], added: 1, removed: 1, source: '', base: BASE, proposal: '', outOfScope: [], adoptionTargets: [], verification: null, ...(options.workingTree ? { workingTree: true } : {}) } as never; } } : {}),
     // BeUser M-33: the person's set-aside records; the harness Run view then says `set-aside`, as inspection does.
     ...(options.dismissable ? { async dismiss(target: { runId: string; taskId: string }, action: 'dismiss' | 'restore') { calls.push(`${action}:${target.runId}/${target.taskId}`);
       if (action === 'dismiss') aside.add(`${target.runId}/${target.taskId}`); else aside.delete(`${target.runId}/${target.taskId}`); } } : {}),
@@ -146,6 +146,10 @@ describe('delivery window — pure rules', () => {
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/main', files: [] })).toBe(true);
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/other', files: [] })).toBe(false);
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/main', to: 'f'.repeat(40), files: [] })).toBe(false);
+    // R9p: a working-tree yes binds every path's before/after digest too.
+    const changes = [{ path: 'a', before: 'x', after: 'y' }];
+    expect(consentMatches({ ...consent, changes }, { ...view, changes })).toBe(true);
+    expect(consentMatches({ ...consent, changes }, { ...view, changes: [{ path: 'a', before: 'x', after: 'z' }] })).toBe(false);
   });
 });
 
@@ -261,6 +265,10 @@ describe('delivery intent on the queue enqueue (cli-terminal port)', () => {
     expect(texts(queued, 'tr')).toContain('Hedef ilerlerse Deckent bunu yeni tabanda bir kez yeniden dener; kararı yine kartlarınız verir.');
     for (const preview of [entry.preview, { ...entry.preview, queueTarget: 'refs/heads/integration' }, { ...entry.preview, reattempt: true } as const])
       for (const locale of ['en', 'tr'] as const) expect(texts(preview, locale)).not.toContain(deliveryWindowLabels(locale).reattempt);
+    // R9p: working-tree mode names the file write instead of the reference; a preview without an integration check (delivered) names no base or source.
+    const files = { ...entry.preview, workingTree: true } as const, words = deliveryWindowLabels('tr');
+    expect(texts(files, 'tr')).toContain(words.whereFiles); expect(texts(files, 'tr')).not.toContain(words.where);
+    expect(texts({ ...files, source: '', base: '' }, 'tr').join('\n')).not.toMatch(/Uyum kontrolü|\{base\}|\{source\}/u);
   });
 });
 
@@ -400,6 +408,19 @@ describe('delivery window on the real Workline', () => {
     const text = rows.map(row => row.spans.map(part => part.text).join('')).join('\n');
     expect(text).toContain('nothing of yours is discarded'); expect(text).not.toMatch(/restore them/u); expect(text).toContain('deckent task patch-preview --scope s --run r --task task');
     expect(text).not.toContain('{run}');
+    // R9p: the same conflict in working-tree mode says the files differ from the Run's base and offers /do again; nothing is written.
+    const files = deliveryLines({ target: { key: 's:r:task', scopeId: 's', runId: 'r', taskId: 'task', title: 'T' } as never, stage: { kind: 'failed', error: 'ERR', code: 'PATCH_CONFLICT' },
+      selected: 0, adopted: null, delivered: null, preview: null, patch: { workingTree: true } as DeliveryPreview }, deliveryWindowLabels('tr')).map(row => row.spans.map(part => part.text).join('')).join('\n');
+    expect(files).toContain('/do ile yeniden gönderin'); expect(files).toContain('Hiçbir şey yazılmadı'); expect(files).toContain('deckent task patch-preview --scope s --run r --task task');
+    // L1c (law audit N1): the worker starts from the person's current files, so the text never asks for a commit first.
+    expect(files).not.toMatch(/commit/iu); expect(files).toContain('işçi çalışırken projenizde değişti');
+  });
+  it('L1c owner "güncel hâle göre yeniden yap": r on a working-tree conflict puts /do with the task\'s recorded request into the composer; nothing starts by itself', async () => {
+    const h = harness({ failPreview: { code: 'PATCH_CONFLICT', message: 'Workspace snapshot conflicts.' }, workingTree: true }); await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('What the worker changed'), 'working-tree conflict');
+    await press(h, CTRL_O); await until(() => frame(h).includes(WORDS.redoFiles), 'redo hint');
+    await press(h, 'r', 150); await until(() => !frame(h).includes(windowTitle), 'window closed');
+    expect(frame(h)).toContain('/do ORDER-TASK'); expect(h.calls).toEqual(['preview:r', 'patch-only']); expect(h.calls).not.toContain('deliver');
   });
 
   it('the suggested command keeps every hostile identity one shell word and runs no side command (Astra 2543 P1)', () => {

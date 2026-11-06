@@ -211,3 +211,33 @@ it('keeps a tool outcome diagnostic on its call record; records without one, and
     finally { reread.close(); }
   } finally { store.close(); }
 });
+
+it('native push settles into the same durable turn and finished replay never opens a new tool session', async () => {
+  const path = await file(), store = await openSqliteAgentTurnStore(path, options);
+  let invoked = 0, executions = 0;
+  const p = ports([]), request = { claim: claim(), messages: [{ role: 'user' as const, content: 'what?' }], tools: [readFile],
+    nativeSession: { schemaVersion: 1 as const, turnId: 't1', generation: 1, tools: [readFile], approvalTtlMs: 60_000 },
+    signal: new AbortController().signal, emit() {} };
+  p.value.execute = async () => { executions++; return { status: 'ok', text: 'contents' }; };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    invoked++;
+    const call = { id: 'native-call', name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' };
+    const correlation = { kind: 'claude-tool-use' as const, toolUseId: 'provider-call', deckentCallId: 'native-call' };
+    await session.propose(call, correlation, signal); await session.propose(call, correlation, signal);
+    return { status: 'responded', content: 'native answer', reasoning: '', toolCalls: [], finish: 'stop', usage: null };
+  };
+  try {
+    await expect(runDurableAgentTurn({ ...request, nativeSession: { ...request.nativeSession, turnId: 'foreign-turn' } }, store, p.value))
+      .rejects.toThrow('TOOL_SESSION_TURN_CONFLICT');
+    expect(await runDurableAgentTurn(request, store, p.value)).toMatchObject({ finish: 'stop', recorded: true, toolCalls: 1, replayed: false });
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      const rows = db.prepare('SELECT round,call_index,record FROM agent_turn_tool_calls').all() as { round: number; call_index: number; record: string }[];
+      expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ round: 1, call_index: 0 });
+      expect(JSON.parse(rows[0]!.record)).toMatchObject({ callId: 'native-call', status: 'ok', resultDigest: agentTurnResultDigest('contents') });
+    } finally { db.close(); }
+    expect(await runDurableAgentTurn({ ...request, nativeSession: { ...request.nativeSession, generation: 2 } }, store, p.value))
+      .toMatchObject({ finish: 'stop', recorded: true, replayed: true, answer: 'native answer' });
+    expect(invoked).toBe(1); expect(executions).toBe(1); expect(p.invoked).toEqual([]);
+  } finally { store.close(); }
+});

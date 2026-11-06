@@ -17,7 +17,6 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { memoryJournalFor } from '#composition/core/memory/index.js';
 const schemas = { listAgents, inspectAgent, listSkills, inspectSkill, defineAgent, defineSkill, importSkill, listSigners, enrolSigner, addSigner, revokeSigner, repairSigners,
   listSuggestions, inspectSuggestion, changeStanding, dismissSuggestion, bulkStanding, listRevokedPromotions };
-/** S8-5 signer cards and S8-3/S8-4 standing and suggestion actions, and their application's method; every other action is the catalog application's. */
 const SIGNER_METHODS = { listSigners: 'list', enrolSigner: 'enrol', addSigner: 'add', revokeSigner: 'revoke', repairSigners: 'repair' } as const;
 const STANDING_METHODS = { listSuggestions: 'listSuggestions', inspectSuggestion: 'inspectSuggestion', changeStanding: 'change', dismissSuggestion: 'dismiss', bulkStanding: 'bulk',
   listRevokedPromotions: 'revokedPromotions' } as const;
@@ -29,7 +28,6 @@ const revocationLog = (layout: Parameters<typeof localSignerKeyCustody>[0], keyF
 export type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 const storeOf = (context: ScopeContext) => async (access: 'read' | 'write') => openSqliteAgentCatalogStore(await context.path(), context.config.storage.sqlite,
   await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, access === 'write'), access);
-/** S8-4 (N23): a lesson ref is readable when the reader's own memory `inspect` (the §7.4 source filter) returns that entry at the cited revision and digest. */
 const lessonReadable = (context: ScopeContext): NonNullable<AgentCatalogDependencies['lessonReadable']> => async (principal, scopeId, refs) => {
   const journal = await memoryJournalFor({ ...context, principal }, 'read'), out: boolean[] = [];
   for (const ref of refs) {
@@ -38,7 +36,6 @@ const lessonReadable = (context: ScopeContext): NonNullable<AgentCatalogDependen
   }
   return out;
 };
-/** The catalog dependencies of one scope context under `principal` (default: the context's; the catalog aggregator passes its own workload identity). */
 export function catalogDependencies(context: ScopeContext, principal: VerifiedPrincipal = context.principal): AgentCatalogDependencies {
   const { layout, config } = context, clock = new SystemTrustedClock(), policy = new AgentCatalogPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
   return { verifier: { verify: async () => principal }, authorize: policy.authorize.bind(policy),
@@ -54,9 +51,7 @@ const run = async <A extends Action>(root: string, action: A, input: unknown, op
   return await target[signer ?? standing ?? action]!(parsed) as Result<A>;
 };
 const READS = new Set<Action>(['listAgents', 'inspectAgent', 'listSkills', 'inspectSkill', 'listSigners', 'listSuggestions', 'inspectSuggestion', 'listRevokedPromotions']);
-/** S7 agent/skill catalog on the Core SQLite adapter. Reads never create a key, database or migration. Create, revise, import, every signer card (S8-5)
- * and every standing or suggestion card (S8-4) are a person's terminal card (the default card, AJAN-ORG S6): the MCP actor, or a caller without the
- * terminal witness, is refused before any read. Imports verify against the scope's `import` signer rows; AI/system writes sign through the host custody. */
+/** Catalog writes require the person's terminal witness before any read. Reads create no key, database or migration. */
 const bind = <A extends Action>(action: A) => async (root: string, input: unknown, options: ConfigLoadOptions = {},
   witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }): Promise<Result<A>> => {
   try {
@@ -65,11 +60,7 @@ const bind = <A extends Action>(action: A) => async (root: string, input: unknow
     return await run(root, action, input, options, write);
   } catch (error) { throw queryFailure(error); }
 };
-/**
- * S8-4 the signed AI command path (S8-DESIGN §8, §9; MCP): the MCP actor — never a person, who uses the terminal card — defines, imports or changes a
- * standing only signed (its enrolled host key through the signer service, or the `signed` its external key made) and only inside a policy grant; a
- * standing action needs a grant naming that WorkClass. Every signature is verified again in the catalog's commit transaction.
- */
+/** MCP writes require a scoped grant and signature, verified again at commit; a person uses the terminal card. */
 const signedBind = <A extends 'defineAgent' | 'defineSkill' | 'importSkill' | 'changeStanding' | 'dismissSuggestion'>(action: A) =>
   async (root: string, input: unknown, options: ConfigLoadOptions = {}): Promise<Result<A>> => {
     try {
@@ -86,8 +77,7 @@ export const listConfiguredSuggestions = bind('listSuggestions'), inspectConfigu
   dismissConfiguredSuggestion = bind('dismissSuggestion'), bulkConfiguredStanding = bind('bulkStanding'), listConfiguredRevokedPromotions = bind('listRevokedPromotions');
 export const signedDefineConfiguredAgent = signedBind('defineAgent'), signedDefineConfiguredSkill = signedBind('defineSkill'), signedImportConfiguredSkill = signedBind('importSkill'),
   signedChangeConfiguredStanding = signedBind('changeStanding'), signedDismissConfiguredSuggestion = signedBind('dismissSuggestion');
-/** S8-5 at service start, before any work or signing: every logged revocation a (restored) scope ledger lacks is re-applied by the same revoke step.
- * A broken log is left for the person's repair card (all signing already refuses on it); any other failure holds the start. */
+/** Before signing/work, replay logged revocations; a broken log needs the person's repair card, other failures hold startup. */
 export async function replayConfiguredSignerRevocations(projectRoot: string, options: ConfigLoadOptions = {}): Promise<number> {
   try {
     const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), log = revocationLog(config.productLayout, config.approvals.keyFile), clock = new SystemTrustedClock();

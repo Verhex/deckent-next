@@ -192,11 +192,13 @@ export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
   tree: { id: 'tree', risk: 'low', readsContent: false, positional: 'paths', grammar: { shortSwitches: 'adlfxpughDFqNsvtrCnAiSJXhQ', shortValues: { L: 'number', P: 'any', I: 'any', H: 'any', T: 'any' }, deniedShort: 'o', longSwitches: ['--noreport', '--charset', '--dirsfirst', '--filesfirst', '--prune', '--du', '--inodes', '--device', '--matchdirs', '--ignore-case', '--gitignore', ...COMMON_LONG_HELP], longValues: { '--filelimit': 'number', '--charset': 'any', '--sort': 'any', '--timefmt': 'any', '--fromfile': 'path', '--gitfile': 'path', '--info': 'any', '--infofile': 'path' } } },
   seq: { id: 'seq', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'w', shortValues: { f: 'any', s: 'any' }, longSwitches: ['--equal-width', ...COMMON_LONG_HELP], longValues: { '--format': 'any', '--separator': 'any' } } },
   true: { id: 'true', risk: 'none', readsContent: false, positional: 'none', grammar: {} },
+  // R9 (owner 2026-11-05): file tests and string/number comparisons only; `[` is the same program without its closing `]` (classifyStage).
+  test: { id: 'test', risk: 'none', readsContent: false, positional: 'paths', grammar: { shortSwitches: 'abcdefghklnopqrstuvwxzGLNOS', longSwitches: COMMON_LONG_HELP } },
   false: { id: 'false', risk: 'none', readsContent: false, positional: 'none', grammar: {} },
 };
 
 export const PROGRAM_ALIASES: Readonly<Record<string, string>> = {
-  gawk: 'awk', mawk: 'awk', nawk: 'awk', egrep: 'grep', fgrep: 'grep', ggrep: 'grep', gsed: 'sed', gtail: 'tail', ghead: 'head', gcat: 'cat', gfind: 'find', gsort: 'sort', gls: 'ls', gwc: 'wc', gdu: 'du', gstat: 'stat', ripgrep: 'rg', gdiff: 'diff', gdate: 'date', gecho: 'echo', gprintf: 'printf', gcut: 'cut', gtr: 'tr', guniq: 'uniq', gnl: 'nl', gtac: 'tac', gpaste: 'paste', gfold: 'fold', grev: 'rev', greadlink: 'readlink', grealpath: 'realpath', gbasename: 'basename', gdirname: 'dirname', gseq: 'seq', gsha256sum: 'sha256sum', gmd5sum: 'md5sum',
+  '[': 'test', gawk: 'awk', mawk: 'awk', nawk: 'awk', egrep: 'grep', fgrep: 'grep', ggrep: 'grep', gsed: 'sed', gtail: 'tail', ghead: 'head', gcat: 'cat', gfind: 'find', gsort: 'sort', gls: 'ls', gwc: 'wc', gdu: 'du', gstat: 'stat', ripgrep: 'rg', gdiff: 'diff', gdate: 'date', gecho: 'echo', gprintf: 'printf', gcut: 'cut', gtr: 'tr', guniq: 'uniq', gnl: 'nl', gtac: 'tac', gpaste: 'paste', gfold: 'fold', grev: 'rev', greadlink: 'readlink', grealpath: 'realpath', gbasename: 'basename', gdirname: 'dirname', gseq: 'seq', gsha256sum: 'sha256sum', gmd5sum: 'md5sum',
 };
 
 /** Version-only invocations are informational reads (`node --version`). */

@@ -1,0 +1,103 @@
+import { createHash } from 'node:crypto';
+import { mkdir, rename } from 'node:fs/promises';
+import { join } from 'node:path';
+import { afterEach, expect, it } from 'vitest';
+import { encodeModelBindingDefinition, parseModelBindingDefinition } from '#domain/index.js';
+import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
+import { openSqliteAttemptStore, openSqliteModelActivationStore, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { headlessCapacityBinding, readCapacityResourceOccupancy } from '#adapters/core/sqlite-model-invocation/index.js';
+import { binding as baseDefinition, cleanupConnections, connection } from '../../fixtures/native-headless/connection.js';
+import { fixtureExecution } from '../support/execution-registry.js';
+afterEach(cleanupConnections);
+const sqlite = { journalMode: 'delete', durability: 'full', busyTimeoutMs: 100 } as const;
+const actor = { id: 'person', issuer: 'fixture', subject: 'owner', assurance: 'os-user' } as const;
+const authorization = { revision: 'policy', ruleId: 'invoke' };
+async function fixture(bound = true) {
+  const c = await connection(), path = join(c.root, 'ledger.db');
+  async function admit(scopeId: string, modelId: string) {
+    const definition = parseModelBindingDefinition({ ...baseDefinition, model: { ...baseDefinition.model, id: modelId } });
+    const reference = { providerId: definition.provider.id, providerVersion: definition.provider.version, modelId, modelVersion: definition.model.version };
+    const expectedBinding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
+    const activations = await openSqliteModelActivationStore(path, sqlite);
+    const activated = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId,
+      reference, expectedRevision: 0, catalogRevision: 'catalog', expectedBinding }, actor, authorization, definition, admittedAtMs: 1 }); activations.close();
+    const profile = { ...c.profile, scopeId, reference, bindingDigest: expectedBinding.digest, allocation: { ...c.profile.allocation, id: 'allocation-' + modelId } };
+    const command = { schemaVersion: 1 as const, commandId: 'invoke', scopeId, reference, catalogRevision: 'catalog', expectedBinding,
+      nativeRequest: { model: definition.model.nativeId, messages: [{ role: 'user', content: 'fixture' }] } };
+    return { command, actor, authorization, definition, activation: activated.receipt.record, profile, profileDigest: modelInvocationProfileDigest(profile),
+      requestDigest: modelInvocationRequestDigest(command), invocationId: 'invocation', claimedAtMs: 2 };
+  }
+  const first = await admit('one', 'first-model'), second = await admit('two', 'second-model');
+  const db = openSqliteLedger(path, sqlite, 'forbid'); let resourceKey: string | null = null;
+  try { if (bound) resourceKey = bindCapacityResource(db, headlessCapacityBinding(c.profile.adapter.definition), { executionSlots: 1, inFlightSlots: 1 }).resourceKey; } finally { db.close(); }
+  return { c, path, first, second, resourceKey };
+}
+it('shares one login resource between two models/projects; cancellation and proven-ended send custody free it without changing an unknown outcome', async () => {
+  const f = await fixture(), store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+  try {
+    const first = await store.claim(f.first); await expect(store.claim(f.second)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
+    expect(await store.claim(f.first)).toMatchObject({ replayed: true }); expect(await store.loadReceipt('two', 'invoke')).toBeNull();
+    await store.cancelInvocation({ command: { schemaVersion: 1, commandId: 'cancel', scopeId: 'one', targetCommandId: 'invoke', reference: f.first.command.reference,
+      expectedRequestDigest: f.first.requestDigest }, actor, authorization, requestedAtMs: 3 });
+    const second = await store.claim(f.second); await store.permitSend(second.record.receipt.claim, 'ended-owner', 4);
+    expect(await store.releaseSettledSlots({ atMs: 5, endedOwner: () => false })).toMatchObject({ settled: 0 });
+    const db = openSqliteLedger(f.path, sqlite, 'forbid');
+    try { expect(readCapacityResourceOccupancy(db, f.resourceKey!)).toEqual({ execution: 1, inFlight: 1 }); } finally { db.close(); }
+    expect(await store.releaseSettledSlots({ atMs: 6, endedOwner: owner => owner === 'ended-owner' })).toMatchObject({ settled: 1 });
+    expect((await store.loadInvocation('two', 'invocation'))?.receipt.outcome?.state).toBe('unknown');
+    const after = openSqliteLedger(f.path, sqlite, 'forbid');
+    try { expect(readCapacityResourceOccupancy(after, f.resourceKey!)).toEqual({ execution: 0, inFlight: 0 }); } finally { after.close(); }
+    expect(first.record.receipt.outcome).toBeNull();
+  } finally { store.close(); }
+});
+it('binds an alpha.62-shaped subscription on its first claim, reuses the login resource and separates another login directory', async () => {
+  const f = await fixture(false), store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+  try {
+    expect(f.first.profile.adapter.definition).not.toHaveProperty('sourceBinding');
+    await expect(store.claim(f.first)).resolves.toMatchObject({ replayed: false });
+    const db = openSqliteLedger(f.path, sqlite, 'forbid');
+    try { expect(db.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(1); } finally { db.close(); }
+    await expect(store.claim(f.second)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
+    const configDir = join(f.c.root, 'second-login'); await mkdir(configDir, { mode: 0o700 });
+    const profile = { ...f.second.profile, adapter: { ...f.second.profile.adapter, definition: { ...f.second.profile.adapter.definition, configDir } } };
+    await expect(store.claim({ ...f.second, profile, profileDigest: modelInvocationProfileDigest(profile) })).resolves.toMatchObject({ replayed: false });
+    const after = openSqliteLedger(f.path, sqlite, 'forbid');
+    try { expect(after.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(2); } finally { after.close(); }
+  } finally { store.close(); }
+});
+it('reports unavailable legacy login metadata as reconnect required before allocation or invocation writes', async () => {
+  const f = await fixture(false), store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+  await rename(f.c.configDir, join(f.c.root, 'moved-login'));
+  try {
+    await expect(store.claim(f.first)).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
+    expect(await store.loadReceipt('one', 'invoke')).toBeNull();
+    const db = openSqliteLedger(f.path, sqlite, 'forbid');
+    try {
+      expect(db.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(0);
+      expect(db.prepare('SELECT count(*) AS n FROM model_invocation_allocations').get()?.n).toBe(0);
+    } finally { db.close(); }
+  } finally { store.close(); }
+});
+it('counts a model call against a worker reservation and a worker reservation against a model call', async () => {
+  const f = await fixture(), model = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+  const runs = await openSqliteAttemptStore(f.path, sqlite, { now: Date.now, timeoutMs: 1000 });
+  const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'a', kind: 'custom', dependencies: [], acceptanceCriteria: ['exit'] }],
+    criterionDefinitions: [{ id: 'exit', version: 1, description: 'exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+  const runActor = { id: actor.id, issuer: actor.issuer, subject: actor.subject };
+  const claim = { commandId: 'reserve', actor: runActor, scopeId: 'worker-project', runId: 'run', expectedRevision: 0, now: 4,
+    identities: [{ scopeId: 'worker-project', runId: 'run', layoutRevision: 'layout', taskId: 'a', attemptId: 'attempt', generation: 1 }] };
+  try {
+    await runs.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 4, inFlightSlots: 4 } });
+    await runs.createRun({ commandId: 'create', actor: runActor, identity: { scopeId: 'worker-project', runId: 'run', layoutRevision: 'layout' }, graph,
+      execution: fixtureExecution(graph), now: 1, policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 4, inFlightSlots: 4 }, ordering: ['a'] } },
+    undefined, undefined, [{ taskId: 'a', resourceKey: f.resourceKey! }]);
+    await model.claim(f.first);
+    await expect(runs.reserveRunTasks(claim)).rejects.toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER' });
+    await model.cancelInvocation({ command: { schemaVersion: 1, commandId: 'cancel', scopeId: 'one', targetCommandId: 'invoke', reference: f.first.command.reference,
+      expectedRequestDigest: f.first.requestDigest }, actor, authorization, requestedAtMs: 3 });
+    await runs.reserveRunTasks(claim);
+    await expect(model.claim(f.second)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
+    expect(await model.loadReceipt('two', 'invoke')).toBeNull();
+  } finally { model.close(); runs.close(); }
+});

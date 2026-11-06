@@ -23,6 +23,7 @@ export interface ApprovalStore {
   create(record: ApprovalRecord): ApprovalRecord;
   receipt(scopeId: string, commandId: string): ApprovalReceipt | null;
   renew(previous: ApprovalRecord, next: ApprovalRecord, receipt: ApprovalReceipt): ApprovalRecord;
+  supersedeRunCreate(previous: ApprovalRecord, next: ApprovalRecord): ApprovalRecord; // L1c: an unused (expired or allowed) Run-create card whose basis changed → its pending successor, one transaction
   transition(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalRecord;
   transitionWithSettlement(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalSettlement;
 }

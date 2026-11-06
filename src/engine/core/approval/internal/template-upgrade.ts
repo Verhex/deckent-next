@@ -6,14 +6,14 @@ import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/pol
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
 /** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`; owner A48-D3, D3c). */
-const FIRST_RUN_DELTA_VERSION = 18;
+const FIRST_RUN_DELTA_VERSION = 19;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;
   /** `preview`: would add `rules`; `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
    * `unavailable`: not a first-run lineage, or (rollback) its archived history is missing (`reason`); `rolled-back` / `nothing-to-roll-back`: upgrade
-   * rules removed / none held (`reason` `no-upgrade-recorded`: a current-template policy with no archived upgrade). */
+   * rules removed (a provably fresh install's own delta too, owner 2026-11-05) / none held (`no-upgrade-recorded` is no longer produced). */
   readonly status: 'preview' | 'upgraded' | 'current' | 'refused' | 'unavailable' | 'rolled-back' | 'nothing-to-roll-back' | 'conflict';
   readonly revision: string;
   readonly rules: readonly PolicyGrant[];
@@ -36,7 +36,10 @@ export class PolicyTemplateUpgrade {
       /** v12: the installation's configured runtime service id of the scope (Astra 2596: never a guessed default when one is configured). */
       readonly serviceId?: string; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[];
       /** v13: the execution-environment registry ids the template's install rule names (the installer's pinned list). */
-      readonly executionEnvironmentIds: readonly string[]; readonly recoveryRules?: readonly Readonly<{ id: string; version: number }>[] }) {}
+      readonly executionEnvironmentIds: readonly string[]; readonly recoveryRules?: readonly Readonly<{ id: string; version: number }>[];
+      /** v19: the person's first-run tool names and operations the MCP actor's rules mirror. */
+      readonly readToolNames: readonly string[]; readonly scratchToolNames: readonly string[]; readonly editShellToolNames: readonly string[];
+      readonly scratchWriteOperationId: string; readonly writeOperationId: string; readonly shellOperationId: string }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
     const out: TemplateUpgradeMissing[] = [];
@@ -46,7 +49,7 @@ export class PolicyTemplateUpgrade {
     return out;
   }
   private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
-    // The installer's key must name a version that can actually have added the current delta (v18's uninstall grants).
+    // The installer's key must name a version that can actually have added the current delta (v19's MCP actor tool rules).
     // Earlier template upgrades cannot prove custody of this later grant.
     const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
     if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
@@ -80,11 +83,11 @@ export class PolicyTemplateUpgrade {
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names.recoveryRules, this.names.firstCommitOperationId, this.names.uninstallOperationIds);
+      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names);
       const history = await this.deps.policy.authorityHistory?.();
-      // J3: a policy at a template's own revision that already carries the delta (v13+; no `a-`/`m-` write since) with no archived upgrade has nothing
-      // provable to undo (a fresh install) → `nothing-to-roll-back`
-      // `no-upgrade-recorded`, nothing written. Any other policy without archived history stays `history-unavailable` (fail closed).
+      // J3, amended by the owner 2026-11-05 (R4a) for the v19 MCP-actor delta: a policy at a template's own revision that carries the whole delta
+      // (no `a-`/`m-` write since) is a provably fresh install, and the installer wrote that delta, so the same card removes it. Any other policy
+      // without archived history stays `history-unavailable` (fail closed).
       const template = policy.revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-')) ? null : matchFirstRunPolicyTemplate(policy.policyRevision);
       // The whole expected delta held, none differing from the template's and none removed (a hand edit that kept the revision is not "the
       // template's own version"; review 2672).
@@ -117,7 +120,8 @@ export class PolicyTemplateUpgrade {
         if (changes[0] === added && JSON.stringify(added.after.grants.find(item => item.id === rule.id)) === JSON.stringify(rule)) held.push(rule.id);
         else conflicts.push(rule.id);
       }
-      if (!held.length) return result('nothing-to-roll-back', { conflicts, ...(installed && chain.length === 0 ? { reason: 'no-upgrade-recorded' } : {}) });
+      if (installed && chain.length === 0) held.push(...delta.rules.map(rule => rule.id));
+      if (!held.length) return result('nothing-to-roll-back', { conflicts });
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
       const planned = planPolicyChange(files.policy, files.bindings, change);
       const missing = this.missing(policy, input.principal, input.scopeId, planned.touched);

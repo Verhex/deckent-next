@@ -3,6 +3,90 @@
 Agent turn loop, durable turns, runtime chatTurn, context measurement, compaction, history, system prompt and reasoning control (moved from ARCHITECTURE.md Packages 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 855–1004, 1028–1101, 1102–1116; the original text below is verbatim; later dated additions are marked separately.
 
+## Subscription agent contract (alpha.63 K0/K1, 2026-11-03)
+
+`adapters/core/native-cli-headless` exports a separate `NativeAgentExecution` v1 capability and `ToolSessionPort`.
+The pure schemas, session port and surface guards live in `capabilities/core/native-agent-execution`; adapter exports stay compatible.
+K0 defines the contract and registry; K1 connects native proposals to the same call coordinator as pull rounds.
+Native drivers, facade and product composition are separate slices. The existing tool-less v1 text-chat profile,
+flags, preflight and `headlessFlagSetDigest` remain unchanged. An agent capability is a verified
+executable/version, owner uid, profile digest and agent flag-set digest; it grants no consent or authority.
+
+`ToolSession` pins a turn id, generation, unique `AgentToolSpec` set and effective-policy `approvalTtlMs`.
+It never exposes `decide_approval`. The existing coordinator owns authorization, approval, execution and durable settlement;
+CLI drivers and the bridge only transport proposals/results through `ToolSessionPort`. Claude correlates MCP
+`_meta["claudecode/toolUseId"]` with `tool_use.id`. Codex carries `_meta.callId` and `_meta.itemId`, but its JSONL
+`item.id` is unrelated: the handler stamps `deckentCallId`, turn id and generation in **every** result, including errors.
+Cancellation and revocation fence a generation; their results distinguish confirmed/unverified termination from
+settled/unknown external effects. Neither stopping a CLI nor receiving a cancel proves that a business effect was undone.
+
+`nativeCliAgent(protocolFamily)` selects sourced registry data beside `nativeCliHeadless`. It inherits the existing
+environment, deny names, login serialization, isolation and resource bounds. Its own argv/guards and the shared bridge
+are included in `nativeAgentFlagSetDigest`. Claude keeps restricted mode, empty native tools and `dontAsk`/no prompts,
+removes safe mode and the blanket MCP denial, and admits exactly one generated `{mcpConfigFile}` slot, a tool list
+and an admission-policy turn bound. Drivers must materialize that file only at the registry file name in the private run
+directory; the registry accepts no arbitrary MCP path or inline configuration. The init guard compares the exact session
+tool set and built-in plugin provenance; any other tool/plugin refuses sealing. Codex keeps the v1 argv and uses direct MCP
+tools (`omit_tools_from`) with `approve`; this value opens the route to Deckent's handler, never bypasses its approval.
+Native/unknown item types refuse; only the exact measured code-mode error is allowed (K3 also enforces stream counts/order).
+
+The shared bridge data describes topology R: HTTP MCP through the existing relay to a `.invalid` sentinel host/path,
+with a generation-bound **Deckent** turn token, not a subscription credential. Claude's HTTP entry uses headers and a
+millisecond timeout; Codex uses URL/bearer-token environment and seconds. Both timeouts derive from the session approval
+TTL; no CLI default supplies authority or a policy deadline. HTTP_PROXY stays in effect and NO_PROXY is cleared by schema.
+Body/frame limits are sourced provisional policy ceilings, not measured capacity. P is disabled fallback flag data only.
+K4 and K15 must supply the facade, token/generation enforcement and login-scope negative evidence before the bridge opens.
+Login methods are registry data: Claude `claudeai`, Codex `browser` and `device-auth`; person-witness checks stay with login.
+Readiness reasons are typed, with matching EN/TR `headless.agent.reason.*` catalog entries; unknown never means ready.
+
+Sources: retained external `proof/ALPHA63/A0/RESULT.md` (A0-1/2/3/4), `AMENDMENT-BRIDGE.md` v2,
+`bridge-research/RESEARCH.md` and `A0/A0-5R/*-relay`; current official
+[Claude CLI reference](https://code.claude.com/docs/en/cli-reference),
+[Claude MCP configuration](https://code.claude.com/docs/en/mcp) and
+[Codex configuration reference](https://developers.openai.com/codex/config-reference/) (accessed 2026-11-03).
+The `approve` interpretation comes from A0 behavior, not a verified official semantic definition. Real-account,
+CLI-update, assembled-product and business-process acceptance remain separate from these schema/guard tests.
+
+### K23 işçi kartı bağlantısı — yazar adayı, 2026-11-03
+
+İşçi kartının mühürlü özeti `worker-tool-call` v1 metadata taşır: exact Run/Task/Attempt,
+turn, araç, hedefin redakte sunumu ve SHA-256'sı, argsDigest. Gerçek karar uygulaması ve
+minimum güvence değişmez. Attended karar üreticisi kayıt MAC'ini mevcut inspect yoluyla doğrular;
+scope/turn/araç/hedef digest/argsDigest bağını kontrol eder, gerçek socket peer ve TTY tanığından
+aynı service ring'inde tek kullanımlık karar üretir. AI/MCP ve TTY'siz SDK kişi tanığı kazanmaz.
+Sohbet kartının başlatan peer bağı ve istemcinin verdiği geçersiz capability reddi aynen kalır.
+
+Workline `/approvals` mevcut ok tuşlu kartı kullanır; exact kimlik ve tam argsDigest ayrıntıdadır.
+Run ayrıntısında bounded pending approval okuması neden ve kalan TTL'yi gösterir; görünüm
+worker fazını veya yetkiyi değiştirmez. İşçi kartında henüz bağlı bir standing cevap üreticisi yoktur:
+yalnız bir kez/red sunulur; oturum/kalıcı izin uydurulmaz ve taban gevşetilmez.
+`ToolSessionPort.terminalFailure` yalnız güvenilir üreticiye ait opsiyonel bir porttur, tel alanı değildir.
+TTL dolunca K1 kaydı expired olur; worker driver/supervisor bağlantısı `approval-expired` nedenini
+başarısız process sonucu `APPROVAL_EXPIRED` olarak kalıcı tutar; modelin son başarı metni bunu silemez.
+
+K23 worktree'si ortak runtime karar çağırıcısını ve driver/supervisor/workload-wrapper dosyalarını
+sahiplenmez: exact bağlantılar dış `proof/ALPHA63/k23/LEAD-CALLERS.patch` içindedir.
+Kaynak dal tek başına bu bağlantılar yapılmış gibi değerlendirilmez. Hedefli yazar kanıtı, derlenmiş
+fixture yürüyüşü, bağımsız Astra, monte BeUser ve owner kabulü ayrı kapılardır.
+
+### K1 call coordinator
+
+`AgentTurnInput.nativeSession` explicitly selects push mode. `AgentTurnPorts.invokeAgent` receives the projected tools,
+messages and `ToolSessionPort`; without that driver the turn refuses rather than falling back to `invokeRound`.
+Native proposals require `call.id = correlation.deckentCallId`; provider ids stay in correlation. Each proposal uses the
+same argument/ingress checks, authorization, preparation, exact approval, execution and settlement as a pull call.
+Concurrent proposals serialize; the same id and body joins its recorded result, while conflicting reuse refuses.
+The driver returns a final answer without tool calls; returned tool calls cannot create a second execution path.
+The session closes at driver completion and drains accepted work. Cancel/revoke fence new proposals and abort both driver
+and call signals. Pending or uncertain non-read effects remain unknown; a completed effect stays successful in its native
+result even on cancellation. K1 has no CLI process-termination evidence and reports `termination: unverified`.
+`runDurableAgentTurn` binds the session turn id to its claim, records through the existing tool-call store and replays a
+finished turn without opening a session. Generation-local replay is not restart recovery. K1 counts one native driver
+invocation as one engine round; native model rounds and compaction belong to the driver. Existing admission request-byte
+bounds also gate queued proposal input; no new round/call/time policy is introduced.
+These are author code/test claims. Real CLI/facade/realm, hosted CI, independent review and assembled acceptance remain
+separate; K15 must be GREEN before the product bridge opens.
+
 **Agent turn loop (T-L3b, engine core; runtime and terminal wiring below).** `engine/core/agent-turn` `runAgentTurn` runs one turn over ports: a
 governed model round (the composition derives the round command id from the turn so a replay never bills twice) → each declared
 tool call checked against its JSON schema subset, authorized per call (policy resource `agent-tool`, id = tool name, action
@@ -235,7 +319,7 @@ shell path classification, the bubblewrap and Landlock deny views, `@file`) deny
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
 resources added later; TERM-FEEDBACK-1: the owner's live session listed and read other saved conversations): each resource, anything
 under it, its sidecars (`rel*`: `ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary
-(`.policy.json.<id>.tmp`). The deny list's nested literal heads (`WorkspaceScope.protectedAnchors`:
+(`.policy.json.<id>.tmp`). The deny list's nested literal heads (`WorkspaceScope.protectedAnchors`: literal nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db*`, `.deckent/host` from `.deckent/host/**`); a pattern starting with a glob has none. A sandbox never grants their ancestors whole, even under an ignored tree; `.gitignore` cannot lift this deny-derived floor (Astra 2162).
 `.deckent/live-data/state/ledger.db`, `.deckent/host`, …) are protected together with their ancestors by both sandboxes even under an
 ignored tree (`node_modules`, `.cache`, a `.gitignore` entry) — the ignored-tree exception never reaches Deckent's own state; a chain
 through a symbolic link refuses the call. In the shell plan a `PATH_PROTECTED` verdict on one of these patterns is a hard floor
@@ -300,3 +384,137 @@ after the turn, however it ends: refused decisions and plain allows that ran, li
 and full-access allows keep their own audit events). A turn that decided nothing writes none. The write is best effort: a refused write
 does not fail the turn and is not reported (`src/engine/core/audit/internal/policy-turn.ts:45`,
 `src/composition/core/agent-turn/internal/turn.ts:360`). See [core layers](core-layers.md#auditor-and-safety-holds-s5-s5b).
+
+
+**Login scope (alpha.63 K15/K15B/K15C).** Composition passes the selected invocation profile and the global state roots into the same shell handler
+used by agent tools. Global-state path names are rejected as `PRODUCT_STATE_PROTECTED` before approval, in every realm. Subscription
+profiles cannot resolve a usable host shell (`SUBSCRIPTION_HOST_SHELL_REFUSED`), whether host was configured or chosen as fallback.
+With global state present, host calls using directory changes (`cd`, `pushd`, `popd`), path-producing `find`/`xargs`, command or parameter
+expansion, dynamic tilde names, braces, process substitution or unparseable syntax require a per-call approval with a localized warning
+that the working directory could not be verified and the command may reach Deckent's state folder (owner 2026-11-03, K15C).
+The warning precedes the command in the bounded preview and is also carried in the structured shell reason. These host calls use the
+existing always-ask tier unless already destructive/authority; mode and standing approvals cannot allow them automatically. Explicit
+global-root names still refuse before any card; subscription host/fallback refusal is unchanged. K15B's prior hard refusal was a lead
+instruction, not owner acceptance of broken API workflows. Host names remain a best-effort check, not an isolation boundary; arbitrary programs
+and concurrent path replacements still require OS containment. Shell hard-link checks compare `(dev, ino)` metadata only against global
+login files projected from the CLI registry's `configVisible` names. Ordinary pnpm/cp-al names no longer hit the global-state hard-link refusal (other sandbox inode floors still apply);
+file tools retain their existing multi-link refusal, descriptor custody and symlink confinement.
+
+Project MCP launches receive the same global hard floor in their sandbox layout. In subscription turns only tools attesting the long-lived
+sandbox's read-only project view are offered (`projectReadOnly` is false on host, remote and prefer-sandbox fallback launches); withheld
+servers have a typed `not-decided` / `SUBSCRIPTION_HOST_MCP_REFUSED` notice. Their tool names are omitted from both specs and the system
+prompt. API MCP tool selection stays unchanged. This is a turn-composition gate, not a new trust or effect flow. The runtime tool name is
+`run_shell`; no alternate command execution path is added. Assembled bridge/CLI stdout canary acceptance remains a separate fan-in gate.
+
+### Path custody and shell contracts
+
+The detailed contracts below accompany the concise comments in the touched adapters. They retain the existing guarantees; K15 adds the global-root and subscription-host refusals described above.
+
+`src/adapters/core/shell-paths/internal/paths.ts`: SEC-6 F31: a segment is the engine's exact sh regex (brackets, POSIX classes) run by the platform's linear engine under a step  budget, never a backtracking RegExp; the engine's leading-dot lookahead (`NO_DOT`) is checked here. `null`: unsupported (fail closed).
+
+`src/adapters/core/shell-paths/internal/paths.ts`: sh-style expansion of one glob argument (no brace expansion; `**` is `*`), bounded; `null` over the bound. A `..` after a glob  segment is unsupported: joining it lexically would name the match's lexical parent, not the one the kernel opens (Astra 2111).  Every name test of the whole expansion is charged to one step budget; exhausting it is unsupported (fail closed, SEC-6 F31).
+
+`src/adapters/core/shell-paths/internal/paths.ts`: The shell classifier's path check over the workspace scope (T-L4 slice 3a): one mechanism with the read tools and edits. A path argument is read-only only when it lies lexically inside the root, is not denied, exists, and its real path (every symlink resolved) is inside and not denied. A path with a `..` component is checked as the kernel opens it (Astra 2111): components in order, so `link/..` is the parent of the link's target, never the lexical parent; that object must exist, be inside and not denied. A glob is expanded with sh rules against the real directory (dotfiles only for a leading dot, bounded), and every match passes the same check; no match (sh would pass the literal) or too many is GLOB_EXPANSION, a `..` after a glob segment is GLOB_UNSUPPORTED, as is one exhausting `globSteps` (SEC-6 F31). Git pathspecs are checked lexically only (git normalizes them itself). Not covered: intermediate symlink hops that leave the root and return (the final real path is what the shell reads); the verdict is taken before the command runs, so a later swap is not excluded.
+
+`src/adapters/core/shell-paths/internal/paths.ts`: Write targets of the narrow mutating tier (T-L4 slice 4a), over the same workspace scope and write floor as agent edits: inside the workspace, not denied, parent a real directory inside, not on the write floor (a new directory is refused when anything under it would be), and the target absent (new directory), absent or a single-link regular file (file), or such an existing file (the source of `mv`). Anything else makes the command not narrow — it then asks, as before. An absolute path inside a second root (SCR-A: the conversation's scratch area) is checked the same way against that root's scope.
+
+`src/adapters/core/shell-paths/internal/paths.ts`: SHELL-AUTONOMY: whether a word of a command names a protected path — the write floor or the product state (its glob patterns, relative to the project root) — by name only, lexically (no file system): as resolved from the project root when it lies inside, and with leading `./`/`../` segments dropped (a `cd` earlier in the same command moves the base). A path or its directory form (`.github` for `.github/**`) counts. A name is not a boundary: the sandbox realm keeps existing floor paths read-only itself.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: The only product resources the agent tools may read (TERM-FEEDBACK-1): the installation's configuration, which the model is told about and which names credentials only by reference (the keys live under `approvals`). Every other resource of the layout is product state or authority (ledger and its sidecars, backups, saved conversations and history, logs, the runtime socket, approvals and their key, previews, audit, policy and bindings, runs, workspaces, scratch, ...) and is never opened to the agent tools; a resource added to the registry is protected until it is listed here.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: The Core read floor plus every product resource of this layout inside the project except the readable ones (TL-C D4, TERM-FEEDBACK-1): the resource, anything under it, its sidecars (`ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary beside it (`.policy.json.<id>.tmp`). The floor names them under the default `.deckent`; a data root moved inside the project (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and shell paths and feeds both shell sandboxes' deny views, and the composer's `@file` picker uses it too.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: MODES-3 `edit-authority`: the installation's configuration file inside the project (it decides where policy, bindings and approvals live, the realm and the network), its sidecars and a writer's temporary — never written without the owner's card, full access included.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: OPEN-SANDBOX (owner MODES-3 checkpoint 4): the hard floor of a full-access turn's open shell view (`ShellSandboxLayout.hardFloor`). Roots: the project's `.deckent` (MCP registry's directory), the data root, the bootstrap configuration's directory unless it holds the project, the global state root of the configuration and process environments, the conventional `~/.deckent` (sealed even before it exists, P5a). Credentials: the Core read floor without repository internals. `product` (owner Y, 2026-09-30): registry resources under this and the default layout, the data root, the bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads — any other existing subdirectory of a sealed root is the project's.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: Astra 2486 P1: a write set keeps a sealed in-project root (`.deckent`) inside the overlay, so its entries are refused here unless they lie in the owner-Y exception — the root's `docs` subtree (creatable) or another EXISTING non-product, non-link subdirectory; the root's own names and product paths never reach the host from a write set.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: The global state roots of the configuration and process environments: each one's resolved root and the conventional `~/.deckent`, which is protected even before it exists (P5a, lead 2026-10-31: nothing can be planted for a later default-root CLI). One derivation for the shell hard floor and the edit/read deny lists.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: The deny patterns of the product's own state: each protected resource, anything under it, its sidecars and a writer's hidden temporary; a shell command naming one of these is refused outright — no approval opens product management (owner F2, Astra 2162). P5a: the same for every global state root inside the project (`env` and this process's environment, as the shell hard floor), e.g. its compile cache.
+
+`src/adapters/core/agent-workspace-floor/internal/floor.ts`: The edit path rules for one write-set path: a denied path (`writablePath`), the configuration file (`edit-authority`), the write floor (`edit-floor`), the additional self-source floor (`edit-self-source`), else `edit`. A directory — one removed, or a new parent one (Astra 2182 R3: `src/package.json/` is the floor name, whatever it holds) — is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the rules for what it holds.
+
+`src/adapters/core/workspace-read/internal/scope.ts`: Paths no read tool returns, matched against the workspace-relative real path (registry data; the default is the Core floor). Reading them needs an explicit, reviewed change of this list, never a model argument.
+
+`src/adapters/core/workspace-read/internal/scope.ts`: The read floor without the repository internals: the credential and product-state paths that stay closed everywhere — a full-access turn, the shell hard floor and the S6 pre-dispatch gate over a worker's tree (a clone legitimately carries `.git`). One list, never a copy.
+
+`src/adapters/core/workspace-read/internal/scope.ts`: The workspace boundary for read tools (T-L1, Astra 2072 R1). A path check followed by opening the same pathname again is a race: a parent directory can be swapped for a symlink in between. So every open walks the real path's components from a root descriptor (`/proc/self/fd/<fd>/<name>`, openat semantics on Linux) with no-follow on each component, and the opened descriptor's own path is checked again. Files with more than one link are refused, because a hard link can alias a protected file under an innocent name. Platforms without per-descriptor paths fail closed.
+
+`src/adapters/core/workspace-read/internal/scope.ts`: Descriptor-relative walk over regular files: each directory is opened from its parent descriptor with no-follow, entries are listed through the descriptor, symlinks are never followed, ignored names and denied paths are skipped. What could not be covered (depth, unreadable or changed directories) is counted, never silently treated as absent.
+
+`WorkspaceScope.protectedAnchors`: The literal, nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db `, `.deckent/host` from `.deckent/host/  `; a pattern starting with a glob has none): paths whose ancestors a shell sandbox must never grant whole, even under an ignored tree (Astra 2162). Derived from the deny list, so a `.gitignore` change cannot lift them.
+
+`NativeCliCapabilities.discovery`: How `disabled` discovery is realised. Argv: non-empty `disabledArgs`, the help flags they need and hidden probes whose invalid value must draw the exact parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Checkout (C2, owner Q4 2026-10-23): a CLI without a suppression flag gets a worker checkout without the registry's `instructionSurface` (G1: one list for checkout shaping and the delivery floor; empty `disabledArgs`, no flags, no probes). Null = no `disabled` mode.
+
+`createAgentShell.posture`: v6 PROMPT-POSTURE: the posture the system prompt states for this turn's shell, from the same realm resolution and open-view rule its calls take. A full-access turn's calls run as `full-access` or `owner-approved`, both open (`shellWritePosture`; the tier does not change `open` or the floor for either); any other turn's calls are closed whatever their authority. In the open view the turn's write floor is the configuration file (turn.ts): read-only for a `full-access` call, and for an `owner-approved` one as `shellWritePosture` says (W3: the owner's card never opens configuration content). The realm is known now: the configuration, the memoized host measurement and the turn's providers are those of every call. Per call only an exception differs, and that call's result says so (its `sandbox:` marker and notices): a full-access call whose grant no longer holds runs unattended in the closed view, and an open view that cannot be built (a state root holding HOME, the HOME walk over its bound) refuses the call.
+
+
+### K20: first guarded subscription turn
+
+The invocation owner may run a no-model preflight when surface observations are absent or incomplete.
+CLI, login, environment and the exact execution identity must pass before this verification turn opens;
+known negative observations keep tools closed. Readiness readers remain read only. The existing running-turn
+cancellation controller owns the no-model probe too; it transfers into the admitted turn, and an early
+cancellation records a cancelled turn without model/tool work. Steering explicitly waits for admission. Claude init/plugin guards
+and Codex item order/allowlists precede proposals; the ordinary policy, approval and effect owners remain
+unchanged. A completed guarded turn records the current profile/agent-flag digests. A surface refusal (unoffered
+tool, plugin, parented event, registry `stopEvents`) stops only that turn and writes no negative observation
+(owner 2026-11-05); an unrecognised CLI event is kept as an identifier in the turn's note and the turn goes on.
+No alternate tool envelope is introduced.
+The same retained observation is readable for workers; it is prerequisite evidence, never the separate F08
+worker execution/settlement proof. Registry capability lookup includes agent-capable headless chat families.
+Pure command schemas, environment/argv shaping, Claude stream validation and diagnostic projection live in
+`capabilities/core/native-agent-execution`; asset loading, filesystem custody and spawning stay in adapters.
+Codex agent argv disables agents and plugins using sourced registry data; the v1 text argv/digest stays unchanged.
+Actual CLI subagent suppression must be verified in owner R / the assembled BeUser walk; fake CLI cannot prove it.
+
+### K22: retained worker verification and input views
+
+A worker with current CLI/login/environment observations and no F08 record may open its first guarded
+verification Attempt. The tree gate, K5 recheck, K6 reservation and ordinary policy/approval owners still
+precede execution. A host-private exclusive claim serializes this binding/seal; contention waits visibly.
+The CLI init/item guards precede every proposal. After the CLI realm closes, effects settle and terminal
+custody is retained, release publishes F08 for the exact connection, scope, reference, execution seal and
+Attempt. A guard refusal instead retains a terminal negative; observing it again cannot trigger a retry.
+Unsafe or unreadable records fail closed; a claim left by an unknown process is never stolen or aged out.
+The record follows no-follow, owner, private-mode, single-link and bounded-read rules and is absent from
+both CLI and tool views. An observation still does not constitute F08 or product acceptance.
+
+K26 places no-model preparation in the authorized task owner before the worker readiness gate. Missing
+or expired observations invoke the existing native-agent preflight and retain its prerequisite observation;
+an existing observation, including a known refusal, is never reprobed by preparation. Readiness queries
+remain read only. The current K5 binding is rechecked before preparation, and an exclusive host-side claim
+for the profile serializes concurrent preparations across processes. Contention and probe failures park the
+Run with a typed reason; an abandoned claim is never stolen. This claim grants neither model execution nor
+F08: the tree gate, lease/delegation checks, K6 reservation and guarded verification Attempt still apply.
+
+Admitted task artifacts and predecessor handoffs appear only in tool views at `/deckent/inputs/...`;
+dependency binds retain their admitted targets. Read tools use the shared scoped reader; shell calls and
+read-only environment probes use the shared bubblewrap view resolver/process owner with read-only aliases.
+Receipts, source roots, scope, byte limits and link checks are rechecked before consumption. A realm unable
+to provide those views refuses them. The CLI receives neither these mounts nor their paths in argv.
+Native template defaults derive their Node requirement from the native CLI registry's hard `dataBytes`
+bound and `native-agent-execution/internal/worker-environment.json`'s heap policy; Docker defaults and
+explicit environment declarations retain their own values. Both read-only probes and governed worker
+shell calls use that same native bound: `prlimit` sets soft and hard RLIMIT_DATA before the command,
+and the fixed Node environment sets old-space to the registry share (currently 1536 MiB of 2 GiB).
+Children inherit the hard limit; this is a per-process data bound, not an aggregate RSS/cgroup limit.
+The existing heap probe still checks minimum available V8 heap, not exact old-space size. A missing
+executable or unmet declaration refuses before model launch. An Attempt inside installation state uses
+a closed bubblewrap view that first hides its state ancestor, then binds only that Attempt subtree;
+sibling state remains absent. This trusted composition-only layout rejects open views; ordinary chat
+shell layouts are unchanged. Generic template/probe shaping and the native bound wrapper live in
+`capabilities/core/native-agent-execution`; adapters supply registry data and the existing realm owner.
+`GitWorkspacePatchSource` selects capture and release observation from the recorded supervisor adapter:
+native workers use their exact retained terminal custody, while Docker records keep Docker observation.
+Unknown or mismatched terminal custody cannot produce a patch; path, symlink and snapshot bounds remain
+unchanged. Patch retention, task acceptance, queue admission and authorized custody release retain their
+existing application owners; a worker's successful exit alone does not establish coding-task acceptance.
+Legacy profile selection and `projectionRetired=false` are unchanged. Real-account R08, assembled BeUser,
+independent review and hosted acceptance remain separate from author fixtures and compiled evidence.
+Background worker approval binds the fresh deciding terminal peer through
+`attendedWorkerApprovalInput` before the existing approval application consumes its turn-bound capability.
+This does not lower the self-source or static hard floors. Author fixtures, compiled customer-project
+execution and assembled self-source interaction remain separate evidence scopes.

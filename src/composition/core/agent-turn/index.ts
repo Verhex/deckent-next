@@ -9,3 +9,7 @@ export { renderMcpStartNotice, runConfiguredMcpCommand } from './internal/mcp.js
 export { describeMcpProposal } from './internal/mcp-propose.js';
 export { createAgentShell, inspectConfiguredShellRealm } from './internal/shell.js';
 export { createAgentFileEdits } from './internal/edits.js';
+export { withNativeChatInvocation, connectedWorkerClis } from './internal/native.js';
+export type { NativeChatRuntime } from './internal/native.js';
+export { createConfiguredNativeChatRuntime } from './internal/native-runtime.js';
+export { createAgentCallApprovals, describeAgentCall } from './internal/call-approvals.js';

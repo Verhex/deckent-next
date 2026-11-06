@@ -1,5 +1,5 @@
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
+import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock, prepareProductDirectory } from '#platform/index.js';
 import { agentFileEffectCommandId, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -11,7 +11,7 @@ import type { loadPeerInvocationContext } from '#composition/core/model-invocati
  * unknown outcome. The effect's approval gate is the caller's: it verifies the durable approval record of exactly this call (C12 G3);
  * nothing here admits a write by itself.
  */
-export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; readonly peer: LocalPeerIdentity;
+export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; readonly peer?: LocalPeerIdentity; readonly sessions?: () => Promise<SessionVerifier & SessionAuthority>;
   readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
   /** MODES-3: the area's paths that decide authority (the installation's configuration file): a write there asks in every mode. */
   readonly authority?: (rel: string) => boolean; readonly selfSource?: (rel: string) => boolean }) {
@@ -56,7 +56,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
         target: { kind: descriptor.targetKind, id: area.targetId(planned.rel) }, idempotencyKey: commandId, input: { content: planned.after },
         expectedVersion: planned.beforeVersion };
       const clock = new SystemTrustedClock();
-      const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
+      const sessions = await (input.sessions ? input.sessions() : input.peer ? createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock) : Promise.reject(new SessionAuthenticationError('SESSION_REQUIRED')));
       const target = area.target(await prepareProductDirectory(context.layout, 'fileEffects'));
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       try {

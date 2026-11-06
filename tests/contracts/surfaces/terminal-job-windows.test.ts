@@ -65,6 +65,9 @@ describe('SW-2 job windows', () => {
     expect(view.stdout.frame).toContain('4b0c9811'); expect(view.stdout.frame).not.toContain(attemptId);
     await snapshot(`run-detail-${locale}`, view);
     expect(runDetailLines(run, work).some(line => line.spans.some(item => item.role === 'muted'))).toBe(true);
+    // R9h: rows and the task's section name it by number; its text appears once (the brief's task line).
+    const detail = runDetailLines(run, work).map(line => [...line.label ?? [], ...line.spans].map(item => item.text).join(''));
+    expect(detail.filter(text => text.includes('Fix checkout'))).toHaveLength(1); expect(detail).toContain(locale === 'en' ? 'Task 1' : 'Görev 1');
     await close(view); onlySummary();
   });
   it.each(['en', 'tr'] as const)('%s: /run shows the summary of a queue row read through the ledger port, and its not-available state when the read fails', async locale => {
@@ -109,6 +112,11 @@ describe('SW-2 job windows', () => {
     const view = await open('/cancel', ports({ inspectRun: inspect, cancelRun: cancel }));
     await until(() => view.stdout.frame.includes('> Fix checkout'), 'picker'); await choose(view);
     await until(() => captured.entries.length > 0, 'closed'); expect(cancel).not.toHaveBeenCalled(); onlySummary();
+    // R9m: `x` in /tasks on a finished Run says it already finished, never "Run details closed".
+    const tasks = await open('/tasks', ports({ inspectRun: async () => ({ ...run, state: { kind: 'terminal', outcome: 'failed' } }) as RunView, cancelRun: cancel }));
+    await until(() => tasks.stdout.frame.includes('worker 1'), 'task rows'); await settle(40); tasks.stdin.write('x');
+    await until(() => tasks.stdout.text.includes('Fix checkout has already finished; there is nothing to cancel.'), 'already finished');
+    expect(tasks.stdout.text).not.toContain('Run details closed'); expect(cancel).not.toHaveBeenCalled();
   });
   it('approvals picker opens the unchanged card and aggregates its result into one line', async () => {
     const decide = vi.fn(ports().decideApproval!), view = await open('/approvals', ports({ decideApproval: decide }));

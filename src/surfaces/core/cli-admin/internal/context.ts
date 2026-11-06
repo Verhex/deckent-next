@@ -37,6 +37,8 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   updateToolchains?: ToolchainUpdateHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
   configureCodingTemplate?: CodingTemplateHandler;
+  /** R8b/R8c: the worker CLI id a subscription connection's protocol family runs (native agent registry), or null. */
+  workerCliOf?: (protocolFamily: string) => string | null;
   // alpha.53 F1: `coding instructions status|trust|revoke` — the worker instruction file a Run snapshots, trusted only at a person's terminal.
   inspectWorkerInstructions?: WorkerInstructionStatusHandler;
   changeWorkerInstructionTrust?: WorkerInstructionTrustHandler;

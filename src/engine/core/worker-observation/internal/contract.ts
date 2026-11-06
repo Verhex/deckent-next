@@ -10,7 +10,7 @@ export type WorkerObservationQuery = z.input<typeof workerObservationQuerySchema
 export interface ObservationLimits { readonly maxFileBytes: number; readonly maxEntries: number; readonly staleMs: number }
 export type WorkerProcessState = 'running' | 'paused' | 'created' | 'exited' | 'missing' | 'unknown' | 'present-unverified' | 'absent-unverified' | 'denied';
 export interface WorkerActivity {
-  readonly schemaVersion: 1; readonly identity: AttemptIdentity; readonly backend: 'docker';
+  readonly schemaVersion: 1; readonly identity: AttemptIdentity; readonly backend: 'docker' | 'native-cli-worker';
   readonly provider: string; readonly workspace: string; readonly observedAt: number;
   readonly process: WorkerProcessState; readonly handle: string | null;
   readonly terminal: DispatchTerminal | null; readonly outputRecorded: boolean;

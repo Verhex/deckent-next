@@ -1,5 +1,6 @@
 import { persistedString, persistedInteger, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
+import { approvalPreviewCutSchema } from '#domain/core/agent-turn/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const approvalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 const renewalSchema = z.strictObject({ previousApprovalId: identitySchema, commandId: identitySchema, commandDigest: digest, actor: approvalActorSchema,
@@ -70,7 +71,11 @@ const requestShape = { approvalId: identitySchema, scopeId: identitySchema, subj
 /** Operation-keyed approval request (v2, C12): agent tool calls and catalog operation commands; task admission keeps v1. */
 const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, ...requestShape }).refine(r => r.expiresAt > r.createdAt).readonly();
 /** Card-facts approval request (v3, B1/APPROVAL-SURFACE): the v2 shape plus the producer's `facts`; v1/v2 records stay readable as written. */
-const factualApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(3); }, ...requestShape, facts: approvalFactsSchema }).refine(r => r.expiresAt > r.createdAt).readonly();
+/** Versioned display expansion: sealed with the request and bound to the exact tool arguments. Older v3 records retain their bytes. */
+export const approvalPreviewSchema = z.strictObject({ schemaVersion: z.literal(1), argsDigest: digest,
+  text: persistedString(z.string().max(16_384)), cut: approvalPreviewCutSchema.nullable() }).readonly();
+const factualApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(3); }, ...requestShape, facts: approvalFactsSchema,
+  preview: approvalPreviewSchema.optional() }).refine(r => r.expiresAt > r.createdAt).readonly();
 export const approvalRequestSchema = z.union([taskApprovalRequestSchema, operationApprovalRequestSchema, factualApprovalRequestSchema]);
 export type ApprovalSubject = z.infer<typeof approvalSubjectSchema>;
 export type ApprovalFacts = z.infer<typeof approvalFactsSchema>;

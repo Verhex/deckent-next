@@ -29,7 +29,7 @@ describe('renderDeliverySummary', () => {
       'Accepted · 2 criteria · on: exit code · content not independently verified',
       'Worker-reported checks (claim): 2 passed, 0 failed, 1 not run, 0 unknown',
       'System verification (queue-verify-1): accepted · on: exit code · content not independently verified',
-      'Model channel/model-x: verified', 'Risk: small change · size tiny · evidence not independent',
+      'Model channel/model-x: verified', 'Risk: small change · size tiny · proof only from the worker; check it yourself',
       'Yes: the result is published · No: nothing is published']);
   });
   it('renders Turkish for the same card', () => {
@@ -38,6 +38,8 @@ describe('renderDeliverySummary', () => {
     expect(lines).toContain('Kabul edildi · 2 ölçüt · dayanak: ' + lines[5]!.split('dayanak: ')[1]);
     expect(lines.at(-1)).toBe('Evet: sonuç yayımlanır · Hayır: hiçbir şey yayımlanmaz');
     expect(lines[2]).toContain('beyan');
+    // R9q (owner D5): risk words say what it is and what to do, without internal terms.
+    expect(lines).toContain('Risk durumu: küçük değişiklik · boyut tiny · kanıt yalnız işçiden; sonucu kendin kontrol et');
   });
   it('says plainly when sections are withheld or unavailable', () => {
     const lines = renderDeliverySummary(summary({ outcome: { state: 'withheld' }, change: { state: 'withheld' }, model: { state: 'unavailable' },
@@ -52,7 +54,7 @@ describe('renderDeliverySummary', () => {
       risk: { class: 'other', workClass: null, protectedTarget: true, sizeBucket: null, flags: ['out-of-scope', 'protected-target'] },
       change: { state: 'available', adapter: 'workspace-patch', files: 1, added: 1, removed: 0, topPaths: ['x.ts'], topPathsOmitted: 0, scope: 'out-of-scope', outOfScope: ['x.ts'], outOfScopeCount: 4 } }), 'en').join('\n');
     expect(lines).toContain('Outside the allowed scope (4): x.ts (+3 more)'); expect(lines).toContain('Accepted, but the content was not independently verified · 0 criteria · on: no evidence recorded');
-    expect(lines).toContain('Risk: not in the small-change class (by the kind of files, not their size) · protected target · changes outside scope · protected target');
+    expect(lines).toContain('Risk: not a small job; look over the change · protected target · files outside the asked area changed; check them · protected target; approve with care');
     expect(renderDeliverySummary(summary({ change: { state: 'available', adapter: 'workspace-patch', files: 1, added: 0, removed: 0, topPaths: [], topPathsOmitted: 0, scope: 'unscoped', outOfScope: [], outOfScopeCount: 0 } }), 'en')).toContain('No scope was declared for this work');
   });
   it('renders every model verdict (incl. start-name-matched and provider-chosen), operation and flag in both locales without unresolved keys or placeholders', () => {
@@ -66,6 +68,9 @@ describe('renderDeliverySummary', () => {
         expect(text).not.toMatch(/\{\w+\}|delivery\./);
       }
       expect(renderDeliverySummary(summary({ risk: { class: 'other', workClass: null, protectedTarget: null, sizeBucket: null, flags: [...DELIVERY_RISK_FLAGS] } }), locale).join('\n')).not.toMatch(/delivery\./);
+      // R9q: the usual subscription-worker flags fit one risk line uncut, so each one's advice stays visible.
+      const usual = renderDeliverySummary(summary({ risk: { class: 'other', workClass: null, protectedTarget: null, sizeBucket: 'small', flags: ['evidence-not-independent', 'model-not-verified', 'verification-missing'] } }), locale).at(-2)!;
+      expect(usual.endsWith('…')).toBe(false); expect(usual).toContain(locale === 'en' ? 'try it first' : 'önce sen dene');
     }
     const provider = renderDeliverySummary(summary({ model: { state: 'available', requested: { channelId: 'cursor', modelId: 'm' }, verdict: 'provider-chosen' } }), 'en').join('\n');
     expect(provider).toContain('left to the provider (cursor)');

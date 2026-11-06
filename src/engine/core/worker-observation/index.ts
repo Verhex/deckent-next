@@ -5,3 +5,5 @@ export { WorkerTranscriptApplication } from './internal/transcript.js';
 export type { WorkerEventArtifacts } from './internal/transcript.js';
 export { readSealedWorkerEvents, projectAttemptWorkerModels, describeAttemptWorkerModels, describeRunWorkerModels, observeAttemptWorkerModels } from './internal/models.js';
 export type { TaskWorkerModel } from './internal/models.js';
+
+export { createWorkerEventCollector } from './internal/events.js';

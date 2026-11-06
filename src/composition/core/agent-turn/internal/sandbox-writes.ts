@@ -1,5 +1,5 @@
 import { PRINCIPAL_EFFECT_PRODUCER, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
+import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority } from '#engine/index.js';
 import { prepareProductDirectory, sha256, SystemTrustedClock } from '#platform/index.js';
 import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
   removeSandboxWriteSetDirectory, scanSandboxWriteSetCall, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
@@ -14,7 +14,7 @@ import type { loadPeerInvocationContext } from '#composition/core/model-invocati
  * whatever happened.
  */
 export async function settleSandboxWriteSet(input: { readonly directory: SandboxWriteSetDirectory; readonly scope: WorkspaceScope; readonly decider: SandboxWriteDecider;
-  readonly authority: (rel: string) => boolean; readonly selfSource?: boolean; readonly sealed?: (rel: string) => boolean; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly peer: LocalPeerIdentity;
+  readonly authority: (rel: string) => boolean; readonly selfSource?: boolean; readonly sealed?: (rel: string) => boolean; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly peer?: LocalPeerIdentity; readonly sessions?: () => Promise<SessionVerifier & SessionAuthority>;
   readonly scopeId: string; readonly shellCommandId: string; readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
   const { scope, context } = input;
   type Store = Awaited<ReturnType<typeof openSqliteAttemptStore>>;
@@ -24,9 +24,9 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
     const clock = new SystemTrustedClock();
     const target = new WorkspaceFileTarget(scope, await prepareProductDirectory(context.layout, 'fileEffects'), { maxFileBytes: 16 * 1024 * 1024, writeSet: { upper: input.directory.upper } });
     // Opened once, on the first entry that reaches its effect (a set with nothing to apply opens nothing).
-    let opened: Promise<{ sessions: Awaited<ReturnType<typeof createLocalPeerSession>>; store: Store }> | null = null;
+    let opened: Promise<{ sessions: SessionVerifier & SessionAuthority; store: Store }> | null = null;
     const lazy = () => opened ??= (async () => {
-      const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
+      const sessions = await (input.sessions ? input.sessions() : input.peer ? createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock) : Promise.reject(new SessionAuthenticationError('SESSION_REQUIRED')));
       const attempts = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       store = attempts;
       return { sessions, store: attempts };

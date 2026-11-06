@@ -1,6 +1,15 @@
 import type { ConfigLoadOptions, Locale } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { PanelLine, ProviderModelOutcome, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
+import type { ModelReference } from '#domain/index.js';
+import type { NativeAgentReadiness, NativeAgentLoginMethod } from '#capabilities/index.js';
+
+export type SubscriptionSurface = 'chat' | 'worker' | 'brain' | 'agent' | 'skill';
+/** Existing scoped observations only; inspecting never signs in, refreshes a seal or admits work. */
+export interface SubscriptionReadinessPort {
+  recognizes(reference: ModelReference): boolean;
+  inspect(surface: SubscriptionSurface, reference: ModelReference): Promise<NativeAgentReadiness>;
+}
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
   catalogProviderId?: string | null;
@@ -37,7 +46,8 @@ export interface ProviderConnectHost {
   /** PV 3: after the person check, the Brain's own login dir of a CLI subscription. */
   loginDir?(connection: string, options: ConfigLoadOptions): Promise<Readonly<{ owned: string }>>;
   /** PV 3: the CLI's own sign-in (`models login`, inherited stdio); the caller hands the terminal over around it. */
-  login?(command: Readonly<{ connection: string; configDir?: string }>, options: ConfigLoadOptions): Promise<import('#surfaces/core/cli-models/index.js').HeadlessLoginView | null>;
+  loginMethods?(connection: string): readonly NativeAgentLoginMethod[];
+  login?(command: Readonly<{ connection: string; configDir?: string; loginMethod?: NativeAgentLoginMethod }>, options: ConfigLoadOptions): Promise<import('#surfaces/core/cli-models/index.js').HeadlessLoginView | null>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
@@ -50,6 +60,7 @@ export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schem
 export type ProviderDelegationPermission = Readonly<{ layers: readonly ('global' | 'project')[]; decisions: readonly Readonly<{
   layer: 'global' | 'project'; decision: 'allow' | 'require-approval' | 'deny' | 'refused'; ruleId: string | null }>[] }>;
 export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels' | 'connectModel' | 'siwc'> {
+  inspectSubscriptionReadiness?: (root: string, query: Readonly<{ scopeId: string; surface: SubscriptionSurface; reference: ModelReference }>, options: ConfigLoadOptions) => Promise<NativeAgentReadiness>;
   /** Read-only doctor projection; optional custody facts never authorize a connection. */
   inspectSecretStore?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; writable: boolean; enumerable: boolean;
     status: 'ready' | 'unavailable' | 'unsafe' | 'corrupt'; code: string | null }>>;
@@ -76,17 +87,19 @@ export type ProviderSubscriptionOutcome = ProviderModelOutcome & Readonly<{ dele
 export interface ProviderSubscriptionPort {
   /** The rows that sign in with their CLI. */
   readonly kinds: readonly string[];
+  methods?(kind: string, configDir?: string | null): readonly Readonly<{ id: NativeAgentLoginMethod; label: string; command: string }>[];
   readonly words: Readonly<Record<'action' | 'dirTitle' | 'dirOwned' | 'dirOther' | 'otherTitle' | 'otherHint' | 'otherAbsolute' | 'banner' | 'retryKeys' | 'consentTitle'
-    | 'consentNow' | 'consentConfirm' | 'configPolicy' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>>;
+    | 'consentNow' | 'consentConfirm' | 'configPolicy' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>> & Readonly<{ methodTitle?: string; methodHint?: string }>;
   refusal(kind: string, usable: readonly string[]): Readonly<{ title: string; lines: readonly PanelLine[] }>;
   /** The person check, then what the sign-in will do and its shell twin; the Brain's own dir (null: refused, with its typed reason). */
   prepare(kind: string): Promise<Readonly<{ owned: string; lines: readonly PanelLine[] }> | Readonly<{ owned: null; title: string; lines: readonly PanelLine[] }>>;
   /** The CLI's own sign-in (null dir: the Brain's own); `refused`: nothing started (person check, isolation, a missing CLI). */
-  login(kind: string, configDir: string | null): Promise<Readonly<{ signedIn: boolean; refused: boolean; title: string; lines: readonly PanelLine[] }>>;
+  login(kind: string, configDir: string | null, method?: NativeAgentLoginMethod): Promise<Readonly<{ signedIn: boolean; refused: boolean; title: string; lines: readonly PanelLine[] }>>;
   /** The governed connect; `delegate` absent keeps the earlier choice. `delegate` in the outcome: who may use the login now. */
   connect(kind: string, configDir: string | null, delegate?: readonly ProviderDelegateClass[]): Promise<ProviderSubscriptionOutcome>;
 }
 export type ProviderWindowPort = ProviderPanelPort & { readonly subscription?: ProviderSubscriptionPort;
+  readonly subscriptionReadiness?: SubscriptionReadinessPort;
   readonly locale?: Locale;
   /** Optional read-only preflight; never delays the choices or grants connection authority. */
   inspectCustody?(): Promise<Readonly<{ id: string; reason: string }> | null>;

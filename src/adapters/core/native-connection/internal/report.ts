@@ -1,5 +1,5 @@
 import { workerReportLimits, type WorkerFinalReportResult } from '#domain/index.js';
-import { createFinalReportJsonSchema, dropTransportNulls, validateFinalReport as validateBridgeReport } from './worker.js';
+import { createFinalReportJsonSchema, dropTransportNulls, finalTextReportInstruction, validateFinalReport as validateBridgeReport } from './worker.js';
 
 type NativeReportResult = Omit<Extract<WorkerFinalReportResult, { status: 'reported' }>, 'schemaVersion' | 'kind'>
   | Omit<Extract<WorkerFinalReportResult, { status: 'unavailable' }>, 'schemaVersion' | 'kind'>;
@@ -17,3 +17,6 @@ export function readFinalReportText(text: string | null, secrets: readonly strin
   dropTransportNulls(value);
   return validateFinalReport(value, secrets);
 }
+
+/** R9k: a bridge worker (no CLI report flag) asks for the same report contract in its last answer, read by `readFinalReportText`; D4: in the person's language. */
+export const finalReportTextInstruction = (language?: string) => finalTextReportInstruction(JSON.stringify(createFinalReportJsonSchema(workerReportLimits, false)), language);

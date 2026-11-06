@@ -56,14 +56,14 @@ export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Re
  * unisolated spawn exist on any path: an unusable realm is refused typed before any spawn, on every check.
  */
 export async function headlessPreflight(entry: HeadlessEntry, definition: NativeCliHeadlessDefinition, now: () => number, isolation: HeadlessIsolation,
-  signal?: AbortSignal): Promise<HeadlessPreflight> {
+  signal?: AbortSignal, agent?: Readonly<{ flagSetDigest: string; requiredFlags: readonly string[] }>): Promise<HeadlessPreflight> {
   if (process.getuid?.() !== definition.ownerUid) refuse('HEADLESS_OWNER_MISMATCH');
   // S7 (owner 2026-10-31): the person's path is resolved on every call (a CLI that updates itself moves its realpath); the key below re-runs the check once.
   const executable = await realpath(definition.executable).catch(() => null), info = executable ? await stat(executable).catch(() => null) : null;
   if (!executable || !info?.isFile() || (info.mode & 0o111) === 0) refuse('HEADLESS_CLI_UNAVAILABLE');
   const config = await stat(definition.configDir).catch(() => null);
   if (!config?.isDirectory() || config.uid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
-  const { headless, command } = entry, runDir = join(definition.stateDir, 'run'), flagSetDigest = headlessFlagSetDigest(entry);
+  const { headless, command } = entry, runDir = join(definition.stateDir, 'run'), flagSetDigest = agent?.flagSetDigest ?? headlessFlagSetDigest(entry);
   await privateDir(definition.stateDir, definition.ownerUid); await privateDir(runDir, definition.ownerUid);
   const record = async (body: Record<string, unknown>) => {
     const target = join(definition.stateDir, 'preflight.json'), temporary = `${target}.${randomUUID()}.tmp`;
@@ -103,7 +103,7 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
       try { const output = await run(shape.args, empty, buildHeadlessEnv(headless, empty, empty), empty); return shape.refusal.every(text => `${output.stderr}\n${output.stdout}`.includes(text)); }
       finally { await rm(empty, { recursive: true, force: true }); }
     };
-    for (const flag of headlessRequiredFlags(entry)) {
+    for (const flag of agent?.requiredFlags ?? headlessRequiredFlags(entry)) {
       const probe = hidden.get(flag);
       if (probe === undefined ? !help.includes(flag) : !(await accepted(probe))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'flags' });
     }

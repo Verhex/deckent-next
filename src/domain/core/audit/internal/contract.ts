@@ -152,7 +152,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ get kind() { return z.literal('skill-signer'); }, get action() { return z.enum(['enrol', 'add', 'revoke']); }, keyId: digest, get purpose() { return z.enum(['action', 'import', 'publish', 'hub']); },
     get custody() { return z.enum(['host', 'external']); }, commandId: identitySchema, get revision() { return counterSchema.positive(); }, get basis() { return z.enum(['person-card', 'revocation-log']); } }),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
-  z.strictObject({ get kind() { return z.literal('permission-mode'); }, get mode() { return z.enum(['auto-edit', 'full-auto', 'standart']); }, get cell() { return z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']); },
+  z.strictObject({ get kind() { return z.literal('permission-mode'); }, get mode() { return z.enum(['auto-edit', 'full-auto', 'standart']); }, get cell() { return z.enum(['edit-non-floor', 'shell-modify', 'shell-read', 'mcp-call']); }, // R9 `shell-read`: a Run worker's read-only shell
     tool: toolRef, call: callRef, get grants() { return z.strictObject({ company: identitySchema, person: identitySchema.nullable() }); },
     get decision() { return z.strictObject({ previous: z.literal('require-approval'), next: z.literal('allow') }); },
     summary: auditSummarySchema }),
@@ -397,6 +397,8 @@ export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   /** BeUser M-33 (owner 2026-10-28, Jev c10e0946): a person sets an accepted task's undelivered result aside (`dismiss`) or brings it back
    * (`restore`); the latest record per task decides whether /deliver and the monitor offer it. Patch and custody are untouched. */
   z.strictObject({ get kind() { return z.literal('delivery-dismissed'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, get action() { return z.enum(['dismiss', 'restore']); } }),
+  /** L1c (lead 2026-11-05): a person put back the files one working-tree delivery wrote (`paths` written back); the ledger delivery stays. */
+  z.strictObject({ get kind() { return z.literal('delivery-rolled-back'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, deliveryCommandId: identitySchema, commandId: identitySchema, paths: counterSchema }),
   z.strictObject({ get kind() { return z.literal('run-request-refused'); }, commandId: identitySchema, requestDigest: digest,
     get title() { return persistedString(z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS)); }, get code() { return z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/); } }),
   /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */

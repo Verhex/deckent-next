@@ -1,4 +1,4 @@
-import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
+import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS } from '../support/first-run-v16.js';
 import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,12 +11,12 @@ import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/in
 import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V19_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS];
 /** I-POL (alpha.48): the v13 delta; an older template reconstructed from the current one leaves it out, and the upgrade adds it last. */
 /** The v13 delta (I-POL) and the current v14 delta (S4): the rules added after v12, in plan order. */
 const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...POST_V15_RULE_IDS];
@@ -37,14 +37,14 @@ describe.skipIf(process.platform === 'win32')('requires POSIX local principal an
 it('previews without touching disk, then a real apply journals and writes policy.json + bindings.json privately; a repeated apply is a byte-identical replay', async () => {
   const root = await project();
   const preview = await previewPolicyTemplateInstallation(root, 'installation');
-  expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: 18 } });
+  expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: 19 } });
   await expect(stat(join(root, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });
   const identity = readLocalOsIdentity();
   expect(preview.principal).toEqual({ issuer: identity.issuer, subject: identity.subject });
   expect(await inspectPolicyTemplate(root)).toBeNull(); // no policy file yet
 
   const result = await applyPolicyTemplateInstallation(root, 'installation');
-  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 18 }, scopeId: 'installation' });
+  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 19 }, scopeId: 'installation' });
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
   const policyBytes = await readFile(policyPath, 'utf8'), bindingsBytes = await readFile(bindingsPath, 'utf8');
   const identityPaths = ['installation-identity', 'project-identity'].map(name => join(root, '.deckent', name, 'identity.json'));
@@ -55,7 +55,7 @@ it('previews without touching disk, then a real apply journals and writes policy
   expect(JSON.parse(bindingsBytes)).toMatchObject({ schemaVersion: 3, revision: expect.stringMatching(/^a-/u), bindings: [expect.objectContaining({ id: expect.stringMatching(/^sr-/u) })], modes: [] });
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600); expect((await stat(bindingsPath)).mode & 0o777).toBe(0o600);
 
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 18 }); // separate committed data rows preserve recognition
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 19 }); // separate committed data rows preserve recognition
 
   const replay = await applyPolicyTemplateInstallation(root, 'installation');
   expect(replay).toMatchObject({ status: 'replayed' });
@@ -153,15 +153,15 @@ it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07
   expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 4 });
 
   const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
-  expect(preview).toMatchObject({ status: 'preview', template: { to: 18 } });
+  expect(preview).toMatchObject({ status: 'preview', template: { to: 19 } });
   expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-read-tools', 'first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', ...V13]);
   expect(await readFile(policyPath, 'utf8')).toBe(v4Bytes);
 
-  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded', template: { to: 18 } });
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded', template: { to: 19 } });
   expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600);
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 18 });
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 19 });
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'current' });
 });
 
@@ -191,7 +191,8 @@ it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and e
   expect(after.grants.slice(0, edited.grants.length)).toEqual(edited.grants); // nothing removed or replaced
   expect(after.grants.map(grant => grant.id).slice(edited.grants.length)).toEqual(preview.rules.map(rule => (rule as { id: string }).id));
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
-  // Since v15 the plan is longer than one policy change: the same run again adds the rest (add-only), a third is current.
+  // Since v15 the plan is longer than one policy change (since v19 three): the same run again adds the rest (add-only), a fourth is current.
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded' });
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded' });
   const rest = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string }[] };
   expect(rest.grants.slice(0, after.grants.length)).toEqual(after.grants);
@@ -304,7 +305,7 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v1
   expect(await readFile(path, 'utf8')).toBe(before);
   output.length = 0;
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', token!, '--json'], ctx)).toBe(0);
-  expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded', template: { to: 18 } });
+  expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded', template: { to: 19 } });
   expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(current); expect(await readFile(bindingPath, 'utf8')).toBe(bindings);
   expect(errors).toEqual([]);
 });

@@ -85,6 +85,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly uninstall?: Readonly<{ title: string; lines: readonly string[]; label: string; copy: string; close: string; summary: string; copied: string }>;
   /** ADAYLAR 16b: the configured model cannot use tools here (said once at the start). */
   readonly toolsNone?: string;
+  /** R4b: a subscription CLI's tools are not verified yet; its first turn verifies them (an information line, not "no tools"). */
+  readonly toolsUnverified?: string;
 }
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
@@ -98,7 +100,9 @@ export interface WorklineProps {
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
     readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference, observe?: (progress: BrainPlanProgress) => void, pending?: import('#engine/index.js').RunIntentRecord) => Promise<RunPlanningResult>;
-    readonly lines: (result: RunPlanningResult) => readonly string[] };
+    readonly lines: (result: RunPlanningResult) => readonly string[];
+    /** R9f: the approval card's preview (only what its summary does not say); absent: `lines`. */
+    readonly cardLines?: (result: RunPlanningResult) => readonly string[] };
   readonly labels: WorklineLabels;
   /** Trusted persistent identities from CLI composition; session identity is generated once by the local adapter. */
   readonly context: Omit<TerminalLocalContext, 'kind' | 'sessionId'>;
@@ -191,7 +195,7 @@ export interface WorklineProps {
   readonly initialDraft?: ComposerHistoryEntry | null; readonly armedAt?: number | null; // a first idle Ctrl+C in the shell: the next one quits
   readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>[];
   /** ADAYLAR 16b (QW): whether the configured model takes tools (`describeTerminalChat` `tools`); `none` is said once as a system line. */
-  readonly modelTools?: 'available' | 'none' | 'unknown';
+  readonly modelTools?: 'available' | 'none' | 'unknown' | 'unverified';
 }
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
@@ -260,7 +264,7 @@ export function WorklineApp(props: WorklineProps) {
   const completion = useRunCompletion({ limit: props.maxTrackedRuns, labels: labels.work?.jobs, ledger, pollMs, refused: completionRefused, push, errorText });
   const trackedRuns = useMemo(() => completion.tracked.map(item => item.run), [completion.tracked]);
   const deliveries = useDeliveryWindows({ port: props.delivery?.port, labels: labels.delivery, runs: trackedRuns, summary: (text, level) => push([systemSummaryEntry(text, level)]),
-    errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0 });
+    errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0, redo: text => setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })) });
   const workNote = useRef({ active: activeDo, runs: completion.tracked, deliveries: deliveries.pending });
   workNote.current = { active: activeDo, runs: completion.tracked, deliveries: deliveries.pending };
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
@@ -361,6 +365,7 @@ export function WorklineApp(props: WorklineProps) {
     said(opening.current); void later.current?.().then(said, () => undefined);
     // ADAYLAR 16b: a configured model without tool use is said once, before the person asks it to read or change anything.
     if (tools.current === 'none' && labels.toolsNone) push([systemSummaryEntry(labels.toolsNone, 'warning')]);
+    else if (tools.current === 'unverified' && labels.toolsUnverified) push([systemSummaryEntry(labels.toolsUnverified)]);
   }, [push]); useEffect(() => props.serviceLost?.(text => push([notice('error', text)])), [props.serviceLost, push]);
   useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
@@ -501,10 +506,11 @@ export function WorklineApp(props: WorklineProps) {
         if (result.run) completion.register(result.run);
         setPlanning(false); onboarding.settled(execution.input.inputId);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
-        if (!isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval) {
+        // L1c: a plan whose basis changed while its card was open (the person's mode) comes back with a fresh card; the person decides on that one.
+        for (let cards = 0; cards < 3 && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; cards++) {
           const expiresAtMs = result.proposal.approval.expiresAt;
           setActiveDo(current => current && { ...current, phase: 'waiting', expiresAtMs });
-          await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, props.doPlan.lines(result).join('\n'));
+          await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, (props.doPlan.cardLines ?? props.doPlan.lines)(result).join('\n'));
           if (execution.signal.aborted) return true;
           result = await plan();
           if (result.run) completion.register(result.run);

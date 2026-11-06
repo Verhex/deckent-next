@@ -1,4 +1,6 @@
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
+import type { ConfigLoadOptions } from '#platform/index.js';
+import type { WorkingTreeRollbackCommand, WorkingTreeRollbackApplication } from '#engine/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { TaskEvaluationHandler, TaskExecutionHandler, TaskIntegrationAdoptHandler, TaskIntegrationCheckHandler, TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler,
   TaskIntegrationPrepareHandler, TaskIntegrationRollbackHandler, TaskPatchHandler } from './task.js';
@@ -9,6 +11,7 @@ export interface TaskCommandContext extends CliBaseContext, Pick<TerminalLaunchC
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   adoptWorkspaceIntegration?: TaskIntegrationAdoptHandler;
   rollbackWorkspaceIntegration?: TaskIntegrationRollbackHandler;
+  rollbackWorkingTreeDelivery?: (root: string, command: WorkingTreeRollbackCommand, options: ConfigLoadOptions) => ReturnType<WorkingTreeRollbackApplication['rollback']>;
   inspectWorkspaceIntegration?: TaskIntegrationInspectHandler;
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;

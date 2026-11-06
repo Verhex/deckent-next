@@ -45,7 +45,8 @@ async function fixture(context: TestContext, files: Record<string, string>, secr
   if (mounts) { Object.assign(parameters, { readOnlyMounts: mounts.mounts });
     for (const [path, content] of Object.entries(mounts.dependencies)) { await mkdir(join(project, path, '..'), { recursive: true }); await writeFile(join(project, path), content); } }
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
-    ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
+    // The gate over a HEAD-based checkout; a working-tree base (R9n) is the same scan of its own tree (terminal-delivery-pty-process).
+    ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 }, deliveryMode: 'reference',
     ...(secretGate ? { secretGate: { schemaVersion: 1, ...secretGate } } : {}),
     ...(mounts?.workTarget ? { adoption: { targets: [baseRef] }, workTargets: { schemaVersion: 1, targets: [{ id: 't', kind: 'git', path: target, baseRef }] } } : {}) } }));
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;

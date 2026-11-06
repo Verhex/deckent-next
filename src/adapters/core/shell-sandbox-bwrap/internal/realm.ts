@@ -105,17 +105,19 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
  * `sealed` (bound read-only; the deny walk masks its product state), one outside is `hidden` (an empty read-only tmpfs). A root that is,
  * holds or equals the project, HOME or `/` cannot be sealed without sealing them: the call is refused. Nested roots collapse into the outer.
  */
-async function sealedRoots(project: string, roots: readonly string[], home: string | undefined): Promise<{ readonly ok: true; readonly sealed: string[]; readonly hidden: string[] }
+async function sealedRoots(project: string, roots: readonly string[], environment: Readonly<Record<string, string | undefined>>, contained?: string, open = false): Promise<{ readonly ok: true; readonly sealed: string[]; readonly hidden: string[] }
   | { readonly ok: false; readonly reason: string }> {
-  const real: string[] = [];
+  const real: string[] = [], home = environment['HOME'];
   for (const root of roots) {
     if (!isAbsolute(root)) return { ok: false, reason: `a Deckent state root is not absolute (${root})` };
     try { await mkdir(root, { recursive: true, mode: 0o700 }); real.push(await realpath(root)); }
     catch { return { ok: false, reason: `a Deckent state root could not be prepared (${root})` }; }
   }
-  const holdsAll = [project, '/', ...(home && isAbsolute(home) ? [home] : [])];
-  for (const root of real) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the Deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
-  const outer = [...new Set(real)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
+  if (contained && (open || !roots.includes(contained) || !real.includes(contained) || contained === project || !under(project, contained) || under(home ?? '/', contained)))
+    return { ok: false, reason: t('headless.agent.k27.containedWorkspaceRefused', undefined, resolveLocale(undefined, environment)) };
+  const holdsAll = [project, '/', ...(home && isAbsolute(home) ? [home] : [])], sealed = real.filter(root => root !== contained);
+  for (const root of sealed) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the Deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
+  const outer = [...new Set(sealed)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
   return { ok: true, sealed: outer.filter(root => under(root, project)), hidden: outer.filter(root => !under(root, project)) };
 }
 /** A Deckent runtime socket path of this uid (`/tmp/dk-<uid>-<sha256>/…`, the local-runtime-socket location); group 1 is its directory. */
@@ -252,7 +254,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const homeAt = environment['HOME'];
   if (openView && !(homeAt && isAbsolute(homeAt) && await realpath(homeAt).then(path => lstat(path)).then(info => info.isDirectory(), () => false))) return { ok: false, code: HOME_CREDENTIAL_REFUSAL,
     reason: t('shell.homeCredentialsRefused', { detail: 'HOME is missing or cannot be resolved', entries: BUBBLEWRAP_HOME_WALK_MAX_ENTRIES }, resolveLocale(undefined, environment)) };
-  const seal = layout.hardFloor ? await sealedRoots(layout.project.root, layout.hardFloor.roots, environment['HOME']) : openView ? { ok: false as const, reason: 'the hard floor is not known to this open view' } : null;
+  const seal = layout.hardFloor || layout.containedWorkspaceRoot ? await sealedRoots(layout.project.root, layout.hardFloor?.roots ?? [], environment, layout.containedWorkspaceRoot, write.open) : openView ? { ok: false as const, reason: 'the hard floor is not known to this open view' } : null;
   if (seal && !seal.ok) return seal;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees are bound read-only (a mount point:
   // no write, rename or unlink lands); the deny masks inside them still follow. A floor path that does not exist yet is not covered here.
@@ -410,7 +412,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     }
   }
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
-  const view: BubblewrapView = Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir,
+  const view: BubblewrapView = Object.freeze({ projectRoot: root, ...(layout.containedWorkspaceRoot ? { containedWorkspaceRoot: layout.containedWorkspaceRoot } : {}), ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir,
     systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
     // Astra 2486 P1: an overlay keeps the in-project sealed roots inside the write set (a read-only host bind over it would hide `.deckent/docs`
     // from the overlay); its entries there are decided after the call (`sealedEntryRefused`), the product state stays masked or read-only.

@@ -11,7 +11,7 @@ export function InstructionChoiceWindow(props: { readonly title: string; readonl
   const [selected, setSelected] = useState(0), selectedRef = useRef(0), closed = useRef(false), palette = useWorklinePalette();
   const finish = (value: number | null) => { if (!closed.current) { closed.current = true; props.onChoice(value); } };
   return <Window title={[span(props.title)]} body={props.body.map(text => ({ spans: projectHumanText(text, 'prose').spans, exact: true }))}
-    hints={props.labels.hints} position={props.labels.position} footerRows={props.choices.length}
+    hints={props.labels.hints} position={props.labels.position} footerRows={props.choices.length} copyOptions={props.choices}
     footer={() => props.choices.map((choice, index) => <Text key={index} {...(selected === index ? palette.selection : palette.muted)}>{`${selected === index ? '>' : ' '} ${choice}`}</Text>)}
     onInput={(input, key) => {
       if (key.upArrow || key.downArrow) {

@@ -58,10 +58,11 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const { runOnboardingSession } = await loadOnboardingScreens();
   expect(await runOnboardingSession(stopped, {} as never, { locale: 'tr', signal: AbortSignal.abort() })).toBeNull();
   expect(attestations).toBe(0);
-  // The optional welcome marker cannot turn a model-less opening into another dead end if persistence fails.
-  const noModel = { ...snapshot, modelUsable: false, budget: { ...snapshot.budget, needed: false }, plan: { ...snapshot.plan, stages: [] } };
-  expect(await runOnboardingSession({ ...port, observe: async () => noModel, defer: async () => { throw new Error('fixture read-only store'); } },
+  // R3d: a model-less opening shows no welcome, so it records no welcome marker (it stays offered once a model is usable).
+  const noModel = { ...snapshot, modelUsable: false, budget: { ...snapshot.budget, needed: false }, plan: { ...snapshot.plan, stages: [] } }, marks: string[] = [];
+  expect(await runOnboardingSession({ ...port, observe: async () => noModel, defer: async (id: string) => { marks.push(id); } },
     { locale: 'en' } as never, { locale: 'en' })).toBeNull();
+  expect(marks).toEqual([]);
 
   // P2: one observation per open; settling writes first and that settled snapshot is shared only when no step was shown.
   let observes = 0; const settledIds: string[] = [], shared: OnboardingSnapshot[] = [];
@@ -129,6 +130,20 @@ it('R13/R18: the image card follows an answered work choice, the step total is k
   current = { ...after, deferred: ['permissions:start-mode', 'core:model', 'coding:first-commit'] };
   expect(deferredOnboardingNotice(current, 'en')).not.toMatch(/model|permission/iu);
   await session.refresh(); expect(settled).toEqual([['permissions:start-mode', 'core:model']]);
+  // R3a: a connected subscription is the first offer on the work card (a worker without Docker); the signed-in host CLI stays under Change.
+  const { PassThrough, Writable } = await import('node:stream'); let frame = ''; const answers: unknown[] = [];
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, next) { frame += String(chunk); next(); } }), { isTTY: true, columns: 140, rows: 40 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  // R8f: that choice also confirms the worker-ready writes: the Git setting is applied with no second "confirm readiness" card in a row.
+  const offered = { ...before, deferred: ['onboarding:first-task:done'], connections: [{ id: 'claude-subscription', provider: 'claude' }] }, applied: string[] = [];
+  const readyPlan = () => [stage('work:kind', 'done'), stage('execution:worker', 'done'), applied.length ? stage('execution:worker-settings', 'done')
+    : { ...stage('execution:worker-settings', 'ready'), operation: { id: 'config.set', version: 1, input: {} } }, stage('work:pool', 'done')];
+  const pick = { assertPerson: async () => {}, defer: async () => {}, apply: async (row: SetupStage) => { applied.push(row.id); return { status: 'applied' }; },
+    observe: async (values: Readonly<Record<string, unknown>>) => { answers.push(values['work:kind']); return values['work:kind'] ? { ...offered, plan: { ...offered.plan, stages: readyPlan() } } : offered; } } as unknown as OnboardingPort;
+  const run = (await loadOnboardingScreens()).runOnboardingSession(pick, { locale: 'en' } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
+  try { await waitForCard(() => frame, 'Use my claude subscription'); expect(frame).not.toContain('Use second for coding work'); stdin.write('\r'); expect(await run).toBeNull(); }
+  finally { stdin.destroy(); stdout.destroy(); }
+  expect(answers).toContainEqual({ connection: 'claude-subscription' }); expect(applied).toEqual(['execution:worker-settings']); expect(frame).not.toContain('Confirm worker readiness');
 });
 
 it('U4E G2: install permission recovery precedes an absent model; not-applicable profiles never get a permission success card', () => {
@@ -284,7 +299,7 @@ it('A62: onboarding follows the exact scoped billingAxis; subscription/local nee
 it('A62: separate welcome shows the conversation return, excludes the step count, and copies no secrets or typed input', async () => {
   const { PassThrough, Writable } = await import('node:stream');
   const { welcomeScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-task.js');
-  const { snapshotKnownSecrets } = await import('#platform/index.js');
+  const { snapshotKnownSecrets, t } = await import('#platform/index.js');
   // Astra 2834 R1: a body line carrying a credential-shaped value and a known secret (as a Git file name or an error message can).
   const KNOWN = 'known-canary-7f3e9d2a', TOKEN = 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', TYPED = 'typed-canary-41c0';
   // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
@@ -304,6 +319,9 @@ it('A62: separate welcome shows the conversation return, excludes the step count
     // Ctrl+Y copies the card through the record projection (no credential shape, no known value) and decides nothing.
     stdin.write('\u0019'); await until(() => copies().length === 1, 'onboarding card copy');
     expect(copies()[0]).toContain('Saved conversation: use /resume'); expect(copies()[0]).toContain('[REDACTED]');
+    expect(copies()[0]).toContain(t('onboarding.welcome.describe', {}, 'en'));
+    expect(copies()[0]).toContain(t('onboarding.welcome.scan', {}, 'en'));
+    expect(copies()[0]).toContain(t('onboarding.welcome.first', {}, 'en'));
     expect(copies()[0]).not.toContain(TOKEN); expect(copies()[0]).not.toContain(KNOWN); expect(copies()[0]).not.toMatch(/sk-ant-|known-canary/u);
     await settle(50); expect(decided).toBe(false);
     await waitForCard(() => frame, "Let's start");

@@ -107,6 +107,12 @@ describe('/model window', () => {
     await view.press(ENTER);
     expect(pins).toEqual(['fast']); expect(calls.closed).toBe(1);
     expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
+    // A63-K9: one stdin read carries filter text and Enter; it must open the current model's scope once.
+    const rapid = modelPort(MODELS), next = panel('model', { model: rapid.port }), coalesced = mount(next.element, 100, 40);
+    await settle(80); await coalesced.raw('fast\r', 60);
+    expect(coalesced.frame()).toContain('This session only (from the next turn)');
+    expect(rapid.pins).toEqual([]); await coalesced.press(ENTER);
+    expect(rapid.pins).toEqual(['fast']); expect(next.calls.closed).toBe(1);
   });
 
   it('BeUser alpha.56.1 (3t): with no model to pick, the first row connects one through the same /provider flow; without that flow the row is absent', async () => {
@@ -127,6 +133,9 @@ describe('/model window', () => {
     const labels = terminalPanelLabels('en').model;
     const tree = modelPanelTree({ ...MODELS, defaultBlocked: 'DECISION-PENDING' }, null, labels, 'T', false);
     expect(tree.scopes).toEqual([{ id: 'session', label: labels.session }, { id: 'default', label: labels.sessionAndDefault, blocked: { reason: 'DECISION-PENDING' } }]);
+    // R2d: an offered default comes first while no model is chosen; once one is (a configured choice), this session comes first again.
+    expect(modelPanelTree({ ...MODELS, choices: MODELS.choices.map(choice => ({ ...choice, configured: false })) }, null, labels, 'T', true).scopes.map(scope => scope.id)).toEqual(['default', 'session']);
+    expect(modelPanelTree(MODELS, null, labels, 'T', true).scopes.map(scope => scope.id)).toEqual(['session', 'default']);
     expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat (local-openai) · default', 'coder (local-openai)', 'fast (local-openai) · this session']);
     // More than one provider: one section per provider.
     const two = modelPanelTree({ ...MODELS, choices: [...MODELS.choices, { ...MODELS.choices[0]!, reference: ref('chat', 'anthropic'), group: 'anthropic' }] }, null, labels, 'T', true);
@@ -225,6 +234,13 @@ describe('/provider window', () => {
     await settle(80);
     expect(view.frame()).toContain('Anthropic API'); expect(view.frame()).toContain('DECKENT_LOCAL_ENDPOINT_KEY');
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(80);
+    // BeUser r-rest 3: with a budget action offered, the window still opens on the first connection row; the budget row comes after the connections.
+    const budget: BudgetPanelPort = { inspect: async () => ({ action: 'create', current: null, note: null, frozen: false, presets: [5], min: 1, max: 100, step: 1, start: 5 }), apply: async () => ({ ok: true, line: '' }) };
+    const priced = mount(panel('provider', { provider: { ...port, budget } }).element, 100, 40);
+    await settle(80);
+    const rows = priced.frame().split('\n');
+    expect(rows.find(line => /│ ?>/u.test(line))).toContain('Anthropic API');
+    expect(rows.findIndex(line => line.includes('Create budget'))).toBeGreaterThan(rows.findIndex(line => line.includes('DeepSeek API')));
   });
 
   it('connect: the key is typed masked under the transparency note, goes only to the port, and the typed result is shown; the key is never drawn or pushed', async () => {
@@ -232,7 +248,8 @@ describe('/provider window', () => {
     const { element, calls } = panel('provider', { provider: port });
     const view = mount(element, 100, 40, false, true);
     await settle(80);
-    await view.press(`${ENTER}${ENTER}`, 60);
+    await view.raw('Anthropic\r', 60);
+    await view.press(ENTER, 60);
     expect(view.frame()).toContain('Anthropic API · API key'); expect(view.frame()).toContain('TRANSPARENCY-NOTE');
     expect(view.frame()).toContain(t('tuicopy.card.hint', {}, 'en'));
     await view.press(ENTER, 40); // an empty required key is refused in place
@@ -572,6 +589,15 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(ENTER, 80);
     expect(budget.applied).toEqual([{ action: 'create', usd: 25, unfreeze: false }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 25 USD' }]); expect(calls.closed).toBe(1); expect(pins).toEqual([]);
+  });
+
+  it('R2c: a USD budget row is not offered when every listed model is billed by subscription; one metered model keeps it', async () => {
+    const billed = (billing: ModelPanelChoice['billing'][]) => ({ ...MODELS, choices: MODELS.choices.map((choice, index) => ({ ...choice, billing: billing[index] })) });
+    for (const [billing, shown] of [[['subscription', 'subscription', 'subscription'], false], [['subscription', 'metered', 'subscription'], true]] as const) {
+      const screen = mount(panel('model', { model: { ...modelPort(billed([...billing])).port, budget: budgetPort(view()).port } }).element, 100, 40);
+      await settle(80);
+      expect(screen.frame().includes('Create budget')).toBe(shown); expect(screen.frame()).toContain('chat');
+    }
   });
 
   it('another amount is stepped with the arrow keys within bounds; digits never type an amount', async () => {
@@ -1032,4 +1058,58 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     inspectSecretStore: () => new Promise(() => undefined) }, {}, 'en', String);
   expect(await stalled.inspectCustody!()).toBeNull();
 
+});
+
+it('K13: the provider and onboarding subscription window offers the registry methods, Esc starts nothing and device choice preserves the typed command in EN/TR', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const requests: unknown[] = [], kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null };
+    const source = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: async () => ({ layers: ['global'], decisions: [{ layer: 'global', decision: 'allow', ruleId: 'fixture' }] }), providerConnect: {
+      kinds: [{ id: kind.id, labelKey: 'tui.provider.kind.codexCli', available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
+        secretName: null, probePath: null, endpointChoices: [], headlessLogin: true, terminalTextChat: true, connectFamily: 'fixture-jsonl', pull: 'available' }],
+      endpoint: () => ({ ok: false, reason: 'unused' }), probe: async () => { throw new Error('unused'); },
+      loginMethods: () => ['browser', 'device-auth'], loginDir: async () => ({ owned: '/fixture/login' }),
+      login: async command => { requests.push(command); return { configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }; } },
+      connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'fixture', scopeId: 'scope', connection: kind.id, status: 'connected',
+        reference: ref('fixture', kind.id), carriedModels: [], notCarried: [], steps: { catalog: 'present', declaration: 'skipped', profile: 'written', activation: 'present', carried: 0 }, tariff: 'unmetered', keyStored: null, credentialRef: null,
+        cli: { configDir: '/fixture/login', owned: true, delegate: [] } }) as never }, {}, locale, () => 'REFUSED');
+    const { port } = providerPort(), subscription = source.subscription!;
+    const ui = mount(panel('provider', { provider: { ...port, subscription, inspect: async () => ({ ...KINDS, kinds: [kind] }) } as ProviderWindowPort }, locale).element);
+    await until(() => ui.frame().includes(kind.label), 'subscription listed'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.action.replace('…', '')), 'subscription action'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.dirTitle), 'login directory'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.methodTitle!), 'method choice');
+    expect(ui.frame()).toContain(locale === 'en' ? 'Sign in with a device code' : 'Cihaz kodu ile giriş');
+    await ui.press(ESC); expect(requests).toEqual([]);
+    await until(() => ui.frame().includes(subscription.words.dirTitle), 'directory after Esc'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.methodTitle!), 'method choice reopened'); await ui.press(DOWN + ENTER);
+    await until(() => requests.length === 1, 'one explicit sign-in');
+    expect(requests).toEqual([{ connection: kind.id, loginMethod: 'device-auth' }]);
+    await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent still required');
+  }
+});
+
+it('R2a: /model pins an unverified (unknown) subscription model; its first turn verifies the tools', async () => {
+  const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
+    inspect: async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }) } };
+  const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
+  await until(() => ui.frame().includes(t('headless.agent.k13.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
+  await ui.press(ENTER + ENTER);
+  await until(() => model.pins.length > 0, 'unknown model pinned');
+  expect(calls.errors).toEqual([]);
+});
+
+it('K13: /model rechecks subscription readiness at confirmation and does not pin after capability revocation', async () => {
+  const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
+  let ready = true;
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
+    inspect: async () => ready ? { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
+      profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } } : { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' } } };
+  const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
+  await until(() => ui.frame().includes(t('headless.agent.k13.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
+  ready = false;
+  await ui.press(ENTER + ENTER);
+  await until(() => calls.errors.length > 0, 'revocation reported');
+  expect(model.pins).toEqual([]);
+  expect(calls.errors[0]).toMatchObject({ code: 'TERMINAL_MODEL_SWITCH_REFUSED' });
 });

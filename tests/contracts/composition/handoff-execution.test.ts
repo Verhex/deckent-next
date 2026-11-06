@@ -38,7 +38,7 @@ describe('configured handoff producer to dependent (source only)', () => {
     registry.kinds = [{ kind: 'producer', profile: { id: registry.profiles[0]!.id, version: 1 } }, { kind: 'consumer', profile: { id: 'consumer', version: 1 } }];
     const { argv: _argv, outputFiles: _files, ...docker } = registry.profiles[0]!.parameters; void _argv; void _files;
     const options = { env: { HOME: join(root, 'home') } };
-    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 16_777_216 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 16_777_216 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry }, execution: { deliveryMode: 'reference', docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } })); // HEAD base: the owner WIP stays out
     const opened = await openConfiguredAttemptStore(project, options); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
     const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
     await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'handoff', restrictions: [], grants: [

@@ -267,11 +267,7 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /** The add-only plan's names (the `--upgrade` path below and setup's anchored read share one construction). */
-const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId,
-  proposeMcpToolName: toolNames.proposeMcpToolName, mcpCallOperationId: toolNames.mcpCallOperationId, policyAdministerOperationId: toolNames.policyAdministerOperationId,
-  ...(toolNames.uninstallOperationIds === undefined ? {} : { uninstallOperationIds: toolNames.uninstallOperationIds }),
-  ...(toolNames.firstCommitOperationId === undefined ? {} : { firstCommitOperationId: toolNames.firstCommitOperationId }), executionEnvironmentIds: toolNames.executionEnvironmentIds,
-  ...(toolNames.recoveryRules === undefined ? {} : { recoveryRules: toolNames.recoveryRules }), ...(serviceId === undefined ? {} : { serviceId }) });
+const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId, ...toolNames, ...(serviceId === undefined ? {} : { serviceId }) });
 /** Setup's read of an installed first-run policy whose revision a governed edit rewrote (the U4E carrier's PRE-9 full-auto grant): the
  * `first-run-read-tools` anchor naming this person keeps it installed, and the same add-only plan `--upgrade` applies decides current vs
  * upgradable. Read-only and grants nothing; no anchor, another person or an unreadable document is `null` (setup: hand-built). */

@@ -12,6 +12,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
 import { activateConfiguredWorkerModel, carryConfiguredModelActivation, admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { listConfiguredConnectionWorkspaces, listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
+import { connectionFacts } from './facts.js';
 import { headlessConnectPorts, headlessPersonWitness } from './headless.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -34,12 +35,16 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const principal = typeof scopeId === 'string' ? () => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options) : () => { throw new ModelConnectError('MODEL_CONNECT_INVALID'); };
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
     let effective: Record<string, unknown> = {};
-    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal) : null;
+    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal, scope) : null;
     if (parsed.success && parsed.data.workspaceId) {
       const rows = await listConfiguredConnectionWorkspaces(projectRoot, String(scopeId), parsed.data.connection, parsed.data.endpoint, options, host);
       if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: parsed.data.workspaceId } };
     }
+    const facts = parsed.success && kindOf(parsed.data.connection)?.connect?.personOnly && kindOf(parsed.data.connection)?.connect?.chatPath === null
+      ? connectionFacts(projectRoot, String(scopeId), options) : null;
+    const inspectCatalog = (channelId: string) => facts ? facts.catalog(channelId)
+      : inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options);
     const siwc = parsed.success && kindOf(parsed.data.connection)?.connect?.adapter === SIWC_INFERENCE.adapter.id ? configuredSiwcConnect(projectRoot, parsed.data, options, host.siwcPresentation) : null;
     const pulled = new Map<string, readonly string[]>();
     const app = new ModelConnectApplication({
@@ -111,11 +116,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         return rebound?.status === 'declared' && profile && rebound.binding.digest !== profile.bindingDigest ? { reboundProfile: profile.reference } : null;
       },
       async catalogHas(channelId, nativeId) {
-        const listed = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options);
+        const listed = await inspectCatalog(channelId);
         return listed.channels.some(channel => channel.channelId === channelId && channel.access !== 'denied' && channel.models.some(entry => entry.model.nativeId === nativeId));
       },
       async registered(channelId, nativeId) {
-        const listed = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options);
+        const listed = await inspectCatalog(channelId);
         for (const channel of listed.channels) {
           if (channel.channelId !== channelId || channel.access !== 'allowed') continue;
           const entry = channel.models.find(item => item.model.nativeId === nativeId);
@@ -125,7 +130,8 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       },
       async register(catalog, commandId) { await applyConfiguredModelCatalog(projectRoot, { schemaVersion: 1, commandId, scopeId, action: 'register', catalog }, options); },
       binding: reference => inspectModelBinding(projectRoot, reference, options),
-      async activation(reference) { return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options)).activation; },
+      async activation(reference) { return (await (facts ? facts.activation(reference)
+        : inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options))).activation; },
       async activate(value) {
         await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
           expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options); },

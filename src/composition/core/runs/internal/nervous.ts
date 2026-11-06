@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { HOST_LIMITS_REGISTRY, inspectProductDirectory, jsonRecordDirectory, mapBounded, recordedProcessState, type ConfigLoadOptions } from '#platform/index.js';
-import { DockerSupervisor, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader } from '#adapters/index.js';
+import { openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader } from '#adapters/index.js';
+import { inspectRecordedTaskActivity } from '#adapters/index.js';
 import { AuditApplication, DISPATCH_PREPARATION_INSTANCE, DispatchInventoryPolicyAuthorization, NERVOUS_RULES_SEED, NervousApplication, SupervisorError, nervousExecutors, nervousRulePromoted, nervousStandingApproval,
   readDispatchLauncherEvidence, readDispatchPreparationRecord, type DispatchPreparationInstance, type NervousAttemptSignal, type NervousProposal, type ReconciliationRecoveryCommand } from '#engine/index.js';
 import { reconcileAttemptFor } from './reconcile.js';
@@ -38,7 +39,7 @@ export function prepareConfiguredNervous(projectRoot: string, options: ConfigLoa
       signals = (await mapBounded(page.entries.filter(entry => entry.launch === 'granted' && !entry.terminal), HOST_LIMITS_REGISTRY.observationConcurrency, async (entry): Promise<NervousAttemptSignal | null> => {
         const record = await reader.loadBoundDispatch(entry.identity);
         if (!record) return null;
-        const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).then(value => value.state,
+        const activity = await inspectRecordedTaskActivity(record.profile, record.request).then(value => value.state,
           (error: unknown) => error instanceof SupervisorError && error.code === 'SUPERVISOR_CONTROL_FAILED' ? 'control-failed' as const : 'unknown' as const);
         const evidence = crashes ? await readDispatchLauncherEvidence(jsonRecordDirectory(join(crashes, 'dispatch-launcher')), entry.identity).catch(() => 'unreadable' as const) : null;
         const prepared = !evidence && crashes ? await readDispatchPreparationRecord(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), entry.identity).catch(() => 'unreadable' as const) : null;

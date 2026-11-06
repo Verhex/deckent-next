@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, loadConfig, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationDelivery, resolveGitWorkTarget, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
-import type { EffectConfirmation, EffectConfirmationView, IntegrationDeliveryCommand, IntegrationAdoptionCommand, IntegrationRollbackCommand } from '#engine/index.js';
-import { deliverWorkspaceIntegrationWithConfirmation } from './delivery.js';
+import type { EffectConfirmation, EffectConfirmationView, IntegrationDeliveryCommand, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkingTreeRollbackCommand } from '#engine/index.js';
+import { deliverWorkspaceIntegrationWithConfirmation, rollbackWorkingTreeDeliveryWithConfirmation } from './delivery.js';
 import { adoptWorkspaceIntegrationWithConfirmation, rollbackWorkspaceIntegrationWithConfirmation } from './adoption.js';
 import { workspacePatchContext } from './configured.js';
 import { inspectConfiguredWorkspaceIntegration } from './integration.js';
@@ -20,10 +20,11 @@ export function verifiedDeliveryConfirmation(answer: (view: EffectConfirmationVi
 }
 export function interactiveDeliveryHandlers(answer: (view: EffectConfirmationView) => Promise<boolean>) {
   const witness = verifiedDeliveryConfirmation(answer);
-  const port = (root: string, input: IntegrationDeliveryCommand | IntegrationAdoptionCommand | IntegrationRollbackCommand, options: ConfigLoadOptions): EffectConfirmation => ({
+  const port = (root: string, input: IntegrationDeliveryCommand | IntegrationAdoptionCommand | IntegrationRollbackCommand | WorkingTreeRollbackCommand, options: ConfigLoadOptions): EffectConfirmation => ({
     assertAvailable: witness.assertAvailable,
     async confirm(view) {
       await witness.assertAvailable();
+      if (view.operation === 'rollback-working-tree') return witness.confirm(view); // L1c: the card names the files going back; no commit or branch moves
       const c = await workspacePatchContext(root, input.identity, options, false, 'read');
       if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
       const git = { ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
@@ -39,5 +40,6 @@ export function interactiveDeliveryHandlers(answer: (view: EffectConfirmationVie
     deliver: (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions) => deliverWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
     adopt: (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions) => adoptWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
     rollback: (root: string, input: IntegrationRollbackCommand, options: ConfigLoadOptions) => rollbackWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
+    rollbackFiles: (root: string, input: WorkingTreeRollbackCommand, options: ConfigLoadOptions) => rollbackWorkingTreeDeliveryWithConfirmation(root, input, options, port(root, input, options)),
   };
 }

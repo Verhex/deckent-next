@@ -95,3 +95,26 @@ acceptance rates with integer Wilson bounds (`src/domain/core/catalog-evolution/
 acceptance rate is not correctness and an association is not causation: the Wilson bound corrects for small samples only, never for task
 difficulty or model differences, and only failures attributable to the worker or the evaluator count. It is a separate signal from the
 cost and quality reports described above; see [core layers](core-layers.md#agents-standing-statistics-suggestions-and-signer-keys-s7-s8-1as8-5).
+
+## Subscription resource capacity (alpha.63 K6b author candidate)
+
+Ledger v74 binds a connection's private metadata location to an opaque UUID minted once. Different project/model
+connections that use the same real login directory and uid find the same resource. The binding reads no token and grants
+no authority, and it cannot infer that separate login directories belong to one subscription account. Capacity comes from
+the connection's registry bound; reconnecting never silently changes an existing resource limit. A legacy (alpha.62)
+headless connection with no binding gets it automatically on first use from its current definition (uid + real login
+directory; K18); when that is impossible the refusal is a typed reconnect reason, never "capacity exhausted".
+
+The Run admission transaction fixes the `taskId → resourceKey` bindings given as the fourth trusted input of the
+`createRun` port. The reservation application carries the resource into planning; the SQLite reservation transaction
+re-reads the binding and occupancy across all scopes. A Model Invocation claim passes the same resource gate. Run progress
+and the existing Invocation receipt/control are the local custody authority; no separate timed counter exists. A
+cancellation intent or elapsed time never frees a slot: preemption, a terminal observation or a proven custody release
+does. An uncertain external effect is never turned into success.
+
+The login lock's persistent companion inode is guarded by kernel flock, so a long approval wait cannot age the lock out.
+An old marker that names a live PID waits regardless of age; a corrupt record is not release evidence. The crash-time end
+of a real realm process group is verified separately from slot-release evidence.
+
+The migration is additive: unused additions can roll back to v73; used records need a service stop/reconciliation and the
+pre-switch backup restore. Live/N1 real data shape and BeUser acceptance are separate from this author evidence.

@@ -55,8 +55,8 @@ async function fixture(extra: Partial<AgentCatalogDependencies> = {}) {
   const agent = async (agentId: string, skills: readonly { skillId: string; revision: number; contentDigest: string }[] = [], workClasses = ['feature'], persona = `${agentId} persona: önce testi yaz.`) =>
     (await app.defineAgent({ schemaVersion: 1, scopeId: 's', commandId: `a-${agentId}`, agentId, expectedRevision: null,
       content: { name: agentId, persona, workClasses, skills: skills.map(row => ({ skillId: row.skillId, revision: row.revision, digest: row.contentDigest })), parentAgentId: null } })).item;
-  const select = async (scopeId = 's', input = graph()) => { const store = await openSqliteAgentCatalogStore(path, options, integrity, 'read');
-    try { return await selectTaskAgents(input, undefined, scopeId, store); } finally { store.close(); } };
+  const select = async (scopeId = 's', input = graph(), pins?: Parameters<typeof selectTaskAgents>[4]) => { const store = await openSqliteAgentCatalogStore(path, options, integrity, 'read');
+    try { return await selectTaskAgents(input, undefined, scopeId, store, pins); } finally { store.close(); } };
   const admit = async (input = graph(), composition?: object) => { const agents = await select('s', input);
     return resolveWorkerEffortExecution(input, registry(composition), await reader(), validation, compiler, { scopeId: 's', nowMs: Date.parse('2026-10-23T12:00:00Z'), roles: composeModelRolePolicy(undefined), agents }); };
   const standings = async (agentId: string, revision = 1) => { const store = await openSqliteAgentCatalogStore(path, options, integrity, 'read');
@@ -158,4 +158,40 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     const execution = await f.admit(), task = execution.tasks[0]!;
     expect(() => assertRunExecution(graph(), { ...execution, tasks: [{ ...task, agent: { ...task.agent!, workClass: 'docs' } }] })).toThrow(expect.objectContaining({ code: 'RUN_EXECUTION_INTEGRITY' }));
   });
+});
+
+
+it('K8: an explicit task pin selects that candidate, never another agent; revised, retired and mismatched pins refuse', async () => {
+  const f = await fixture(), skill = await f.skill('invoice'), chosen = await f.agent('z-chosen', [skill]);
+  await f.agent('a-default');
+  const pin = { agentId: chosen.agentId, revision: chosen.revision, personaDigest: chosen.personaDigest, skillSetDigest: chosen.skillSetDigest, skills: chosen.content.skills };
+  const pins = new Map([['t', pin]]);
+  expect((await f.select()).get('t')!.seal.agentId).toBe('a-default');
+  const selected = (await f.select('s', graph(), pins)).get('t')!;
+  expect(selected.seal).toMatchObject({ agentId: 'z-chosen', skills: [{ skillId: 'invoice', revision: 1, digest: skill.contentDigest }], standing: 'candidate' });
+  expect(selected.parts.persona.text).toBe(chosen.content.persona);
+  // Skill revision is not an implicit repin: the agent still uses exactly revision 1.
+  await f.app.defineSkill({ schemaVersion: 1, scopeId: 's', commandId: 'skill-revise', skillId: 'invoice', expectedRevision: 1, content: { name: 'invoice', text: 'new skill text' } });
+  expect((await f.select('s', graph(), pins)).get('t')!.parts.skills[0]!.text).toBe(skill.content.text);
+  await expect(f.select('s', graph(), new Map([['missing-task', pin]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(f.select('other', graph(), pins)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(f.select('s', graph(), new Map([['t', { ...pin, personaDigest: 'e'.repeat(64) }]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(f.select('s', graph(), new Map([['t', { ...pin, skills: [] }]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await f.app.defineAgent({ schemaVersion: 1, scopeId: 's', commandId: 'revise', agentId: chosen.agentId, expectedRevision: 1, content: { ...chosen.content, persona: 'Revised persona' } });
+  await expect(f.select('s', graph(), pins)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  const current = (await f.select('s', graph(), new Map([['t', { ...pin, revision: 2, personaDigest: personaDigest('Revised persona') }]]))).get('t')!.seal;
+  writeStanding(f.path, integrity, moved((await f.standings('z-chosen', 2))[0]!, 'retired'));
+  await expect(f.select('s', graph(), new Map([['t', current]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+});
+
+it('K8: upstream agent/skill revocation rejects an explicit choice without falling through to a different candidate', async () => {
+  const f = await fixture(), skill = await f.skill('invoice'), chosen = await f.agent('z-chosen', [skill]); await f.agent('a-default');
+  const pin = { agentId: chosen.agentId, revision: chosen.revision, personaDigest: chosen.personaDigest, skillSetDigest: chosen.skillSetDigest, skills: chosen.content.skills };
+  const store = await openSqliteAgentCatalogStore(f.path, options, integrity, 'read');
+  try {
+    for (const revokedKind of ['agent', 'skill']) {
+      const source = { eligibleAgents: store.eligibleAgents.bind(store), loadSkill: store.loadSkill.bind(store), upstream: async (_scope: string, kind: string) => kind === revokedKind ? 'revoked' as const : 'clear' as const };
+      await expect(selectTaskAgents(graph(), undefined, 's', source, new Map([['t', pin]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+    }
+  } finally { store.close(); }
 });

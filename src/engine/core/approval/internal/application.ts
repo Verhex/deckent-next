@@ -1,3 +1,4 @@
+import { readWorkerToolCard, workerToolPreviewComplete } from '#capabilities/index.js';
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
@@ -70,7 +71,9 @@ export class ApprovalApplication {
     identitySchema.parse(channel); counterSchema.positive().parse(pageLimit);
   }
   private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: unknown, decision: 'allow' | 'deny'): Promise<boolean> {
-    const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true;
+    const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request.summary);
+    if (worker && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
+    if (decision === 'allow' && (worker || record.request.schemaVersion === 3 && record.request.preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
     if (!interactive) {
       const risk = facts?.risk;

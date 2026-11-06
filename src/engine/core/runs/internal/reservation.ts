@@ -1,9 +1,8 @@
-import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema, policyHasResourceRules, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { clientCommandIdSchema, counterSchema, identitySchema, policyHasResourceRules, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
-import { diagnoseReservationWave, planSchedulingWave } from '#engine/core/scheduling/index.js';
+import { diagnoseReservationWave, planSchedulingWave, type ResourceCapacityInput } from '#engine/core/scheduling/index.js';
 import { runQuerySchema, type RunAuthorization } from './application.js';
 import { runExecutionPolicySchema, runReservationSchema, RunStoreError, type RunStore, type RunReceipt, type RunReservation } from './store.js';
 import { assertRunExecution } from './registry.js';
@@ -12,6 +11,7 @@ import { projectRunView } from './view.js';
 export const runReservationCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema }).strict();
 export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
 export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
+  loadRunResourceCapacity?(run: RunSnapshot): Promise<ResourceCapacityInput>;
   quotaHeldTasks?(run: RunSnapshot, now: number): Promise<readonly string[]>;
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;
 }
@@ -35,6 +35,14 @@ function checkedSnapshot(input: unknown) {
  * tasks, supply capacity or override time. The ledger remains the atomic shared-pool authority.
  */
 export class RunReservationApplication {
+  /** A Run worker reuses its existing reservation. This neither claims another slot nor releases unknown work. */
+  static ownsResourceReservation(run: RunSnapshot, identity: AttemptIdentity, resourceKey: string, resources: ResourceCapacityInput): boolean {
+    if (!run.bindings.some(row => sameAttemptIdentity(row.identity, identity))
+      || !run.progress.some(row => row.taskId === identity.taskId && row.phase === 'active')
+      || !resources.bindings.some(row => row.taskId === identity.taskId && row.resourceKey === resourceKey)) throw new RunStoreError('RUN_STORE_CONFLICT');
+    const resource = resources.resources.find(row => row.resourceKey === resourceKey);
+    return !!resource && resource.occupancy.execution <= resource.capacity.executionSlots && resource.occupancy.inFlight <= resource.capacity.inFlightSlots;
+  }
   constructor(private readonly store: RunReservationStore, private readonly verifier: PrincipalVerifier,
     private readonly authorization: RunAuthorization, private readonly poolAuthorization: PoolAuthorization, private readonly runtime: ReservationRuntime, private readonly admission?: RunAdmissionFilter) {}
   private project(receipt: RunReceipt, command: RunReservationCommand, actor: RunReservation['actor']) {
@@ -84,6 +92,7 @@ export class RunReservationApplication {
       const now = counterSchema.parse(this.runtime.now());
       const excludedTaskIds = [...(await this.admission?.prepare(run, principal, now) ?? []), ...(await this.store.quotaHeldTasks?.(run, now) ?? [])];
       const wave = planSchedulingWave(run.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, excludedTaskIds,
+        resourceCapacity: await this.store.loadRunResourceCapacity?.(run),
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,

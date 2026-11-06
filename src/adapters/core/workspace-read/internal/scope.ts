@@ -1,37 +1,33 @@
+import { nativeCliLoginReadDeny } from '#adapters/core/native-cli-registry/index.js';
 import CREDENTIAL_PATHS from './credential-paths.json' with { type: 'json' };
 import { existsSync } from 'node:fs';
 import { constants, open, readdir, readFile, readlink, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { createGlobMatcher, globLiteralHead } from '#platform/index.js';
+import { createGlobMatcher, globLiteralHead, PRODUCT_LAYOUT_REGISTRY } from '#platform/index.js';
 
 /** Generated/vendored directory names skipped by walks (legacy baseline), plus unambiguous directory names from the root .gitignore. */
 export const BASELINE_IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build', 'out', 'coverage',
   '.nyc_output', '.next', '.nuxt', '.svelte-kit', '.turbo', '.cache', '__pycache__', '.venv', 'venv']);
 
-/**
- * Paths no read tool returns, matched against the workspace-relative real path (registry data; the default is the Core floor).
- * Reading them needs an explicit, reviewed change of this list, never a model argument.
- */
+/** Paths no read tool returns, matched against the workspace-relative real path (registry data; the default is the Core floor). Details: agent-turn-engine module note. */
 export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.env', '.env.*', '**/.env', '**/.env.*', '**/*.pem', '**/*.key',
   '**/*.p12', '**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/.credentials.json', '**/.npmrc', '**/.netrc', '.git/**', '**/.git/**',
   '.deckent/host/**', '.deckent/audit-key/**', '.deckent/approvals/**',
   // Credential carriers the legacy shell classifier protected (T-L4 slice 3a): one protected set for read tools, shell and edits.
-  ...CREDENTIAL_PATHS,
+  ...CREDENTIAL_PATHS, ...nativeCliLoginReadDeny(PRODUCT_LAYOUT_REGISTRY.resources.headlessLogins),
   '**/*.pfx', '**/*.keystore', '**/*.jks', '**/.pypirc', '**/credentials', '**/credentials.json', '**/secrets.json', '**/secrets.sealed.json', '.brain/memory.db*',
   // The repository directory itself, not only its content: listing `.git` is refused too.
   '.git', '**/.git']);
 /** The repository internals of the default deny (MODES-3): the only entries a full-access turn opens (commit, branch, push); credentials stay. */
 export const REPOSITORY_INTERNALS_DENY: readonly string[] = Object.freeze(['.git/**', '**/.git/**', '.git', '**/.git']);
-/** The read floor without the repository internals: the credential and product-state paths that stay closed everywhere — a full-access turn,
- * the shell hard floor and the S6 pre-dispatch gate over a worker's tree (a clone legitimately carries `.git`). One list, never a copy. */
+/** The read floor without the repository internals: the credential and product-state paths that stay closed everywhere — a full-access turn, the shell hard floor and the S6 pre-dispatch gate over a worker's tree (a clone legitimately carries `.git`). Details: agent-turn-engine module note. */
 export const CREDENTIAL_WORKSPACE_DENY: readonly string[] = Object.freeze(DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)));
 
 /** Exact known HOME locations, derived from the shared credential registry rather than a second protection policy. */
 export const HOME_CREDENTIAL_PATHS: readonly string[] = Object.freeze(CREDENTIAL_PATHS.map(pattern => pattern.replace(/^\*\*\//u, ''))
   .filter(path => !path.includes('*') && !path.includes('?')));
 
-// The glob grammar (wildcards, literal head) is the platform's one definition (`#platform/core/common`): the matcher, the anchor derivation
-// and the product layout admission share it (Astra 2164/2166) — a bracketed path such as `.cache/deckent[1]/state/ledger.db*` keeps its brackets.
+// Matcher, anchors and layout admission share the platform glob grammar; bracketed path heads stay literal (Astra 2164/2166).
 export { createGlobMatcher, globLiteralHead } from '#platform/index.js';
 
 export type WorkspacePathError = 'path-invalid' | 'path-outside-workspace' | 'path-denied' | 'not-found' | 'path-changed' | 'not-a-file'
@@ -47,9 +43,7 @@ export interface WalkIncomplete { depthLimited: number; unreadable: number; chan
 export interface WorkspaceScope {
   readonly root: string;
   readonly ignoredDirs: ReadonlySet<string>;
-  /** The literal, nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db*`, `.deckent/host` from
-   * `.deckent/host/**`; a pattern starting with a glob has none): paths whose ancestors a shell sandbox must never grant whole, even
-   * under an ignored tree (Astra 2162). Derived from the deny list, so a `.gitignore` change cannot lift them. */
+  /** Deny-list literal heads whose ancestors cannot be granted whole, including ignored trees. */
   readonly protectedAnchors: ReadonlySet<string>;
   denied(rel: string): boolean;
   /** The real, workspace-relative path of an existing target; symlinks are resolved and must stay inside and not denied. */
@@ -76,13 +70,7 @@ const DIR_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOL
 const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 export const MAX_WALK_DEPTH = 32;
 
-/**
- * The workspace boundary for read tools (T-L1, Astra 2072 R1). A path check followed by opening the same pathname again is a
- * race: a parent directory can be swapped for a symlink in between. So every open walks the real path's components from a
- * root descriptor (`/proc/self/fd/<fd>/<name>`, openat semantics on Linux) with no-follow on each component, and the opened
- * descriptor's own path is checked again. Files with more than one link are refused, because a hard link can alias a protected
- * file under an innocent name. Platforms without per-descriptor paths fail closed.
- */
+/** The workspace boundary for read tools (T-L1, Astra 2072 R1). Details: agent-turn-engine module note. */
 export async function createWorkspaceScope(rootInput: string, deny: readonly string[] = DEFAULT_WORKSPACE_READ_DENY): Promise<WorkspaceScope> {
   const supported = process.platform === 'linux' && existsSync('/proc/self/fd');
   const root = await realpath(rootInput);
@@ -153,11 +141,7 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
   });
 }
 
-/**
- * Descriptor-relative walk over regular files: each directory is opened from its parent descriptor with no-follow, entries are
- * listed through the descriptor, symlinks are never followed, ignored names and denied paths are skipped. What could not be
- * covered (depth, unreadable or changed directories) is counted, never silently treated as absent.
- */
+/** Descriptor-relative walk over regular files: each directory is opened from its parent descriptor with no-follow, entries are listed through the descriptor, symlinks are never followed, ignored names and denied paths are skipped. Details: agent-turn-engine module note. */
 export async function walkWorkspaceFiles(scope: WorkspaceScope, startRel: string, visit: (rel: string, parent: FileHandle, name: string) => Promise<boolean> | boolean,
   signal?: AbortSignal): Promise<WalkIncomplete> {
   const incomplete: WalkIncomplete = { depthLimited: 0, unreadable: 0, changed: 0, special: 0 };

@@ -6,7 +6,7 @@ import {
 import { configServiceState } from '#engine/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
-import { modelRetirementWarnings, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
+import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
 import type { KernelCall } from './kernel.js';
 import { offerDoctorFixes } from './doctor-fix.js';
@@ -19,8 +19,10 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const scopeId = (config.terminal as { scopeId?: string } | undefined)?.scopeId ?? null;
   const providerSpending = context.inspectProviderSpendAccount && scopeId ? await context.inspectProviderSpendAccount(root,
     { schemaVersion: 1, scopeId, current: true }, options).catch(() => null) : null;
+  // BeUser r-rest 3: "no API budget yet" is said only when the scope has a metered model connection; subscription and local work never need one.
+  const metered = scopeHasMeteredModel(((config as Record<string, unknown>)['provider_invocation_profiles'] as { profiles?: Parameters<typeof scopeHasMeteredModel>[0] } | undefined)?.profiles ?? [], scopeId);
   const budgetPeriodText = providerSpending ? providerSpending.checkpoint ? spendPeriodLines(providerSpending, locale).join(' ')
-    : t('climodels.spending.none', { scope: scopeId! }, locale) : null;
+    : metered ? t('climodels.spending.none', { scope: scopeId! }, locale) : null : null;
   const identity = (config as Record<string, unknown>)['identity'] as { profile?: { id?: unknown } } | undefined;
   const names = context.listSecretNames ? await context.listSecretNames(root, options).then(view => view.names, () => null) : null;
   const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
@@ -49,7 +51,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
       })),
     catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
-    firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry }, // I-S7: the first-job steps doctor names
+    firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry, connection: !!config.execution && !docker }, // I-S7: the first-job steps doctor names
     imageId: docker?.imageId ?? null, executionEnvironment, workerImage,
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
