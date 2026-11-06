@@ -1,4 +1,4 @@
-import { ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
@@ -12,7 +12,7 @@ const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/
   (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
 type Host = Pick<TerminalLaunchContext, 'admitModelActivation' | 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect' | 'siwc'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+  | 'listSecretNames' | 'inspectBrainModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect' | 'siwc'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
   switch (source) {
@@ -24,6 +24,9 @@ function winnerNote(source: string | null | undefined, model: string, locale: Lo
 }
 const sameReference = (left: ModelReference, right: ModelReference) => left.providerId === right.providerId && left.providerVersion === right.providerVersion
   && left.modelId === right.modelId && left.modelVersion === right.modelVersion;
+/** R9b: the person's Brain model in effect (`brain_planner.reference`, project over user), or null. */
+const brainModel = (root: string, options: ConfigLoadOptions) => loadConfig(root, options)
+  .then(config => (config['brain_planner'] as { reference?: ModelReference } | undefined)?.reference ?? null, () => null);
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 function readinessReason(error: unknown, locale: Locale): string {
   const params = (error as { params?: { requested?: unknown; currency?: unknown } })?.params;
@@ -95,6 +98,9 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         } catch { /* names only; the reference stays the text */ }
       }
       const reservationBlocked = new Set<string>();
+      // R9b (owner D3): which models the Brain role may use today (tier or a current exception) and the one chosen; marks only, the /do gate decides.
+      const brainRows = await host.inspectBrainModels?.(root, scopeId, options).catch(() => null), brainNow = await brainModel(root, options);
+      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal);
       const choices = await Promise.all(declared.catalog.providers.flatMap(provider => provider.models.map(async (model): Promise<ModelPanelChoice> => {
         const reference: ModelReference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
@@ -107,6 +113,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const fixes: NonNullable<ModelPanelChoice['fixes']>[number][] = host.admitModelActivation ? [{ id: on ? 'deactivate' : 'activate', label: on ? t('tui.model.fix.deactivate', {}, locale) : t('tui.model.fix.activate', {}, locale) }, ...(conflict ? [{ id: 'reconcile' as const, label: t('tui.model.reconcile.align', {}, locale) }] : [])] : [];
         if (!state.invocable && state.reason.code.startsWith('PROVIDER_SPEND')) fixes.push({ id: 'budget', label: t('tui.model.fix.budget', {}, locale) });
         if (!state.invocable && !state.reason.code.startsWith('PROVIDER_SPEND') && host.providerConnect) fixes.push({ id: 'provider', label: t('tui.model.fix.provider', {}, locale) });
+        const brain = brainRows?.models.some(row => row.channelId === provider.id && row.modelId === model.nativeId) ?? false, isBrain = brainNow !== null && sameReference(brainNow, reference);
+        if (brain && state.invocable && writer) fixes.push({ id: 'brain-global', label: t('tui.model.brain.setGlobal', {}, locale) }, { id: 'brain-project', label: t('tui.model.brain.setProject', {}, locale) });
         const cliPlan = host.providerConnect?.kinds.find(kind => kind.headlessLogin && (kind.catalogProviderId ?? kind.id) === provider.id);
         const readiness = !state.invocable && state.reason.code === 'MODEL_INVOCATION_UNAVAILABLE' && cliPlan && !cliPlan.terminalTextChat
           ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(state, locale);
@@ -118,7 +126,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           ? t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
             revision: state.reason.activationRevision ?? 0, digest: entry.bindingDigest, catalog: entry.catalogRevision }, locale) : null;
         const tools = cliPlan?.terminalTextChat ? t('terminal.admin.model.toolsUnsupported', {}, locale) : model.protocols.some(protocol => protocol.capabilities.some(row => row.id === 'tool-calls' && row.version === 1 && row.state === 'supported')) ? t('terminal.admin.model.toolsSupported', {}, locale) : model.protocols.some(protocol => protocol.capabilities.some(row => row.id === 'tool-calls' && row.version === 1 && row.state === 'unsupported')) ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale);
-        return { reference, label: display.get(exact) ?? model.nativeId, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : readiness}${personalPlan ? ` · ${t('siwc.preview', {}, locale)}${state.invocable ? ` · ${t('siwc.status.usingPlan', {}, locale)}` : ''}` : ''} · ${tools}${cliPlan?.terminalTextChat ? ` · ${t('tui.model.textChatSubscription', {}, locale)}` : ''}`,
+        return { reference, label: display.get(exact) ?? model.nativeId, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : readiness}${personalPlan ? ` · ${t('siwc.preview', {}, locale)}${state.invocable ? ` · ${t('siwc.status.usingPlan', {}, locale)}` : ''}` : ''} · ${tools}${cliPlan?.terminalTextChat ? ` · ${t('tui.model.textChatSubscription', {}, locale)}` : ''}${isBrain ? ` · ${t('tui.model.brain.current', {}, locale)}` : brain ? ` · ${t('tui.model.brain.eligible', {}, locale)}` : ''}`,
           providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command: personalPlan && host.siwc?.usageUrl ? [command, t('siwc.usage.manage', { url: host.siwc.usageUrl }, locale)].filter(Boolean).join('\n') : command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
@@ -134,6 +142,9 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
       const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
       choices.sort((left, right) => Number(left.blocked !== null) - Number(right.blocked !== null));
+      // R9b: with no Brain model chosen, the models that could plan are suggested (never chosen for the person).
+      const planners = brainNow ? [] : choices.filter(choice => choice.blocked === null && choice.fixes?.some(fix => fix.id === 'brain-project'));
+      if (planners.length) notes.push(t('tui.model.brain.suggest', { models: planners.map(choice => choice.label).join(', ') }, locale));
       return { title, choices, fixTitle: t('tui.model.reconcile.title', {}, locale), fixApply: t('cli.init.policyModes.cardApply', {}, locale), fixKeep: t('tui.model.reconcile.keep', {}, locale), notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };
     },
     // "Also make default" (T4-B D1, Jev d84b248d): the user's `terminal.defaultModel` through the governed `/config` writer on the user (global)
@@ -145,6 +156,13 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       const shadowed = outcome.status === 'applied' && plan?.source === 'project' && plan.reference;
       return { ...outcome, lines: [...outcome.lines, ...(shadowed ? [t('tui.model.defaultShadowed', {}, locale)] : [])],
         shadow: shadowed ? { projectModel: plan.reference!.modelId } : null };
+    },
+    // R9b (owner D3): the Brain's own model on the user or project layer, through the same governed writer; a project value keeps winning.
+    async setBrain(choice: { reference: ModelReference; label: string }, layer: 'global' | 'project') {
+      const outcome = await terminalConfigWrite(root, { action: 'set', keyPath: 'brain_planner.reference', value: { ...choice.reference }, layer }, host, options, locale);
+      if (outcome.status !== 'applied') return outcome;
+      const now = await brainModel(root, options), shadowed = layer === 'global' && now !== null && !sameReference(now, choice.reference);
+      return { ...outcome, lines: [shadowed ? t('tui.model.brain.shadowed', {}, locale) : t('tui.model.brain.done', { model: choice.label }, locale), ...outcome.lines] };
     },
     // Only the project's `terminal.chat.reference` is written or removed (its chat siblings stay), through the same governed writer.
     async resolveShadow(choice: { reference: ModelReference; label: string }, action: 'remove' | 'align') {

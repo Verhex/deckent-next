@@ -106,6 +106,8 @@ export async function assertBrainModelRole(sources: RoleModelSources, command: M
 export const brainTakesMemory = (config: unknown) => selectedBrainTemplate(config).contextVersion === 3;
 /** Whether the configured Brain template leaves worker assignment to the system (callers then skip the worker-model catalog read). */
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
+/** R9b (owner D3): the person's chosen Brain model from the merged `brain_planner` section (project over user), or undefined (the chat model is tried). */
+export const configuredBrainModel = (config: unknown): ModelReference | undefined => brainPlannerConfigSchema.parse(config ?? {}).reference;
 /**
  * S3-4: the typed cause of a rejected planning call. The subscription CLI step's own adapter body names it (quota with its reset, credits, login,
  * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried (a quota wait

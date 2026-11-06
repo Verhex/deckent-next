@@ -1,10 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
 import { inspectConfiguredRoleModels } from '#composition/core/run-planner/index.js';
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
+import { configCommand } from '#surfaces/core/config/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 
 // S2 (owner A2, A3, BRAIN1): the Brain model is checked against the tier/role registry where the planner takes it, before the budget read, the
@@ -31,7 +33,7 @@ describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner co
     expect(error).toMatchObject({ code: 'BRAIN_TIER_REFUSED', params: { channelId, modelId, reason } });
     for (const locale of ['en', 'tr'] as const) {
       const message = (error as { localize(locale: string): { message: string } }).localize(locale).message;
-      expect(message).toContain(modelId); expect(message).toContain(channelId);
+      expect(message).toContain(modelId); expect(message).toContain(channelId); expect(message).toContain('/model'); // R9b: the next step is named
     }
     expect(f.posts).toBe(0); expect(f.counterBodies).toHaveLength(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
@@ -47,6 +49,24 @@ describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner co
     await expect(planRun(inactive.project, command, inactive.options)).rejects.toMatchObject({ code: 'MODEL_NOT_ACTIVATED' });
     expect(inactive.posts).toBe(0);
     await expect(inspectConfiguredRoleModels(f.project, 's', 'auditor', f.options)).rejects.toMatchObject({ code: 'MODEL_ROLE_NOT_REGISTERED' });
+  });
+  it('R9b: plans with the caller\'s model, else the person\'s Brain model set by `deckent config set` (project over user), else the chat model', async () => {
+    const f = await fixture({});
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; resource: unknown; actions: string[]; scopes: unknown }[] };
+    policy.grants.push({ ...policy.grants[0]!, id: 'config', actions: ['write'], scopes: 'all', resource: { kind: 'config', ids: 'all' } }); // the user layer needs an all-scope grant
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+    const set = (model: string, ...layer: string[]) => configCommand(['config', 'set', 'brain_planner.reference', JSON.stringify({ ...f.reference, modelId: model }), '--scope', 's', ...layer],
+      { root: f.project, env: f.options.env, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal, stdout: { write: () => true } } as never);
+    // An undeclared reference names which model the planner took, before any count or POST.
+    const took = (commandId: string, reference?: object) => planRun(f.project, { ...command, commandId, ...(reference ? { reference } : {}) }, f.options).then(() => 'planned', (error: { code: string; params?: { model?: string } }) => error.params?.model ?? error.code);
+    await set('user-brain', '--global');
+    expect(await took('brain-user')).toBe('test-operator/user-brain@1');
+    await set('project-brain');
+    expect(await took('brain-project')).toBe('test-operator/project-brain@1');
+    expect(await took('brain-pinned', { ...f.reference, modelId: 'pinned' })).toBe('test-operator/pinned@1');
+    expect(f.posts).toBe(0);
+    await set(f.reference.modelId);
+    expect(await took('brain-own')).toBe('planned'); expect(f.posts).toBe(1);
   });
   it('refuses an overlay that changes a Core row without compare-and-set, and a project layer that widens Brain eligibility', async () => {
     const core = roles([{ channelId: 'anthropic-api', modelId: 'claude-sonnet-5-5', version: 2, tier: 'frontier', roles: ['brain'] }]);

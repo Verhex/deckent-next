@@ -1,5 +1,5 @@
 import type { ModelInvocationCommand } from '#domain/index.js';
-import { assertBrainModelRole, inspectRoleModelsInScope, type RoleModelSources } from '#engine/index.js';
+import { assertBrainModelRole, inspectRoleModelsInScope, BRAIN_MODEL_ROLE, type RoleModelSources } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteModelActivationReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -21,3 +21,5 @@ export async function inspectConfiguredRoleModels(root: string, scopeId: string,
     return await withSources(context, sources => inspectRoleModelsInScope(sources, role, scopeId, Date.now()));
   } catch (error) { throw queryFailure(error); }
 }
+/** R9b (owner D3): the Brain role's models for `/model` (marks only; the planner's gate decides at /do). */
+export const inspectConfiguredBrainModels = (root: string, scopeId: string, options: ConfigLoadOptions = {}) => inspectConfiguredRoleModels(root, scopeId, BRAIN_MODEL_ROLE, options);

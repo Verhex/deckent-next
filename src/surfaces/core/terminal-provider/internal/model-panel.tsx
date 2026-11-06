@@ -100,6 +100,15 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       const choice = view.choices.find(choice => keyOf(choice.reference) === parts.join(':'));
       if (action === 'provider') { setProviderOpen(true); return; }
       if (action === 'budget') { setBudgetOpen(true); return; }
+      // R9b (owner D3): the Brain's own model through the governed writer; one summary line, a held write opens its approval.
+      if (choice && port.setBrain && (action === 'brain-global' || action === 'brain-project')) {
+        setPreparing(true);
+        port.setBrain(choice, action === 'brain-global' ? 'global' : 'project').then(outcome => {
+          push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]); onClose();
+          if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
+        }, error => { onError(error); onClose(); }).finally(() => { if (mounted.current) setPreparing(false); });
+        return;
+      }
       if (choice && port.fix && ['activate', 'deactivate', 'reconcile'].includes(action!)) setFix({ choice, action: action as 'activate' | 'deactivate' | 'reconcile' });
       return;
     }

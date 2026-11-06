@@ -64,6 +64,8 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   changeDeliveryDismissal?: (root: string, input: Readonly<{ scopeId: string; runId: string; taskId: string; attemptId: string; action: 'dismiss' | 'restore' }>, options: ConfigLoadOptions) => Promise<void>; /* BeUser M-33: person card */
   openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;
   admitModelActivation?: import('#surfaces/core/cli-models/index.js').ModelActivationAdmissionHandler;
+  /** R9b (owner D3): the models the Brain role may use in the scope today (tier or a current exception), each with its activation; `/model` marks them. */
+  inspectBrainModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<Readonly<{ models: readonly import('#domain/index.js').RoleModelRow[] }>>;
   openOnboarding?: (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-onboarding/index.js').OnboardingPort>;
   deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;

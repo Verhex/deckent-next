@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { persistedString, persistedInteger, brainPlanCommandSchema, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { toInputJsonSchema, ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
@@ -27,6 +27,9 @@ export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.litera
     maxAttempts: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).prefault(templates.quotaWait),
   /** D-02 (lead GO 2026-10-28, Jev c97aa511): corrective re-plans after a correctable validation refusal (0 disables; registry ceiling). */
   correctionRetries: persistedInteger().min(0).max(templates.correctionRetriesCeiling).prefault(templates.correctionRetries),
+  /** R9b (owner D3, 2026-11-06): the person's own Brain model, an exact catalog reference; a project value wins over the user's. Absent: the Brain
+   * tries the chat model. The tier/role gate still decides; nothing ever chooses another model. Additive optional key (schemaVersion stays 1). */
+  reference: brainPlanCommandSchema.unwrap().shape.reference, // the plan command's own exact-reference contract
 });
 /** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
 export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
