@@ -57,8 +57,9 @@ export async function recordNativeAgentObservation(profile: ModelInvocationProfi
     await rename(temporary, path);
   } finally { await rm(temporary, { force: true }); }
 }
-/** Bounded read-only K7 input: missing/malformed/foreign/stale records are unknown. Never spawn, refresh, sign in or read credentials. */
-export async function readNativeAgentObservation(profile: ModelInvocationProfile, now: () => number = Date.now) {
+/** Bounded read-only K7 input: missing/malformed/foreign/stale records are unknown. Never spawn, refresh, sign in or read credentials.
+ * `display` (R8e, /provider and /model only, never a gate): the last verification counts past its age and the CLI's own login-file writes. */
+export async function readNativeAgentObservation(profile: ModelInvocationProfile, now: () => number = Date.now, display = false) {
   try {
     const { entry, definition } = agentTarget(profile);
     if (process.getuid?.() !== definition.ownerUid || constants.O_NOFOLLOW === undefined) return null;
@@ -73,11 +74,11 @@ export async function readNativeAgentObservation(profile: ModelInvocationProfile
     } finally { await file.close(); }
     const record = recordSchema.parse(value), execution = record.observed.execution;
     const age = now() - record.checkedAtMs;
-    if (!entry.agent.observationMaxAgeMs || age < 0 || age > entry.agent.observationMaxAgeMs
+    if (!entry.agent.observationMaxAgeMs || age < 0 || !display && age > entry.agent.observationMaxAgeMs
       || record.scopeId !== profile.scopeId || !isDeepStrictEqual(record.reference, profile.reference)
       || execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
       || execution.ownerUid !== definition.ownerUid || execution.executable !== await realpath(definition.executable)
-      || record.identity !== await identity(profile)) return null;
+      || !display && record.identity !== await identity(profile)) return null;
     return Object.freeze({ ...record.observed, toolSurface: record.observed.toolSurface ?? null,
       plugins: record.observed.plugins ?? null, bridge: record.observed.bridge ?? null });
   } catch { return null; }

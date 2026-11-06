@@ -9,7 +9,7 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import type { SubscriptionReadinessReader } from './readiness.js';
 
 /** Exact chat observation reader shared by the service and terminal. This never performs an inspection run. */
-export function configuredNativeChatReadiness(projectRoot: string, options: ConfigLoadOptions = {}): SubscriptionReadinessReader {
+export function configuredNativeChatReadiness(projectRoot: string, options: ConfigLoadOptions = {}, display = false): SubscriptionReadinessReader {
   const reader: SubscriptionReadinessReader = { async read(query) {
     if (query.surface !== 'chat' && query.surface !== 'worker') return null;
     const config = await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>;
@@ -18,7 +18,7 @@ export function configuredNativeChatReadiness(projectRoot: string, options: Conf
         && isDeepStrictEqual(profile.reference, query.reference) && isNativeCliHeadlessAdapter(profile.adapter));
     const entry = profile && nativeCliAgent(profile.protocol.family);
     if (!profile || !entry || modelInvocationProfileDigest(profile) !== query.profileDigest || nativeAgentFlagSetDigest(entry) !== query.flagSetDigest) return null;
-    const observed = await readNativeAgentObservation(profile);
+    const observed = await readNativeAgentObservation(profile, Date.now, display); // R8e: display reads the last verification; gates never pass `display`
     if (!observed) return null;
     // K15 seals installation-global roots. A custom login outside them has no tool-realm custody proof.
     const inside = (root: string, path: string) => { const rel = relative(root, path); return rel === '' || !isAbsolute(rel) && rel !== '..' && !rel.startsWith('../'); };

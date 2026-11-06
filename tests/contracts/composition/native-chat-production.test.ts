@@ -108,6 +108,9 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     expect(firstSeal).toMatchObject({ cli: true, login: true, environment: true, toolSurface: true, plugins: true, bridge: true });
     const firstRecord = JSON.parse(await readFile(join(String(h.profile.adapter.definition['stateDir']), `agent-${firstSeal!.execution.profileDigest}.json`), 'utf8'));
     expect(firstRecord.observed).toMatchObject(firstSeal!);
+    // R8e: past its age the gate reads nothing, while /provider and /model still show the last verification.
+    const later = () => Date.now() + 3_600_000;
+    expect(await readNativeAgentObservation(h.profile, later)).toBeNull(); expect(await readNativeAgentObservation(h.profile, later, true)).toMatchObject({ toolSurface: true });
     const reader = configuredNativeChatReadiness(h.f.project, h.options);
     const query = { surface: 'worker' as const, scopeId: h.profile.scopeId, reference: h.profile.reference,
       profileDigest: firstSeal!.execution.profileDigest, flagSetDigest: firstSeal!.execution.flagSetDigest };

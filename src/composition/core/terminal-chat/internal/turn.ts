@@ -52,7 +52,7 @@ const nativeChatProfile = (config: Record<string, unknown>, scopeId: string | un
 /** R8e: the host's chat readiness read for `/provider` and `/model` (read only: no preflight, spawn or sign-in). */
 export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; reference: ModelReference }>, options: ConfigLoadOptions = {}) {
   const profile = query.surface === 'chat' ? nativeChatProfile(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>, query.scopeId, query.reference) : undefined;
-  return profile ? inspectNativeChat(profile, { readiness: configuredNativeChatReadiness(projectRoot, options) }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
+  return profile ? inspectNativeChat(profile, { readiness: configuredNativeChatReadiness(projectRoot, options, true) }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
 }
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<TerminalChatPlan> {
   runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options) };
