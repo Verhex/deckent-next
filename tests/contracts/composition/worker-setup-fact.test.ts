@@ -1,6 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { executionProfileDefinitionSchema } from '#domain/index.js';
-import { nativeCliWorkerProfile } from '#capabilities/index.js';
+import { createNativeCodingTemplate } from '#adapters/index.js';
 // Own file: run-intent-preflight.test.ts replaces intent-facts wholesale, so the real fact is read here over mocked config, image and pool owners.
 const state = vi.hoisted(() => ({ config: null as unknown, presence: [] as string[] }));
 vi.mock('#platform/index.js', async original => ({ ...await original<object>(), loadConfig: async () => state.config }));
@@ -11,21 +10,25 @@ vi.mock('#adapters/index.js', async original => ({ ...await original<object>(),
 const { configuredWorkerSetupFact } = await import('../../../src/composition/core/run-planner/internal/intent-facts.js');
 
 it('R8b: a person who had a Docker image consent and rebinds the work kind to a subscription connection is not parked as worker setup pending', async () => {
-  const image = `sha256:${'a'.repeat(64)}`;
-  const docker = executionProfileDefinitionSchema.parse({ id: 'claude-docker', version: 1, adapter: { id: 'docker', version: 2 },
-    parameters: { imageId: image, nativeSubscription: { schemaVersion: 2, provider: 'claude', preflight: { cliVersion: '2.1.0' } } } });
-  const connected = nativeCliWorkerProfile(executionProfileDefinitionSchema.parse({ ...docker, id: 'claude-connection', parameters: { nativeSubscription: { schemaVersion: 2, provider: 'claude' } } }),
-    { schemaVersion: 1, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque-subscription-fixture',
-      definition: { schemaVersion: 1, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: '/fixture/state', ownerUid: 1000, minCliVersion: '2.1.0', delegatedUse: null } });
-  const config = (kind: typeof docker) => ({ toolchains: { image: { consents: [{ providers: ['claude'] }] } },
-    execution: { docker: { executable: 'docker', imageId: image, controlTimeoutMs: 1000, outputBytes: 1024 }, git: { gitExecutable: 'git' } },
-    admission: { poolId: 'p', registry: { schemaVersion: 1, revision: 'r', profiles: [docker, connected], kinds: [{ kind: 'code', profile: { id: kind.id, version: kind.version } }],
+  // The installed shape: `coding template --connection` writes a v2 coding template with its `worker` binding; the old Docker settings and image
+  // consent stay, the old image is gone, and the template either carries that image id or (written without settings) none at all.
+  const image = `sha256:${'a'.repeat(64)}`, docker = { executable: 'docker', imageId: image, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2,
+    tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 }, { executable, ...limits } = docker; void executable;
+  const invocation = { provider: 'claude', cliVersion: '2.1.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' };
+  const binding = { schemaVersion: 1 as const, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64),
+    resourceKey: 'opaque-subscription-fixture', definition: { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: '/fixture/state',
+      ownerUid: 1000, minCliVersion: '2.1.0', delegatedUse: null } };
+  const config = (template: ReturnType<typeof createNativeCodingTemplate>) => ({ toolchains: { image: { consents: [{ providers: ['claude'] }] } },
+    execution: { docker, git: { gitExecutable: 'git' } },
+    admission: { poolId: 'p', registry: { schemaVersion: 1, revision: 'r', profiles: [template], kinds: [{ kind: 'code', profile: { id: template.id, version: template.version } }],
       evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } });
-  state.config = config(connected);
-  expect(await configuredWorkerSetupFact('/unused', 's')).toMatchObject({ ready: true, params: { phase: 'ready' } });
+  for (const connected of [createNativeCodingTemplate(limits, invocation, binding), createNativeCodingTemplate(undefined, invocation, binding)]) {
+    state.config = config(connected);
+    expect(await configuredWorkerSetupFact('/unused', 's')).toMatchObject({ ready: true, params: { phase: 'ready' } });
+  }
   expect(state.presence).toEqual([]);
-  // Negative: the same kind still bound to its Docker image waits for that image.
-  state.config = config(docker);
+  // Negative: the same kind bound to a plain Docker template still waits for its image.
+  state.config = config(createNativeCodingTemplate(limits, invocation));
   expect(await configuredWorkerSetupFact('/unused', 's')).toMatchObject({ ready: false, reason: 'WORKER_SETUP_PENDING' });
   expect(state.presence).toEqual([image]);
 });
