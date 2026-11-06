@@ -8,7 +8,7 @@ Codex agent profiles disable subagents and plugins using version-sourced registr
 
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
-Subscription-based agent execution with tools is being built in alpha.63.
+Since alpha.63 your own Claude or ChatGPT (Codex CLI) sign-in runs tool chat, workers and Brain; the limits are listed under Providers.
 
 This page says plainly what Deckent does not do yet, what has not been tried, and what you should do instead. It
 describes the current pre-release (the version is in the [README](../README.md) and the top line of the
@@ -298,15 +298,15 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Providers and subscriptions
 
-- **Claude subscription text chat (A62):** `/model` can use the existing isolated Claude CLI connection for streamed text replies,
-  conversation history and cancellation without an API budget. Native CLI tools and MCP remain disabled; this connection cannot write files
-  or run commands in chat. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
+- **Claude subscription chat (A62, tools since alpha.63):** `/model` uses the isolated Claude CLI connection for streamed replies,
+  conversation history and cancellation without an API budget. Since alpha.63 the CLI's own tools stay off and it works only through
+  Deckent's tools, under Deckent's approvals, sandbox, policy and audit. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
   store or intermediate OAuth/session tokens, share the profile with another principal, resell usage or bill on others' behalf.
   Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
   Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
 
-- **ChatGPT sign-in is beta in this release.** Full Claude and ChatGPT subscriptions as agents inside Deckent (tool-enabled chat, workers,
-  Brain, agents/skills) are planned for alpha.63. The current ChatGPT sign-in remains selectable with its beta note.
+- **ChatGPT has two sign-ins.** The Codex CLI sign-in (alpha.63) runs tool chat, workers and Brain like Claude; the browser sign-in
+  (SIWC) stays beta with its note and its worker still needs Docker.
 - **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global
   source is registered. Existing installations are not registered automatically. From the installed folder, run
   `deckent terminal attach --register --apply`, confirm the source, then open `deckent` in the new folder. An existing source is kept.
@@ -341,6 +341,25 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT subscriptions support text chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
+- **Subscription workers without Docker (alpha.63, R8b; author evidence, real-account and BeUser acceptance open).** A Claude or Codex CLI
+  worker bound to your connection runs in Deckent's bubblewrap sandbox, so `execution.docker` may be absent; it needs Linux (or WSL) with
+  bubblewrap, otherwise the worker is refused (`HEADLESS_ISOLATION_UNAVAILABLE`). Plain Docker workers and the ChatGPT browser sign-in (SIWC)
+  worker still need Docker settings and an image (`EXECUTION_NOT_CONFIGURED`). *Impact:* adding a second provider from setup
+  (`work.profile-add`) still needs a worker image; `deckent coding template --connection <profile> --image <id>` ignores the image when
+  `execution` has no Docker settings; the installation profile preview refuses a template without an image (`INSTALLATION_PROFILE_ADAPTER`).
+  *Workaround:* for a second provider or a Docker worker, set up Docker and its image in `/setup`.
+- **/provider and /model show the last tool verification.** A subscription's ready mark is the verification a chat turn last recorded;
+  it does not age out on screen and ignores the CLI's own login-file writes. Each turn and each worker still verifies again before it runs.
+  *Impact:* "verified" on screen is not a check made now; a later turn can still stop with a typed reason.
+- **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 and the worker report
+  instruction ask for titles, task text, criterion descriptions and the report summary in your language; JSON keys and ids stay unchanged.
+  This has not been measured on real models. *Impact:* a model may still answer in English; Deckent does not translate model text.
+- **The below-recommended Brain note follows the first model (alpha.63).** Every active model can plan; when the planning model is below the
+  recommended class, the plan card and `deckent do` add a note. When a subscription quota refusal continues on an API model you allowed
+  (`continueBilling`), the note is still decided from the first chosen model, not the continuation model.
+- **A worker that does not see its Git repository (R9o) was not reproduced.** One owner-walk Attempt reported "not a git repository" with
+  `.git` present; a hermetic worker-shell check (`git rev-parse --is-inside-work-tree` in the contained view) passes. *Impact:* the cause is
+  not known. *Workaround:* if you see it, keep the Run id and the worker's stderr and report it.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
 - **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
@@ -634,6 +653,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Recovery and upgrades
 
+- **A configuration without Docker settings cannot be read by an older build (alpha.63, R8b).** Once `execution` holds only `git`, a build
+  before alpha.63 refuses the config with its strict schema and does not open. *Workaround:* to go back, restore the pre-upgrade backup.
 - **After the alpha.56.1 upgrade, a personal MCP server whose entry names a main-vault key (`$DECK:NAME`) needs that key granted to each
   project** (KER-17, 2026-10-28): the key is now used under the same project grant as a provider key, so the server does not start in a
   project without it and the turn says which key. *Workaround:* `deckent doctor` lists each such key with its command; run
