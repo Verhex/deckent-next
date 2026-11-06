@@ -74,19 +74,20 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?
   const labels = work.jobs!;
   const section = (title: string): WindowLine => ({ spans: [span(title, { bold: true, role: 'accent' })] });
   const field = (label: string, text: string, muted = false): WindowLine => ({ label: [span(label, { bold: true })], spans: [span(text, muted ? { role: 'muted' } : {})] });
-  const taskLabel = (task: RunView['tasks'][number], index: number) => (task.resultBrief ? task.taskBrief?.task : undefined) ?? `${labels.tasks} ${index + 1}`;
+  // R9h: rows and section headers name a task by its number; its full text is said once, in its own section (the brief's task line).
+  const taskLabel = (index: number) => t('terminal.jobs.taskOrdinal', { n: index + 1 }, labels.locale);
   const parked = run.state?.kind === 'parked' ? run.state : null, reason = parkReasonText(run, labels), note = runHoldText(run, labels); // S6R-6: words, never a raw code
   return [section(labels.state), { spans: [span(`[${runStateText(run, labels)}]`, { role: run.cancellationRequested ? 'warning' : 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] },
     ...(parked ? [{ spans: [span(reason ?? parked.reason, { role: 'warning' }), ...(parked.failureCode && labels.parkCode ? [span(` · ${fillTemplate(labels.parkCode, { code: parked.failureCode })}`, { role: 'muted' })] : []),
       ...(note && labels.parkNote ? [span(` · ${fillTemplate(labels.parkNote, { note })}`)] : [])] }] : []),
-    section(labels.tasks), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: [span(`[${fillTemplate(work.workerLine.card?.runPhases[task.phase] ?? task.phase, { count: 1 })}]`, { role: 'accent' }), span(` · ${displayId(task.id)}`, { role: 'muted' })] })),
-    section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(task, index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
-    section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: task.resultBrief?.runDelivery
+    section(labels.tasks), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(index), { bold: true })], spans: [span(`[${fillTemplate(work.workerLine.card?.runPhases[task.phase] ?? task.phase, { count: 1 })}]`, { role: 'accent' }), span(` · ${displayId(task.id)}`, { role: 'muted' })] })),
+    section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
+    section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(index), { bold: true })], spans: task.resultBrief?.runDelivery
       ? [span(labels.runStates[task.resultBrief.runDelivery.state] ?? task.resultBrief.runDelivery.state), ...(task.resultBrief.runDelivery.commit ? [span(` · ${displayId(task.resultBrief.runDelivery.commit)}`, { role: 'muted' })] : [])] : [span(labels.unknown, { role: 'muted' })] })),
     ...(run.targetQueue?.records ?? []).flatMap((view, index) => [...renderQueueStatus(view, labels.locale).split('\n'),
       ...summaries?.[index] ?? []].map(text => ({ spans: [span(text)] }))),
     ...(run.targetQueue?.truncated ? [{ spans: [span(t('queue.truncated', {}, labels.locale), { role: 'warning' })] }] : []),
-    ...run.tasks.flatMap((task, index) => [section(taskLabel(task, index)), ...(task.resultBrief
+    ...run.tasks.flatMap((task, index) => [section(taskLabel(index)), ...(task.resultBrief
       ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale, { scope: run.scopeId, run: run.runId, task: task.id }).map(text => ({ spans: [span(text)] }))
       : [{ spans: [span(labels.detailsUnavailable, { role: 'warning' })] }])])];
 }

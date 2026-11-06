@@ -24,6 +24,7 @@ it('K27: a closed native Attempt hides its state ancestor and enforces inherited
   const root = await mkdtemp(join(tmpdir(), 'k27-closed-')); roots.push(root);
   const state = join(root, 'state'), workspace = join(state, 'workspaces', 'attempt'), home = join(root, 'home');
   await mkdir(workspace, { recursive: true }); await mkdir(home); await writeFile(join(state, 'private-state'), 'not-for-tools');
+  for (const args of [['init', '-q'], ['-c', 'user.name=k27', '-c', 'user.email=k27@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'base']]) execFileSync('git', args, { cwd: workspace });
   const layout = { project: await createWorkspaceScope(workspace), scratchDir: null, writeFloor: () => false,
     hardFloor: { roots: [state], homeDenied: () => false } };
   const environment = { HOME: home, PATH: process.env.PATH ?? '' };
@@ -42,6 +43,8 @@ it('K27: a closed native Attempt hides its state ancestor and enforces inherited
     sibling:fs.existsSync(${JSON.stringify(join(state, 'private-state'))}),raise:cp.spawnSync(${JSON.stringify(bounds.limiter)},['--data=2147483649','--','true']).status}))`;
   const request = { command: `node -e '${program.replaceAll("'", "'\\''")}'`, cwd: workspace, environment, projectReadOnly: true, writeFloorReadOnly: true };
   const actual = await usable.realm.run(request); expect(actual, actual.output).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'clean' });
+  // R9o: the contained view keeps the Attempt clone's own `.git`; Git in the worker shell sees its repository.
+  expect((await usable.realm.run({ ...request, command: 'git rev-parse --is-inside-work-tree 2>&1' })).output.trim()).toBe('true');
   const observed = JSON.parse(actual.output) as { heap: number; options: string; own: string; child: string; sibling: boolean; raise: number };
   expect(observed.options).toBe('--max-old-space-size=1536'); expect(observed.heap).toBeGreaterThanOrEqual(1610612736); expect(observed.heap).toBeLessThan(2147483648);
   for (const limits of [observed.own, observed.child]) expect(limits).toMatch(/Max data size\s+2147483648\s+2147483648/u);

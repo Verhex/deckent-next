@@ -5,11 +5,11 @@ import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPo
 import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
 import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
-import { shortId } from '#platform/index.js';
+import { shortId, t } from '#platform/index.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
-import { JobWindow, pickRun } from './job-windows.js';
+import { JobWindow, pickRun, runTitle } from './job-windows.js';
 import { RunAnswerDecisionCard, RunControlDecisionCard, RunsControlWindow, runRunsControl } from './run-control.js';
 import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
@@ -80,7 +80,8 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       if (command === 'cancel') {
         const selected = selectedRunId ? await ledger.inspectRun(selectedRunId) : null;
         const view = selectedRunId ? selected && selected.state?.kind !== 'terminal' && !selected.cancellationRequested ? selected : null : await pickRun(panel, execution, ledger, work, true);
-        if (!view || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
+        // R9m: `x` on a finished Run says it finished; "closed" would read as closing it again.
+        if (!view || execution.signal.aborted) { output(selected?.state?.kind === 'terminal' && !execution.signal.aborted ? t('terminal.jobs.alreadyFinished', { title: runTitle(selected, work.jobs!) }, work.jobs!.locale) : fillTemplate(work.jobs!.closed, { title })); return; }
         const answer = await panel.pick(execution, { kind: 'cancel', run: view }, ['allow', 'deny']);
         if (!execution.signal.aborted) await cancelRun(view, answer === 'allow');
         return;
