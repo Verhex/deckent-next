@@ -218,7 +218,7 @@ it('chains genuine receipt1 v14 through receipt2 into separated receipt3/content
     expect(after.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='model_invocation_contents'").all()).toEqual([]);
     after.close();
   });
-});
+}, 60000); // ~17 s alone; two full-suite runs (5 forks) exceeded 30 s under load (2026-11-06)
 
 
 it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown records to receipt3/content ', async () => {
