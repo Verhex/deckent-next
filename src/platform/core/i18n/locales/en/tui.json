@@ -781,6 +781,8 @@
   "terminal.jobs.poll": "polling",
   "terminal.jobs.hints": "↑↓ PgUp PgDn scroll · Esc close",
   "terminal.jobs.cancelPickerTitle": "Choose a run to cancel",
+  "terminal.jobs.taskOrdinal": "Task {n}",
+  "terminal.jobs.alreadyFinished": "{title} has already finished; there is nothing to cancel.",
   "terminal.runControl.hints": "↑↓ choose a run · Esc close",
   "terminal.runControl.keyHold": "h hold",
   "terminal.runControl.keyResume": "r resume",

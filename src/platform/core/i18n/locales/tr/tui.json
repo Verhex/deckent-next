@@ -781,6 +781,8 @@
   "terminal.jobs.poll": "aralıklı okuma",
   "terminal.jobs.hints": "↑↓ PgUp PgDn kaydır · Esc kapatır",
   "terminal.jobs.cancelPickerTitle": "İptal edilecek işi seçin",
+  "terminal.jobs.taskOrdinal": "Görev {n}",
+  "terminal.jobs.alreadyFinished": "{title} zaten bitti; iptal edilecek bir şey yok.",
   "terminal.runControl.hints": "↑↓ iş seç · Esc kapatır",
   "terminal.runControl.keyHold": "h beklet",
   "terminal.runControl.keyResume": "r sürdür",

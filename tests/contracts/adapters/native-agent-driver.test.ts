@@ -77,11 +77,15 @@ it('keeps no-model preflight observations incomplete, never upgrades text seals,
 it('runs both real isolated CLI drivers through R with exact correlation, readonly MCP config and no token/login canary in deltas or receipts', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {
-    const f = await fixture(family!, { calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }], preamble: 'Before the tool.\n', echoToken: true, loginCanary: 'FIXTURE-LOGIN-CANARY-4cf027' });
-    const h = await f.start(), result = await h.run();
+    // R5d: a text block that ends without whitespace is shown whole before its tool call, never split around the tool line.
+    const f = await fixture(family!, { calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }], preamble: 'Before the tool.', echoToken: true, loginCanary: 'FIXTURE-LOGIN-CANARY-4cf027' });
+    const h = await f.start(), proposed = f.propose.getMockImplementation()!; let shownAtCall: string | undefined;
+    f.propose.mockImplementationOnce(async (...args) => { shownAtCall = h.deltas.map(delta => delta.text).join(''); return proposed(...args); });
+    const result = await h.run();
+    expect(shownAtCall).toBe('Before the tool.');
     expect(result).toMatchObject({ schemaVersion: 1, native: { choices: [{ message: { content: expect.stringContaining('agent completed') }, finish_reason: 'stop' }] } });
     const content = (result as { native: { choices: { message: { content: string } }[] } }).native.choices[0]!.message.content;
-    expect(content).toBe(h.deltas.map(delta => delta.text).join('')); expect(content).toMatch(/^Before the tool\.\n/u);
+    expect(content).toBe(h.deltas.map(delta => delta.text).join('')); expect(content).toMatch(/^Before the tool\./u);
     expect(f.propose).toHaveBeenCalledOnce();
     expect(f.propose.mock.calls[0]![1]).toMatchObject({ kind: f.entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp' });
     const projected = JSON.stringify({ result, deltas: h.deltas });
