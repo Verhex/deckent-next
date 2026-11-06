@@ -584,6 +584,15 @@ describe('stage 1 budget window (/model and /provider)', () => {
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 25 USD' }]); expect(calls.closed).toBe(1); expect(pins).toEqual([]);
   });
 
+  it('R2c: a USD budget row is not offered when every listed model is billed by subscription; one metered model keeps it', async () => {
+    const billed = (billing: ModelPanelChoice['billing'][]) => ({ ...MODELS, choices: MODELS.choices.map((choice, index) => ({ ...choice, billing: billing[index] })) });
+    for (const [billing, shown] of [[['subscription', 'subscription', 'subscription'], false], [['subscription', 'metered', 'subscription'], true]] as const) {
+      const screen = mount(panel('model', { model: { ...modelPort(billed([...billing])).port, budget: budgetPort(view()).port } }).element, 100, 40);
+      await settle(80);
+      expect(screen.frame().includes('Create budget')).toBe(shown); expect(screen.frame()).toContain('chat');
+    }
+  });
+
   it('another amount is stepped with the arrow keys within bounds; digits never type an amount', async () => {
     const budget = budgetPort(view({ max: 7 })), { port } = modelPort(MODELS);
     const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });

@@ -148,6 +148,8 @@ export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label:
    * reference, and for a locked row the governed command that would fix it. */
   exact: string; command: string | null; stateToken?: string;
   fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider' | 'brain-global' | 'brain-project'; label: string }>[];
+  /** R2c: the exact scoped profile's billing axis (absent: not declared, read as metered). */
+  billing?: 'subscription' | 'local' | 'metered';
   /** The configured default (`terminal.chat.reference`). */
   configured: boolean }>;
 export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPanelChoice[]; notes: readonly string[];

@@ -86,6 +86,9 @@ describe('doctor rows (pure)', () => {
     expect(docker('blocked', 'setup.execution.unknown').next).toBeUndefined();
     const en = doctorChecks(report, facts({ executionEnvironment: { state: 'blocked', reason: { code: 'setup.execution.none', params: {} } } }), 'en').find(row => row.id === 'work.docker')!;
     expect(en.text).toBe('No execution environment is installed: work, /do and delivery cannot run. Chat, MCP and governed tools work. Open /setup in the Deckent terminal to set up execution.');
+    // R8b: work set up on a connected subscription (execution without Docker) is not told to set Docker up.
+    expect(docker('blocked', 'setup.execution.none', { firstJob: { execution: false, registry: true, connection: true } })).toEqual({ group: 'work', id: 'work.docker', state: 'ok',
+      text: 'Docker gerekmez: işler bağlı aboneliğinle bu bilgisayarda Deckent\'in korumalı alanında çalışır.' });
   });
   it('PRE-34: a current worker image without a version names the configured image instead of nothing', () => {
     const image = { ...report, imageRefresh: { status: 'current', reason: null, imageVersion: null } };

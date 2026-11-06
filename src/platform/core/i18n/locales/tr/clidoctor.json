@@ -128,6 +128,7 @@
   "doctor.check.image.updating": "İşçi imajı arka planda güncelleniyor; işler mevcut imajı kullanır",
   "doctor.check.image.failed": "Son işçi imajı yenilemesi başarısız; önceki imaj kullanılıyor",
   "doctor.check.docker.unknown": "Docker durumu okunamadı",
+  "doctor.check.docker.notNeeded": "Docker gerekmez: işler bağlı aboneliğinle bu bilgisayarda Deckent'in korumalı alanında çalışır.",
   "doctor.check.delivery": "{profile} profilinin ({model}) model yanıtları yanıt sınırını aşabilir",
   "doctor.check.models.ok": "Emekliye ayrılan etkin model yok",
   "doctor.check.models.unknown": "Model kataloğu okunmadı",

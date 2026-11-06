@@ -1,6 +1,7 @@
 import { sha256, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { affectedToolchainProfiles, type SetupIntentFact } from '#engine/index.js';
-import { workerImagePresence } from '#adapters/index.js';
+import { workerImagePresence, isNativeCliWorkerProfile } from '#adapters/index.js';
+import { executionRegistrySchema } from '#domain/index.js';
 import { inspectConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
 import { inspectConfiguredPoolCapacity } from '#composition/core/runs/index.js';
 /** Readiness is observed through the existing image and pool owners; configuration presence alone never settles setup. */
@@ -13,8 +14,11 @@ export async function configuredWorkerSetupFact(root: string, scopeId: string, o
   const present = settings ? await Promise.all(pins.map(pin => pin.imageId ? workerImagePresence({ executable: settings.executable, imageId: pin.imageId,
     timeoutMs: settings.controlTimeoutMs, outputBytes: settings.outputBytes }) : Promise.resolve('unknown' as const))) : [];
   const pool = config.admission ? await inspectConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId }, options).catch((error: unknown) => { if ((error as { code?: unknown })?.code === 'RUN_POOL_REQUIRED') return null; throw error; }) : null;
+  // R8b: a kind bound to a subscription connection runs without an image (its profile has no image pin); only image pins wait for their image.
+  const registry = executionRegistrySchema.safeParse(config.admission?.registry);
+  const connected = registry.success && registry.data.kinds.some(kind => registry.data.profiles.some(profile => profile.id === kind.profile.id && profile.version === kind.profile.version && isNativeCliWorkerProfile(profile)));
   // Another provider's acquisition does not block an already admitted, ready profile.
-  const ready = pins.length > 0 && present.every(value => value === 'present') && pool !== null;
+  const ready = (pins.length > 0 || connected) && present.every(value => value === 'present') && pool !== null;
   const phase = ready ? 'ready' : state?.phase === 'ready' ? 'awaiting-confirmation' : state?.phase ?? 'waiting-docker';
   const reason = !ready && state?.phase === 'declined' ? 'WORKER_IMAGE_DECLINED' : !ready && state?.phase === 'failed'
     ? state.code === 'WORKER_IMAGE_BUILD_INTERRUPTED' ? 'WORKER_IMAGE_BUILD_INTERRUPTED' : 'WORKER_IMAGE_BUILD_FAILED' : 'WORKER_SETUP_PENDING';
