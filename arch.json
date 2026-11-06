@@ -3509,6 +3509,7 @@
     },
     "src/composition/core/run-planner": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/domain/core/run",
         "src/domain/core/model-invocation",
         "src/engine/core/run-planner",
@@ -5193,10 +5194,10 @@
       "engine": 60000,
       "adapters": 42100,
       "surfaces": 45000,
-      "composition": 13487
+      "composition": 13491
     },
     "totalSrcLines": 200000,
-    "testCases": 8202,
+    "testCases": 8204,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

@@ -82,7 +82,9 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const tokens = port.largeContext?.() ?? null;
   if (protocolOpen && protocol && port.protocol && labels.protocol) return <CacheWindow port={port.protocol} view={protocol} words={labels.protocol} labels={labels}
     push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
-  const entry = budgetEntry(budget, labels.budget), cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault), tokens !== null);
+  // R2c: a USD budget limits metered calls only; with every listed model on a subscription or local axis the row is not offered.
+  const metered = !view.choices.length || view.choices.some(choice => choice.billing === undefined || choice.billing === 'metered');
+  const entry = metered ? budgetEntry(budget, labels.budget) : null, cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault), tokens !== null);
   // BeUser alpha.56.1 (3t): with nothing to pick, the first row is the way to connect a model (the same `/provider` flow), like an empty state's action.
   const connect = !view.choices.length && port.provider && words.connect ? [{ id: CONNECT, label: words.connect, unscoped: true }] : [];
   const tree: PickerTree = { ...listed, items: [...connect, ...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }] : []),

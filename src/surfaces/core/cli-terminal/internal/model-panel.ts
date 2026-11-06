@@ -27,6 +27,9 @@ const sameReference = (left: ModelReference, right: ModelReference) => left.prov
 /** R9b: the person's Brain model in effect (`brain_planner.reference`, project over user), or null. */
 const brainModel = (root: string, options: ConfigLoadOptions) => loadConfig(root, options)
   .then(config => (config['brain_planner'] as { reference?: ModelReference } | undefined)?.reference ?? null, () => null);
+/** R2c: the scope's invocation profiles' declared billing axes (an undeclared axis stays metered for the budget row). */
+const billingAxes = (root: string, options: ConfigLoadOptions) => loadConfig(root, options).then(config => ((config['provider_invocation_profiles'] as
+  { profiles?: readonly Readonly<{ scopeId: string; reference: ModelReference; billingAxis?: unknown }>[] } | undefined)?.profiles ?? []), () => []);
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 function readinessReason(error: unknown, locale: Locale): string {
   const params = (error as { params?: { requested?: unknown; currency?: unknown } })?.params;
@@ -100,7 +103,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       const reservationBlocked = new Set<string>();
       // R9b (owner D3): which models the Brain role may use today (tier or a current exception) and the one chosen; marks only, the /do gate decides.
       const brainRows = await host.inspectBrainModels?.(root, scopeId, options).catch(() => null), brainNow = await brainModel(root, options);
-      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal);
+      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal), axes = await billingAxes(root, options);
       const choices = await Promise.all(declared.catalog.providers.flatMap(provider => provider.models.map(async (model): Promise<ModelPanelChoice> => {
         const reference: ModelReference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
@@ -113,6 +116,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const fixes: NonNullable<ModelPanelChoice['fixes']>[number][] = host.admitModelActivation ? [{ id: on ? 'deactivate' : 'activate', label: on ? t('tui.model.fix.deactivate', {}, locale) : t('tui.model.fix.activate', {}, locale) }, ...(conflict ? [{ id: 'reconcile' as const, label: t('tui.model.reconcile.align', {}, locale) }] : [])] : [];
         if (!state.invocable && state.reason.code.startsWith('PROVIDER_SPEND')) fixes.push({ id: 'budget', label: t('tui.model.fix.budget', {}, locale) });
         if (!state.invocable && !state.reason.code.startsWith('PROVIDER_SPEND') && host.providerConnect) fixes.push({ id: 'provider', label: t('tui.model.fix.provider', {}, locale) });
+        const axis = axes.find(row => row.scopeId === scopeId && sameReference(row.reference, reference))?.billingAxis;
+        const billing = axis === 'subscription' || axis === 'local' || axis === 'metered' ? { billing: axis } as const : {};
         const brain = brainRows?.models.some(row => row.channelId === provider.id && row.modelId === model.nativeId) ?? false, isBrain = brainNow !== null && sameReference(brainNow, reference);
         if (brain && state.invocable && writer) fixes.push({ id: 'brain-global', label: t('tui.model.brain.setGlobal', {}, locale) }, { id: 'brain-project', label: t('tui.model.brain.setProject', {}, locale) });
         const cliPlan = host.providerConnect?.kinds.find(kind => kind.headlessLogin && (kind.catalogProviderId ?? kind.id) === provider.id);
@@ -126,7 +131,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           ? t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
             revision: state.reason.activationRevision ?? 0, digest: entry.bindingDigest, catalog: entry.catalogRevision }, locale) : null;
         const tools = cliPlan?.terminalTextChat ? t('terminal.admin.model.toolsUnsupported', {}, locale) : model.protocols.some(protocol => protocol.capabilities.some(row => row.id === 'tool-calls' && row.version === 1 && row.state === 'supported')) ? t('terminal.admin.model.toolsSupported', {}, locale) : model.protocols.some(protocol => protocol.capabilities.some(row => row.id === 'tool-calls' && row.version === 1 && row.state === 'unsupported')) ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale);
-        return { reference, label: display.get(exact) ?? model.nativeId, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : readiness}${personalPlan ? ` · ${t('siwc.preview', {}, locale)}${state.invocable ? ` · ${t('siwc.status.usingPlan', {}, locale)}` : ''}` : ''} · ${tools}${cliPlan?.terminalTextChat ? ` · ${t('tui.model.textChatSubscription', {}, locale)}` : ''}${isBrain ? ` · ${t('tui.model.brain.current', {}, locale)}` : brain ? ` · ${t('tui.model.brain.eligible', {}, locale)}` : ''}`,
+        return { ...billing, reference, label: display.get(exact) ?? model.nativeId, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : readiness}${personalPlan ? ` · ${t('siwc.preview', {}, locale)}${state.invocable ? ` · ${t('siwc.status.usingPlan', {}, locale)}` : ''}` : ''} · ${tools}${cliPlan?.terminalTextChat ? ` · ${t('tui.model.textChatSubscription', {}, locale)}` : ''}${isBrain ? ` · ${t('tui.model.brain.current', {}, locale)}` : brain ? ` · ${t('tui.model.brain.eligible', {}, locale)}` : ''}`,
           providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command: personalPlan && host.siwc?.usageUrl ? [command, t('siwc.usage.manage', { url: host.siwc.usageUrl }, locale)].filter(Boolean).join('\n') : command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
