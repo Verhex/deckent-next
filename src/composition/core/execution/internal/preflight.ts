@@ -20,7 +20,7 @@ export async function settleConfiguredEnvironmentProbes(projectRoot: string, fil
 async function probeContext(projectRoot: string, options: ConfigLoadOptions) {
   const config = await loadConfig(projectRoot, { ...options, heal: false }), os = userInfo();
   // No workspaces directory: no probe ever ran here, and a start never creates it (the refresh gate precedes every write).
-  if (!config.execution || os.uid <= 0 || os.gid < 0 || !existsSync(productResourcePath(config.productLayout, 'workspaces'))) return null;
+  if (!config.execution?.docker || os.uid <= 0 || os.gid < 0 || !existsSync(productResourcePath(config.productLayout, 'workspaces'))) return null;
   const workspaceRoot = await prepareProductDirectory(config.productLayout, 'workspaces');
   return { config, settings: { ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid } };
 }

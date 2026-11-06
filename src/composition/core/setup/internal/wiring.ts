@@ -8,7 +8,7 @@ import { ErrorRegistry, sha256, loadConfig, prepareProductDirectory, productReso
 import { cliCardGate, doctorVerdict, loadSetupSurface, type CliCardIo, type KernelCommandContext } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallationWithSecretDefault, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
-import { inspectConfiguredShellRealm } from '#composition/core/agent-turn/index.js';
+import { inspectConfiguredShellRealm, connectedWorkerClis } from '#composition/core/agent-turn/index.js';
 import { inspectConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
 import { configuredOnboarding } from './onboarding.js';
 import { executionRegistrySchema } from '#domain/index.js';
@@ -46,11 +46,16 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     const pending = config?.toolchains.image.consents.filter(record => record.providers.some(provider =>
       !pins.some(pin => pin.provider === provider && acquisition?.images.some(image => image.provider === provider && image.imageId === pin.imageId)))).at(-1);
     const provider = typeof options.answers?.['work:kind'] === 'string' ? options.answers['work:kind'] : pending?.providers[0];
+    // R8b/R3a: a chosen subscription connection (answer `{ connection }`), or an `execution` without Docker, runs the worker without an image or runtime.
+    const connections = config ? connectedWorkerClis(config, config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId) : [];
+    const chosen = connections.find(row => row.id === (options.answers?.['work:kind'] as { connection?: unknown } | undefined)?.connection);
+    const connected = chosen || config?.execution && !config.execution.docker ? config?.execution ? 'configured' as const : 'pending' as const : undefined;
     const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
     const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
-      hasWorkerKind(context) ? stage.evaluate(context) : { state: 'skipped' as const, reason: { code: 'setup.execution.noWorkKind', params: {} } } })) };
+      connected && stage.id === 'execution:runtime' ? { state: 'skipped' as const, reason: { code: 'setup.execution.workerConnection', params: {} } }
+        : hasWorkerKind(context) || connected ? stage.evaluate(context) : { state: 'skipped' as const, reason: { code: 'setup.execution.noWorkKind', params: {} } } })) };
     const recovery = coding.repository === 'present' ? await observeFirstCommitRecovery(root, env).catch(() => ({ state: 'unknown' as const })) : null; signal?.throwIfAborted();
-    const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily(), SETUP_PERMISSIONS_FAMILY], facts: { permissions: null, execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider, providerPending: !pins.some(pin => pin.provider === provider) } : {}), acquisition } } : {}) },
+    const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily(), SETUP_PERMISSIONS_FAMILY], facts: { permissions: null, execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider, providerPending: !pins.some(pin => pin.provider === provider) } : {}), acquisition, ...(connected ? { connection: connected } : {}) } } : {}) },
       coding: { ...coding, firstCommitRecovery: recovery?.state === 'prepared' ? 'none' : recovery?.state ?? 'none' } } });
     const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, execution: observed.firstJob.execution && worker?.image !== 'missing' };
     const registry = executionRegistrySchema.safeParse(config?.admission?.registry);
@@ -60,7 +65,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       effectiveMode: permission.effectiveMode, principal: permission.principal, selectedProfile: permission.selectedProfile } : null;
     const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, permissions: permissionFacts, work: { ...observed.firstJob, ...(provider ? { pendingProvider: provider } : {}),
       providers: [...new Set(pins.map(pin => pin.provider))], kinds: registry.success ? registry.data.kinds.map(row => row.kind) : [],
-      images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])) } };
+      images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])), connections, ...(chosen ? { connection: chosen } : {}) } };
     return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, families, check: { state: installed ? await verdict(env, root).catch(() => 'not-run' as const) : 'not-run' as const } } };
   };
   const applySetupStage = async (root: string, stage: SetupStage, options: Options) => {

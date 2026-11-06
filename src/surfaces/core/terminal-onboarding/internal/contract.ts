@@ -11,10 +11,11 @@ export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; 
   deferred: readonly string[]; modelUsable: boolean; /** K3: the host's run-here answer (`localRunOffer`); false: no promise of a local run (absent: a fixture without the host). */ localRun?: boolean; folder: string; folderFacts: FolderFacts; scopeId: string;
   hosts: readonly Readonly<{ id: string; cli: string; login: string }>[];
   admittedProviders?: readonly string[];
+  /** R3a: the scope's connected subscription CLIs that can run a worker without Docker (profile id, CLI id). */ connections?: readonly Readonly<{ id: string; provider: string }>[];
   budget: Readonly<{ needed: boolean; presetUsd: number; presetsUsd: readonly number[]; currentUsd: number | null; reason?: string }>;
   permissions: Readonly<{ state: SetupPermissionPreview['state'] | 'unavailable'; reason: string; digest?: string; mode?: string; profile?: string; principal?: string;
     selectedProfile?: SetupPermissionPreview['selectedProfile']; profiles?: SetupPermissionPreview['profiles'] }>;
-  ready?: Readonly<{ provider: string | null; imageId: string | null; fallbackBefore: string | null; fallbackAfter: string | null }>;
+  ready?: Readonly<{ provider: string | null; connection?: string | null; imageId: string | null; fallbackBefore: string | null; fallbackAfter: string | null }>;
   pending: readonly RunIntentRecord[];
   rights?: Readonly<{ state: 'needed' | 'current' | 'unavailable'; digest?: string; rules: number }> }>; // BeUser ZEY-02/D-04: the founder card, previewed
 export interface OnboardingPort {

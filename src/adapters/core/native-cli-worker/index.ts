@@ -1,4 +1,4 @@
-export { NATIVE_CLI_WORKER_ADAPTER, nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, resolveNativeCliWorkerProfile,
+export { NATIVE_CLI_WORKER_ADAPTER, nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, nativeCliWorkerTaskBase, nativeCliWorkerStoredBase,
   isNativeCliWorkerProfile, NativeCliWorkerError } from './internal/profile.js';
 export type { NativeCliWorkerBinding } from './internal/profile.js';
 export { nativeWorkerEvidenceFile } from './internal/evidence.js';

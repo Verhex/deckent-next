@@ -99,8 +99,8 @@
   "k29.coding.columns": "Task kind|Profile|Provider|CLI|Image|Worker path|Connection",
   "k29.coding.runtime.docker": "Docker worker",
   "k29.coding.runtime.subscription": "Subscription worker (token-free)",
-  "k29.coding.result.runtime": "Worker: {runtime} · connection: {connection}",
-  "k29.coding.connections": "Connected profiles (--connection): {connections}",
+  "k29.coding.result.runtime": "Worker: {runtime} · {connection}",
+  "k29.coding.connections": "Connected subscriptions: {connections} (their --connection ids: deckent coding --json)",
   "k29.coding.connection.unsupported": "This connection has no compatible native agent capability for the selected provider. Use a matching connected agent profile, or choose --docker; nothing changed.",
   "k29.coding.connection.discoveryUnsupported": "Subscription workers require --discovery disabled; repository instructions go through Deckent's governed worker-instructions path. Nothing was written."
 }
