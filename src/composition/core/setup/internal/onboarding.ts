@@ -39,7 +39,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     if (before.digest !== after.digest || JSON.stringify(before.global) !== JSON.stringify(after.global)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
     const configBasis = { projectDigest: after.digest, globalDigest: sha256(JSON.stringify(after.global)) };
     const coding = observed.observation.families?.['coding'] as { repository: string; hosts: { id: string; cli: string; login: string }[] } | undefined;
-    const provider = (observed.observation.families?.['work'] as { pendingProvider?: string } | undefined)?.pendingProvider ?? affectedToolchainProfiles(config)[0]?.provider;
+    const work = observed.observation.families?.['work'] as { pendingProvider?: string; providers?: readonly string[]; connections?: readonly { id: string; provider: string }[]; connection?: { id: string; provider: string } } | undefined;
+    const provider = work?.pendingProvider ?? affectedToolchainProfiles(config)[0]?.provider;
     const values = { ...(provider ? { 'work:kind': provider } : {}), ...answers };
     const planned = planSetup(observed.observation, { schemaVersion: 2, values }, observed.registry, { phase: 'onboarding' });
     const worker = (observed.observation.families?.['execution'] as { worker?: { acquisition?: { images: { provider: string; imageId: string }[] } | null } } | undefined)?.worker;
@@ -73,8 +74,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     } finally { reader.close(); }
     return { configBasis, plan: planned, observation: observed.observation, answers: values, deferred: (await store.list(principal, folder)).map(row => row.stageId),
       modelUsable, localRun: await terminal.localRunOffer?.(root, scopeId, options).catch(() => false) ?? false, folder, folderFacts: { kind, entries: visible }, scopeId,
-      ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
-      admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
+      connections: work?.connections ?? [], ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : work?.connection?.provider ?? null, connection: work?.connection?.id ?? null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
+      admittedProviders: work?.providers ?? [],
       hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
         presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending, ...await rights() };
   };

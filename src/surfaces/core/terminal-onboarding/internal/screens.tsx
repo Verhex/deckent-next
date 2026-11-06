@@ -35,7 +35,8 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
       if (!shown) ui.observed?.(model.snapshot);
       if (!welcome || io.signal?.aborted) return null;
       const result = await welcomeScreen(model, io, conversationNotice);
-      if (!io.signal?.aborted) await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined); // A welcome marker never discards the person's explicit choice.
+      // R3d: the marker records a welcome that was shown (a usable model); a welcome marker never discards the person's explicit choice.
+      if (!io.signal?.aborted && model.snapshot.modelUsable) await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined);
       return result;
     }
     shown = true;
@@ -57,8 +58,9 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     const body = stage ? [onboardingMessage(stage.reason.code, stage.reason.params, locale)] : pending ? [pending.status === 'starting' ? t('onboarding.parked.unknown', {}, locale) : pending.status === 'released' ? t('onboarding.parked.released', {}, locale) : ErrorRegistry.createError(pending.fact.reason, { locale, params: pending.fact.params }).message] : [];
     if (step.kind === 'ready' && model.snapshot.ready) {
       const ready = model.snapshot.ready;
-      body.push(t('onboarding.ready.body', {}, locale), t('onboarding.ready.image', { provider: ready.provider ?? '-', image: ready.imageId ?? '-' }, locale),
-        t('onboarding.ready.fallback', { before: ready.fallbackBefore ?? '-', after: ready.fallbackAfter ?? '-' }, locale));
+      body.push(...ready.connection ? [t('onboarding.ready.connectionBody', {}, locale), t('onboarding.ready.connection', { provider: ready.provider ?? '-' }, locale)]
+        : [t('onboarding.ready.body', {}, locale), t('onboarding.ready.image', { provider: ready.provider ?? '-', image: ready.imageId ?? '-' }, locale),
+          t('onboarding.ready.fallback', { before: ready.fallbackBefore ?? '-', after: ready.fallbackAfter ?? '-' }, locale)]);
     }
     const question = { title, body, step: model.completed + 1, total: model.total,
       choices: pending ? [...(pending.status === 'released' ? [{ id: 'start', label: t('onboarding.parked.start', {}, locale) }] : []),
@@ -67,12 +69,23 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     let choice: QuestionAnswer;
     if (step.kind === 'work') {
       const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id)), admitted = model.snapshot.admittedProviders ?? [];
-      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows });
+      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = model.snapshot.connections ?? [];
+      // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
+      const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => ({ id: `connection:${row.id}`, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale) })) }
+        : { title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale), body, choices: provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : [] };
       // BeUser M-28: a kind already set up (revisit) is kept by default; adding another CLI is the explicit second choice.
       choice = admitted.length && step.stages[0]?.state === 'done' ? await askOnboardingQuestion({ ...question, title: t('onboarding.work.configured', { cli: admitted.join(', ') }, locale),
-        choices: [{ id: 'keep', label: t('onboarding.session.continue', {}, locale) }, { id: 'change', label: t('onboarding.work.add', {}, locale) }] }, io) : await askOnboardingQuestion({ ...question, title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale),
-        choices: [...(provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : []), { id: 'change', label: t('onboarding.work.change', {}, locale) }] }, io);
+        choices: [{ id: 'keep', label: t('onboarding.session.continue', {}, locale) }, { id: 'change', label: t('onboarding.work.add', {}, locale) }] }, io) : await askOnboardingQuestion({ ...question, title: offer.title, body: offer.body,
+        choices: [...offer.choices, { id: 'change', label: t('onboarding.work.change', {}, locale) }] }, io);
       if (choice.id === 'keep') { await session.finish(step); continue; }
+      const connection = connections.find(row => choice.id === `connection:${row.id}`);
+      if (connection) {
+        await session.answer('work:kind', { connection: connection.id }); await session.finish(step);
+        // R8f: choosing the subscription also confirms the worker-ready writes (one card, not two in a row); a refusal leaves the ready card to show.
+        const ready = session.model().steps[0];
+        if (ready?.kind === 'ready' && await settleOnboardingReady(port, ui, session.refresh, async () => false).catch(() => false)) await session.finish(ready);
+        continue;
+      }
       const changing = choice.id === 'change';
       if (changing) choice = await askOnboardingQuestion({ ...question, choices: rows.map(row => ({ id: row.id,
         label: `${row.id} · ${(row.cli === 'found' && row.login === 'found' ? t('onboarding.work.available', {}, locale) : t('onboarding.work.unavailable', {}, locale))}`,

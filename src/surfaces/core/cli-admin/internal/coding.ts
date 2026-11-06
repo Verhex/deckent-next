@@ -28,6 +28,11 @@ const sinksOf = (context: AdminCommandContext) => ({ ...(context.stdout ? { stdo
 const shortImage = (image: string | null | undefined) => image ? image.replace(/^sha256:/u, '').slice(0, 12) : '-';
 const runtimeLabel = (subscription: boolean, locale: Locale) => subscription ? t('k29.coding.runtime.subscription', {}, locale) : t('k29.coding.runtime.docker', {}, locale);
 type Pins = ReturnType<typeof affectedToolchainProfiles>;
+type Connection = ReturnType<typeof modelUseProfiles>[number];
+/** R8b/R8c: a connection's CLI is its catalog channel's (the engine still checks it against the native agent registry); people see CLI · model, the id stays in --json. */
+const connectionCli = (config: DeckentConfig, row: Connection) => (config['provider_catalog'] as { providers?: readonly { id: string; channel: { cli?: string | null } }[] } | null)?.providers
+  ?.find(provider => provider.id === row.reference.providerId)?.channel.cli ?? null;
+const connectionLabel = (config: DeckentConfig, row: Connection | undefined) => row ? `${connectionCli(config, row) ?? row.reference.providerId} · ${row.reference.modelId}` : '-';
 
 export async function codingCommand(argv: readonly string[], context: AdminCommandContext): Promise<void | ExitCode> {
   if (argv[1] === 'template') return codingTemplateCommand(argv, context);
@@ -87,11 +92,12 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   const connections = modelUseProfiles(config).filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID).map(row => ({ id: row.id, scopeId: row.scopeId, protocolFamily: row.protocol.family }));
   const unused = configured !== null && profiles.some(row => row.runtime === 'container' && row.provider) && !profiles.some(row => row.imageId === configured);
   emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
-    const available = t('k29.coding.connections', { connections: data.connections.map(row => `${row.id} (${row.scopeId})`).join(', ') || '-' }, locale);
+    const all = modelUseProfiles(config), label = (id: string | null) => connectionLabel(config, all.find(row => row.id === id));
+    const available = t('k29.coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
     if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available].join('\n');
     const columns = t('k29.coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
     return [t('clisetup.coding.title', { count: data.profiles.length }, locale),
-      renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ?? '-']),
+      renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ? label(row.connection) : '-']),
         cliTableStyle(context)),
       t('clisetup.coding.configuredImage', { image: shortImage(configured) }, locale), ...(unused ? [t('clisetup.coding.imageUnused', {}, locale)] : []),
       available, t('clisetup.coding.next', {}, locale)].join('\n');
@@ -122,7 +128,8 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   const ask = async (title: string, options: readonly CliCardOption[]) => options.length === 1 ? options[0]!.id : await askCliCard({ title, options }, io) ?? undefined;
   const missing = (flag: string, choices: readonly string[]) => ErrorRegistry.createError('CLI_CODING_TEMPLATE_CHOICE_MISSING',
     { params: { flag, values: choices.length ? choices.join(', ') : t('clisetup.coding.noChoices', {}, locale) }, locale });
-  let provider = values.get('--provider');
+  const connected = values.has('--connection') ? modelUseProfiles(config).find(row => row.id === values.get('--connection')) : undefined;
+  let provider = values.get('--provider') ?? (connected && connectionCli(config, connected) || undefined);
   if (!provider && !person) throw missing('--provider <id>', providers);
   if (!provider) {
     if (!providers.length) throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED', { locale });
@@ -144,11 +151,11 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   if (!person && !flags.has('--preview') && !flags.has('--apply')) throw ErrorRegistry.createError('CLI_USAGE');
   const discovery = values.get('--discovery');
   const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
-  const sinks = { json: flags.has('--json'), ...sinksOf(context) }, show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale) });
+  const sinks = { json: flags.has('--json'), ...sinksOf(context) }, show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale, config) });
   if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run(flags.has('--apply'))); return; }
   const preview = await run(false);
   if (preview.status !== 'preview') { show(preview); return; }
-  const answer = await askCliCard({ title: t('clisetup.coding.card.title', {}, locale), body: templateLines(output(preview), locale),
+  const answer = await askCliCard({ title: t('clisetup.coding.card.title', {}, locale), body: templateLines(output(preview), locale, config),
     options: [{ id: 'apply', label: t('clisetup.coding.card.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('clisetup.coding.card.cancel', {}, locale), role: 'no' }] }, io);
   if (answer !== 'apply') { emit(t('clisetup.coding.card.cancelled', {}, locale), { ...sinks, json: false }); return; }
   show(await run(true));
@@ -177,11 +184,12 @@ function unadmittedImage(error: unknown, config: DeckentConfig, request: { provi
 }
 const output = (result: TemplateResult) => ({ schemaVersion: 1 as const, status: result.status, profile: result.profile, kind: result.kind,
   registryRevision: result.registry.revision, connection: result.connection ?? null, expect: result.expect, write: result.write });
-function templateLines(value: ReturnType<typeof output>, locale: Locale): string[] {
+function templateLines(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig): string[] {
   const parameters = value.profile.parameters as { docker?: { imageId?: string }; invocation?: { provider?: string; cliVersion?: string; discovery?: { mode?: string } } };
   const worker = value.profile.parameters['worker'] as { connectionId?: string; profileDigest?: string } | undefined;
   const discovery = parameters.invocation?.discovery?.mode;
-  return [t('k29.coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: value.connection ?? worker?.connectionId ?? '-' }, locale),
+  const connection = modelUseProfiles(config).find(row => row.id === value.connection || !!worker && modelInvocationProfileDigest(row) === worker.profileDigest);
+  return [t('k29.coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(config, connection) : '-' }, locale),
     t('clisetup.coding.result.profile', { profile: `${value.profile.id}@${value.profile.version}` }, locale),
     t('clisetup.coding.result.kind', { kind: String((value.kind as { kind?: unknown } | null)?.kind ?? '-') }, locale),
     t('clisetup.coding.result.toolchain', { provider: parameters.invocation?.provider ?? '-', cli: parameters.invocation?.cliVersion ?? '-',
@@ -190,8 +198,8 @@ function templateLines(value: ReturnType<typeof output>, locale: Locale): string
       : discovery === 'repository' ? [t('clisetup.coding.result.discovery.repository', {}, locale)] : []),
     t('clisetup.coding.result.registry', { revision: value.registryRevision }, locale)];
 }
-function renderTemplate(value: ReturnType<typeof output>, locale: Locale): string {
+function renderTemplate(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig): string {
   const head = value.status === 'preview' ? t('cli.coding.template.preview', {}, locale) : value.status === 'applied' ? t('cli.coding.template.applied', {}, locale)
     : t('cli.coding.template.unchanged', {}, locale);
-  return [head, ...templateLines(value, locale), ...(value.status === 'preview' ? [t('clisetup.coding.applyHint', {}, locale)] : [])].join('\n');
+  return [head, ...templateLines(value, locale, config), ...(value.status === 'preview' ? [t('clisetup.coding.applyHint', {}, locale)] : [])].join('\n');
 }

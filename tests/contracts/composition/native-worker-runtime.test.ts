@@ -7,7 +7,7 @@ import { fixtureExecution } from '../support/execution-registry.js';
 import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
-  resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding } from '#adapters/index.js';
+  resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, executionTaskBase, executionTaskSilenceDeadline, executionTaskHiddenPaths, validateDockerTaskProfile, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest, connectedModelProfile } from '#engine/index.js';
@@ -32,8 +32,15 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     const template = createNativeCodingTemplate({ imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1,
       logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
     { provider: entry.id, cliVersion: '9.0.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding);
-    const compiled = compileNativeCodingWorkInput(template, { schemaVersion: 1, task: 'Record the business result.', scope: { paths: ['result.txt'] }, acceptance: 'The result has a durable receipt.',
-      model: { channelId: profile.reference.providerId, modelId: 'vendor/model', auxiliaryModelIds: [] } });
+    const work = { schemaVersion: 1, task: 'Record the business result.', scope: { paths: ['result.txt'] }, acceptance: 'The result has a durable receipt.',
+      model: { channelId: profile.reference.providerId, modelId: 'vendor/model', auxiliaryModelIds: [] } }, compiled = compileNativeCodingWorkInput(template, work);
+    // R8b (owner D1b): without Docker settings the worker template has the default limits and no image; the compiled worker still resolves for
+    // admission and keeps its silence deadline, the placeholder never reaches the stored base, and a plain Docker template without an image is refused.
+    const invocation = { provider: entry.id, cliVersion: '9.0.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' };
+    const imageless = compileNativeCodingWorkInput(createNativeCodingTemplate(undefined, invocation, binding), work), base = resolveNativeCliWorkerProfile(imageless).base;
+    expect(base.parameters).not.toHaveProperty('imageId'); expect(validateDockerTaskProfile(executionTaskBase(imageless))).toBeUndefined(); expect(executionTaskSilenceDeadline(imageless)).toBe(1200000);
+    expect(executionTaskHiddenPaths(imageless)).toEqual(executionTaskHiddenPaths(compiled)); // C2: the same pinned checkout shaping as with an image
+    expect(() => createNativeCodingTemplate(undefined, invocation)).toThrow();
     const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['criterion'] }],
       criterionDefinitions: [{ id: 'criterion', version: 1, description: 'Evidence', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
     // R9: an assigned model runs on the same login's connected profile for it; another login or an undeclared model has none.

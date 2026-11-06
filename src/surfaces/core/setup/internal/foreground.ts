@@ -20,10 +20,12 @@ async function confirmed(io: CliCardIo, title: string, body: readonly string[], 
 async function declareWorkKind(context: SetupCommandContext, root: string, stage: SetupStage, scopeId: string, io: CliCardIo,
   result: (status: SetupApplyResult['status'], failure?: string) => SetupApplyResult): Promise<SetupApplyResult> {
   const input = stage.operation!.input, locale = io.locale, options = { env: io.env ?? process.env, heal: false };
-  if (typeof input['image'] !== 'string') return result('refused', 'CODING_TEMPLATE_IMAGE_REQUIRED');
-  const request = { schemaVersion: 1 as const, scopeId, image: input['image'], provider: String(input['provider']), kind: String(input['kind']), poolId: String(input['poolId']),
+  // R8b: a subscription connection replaces the image (the worker runs in the host sandbox).
+  const source = typeof input['connection'] === 'string' ? { connection: input['connection'] } : typeof input['image'] === 'string' ? { image: input['image'] } : null;
+  if (!source) return result('refused', 'CODING_TEMPLATE_IMAGE_REQUIRED');
+  const request = { schemaVersion: 1 as const, scopeId, ...source, provider: String(input['provider']), kind: String(input['kind']), poolId: String(input['poolId']),
     executionSlots: Number(input['executionSlots']), inFlightSlots: Number(input['inFlightSlots']) };
-  emit(t('setup.work.previewing', { provider: terminalSafeText(request.provider) }, locale), { stdout: process.stdout });
+  if ('image' in source) emit(t('setup.work.previewing', { provider: terminalSafeText(request.provider) }, locale), { stdout: process.stdout });
   const preview = await context.initializeNativeCodingRegistry!(root, { ...request, apply: false }, options);
   if (preview.status === 'current') return result('applied');
   const params = { kind: terminalSafeText(request.kind), provider: terminalSafeText(request.provider), profile: terminalSafeText(`${preview.profile.id}@${preview.profile.version}`),

@@ -6,14 +6,16 @@ import defaults from './work.json' with { type: 'json' };
 /** The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
 export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), pendingProvider: z.string().optional(),
   providers: z.array(z.string()).max(16).optional(), kinds: z.array(z.string()).max(256).optional(),
-  images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional() });
+  images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional(),
+  /** R8b/R3a: the scope's connected subscription CLIs (a worker without Docker) and the one the person chose for the first work kind. */
+  connections: z.array(z.strictObject({ id: z.string(), provider: z.string() })).max(16).optional(), connection: z.strictObject({ id: z.string(), provider: z.string() }).optional() });
 export const WORK_KIND_STAGE_ID = 'work:kind', WORK_POOL_STAGE_ID = 'work:pool';
 /** The coding CLIs a first work kind may run on: the native CLI registry, in its order (the window's choices). */
 export const WORK_PROVIDERS: readonly string[] = nativeCliIds;
 export const WORK_DEFAULTS = Object.freeze({ kind: defaults.kind, poolId: defaults.pool, executionSlots: defaults.executionSlots, inFlightSlots: defaults.inFlightSlots });
 const reason = (code: string, params: Record<string, string | number> = {}) => ({ code: `setup.work.${code}`, params });
-const registryCli = (scopeId: string, provider: string) => ['deckent', 'init', 'registry', '--scope', scopeId, '--provider', provider, '--kind', WORK_DEFAULTS.kind,
-  '--pool', WORK_DEFAULTS.poolId, '--execution-slots', String(WORK_DEFAULTS.executionSlots), '--in-flight-slots', String(WORK_DEFAULTS.inFlightSlots), '--preview'];
+const registryCli = (scopeId: string, provider: string, connection?: string) => ['deckent', 'init', 'registry', '--scope', scopeId, '--provider', provider, '--kind', WORK_DEFAULTS.kind,
+  '--pool', WORK_DEFAULTS.poolId, '--execution-slots', String(WORK_DEFAULTS.executionSlots), '--in-flight-slots', String(WORK_DEFAULTS.inFlightSlots), ...(connection ? ['--connection', connection] : []), '--preview'];
 
 /** The execution settings must name a present worker image first: the execution family's own stage when it is observed, else configuration. */
 const executionReady = (context: SetupStageContext, facts: z.infer<typeof workFactsSchema>) => {
@@ -28,6 +30,11 @@ function kind(context: SetupStageContext): SetupDecision {
   if (facts.registry && (typeof selected !== 'string' || facts.providers === undefined || facts.providers.includes(selected))) return { state: 'done', reason: reason('kindDone') };
   if (context.answer === false) return { state: 'skipped', reason: reason('kindMissing', { kind: WORK_DEFAULTS.kind, pool: WORK_DEFAULTS.poolId }) };
   if (!scopeId) return { state: 'blocked', reason: reason('unavailable') };
+  // R8b (owner D1): a chosen subscription connection runs the worker in the host sandbox: no image gate, once the Git settings are written.
+  const connection = facts.connection;
+  if (connection && !facts.registry) return !executionReady(context, facts) ? { state: 'done', reason: reason('kindConnection', { provider: connection.provider }) }
+    : { state: 'ready', reason: reason('kindConnection', { provider: connection.provider }), cli: registryCli(scopeId, connection.provider, connection.id),
+      operation: { id: 'work.registry', version: 1, input: { scopeId, provider: connection.provider, connection: connection.id, ...WORK_DEFAULTS } } };
   const provider = WORK_PROVIDERS.includes(String(context.answer ?? facts.pendingProvider)) ? String(context.answer ?? facts.pendingProvider) : null;
   if (!provider) return { state: 'needs-answer', reason: reason('kindMissing', { kind: WORK_DEFAULTS.kind, pool: WORK_DEFAULTS.poolId }),
     question: { key: 'setup.work.kindQuestion', params: { kind: WORK_DEFAULTS.kind, pool: WORK_DEFAULTS.poolId, slots: WORK_DEFAULTS.executionSlots } }, cli: registryCli(scopeId, `<${nativeCliIds.join('|')}>`) };

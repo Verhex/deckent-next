@@ -6,7 +6,8 @@ import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, nativeD
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, promptPartSchema } from './composition.js';
 import { nativeCodingTemplateEnvironment } from './environment.js';
-import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
+import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, nativeCliWorkerTaskBase, nativeCliWorkerStoredBase, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
+import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 
 /**
  * K3 = A (owner 2026-09-30): a reusable native coding TEMPLATE is an ordinary registry profile of this adapter identity. It holds
@@ -35,8 +36,8 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   if (maxTurns !== undefined && !command.capabilities.maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
   if (Number(parameters.data.docker['outputBytes']) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   // The compiler replaces argv; the placeholder only lets the Docker validator check every other parameter now.
-  const docker = executionProfileDefinitionSchema.parse({ id: profile.id, version: profile.version, adapter: { id: 'docker', version: 2 },
-    parameters: { argv: [TEMPLATE_ARGV], ...parameters.data.docker } });
+  const parsed = executionProfileDefinitionSchema.parse({ id: profile.id, version: profile.version, adapter: { id: 'docker', version: 2 },
+    parameters: { argv: [TEMPLATE_ARGV], ...parameters.data.docker } }), docker = parameters.data.worker ? nativeCliWorkerTaskBase(parsed) : parsed;
   try { validateDockerTaskProfile(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   return { docker, invocation: parameters.data.invocation, worker: parameters.data.worker };
 }
@@ -51,12 +52,13 @@ export function nativeCodingTemplateTurnLimit(profile: ExecutionProfileDefinitio
 }
 
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
-export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }
+export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return nativeCliWorkerStoredBase(parseTemplate(profile).docker); }
 
 /** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. PRE-7: a template
  * that declares no environment gets the adapter's default requirements (registry data), so they are part of its content identity. */
-export function createNativeCodingTemplate(resourceLimits: unknown, invocation: unknown, worker?: NativeCliWorkerBinding): ExecutionProfileDefinition {
-  const declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits, worker?.protocolFamily) } : resourceLimits;
+export function createNativeCodingTemplate(limits: unknown, invocation: unknown, worker?: NativeCliWorkerBinding): ExecutionProfileDefinition {
+  // R8b: a connected worker without Docker settings takes the default limits and no image.
+  const resourceLimits = limits ?? (worker ? DOCKER_EXECUTION_SETTINGS.omit({ executable: true, imageId: true }).parse({}) : limits), declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits, worker?.protocolFamily) } : resourceLimits;
   const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: declared, invocation, ...(worker ? { worker } : {}) });
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   const parameters = immutableJsonObjectSchema.parse(parsed.data);
@@ -90,7 +92,7 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
     model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence);
-  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(compiled, worker), id: template.id, version: template.version }) : compiled;
+  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(nativeCliWorkerStoredBase(compiled), worker), id: template.id, version: template.version }) : compiled;
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */

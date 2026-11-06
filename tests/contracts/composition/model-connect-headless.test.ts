@@ -19,7 +19,7 @@ import * as configComposition from '#composition/core/config/index.js';
 import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
-import { configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
+import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { Writable } from 'node:stream';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -125,6 +125,11 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } });
     expect(await main(['coding', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
     expect(JSON.parse(output).profiles[0]).toMatchObject({ runtime: 'subscription', connection: profile.id });
+    // R8c: people see the connection as CLI · model (its id only in --json); R8b: `--connection` alone names the provider.
+    output = ''; expect(await main(['coding'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
+    expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
+    output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
+    expect(JSON.parse(output)).toMatchObject({ status: 'unchanged', connection: profile.id });
     const back = await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, apply: false }, options, person);
     expect(back.profile.adapter.version).toBe(1); expect(back.profile.parameters).not.toHaveProperty('worker');
     expect((await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, discovery: 'repository', apply: true }, options, person)).profile).toEqual(template);
@@ -162,6 +167,15 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(result.profile.adapter.version).toBe(2); expect(result.profile.parameters['worker']).toMatchObject({ protocolFamily: CODEX_FAMILY, definition: profile.adapter.definition });
     await expect(configureNativeCodingTemplate(h.f.project, { ...request, provider: 'claude' }, options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_UNSUPPORTED' });
     expect(await readFile(path, 'utf8')).toBe(before);
+    // R8b (owner D1): without Docker the first registry comes from the connection alone (its CLI floor, no image, no detection container);
+    // a plain Docker registry without an image stays refused.
+    config.execution = { git: { gitExecutable: 'git', timeoutMs: 5000 } }; delete config.admission; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    const person = { witness: { attest: async () => true } }, init = { schemaVersion: 1, scopeId: 'scope', provider: 'codex', kind: 'coding', poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, apply: true };
+    await expect(initializeNativeCodingRegistry(h.f.project, init, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
+    const first = await initializeNativeCodingRegistry(h.f.project, { ...init, connection: profile.id }, options, { ...person, detect: async () => { throw new Error('no detection without Docker'); } });
+    expect(first.status).toBe('applied'); expect(first.profile.parameters['docker']).not.toHaveProperty('imageId');
+    expect(first.profile.parameters['invocation']).toMatchObject({ cliVersion: profile.adapter.definition.minCliVersion, discovery: { mode: 'disabled' } });
+    expect((await configureNativeCodingTemplate(h.f.project, { ...request, kind: 'review', apply: true }, options, person)).registry.kinds.map(row => row.kind)).toEqual(['coding', 'review']);
   });
 
   it('S3-5/A62: connects without a preview switch; subscription text chat streams, carries history and Esc cancels in the built terminal', async () => {

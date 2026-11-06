@@ -6,7 +6,7 @@ import { validateExecutionSupervisorProfile } from '#adapters/index.js';
  * before admitting commands; these adapters alone never grant execution permission. */
 export async function openConfiguredExecution(projectRoot: string, sourceRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadConfig(projectRoot, { ...options, heal: false });
-  if (!config.execution) throw new Error('EXECUTION_NOT_CONFIGURED');
+  if (!config.execution?.docker) throw new Error('EXECUTION_NOT_CONFIGURED');
   const layout = config.productLayout; const os = userInfo();
   if (os.uid <= 0 || os.gid < 0) throw new Error('EXECUTION_HOST_UNSUPPORTED');
   const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
