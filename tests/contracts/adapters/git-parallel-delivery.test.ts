@@ -437,6 +437,21 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     try { await expect(captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'mac' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_UNSUPPORTED' }); }
     finally { Object.defineProperty(process, 'platform', platform); }
   });
+  it('A6-1: a repository filter driver never runs in the service; the base is a typed permanent refusal before any file content is read', async () => {
+    const f = await fixture(false, 'sha1', true), s = f.sourceRoot, marker = join(f.workspaceRoot, 'ran'), git = (...args: string[]) => exec('/usr/bin/git', ['-C', s, ...args]);
+    // A racy entry: the file's mtime equals both its index stamp and the index file's mtime, so `diff-index` compares content through the driver.
+    const at = new Date(Math.floor(Date.now() / 1000) * 1000); await utimes(join(s, 'a.txt'), at, at); await git('update-index', '--refresh');
+    const config = await readFile(join(s, '.git/config'), 'utf8'), bases = await readdir(join(f.workspaceRoot, 'run-bases'));
+    // Astra 3038: an empty driver name (`[filter ""]`, attribute `filter=`) is a driver too.
+    for (const [section, attribute, drivers] of [['filter "x"', 'filter=x', 'x'], ['filter ""', 'filter=', '""']] as const) {
+      await writeFile(join(s, '.git/config'), `${config}[${section}]\n\tclean = "sh -c 'echo ran >> ${marker}; cat'"\n`); await writeFile(join(s, '.git/info/attributes'), `* ${attribute}\n`);
+      await utimes(join(s, '.git/index'), at, at);
+      const refusal = await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'a61' }, limits, workerTreeDenied).catch((error: unknown) => error);
+      expect(refusal).toMatchObject({ code: 'PATCH_WORKING_TREE_FILTER', params: { drivers } }); expect(JSON.stringify(refusal)).not.toContain(marker);
+    }
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases);
+    expect(classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_FILTER')).disposition).toBe('permanent');
+  });
 });
 describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, crash recovery and rollback (R9p, L1c, Astra 3015)', () => {
   it('one touched path differing from its base writes nothing (PATCH_CONFLICT before any write)', async () => {

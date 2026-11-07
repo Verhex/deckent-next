@@ -41,6 +41,11 @@ export async function captureWorkingTreeBase(options: GitWorkspaceOptions, run: 
   if (await realpath(await source.run(['rev-parse', '--show-toplevel'])) !== await realpath(options.sourceRoot)) throw new WorkspacePatchError('PATCH_WORKING_TREE_SUBFOLDER');
   const listed = (args: string[]) => source.run(args).then(list, (error: unknown) => {
     throw error instanceof WorkspacePatchError && error.detail === 'git-output' ? new WorkspacePatchError('PATCH_WORKING_TREE_LISTING_LIMIT', undefined, { limit: options.outputBytes, maxEntries: limits.maxEntries }) : error; });
+  // A6-1 (owner 2026-11-07, alpha.63.1): `diff-index` hashes a racy file through the repository's filter driver, a command the repository
+  // names, run here in the service outside every sandbox; no Git option turns drivers off, so a repository defining one is refused (names only, never values).
+  const drivers = [...new Set(list(await source.run(['config', '--list', '--null', '--includes'])).map(entry => entry.split('\n', 1)[0]!)
+    .filter(key => key.startsWith('filter.')).map(key => key.slice('filter.'.length, key.lastIndexOf('.')) || '""'))]; // an empty name is a driver too (Astra 3038)
+  if (drivers.length) throw new WorkspacePatchError('PATCH_WORKING_TREE_FILTER', undefined, { drivers: drivers.join(', ') });
   const head = await source.run(['rev-parse', '--verify', 'HEAD^{commit}']);
   const tracked = new Set(await listed(['diff-index', '-z', '--name-only', '--no-renames', '--ignore-submodules', head, '--']));
   const paths = [...new Set([...tracked, ...await listed(['ls-files', '-z', '--others', '--exclude-standard'])])].sort();

@@ -5192,12 +5192,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42101,
+      "adapters": 42106,
       "surfaces": 45000,
       "composition": 13491
     },
     "totalSrcLines": 200000,
-    "testCases": 8205,
+    "testCases": 8206,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

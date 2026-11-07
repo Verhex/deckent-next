@@ -33,7 +33,7 @@ const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_C
   // A `time` bound depends on load, not on the tree (R2, D3a 2026-10-18): the gate throws it as WORKER_TREE_SCAN_DEFERRED, deliberately absent
   // here (transient), until the Attempt's `maxTimeRefusals` are spent; only the refusal after that arrives here as WORKER_TREE_SCAN_INCOMPLETE.
   'HUB_SKILL_FILES_UNAVAILABLE', 'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
-  /* R9n working-tree base: the place in the repository, the unignored file list and the platform recur every turn */ 'PATCH_WORKING_TREE_SUBFOLDER', 'PATCH_WORKING_TREE_LISTING_LIMIT', 'PATCH_WORKING_TREE_UNSUPPORTED',
+  /* R9n working-tree base: the place in the repository, the unignored file list and the platform recur every turn */ 'PATCH_WORKING_TREE_SUBFOLDER', 'PATCH_WORKING_TREE_FILTER', 'PATCH_WORKING_TREE_LISTING_LIMIT', 'PATCH_WORKING_TREE_UNSUPPORTED',
   // PRE-7: Deckent's preflight found a declared requirement unmet. It carries the requirement; the Run parks for the operator (no turn retries it).
   ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE, /* U9-7 relay worker gate: closes before any workspace or container, never another route */ 'SIWC_WORKER_ISOLATION_UNAVAILABLE', 'SIWC_APP_SERVER_AUTH_UNAVAILABLE']);
 /** E1: refusals that hold the Run (the existing progression park, failure code = the refusal code) instead of closing the attempt: no answer
