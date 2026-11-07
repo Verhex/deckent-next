@@ -584,7 +584,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `execution.retention.setAsideDays` (default 14) days; after that, the start-of-service cleanup may remove the base when no other
   pending work still needs it. A result brought back after its base was removed can no longer be delivered
   (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window. A repository whose Git
-  configuration defines a filter driver (`filter.<name>.*`, for example Git LFS) cannot start from its current files: Git would run that
+  configuration defines a filter driver (`filter.<name>.*`, for example Git LFS or an unlocked git-crypt) cannot start from its current files: Git would run that
   driver's command in Deckent's service, so the Run is refused before any file content is read (`PATCH_WORKING_TREE_FILTER`, alpha.63.1).
   *Workaround:* `deckent config set execution.deliveryMode reference`. The check reads the configuration just before Git does; a
   driver added in the moment between the two is not caught. alpha.64 builds the base without Git hashing your files, which closes both.

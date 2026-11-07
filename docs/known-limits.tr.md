@@ -579,7 +579,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   `execution.retention.setAsideDays` (varsayılan 14) günlük geri getirme penceresi boyunca saklanır; süre sonrası, başka bekleyen iş
   tabana ihtiyaç duymuyorsa servis başlangıcındaki temizlikte kaldırılabilir. Taban kaldırıldıktan sonra geri getirilen sonuç teslim
   edilemez (`WORKSPACE_RUN_BASE_REMOVED`; `/do` ile yeniden isteyin). Kapatılan ya da iptal edilen bir Run'ın tabanı için böyle bir pencere yoktur.
-  Git ayarları bir filtre sürücüsü tanımlayan bir depo (`filter.<ad>.*`, örneğin Git LFS) şimdiki dosyalarından başlayamaz: Git o
+  Git ayarları bir filtre sürücüsü tanımlayan bir depo (`filter.<ad>.*`, örneğin Git LFS ya da kilidi açılmış git-crypt) şimdiki dosyalarından başlayamaz: Git o
   sürücünün komutunu Deckent servisinde çalıştırırdı; bu yüzden Run hiçbir dosya içeriği okunmadan reddedilir (`PATCH_WORKING_TREE_FILTER`, alpha.63.1).
   *Yol:* `deckent config set execution.deliveryMode reference`. Kontrol ayarları Git'ten hemen önce okur; ikisinin arasındaki anda
   eklenen bir sürücü yakalanmaz. alpha.64 tabanı Git'e dosyalarınızı hash'letmeden kurar; bu ikisini de kapatır.
