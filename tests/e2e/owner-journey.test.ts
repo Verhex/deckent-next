@@ -27,8 +27,8 @@ async function walk(name: string, s: PtySession, steps: readonly Step[]) {
   finally { await dump(name, s); }
 }
 /** Waits until the latest card shows its key hint and the screen has been quiet for 1.2 s, past the onboarding card's input guard
- * (presentation.json cardInputGuardMs, 500 ms after it draws; its hint is drawn during the guard). A key sent sooner, e.g. as "Applying…" turns
- * into "rights are given", is dropped (hosted CI 42523203853 J5). Bounded; falls through on a slow screen. */
+ * (presentation.json cardInputGuardMs, 500 ms after it draws; its hint is drawn during the guard), so a key never meets a card that is still
+ * redrawing or guarded. Bounded; falls through on a slow screen, where the next wait still fails. */
 async function settled(t: PtySession, mark: number) {
   const until = Date.now() + within(15_000);
   for (let last = -1, since = Date.now(); Date.now() < until; await pause(200)) {
@@ -41,12 +41,14 @@ async function settled(t: PtySession, mark: number) {
  * choices the worker-kind card offered (F2-13: one row per subscription, each naming it, so no two rows read the same). */
 async function firstOpen(t: PtySession) {
   const rows: string[] = [];
-  for (let step = 0; step < 10; step++) {
-    const mark = t.mark();
+  // The mark is taken before each key, never after it: a fast apply draws the next card while `type` still pauses after Enter, and a mark taken
+  // then would miss that card and end the walk (hosted CI 42530303430: "rights are given" drawn 67 ms after the key). The session is fresh, so 0.
+  for (let step = 0, mark = 0; step < 10; step++) {
     if (!await t.waitFor(/Step \d+\/\d+/u, mark, within(15_000)).then(() => true, () => false)) break;
     await settled(t, mark);
     const shown = t.flat(mark);
     if (/Use my \w+ subscription/u.test(shown)) rows.push(...[...shown.matchAll(/(?:>|›)?\s*(Use my [^>›]*?subscription[^>›]*?)(?=\s+(?:Use my|Change|Enter)|$)/gu)].map(row => row[1]!.trim()));
+    mark = t.mark();
     await t.type(/Give me these rights|rights are given|Continue opens this profile|Confirm to complete/u.test(shown.slice(-1500)) ? '\r' : ESC);
   }
   return rows;
