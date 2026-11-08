@@ -20,7 +20,7 @@ const same = (left: ModelPanelReference | null, right: ModelPanelReference) => l
  */
 export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference | null, labels: ModelPanelLabels, title: string, defaultOffered: boolean, largeContext = false): PickerTree {
   const node = (choice: ModelPanelChoice): PickerNode => {
-    const marks = [...(same(pinned, choice.reference) ? [labels.pinnedMark] : []), ...(choice.configured ? [labels.configuredMark] : [])];
+    const marks = [...(same(pinned, choice.reference) ? [labels.pinnedMark] : []), ...(choice.configured ? [labels.configuredMark] : []), ...(choice.brain && labels.brainMark ? [labels.brainMark] : [])];
     const provider = choice.providerLabel ?? choice.group, label = `${choice.label} (${provider})`;
     const fixes = (choice.fixes ?? []).map(fix => ({ id: `:fix:${fix.id}:${keyOf(choice.reference)}`, label: fix.label, unscoped: true }));
     return { ...(fixes.length ? { children: [...(choice.blocked ? [] : [{ id: keyOf(choice.reference), label }]), ...fixes] } : {}), id: keyOf(choice.reference), label: marks.length ? `${label} · ${marks.join(' · ')}` : label, identity: { model: choice.label, provider }, detail: choice.detail,

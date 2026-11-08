@@ -137,6 +137,8 @@ describe('/model window', () => {
     expect(modelPanelTree({ ...MODELS, choices: MODELS.choices.map(choice => ({ ...choice, configured: false })) }, null, labels, 'T', true).scopes.map(scope => scope.id)).toEqual(['default', 'session']);
     expect(modelPanelTree(MODELS, null, labels, 'T', true).scopes.map(scope => scope.id)).toEqual(['session', 'default']);
     expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat (local-openai) · default', 'coder (local-openai)', 'fast (local-openai) · this session']);
+    // J1: the chosen Brain model carries its mark on the row itself (the detail line is not part of the list row).
+    expect(modelPanelTree({ ...MODELS, choices: MODELS.choices.map((choice, index) => index === 1 ? { ...choice, brain: true } : choice) }, null, labels, 'T', true).items[1]!.label).toBe('coder (local-openai) · plans /do work (Brain model)');
     // More than one provider: one section per provider.
     const two = modelPanelTree({ ...MODELS, choices: [...MODELS.choices, { ...MODELS.choices[0]!, reference: ref('chat', 'anthropic'), group: 'anthropic' }] }, null, labels, 'T', true);
     expect(two.items.map(item => [item.label, item.children?.length])).toEqual([['local-openai', 3], ['anthropic', 1]]);

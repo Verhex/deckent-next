@@ -78,6 +78,9 @@ it('a stopped or unfinished sign-in says so and exits 1; another dir is named as
     'Login directory: /x (named by you; not the Brain\'s own).\nThe sign-in was stopped; nothing else was changed.\n'
     + 'Not signed in with a subscription for claude-cli-subscription: the Brain cannot use this directory yet. Run the sign-in again.');
   expect(renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: false, authMethod: null, subscriptionType: null }, 'tr', 'claude-cli-subscription')).toContain('Giriş tamamlanmadı');
+  // NF-8: a failed attempt over an existing login never says "Signed in".
+  const kept = renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: true, authMethod: 'claude.ai', subscriptionType: null }, 'en', 'claude-cli-subscription');
+  expect(kept).toContain('An earlier sign-in is still in place for this directory: claude.ai'); expect(kept).not.toContain('Signed in:');
 });
 it('K3: an explicit login method follows the same person card; CI, AI and pipe cannot use it', async () => {
   const f = await project(), calls: unknown[] = [], argv = ['models', 'login', '--connection', 'codex-cli-subscription', '--login-method', 'device-auth'];

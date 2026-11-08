@@ -18,6 +18,14 @@ export async function inspectNativeChat(profile: ModelInvocationProfile, runtime
   return readiness;
 }
 
+/** NF-7 (presentation only, never a gate): when the last tool verification still reads ready past the K16 age (R8e display read), its time. */
+export async function nativeChatVerifiedAtMs(profile: ModelInvocationProfile, display: SubscriptionReadinessReader): Promise<number | null> {
+  const entry = nativeCliAgent(profile.protocol.family);
+  if (!entry || (await inspectNativeChat(profile, { readiness: display })).state !== 'ready') return null;
+  const observed = await display.read({ surface: 'chat', scopeId: profile.scopeId, reference: profile.reference, profileDigest: modelInvocationProfileDigest(profile), flagSetDigest: nativeAgentFlagSetDigest(entry) });
+  return typeof observed?.checkedAtMs === 'number' ? observed.checkedAtMs : null;
+}
+
 /** Invocation-only eligibility: missing surface facts may be checked by the guarded first turn; false never is eligible. */
 export async function nativeChatVerificationExecution(profile: ModelInvocationProfile, runtime: { readonly readiness: SubscriptionReadinessReader }) {
   const entry = nativeCliAgent(profile.protocol.family);

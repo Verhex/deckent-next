@@ -15,6 +15,8 @@ export type TerminalChatPlanView = Readonly<{
   maxCompletionTokens: number | null;
   historyMessages: number | null;
   tools?: 'available' | 'none' | 'unknown' | 'unverified';
+  /** NF-7: the last tool verification's time when only its age made `tools` unverified. */
+  toolsVerifiedAtMs?: number;
 }>;
 
 /** One governed model invocation per turn in the caller's scope; abort requests cancellation of that invocation. */

@@ -29,10 +29,10 @@ describe('run and worker cards', () => {
     ['tr', ['revizyon 4 · iptal istendi', '2 bekliyor, 1 çalışıyor, 1 weird', '· 3f2a9c1e']]] as const)('/runs (%s)', async (locale, lines) => {
     const text = await card(locale, '/tasks', lines[2]);
     for (const line of lines) expect(text).toContain(line);
-    expect(text).not.toContain(RUN); expect(text).not.toMatch(/\brev\b|pending:|active:|· cancel\b/u);
+    expect(text).not.toContain(RUN); expect(text).not.toMatch(/(?<!\p{L})rev\b|pending:|active:|· cancel\b/u); // a raw revision word, not the end of Turkish "Görev"
   });
-  it.each([['en', ['[running] worker 1 · claude · running', '[present (unverified)] worker 2 · docker · present (unverified)']],
-    ['tr', ['[çalışıyor] işçi 1 · claude · çalışıyor', '[var (doğrulanmadı)] işçi 2 · docker · var (doğrulanmadı)']]] as const)('/workers (%s)', async (locale, lines) => {
+  it.each([['en', ['[running] Task 1 · claude · running', '[present (unverified)] Task 2 · docker · present (unverified)']],
+    ['tr', ['[çalışıyor] Görev 1 · claude · çalışıyor', '[var (doğrulanmadı)] Görev 2 · docker · var (doğrulanmadı)']]] as const)('/workers (%s)', async (locale, lines) => {
     const text = await card(locale, '/workers ', lines[1]);
     for (const line of lines) expect(text).toContain(line);
     expect(text).not.toContain(TASK); expect(text).not.toMatch(/next-ledger|legacy-activity|present-unverified/u);
