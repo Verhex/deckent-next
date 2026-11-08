@@ -66,7 +66,7 @@ it('checks current delegation before native send and refuses changed consent wit
   f.replace({ ...f.profile, adapter: { ...f.profile.adapter, definition: { ...f.profile.adapter.definition, delegatedUse: null } } });
   await expect(port.send({})).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' }); expect(send).not.toHaveBeenCalled();
   await expect(resolveModelUse(f.ports, 'target-root', { ...f.profile, adapter: { ...f.profile.adapter, definition: { ...f.profile.adapter.definition, delegatedUse: null } } }, ai))
-    .rejects.toMatchObject({ code: 'HEADLESS_DELEGATION_REFUSED' });
+    .rejects.toMatchObject({ code: 'HEADLESS_DELEGATION_REFUSED', message: expect.stringContaining('/provider') }); // NF-3: a typed refusal with its next step
 });
 describe('an admitted ONCE connection never grants a revoked or pending job an effect', () => {
   it('refuses a pending lease before an effect', async () => {

@@ -20,6 +20,9 @@ import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
 import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
+import { configuredSetup } from '#composition/core/setup/index.js';
+import { inspectPolicyTemplate } from '#composition/core/installation/index.js';
+import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { Writable } from 'node:stream';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -30,7 +33,7 @@ import { inspectConfiguredInvocableModels } from '#composition/core/model-invoca
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import seed from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
 import codexSeed from '../../../assets/model-catalog/codex-cli-subscription.json' with { type: 'json' };
-import { textOnlyModelInvocationRequest, roleModelInvocationReference } from '#engine/index.js';
+import { textOnlyModelInvocationRequest, roleModelInvocationReference, planSetup } from '#engine/index.js';
 import { CODEX_FAMILY, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
 import { initLine, assistantLine, resultLine, rateLimitLine, writeFakeCli } from '../../fixtures/native-headless/stream.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
@@ -112,12 +115,13 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(preview.profile.adapter.version).toBe(2); expect(preview.profile.parameters['invocation']).toMatchObject({ discovery: { mode: 'disabled' } }); expect(await readFile(path, 'utf8')).toBe(before); expect(await h.spawns()).toEqual(spawns);
     expect(preview.profile.parameters['worker']).toMatchObject({ definition: profile.adapter.definition, protocolFamily: profile.protocol.family });
     await expect(configureNativeCodingTemplate(h.f.project, { ...request, discovery: 'repository' }, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED' });
-    // Owner 2026-11-05 (R8): without a Docker toolchain pin the template records the connection's CLI floor; the worker runs on the current sealed version.
+    // Owner R8 (2026-11-05, 2026-11-08): without a Docker toolchain pin the template records the CLI version the connection last proved (the
+    // fixture's 9.1.0), not its floor; the floor stays the minimum.
     const pinless = { ...config, admission: { ...config.admission, registry: { ...config.admission.registry, profiles: [{ ...template, parameters: { ...template.parameters,
       invocation: { ...(template.parameters['invocation'] as object), provider: 'codex', cliVersion: 'codex-cli 9.1.0' } } }] } } };
     await writeFile(path, JSON.stringify(pinless)); platform.clearConfigCache();
     const floor = await configureNativeCodingTemplate(h.f.project, request, options, person).catch((error: unknown) => error);
-    expect(floor).toMatchObject({ profile: { parameters: { invocation: { cliVersion: profile.adapter.definition.minCliVersion } } } });
+    expect(profile.adapter.definition.minCliVersion).not.toBe('9.1.0'); expect(floor).toMatchObject({ profile: { parameters: { invocation: { cliVersion: '9.1.0' } } } });
     await writeFile(path, before); platform.clearConfigCache();
     const applied = await configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options, person);
     expect(applied.registry).toEqual(preview.registry); expect(applied.status).toBe('applied');
@@ -171,11 +175,17 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     // R8b (owner D1): without Docker the first registry comes from the connection alone (its CLI floor, no image, no detection container);
     // a plain Docker registry without an image stays refused.
     config.execution = { git: { gitExecutable: 'git', timeoutMs: 5000 } }; delete config.admission; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
+    // NF-2: onboarding's "use my subscription" answer, once the Git setting is written, proposes the first kind from that connection (it read Docker-only facts).
+    const answers = { 'work:kind': { connection: profile.id } }, wired = configuredSetup({ listIdentityProfiles, inspectPolicyTemplate });
+    const observed = await wired.observeSetup(h.f.project, { ...options, person: true, answers });
+    expect(planSetup(observed.observation, { schemaVersion: 2, values: answers }, observed.registry, { phase: 'onboarding' }).stages.find(row => row.id === 'work:kind'))
+      .toMatchObject({ state: 'ready', operation: { id: 'work.registry', input: { connection: profile.id, provider: 'codex' } } });
     const person = { witness: { attest: async () => true } }, init = { schemaVersion: 1, scopeId: 'scope', provider: 'codex', kind: 'coding', poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, apply: true };
     await expect(initializeNativeCodingRegistry(h.f.project, init, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
     const first = await initializeNativeCodingRegistry(h.f.project, { ...init, connection: profile.id }, options, { ...person, detect: async () => { throw new Error('no detection without Docker'); } });
     expect(first.status).toBe('applied'); expect(first.profile.parameters['docker']).not.toHaveProperty('imageId');
-    expect(first.profile.parameters['invocation']).toMatchObject({ cliVersion: profile.adapter.definition.minCliVersion, discovery: { mode: 'disabled' } });
+    const proved = (JSON.parse(await readFile(join(profile.adapter.definition.stateDir, 'preflight.json'), 'utf8')) as { version: string }).version;
+    expect(proved).not.toBe(profile.adapter.definition.minCliVersion); expect(first.profile.parameters['invocation']).toMatchObject({ cliVersion: proved, discovery: { mode: 'disabled' } });
     expect((await configureNativeCodingTemplate(h.f.project, { ...request, kind: 'review', apply: true }, options, person)).registry.kinds.map(row => row.kind)).toEqual(['coding', 'review']);
   });
 

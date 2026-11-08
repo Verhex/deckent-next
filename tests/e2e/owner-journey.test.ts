@@ -73,14 +73,11 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     const t = open();
     await walk('onboarding', t, [['Choose a profile to preview', CTRL_O], [800, '\r'], ...card('Confirm to complete'), ...card('Give me these rights'), ...card('rights are given'),
       ...card('No model is connected yet'), ...card('Sign in with Claude · no extra charge ›'), ...card('Sign in with its CLI and connect'), ...card("Deckent's own login directory"),
-      ...card('who besides you may use this login', DOWN.repeat(2)), [800, '\r'], [1500, '\u001b[A\u001b[A'], [800, '\r'], ...card('Let ai use your', 'y'), ...card('Model connected'), ...card('Use my claude subscription'), ...card('Selected worker: your claude subscription'),
-      [3000, ESC], ...card('Project instructions', ESC), [3000, '/exit\r']]);
+      ...card('who besides you may use this login', DOWN.repeat(2)), [800, '\r'], [1500, '\u001b[A\u001b[A'], [800, '\r'], ...card('Let ai use your', 'y'), ...card('Model connected'), ...card('Use my claude subscription'), ...card('Declare work kind coding on claude', 'y'),
+      ...card('Set up worker pool', 'y'), ...card('Project instructions', ESC), [3000, '/exit\r']]);
     await t.closed;
-    // The onboarding's subscription worker choice leaves no work kind (finding: Step 5 "This step is waiting"); its CLI twins write the kind and pool.
-    for (const args of [['init', 'registry', '--scope', 'c', '--provider', 'claude', '--kind', 'coding', '--pool', 'workers', '--execution-slots', '1', '--in-flight-slots', '1',
-      '--connection', 'claude-cli-subscription.claude-cli-subscription.sonnet-5-5.1', '--apply'], ['init', 'pool', '--scope', 'c', '--apply']]) {
-      const step = open(args); expect(await step.closed, step.text()).toBe(0);
-    }
+    // NF-2: the onboarding's subscription worker choice writes the first work kind on that connection (no CLI twin needed).
+    expect(JSON.parse(await readFile(join(project, '.deckent', 'config.json'), 'utf8')).admission?.registry?.kinds?.map((row: { kind: string }) => row.kind), t.text().slice(-3000)).toEqual(['coding']);
   }, 300_000);
   afterAll(async () => {
     for (const s of sessions.splice(0)) await s.close();

@@ -1,4 +1,4 @@
-import { prepareSubscriptionConsent } from '#engine/index.js';
+import { compareToolchainVersions, prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {  headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
@@ -54,6 +54,14 @@ async function readEgress(stateDir: string) {
   const parsed = (schemaVersion === 1 || schemaVersion === 2) && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
   return parsed?.success && parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
     ...headlessEgressReasons(parsed.data), hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
+}
+/** R8 (owner 2026-11-05/08): the CLI version the connection's last passing preflight proved (read only, no spawn); the connection's floor is only the
+ * minimum. Null: none recorded, closed, recorded for another executable than the one the connection names, or below the floor. */
+export async function readHeadlessSealedVersion(definition: NativeCliHeadlessDefinition): Promise<string | null> {
+  const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; version?: unknown; executable?: unknown }, () => null);
+  const executable = await realpath(definition.executable).catch(() => null), version = typeof record?.version === 'string' && /^\d+\.\d+\.\d+$/u.test(record.version) ? record.version : null;
+  return record?.state === 'open' && executable !== null && record.executable === executable && version !== null
+    && compareToolchainVersions(version, definition.minCliVersion) >= 0 ? version : null;
 }
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
  * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet), f5 its gateway refusals and s3c whether

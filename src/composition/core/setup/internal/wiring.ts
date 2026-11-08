@@ -65,7 +65,9 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       effectiveMode: permission.effectiveMode, principal: permission.principal, selectedProfile: permission.selectedProfile } : null;
     const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, permissions: permissionFacts, work: { ...observed.firstJob, ...(provider ? { pendingProvider: provider } : {}),
       providers: [...new Set(pins.map(pin => pin.provider))], kinds: registry.success ? registry.data.kinds.map(row => row.kind) : [],
-      images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])), connections, ...(chosen ? { connection: chosen } : {}) } };
+      images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])), connections,
+      // NF-2: `execution` (first job) means Docker; a chosen connection's kind needs only its Git settings, planned after the kind stage.
+      ...(chosen ? { connection: chosen, execution: connected === 'configured' } : {}) } };
     return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, families, check: { state: installed ? await verdict(env, root).catch(() => 'not-run' as const) : 'not-run' as const } } };
   };
   const applySetupStage = async (root: string, stage: SetupStage, options: Options) => {

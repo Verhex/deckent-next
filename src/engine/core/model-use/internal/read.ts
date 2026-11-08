@@ -92,7 +92,7 @@ function assertModelUsePerson(context: ModelUseContext, profile: ModelInvocation
       || !sameAttachmentPerson(bound.principal, owner)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   }
   const refusal = subscriptionDelegationRefusal({ billing: 'subscription', ...caller, consent: delegatedUseOf(definition) });
-  if (refusal) throw new ModelUseDelegationError(refusal);
+  if (refusal) throw ErrorRegistry.createError(refusal);
 }
 
 async function assertFreshModelUse(ports: ModelUseReadPorts, target: ModelUseContext, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive: boolean) {
@@ -101,7 +101,3 @@ async function assertFreshModelUse(ports: ModelUseReadPorts, target: ModelUseCon
   await assertModelUseSource(ports, target, fresh, actor, requireActive);
 }
 
-/** Preserve the shared delegation rule's typed reason without importing a transport or renderer into this owner. */
-class ModelUseDelegationError extends Error {
-  constructor(readonly code: NonNullable<ReturnType<typeof subscriptionDelegationRefusal>>) { super(code); this.name = 'ModelUseDelegationError'; }
-}
