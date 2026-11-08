@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, callerEnvironment } from '#platform/index.js';
+import { persistedString, persistedInteger, inheritedEnvironment, CHILD_BASE_ENVIRONMENT } from '#platform/index.js';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
@@ -28,7 +28,7 @@ export class ProcessSupervisor implements ExecutionSupervisor {
     if (signal?.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
     const options = this.options;
     return new Promise((resolve, reject) => {
-      const child = spawn(options.executable, [...options.args], { cwd: options.cwd, env: callerEnvironment(process.env), shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(options.executable, [...options.args], { cwd: options.cwd, env: inheritedEnvironment(process.env, CHILD_BASE_ENVIRONMENT), shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
       const chunks: Buffer[] = []; let bytes = 0; let failed = false;
       // Kill the control process only. The durable application must reconcile its worker separately.
       const stop = () => {

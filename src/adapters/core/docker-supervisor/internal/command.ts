@@ -15,7 +15,7 @@ export class DockerCommandFailure extends Error {
 }
 /** A6-3 (owner 2026-11-08, alpha.63.2): the only inherited service variables a Docker client process receives, one table for every caller;
  * a provider key or token in the service environment never reaches the docker CLI, its plugins or credential helpers. */
-const DOCKER_CLIENT_ENV_NAMES: readonly string[] = Object.freeze(['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']);
+export const DOCKER_CLIENT_ENV_NAMES: readonly string[] = Object.freeze(['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']);
 export function dockerClientEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
   return Object.fromEntries(DOCKER_CLIENT_ENV_NAMES.flatMap(name => typeof env[name] === 'string' ? [[name, env[name]]] : []));
 }

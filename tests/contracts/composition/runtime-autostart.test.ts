@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
 import { encodeServiceFrame, ServiceFrameDecoder } from '#adapters/index.js';
-import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
 import { awaitRuntimeServiceRestart, describeRuntimeServiceWithin, runtimeMonotonicDeadline, RUNTIME_SERVICE_AUTOSTART_ENV, type RuntimeServiceDescriptor } from '#engine/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
 
@@ -229,4 +229,15 @@ it('RESTART-HUNT: the restart loop launches once only for the startable refusal;
   for (const [answers, startable] of [[[first, descriptor], undefined], [[transport, descriptor], stale]] as const) {
     const seen = await judge([...answers], startable); expect(seen.result).toBe(answers[0]); expect(seen.calls).toBe(1);
   }
+});
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] A6-3: the service starts with an explicit environment: referenced secret names, DECKENT_ names and agent markers pass, an unrelated token does not', async () => {
+  const f = await fixture({ serviceStartTimeoutMs: 1_000 });
+  const globalPath = resolveGlobalConfigPaths(f.options.env).platformPath; await mkdir(dirname(globalPath), { recursive: true, mode: 0o700 });
+  await writeFile(globalPath, JSON.stringify({ projectName: '$DECK:SERVICE_FIXTURE_KEY' }), { mode: 0o600 });
+  const env = { ...f.options.env, PATH: '/usr/bin:/bin', SERVICE_FIXTURE_KEY: 'referenced', UNRELATED_TOKEN: 'leak', DECKENT_OPENAI_KEY: 'product', CLAUDECODE: '1', [RUNTIME_SERVICE_AUTOSTART_ENV]: 'stale' };
+  const launches: Array<{ env: Record<string, string> }> = [];
+  await ensureConfiguredRuntimeService(f.project, { env }, async input => { launches.push(input); return { pid: 1 }; }, fileURLToPath(import.meta.url)).catch((error: unknown) => { if (!launches.length) throw error; });
+  expect(launches[0]?.env).toMatchObject({ PATH: '/usr/bin:/bin', SERVICE_FIXTURE_KEY: 'referenced', DECKENT_OPENAI_KEY: 'product', CLAUDECODE: '1', [RUNTIME_SERVICE_AUTOSTART_ENV]: '1' });
+  expect(launches[0]?.env).not.toHaveProperty('UNRELATED_TOKEN');
 });

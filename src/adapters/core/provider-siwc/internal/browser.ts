@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { OAuthConnectionError } from '#engine/index.js';
 import { SIWC_PROTOCOL, SIWC_LIMITS } from './registry.js';
-import { callerEnvironment } from '#platform/index.js';
+import { personProcessEnvironment } from '#platform/index.js';
 /** Linux/WSL local browser path. No token hints, callback data, browser stdout/stderr or URL in public errors. */
 export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) => string, signal: AbortSignal, presentation: Readonly<{ fallback?: (url: string) => void }> = {}): Promise<{ callback: string; redirectUri: string }> {
   if (process.platform !== 'linux') throw new OAuthConnectionError('OAUTH_CONNECTION_PLATFORM_UNSUPPORTED');
@@ -42,7 +42,7 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
     if (parsed.username || parsed.password || parsed.hash || parsed.origin !== new URL(SIWC_PROTOCOL.authorizationEndpoint).origin
       || parsed.pathname !== new URL(SIWC_PROTOCOL.authorizationEndpoint).pathname
       || !expectedState || ['id_token_hint', 'access_token', 'refresh_token', 'code'].some(key => parsed.searchParams.has(key))) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
-    const browser = spawn('xdg-open', [url], { stdio: 'ignore', shell: false, env: callerEnvironment(process.env) });
+    const browser = spawn('xdg-open', [url], { stdio: 'ignore', shell: false, env: personProcessEnvironment(process.env) });
     // The link is always shown (as Claude Code / Codex do): on SSH or a headless host xdg-open may "succeed" without a browser the person sees.
     browser.once('error', () => { /* no opener: the link on screen is the way in */ });
     presentation.fallback?.(url);

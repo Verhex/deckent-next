@@ -7,7 +7,7 @@ export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, indexMoni
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, recordedWorkerIsolation, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
-  resolveDockerReadOnlyMounts, dockerProfileObservesWorker, dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.js';
+  resolveDockerReadOnlyMounts, dockerProfileObservesWorker, dockerClientEnvironment, DOCKER_CLIENT_ENV_NAMES } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal, captureLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';

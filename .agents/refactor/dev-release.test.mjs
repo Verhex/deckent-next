@@ -575,3 +575,9 @@ releaseTest('unavailable systemd control refuses before governed shutdown; no ra
   assert.equal(f.current(), `versions/${old}`); assert.equal(f.describe().instanceId, before.instanceId);
   assert.equal(existsSync(join(f.data, 'state/shutdowns.jsonl')), false);
 });
+
+test('A6-3: the unmanaged service launch passes an explicit environment, never an unrelated shell token', async () => {
+  const { serviceLaunchEnv } = await import('./dev-release.mjs');
+  const env = serviceLaunchEnv({ PATH: '/bin', HOME: '/h', DECKENT_GLOBAL_HOME: '/g', CLAUDECODE: '1', UNRELATED_TOKEN: 'leak', DECKENT_NEXT_INSTALL_ROOT: '/old' }, '/install');
+  assert.deepEqual(env, { PATH: '/bin', HOME: '/h', DECKENT_GLOBAL_HOME: '/g', CLAUDECODE: '1', DECKENT_NEXT_INSTALL_ROOT: '/install' });
+});

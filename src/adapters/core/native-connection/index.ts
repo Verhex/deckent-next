@@ -1,4 +1,4 @@
-export { nativeSubscriptionSchema, NativeConnectionError, readLocalNativeCredential, projectNativeCredential, nativeProviderSpec, nativeProjectionDispatch } from './internal/credential.js';
+export { nativeSubscriptionSchema, NativeConnectionError, readLocalNativeCredential, projectNativeCredential, nativeProviderSpec, nativeHomeOverrideNames, nativeProjectionDispatch } from './internal/credential.js';
 export type { NativeSubscription } from './internal/credential.js';
 export { openNativeConnection, isPublicNativeAddress, nativeWorkerEventRetentionBytes, nativeQuotaPolicy } from './internal/gateway.js';
 export { inspectNativeClientHello } from './internal/tls-hello.js';

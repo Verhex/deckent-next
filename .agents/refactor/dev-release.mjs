@@ -51,6 +51,15 @@ const sleep = ms => new Promise(done => setTimeout(done, ms));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const inside = (path, dir) => path === dir || path.startsWith(dir + sep);
 
+// A6-3 (owner 2026-11-08, alpha.63.2): the service starts with an explicit environment, as the product launcher does
+// (src/platform/core/host/internal/env.ts serviceEnvironment), never the lead shell's whole one. Agent markers stay so a service an agent
+// started keeps that floor; live and N1 use the encrypted-file secret store, so no `$DECK:` environment names are needed here.
+const SERVICE_ENV_NAMES = new Set(['PATH', 'HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'LANG', 'LC_ALL',
+  'LC_CTYPE', 'LC_MESSAGES', 'TZ', 'TMPDIR', 'NODE_ENV', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'DBUS_SESSION_BUS_ADDRESS', 'NODE_EXTRA_CA_CERTS',
+  'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH',
+  'CI', 'CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']);
+export const serviceLaunchEnv = (env, installRoot) => ({ ...Object.fromEntries(Object.entries(env)
+  .filter(([name, value]) => typeof value === 'string' && (SERVICE_ENV_NAMES.has(name) || name.startsWith('DECKENT_')))), DECKENT_NEXT_INSTALL_ROOT: installRoot });
 export function layout({ env = process.env, home = homedir(), launcher = join(here, 'next-entry.mjs') } = {}) {
   const installRoot = resolve(env.DECKENT_NEXT_INSTALL_ROOT || join(home, '.local/share/deckent-next-dev'));
   const project = resolve(dirname(launcher), '../..');
@@ -274,7 +283,7 @@ async function startService(L, expect, opts) {
     if (opts.manager) {
       launchError = restartManaged(L, opts, fail);
       writeFileSync(log, JSON.stringify({ event: 'systemd-restart', unit: opts.manager.unit, ok: !launchError }) + '\n', { flag: 'a' });
-    } else child = (opts.spawn ?? spawn)(opts.node, [L.launcher, 'cli', 'runtime', 'serve', '--json'], { cwd: L.project, env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: L.installRoot },
+    } else child = (opts.spawn ?? spawn)(opts.node, [L.launcher, 'cli', 'runtime', 'serve', '--json'], { cwd: L.project, env: serviceLaunchEnv(process.env, L.installRoot),
       detached: true, stdio: ['ignore', fd, fd] });
     child?.on('error', error => { launchError ??= error; });
     child?.on('exit', (code, signal) => { exited = { code, signal }; });
