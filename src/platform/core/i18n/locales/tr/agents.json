@@ -73,6 +73,8 @@
   "error.AGENT_STANDING_REFUSED": "Bu ajan durumu değişikliğine mevcut durumdan ya da bu kimlikle izin verilmiyor. Hiçbir şey değişmedi.",
   "error.AGENT_STANDING_CONFLICT": "Ajanın durumu gösterildikten sonra değişti. Hiçbir şey değişmedi; yeniden bakıp güncel duruma göre karar verin.",
   "agent.card.selected": "  ajan: {agentId} (sürüm {revision}, {standing})",
+  "agent.card.skills": "    skill'ler: {skills}",
+  "agent.card.skill": "{skillId} (sürüm {revision})",
   "agent.standing.active": "terfili",
   "agent.standing.candidate": "aday",
   "agents.inspect.standings": "İş türüne göre durum: {standings}",

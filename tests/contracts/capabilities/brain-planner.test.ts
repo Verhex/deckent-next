@@ -64,9 +64,10 @@ it.each([
   expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, tasks: [task] } })))
     .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule } }));
 });
-it('supplies criterion-id annotation and selects v5 (D4 person language) while keeping v1–v4 available', () => {
+it('supplies criterion-id annotation and selects v6 (F2-11 class descriptions over v5 person language) while keeping v1–v5 available', () => {
   const current = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
-  expect(current.template.version).toBe(5);
+  expect(current.template.version).toBe(6);
+  expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 5 } }).template.version).toBe(5);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 4 } }).template.version).toBe(4);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 3 } }).template.version).toBe(3);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).template.version).toBe(2);

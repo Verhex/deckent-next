@@ -1,6 +1,7 @@
 import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
-import type { ModelReference } from '#domain/index.js';
+import { MODEL_TIERS, type ModelReference, type ModelTier } from '#domain/index.js';
+import { composeModelRolePolicy } from '#engine/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
@@ -30,6 +31,16 @@ const brainModel = (root: string, options: ConfigLoadOptions) => loadConfig(root
 /** R2c: the scope's invocation profiles' declared billing axes (an undeclared axis stays metered for the budget row). */
 const billingAxes = (root: string, options: ConfigLoadOptions) => loadConfig(root, options).then(config => ((config['provider_invocation_profiles'] as
   { profiles?: readonly Readonly<{ scopeId: string; reference: ModelReference; billingAxis?: unknown }>[] } | undefined)?.profiles ?? []), () => []);
+/** F2-14: each catalog model's tier from the tier/role registry (`model_roles`, the only tier owner), or none when the policy is unreadable. */
+const modelTiers = (root: string, options: ConfigLoadOptions) => loadConfig(root, options).then(config => composeModelRolePolicy(config['model_roles']).models, () => []);
+/** F2-14 (owner: newest and higher tier first): runnable first, then the higher registry tier (unknown last), then the catalog's own `priority`
+ * (lower first; undeclared after declared), then the declared order. The catalog carries no release date, so recency is the catalog's own order. */
+export function orderModelChoices<T extends Readonly<{ blocked: string | null }>>(choices: readonly T[], facts: (choice: T) => Readonly<{ tier: ModelTier | null; priority: number | null }>): T[] {
+  const rank = (choice: T, index: number) => { const fact = facts(choice);
+    return [Number(choice.blocked !== null), fact.tier === null ? MODEL_TIERS.length : MODEL_TIERS.length - 1 - MODEL_TIERS.indexOf(fact.tier), fact.priority ?? Number.MAX_SAFE_INTEGER, index]; };
+  const ranked = choices.map((choice, index) => ({ choice, key: rank(choice, index) }));
+  return ranked.sort((a, b) => { for (let i = 0; i < a.key.length; i++) if (a.key[i] !== b.key[i]) return a.key[i]! - b.key[i]!; return 0; }).map(row => row.choice);
+}
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 function readinessReason(error: unknown, locale: Locale): string {
   const params = (error as { params?: { requested?: unknown; currency?: unknown } })?.params;
@@ -86,7 +97,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
       // Display names from the ledger catalog when it knows the model (best effort; the exact reference is always shown).
-      const display = new Map<string, string>(), workers = new Map<string, boolean>(), workerTokens = new Map<string, readonly unknown[]>();
+      const display = new Map<string, string>(), priority = new Map<string, number>(), workers = new Map<string, boolean>(), workerTokens = new Map<string, readonly unknown[]>();
       if (host.inspectModelCatalog) {
         try {
           for (const channel of (await host.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options)).channels) {
@@ -96,6 +107,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
               workers.set(`${channel.channelId}@${channel.providerVersion}/${entry.model.id}@${entry.model.version}`, channel.activation?.state === 'active' && entry.activation?.state === 'active');
               const name = (entry.model as { displayName?: string }).displayName;
               if (name) display.set(`${channel.channelId}@${channel.providerVersion}/${entry.model.id}@${entry.model.version}`, name);
+              const order = (entry.model as { priority?: number }).priority;
+              if (order !== undefined) priority.set(`${channel.channelId}@${channel.providerVersion}/${entry.model.id}@${entry.model.version}`, order);
             }
           }
         } catch { /* names only; the reference stays the text */ }
@@ -104,7 +117,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       // R9b (owner D3, 2026-11-06): the models recommended for the Brain role (tier or a current exception) and the one chosen; every model may be
       // chosen, the /do gate decides (an installation's written model_roles policy binds there).
       const brainRows = await host.inspectBrainModels?.(root, scopeId, options).catch(() => null), brainNow = await brainModel(root, options);
-      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal), axes = await billingAxes(root, options);
+      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal), axes = await billingAxes(root, options), tiers = await modelTiers(root, options);
+      const natives = new Map<string, string>(declared.catalog.providers.flatMap(provider => provider.models.map(model => [`${provider.id}@${provider.version}/${model.id}@${model.version}`, model.nativeId] as const)));
       const choices = await Promise.all(declared.catalog.providers.flatMap(provider => provider.models.map(async (model): Promise<ModelPanelChoice> => {
         const reference: ModelReference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
@@ -148,7 +162,9 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       }
       const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
       const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
-      choices.sort((left, right) => Number(left.blocked !== null) - Number(right.blocked !== null));
+      const exactOf = (choice: ModelPanelChoice) => `${choice.reference.providerId}@${choice.reference.providerVersion}/${choice.reference.modelId}@${choice.reference.modelVersion}`;
+      choices.splice(0, choices.length, ...orderModelChoices(choices, choice => ({ priority: priority.get(exactOf(choice)) ?? null,
+        tier: tiers.find(row => row.channelId === choice.reference.providerId && row.modelId === natives.get(exactOf(choice)))?.tier ?? null })));
       // R9b: with no Brain model chosen, the recommended models that can run now are suggested (never chosen for the person).
       const planners = brainNow ? [] : choices.filter(choice => choice.blocked === null && choice.fixes?.some(fix => fix.id === 'brain-project') && recommended.has(`${choice.reference.providerId}@${choice.reference.providerVersion}/${choice.reference.modelId}@${choice.reference.modelVersion}`));
       if (planners.length) notes.push(t('tui.model.brain.suggest', { models: planners.map(choice => choice.label).join(', ') }, locale));

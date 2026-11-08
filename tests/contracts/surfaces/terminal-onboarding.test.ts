@@ -135,13 +135,16 @@ it('R13/R18: the image card follows an answered work choice, the step total is k
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, next) { frame += String(chunk); next(); } }), { isTTY: true, columns: 140, rows: 40 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   // R8f: that choice also confirms the worker-ready writes: the Git setting is applied with no second "confirm readiness" card in a row.
-  const offered = { ...before, deferred: ['onboarding:first-task:done'], connections: [{ id: 'claude-subscription', provider: 'claude' }] }, applied: string[] = [];
+  const offered = { ...before, deferred: ['onboarding:first-task:done'], connections: [{ id: 'claude-subscription', provider: 'claude' }, { id: 'claude-subscription-sonnet', provider: 'claude' }, { id: 'codex-subscription', provider: 'codex' }] }, applied: string[] = [];
   const readyPlan = () => [stage('work:kind', 'done'), stage('execution:worker', 'done'), applied.length ? stage('execution:worker-settings', 'done')
     : { ...stage('execution:worker-settings', 'ready'), operation: { id: 'config.set', version: 1, input: {} } }, stage('work:pool', 'done')];
   const pick = { assertPerson: async () => {}, defer: async () => {}, apply: async (row: SetupStage) => { applied.push(row.id); return { status: 'applied' }; },
     observe: async (values: Readonly<Record<string, unknown>>) => { answers.push(values['work:kind']); return values['work:kind'] ? { ...offered, plan: { ...offered.plan, stages: readyPlan() } } : offered; } } as unknown as OnboardingPort;
   const run = (await loadOnboardingScreens()).runOnboardingSession(pick, { locale: 'en' } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
-  try { await waitForCard(() => frame, 'Use my claude subscription'); expect(frame).not.toContain('Use second for coding work'); stdin.write('\r'); expect(await run).toBeNull(); }
+  // F2-13: one row per subscription CLI (two Claude model profiles are one row), so each row is distinguishable; the first profile answers it.
+  // eslint-disable-next-line no-control-regex
+  const shown = () => frame.replace(/\u001b\[[0-9;?]*[a-zA-Z]/gu, '');
+  try { await waitForCard(() => frame, 'Use my codex subscription'); expect(shown()).not.toMatch(/Use my claude subscription[^\n]*\n[^\n]*Use my claude subscription/u); expect(frame).not.toContain('Use second for coding work'); stdin.write('\r'); expect(await run).toBeNull(); }
   finally { stdin.destroy(); stdout.destroy(); }
   expect(answers).toContainEqual({ connection: 'claude-subscription' }); expect(applied).toEqual(['execution:worker-settings']); expect(frame).not.toContain('Confirm worker readiness');
 });

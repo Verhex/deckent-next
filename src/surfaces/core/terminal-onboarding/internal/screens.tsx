@@ -69,7 +69,8 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     let choice: QuestionAnswer;
     if (step.kind === 'work') {
       const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id)), admitted = model.snapshot.admittedProviders ?? [];
-      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = model.snapshot.connections ?? [];
+      // F2-13: one row per subscription CLI (its first connected profile): the system assigns the worker model per WorkClass, so per-model rows only repeated the CLI.
+      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = (model.snapshot.connections ?? []).filter((row, index, all) => all.findIndex(other => other.provider === row.provider) === index);
       // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
       const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => ({ id: `connection:${row.id}`, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale) })) }
         : { title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale), body, choices: provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : [] };

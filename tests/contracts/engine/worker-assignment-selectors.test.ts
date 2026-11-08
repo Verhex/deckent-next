@@ -66,7 +66,7 @@ it('PROOF: a new model added only as data (catalog row + role row + activation) 
   const execution = await assign(reader, policy), task = execution.tasks[0]!;
   expect(readWorkerModelPin(task.profile.parameters)!.pin).toEqual({ channelId: CHANNEL, modelId: id, auxiliaryModelIds: [] });
   const expansionDigest = createHash('sha256').update(JSON.stringify([{ role: 'worker', minTier: 'frontier' }, policy.revision, [[CHANNEL, id]]]), 'utf8').digest('hex');
-  expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'standard', version: 2 },
+  expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'standard', version: 2 },
     candidateIndex: 3, channelId: CHANNEL, modelId: id, catalogRevision: packaged.revision, modelRevision: 7, activationRevision: 5,
     effort: { level: null, source: 'cli-default' },
     selector: { roleRevision: JSON.stringify(['model-roles-2026-10-31', 'acme-roles-1']), expanded: 1, position: 0, expansionDigest },

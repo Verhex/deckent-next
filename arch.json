@@ -1498,6 +1498,7 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/project-instructions",
         "src/engine/core/model-invocation",
+        "src/engine/core/model-activation",
         "src/surfaces/core/run-planning",
         "src/domain/core/run",
         "src/domain/core/attempt",
@@ -5199,7 +5200,7 @@
       "composition": 13518
     },
     "totalSrcLines": 200000,
-    "testCases": 8212,
+    "testCases": 8214,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

@@ -73,6 +73,8 @@
   "error.AGENT_STANDING_REFUSED": "That agent standing change is not allowed from its current standing or by this principal. Nothing was changed.",
   "error.AGENT_STANDING_CONFLICT": "The agent's standing changed since it was shown. Nothing was changed; look at it again and decide on the current standing.",
   "agent.card.selected": "  agent: {agentId} (revision {revision}, {standing})",
+  "agent.card.skills": "    skills: {skills}",
+  "agent.card.skill": "{skillId} (revision {revision})",
   "agent.standing.active": "promoted",
   "agent.standing.candidate": "candidate",
   "agents.inspect.standings": "Standing per work class: {standings}",

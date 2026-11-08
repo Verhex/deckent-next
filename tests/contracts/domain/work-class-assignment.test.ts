@@ -11,7 +11,7 @@ const overlay = (extra: object) => workClassRegistrySchema.parse({ schemaVersion
   bindings: [], evidenceExtensions: [], candidatePolicies: [], ...extra });
 
 it('the Core seed is registry v5: every class names a declared list of exact catalog models in owner order, ending in one role selector', async () => {
-  expect(CORE_WORK_CLASSES.schemaVersion).toBe(5); expect(CORE_WORK_CLASSES.revision).toBe('atama-m3-2026-10-23');
+  expect(CORE_WORK_CLASSES.schemaVersion).toBe(5); expect(CORE_WORK_CLASSES.revision).toBe('work-classes-2026-11-08');
   const policy = mergeWorkClassRegistries(CORE_WORK_CLASSES, []);
   const lists = Object.fromEntries(policy.classes.map(row => [row.id, resolveWorkClassCandidates(policy, row)?.id]));
   expect(lists).toEqual({ small: 'light', test: 'light', feature: 'standard', design: 'deep', architecture: 'deep', 'security-critical': 'deep' });
