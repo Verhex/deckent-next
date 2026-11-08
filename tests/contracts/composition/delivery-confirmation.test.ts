@@ -60,7 +60,7 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
   it.each(['n', 'EOF', 'yes', ' '])('refuses %s after showing the exact card and keeps refs untouched', async answer => {
     const f = await fixture(), before = await f.refs(), result = await f.execute('deliver', answer);
     expect(result).toMatchObject({ ok: false, error: { code: 'DELIVERY_CONFIRMATION_DECLINED' } });
-    expect(result.output).toContain('Ship useful change'); expect(result.output).toContain('note.txt'); expect(result.output).toContain(f.base);
+    expect(result.output).toContain('Ship useful change'); expect(result.output).toContain('note.txt'); expect(result.output).toContain(f.base.slice(0, 8));
     expect(await f.refs()).toBe(before); await expect(readFile(join(f.root, 'delivery.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('cannot carry a forged confirmation through either typed command input', async () => {

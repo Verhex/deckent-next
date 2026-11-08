@@ -346,7 +346,7 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
         : lang === 'en' ? `Reasoning effort: ultra (${choice === 'explicit' ? 'explicit' : 'policy default'}` : `Muhakeme eforu: ultra (${choice === 'explicit' ? 'açık istek' : 'politika varsayılanı'}`;
       expect(output).toContain(expected); expect(detail).toContain(expected);
       expect(output).toContain(lang === 'en' ? `Task text: ${TASK}` : `İş metni: ${TASK}`);
-      expect(output).toContain(lang === 'en' ? 'Requested reasoning effort (application not proven):' : 'İstenen reasoning effort (uygulandığı kanıtlanmadı):');
+      expect(output).toContain(lang === 'en' ? 'Requested reasoning effort (application not proven):' : 'İstenen akıl yürütme düzeyi (uygulandığı kanıtlanmadı):');
     }
   });
 
