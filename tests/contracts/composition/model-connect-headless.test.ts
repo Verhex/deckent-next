@@ -292,13 +292,14 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
     const first = await h.connect('c-1');
     vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
-    expect(first).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered', cli: { configDir: h.configDir, delegate: [] },
+    // Owner 2026-11-08: a first connect without a choice lets the person's AI actor use the login (`system` stays opt-in).
+    expect(first).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered', cli: { configDir: h.configDir, delegate: ['ai'] },
       steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
     expect(await h.spawns()).toEqual(expect.arrayContaining(['version', 'help', 'auth']));
     expect(await h.spawns()).not.toContain('call');
     const profile = (await h.profile())!;
     expect(profile).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', allocation: { maxCalls: null, maxInFlight: 1 }, adapter: { id: 'native-cli-headless', definition: { schemaVersion: 1, executable: h.executable,
-      configDir: h.configDir, ownerUid: process.getuid!(), delegatedUse: null } } });
+      configDir: h.configDir, ownerUid: process.getuid!(), delegatedUse: { consentedBy: me[0], classes: ['ai'] } } } });
     expect(String(profile.adapter.definition['stateDir'])).toContain(join('headless', ''));
     const granted = await person({}, 'c-2');
     console.info('F11 synthetic-person PTY:', JSON.stringify(granted));

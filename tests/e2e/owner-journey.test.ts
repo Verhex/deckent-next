@@ -73,10 +73,10 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     const t = open();
     await walk('onboarding', t, [['Choose a profile to preview', CTRL_O], [800, '\r'], ...card('Confirm to complete'), ...card('Give me these rights'), ...card('rights are given'),
       ...card('No model is connected yet'), ...card('Sign in with Claude · no extra charge ›'), ...card('Sign in with its CLI and connect'), ...card("Deckent's own login directory"),
-      ...card('who besides you may use this login', DOWN.repeat(2)), [800, '\r'], [1500, '\u001b[A\u001b[A'], [800, '\r'], ...card('Let ai use your', 'y'), ...card('Model connected'), ...card('Use my claude subscription'), ...card('Declare work kind coding on claude', 'y'),
-      ...card('Set up worker pool', 'y'), ...card('Project instructions', ESC), [3000, '/exit\r']]);
+      ...card('who besides you may use this login'), ...card('Model connected'), ...card('Use my claude subscription'), ...card('Project instructions', ESC), [3000, '/exit\r']]);
     await t.closed;
-    // NF-2: the onboarding's subscription worker choice writes the first work kind on that connection (no CLI twin needed).
+    // Owner 2026-11-08: the consent card says the chat's AI may use the login by default. NF-2 + R8b: the one subscription choice writes the first kind.
+    expect(t.flat()).toContain('You and the AI in this chat may use this sign-in'); expect(t.flat()).not.toContain('Declare work kind');
     expect(JSON.parse(await readFile(join(project, '.deckent', 'config.json'), 'utf8')).admission?.registry?.kinds?.map((row: { kind: string }) => row.kind), t.text().slice(-3000)).toEqual(['coding']);
   }, 300_000);
   afterAll(async () => {
@@ -194,9 +194,9 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     // Claude is already signed in under this global home: the person connects it here with /provider "Connect (no key: checks the sign-in)", then
     // chats with a Codex model and with a Claude model; both answer without a reconcile or a refusal (F2-15, F2-17).
     await walk('j5-chat', t, [[1500, '/provider'], [1500, '\r'], ['Sign in with Claude ›', ''], [1500, '\r'], ['Connect (no key', ''], [1500, DOWN], [800, '\r'],
-      ['Connected: Sign in with Claude', ''], [1500, '\r'], [1500, ESC], [2000, '/model'], [1500, '\r'], ['codex-cli-subscription ›', ''], [1000, DOWN], [600, '\r'], ['GPT-6-Sol', ''],
+      ['Connected: Sign in with Claude', ''], [1500, '\r'], [1500, ESC], [2000, '/model'], [1500, '\r'], ['codex-cli-subscription ›', ''], [1000, 'codex'], [600, '\r'], ['GPT-6-Sol', ''],
       [1000, 'sol'], [1500, '\r'], ['Use as Brain model (this project)', ''], [800, '\r'], ['make it my default', ''], [800, '\r'], [2500, 'hello codex'], [600, '\r'],
-      ['agent completed', ''], [2000, '/model'], [1500, '\r'], ['codex-cli-subscription ›', ''], [1000, '\r'], ['Claude Sonnet 5.5', ''], [1000, 'sonnet'], [1500, '\r'],
+      ['agent completed', ''], [2000, '/model'], [1500, '\r'], ['codex-cli-subscription ›', ''], [1000, 'claude'], [600, '\r'], ['Claude Sonnet 5.5', ''], [1000, 'sonnet'], [1500, '\r'],
       ['Use as Brain model (this project)', ''], [800, '\r'], ['make it my default', ''], [800, '\r'], [2500, 'hello claude'], [600, '\r'], ['agent completed', ''],
       [1500, '/exit\r']]);
     await t.closed;

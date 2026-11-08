@@ -6,7 +6,7 @@ import { WORKER_IMAGE_ESTIMATED_GB, attestLocalInteractiveTerminal, codingSetupF
 import { affectedToolchainProfiles, WorkerImageSetupApplication, assertAuthorityWitness, type AuthorityWitness, type SetupStage, SETUP_PERMISSIONS_FAMILY, setupProfileRefSchema, hasWorkerKind } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { cliCardGate, doctorVerdict, loadSetupSurface, type CliCardIo, type KernelCommandContext } from '#surfaces/index.js';
-import { applyPolicyTemplateInstallationWithSecretDefault, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallationWithSecretDefault, installConfiguredExecutionPool, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredShellRealm, connectedWorkerClis } from '#composition/core/agent-turn/index.js';
 import { inspectConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
@@ -100,6 +100,13 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
           expect: input['expect'], digest: input['digest'], apply: true }, options, { witness });
         return result(added.status === 'applied' || added.status === 'unchanged' ? 'applied' : 'refused');
       }
+      // R8b "confirms once": the subscription choice is the person's confirmation for its first kind and pool; each governed writer keeps its witness and CAS.
+      if (op === 'work.registry' && typeof input['connection'] === 'string') {
+        const init = await (host as { initializeNativeCodingRegistry: AddCodingProfile }).initializeNativeCodingRegistry(root, { schemaVersion: 1, scopeId, ...input, apply: true,
+          ...(options.expectedConfig?.projectDigest ? { expect: options.expectedConfig.projectDigest } : {}) }, options, { witness });
+        return result(init.status === 'applied' || init.status === 'current' ? 'applied' : 'refused');
+      }
+      if (op === 'work.pool') { const pool = await installConfiguredExecutionPool(root, scopeId, true, options); return pool.status === 'created' || pool.status === 'current' ? result('applied') : result('refused', `POOL_${pool.status.toUpperCase()}`); }
       // Every profile's selection, solo included (SOLO-PROFILE; template data, never authority; the `identity` section is global-layer only,
       // as `config set identity.profile --global`; the next observation reads it back); distribution stays `deckent identity distribute`.
       if (op === 'identity-profile.preview') { await config('identity.profile', input['profile'], 'global'); return result('applied'); }
