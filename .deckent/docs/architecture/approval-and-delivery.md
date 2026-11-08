@@ -1253,13 +1253,23 @@ offers a delivered result for adoption from its own Run's pinned mode, never fro
 A Run that starts in `working-tree` mode (no recorded custody yet and the config derives `working-tree`; never a queue verification Run)
 gets its base from the person's current files, not HEAD: `captureWorkingTreeBase` builds one private bare repository per Run under the
 workspace root (`run-bases/<sha256(scope, run)>`). Only the objects reachable from HEAD are streamed in (`pack-objects --revs` into
-`index-pack`; the person's unreachable objects never travel). Every tracked path that differs from HEAD (`diff-index`) and every untracked
-file outside `.gitignore`/`.git/info/exclude` (`ls-files --others --exclude-standard`; the person's global excludes file is not read) is read
-through `readTreeFile` (descriptor-relative, `O_NOFOLLOW`, owner, one link, regular file) and hashed into that repository only; the
-detached HEAD there is the base commit (HEAD itself on a clean tree). Before any read, a path on the S6 deny list
+`index-pack`; the person's unreachable objects never travel). A6-1 (alpha.64, owner 2026-11-07/08): Git never hashes the person's
+files, so no clean, smudge or process filter driver runs in the service. Every HEAD file (`ls-tree -l`), index entry (`ls-files --stage`;
+gitlinks keep HEAD) and untracked file outside `.gitignore`/`.git/info/exclude` (`ls-files --others --exclude-standard`; the person's
+global excludes file is not read) is opened through `readTreeFile` (descriptor-relative, `O_NOFOLLOW`, owner, one link, regular file); a
+file of its HEAD entry's mode and size is stream-hashed by Deckent (Git's blob id, not charged to the byte budget) and stays HEAD's entry
+when equal; any other file is read and written into that repository only (`hash-object --no-filters --stdin`); the detached HEAD there
+is the base commit (HEAD itself on a clean tree). A filtered path (K-1 "Son commit'teki hâli"; M2 union: its `filter` attribute set in
+HEAD's `.gitattributes`, read by `check-attr --source <head>` inside the private repository, where neither the person's worktree,
+`.git/info/attributes` nor `core.attributesFile` apply, or in the person's own attribute view) is never opened: it keeps its HEAD blob
+(ciphertext, LFS pointer) and is withheld as `filter:<driver>`; a working-tree patch writing one is refused when delivery observes the
+checkout (`PATCH_WORKING_TREE_FILTERED`). A `filter.*` driver the repository's configuration defines but no attribute view names refuses
+the base (`PATCH_WORKING_TREE_FILTER`: its paths would come from an attribute file Deckent's Git does not read, such as the global one),
+and so does a Git below 2.40.0, the first with `check-attr --source` (`PATCH_WORKING_TREE_GIT_VERSION`). A path on the S6 deny list
 (`workerTreeDenied`), under a patch exclusion, under a product-state root (layout root, configuration directory), a nested repository, a
 symlink, hard link, foreign-owned or special file, or one over the snapshot budget (`artifacts.maxBytes`, `patchPreview.maxEntries`) is
-withheld: never read or hashed anywhere; a tracked one keeps its HEAD version, an untracked one is absent. Each withheld path (path and
+withheld: never read or hashed anywhere; a tracked one keeps its HEAD version and is listed even when unchanged, an untracked one is
+absent. Each withheld path (path and
 rule) is audited as `worker-tree-excluded` with `by: working-tree-base` before the launch and reaches the worker as one data line
 `{"kind":"workspace-files-withheld",…}` after its context (workers that take Deckent's prompt context). The person's repository gets no
 object, reference or index write. Concurrent first attempts build in fresh directories and rename into place; the loser uses the winner.

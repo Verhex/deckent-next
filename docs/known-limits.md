@@ -594,11 +594,16 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   of withheld files reach the worker as one note line. A set-aside delivery result keeps its Run's private base through a return window of
   `execution.retention.setAsideDays` (default 14) days; after that, the start-of-service cleanup may remove the base when no other
   pending work still needs it. A result brought back after its base was removed can no longer be delivered
-  (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window. A repository whose Git
-  configuration defines a filter driver (`filter.<name>.*`, for example Git LFS or an unlocked git-crypt) cannot start from its current files: Git would run that
-  driver's command in Deckent's service, so the Run is refused before any file content is read (`PATCH_WORKING_TREE_FILTER`, alpha.63.1).
-  *Workaround:* `deckent config set execution.deliveryMode reference`. The check reads the configuration just before Git does; a
-  driver added in the moment between the two is not caught. alpha.64 builds the base without Git hashing your files, which closes both.
+  (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window. Deckent builds the base without Git
+  hashing your files (alpha.64), so no filter driver (Git LFS, git-crypt) runs in its service. A file your repository keeps
+  through a Git filter (its `filter` attribute set in the last commit's `.gitattributes`, in your current `.gitattributes`,
+  `.git/info/attributes` or `core.attributesFile`) enters the base as it is in the last commit: the LFS pointer or the encrypted
+  text, never its current content. Its name is one of the withheld files (`filter:<driver>`), and a change that writes it is
+  refused at delivery (`PATCH_WORKING_TREE_FILTERED`). A filter attribute set only in your global attributes file
+  (`~/.config/git/attributes`) is not read; a filter driver your repository's Git configuration defines but no attribute file
+  above names refuses the Run (`PATCH_WORKING_TREE_FILTER`). A commit that removes the filter from `.gitattributes` makes the
+  repository keep those files unfiltered, and Deckent follows it. Starting from your current files needs Git 2.40.0 or later
+  (`PATCH_WORKING_TREE_GIT_VERSION`). *Workaround:* `deckent config set execution.deliveryMode reference`.
 - **A cross-device aside is never deleted for you.** When Deckent's state and the project are on different filesystems (for
   example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
   `.deckent-<uuid>.aside`, and the note names it. Deckent never deletes it, so these files accumulate and show as untracked in

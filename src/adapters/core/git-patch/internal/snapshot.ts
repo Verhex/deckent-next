@@ -66,7 +66,7 @@ export async function completeHiddenBase(lease: GitWorkspaceLease, options: GitW
 export type WorkspaceBase = Readonly<{ listing: BaseListing; algorithm: 'sha1' | 'sha256'; keep?: ReadonlySet<string> }>;
 const CHUNK = 65_536;
 /** Streams a file through the patch digest and the Git blob id without retaining it; the scan budget is checked per chunk. */
-async function hashStreaming(handle: FileHandle, size: number, algorithm: 'sha1' | 'sha256', budget: SnapshotBudget) {
+export async function hashStreaming(handle: FileHandle, size: number, algorithm: 'sha1' | 'sha256', budget: SnapshotBudget) {
   const digest = createHash('sha256'), oid = createHash(algorithm).update(`blob ${size}\0`), chunk = Buffer.alloc(Math.min(CHUNK, Math.max(1, size)));
   let offset = 0;
   while (offset < size) {

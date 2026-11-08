@@ -4,9 +4,10 @@ import { open, realpath, lstat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fingerprintGitSource, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { patchFile, patchDigest, workingTreeSource, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
+import { patchFile, patchDigest, workingTreeSource, WorkspacePatchError, PATCH_SCOPE_ERROR_PATHS, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
 import { gitFailure, SnapshotBudget } from './snapshot.js';
 import { readTreeFile } from './working-tree.js';
+import { filteredBasePaths } from './working-tree-base.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 import { assertIntegrationBase } from './integration-base.js';
 const exec = promisify(execFile);
@@ -39,6 +40,9 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
   if (source !== repository || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
     throw new WorkspacePatchError('PATCH_CONFLICT');
   await assertIntegrationBase(git, patch, head, budget);
+  // K-1 (owner 2026-11-08): a filtered path (Git LFS, git-crypt) kept its HEAD blob in the Run's base; a patch writing it is refused, never delivered.
+  const filtered = files ? await filteredBasePaths(options.workspaceRoot, patch.identity) : new Set<string>(), touched = patch.changes.map(change => change.path).filter(path => filtered.has(path));
+  if (touched.length) throw new WorkspacePatchError('PATCH_WORKING_TREE_FILTERED', undefined, { count: touched.length, paths: touched.slice(0, PATCH_SCOPE_ERROR_PATHS).join(', '), omitted: Math.max(0, touched.length - PATCH_SCOPE_ERROR_PATHS) });
   const index = new Map<string, string>();
   for (const entry of files ? [] : (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)) {
     budget.time();
