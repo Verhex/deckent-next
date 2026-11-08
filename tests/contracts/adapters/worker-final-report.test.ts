@@ -133,7 +133,9 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     const printed: string[] = [];
     expect(await cliMain(['task', 'transcript', '--scope', 'test', '--run', 'run', '--task', 'task', '--attempt', sandbox.identity.attemptId, '--generation', '1', '--layout-revision', 'layout'],
       { root: workspace, stdout: { write: (s: string) => { printed.push(s); } }, inspectWorkerTranscript: async () => transcript })).toBe(0);
-    expect(printed.join('')).toContain('native-worker-report');
+    // F2-6: the human transcript says the report in words; its raw JSON record stays behind --json.
+    expect(printed.join('')).not.toContain('native-worker-report');
+    expect(printed.join('')).toContain(expected === 'reported' ? "Worker's claim: Completed [REDACTED]" : 'Final report claim missing / unreadable');
     if (expected === 'reported') {
       expect(printed.join('')).toContain('note.txt');
       const prepared = await artifacts.prepareReadOnlyFile('test', output);

@@ -211,7 +211,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       // SLASH-WINDOWS (SW-2): the policy refusal is shown in the /workers window; Esc closes it and leaves the one system line.
       ['The trusted policy cannot be read', '\u001b'],
       ['◆ Deckent system · The trusted policy', 'hello\r'],
-      ['No model is connected', '/nope\r'],
+      ['No model is chosen', '/nope\r'],
       // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
       ['is not a Deckent command', '\u001b'],
       ['Deckent workline', '/exit\r'],
@@ -229,25 +229,25 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   it('/clear erases the screen and the scrollback in a real terminal (also with NO_COLOR); on TERM=dumb it sends nothing', async () => {
     const f = await project();
     const colour = Object.fromEntries(Object.entries(f.env).filter(([key]) => key !== 'NO_COLOR'));
-    const steps: ReadonlyArray<readonly [string, string]> = [['Deckent workline', 'hello\r'], ['No model is connected', '/clear\r'], ['New conversation started.', '/exit\r']];
+    const steps: ReadonlyArray<readonly [string, string]> = [['Deckent workline', 'hello\r'], ['No model is chosen', '/clear\r'], ['New conversation started.', '/exit\r']];
     const result = await inPty(f.projectRoot, colour, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
     const at = result.output.lastIndexOf('\u001b[3J');
     expect(at, 'ED 3 sent').toBeGreaterThan(-1);
-    expect(at).toBeGreaterThan(result.output.indexOf('No model is connected'));
+    expect(at).toBeGreaterThan(result.output.indexOf('No model is chosen'));
     // TERMINAL-SABIT-DUZEN: the full window empties itself on the alternate screen (no ED 2 needed there); ED 3 still drops the scrollback.
     expect(result.output).toContain('\u001b[?1049h');
     // The replayed terminal, scrollback included: the earlier conversation is gone; the new conversation's one system line is there.
     const screen = terminalScreen(result.output, 120);
-    expect(screen).not.toContain('No model is connected'); expect(screen).not.toMatch(/│ hello/u);
+    expect(screen).not.toContain('No model is chosen'); expect(screen).not.toMatch(/│ hello/u);
     expect(screen).toContain('◆ Deckent system · New conversation started.');
     const noColour = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
     expect(noColour.timeout, noColour.output).toBeUndefined();
-    expect(noColour.output.slice(noColour.output.indexOf('No model is connected'))).toContain('\u001b[3J');
+    expect(noColour.output.slice(noColour.output.indexOf('No model is chosen'))).toContain('\u001b[3J');
     const dumb = await inPty(f.projectRoot, { ...f.env, TERM: 'dumb' }, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
     expect(dumb.timeout, dumb.output).toBeUndefined();
-    expect(dumb.output.slice(Math.max(0, dumb.output.indexOf('No model is connected')))).not.toContain('\u001b[3J');
+    expect(dumb.output.slice(Math.max(0, dumb.output.indexOf('No model is chosen')))).not.toContain('\u001b[3J');
   });
 
   it('arms exit on the first idle Ctrl+C and exits on the second in a real terminal', async () => {
@@ -403,7 +403,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
       child.on('error', reject); child.on('close', code => resolvePromise({ code, stderr, stdout })); child.stdin.end('hello\n');
     });
-    expect(line.code).toBe(0); expect(`${line.stdout}${line.stderr}`).toContain('No model is connected');
+    expect(line.code).toBe(0); expect(`${line.stdout}${line.stderr}`).toContain('No model is chosen');
   });
 });
 

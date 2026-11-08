@@ -315,10 +315,12 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
     expect(await runForegroundStage(failing, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' });
     expect(calls).toHaveLength(2);
   });
-  it('negative: the composed apply port (pipe, --yes, the window itself) refuses every terminal-taking BR1 stage before anything runs', async () => {
+  it('negative: the composed apply port refuses the terminal-taking BR1 stages; the pool (R8b, onboarding confirms once) goes to its governed writer, which refuses here', async () => {
     const root = await temp('apply'), setup = configuredSetup({});
-    for (const [operation, input] of [['work.registry', { scopeId: 'erp-demo' }], ['work.pool', { scopeId: 'erp-demo' }], ['execution.worker-image', { scopeId: 'erp-demo' }]] as const)
+    for (const [operation, input] of [['work.registry', { scopeId: 'erp-demo' }], ['execution.worker-image', { scopeId: 'erp-demo' }]] as const)
       expect(await setup.applySetupStage(root, stage(operation, input), { env: {} })).toMatchObject({ status: 'refused', code: 'TERMINAL_TTY_REQUIRED' });
+    // The window and --yes never send work.pool here (modes.json foreground, not autoEligible); onboarding's apply asserts the person first.
+    expect(await setup.applySetupStage(root, stage('work.pool', { scopeId: 'erp-demo' }), { env: {} })).toMatchObject({ status: 'refused', code: 'HOME_NOT_RESOLVED' });
     expect(await readdir(root)).toEqual([]);
   });
 });
