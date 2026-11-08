@@ -103,9 +103,11 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       if (action === 'provider') { setProviderOpen(true); return; }
       if (action === 'budget') { setBudgetOpen(true); return; }
       // R9b (owner D3): the Brain's own model through the governed writer; one summary line, a held write opens its approval.
-      if (choice && port.setBrain && (action === 'brain-global' || action === 'brain-project')) {
+      const brainWrite = choice && (action === 'brain-global' || action === 'brain-project' ? port.setBrain?.bind(port, choice, action === 'brain-global' ? 'global' : 'project')
+        : action === 'brain-off' || action === 'brain-on' ? port.setBrainOffer?.bind(port, choice, action === 'brain-on') : undefined);
+      if (brainWrite) {
         setPreparing(true);
-        port.setBrain(choice, action === 'brain-global' ? 'global' : 'project').then(outcome => {
+        brainWrite().then(outcome => {
           push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]); onClose();
           if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
         }, error => { onError(error); onClose(); }).finally(() => { if (mounted.current) setPreparing(false); });

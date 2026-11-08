@@ -427,7 +427,7 @@ describe('/model source', () => {
       configApplication: (() => ({
         submit: async (action: string, input: Record<string, unknown>) => { writes.push({ action, ...input }); return { status: 'applied', approvalId: null,
           result: { keyPath: input['keyPath'], layer: input['layer'], beforeDigest: null, afterDigest: 'a'.repeat(64), backupPath: null, overridden: false } }; },
-        explain: async () => ({ apply: 'live' }),
+        explain: async () => ({ apply: 'live' }), inspectValue: async () => ({ value: (JSON.parse(await readFile(join(root, '.deckent/config.json'), 'utf8')) as { brain_planner?: { excluded?: unknown } }).brain_planner?.excluded }),
       })) as never,
     };
     const source = modelPanelSource(root, 'scope', host, options, 'en'), view = await source.inspect(), row = (id: string) => view.choices.find(choice => choice.reference.modelId === id)!;
@@ -446,6 +446,15 @@ describe('/model source', () => {
     // J1: the chosen Brain model is marked on its row (`brain`), not in the detail line the list does not show.
     const brainRow = after.choices.find(choice => choice.reference.modelId === 'chat')!; expect(brainRow.brain).toBe(true); expect(brainRow.detail).not.toContain('plans /do work');
     expect(after.notes.some(note => note.startsWith('No Brain model chosen'))).toBe(false);
+    // Owner 2026-11-06 ("can be Brain", default on): a runnable row offers "Don't offer as Brain"; a switched-off row is not offered as Brain (no
+    // "Use as Brain", no recommendation) and offers "Offer as Brain", written to brain_planner.excluded on the layer that holds it.
+    expect(row('coder').fixes!.map(fix => fix.id)).toContain('brain-off');
+    await writeFile(configPath, JSON.stringify({ ...config, brain_planner: { reference: ref('chat'), excluded: [{ channelId: 'local-openai', modelId: 'native-coder' }] } })); clearConfigCache();
+    const off = (await source.inspect()).choices.find(choice => choice.reference.modelId === 'coder')!;
+    expect(off.fixes!.filter(fix => fix.id.startsWith('brain')).map(fix => fix.id)).toEqual(['brain-on']);
+    expect(off.detail).toContain('switched off as Brain'); expect(off.detail).not.toContain('recommended for planning');
+    expect((await source.setBrainOffer!(off, true)).lines[0]).toBe('native-coder can be chosen as Brain again.');
+    expect(writes.at(-1)).toMatchObject({ action: 'set', keyPath: 'brain_planner.excluded', layer: 'project', value: [] });
     { // F2-14 (owner walk 2026-11-08): /model lists the higher registry tier first, then the catalog's own priority, not the declared (alphabetical) order
     // The tier comes from the tier/role registry overlay; `keyless` is frontier, the rest are not registered. The catalog has no release date.
     const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'tiers-1', roles: [], exceptions: [],
@@ -545,6 +554,11 @@ describe('/model source', () => {
     // Astra D10-M1: without a provider port there is no "Connect a model…" row, so the note names the CLI instead.
     const bare = await modelPanelSource(root, 'scope', empty as never, options, 'en').inspect();
     expect(bare.notes[0]).toContain('deckent models connect'); expect(bare.notes[0]).not.toContain('Connect a model…');
+    expect(bare.title).toBe(t('tui.model.title', { scope: 'scope' }, 'en')); // an own installation keeps its scope
+    // a64 (owner walk): an attached project (generated scope id) titles /model with its folder name; the scope id stays in a note.
+    const scopeId = '0d9e3a52-6b1f-4c7a-9a43-2f5c8e7d1b60', attached = await project({ schema_version: 5, installation: { sharedRegistrationId: '8b2d4f6a-1c3e-4a5b-9d7f-0e1a2b3c4d5e' } });
+    const shown = await modelPanelSource(attached.root, scopeId, empty as never, attached.options, 'en').inspect(), folder = attached.root.split(/[\\/]/u).at(-1)!;
+    expect(shown.title).toBe(t('tui.model.title', { scope: folder }, 'en')); expect(shown.notes[0]).toBe(t('tui.model.scopeNote', { scope: scopeId }, 'en'));
   });
 });
 

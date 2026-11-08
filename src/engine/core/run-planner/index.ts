@@ -2,7 +2,7 @@ import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
   parseModelInvocationCommand, modelRoleConfigSchema, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
   type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
-import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
+import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, brainModelSwitchedOff, boundBrainContext, assertBrainLeavesAssignment,
   BRAIN_CORRECTION_TEMPLATE, prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -93,11 +93,12 @@ export const BRAIN_MODEL_ROLE = 'brain';
  * and digest-checked against the prepared command — must be active in the scope (else the existing inactive-model refusal). Owner 2026-11-06:
  * with the built-in role table alone (or only the person's own `models roles assign` overlay) the Brain role only recommends, and a model outside
  * it plans with `belowRecommended`; any other written `model_roles` overlay binds, and a model it does not admit is one typed BRAIN_TIER_REFUSED naming the
- * model and the reason. Never another model in its place. */
-export async function assertBrainModelRole(sources: RoleModelSources, command: ModelInvocationCommand, nowMs: number): Promise<Readonly<{ belowRecommended: boolean }>> {
+ * model and the reason. Never another model in its place. A model the person switched off as Brain (`brainPlanner.excluded`) is refused first, typed. */
+export async function assertBrainModelRole(sources: RoleModelSources, command: ModelInvocationCommand, nowMs: number, brainPlanner?: unknown): Promise<Readonly<{ belowRecommended: boolean }>> {
   const definition = sources.providerCatalog === undefined ? null : resolveModelBindingDefinition(parseProviderCatalog(sources.providerCatalog), command.reference);
   if (!definition || sha256(encodeModelBindingDefinition(definition)) !== command.expectedBinding.digest) throw ErrorRegistry.createError('MODEL_INVOCATION_BINDING_CONFLICT');
   const target = { channelId: definition.provider.id, modelId: definition.model.nativeId }, ports = roleModelPorts(sources);
+  if (brainModelSwitchedOff(brainPlanner, target)) throw ErrorRegistry.createError('BRAIN_TIER_REFUSED', { params: { ...target, reason: 'switched-off' } });
   const record = await ports.activation(command.scopeId, command.reference);
   const decision = await decideRoleModelInScope(composeModelRolePolicy(sources.modelRoles), BRAIN_MODEL_ROLE, command.scopeId, target, ports, nowMs, record?.state === 'active');
   if (decision.state === 'eligible') return { belowRecommended: false };

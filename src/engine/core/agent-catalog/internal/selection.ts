@@ -54,7 +54,8 @@ async function choose(store: SelectionStore, scopeId: string, workClass: string,
   const seal = taskAgentSealSchema.parse({ schemaVersion: 1, agentId: agent.agentId, revision: agent.revision, workClass, personaDigest: agent.personaDigest,
     skillSetDigest: agent.skillSetDigest, skills: agent.content.skills, standing: standing.standing, standingRevision: standing.standingRevision,
     // For an explicit choice the eligible set is narrowed to that one id; the v1 seal keeps its existing vocabulary.
-    selection: { eligible: pin ? 1 : ordered.length, position: pin ? 0 : ordered.indexOf(pick), reason: standing.standing === 'active' ? 'active-agent' : 'first-candidate' } });
+    selection: { eligible: pin ? 1 : ordered.length, position: pin ? 0 : ordered.indexOf(pick), reason: standing.standing === 'active' ? 'active-agent' : 'first-candidate' },
+    name: agent.content.name });
   return Object.freeze({ seal, parts });
 }
 

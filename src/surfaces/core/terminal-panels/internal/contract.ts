@@ -147,7 +147,7 @@ export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label:
   /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
    * reference, and for a locked row the governed command that would fix it. */
   exact: string; command: string | null; stateToken?: string;
-  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider' | 'brain-global' | 'brain-project'; label: string }>[];
+  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider' | 'brain-global' | 'brain-project' | 'brain-off' | 'brain-on'; label: string }>[];
   /** R2c: the exact scoped profile's billing axis (absent: not declared, read as metered). */
   billing?: 'subscription' | 'local' | 'metered';
   /** The configured default (`terminal.chat.reference`). */
@@ -187,6 +187,8 @@ export interface ModelPanelSource {
   resolveShadow?(choice: ModelPanelChoice, action: 'remove' | 'align'): Promise<ConfigPanelOutcome>;
   /** R9b (owner D3): make this model the Brain's (`brain_planner.reference`) on the user or project layer through the same governed writer. */
   setBrain?(choice: ModelPanelChoice, layer: 'global' | 'project'): Promise<ConfigPanelOutcome>;
+  /** Owner 2026-11-06 ("can be Brain", default on): offer this model as Brain again, or switch it off (`brain_planner.excluded`, governed writer). */
+  setBrainOffer?(choice: ModelPanelChoice, offered: boolean): Promise<ConfigPanelOutcome>;
 }
 /** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). `fresh`: the
  * person chose a new context for the switch (the conversation keeps only their own instructions). */

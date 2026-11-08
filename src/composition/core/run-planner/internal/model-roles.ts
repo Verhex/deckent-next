@@ -12,7 +12,7 @@ async function withSources<T>(context: ScopeContext, run: (sources: RoleModelSou
   finally { reader.close(); }
 }
 /** The Brain gate where the planner takes its model, before any budget read, count or model POST. */
-export const gateConfiguredBrainModel = (context: ScopeContext, command: ModelInvocationCommand) => withSources(context, sources => assertBrainModelRole(sources, command, Date.now()));
+export const gateConfiguredBrainModel = (context: ScopeContext, command: ModelInvocationCommand) => withSources(context, sources => assertBrainModelRole(sources, command, Date.now(), context.config['brain_planner']));
 /** Read port for role consumers (S6R-5 recovery decision, S4B memory evaluator): the models a registered role may use in a scope today, each
  * with its basis and whether the scope has it active. An unregistered role is refused, typed. No CLI, MCP or SDK surface reads it yet. */
 export async function inspectConfiguredRoleModels(root: string, scopeId: string, role: string, options: ConfigLoadOptions = {}) {

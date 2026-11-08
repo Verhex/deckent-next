@@ -38,4 +38,6 @@ export interface ModelCommandContext extends CliBaseContext {
   /** M2 `models roles`: the tier/role read view (catalog models with their row or pending) and the person's one-row write. */
   inspectModelRoles?: ModelRoleInspectionHandler;
   assignModelRole?: ModelRoleAssignHandler;
+  /** Owner 2026-11-06: `models catalog brain` ("can be Brain"), the config surface's governed writer bound by the CLI entry. */
+  brainOffer?: (argv: readonly string[]) => Promise<void>;
 }

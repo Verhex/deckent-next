@@ -1,4 +1,5 @@
 export { configCommand, configSlash, configTtySlash, configShortcut, configWrite, terminalConfigWrite, type ConfigCommandContext, type ConfigApplicationFactory, type ConfigWriteRequest } from './internal/command.js';
+export { setBrainOffer, brainOfferCommand, type BrainOfferTarget } from './internal/brain-offer.js';
 export { configPanelPort, configSchemaChoices, type ConfigPanelFieldView } from './internal/panel.js';
 export type { OperationsBaselineOffer } from './internal/operations-baseline.js';
 export { renderConfigInspection, renderConfigExplanation, configValueWord } from './internal/render.js';

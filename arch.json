@@ -3487,7 +3487,8 @@
         "src/platform/core/redaction",
         "src/platform/core/integrity",
         "src/capabilities/core/evaluation-evidence",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },

@@ -75,6 +75,7 @@
   "agent.card.selected": "  agent: {agentId} (revision {revision}, {standing})",
   "agent.card.skills": "    skills: {skills}",
   "agent.card.skill": "{skillId} (revision {revision})",
+  "agent.card.id": "  agent id: {agentId}",
   "agent.standing.active": "promoted",
   "agent.standing.candidate": "candidate",
   "agents.inspect.standings": "Standing per work class: {standings}",

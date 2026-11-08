@@ -6,7 +6,7 @@ import { planRun } from '../../../src/index.js';
 import { inspectConfiguredRoleModels } from '#composition/core/run-planner/index.js';
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
-import { configCommand } from '#surfaces/core/config/index.js';
+import { brainOfferCommand, configCommand } from '#surfaces/core/config/index.js';
 import { brainProposalCardLines, brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 
@@ -82,6 +82,18 @@ describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner co
     expect(f.posts).toBe(0);
     await set(f.reference.modelId);
     expect(await took('brain-own')).toBe('planned'); expect(f.posts).toBe(1);
+    // Owner 2026-11-06 ("can be Brain", default on): `models catalog brain --off` switches the model off through the same governed writer; it then never
+    // plans (typed, before any count or POST) and --on restores it.
+    const out: string[] = [], toggle = (model: string, ...flags: string[]) => brainOfferCommand(['models', 'catalog', 'brain', '--channel', channelId, '--model', model, ...flags],
+      { root: f.project, env: f.options.env, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal, stdout: { write: (text: string) => out.push(text) } } as never);
+    await expect(toggle(modelId, '--off', '--on')).rejects.toMatchObject({ code: 'CLI_USAGE' });
+    await expect(toggle('not-declared', '--off')).rejects.toMatchObject({ code: 'MODEL_CATALOG_NOT_FOUND' });
+    await toggle(modelId, '--off'); expect(out.join('')).toContain(`${modelId} is no longer offered as Brain`);
+    const error = await planRun(f.project, { ...command, commandId: 'brain-off' }, f.options).catch((value: unknown) => value);
+    expect(error).toMatchObject({ code: 'BRAIN_TIER_REFUSED', params: { channelId, modelId, reason: 'switched-off' } });
+    for (const locale of ['en', 'tr'] as const) expect((error as { localize(locale: string): { message: string } }).localize(locale).message).toContain(`--model ${modelId} --on`);
+    expect(f.posts).toBe(1);
+    await toggle(modelId, '--on'); expect(await took('brain-on')).toBe('planned'); expect(f.posts).toBe(2);
   });
   it('refuses an overlay that changes a Core row without compare-and-set, and a project layer that widens Brain eligibility', async () => {
     const core = roles([{ channelId: 'anthropic-api', modelId: 'claude-sonnet-5-5', version: 2, tier: 'frontier', roles: ['brain'] }]);

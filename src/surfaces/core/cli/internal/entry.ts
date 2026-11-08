@@ -22,7 +22,9 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   workers: lazyFunction(observe, 'workersCommand'), run: runCommand, task: lazyFunction(() => import('#surfaces/core/cli-task/index.js'), 'taskCommand'),
   do: lazyFunction(cliRun, 'doCommand'),
   report: lazyFunction(cliRun, 'reportCommand'),
-  pool: lazyFunction(admin, 'poolCommand'), models: lazyFunction(models, 'modelsCommand'), approval: lazyFunction(approval, 'approvalsCommand'),
+  pool: lazyFunction(admin, 'poolCommand'),
+  // Owner 2026-11-06: `models catalog brain` is a governed config write; the config surface owns it (it already depends on cli-models).
+  models: async (argv, context) => (await models()).modelsCommand(argv, { ...context, brainOffer: async args => (await import('#surfaces/core/config/index.js')).brainOfferCommand(args, context) }), approval: lazyFunction(approval, 'approvalsCommand'),
   // The config surface renders through terminal-render (whose barrel carries Ink): a lazy edge keeps it off every other command's start.
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
   mcp: mcpCommand, secret: lazyFunction(admin, 'secretCommand'), toolchains: toolchainsCommand, doctor: runKernelCommand,
