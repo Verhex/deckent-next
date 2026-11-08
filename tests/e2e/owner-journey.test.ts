@@ -26,6 +26,17 @@ async function walk(name: string, s: PtySession, steps: readonly Step[]) {
   try { for (const [wait, keys] of steps) { if (typeof wait === 'number') await pause(wait); else await s.waitFor(wait, from, within()); from = s.mark(); await s.type(keys); } }
   finally { await dump(name, s); }
 }
+/** Waits until the latest card shows its key hint and the screen has been quiet for 1.2 s, past the onboarding card's input guard
+ * (presentation.json cardInputGuardMs, 500 ms after it draws; its hint is drawn during the guard). A key sent sooner, e.g. as "Applying…" turns
+ * into "rights are given", is dropped (hosted CI 42523203853 J5). Bounded; falls through on a slow screen. */
+async function settled(t: PtySession, mark: number) {
+  const until = Date.now() + within(15_000);
+  for (let last = -1, since = Date.now(); Date.now() < until; await pause(200)) {
+    const shown = t.flat(mark);
+    if (shown.length !== last) { last = shown.length; since = Date.now(); continue; }
+    if (Date.now() - since >= 1_200 && /Ctrl\+Y copy \(card and options\)\s*$/u.test(shown)) return;
+  }
+}
 /** A first open's setup cards as the person: the profile and rights are confirmed, every other step is left for later. Returns the subscription
  * choices the worker-kind card offered (F2-13: one row per subscription, each naming it, so no two rows read the same). */
 async function firstOpen(t: PtySession) {
@@ -33,7 +44,7 @@ async function firstOpen(t: PtySession) {
   for (let step = 0; step < 10; step++) {
     const mark = t.mark();
     if (!await t.waitFor(/Step \d+\/\d+/u, mark, within(15_000)).then(() => true, () => false)) break;
-    await pause(1500);
+    await settled(t, mark);
     const shown = t.flat(mark);
     if (/Use my \w+ subscription/u.test(shown)) rows.push(...[...shown.matchAll(/(?:>|›)?\s*(Use my [^>›]*?subscription[^>›]*?)(?=\s+(?:Use my|Change|Enter)|$)/gu)].map(row => row[1]!.trim()));
     await t.type(/Give me these rights|rights are given|Continue opens this profile|Confirm to complete/u.test(shown.slice(-1500)) ? '\r' : ESC);
