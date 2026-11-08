@@ -190,8 +190,7 @@
         "src/engine/core/resource-observation",
         "src/domain/core/attempt",
         "src/adapters/core/native-cli-registry",
-        "src/domain/core/provider-catalog",
-        "src/platform/core/host"
+        "src/domain/core/provider-catalog"
       ],
       "plan": "ISOLATION"
     },
@@ -2644,7 +2643,8 @@
         "src/adapters/core/process-runner",
         "src/engine/core/runtime",
         "src/platform/core/config-fields",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/adapters/core/docker-supervisor"
       ],
       "plan": "PROVIDERS"
     },
@@ -5192,12 +5192,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42106,
+      "adapters": 42112,
       "surfaces": 45000,
       "composition": 13491
     },
     "totalSrcLines": 200000,
-    "testCases": 8206,
+    "testCases": 8208,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
