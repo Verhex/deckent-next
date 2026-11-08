@@ -1,4 +1,4 @@
-import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { MODEL_TIERS, type ModelReference, type ModelTier } from '#domain/index.js';
@@ -36,7 +36,7 @@ const brainSwitchedOff = (root: string, options: ConfigLoadOptions) => loadConfi
   .then(config => (config['brain_planner'] as { excluded?: readonly Readonly<{ channelId: string; modelId: string }>[] } | undefined)?.excluded ?? [], () => []);
 /** In an attached project (no installation of its own; its scope id is generated) the person reads the folder name; the scope id stays in details. */
 export const attachedScopeLabel = (root: string, scopeId: string, options: ConfigLoadOptions) => loadConfig(root, options)
-  .then(config => (config['installation'] as { sharedRegistrationId?: unknown } | undefined)?.sharedRegistrationId ? basename(root) || scopeId : scopeId, () => scopeId);
+  .then(config => (config['installation'] as { sharedRegistrationId?: unknown } | undefined)?.sharedRegistrationId ? terminalSafeText(basename(root)).trim() || scopeId : scopeId, () => scopeId);
 /** R2c: the scope's invocation profiles' declared billing axes (an undeclared axis stays metered for the budget row). */
 const billingAxes = (root: string, options: ConfigLoadOptions) => loadConfig(root, options).then(config => ((config['provider_invocation_profiles'] as
   { profiles?: readonly Readonly<{ scopeId: string; reference: ModelReference; billingAxis?: unknown }>[] } | undefined)?.profiles ?? []), () => []);

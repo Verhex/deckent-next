@@ -119,7 +119,7 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
       { graph: graph(), execution: { ...execution, tasks: execution.tasks.map(task => ({ ...task, agent: { ...task.agent!, name } })) } } as never,
       { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, 'en');
     const shown = named('Note writer');
-    expect(shown).toContain('agent: Note writer (revision 1, promoted)'); expect(shown.indexOf('agent id: b-second')).toBeGreaterThan(shown.indexOf('Details'));
+    expect(shown).toContain('agent: Note writer (id b-second, revision 1, promoted)');
     expect(named(undefined)).toContain('agent: b-second (revision 1, promoted)');
   });
   it('F2-11 (owner walk 2026-11-08): a Brain answer naming `small` binds the agent defined for `small` with its pinned skill revision, on the card and in the seal; the walk\'s `feature` answer binds none', async () => {
