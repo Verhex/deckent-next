@@ -1,4 +1,4 @@
-import { installationSourceSchema } from '#domain/index.js';
+import { delegationOwner, installationSourceSchema } from '#domain/index.js';
 import { attachmentFailure, type InstallationContextPorts } from '#engine/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import { FileProjectAttachmentStore, captureAttachmentLocation } from './store.js';
@@ -14,7 +14,7 @@ export async function inspectInstallationSourceFiles(config: ResolvedConfig, sco
   if (identity.status !== 'available' || identity.pendingWrite || identity.value.realmSeal || project.status !== 'available') return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
   const source = installationSourceSchema.parse({ projectRoot: config.projectRoot, layoutRoot: layout.root, bootstrapConfigPath: layout.bootstrapConfigPath,
     layoutRevision: layout.revision, installationId: identity.value.installationId, projectId: project.value.projectId,
-    companyId: config.company.id, scopeId, owner: { issuer: actor.issuer, subject: actor.subject }, location });
+    companyId: config.company.id, scopeId, owner: delegationOwner(actor), location }); // a workload reads the source as the person it acts for
   return { source, identity, config };
 }
 export function localInstallationProjectContextPorts(config: ResolvedConfig, options: ConfigLoadOptions, source: InstallationContextPorts['source']): InstallationContextPorts {

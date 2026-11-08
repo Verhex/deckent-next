@@ -4997,6 +4997,7 @@
     "src/engine/core/project-attachment": {
       "dependencies": [
         "src/domain/core/primitives",
+        "src/domain/core/model-invocation",
         "src/domain/core/project-attachment",
         "src/engine/core/bootstrap-identity",
         "src/platform/core/config"
@@ -5005,6 +5006,7 @@
     },
     "src/adapters/core/project-attachment": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/domain/core/project-attachment",
         "src/engine/core/project-attachment",
         "src/adapters/core/installation-files",
