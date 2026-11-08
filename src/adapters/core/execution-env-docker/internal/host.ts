@@ -1,7 +1,7 @@
 import { chmod, lstat, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { isWslHost } from '#platform/index.js';
+import { CHILD_BASE_ENVIRONMENT, inheritedEnvironment, isWslHost } from '#platform/index.js';
 import { findExecutable, runDetectCommand, type DetectEnvironment, type DetectRunner } from '#adapters/core/setup-detect-execution/index.js';
 import { DOCKER_APT, type DockerAptData } from './registry.js';
 import { dockerSource, dockerSourcesFile, type DockerHostFacts, type DockerSource } from './plan.js';
@@ -25,7 +25,8 @@ export async function observeDockerHost(env: DetectEnvironment, desktop: boolean
   const signal = AbortSignal.timeout(data.timeoutsMs.probe), platform = ports.platform(), user = ports.user();
   const run = async (name: string, args: readonly string[]) => {
     const file = await ports.find(name, env, 256, signal);
-    return file ? ports.run(file, args, { env, timeoutMs: data.timeoutsMs.probe, outputBytes: data.outputBytes, signal }) : null;
+    // A6-3 (Astra 3044 R3): the package probes get the tool child base, never the caller's whole environment.
+    return file ? ports.run(file, args, { env: inheritedEnvironment(env, CHILD_BASE_ENVIRONMENT), timeoutMs: data.timeoutsMs.probe, outputBytes: data.outputBytes, signal }) : null;
   };
   let osRelease: Record<string, string> | null = null;
   for (const path of data.osRelease) if (!osRelease) osRelease = parseOsRelease(await ports.read(path));
