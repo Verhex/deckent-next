@@ -35,7 +35,7 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
     otherHint: t('tui.provider.login.otherHint', {}, locale), otherAbsolute: t('tui.provider.login.otherAbsolute', {}, locale), banner: t('tui.provider.login.banner', {}, locale),
     retryKeys: t('tui.provider.login.retryKeys', {}, locale), consentTitle: t('tui.provider.login.consentTitle', {}, locale), consentNow: t('tui.provider.login.consentNow', {}, locale),
     consentConfirm: t('tui.provider.login.consentConfirm', {}, locale), configPolicy: t('tui.provider.login.configPolicy', {}, locale), onlyYou: t('tui.provider.login.onlyYou', {}, locale), youAnd: t('tui.provider.login.youAnd', {}, locale),
-    system: t('tui.provider.login.system', {}, locale), ai: t('tui.provider.login.ai', {}, locale), mcp: t('tui.provider.login.mcp', {}, locale),
+    system: t('tui.provider.login.system', {}, locale), ai: t('tui.provider.login.ai', {}, locale), aiShared: t('tui.provider.login.aiShared', {}, locale), mcp: t('tui.provider.login.mcp', {}, locale),
     mcpBlocked: t('tui.provider.login.mcpBlocked', {}, locale), question: t('tui.provider.login.question', {}, locale), questionKeys: t('tui.provider.login.questionKeys', {}, locale),
     methodTitle: t('headless.agent.k13.login.methodTitle', {}, locale), methodHint: t('headless.agent.k13.login.methodHint', {}, locale) };
   const twin = (kind: string, configDir: string | null) => ['deckent', 'models', 'login', '--connection', kind, ...(configDir ? ['--config-dir', configDir] : [])].map(quoted).join(' ');

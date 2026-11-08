@@ -89,7 +89,7 @@ export interface ProviderSubscriptionPort {
   readonly kinds: readonly string[];
   methods?(kind: string, configDir?: string | null): readonly Readonly<{ id: NativeAgentLoginMethod; label: string; command: string }>[];
   readonly words: Readonly<Record<'action' | 'dirTitle' | 'dirOwned' | 'dirOther' | 'otherTitle' | 'otherHint' | 'otherAbsolute' | 'banner' | 'retryKeys' | 'consentTitle'
-    | 'consentNow' | 'consentConfirm' | 'configPolicy' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>> & Readonly<{ methodTitle?: string; methodHint?: string }>;
+    | 'consentNow' | 'consentConfirm' | 'configPolicy' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'aiShared' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>> & Readonly<{ methodTitle?: string; methodHint?: string }>;
   refusal(kind: string, usable: readonly string[]): Readonly<{ title: string; lines: readonly PanelLine[] }>;
   /** The person check, then what the sign-in will do and its shell twin; the Brain's own dir (null: refused, with its typed reason). */
   prepare(kind: string): Promise<Readonly<{ owned: string; lines: readonly PanelLine[] }> | Readonly<{ owned: null; title: string; lines: readonly PanelLine[] }>>;

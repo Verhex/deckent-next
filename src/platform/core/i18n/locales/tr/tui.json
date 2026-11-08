@@ -911,6 +911,7 @@
   "tui.provider.login.youAnd": "siz ve {classes}",
   "tui.provider.login.system": "Arka plan rolleri (system): kurtarma kararları, bellek değerlendirmesi",
   "tui.provider.login.ai": "Yapay zekâ aktörleri (ai): sizin için çalışan ajanlar",
+  "tui.provider.login.aiShared": "Bu girişi sen ve bu sohbetteki yapay zekâ kullanabilir; bağlı MCP istemcileri de aynı yapay zekâ kimliğini kullanır. İstersen yalnız kendine kısıtla: yapay zekâ aktörlerinin işaretini kaldırıp onayla.",
   "tui.provider.login.mcp": "MCP istemcileri",
   "tui.provider.login.mcpBlocked": "Asla: bir MCP istemcisine abonelik girişiniz verilemez.",
   "tui.provider.login.question": "{classes} {kind} girişinizi kullanabilsin mi?",

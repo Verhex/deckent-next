@@ -12,6 +12,9 @@ export type DelegationPrincipalClass = typeof DELEGATION_PRINCIPAL_CLASSES[numbe
 export const delegatedUseConsentSchema = z.strictObject({ consentedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(), atMs: counterSchema,
   classes: z.array(z.enum(['ai', 'system'])).min(1).max(2).readonly() }).readonly();
 export type DelegatedUseConsent = z.infer<typeof delegatedUseConsentSchema>;
+/** Owner 2026-11-08 ("sen + sohbetteki AI"): a new subscription connection, connected without a consent choice, lets the person's AI actor use it
+ * (R4a: the chat's agent and connected MCP clients share it); `system` stays opt-in and the person may narrow it to only themselves. */
+export const DEFAULT_DELEGATED_CLASSES: readonly ('ai' | 'system')[] = Object.freeze(['ai']);
 /** The consent an invocation profile's adapter definition carries (`null`: none, or not an object). Read only; the shape is checked by the rule. */
 export function delegatedUseOf(definition: unknown): unknown {
   return definition !== null && typeof definition === 'object' && !Array.isArray(definition) ? (definition as { delegatedUse?: unknown }).delegatedUse ?? null : null;

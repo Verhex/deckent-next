@@ -173,4 +173,9 @@ it('the Brain worker-model list applies the same worker role gate as assignment:
   expect(await listed(roles([roleRow(id, 'frontier')]))).toContain(id);
   // A model whose row lacks the worker role is not listed either, though it is catalog-registered and active.
   expect(await listed(roles([roleRow(id, 'frontier', ['brain'])]))).not.toContain(id);
+  // NF-1 (owner R8): a connection-bound template records a bare version; Haiku needs 2.1.293, so the connection's 2.1.284 floor does not admit it
+  // and its proved current CLI 2.1.319 does.
+  const bare = async (cliVersion: string) => (await inspectAdmissibleWorkerModels([{ ...templates[0]!, cliVersion }], 's', catalog(['claude-haiku-5-5']), context().nowMs,
+    { roles: roles(), workerRole: WORK_CLASS_WORKER_ROLE })).map(row => row.modelId);
+  expect(await bare('2.1.284')).toEqual([]); expect(await bare('2.1.319')).toEqual(['claude-haiku-5-5']);
 });

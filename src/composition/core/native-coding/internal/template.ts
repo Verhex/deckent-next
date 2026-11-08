@@ -1,4 +1,4 @@
-import { createNativeCodingTemplate, detectNativeCliVersion, nativeCliAgent, openSqliteInventoryReader, headlessCapacityBinding } from '#adapters/index.js';
+import { createNativeCodingTemplate, detectNativeCliVersion, nativeCliAgent, openSqliteInventoryReader, headlessCapacityBinding, readHeadlessSealedVersion } from '#adapters/index.js';
 import { configureNativeTemplate, initializeNativeRegistry, addNativeProfile, resolveNativeTemplateConnection, type NativeTemplatePorts } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { configPersonWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -11,7 +11,7 @@ function ports(root: string, options: ConfigLoadOptions, dependencies: Dependenc
     connection: (snapshot, id, provider) => resolveNativeTemplateConnection(root, snapshot.effective, id, provider, modelUseReadPorts(options), nativeCliAgent, async (context, definition) => {
       const reader = await openSqliteInventoryReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
       try { return await reader.findCapacityResource(headlessCapacityBinding(definition)); } finally { reader.close(); }
-    }), detect: dependencies.detect ?? detectNativeCliVersion, witness: configPersonWitness(dependencies.witness),
+    }), observed: worker => readHeadlessSealedVersion(worker.definition), detect: dependencies.detect ?? detectNativeCliVersion, witness: configPersonWitness(dependencies.witness),
     ...(dependencies.beforeWrite ? { beforeWrite: dependencies.beforeWrite } : {}) };
 }
 export function configureNativeCodingTemplate(root: string, input: unknown, options: ConfigLoadOptions = {}, dependencies: Omit<Dependencies, 'detect'> = {}) {

@@ -13,7 +13,7 @@ export interface NativeTemplatePorts {
   principal(scopeId: string): Promise<VerifiedPrincipal>;
   writer(guard: (snapshot: ConfigSnapshot) => void): Pick<ConfigApplication, 'set'>;
   template(resources: unknown, invocation: unknown, worker?: NativeCliWorkerBinding): ExecutionProfileDefinition;
-  connection?(snapshot: ConfigSnapshot, id: string, provider: string): Promise<NativeCliWorkerBinding>;
+  connection?(snapshot: ConfigSnapshot, id: string, provider: string): Promise<NativeCliWorkerBinding>; observed?(worker: NativeCliWorkerBinding): Promise<string | null>; // R8: last proved CLI
   detect(provider: string, settings: NonNullable<NonNullable<DeckentConfig['execution']>['docker']>): Promise<string>;
   beforeWrite?: () => void | Promise<void>;
   /** alpha.55.1: the person's terminal witness (`ConfigAuthorityPort.witness`): `admission` is a protected root, so an apply asks it right after
@@ -131,9 +131,9 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     throw error;
   });
   const worker = request.connection ? await ports.connection?.(read, request.connection, request.provider) : undefined; if (request.connection && !worker) refuse('NATIVE_AGENT_RECONNECT_REQUIRED');
-  // Owner 2026-11-05: the worker runs on its connection's current sealed CLI version, so a template without a Docker toolchain pin records the floor.
+  const cliVersion = worker ? await ports.observed?.(worker) ?? worker.definition.minCliVersion : undefined; // Owner R8: the CLI its connection last proved, read once
   const own = (snapshot: ConfigSnapshot) => {
-    try { return ports.template(limits(snapshot, worker, request.image, 'CODING_TEMPLATE_IMAGE_REQUIRED'), { provider: request.provider, cliVersion: worker!.definition.minCliVersion,
+    try { return ports.template(limits(snapshot, worker, request.image, 'CODING_TEMPLATE_IMAGE_REQUIRED'), { provider: request.provider, cliVersion: cliVersion!,
       discovery: { schemaVersion: 1, mode: request.discovery ?? 'disabled' }, permissionMode: 'unattended' }, worker); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } };
   const planFor = (snapshot: ConfigSnapshot) => { try { return proposal(snapshot, request, ports.template, undefined, worker); } catch (error) {
     if (!worker || (error as { code?: unknown }).code !== 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') throw error; return proposal(snapshot, request, ports.template, own(snapshot), worker); } };
@@ -211,8 +211,8 @@ export async function initializeNativeRegistry(input: unknown, ports: NativeTemp
   const worker = request.connection ? await ports.connection?.(read, request.connection, request.provider) : undefined; if (request.connection && !worker) refuse('NATIVE_AGENT_RECONNECT_REQUIRED');
   const current = currentRegistry(read, request, ports.template, worker);
   if (current) return { schemaVersion: 1 as const, ...current, expect: read.digest, status: 'current' as const, write: null };
-  const settings = initialSource(read, request, false, worker); // R8a (owner 2026-11-05): a connected worker records its connection's floor; no detection container
-  const cliVersion = worker ? worker.definition.minCliVersion : await ports.detect(request.provider, { executable: read.effective.execution!.docker!.executable, ...settings! });
+  const settings = initialSource(read, request, false, worker); // R8a: a connected worker records its connection's current CLI version; no detection container
+  const cliVersion = worker ? await ports.observed?.(worker) ?? worker.definition.minCliVersion : await ports.detect(request.provider, { executable: read.effective.execution!.docker!.executable, ...settings! });
   const { profile, kind, registry } = initialRegistry(request, settings, cliVersion, ports.template, worker);
   const admission = { ...read.effective.admission, registry, poolId: request.poolId, executionSlots: request.executionSlots,
     inFlightSlots: request.inFlightSlots, ordering: initialRegistryDefaults.ordering };

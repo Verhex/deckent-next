@@ -911,6 +911,7 @@
   "tui.provider.login.youAnd": "you and {classes}",
   "tui.provider.login.system": "Background roles (system): recovery decisions, memory evaluation",
   "tui.provider.login.ai": "AI actors (ai): agents that work for you",
+  "tui.provider.login.aiShared": "You and the AI in this chat may use this sign-in; connected MCP clients use the same AI identity. To keep it to only you, untick AI actors and confirm.",
   "tui.provider.login.mcp": "MCP clients",
   "tui.provider.login.mcpBlocked": "Never: an MCP client cannot be given your subscription login.",
   "tui.provider.login.question": "Let {classes} use your {kind} login?",

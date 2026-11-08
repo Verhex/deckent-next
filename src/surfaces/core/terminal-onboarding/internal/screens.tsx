@@ -84,7 +84,7 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
         await session.answer('work:kind', { connection: connection.id }); await session.finish(step);
         // R8f: choosing the subscription also confirms the worker-ready writes (one card, not two in a row); a refusal leaves the ready card to show.
         const ready = session.model().steps[0];
-        if (ready?.kind === 'ready' && await settleOnboardingReady(port, ui, session.refresh, async () => false).catch(() => false)) await session.finish(ready);
+        if (ready?.kind === 'ready' && await settleOnboardingReady(port, ui, session.refresh, async () => false, true).catch(() => false)) await session.finish(ready);
         continue;
       }
       const changing = choice.id === 'change';
