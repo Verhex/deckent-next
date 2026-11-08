@@ -66,6 +66,25 @@ describe('/model in the workline carries the host budget and shadow ports', () =
     expect(asked).toEqual(['remove']);
   });
 
+  it('F2-1 (owner 2026-11-08): "Use as Brain model" reaches the host setBrain port through the workline and the window closes with its line', async () => {
+    const asked: Array<[string, string]> = [];
+    const fixes = [{ id: 'brain-global', label: 'USE-AS-BRAIN-DEFAULT' }];
+    const model: ModelPanelSource = { inspect: async () => ({ ...MODELS, choices: MODELS.choices.map(choice => ({ ...choice, fixes })) }),
+      setBrain: async (choice: ModelPanelChoice, layer: 'global' | 'project') => { asked.push([choice.reference.modelId, layer]); return { status: 'applied', lines: ['BRAIN-SAVED'], approvalId: null }; } };
+    const view = open(model);
+    await settle(40);
+    view.stdin.write(`/model${ENTER}`);
+    await until(() => view.stdout.frame.includes('Models · scope'), 'model window');
+    await settle(60);
+    view.stdin.write(ENTER);
+    await until(() => view.stdout.frame.includes('USE-AS-BRAIN-DEFAULT'), 'brain row');
+    await settle(60);
+    view.stdin.write(DOWN); await settle(30); view.stdin.write(ENTER);
+    await until(() => asked.length === 1, 'setBrain called');
+    expect(asked).toEqual([['chat', 'global']]);
+    await until(() => view.stdout.frame.includes('BRAIN-SAVED'), 'outcome line');
+  });
+
   it('a host without the optional ports shows neither row', async () => {
     const view = open({ inspect: async () => MODELS });
     await settle(40);

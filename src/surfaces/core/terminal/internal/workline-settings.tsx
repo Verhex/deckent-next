@@ -54,15 +54,11 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
     const themePort = typeof theme === 'function' ? input.themeControl ? boundTheme.current?.port : undefined : theme;
     return { ...rest, ...(themePort ? { theme: themePort } : {}), ...(permissionMode ? { mode: {
       canOpen: Boolean(permissionMode.open), inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
-    // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
-    ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
+    // Every optional host port passes as it is (`budget`/`resolveShadow` on 2026-10-09, then `setBrain` in alpha.63 went missing when this
+    // was copied field by field: the window offered the row and nothing ran); only the session-bound members are this workline's own.
+    ...(model && pinnable ? { model: { ...model,
       ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice, sessionModel.current?.reasoning?.()) } : {}),
-      ...(model.budget ? { budget: model.budget } : {}), ...(model.cache ? { cache: model.cache } : {}),
-      ...(model.protocol ? { protocol: model.protocol } : {}), ...(model.workspace ? { workspace: model.workspace } : {}),
-      // BeUser re-walk (3t RED): the embedded `/provider` flow (the empty list's "Connect a model…" row, a row's provider fix) and the activation fixes.
-      ...(model.provider ? { provider: model.provider } : {}), ...(model.fix ? { fix: (choice: ModelPanelChoice, action: 'activate' | 'deactivate' | 'reconcile') => model.fix!(choice, action) } : {}),
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
-      ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice, fresh?: boolean) => sessionModel.current?.pin(choice, fresh) } } : {}) };
   }, [panels, permissionMode, pinnable, input.themeControl]);
   const approvalAfter = useRef<string | null>(null), openApprovals = useRef(input.openApprovals); openApprovals.current = input.openApprovals;
