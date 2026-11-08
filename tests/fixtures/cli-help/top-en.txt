@@ -71,7 +71,7 @@ Models:
       binding | activation | activate | deactivate | invoke | invocation |
       purge-content | cancel | spending | reconcile-spending | create-budget |
       revise-budget | audit-spending | connect | login | logout |
-      catalog list|register|activate|deactivate | roles show|set
+      catalog list|register|activate|deactivate|brain | roles show|set
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Approvals:

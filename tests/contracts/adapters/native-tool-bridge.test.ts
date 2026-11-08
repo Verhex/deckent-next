@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeEgressLimits, openNativeEgressGateway } from '#adapters/core/native-connection/index.js';
-import { snapshotKnownSecrets } from '#platform/index.js';
+import { EMPTY_RECORD_STREAM, feedRecordStream, finishRecordStream, snapshotKnownSecrets } from '#platform/index.js';
 import type { NativeAgentToolResult, ToolSessionPort } from '#capabilities/index.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -138,6 +138,16 @@ it('preserves unknown outcomes, validates result identity, and redacts the Decke
   kind = 'throw'; const unknown = await f.send(rpc(4), { headers }); expect(resultEnvelope(unknown).outcome.text).toBe('NATIVE_BRIDGE_RESULT_UNKNOWN');
   expect(unknown.body).not.toContain('private-canary'); await f.send(rpc(4), { headers }); expect(f.submit).toHaveBeenCalledTimes(3);
   expect(await f.bridge.revoke()).toMatchObject({ kind: 'revoked', effects: 'unknown' });
+  // A chat answer ending in an ordinary character is never masked as a turn-token fragment; a real fragment still is.
+  const token = f.bridge.turnToken, known = snapshotKnownSecrets([{ name: f.bridge.tokenEnvName, value: token }]);
+  const finish = (answer: string) => { const fed = feedRecordStream(EMPTY_RECORD_STREAM, answer, known); return fed.text + finishRecordStream(fed.state, known); };
+  // Before the fixed head, an answer ending in the random token's first character showed "complete[REDACTED]" (~1/64).
+  const ordinary = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!?)`';
+  for (const end of ordinary) expect(finish(`agent complete${end}`)).toBe(`agent complete${end}`);
+  for (const fragment of [token.slice(0, 1), token.slice(0, 12), token.slice(0, -1)]) {
+    const shown = finish(`agent completed ${fragment}`);
+    expect(shown).toMatch(/^agent completed \[REDACTED\]$/u); expect(shown).not.toContain(token.slice(0, 2));
+  }
 });
 
 it('uses Codex metadata correlation and refuses absent correlation without invoking K1', async () => {

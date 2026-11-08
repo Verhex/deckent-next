@@ -22,7 +22,7 @@ import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#su
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
 import { mcpPanelPort } from './mcp-panel.js';
 import { secretGrantCardPort } from './secret-grant-card.js';
-import { modelPanelSource } from './model-panel.js';
+import { attachedScopeLabel, modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
 import { workspacePanelPort } from './workspace-panel.js';
@@ -394,7 +394,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // BeUser DR3-02: the configured pool's hold, read with each plan, so the card says before y that an approved Run will wait.
   let poolHold: PlanningPoolHold | null = null;
   const readPoolHold = async () => { poolHold = await context.inspectPoolHold?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null) ?? null; };
-  const target = scopeId;
+  const target = await attachedScopeLabel(root, scopeId, options); // an attached project shows its folder; /status keeps the scope id
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
   const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly notify?: 'bell' | 'off'; readonly viewportRows?: number };

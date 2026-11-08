@@ -206,6 +206,7 @@ export const CLI_CATALOG = [
       action('register', 'models', 'cli.help.action.register', 'cli.help.modelsCatalog', { requires: ['--command-id <id>', '--seed <name> | --file <path>'] }),
       action('activate', 'models', 'cli.help.action.models.catalog.activate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
       action('deactivate', 'models', 'cli.help.action.models.catalog.deactivate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
+      action('brain', 'models', 'cli.help.action.models.catalog.brain', 'cli.help.modelsCatalogBrain', { requires: ['--channel <id>', '--model <exact_id>', '--on | --off'] }),
     ] },
     // M2 typed role admission: which exact catalog model serves which role; `set` is a person's card (never AI, pipe or --json).
     { name: 'roles', group: 'models', summary: 'cli.help.action.models.roles', detail: 'climodels.roles.help', children: [

@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, brainPlanCommandSchema, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { persistedString, persistedInteger, exactModelIdSchema, MODEL_ROLE_LIMITS, brainPlanCommandSchema, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { toInputJsonSchema, ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
@@ -32,7 +32,14 @@ export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.litera
   /** R9b (owner D3, 2026-11-06): the person's own Brain model, an exact catalog reference; a project value wins over the user's. Absent: the Brain
    * tries the chat model. The tier/role gate still decides; nothing ever chooses another model. Additive optional key (schemaVersion stays 1). */
   reference: brainPlanCommandSchema.unwrap().shape.reference, // the plan command's own exact-reference contract
+  /** Owner 2026-11-06 ("can be Brain", default on): catalog models (channel id, exact model id) the person switched off as Brain. They are not
+   * offered as Brain and never plan; nothing else about the model changes. Additive optional key (schemaVersion stays 1); arrays replace per layer. */
+  excluded: z.array(z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema })).max(MODEL_ROLE_LIMITS.models)
+    .refine(rows => new Set(rows.map(row => JSON.stringify([row.channelId, row.modelId]))).size === rows.length).optional(),
 });
+/** Whether the person switched this catalog model off as Brain (`brain_planner.excluded`). */
+export const brainModelSwitchedOff = (config: unknown, target: Readonly<{ channelId: string; modelId: string }>) =>
+  (brainPlannerConfigSchema.parse(config ?? {}).excluded ?? []).some(row => row.channelId === target.channelId && row.modelId === target.modelId);
 /** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
 export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
 export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;

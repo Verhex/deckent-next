@@ -261,6 +261,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'brain_planner.reference.providerVersion': { kind: 'hidden' },
   'brain_planner.reference.modelId': { kind: 'hidden' },
   'brain_planner.reference.modelVersion': { kind: 'hidden' },
+  'brain_planner.excluded': { kind: 'hidden' }, 'brain_planner.excluded.*.channelId': { kind: 'hidden' }, 'brain_planner.excluded.*.modelId': { kind: 'hidden' }, // owner 2026-11-06: /model or `deckent models catalog brain`
   'brain_planner.context.tokenFramingAllowance': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 256, 512, 1024, 2048, 4096] },
   'provider_invocation_profiles.schemaVersion': { kind: 'schema' },
   'provider_invocation_profiles.profiles': { kind: 'document' },

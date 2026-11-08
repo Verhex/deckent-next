@@ -96,7 +96,7 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     const execution = await f.admit(), task = execution.tasks[0]!;
     expect(task.agent).toEqual({ schemaVersion: 1, agentId: 'auditor', revision: 1, workClass: 'feature', personaDigest: personaDigest(a.content.persona), skillSetDigest: a.skillSetDigest,
       skills: [{ skillId: 'tdd', revision: 1, digest: skillContentDigest({ name: 'tdd', text: 'Önce başarısız testi yaz.' }) }], standing: 'candidate', standingRevision: 1,
-      selection: { eligible: 1, position: 0, reason: 'first-candidate' } });
+      selection: { eligible: 1, position: 0, reason: 'first-candidate' }, name: 'auditor' });
     expect(a.skillSetDigest).toBe(skillSetDigest(task.agent!.skills));
     expect(prompt(task.profile)).toMatchObject({ persona: [{ id: 'auditor', version: 1 }], skills: [{ id: 'tdd', version: 1 }] });
     expect(prompt(task.profile).text).toContain(a.content.persona); expect(prompt(task.profile).text).toContain('Önce başarısız testi yaz.');
@@ -113,7 +113,14 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     expect(chosen).toMatchObject({ agentId: 'b-second', standing: 'active', standingRevision: 2, selection: { eligible: 2, position: 1, reason: 'active-agent' } });
     const execution = await f.admit(), card = renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: graph() },
       { graph: graph(), execution } as never, { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, 'tr');
-    expect(card).toContain('ajan: b-second (sürüm 1, terfili)');
+    expect(card).toContain('ajan: b-second (sürüm 1, terfili)'); expect(card).not.toContain('ajan kimliği');
+    // a64 (owner walk): a named agent is shown by its name on the card's head, its id under details; a seal frozen without a name keeps the id.
+    const named = (name?: string) => renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: graph() },
+      { graph: graph(), execution: { ...execution, tasks: execution.tasks.map(task => ({ ...task, agent: { ...task.agent!, name } })) } } as never,
+      { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, 'en');
+    const shown = named('Note writer');
+    expect(shown).toContain('agent: Note writer (id b-second, revision 1, promoted)');
+    expect(named(undefined)).toContain('agent: b-second (revision 1, promoted)');
   });
   it('F2-11 (owner walk 2026-11-08): a Brain answer naming `small` binds the agent defined for `small` with its pinned skill revision, on the card and in the seal; the walk\'s `feature` answer binds none', async () => {
     const f = await fixture(), k = await f.skill('satir-ekle', 'Dosyanın sonuna tek satır ekle.'); await f.agent('not-yazici', [k], ['small']);

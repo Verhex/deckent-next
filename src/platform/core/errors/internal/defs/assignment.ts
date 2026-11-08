@@ -8,6 +8,7 @@ const brainTierRefusal = (p: Parameters<typeof t>[1], l: Parameters<typeof t>[2]
     case 'exception-not-current': return t('error.BRAIN_TIER_REFUSED.exception-not-current', p, l);
     case 'exception-dropped': return t('error.BRAIN_TIER_REFUSED.exception-dropped', p, l);
     case 'role-unknown': return t('error.BRAIN_TIER_REFUSED.role-unknown', p, l);
+    case 'switched-off': return t('error.BRAIN_TIER_REFUSED.switched-off', p, l);
     default: return t('error.BRAIN_TIER_REFUSED', p, l);
   }
 };

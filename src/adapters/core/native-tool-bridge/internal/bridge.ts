@@ -35,7 +35,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   if ([limits.idleMs, limits.maxConnections, limits.replayMaxEntries, limits.replayMaxBytes].some(value => !Number.isSafeInteger(value) || value <= 0)
     || limits.idleMs <= 1 || limits.replayMaxBytes < bridge.frameMaxBytes || !nodeDelaySchema.safeParse(session.approvalTtlMs).success) throw new Error('NATIVE_BRIDGE_LIMITS_INVALID');
   const { Server, WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
-  const turnToken = randomBytes(32).toString('base64url'), tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken);
+  const turnToken = `~${randomBytes(32).toString('base64url')}`, tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken); // '~' head (RFC 6750 b64token): a field ending in a known-secret prefix is masked, and ordinary text practically never ends in '~'
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
   const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Set<string>();
   let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;

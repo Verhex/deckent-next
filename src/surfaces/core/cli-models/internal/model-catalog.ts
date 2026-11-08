@@ -78,6 +78,8 @@ function renderResult(value: ModelCatalogResult, locale: Locale): string {
 
 /** `models catalog list|register|activate|deactivate` (WORKER-CURRENCY-2): the same application contract as SDK `applyModelCatalog` and MCP. */
 export async function modelCatalogCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
+  const action = argv[2];
+  if (action === 'brain') { if (!context.brainOffer) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); return context.brainOffer(argv); }
   const choosing = (argv[2] === 'activate' || argv[2] === 'deactivate') ? scopeOnly(argv) : null;
   if (choosing && modelsInteractive(context)) return catalogByChoice(argv[2] as 'activate' | 'deactivate', choosing, context);
   const parsed = parseFlags(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.language);
