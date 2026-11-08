@@ -44,3 +44,22 @@ export function callerEnvironment<T extends Environment>(env: T): T {
   if (callerNodeEnv.value === undefined) delete own.NODE_ENV; else own.NODE_ENV = callerNodeEnv.value;
   return own as T;
 }
+/** A6-3 (owner 2026-11-08, alpha.63.2): a child process inherits only the names it needs, never the whole environment (arch guard `childEnv`). */
+export function inheritedEnvironment(env: Environment, names: Iterable<string>): Record<string, string> {
+  const own = callerEnvironment(env), result: Record<string, string> = {};
+  for (const name of names) { const value = own[name]; if (typeof value === 'string') result[name] = value; }
+  return result;
+}
+/** What a Deckent tool child (git, a package query, a probe) needs: executable lookup, home and user config, locale, time zone, temp directory and
+ * the caller's own NODE_ENV (restored by `callerEnvironment`, never this entry's production mode). */
+export const CHILD_BASE_ENVIRONMENT: readonly string[] = Object.freeze(['PATH', 'HOME', 'XDG_CONFIG_HOME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'TZ', 'TMPDIR', 'NODE_ENV']);
+/** The runtime service's environment: the child base, the documented call-time inputs, the user and session bus, Node's CA file, the CI markers and
+ * every DECKENT_ name; the launcher adds what its configuration names (agent markers, referenced secret names, tool home overrides). */
+export function serviceEnvironment(env: Environment, extra: Iterable<string>): Record<string, string> {
+  const names = new Set([...CHILD_BASE_ENVIRONMENT, ...ENVIRONMENT_KEYS, 'USER', 'LOGNAME', 'SHELL', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS',
+    'NODE_EXTRA_CA_CERTS', ...AUTOMATION.ciEnvironment, ...extra]);
+  for (const name of Object.keys(env)) if (name.startsWith('DECKENT_')) names.add(name);
+  return inheritedEnvironment(env, names);
+}
+/** Owner 2026-11-08: the person's own CLI process (their editor, the sign-in browser, the init first commit) keeps their environment by design. */
+export const personProcessEnvironment = <T extends Environment>(env: T): T => callerEnvironment(env);

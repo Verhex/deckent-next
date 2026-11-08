@@ -28,7 +28,7 @@ export const spawnForeground: DockerInstallPorts['spawn'] = (file, args, options
   child.once('close', (code, signal) => done({ code, signal }));
 });
 export const installedDockerVersion = (env: DetectEnvironment, data: DockerAptData = DOCKER_APT) => async () => {
-  const listed = await runDetectCommand('dpkg-query', ['-W', '-f', '${Version}', data.packages[0]!], { env, timeoutMs: data.timeoutsMs.probe, outputBytes: data.outputBytes,
+  const listed = await runDetectCommand('dpkg-query', ['-W', '-f', '${Version}', data.packages[0]!], { env: sudoEnvironment(env), timeoutMs: data.timeoutsMs.probe, outputBytes: data.outputBytes,
     signal: AbortSignal.timeout(data.timeoutsMs.probe) });
   return listed.code === 0 && /^[0-9A-Za-z.+:~_-]{1,64}$/.test(listed.stdout.trim()) ? listed.stdout.trim() : null;
 };

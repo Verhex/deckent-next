@@ -66,8 +66,10 @@ export const approvalFactsSchema = z.strictObject({
   z.strictObject({ kind: z.literal('irreversible') })]).nullable(); },
   get onExpiry() { return z.literal('nothing-runs'); }, requiredAssurance: approvalAssuranceSchema,
 }).readonly();
+/** The card summary a v2/v3 request stores; a producer that must fit a structured summary checks it against this schema. */
+export const approvalSummarySchema = persistedString(z.string().min(1).max(2048));
 const requestShape = { approvalId: identitySchema, scopeId: identitySchema, subject: approvalSubjectSchema, requester: approvalActorSchema, actionDigest: digest,
-  policyRevision: identitySchema, summary: persistedString(z.string().min(1).max(2048)), createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional() };
+  policyRevision: identitySchema, summary: approvalSummarySchema, createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional() };
 /** Operation-keyed approval request (v2, C12): agent tool calls and catalog operation commands; task admission keeps v1. */
 const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, ...requestShape }).refine(r => r.expiresAt > r.createdAt).readonly();
 /** Card-facts approval request (v3, B1/APPROVAL-SURFACE): the v2 shape plus the producer's `facts`; v1/v2 records stay readable as written. */

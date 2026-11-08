@@ -189,6 +189,13 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **Kimlik bilgisi ve ev dizini gizleme sınırlıdır.** Ortak kayıt gh, Docker, kube, Codex, Git kimlik bilgileri ve yaygın
   bulut CLI'larını kapsar; gizleme 3 derinlikte ve 20.000 girdide durur. *Etki:* özel konumlar ve olağandışı dosya adları
   maskelenmez. *Yol:* böyle dosyaları sandbox'ın gördüğü ev dizininin dışında tutun ya da ayrıca yalıtın.
+- **Runtime servisi yalnız başlatıldığı ortam adlarını görür (alpha.63.2).** Terminaldeki otomatik başlatma servise temel adları
+  (yol, ev dizini, dil, kullanıcı, oturum veri yolu, Node'un CA dosyası), her `DECKENT_` adını, ajan ve CI işaretlerini, Docker
+  istemcisi ve yerel CLI ev dizini adlarını, ayar alanlarının okuduğu adları, ajan kabuğunun `terminal.shell.environment` adlarını, bu
+  projenin ana kasasına izin verilen adları ve kurulum ayarının `$DECK:` ile andığı sır adlarını geçirir; Deckent'in alt süreçleri
+  yalnız ihtiyaç duydukları adları alır, kişinin kendi editörü, giriş tarayıcısı ve kurulumdaki ilk commit hariç. *Etki:* ortam sır
+  deposunda servis başladıktan sonra eklenen bir `$DECK:` referansı, izin ya da kabuk ortam adı ancak yeniden başlatmadan sonra etkili olur; başka bir devralınmış
+  değişkene dayanan bir araç onu artık görmez. *Yol:* referans ekledikten sonra `deckent runtime restart`; şifreli dosya deposunu kullanın.
 - **Sırrı yalnız kurulum ayarı adlandırabilir.** Proje ayarındaki (`.deckent/config.json`) bir `$DECK:NAME` referansı ayarın
   yüklenmesini `SECRET_REFERENCE_PROJECT_LAYER` ile durdurur; teslim commit'inin yazarı hiçbir ayarda referans olamaz
   (`SECRET_REFERENCE_LEAVES_HOST`). *Etki:* alpha.48'den önce `$DECK:` kullanan bir proje dosyası değiştirilene kadar yüklenmez.

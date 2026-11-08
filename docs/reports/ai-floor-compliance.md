@@ -2360,8 +2360,8 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/agent-turn/internal/contract.ts`: `199e57c9d672f85fd45ebe6a88a516463703c0ee3e7b26a42292b949b1ab0ee4`
 - `src/domain/core/agent-turn/internal/scratch.ts`: `e3823e693b8452d50006bdd95d1b2f65d37530b499802c32739a73dfc787a4f4`
 - `src/domain/core/agent-turn/internal/workspace-files.ts`: `ae38afcf5d38a97f0b4f468c70091ce1e449c2d3e10f11677a2116eb2fcfeb31`
-- `src/domain/core/approval/index.ts`: `28a736f944f2774fab323cb5eff739c87eade4d6f9ce9f241181dfdcdfe817a3`
-- `src/domain/core/approval/internal/contract.ts`: `969a1cac9ef5ea2f6e3c4223425de61ccd5cc45911cbd52eecf4266ff512633f`
+- `src/domain/core/approval/index.ts`: `b017f44bb846ccf6f962cf5ba4238efa5f7354f64bef3126521f32c834cdc4ed`
+- `src/domain/core/approval/internal/contract.ts`: `589aca1b2c0d09283ee1abcc20d335064931c4aefe21ae7249d1987910755527`
 - `src/domain/core/attempt/index.ts`: `a2234fa31bde2aa77747a7ffe545103827e75935bcf3762be241cdd0928873a9`
 - `src/domain/core/attempt/internal/contract.ts`: `b22f69acb87323015b0f971f7137b2ad8b7ace0d2924434fcb6514f28bf765b0`
 - `src/domain/core/attempt/internal/dispatch-loss.ts`: `d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f`

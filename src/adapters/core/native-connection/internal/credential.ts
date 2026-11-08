@@ -41,6 +41,8 @@ export class NativeConnectionError extends Error {
 export interface NativeProviderSpec { readonly homeOverride: string; readonly home: string; readonly file: string; readonly destinations: readonly string[];
   readonly environment: Readonly<Record<string, string>> }
 /** The provider's local credential spec from the adapter catalog; an id the catalog does not list is a typed unavailability, never `any`. */
+/** The environment names that move a native CLI's home (the runtime service keeps them, A6-3). */
+export const nativeHomeOverrideNames = (): readonly string[] => Object.values(catalog.providers as Readonly<Record<string, NativeProviderSpec>>).map(spec => spec.homeOverride).filter(Boolean);
 export function nativeProviderSpec(provider: NativeSubscription['provider']): NativeProviderSpec {
   const specs: Readonly<Record<string, NativeProviderSpec | undefined>> = catalog.providers;
   const spec = specs[provider];

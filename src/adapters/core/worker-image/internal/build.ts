@@ -6,6 +6,7 @@ import { copyFile, lstat, mkdir, open, readFile, realpath } from 'node:fs/promis
 import { stripVTControlCharacters } from 'node:util';
 import { DeckentError, ErrorRegistry, redactSensitive } from '#platform/index.js';
 import { isAbsolute, join } from 'node:path';
+import { dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.js';
 import { runNodeProcess, type ProcessCommand, type ProcessEvidence } from '#adapters/core/process-runner/index.js';
 
 /** Only known builder reasons are promoted from stderr; arbitrary process output never becomes an error code. */
@@ -48,8 +49,7 @@ function assertBuilderExited(evidence: ProcessEvidence, timeout: WorkerImageBuil
   const reason = /^Error: (WORKER_[A-Z_]+)(?::|$)/.exec(errorLine(evidence) ?? '')?.[1];
   throw new WorkerImageBuildError(BUILDER_REASONS.find(code => code === reason) ?? fallback, evidence);
 }
-const allowedEnvironment = (input: Readonly<Record<string, string | undefined>>) => Object.fromEntries(Object.entries(input)
-  .filter((entry): entry is [string, string] => ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0]) && typeof entry[1] === 'string'));
+const allowedEnvironment = dockerClientEnvironment;
 /** Highest daemon-held counter, read-only; malformed answers refuse. */
 export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: string; home?: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
   runner: WorkerImageBuildRunner = runNodeProcess): Promise<string | null> {

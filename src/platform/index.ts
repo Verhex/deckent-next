@@ -21,7 +21,7 @@ export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionM
 export { getConfigKnownSecrets } from '#platform/core/config/index.js';
 export { formatHumanError, buildCrashArtifact, writeCrashArtifact, writeDiagnosticRecord, reportFatal } from '#platform/core/crash-reporting/index.js';
 export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
-export { ENVIRONMENT_KEYS, envValue, automationMarker, adoptProductionReact, callerEnvironment } from '#platform/core/host/index.js';
+export { ENVIRONMENT_KEYS, envValue, automationMarker, adoptProductionReact, callerEnvironment, inheritedEnvironment, CHILD_BASE_ENVIRONMENT, serviceEnvironment, personProcessEnvironment } from '#platform/core/host/index.js';
 export { isMainModule, packageRemovalCommand, handMadeLaunchers } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
@@ -68,7 +68,7 @@ export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
 export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
 export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.js';
-export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS, MEMORY_AUTOMATION_MODES } from '#platform/core/config-fields/index.js';
+export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, MEMORY_AUTOMATION_MODES } from '#platform/core/config-fields/index.js';
 export { mergeConfigFields } from '#platform/core/config-fields/index.js';
 export type { ResourceObservationSettings } from '#platform/core/config-fields/index.js';
 export { RESOURCE_OBSERVATION_SETTINGS } from '#platform/core/config-fields/index.js';

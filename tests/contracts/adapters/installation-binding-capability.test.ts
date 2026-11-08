@@ -47,9 +47,9 @@ it.skipIf(process.platform === 'win32')('uses bounded macOS IOPlatformUUID captu
   expect(calls()).toBe(1);
   const [file, args, { env, ...bounds }] = probe.execute.mock.calls[0]! as [string, string[], { env: NodeJS.ProcessEnv }];
   expect([file, args, bounds]).toEqual(['/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { timeout: 37, maxBuffer: 4096, encoding: 'utf8' }]);
-  // FIX8a: exactly the caller's environment (its NODE_ENV, never the entry's), compared by names and digest only.
-  const caller = callerEnvironment(process.env);
-  expect(Object.keys(env).sort()).toEqual(Object.keys(caller).sort()); expect(envDigest(env)).toBe(envDigest(caller));
+  // A6-3 (alpha.63.2): only PATH of the caller's environment (its value, never another name), compared by names and digest only.
+  const caller = { PATH: callerEnvironment(process.env).PATH };
+  expect(Object.keys(env).sort()).toEqual(['PATH']); expect(envDigest(env)).toBe(envDigest(caller));
   // A platform machine binding keeps the v1 persisted shape (rollback-safe); strength and source are reported on reads.
   expect(JSON.parse(bytes).binding).toEqual({ schemaVersion: 1, machineDigest: createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex'),
     canonicalRoot: await realpath(join(f.root, '.deckent')), device: expect.stringMatching(/^\d+$/u), inode: expect.stringMatching(/^[1-9]\d*$/u) });

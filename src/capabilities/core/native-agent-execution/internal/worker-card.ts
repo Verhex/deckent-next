@@ -1,13 +1,23 @@
 import { z } from 'zod';
 import { sha256 } from '#platform/index.js';
-import { approvalSubject, isAiPrincipal, attemptIdentitySchema, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
+import { ApprovalError, approvalSubject, approvalSummarySchema, isAiPrincipal, attemptIdentitySchema, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
 
 /** Producer-owned metadata inside the sealed request. No arguments, login material or caller-supplied approval authority. */
 const workerCardSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema,
   tool: z.string().min(1), resource: z.string(), resourceDigest: z.string().regex(/^[a-f0-9]{64}$/u), argsDigest: z.string().regex(/^[a-f0-9]{64}$/u), turnId: z.string().min(1) });
 export type WorkerToolCard = z.infer<typeof workerCardSchema>;
-export const workerToolCardSummary = (input: Omit<WorkerToolCard, 'schemaVersion' | 'kind' | 'resourceDigest'> & { resourceDigest?: string }): string =>
-  JSON.stringify(workerCardSchema.parse({ schemaVersion: 1, kind: 'worker-tool-call', ...input, resourceDigest: input.resourceDigest ?? sha256(input.resource) }));
+export const workerToolCardSummary = (input: Omit<WorkerToolCard, 'schemaVersion' | 'kind' | 'resourceDigest'> & { resourceDigest?: string }): string => {
+  const card = workerCardSchema.parse({ schemaVersion: 1, kind: 'worker-tool-call', ...input, resourceDigest: input.resourceDigest ?? sha256(input.resource) });
+  // A6-2 (owner 2026-11-08, alpha.63.2): a summary over the contract bound was cut when stored, and a cut card no longer parsed, so its
+  // interactive-human rule was skipped. The display resource is shortened instead (its digest still binds the full target); a card that cannot fit is refused.
+  const fits = (text: string) => approvalSummarySchema.safeParse(text).success, full = JSON.stringify(card);
+  if (fits(full)) return full;
+  const points = Array.from(card.resource), shown = (count: number) => JSON.stringify({ ...card, resource: points.slice(0, count).join('') + '…' });
+  if (!fits(shown(0))) throw new ApprovalError('APPROVAL_INVALID');
+  let low = 0, high = points.length - 1; // the longest shown prefix that fits
+  while (low < high) { const mid = Math.ceil((low + high) / 2); if (fits(shown(mid))) low = mid; else high = mid - 1; }
+  return shown(low);
+};
 /** Display copies only. Authority consumers must additionally use the verified record and compare its subject below. */
 export function readWorkerToolCard(summary: string): WorkerToolCard | null {
   try { const parsed = workerCardSchema.safeParse(JSON.parse(summary)); return parsed.success ? parsed.data : null; } catch { return null; }

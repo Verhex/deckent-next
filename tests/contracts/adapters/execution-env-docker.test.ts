@@ -107,6 +107,13 @@ describe('read-only host probes', () => {
     expect(runs.map(argv => argv[0])).toEqual(['/usr/bin/dpkg', '/usr/bin/dpkg-query']);
     expect(runs.flat().join(' ')).not.toMatch(/sudo|apt-get|install|usermod/u);
   });
+  it('A6-3 (Astra 3044 R3): the package probes get the tool child base: PATH and locale pass, an unrelated token does not', async () => {
+    const envs: Readonly<Record<string, string | undefined>>[] = [];
+    const { port } = ports({ files: { '/etc/os-release': 'ID=ubuntu\nVERSION_CODENAME=noble\n' } });
+    await observeDockerHost({ PATH: '/usr/bin', LANG: 'C.UTF-8', UNRELATED_TOKEN: 'leak' }, false, { ...port, run: async (file, args, options) => { envs.push(options.env); return port.run(file, args, options); } });
+    expect(envs).toHaveLength(2);
+    for (const env of envs) { expect(env).toMatchObject({ PATH: '/usr/bin', LANG: 'C.UTF-8' }); expect(env).not.toHaveProperty('UNRELATED_TOKEN'); }
+  });
   it('negative (Astra 2672 R1): a host check without a clean answer is never read as a clean host — print, zero privileged spawns', async () => {
     const files = { '/etc/os-release': 'ID=ubuntu\nVERSION_CODENAME=noble\n' };
     const planOf = async (patch: Partial<DockerHostPorts>) => { const observed = await observeDockerHost({ PATH: '/usr/bin' }, false, ports({ files, ...patch }).port);

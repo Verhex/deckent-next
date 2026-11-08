@@ -18,9 +18,12 @@ const temps: string[] = [];
 const temp = async (name: string) => { const path = await mkdtemp(join(tmpdir(), `deckent-is2-${name}-`)); temps.push(path); return path; };
 afterEach(async () => { for (const path of temps.splice(0)) { await chmod(path, 0o700).catch(() => undefined); await rm(path, { recursive: true, force: true }); } });
 
-/** A fake `docker` that logs every argv line and answers per FAKE_MODE: up | desktop | rootless | down. Never touches anything else. */
+/** A fake `docker` that logs every argv line and its environment names and answers per FAKE_MODE: up | desktop | rootless | down. Its settings come
+ * from a file beside it (A6-3: a probe child inherits only the Docker client table, never test variables). Never touches anything else. */
 const FAKE_DOCKER = `#!/bin/sh
+. "\${0%/*}/fake.env"
 echo "$*" >> "$FAKE_LOG"
+/usr/bin/env | /usr/bin/cut -d= -f1 | /usr/bin/tr '\\n' ' ' >> "$FAKE_LOG.env"; echo >> "$FAKE_LOG.env"
 case "$1" in
   version) if [ "$FAKE_MODE" = down ]; then echo '{"Client":{"Version":"29.1.3"},"Server":null}'; echo 'Cannot connect' >&2; exit 1; fi
     echo '{"Client":{"Version":"29.1.3"},"Server":{"Version":"29.1.2"}}';;
@@ -37,10 +40,11 @@ async function fakeBin(names: Readonly<Record<string, string>>) {
   for (const [name, body] of Object.entries(names)) { await writeFile(join(dir, name), body); await chmod(join(dir, name), 0o755); }
   return dir;
 }
-async function dockerHost(mode: string, socket: string, extra: Readonly<Record<string, string>> = {}) {
+async function dockerHost(mode: string, socket: string, extra: Readonly<Record<string, string>> = {}, groups = '') {
   const bin = await fakeBin({ docker: FAKE_DOCKER, ...extra }), log = join(await temp('log'), 'argv.log');
   await writeFile(log, '');
-  return { env: { PATH: bin, FAKE_MODE: mode, FAKE_SOCKET: socket, FAKE_LOG: log, FAKE_GROUPS: '' }, log };
+  await writeFile(join(bin, 'fake.env'), `FAKE_MODE='${mode}'\nFAKE_SOCKET='${socket}'\nFAKE_LOG='${log}'\nFAKE_GROUPS='${groups}'\n`);
+  return { env: { PATH: bin }, log };
 }
 const docker = (facts: ExecutionFacts) => facts.runtimes[0]!;
 const decide = (facts: unknown, family = executionSetupFamily(), answer?: unknown) =>
@@ -86,11 +90,15 @@ describe.skipIf(posix)('I-S2 execution-environment detection', () => {
     await writeFile(socket, ''); await chmod(socket, 0o000);
     const gid = (await stat(socket)).gid;
     for (const [listed, group, code, session] of [[`1 ${gid}`, 'relogin', 'relogin', []], ['1 2', 'not-member', 'noPermission', []], ['', 'member', 'socketMode', [gid]]] as const) {
-      const host = await dockerHost('down', socket, { id: '#!/bin/sh\necho "$FAKE_GROUPS"\n' });
+      const host = await dockerHost('down', socket, { id: '#!/bin/sh\n. "${0%/*}/fake.env"\n/usr/bin/env | /usr/bin/cut -d= -f1 | /usr/bin/tr \'\\n\' \' \' >> "$FAKE_LOG.id"\necho "$FAKE_GROUPS"\n' }, listed);
       const ports: ExecutionDetectPorts = { ...HOST_EXECUTION_PORTS, groups: () => session, user: () => 'someone' };
-      const facts = await detectExecutionFacts({ env: { ...host.env, FAKE_GROUPS: listed }, ports });
+      const facts = await detectExecutionFacts({ env: { ...host.env, UNRELATED_TOKEN: 'leak', DOCKER_CONFIG: '/tmp/fake-docker' }, ports });
       expect(docker(facts)).toMatchObject({ daemon: 'no-permission', group });
       expect(decide(facts)).toMatchObject({ state: 'blocked', reason: { code: `setup.execution.${code}` } });
+      // A6-3 (Astra 3042 R1): the Docker probe gets the Docker client table, the group tool only PATH; an unrelated token reaches neither.
+      const { readFile } = await import('node:fs/promises'), probe = await readFile(`${host.log}.env`, 'utf8');
+      expect(probe).toMatch(/\bDOCKER_CONFIG\b/u); expect(probe).not.toMatch(/\bUNRELATED_TOKEN\b/u);
+      if (session.length === 0) { const id = await readFile(`${host.log}.id`, 'utf8'); expect(id).not.toMatch(/\b(UNRELATED_TOKEN|DOCKER_CONFIG)\b/u); }
     }
     expect(MESSAGE_REGISTRY.catalogs.en['setup.execution.noPermission']).toContain('root-equivalent');
   });

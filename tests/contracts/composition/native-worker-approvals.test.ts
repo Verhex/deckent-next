@@ -252,7 +252,7 @@ it('K24 a truncated worker summary and a genuine capability cannot authorize an 
     const write = adapters.withMcpPrincipal(() => f.port.propose({ id: 'long-path', name: 'write_file', argumentsJson: JSON.stringify({ path, content: 'unseen-change\n'.repeat(2000) }) },
       { kind: 'claude-tool-use', toolUseId: 'long-path', deckentCallId: 'long-path' }, new AbortController().signal));
     const card = await f.pending();
-    expect(card.request.summary.length).toBe(2048); expect((await import('#capabilities/index.js')).readWorkerToolCard(card.request.summary)).toBeNull();
+    expect(card.request.summary.length).toBeLessThanOrEqual(2048); expect((await import('#capabilities/index.js')).readWorkerToolCard(card.request.summary)).toMatchObject({ kind: 'worker-tool-call' }); // A6-2: the card stays readable
     expect(card.request.schemaVersion === 3 && card.request.preview?.cut).toBeTruthy();
     const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, { env: f.env })), ring = createTurnDecisionCapabilities();
     const capability = ring.mint({ scopeId: 'scope', approvalId: card.request.approvalId, principal, peerPid: peer.pid, expiresAt: card.request.expiresAt }, Date.now());
@@ -267,3 +267,14 @@ it('K24 a truncated worker summary and a genuine capability cannot authorize an 
     expect((await write).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
   } finally { await adapters.withMcpPrincipal(() => f.port.cancel()); }
 }, 30_000);
+
+it('A6-2: a long worker target still stores a readable worker card (the interactive-human rule holds); a card that cannot fit is refused', async () => {
+  const { workerToolCardSummary, readWorkerToolCard } = await import('#capabilities/index.js');
+  const { sha256 } = await import('#platform/index.js');
+  const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 'scope', layoutRevision: 'l', generation: 1 }, target = 'src/' + 'ş"'.repeat(3000);
+  const summary = workerToolCardSummary({ identity, turnId: 'worker-turn', tool: 'write_file', resource: target, argsDigest: 'a'.repeat(64) });
+  expect(summary.length).toBeLessThanOrEqual(2048);
+  expect(readWorkerToolCard(summary.slice(0, 2048))).toMatchObject({ kind: 'worker-tool-call', resourceDigest: sha256(target) });
+  expect(() => workerToolCardSummary({ identity, turnId: 'worker-turn', tool: 'x'.repeat(3000), resource: 'a', argsDigest: 'a'.repeat(64) }))
+    .toThrow(expect.objectContaining({ code: 'APPROVAL_INVALID' }));
+});

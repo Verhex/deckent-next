@@ -769,6 +769,9 @@ if (arch.guards) {
   if (guards.hostPaths) wordRatchet('host-path', 'hostPaths', guards.hostPaths,
     guards.hostPaths.scope.flatMap(root => anyFiles(root, p => /\.(md|mdc|txt|json|jsonl|ts|mjs|js|sse|fixture)$/.test(p))),
     (word, count) => `host path "${word}" in a published file (${count} hit(s)); use a neutral root such as <refactor-work>/ or <repo>/`);
+  // A6-3 (owner 2026-11-08): no child process inherits the whole service environment; the listed sites are a shrink-only allowlist.
+  if (guards.childEnv) wordRatchet('child-env', 'childEnv', guards.childEnv, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p)),
+    (word, count) => `"${word}" passes a whole environment (${count} hit(s)); use inheritedEnvironment(env, names), serviceEnvironment or an explicit env`);
   // G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; the five legacy flows are a shrink-only list.
   if (guards.effectFlows) {
     const { owner, pattern, frozen } = guards.effectFlows, flowRe = new RegExp(pattern, 'i'), frozenSet = new Set(frozen);

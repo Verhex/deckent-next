@@ -52,8 +52,8 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
     arch.units[from]!.dependencies = [...dependencies].sort();
   }
   // Shrink-only repository debt (allowlists, caps, frozen lists) describes the real tree, not a fixture: start every fixture from zero.
-  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
-  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
+  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; childEnv: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
+  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.childEnv.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
   delete (guards as { publicExtensions?: unknown }).publicExtensions; // names the real tree's entry, registrations and overlay fixture
   (arch as unknown as { literals: { allowUnits: unknown[] } }).literals.allowUnits = [];
   patch?.(arch);
@@ -483,6 +483,15 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
     expect(over!.out).toContain('2 host-word hits > allowed 1');
     expect(stale!.out).toContain('stale hostWords.allow entry');
     expect(loose!.out).toContain('lower the allowance (shrink-only)');
+  });
+
+  it('A6-3 child-env: passing a whole environment to a child is red, a listed site only shrinks', async () => {
+    const body = (text: string) => unit('engine', 'core', 'a', 'x', text);
+    for (const text of ['export const x = { env: process.env };\n', 'export const x = { ...process.env };\n', 'export const x = callerEnvironment(process.env);\n'])
+      expect((await lint(await fixture(body(text)))).out, text).toContain('[child-env] src/engine/core/a/internal/x.ts:');
+    expect((await lint(await fixture(body("export const x = inheritedEnvironment(process.env, ['PATH']);\n")))).out).not.toContain('[child-env]');
+    const allow: ArchPatch = arch => { arch.guards.childEnv.allow = [{ file: 'src/engine/core/a/internal/x.ts', count: 1, reason: 'fixture' }]; };
+    expect((await lint(await fixture(body('export const x = 1;\n'), true, false, {}, allow))).out).toContain('stale childEnv.allow entry');
   });
 
   it('G-d2: /home/ paths are red in docs, skills, Cursor rules and fixtures, host words there are not, and listed hits only shrink', async () => {

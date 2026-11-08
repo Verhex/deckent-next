@@ -5,7 +5,7 @@ import { lstat, mkdtemp, open, readFile, readlink, realpath, rename, rm } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workerTreeDenyForms } from '#engine/index.js';
-import { ErrorRegistry, redactForRecord, callerEnvironment, sha256 } from '#platform/index.js';
+import { ErrorRegistry, redactForRecord, personProcessEnvironment, sha256 } from '#platform/index.js';
 import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY } from '#adapters/core/workspace-read/index.js';
 import { configSecretHit, isConfigFile, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 import { findExecutable, type DetectEnvironment } from '#adapters/core/setup-detect-execution/index.js';
@@ -42,7 +42,7 @@ const io = (name: string) => (error: NodeJS.ErrnoException): never => refuse('SE
 export async function firstCommitGit(root: string, env: DetectEnvironment, signal?: AbortSignal): Promise<FirstCommitGit> {
   const executable = await findExecutable(gitRegistry.executable, env, detectLimits.pathDirectories, signal ?? AbortSignal.timeout(detectLimits.totalTimeoutMs));
   if (!executable) refuse('SETUP_FIRST_COMMIT_FAILED', { step: 'git', detail: gitRegistry.executable });
-  const base = Object.fromEntries(Object.entries(callerEnvironment(env)).filter((entry): entry is [string, string] => entry[1] !== undefined && !policy.stripEnv.includes(entry[0])));
+  const base = Object.fromEntries(Object.entries(personProcessEnvironment(env)).filter((entry): entry is [string, string] => entry[1] !== undefined && !policy.stripEnv.includes(entry[0])));
   let directory = root;
   const run: FirstCommitGit = (args, options = {}) => new Promise(done => {
     const child = execFile(executable!, [...gitRegistry.prefix, ...args], { cwd: directory, encoding: 'buffer', timeout: options.timeoutMs ?? detectLimits.commandTimeoutMs,
