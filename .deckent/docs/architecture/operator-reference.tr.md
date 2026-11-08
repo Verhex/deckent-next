@@ -64,8 +64,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 
 ## Sağlayıcı bağlantı ayrıntıları
 
-- `/provider` şunları sunar: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, Zhipu GLM Çin, OpenRouter, vLLM, Ollama ya da
-  LM Studio gibi yerel bir sunucu ve fiyatı yayımlanmış OpenAI uyumlu bir uç nokta. Ücretsiz denemenin reddettiği anahtar asla
+- `/provider` şunları sunar: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, Zhipu GLM Çin, OpenRouter, vLLM, Ollama, LM Studio ya da
+  SGLang gibi yerel bir sunucu ve fiyatı yayımlanmış OpenAI uyumlu bir uç nokta. Ücretsiz denemenin reddettiği anahtar asla
   saklanmaz. Ücretsiz denemesi olmayan sağlayıcıda anahtar doğrulanmadan saklanır; olası reddi ilk tur gösterir.
 - **Model bağla:** paketlenmiş kataloğu olan sağlayıcılar o modelleri sunar; kataloğu olmayanlarda önce adresi, sonra sınırlı
   `/v1/models` listesinden birebir model kimliğini seçersiniz. Deckent bu kimliği aynen saklar. Yerel loopback modeller

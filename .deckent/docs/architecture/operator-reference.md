@@ -63,7 +63,7 @@ one section; other sections link to it.
 ## Provider connection details
 
 - `/provider` offers Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, Zhipu GLM China, OpenRouter, a local server such as
-  vLLM, Ollama or LM Studio, and an OpenAI-compatible endpoint with published pricing. A key the free check rejects is never
+  vLLM, Ollama, LM Studio or SGLang, and an OpenAI-compatible endpoint with published pricing. A key the free check rejects is never
   stored. Where a provider has no free check, the key is kept unverified and the first turn shows any rejection.
 - **Connect a model:** providers with a packaged catalog offer those models; for a provider without one, choose an address,
   then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged. Local loopback models are

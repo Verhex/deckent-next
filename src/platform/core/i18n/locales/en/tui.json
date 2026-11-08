@@ -960,6 +960,7 @@
   "tui.provider.endpoint.choice.vllm": "vLLM on this machine",
   "tui.provider.endpoint.choice.ollama": "Ollama on this machine",
   "tui.provider.endpoint.choice.lmStudio": "LM Studio on this machine",
+  "tui.provider.endpoint.choice.sglang": "SGLang on this machine",
   "tui.provider.endpoint.choice.default": "The provider's own address",
   "tui.panel.provider.endpointOther": "A new address…",
   "tui.panel.provider.previewTitle": "Use this address?",

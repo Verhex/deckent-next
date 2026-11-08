@@ -305,6 +305,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
   Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
 
+- **SGLang local server: give Deckent only the ordinary `--api-key` (owner 2026-11-08).** SGLang releases up to and including
+  v0.5.23 return `admin_api_key` and `ssl_keyfile_password` from `/server_info` to anyone holding the ordinary key; the fix
+  (sgl-project/sglang PR #48518, merged 2026-11-07) is not in a released version yet. Never store `--admin-api-key` in Deckent, and
+  keep the server on this machine. This limit is updated with the first release that contains the fix.
 - **ChatGPT has two sign-ins.** The Codex CLI sign-in (alpha.63) runs tool chat, workers and Brain like Claude; the browser sign-in
   (SIWC) stays beta with its note and its worker still needs Docker.
 - **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global

@@ -301,6 +301,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 - **Claude aboneliğiyle sohbet (A62, araçlar alpha.63'ten beri):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. alpha.63'ten beri CLI'ın kendi araçları kapalı kalır; yalnız Deckent'in araçlarıyla, Deckent'in onay, sandbox, politika ve denetim sınırında çalışır. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
 
+- **SGLang yerel sunucu: Deckent'e yalnız sıradan `--api-key` verin (owner 2026-11-08).** SGLang v0.5.23 dahil önceki sürümler
+  `/server_info` yanıtında `admin_api_key` ve `ssl_keyfile_password` değerlerini sıradan anahtara sahip herkese döndürür; düzeltme
+  (sgl-project/sglang PR #48518, 2026-11-07'de birleşti) henüz yayımlanmış bir sürümde yok. `--admin-api-key` Deckent'e asla
+  kaydedilmez ve sunucu bu makinede tutulur. Bu sınır düzeltmeyi içeren ilk sürümle güncellenir.
 - **ChatGPT'nin iki girişi var.** Codex CLI girişi (alpha.63) Claude gibi araçlı sohbeti, işçileri ve Brain'i çalıştırır; tarayıcı girişi
   (SIWC) notuyla betada kalır ve işçisi hâlâ Docker ister.
 - **İlk kurulum ve yeni klasörler (A62):** kişinin tanığıyla tamamlanan sıfır kurulum, global kayıt yoksa kaynak olur. Eski kurulum otomatik

@@ -960,6 +960,7 @@
   "tui.provider.endpoint.choice.vllm": "Bu makinedeki vLLM",
   "tui.provider.endpoint.choice.ollama": "Bu makinedeki Ollama",
   "tui.provider.endpoint.choice.lmStudio": "Bu makinedeki LM Studio",
+  "tui.provider.endpoint.choice.sglang": "Bu makinedeki SGLang",
   "tui.provider.endpoint.choice.default": "Sağlayıcının kendi adresi",
   "tui.panel.provider.endpointOther": "Yeni adres…",
   "tui.panel.provider.previewTitle": "Bu adres kullanılsın mı?",
