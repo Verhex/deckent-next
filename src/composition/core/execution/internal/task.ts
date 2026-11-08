@@ -5,7 +5,7 @@ import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigK
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, type WorkerEventSealing } from '#adapters/index.js';
+  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerCredential, nativeLoginUseAllowed, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -67,6 +67,11 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const waiting = (reason: string) => nativeWorkerWaiting(projectRoot, identity, layout, store, options, reason, !native);
       // Existing dispatch replay above is deliberately outside the new-dispatch retirement/readiness gates.
       if (!native && !relayed && nativeProjectionDispatch(profile.nativeSubscription, options.nativeCliWorker?.projectionRetired === true) === 'retired') return await waiting('NATIVE_PROJECTION_RETIRED');
+      // Owner 2026-11-08: an admitted Docker subscription profile of a CLI without that path parks typed before any login read, workspace or container.
+      if (!native && !relayed && profile.nativeSubscription && nativeDockerCredential(profile.nativeSubscription.provider) === 'prohibited') return await waiting('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE');
+      // Owner 2026-11-08 (lead): a relayed login serves only Runs its owner or the owner's delegated classes admitted; any other Run parks before any login read.
+      const runPrincipal = await store.loadRunEvaluationPrincipal(identity);
+      if (!native && !relayed && profile.nativeSubscription && nativeDockerCredential(profile.nativeSubscription.provider) === 'relayed' && !nativeLoginUseAllowed(runPrincipal)) return await waiting('NATIVE_SUBSCRIPTION_OTHER_PERSON');
       if (native) {
         if (!nativePorts) return await waiting('NATIVE_AGENT_BRIDGE_UNAVAILABLE');
         const refusal = await nativePorts.prepare?.(native.binding); if (refusal) return await waiting(refusal);
@@ -150,7 +155,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
       connection = profile.nativeSubscription && !relayed && !native ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
-        deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}), language }) : undefined; await preparation.enter('dispatch');
+        deadlineMs: profile.options.deadlineMs, principal: runPrincipal, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}), language }) : undefined; await preparation.enter('dispatch');
       relay = relayed ? await openConfiguredSiwcWorker(projectRoot, options, { identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: profile.options.imageId,
         codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext, relayed.finalReport ? language : undefined), finalReport: !!relayed.finalReport },
         deadlineMs: profile.options.deadlineMs, directory: workspaceRoot, policyRevision: document.revision, audit,

@@ -15,13 +15,16 @@ export class LocalOsPrincipalVerifier implements PrincipalVerifier {
   }
 }
 
-/** Identity evidence only; this function assigns no scope membership or permission. */
-export function readLocalOsIdentity() {
+/** The OS account this process runs as, whatever the channel: the person a local login file (owned by this uid) belongs to. */
+export function readLocalOsOwner() {
   const user = userInfo();
   if (!user.username || !Number.isSafeInteger(user.uid) || user.uid < 0) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
-  const issuer = hostname();
-  const owner = { issuer, subject: String(user.uid) }, mcp = localPrincipalChannel() === 'mcp';
+  return Object.freeze({ issuer: hostname(), subject: String(user.uid), username: user.username });
+}
+/** Identity evidence only; this function assigns no scope membership or permission. */
+export function readLocalOsIdentity() {
+  const { username, ...owner } = readLocalOsOwner(), mcp = localPrincipalChannel() === 'mcp';
   return verifiedPrincipalSchema.unwrap().omit({ scopeIds: true }).readonly().parse({
-    id: `${user.username}@${issuer}${mcp ? '/mcp' : ''}`, ...(mcp ? mcpPrincipalRef(owner) : owner), assurance: mcp ? 'workload-verified' : 'os-user',
+    id: `${username}@${owner.issuer}${mcp ? '/mcp' : ''}`, ...(mcp ? mcpPrincipalRef(owner) : owner), assurance: mcp ? 'workload-verified' : 'os-user',
   });
 }

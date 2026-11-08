@@ -11,7 +11,8 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
+import { seedCatalog } from '../support/model-catalog.js';
+const SEED_CHANNEL = 'codex-cli-subscription'; // owner 2026-11-08: no Claude Docker worker; this admission path runs on a Codex Docker template
 
 // S8-1b on the product path: a person defines an agent on their terminal card, then the real admission (configured registry, ledger catalog,
 // policy, integrity key) selects it for a work-input task of its WorkClass, puts its persona and pinned skill into the worker prompt and freezes the
@@ -21,9 +22,9 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const claude = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
+const codex = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const registry = { schemaVersion: 1, revision: 's8-1b', profiles: [{ id: 'coding', version: 1, adapter: { id: 'native-coding-template', version: 1 },
-  parameters: { schemaVersion: 1, docker, invocation: claude } }], kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }],
+  parameters: { schemaVersion: 1, docker, invocation: codex } }], kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }],
   evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] };
 const graph = { schemaVersion: 4, revision: 1, tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], workClass: 'small',
   workInput: { schemaVersion: 2, task: 'Append the line "done" to note.txt.', scope: { paths: ['note.txt'] }, acceptance: 'note.txt ends with "done".' } }],
@@ -46,8 +47,8 @@ async function seeded() {
   ] }), { mode: 0o600 });
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog() });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }); await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', expectedRevision: 0 });
+  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
+  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }); await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6-luna', expectedRevision: 0 });
   const task = (runId: string) => { const db = new DatabaseSync(path, { readOnly: true });
     try { return (JSON.parse(String(db.prepare('SELECT snapshot FROM runs WHERE run_id = ?').get(runId)!['snapshot'])) as { execution: { tasks: Record<string, unknown>[] } }).execution.tasks[0]!; } finally { db.close(); } };
   return { project, options, task };
@@ -65,7 +66,7 @@ it('the configured admission selects the person\'s candidate agent, fills its pe
   expect(task.agent).toMatchObject({ agentId: 'small-fixer', revision: 1, workClass: 'small', standing: 'candidate', skills: [{ skillId: 'tdd', revision: 1, digest: skill.contentDigest }] });
   expect(task.profile.parameters.nativeSubscription.promptDelivery.segments.filter(row => row.kind === 'persona' || row.kind === 'skill').map(row => `${row.kind}:${row.id}`))
     .toEqual(['persona:small-fixer', 'skill:tdd']);
-  expect(task.assignment.modelId).toBe('claude-sonnet-5-5');
+  expect(task.assignment.modelId).toBe('gpt-6-luna');
   // The proposal path records the same selection; a candidate never runs card-less.
   const proposal = { schemaVersion: 1 as const, commandId: 'p', proposalId: 'p', scopeId: 's', runId: 'proposed', proposer: (({ id, issuer, subject }) => ({ id, issuer, subject }))(readLocalOsIdentity()),
     source: { kind: 'human' as const }, budgetCeiling: { currency: 'USD', limitMinorUnits: 0 }, requiredPermissions: [], graph };

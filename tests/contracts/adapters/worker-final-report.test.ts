@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import * as bridge from '#adapters/core/native-connection/index.js';
-import { compileNativeCodingDockerProfile, resolveDockerTaskProfile } from '#adapters/index.js';
+import { compileNativeCodingDockerProfile, resolveDockerTaskProfile, readLocalOsOwner } from '#adapters/index.js';
 
 const report = { schemaVersion: 1, summary: 'Done', changedFiles: ['note.txt'], checks: [{ command: 'npm test', outcome: 'passed' }], openIssues: [] };
 const template = { id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: {
@@ -54,17 +54,17 @@ const principal = { id: 'fixture' } as VerifiedPrincipal;
 
 describe.skipIf(!imageId)('real Docker final report custody', () => {
   it.each([
-    ['claude', 'valid', 'reported'], ['codex', 'valid', 'reported'], ['claude', 'typed', 'reported'], ['codex', 'typed', 'reported'],
-    ['claude', 'invalid', 'invalid'], ['claude', 'oversized', 'oversized'], ['claude', 'missing', 'missing'],
+    // Owner 2026-11-08: Claude has no Docker worker (its report runs on the tokenless worker); Codex and Cursor keep this custody.
+    ['codex', 'valid', 'reported'], ['codex', 'typed', 'reported'], ['codex', 'invalid', 'invalid'], ['codex', 'oversized', 'oversized'], ['codex', 'missing', 'missing'],
     ['cursor', 'valid', 'reported'], ['cursor', 'fenced', 'reported'], ['cursor', 'invalid', 'invalid'], ['cursor', 'oversized', 'oversized'], ['cursor', 'missing', 'missing'],
-    ['claude', 'unsupported', 'unsupported'],
+    ['codex', 'unsupported', 'unsupported'],
   ])('%s %s reaches the sealed transcript as %s', async (provider, variant, expected) => {
     const root = await mkdtemp(join(tmpdir(), 'dn-report-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
     const workspace = join(root, 'work'); await mkdir(workspace);
     const jwt = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
-    // Known-secret redaction masks the values of the credential the worker was given; Cursor's credential is only the access token,
-    // so its report carries that token where the other providers carry their fixture secret.
-    const secret = provider === 'cursor' ? jwt : fixtureSecret, base = { ...valid, summary: `Completed ${secret}` };
+    // Known-secret redaction masks the values of the credential the worker was given; Cursor's credential is only the access token, and a relayed
+    // Codex worker is given none (owner 2026-11-08), so their reports carry a token shape where a projected credential carried its fixture secret.
+    const secret = provider === 'cursor' || provider === 'codex' ? jwt : fixtureSecret, base = { ...valid, summary: `Completed ${secret}` };
     const value = variant === 'invalid' ? { ...base, accepted: true } : variant === 'oversized' ? { ...base, summary: 'x'.repeat(40000) }
       : variant === 'typed' ? { ...base, checks: [{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', ...(provider === 'codex' ? { checkId: null, role: null } : {}) }] } : base;
     const compiled = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template, { schemaVersion: 3, provider, cliVersion: 'fixture-1',
@@ -94,7 +94,7 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     const received: WorkerEvent[] = [];
     const credential = provider === 'claude' ? { claudeAiOauth: { accessToken: fixtureSecret, expiresAt: Date.now() + 3600000 } }
       : provider === 'codex' ? { tokens: { access_token: jwt, id_token: fixtureSecret } } : { accessToken: jwt };
-    const connection = await openNativeConnection({ binding: compiled.nativeSubscription!,
+    const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: compiled.nativeSubscription!,
       directory: root, credential, deadlineMs: 20000, onEvents: events => received.push(...events) });
     cleanups.push(connection.close);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),

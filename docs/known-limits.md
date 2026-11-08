@@ -312,6 +312,17 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
   Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
 
+- **Docker subscription workers (alpha.64, owner 2026-11-08).** Claude has no Docker subscription worker: Deckent no longer reads the local
+  Claude CLI login or serves its token into a container ([Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance)).
+  New Claude Docker templates and prepared profiles are refused, and an existing Claude Docker template refuses at Run admission with
+  `NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE`. *Workaround:* bind the template to the tokenless worker with
+  `deckent coding template --connection <profile>`. A Codex Docker worker no longer receives the login: its CLI sends a placeholder to a loopback
+  shim, and the Attempt's host relay attaches the token and account id for the two Codex routes only, for the admitted model, with no CONNECT
+  tunnel. Other processes in the same container can reach that shim for the Attempt's lifetime (the same two routes, never the token). The
+  relay serves only Runs admitted by the person whose login it is (the account the runtime runs as) or by that person's AI under the default
+  delegated use (`ai`, as `models connect` prints it); another person's Run, or a class without consent (a system workload), is refused at
+  admission and again before dispatch with `NATIVE_SUBSCRIPTION_OTHER_PERSON` and can use an API-key connection instead. Subscription logins are not shared across people; widening this is an owner decision. Proven with codex-cli 0.167.0
+  and a fake origin; a real-account walk is still open.
 - **ChatGPT has two sign-ins.** The Codex CLI sign-in (alpha.63) runs tool chat, workers and Brain like Claude; the browser sign-in
   (SIWC) stays beta with its note and its worker still needs Docker.
 - **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global

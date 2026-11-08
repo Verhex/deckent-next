@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { readlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -6,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
-import { bindSiwcWorker, compileNativeCodingDockerProfile, DockerSupervisor, GitWorkspaceBroker, readLocalOsIdentity, yamaPtraceScope } from '#adapters/index.js';
+import { bindSiwcWorker, compileNativeCodingDockerProfile, DockerSupervisor, GitWorkspaceBroker, readLocalOsIdentity, withMcpPrincipal, yamaPtraceScope } from '#adapters/index.js';
+import { mcpPrincipalRef } from '#domain/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { seedCatalog } from '../support/model-catalog.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -20,23 +22,23 @@ const roots: string[] = [], exec = promisify(execFile);
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
 /** Configured Run whose installation has no `execution` section: every start of its pinned attempt is refused the same way. */
-async function fixture(context: TestContext, grants: readonly string[] = ['execute', 'evaluate', 'read-output']) {
+async function fixture(context: TestContext, grants: readonly string[] = ['execute', 'evaluate', 'read-output'], slots = 1) {
   const root = await mkdtemp(join(tmpdir(), 'launch-refusal-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const options = { env: { HOME: home, USERPROFILE: home } }, registry = fixtureDockerRegistry(['fixture']);
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p',
-    executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry } }));
+    executionSlots: slots, inFlightSlots: slots, ordering: 'input-order', registry } }));
   if (process.platform === 'win32') {
     await expect(openConfiguredAttemptStore(project, options)).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
     await expect(stat(data)).rejects.toMatchObject({ code: 'ENOENT' });
     context.skip('MANAGED_FILE_UNSUPPORTED: configured refusal receipt requires POSIX private ledger');
   }
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;
-  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
-  const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] }, principals = [{ issuer: principal.issuer, subject: principal.subject }];
+  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: slots, inFlightSlots: slots } });
+  const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] }, principals = [{ issuer: principal.issuer, subject: principal.subject }, mcpPrincipalRef(principal)];
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'fixture', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r', 'relay'] } },
+    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r', 'relay', 'legacy', 'claude', 'ai'] } },
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
     { id: 'catalog', effect: 'allow', actions: ['activate'], scopes: 'all', principals, resource: { kind: 'model-activation', ids: 'all' } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
@@ -50,6 +52,16 @@ async function fixture(context: TestContext, grants: readonly string[] = ['execu
   return { project, options, store, workspaces: productResourcePath(opened.layout, 'workspaces') };
 }
 
+const CRITERIA = [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }];
+/** Registers and activates one fixture catalog channel of `cli` with one exact active model (each call its own catalog revision). */
+async function registerFixtureChannel(f: Awaited<ReturnType<typeof fixture>>, cli: string, channelId: string, modelId: string) {
+  const seed = await seedCatalog(), provider = seed.providers[0];
+  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: `catalog-${cli}`, scopeId: 's', action: 'register', catalog: { schemaVersion: 3, revision: `fixture-${cli}`, providers: [{ ...provider, id: channelId,
+    channel: { ...provider.channel, cli, client: cli, protocolFamily: 'fixture', aliases: [], aliasesRefused: [] }, models: [{ ...provider.models[0], id: modelId, nativeId: modelId,
+      channelModelId: modelId, canonicalModelId: modelId, aliases: [], minCliVersion: null, minClientVersion: null, protocols: [{ family: 'fixture', version: 'v1', capabilities: [] }],
+      lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null } }] }] } }, f.options);
+  for (const id of [null, modelId]) await applyModelCatalog(f.project, { schemaVersion: 1, commandId: `activate-${cli}-${id}`, scopeId: 's', action: 'activate', channelId, modelId: id, expectedRevision: 0 }, f.options);
+}
 /** A Run 'relay' with one task on a compiled native Codex profile (catalog channel registered and activated); `bind` may turn it into the relay route. */
 async function nativeCodexRun(f: Awaited<ReturnType<typeof fixture>>, bind: (compiled: ReturnType<typeof compileNativeCodingDockerProfile>, modelId: string) => ReturnType<typeof compileNativeCodingDockerProfile>,
   execution?: object) {
@@ -57,12 +69,7 @@ async function nativeCodexRun(f: Awaited<ReturnType<typeof fixture>>, bind: (com
   const template = { id: 'relay', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...fixtureDockerRegistry(['x']).profiles[0]!.parameters, argv: ['unused'] } };
   const compiled = compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' },
     permissionMode: 'unattended', model: { channelId, modelId, auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } });
-  const seed = await seedCatalog(), provider = seed.providers[0];
-  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'catalog', scopeId: 's', action: 'register', catalog: { schemaVersion: 3, revision: 'siwc-hold', providers: [{ ...provider, id: channelId,
-    channel: { ...provider.channel, cli: 'codex', client: 'codex', protocolFamily: 'fixture', aliases: [], aliasesRefused: [] }, models: [{ ...provider.models[0], id: modelId, nativeId: modelId,
-      channelModelId: modelId, canonicalModelId: modelId, aliases: [], minCliVersion: null, minClientVersion: null, protocols: [{ family: 'fixture', version: 'v1', capabilities: [] }],
-      lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null } }] }] } }, f.options);
-  for (const id of [null, modelId]) await applyModelCatalog(f.project, { schemaVersion: 1, commandId: `activate-${id}`, scopeId: 's', action: 'activate', channelId, modelId: id, expectedRevision: 0 }, f.options);
+  await registerFixtureChannel(f, 'codex', channelId, modelId);
   const config = join(f.project, '.deckent/config.json'), written = JSON.parse(await readFile(config, 'utf8'));
   written.admission.registry = { ...written.admission.registry, profiles: [bind(compiled, modelId)], kinds: [{ kind: 'relay', profile: { id: 'relay', version: 1 } }] };
   if (execution) written.execution = execution;
@@ -109,7 +116,7 @@ it('a transient refusal (policy denial before the ledger is touched) is not reco
 });
 
 it('K12: an explicitly retired projection parks the pinned queue with its reason before workspace, probe or credential dispatch', async context => {
-  const f = await fixture(context);
+  const f = await fixture(context, undefined, 3); // slots for the AI and legacy Claude Runs below
   try {
     const identity = await nativeCodexRun(f, compiled => compiled), before = await f.store.load(identity.scopeId, identity.attemptId);
     const worker = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe'), allocate = vi.spyOn(GitWorkspaceBroker.prototype, 'allocate');
@@ -119,7 +126,53 @@ it('K12: an explicitly retired projection parks the pinned queue with its reason
     expect((await f.store.loadRun(identity.scopeId, identity.runId))!.state).toMatchObject({ kind: 'parked', reason: 'progression-failed', failureCode: 'NATIVE_PROJECTION_RETIRED' });
     expect(await f.store.load(identity.scopeId, identity.attemptId)).toEqual(before);
     expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+    // Owner 2026-11-08 (lead): the relayed Codex login serves its owner and the owner's AI under the delegated-use default (`ai`): the AI workload's
+    // Run is admitted. A Run recorded for another person (the admission row is edited to another uid) parks typed at dispatch before any login read.
+    const relayGraph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 't', kind: 'relay', dependencies: [], acceptanceCriteria: ['exit'] }], criterionDefinitions: CRITERIA };
+    await withMcpPrincipal(() => createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'ai', commandId: 'create-ai', graph: relayGraph }, f.options));
+    const other = (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'ai', commandId: 'reserve-ai', expectedRevision: 0 }, f.options)).reservation.identities[0]!;
+    const ledger = (await openConfiguredAttemptStore(f.project, f.options)), intents = new DatabaseSync(ledger.path); ledger.store.close();
+    try { intents.prepare("UPDATE run_execution_intents SET subject=? WHERE scope_id='s' AND run_id='ai'").run(String(process.getuid!() + 1)); } finally { intents.close(); }
+    expect((await executeConfiguredTask(f.project, other, f.options)).execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_SUBSCRIPTION_OTHER_PERSON' } });
+    expect(await f.store.loadBoundDispatch(other)).toBeNull(); expect(worker).not.toHaveBeenCalled(); expect(allocate).not.toHaveBeenCalled();
+    // Owner 2026-11-08: a Run admitted on a Claude Docker profile before alpha.64 (the ledger row is edited to that shape) parks with the closed-path
+    // reason before any workspace, probe, login read or container.
+    const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 't', kind: 'relay', dependencies: [], acceptanceCriteria: ['exit'] }], criterionDefinitions: CRITERIA };
+    await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'legacy', commandId: 'create-legacy', graph }, f.options);
+    const legacy = (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'legacy', commandId: 'reserve-legacy', expectedRevision: 0 }, f.options)).reservation.identities[0]!;
+    const { path, store } = await openConfiguredAttemptStore(f.project, f.options); store.close();
+    const db = new DatabaseSync(path);
+    try {
+      const snapshot = JSON.parse((db.prepare('SELECT snapshot FROM runs WHERE scope_id=? AND run_id=?').get('s', 'legacy') as { snapshot: string }).snapshot);
+      const frozen = snapshot.execution.tasks[0].profile, pin = frozen.parameters.nativeSubscription.model;
+      snapshot.execution.tasks[0].profile = compileNativeCodingDockerProfile({ id: frozen.id, version: frozen.version, adapter: { id: 'docker', version: 2 }, parameters: { ...fixtureDockerRegistry(['x']).profiles[0]!.parameters, argv: ['unused'] } },
+        { schemaVersion: 4, provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
+          model: { channelId: pin.channelId, modelId: pin.modelId, auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } });
+      db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?').run(JSON.stringify(snapshot), 's', 'legacy');
+    } finally { db.close(); }
+    expect((await executeConfiguredTask(f.project, legacy, f.options)).execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', legacy: true } });
+    expect((await f.store.loadRun('s', 'legacy'))!.state).toMatchObject({ kind: 'parked', failureCode: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' });
+    expect(await f.store.loadBoundDispatch(legacy)).toBeNull();
     expect(worker).not.toHaveBeenCalled(); expect(probe).not.toHaveBeenCalled(); expect(allocate).not.toHaveBeenCalled();
+    // Owner 2026-11-08: an existing Claude Docker template (as written before alpha.64) and a prepared Claude Docker profile refuse at Run admission,
+    // typed with the tokenless next step; nothing is admitted.
+    const claude = { channelId: 'claude-fixture', modelId: 'exact-claude-fixture', auxiliaryModelIds: [] };
+    await registerFixtureChannel(f, 'claude', claude.channelId, claude.modelId);
+    const base = fixtureDockerRegistry(['x']).profiles[0]!, { argv: _argv, ...docker } = base.parameters; void _argv;
+    const invocation = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
+    const prepared = compileNativeCodingDockerProfile({ id: 'prepared', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...base.parameters, argv: ['unused'] } },
+      { schemaVersion: 4, ...invocation, model: claude, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } });
+    const template = { id: 'template', version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation } };
+    const config = join(f.project, '.deckent/config.json'), written = JSON.parse(await readFile(config, 'utf8'));
+    written.admission.registry = { ...written.admission.registry, profiles: [...written.admission.registry.profiles, prepared, template],
+      kinds: [...written.admission.registry.kinds, { kind: 'prepared', profile: { id: 'prepared', version: 1 } }, { kind: 'template', profile: { id: 'template', version: 1 } }] };
+    await writeFile(config, JSON.stringify(written)); clearConfigCache();
+    for (const [commandId, task] of [['p', { id: 't', kind: 'prepared', dependencies: [], acceptanceCriteria: ['exit'] }],
+      ['t', { id: 't', kind: 'template', dependencies: [], acceptanceCriteria: ['exit'], workInput: { schemaVersion: 1, task: 'Edit note.txt', scope: { paths: ['note.txt'] }, acceptance: 'Zero exit', model: claude } }]] as const) {
+      await expect(createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'claude', commandId: `create-${commandId}`, graph: { schemaVersion: 4, revision: 1, tasks: [task], criterionDefinitions: CRITERIA } }, f.options))
+        .rejects.toMatchObject({ code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', message: expect.stringContaining('deckent coding template --connection') });
+      expect(await f.store.loadRun('s', 'claude')).toBeNull();
+    }
   } finally { f.store.close(); }
 });
 
@@ -184,3 +237,4 @@ it.skipIf(process.platform !== 'linux')('NEGATIVE: the service loop parks a Run 
     await f.sinkClosed();
   } finally { f.store.close(); }
 }, 30000);
+

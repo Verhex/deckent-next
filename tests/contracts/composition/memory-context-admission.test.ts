@@ -9,7 +9,8 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { proposeConfiguredMemory, purgeConfiguredMemory, verifyConfiguredMemory } from '#composition/core/memory/index.js';
 import { renderBriefLines } from '#surfaces/core/monitor/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
+import { seedCatalog } from '../support/model-catalog.js';
+const SEED_CHANNEL = 'codex-cli-subscription'; // owner 2026-11-08: no Claude Docker worker; this admission path runs on a Codex Docker template
 
 // S4B-5 through the real admission composition (config, policy file, integrity key, SQLite ledger with the memory journal and audit chain):
 // `memoryAutomation.context.mode` off reads nothing; shadow seals the part it would send and sends nothing; on freezes verified memory into
@@ -19,12 +20,12 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const invocation = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', maxTurns: 40,
+const invocation = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
   composition: { persona: { id: 'implementer', version: 1, text: 'You implement exactly one card.' }, context: [{ id: 'repo-tooling', version: 2, text: 'Use npm scripts.' }] } };
 const registry = { schemaVersion: 1 as const, revision: 's4b5', profiles: [{ id: 'coding', version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation } }],
   kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] };
 const workInput = { schemaVersion: 1, task: 'Fix the invoice approval queue for invoices without a delivery note.', scope: { paths: ['src/invoice/**'] },
-  acceptance: 'Invoices without a delivery note reach the approval queue.', model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] } };
+  acceptance: 'Invoices without a delivery note reach the approval queue.', model: { channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', auxiliaryModelIds: [] } };
 const run = (runId: string) => ({ schemaVersion: 1 as const, commandId: `create-${runId}`, scopeId: 's', runId, graph: { schemaVersion: 3, revision: 1,
   tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], workInput }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } });
@@ -48,9 +49,9 @@ async function seeded(mode: 'off' | 'shadow' | 'on', memoryActions = ['inspect',
   ] }), { mode: 0o600 });
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog() });
+  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
   await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', expectedRevision: 0 });
+  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', expectedRevision: 0 });
   const read = <T>(sql: string, ...args: string[]) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(...args) as T[]; } finally { db.close(); } };
   const delivery = (runId: string) => (JSON.parse(read<{ snapshot: string }>('SELECT snapshot FROM runs WHERE run_id = ?', runId)[0]!.snapshot).execution.tasks[0].profile.parameters
     .nativeSubscription.promptDelivery) as { task: string; segments: { kind: string; id: string; version: number; sha256: string }[] };

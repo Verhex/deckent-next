@@ -69,7 +69,17 @@ async function fixture(kind: 'claude' | 'codex' = 'claude', retainOutput = true)
   }
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind, dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
-  await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph }, options);
+  // Owner 2026-11-08: a Claude Docker profile is no longer admitted, but Runs admitted on it before alpha.64 (live, N1) are still evaluated from
+  // their sealed session events. Such a Run is the Codex admission with its ledger row edited to the Claude shape (as launch-refusal K12 does).
+  await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: kind === 'claude' ? { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'codex' }] } : graph }, options);
+  if (kind === 'claude') {
+    const db = new DatabaseSync(opened.path);
+    try {
+      const snapshot = JSON.parse((db.prepare("SELECT snapshot FROM runs WHERE scope_id='s' AND run_id='r'").get() as { snapshot: string }).snapshot);
+      snapshot.graph.tasks[0].kind = 'claude'; snapshot.execution.tasks[0].profile = claude;
+      db.prepare("UPDATE runs SET snapshot=? WHERE scope_id='s' AND run_id='r'").run(JSON.stringify(snapshot));
+    } finally { db.close(); }
+  }
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
   const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });

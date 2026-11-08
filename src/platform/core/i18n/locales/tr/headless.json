@@ -96,6 +96,8 @@
   "headless.agent.k13.surfaceStopped": "CLI beklenmedik bir araç veya olay sundu; bu tur durduruldu ve hiçbir araç izinsiz çalışmadı. Sonraki mesajınız normal çalışır.",
   "headless.agent.k13.cliNotices": "[deckent] CLI tanınmayan bildirim gönderdi ({events}); tur sürdü, bildirim bu turun kaydına eklendi.",
   "headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED": "Önceki işçi yürütme yolu yeni işler için kapalı. Denetimli native işçiyi kullanmak için aboneliği yeniden bağlayın; kabul edilmiş işler kayıtlı profili korur.",
+  "headless.agent.k13.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE": "Bu CLI için Docker abonelik işçisi kapalı: Deckent sağlayıcının koşulları gereği yerel oturumunu okumaz ve konteynere aktarmaz. Hiçbir şey çalışmadı. Şablonu token'sız işçiye bağlayın: deckent coding template --connection <profil>.",
+  "headless.agent.k13.worker.NATIVE_SUBSCRIPTION_OTHER_PERSON": "Bu abonelik girişi başka bir kişiye ait; bu Run onu kullanamaz. Hiçbir şey çalışmadı. Run bunun yerine API anahtarlı bir bağlantı kullanabilir.",
   "headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED": "Bu CLI profilinde işçi yürütmesi doğrulanmadı. Kalıcı yürütme kanıtı sağlanana kadar görev bekler; başka yürütme yolu kendiliğinden seçilmez.",
   "headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT": "Abonelik kaynağı kullanımda. Görevi bekletebilir veya iptal edebilirsiniz; kapasite yalnız sonlanma doğrulanınca serbest kalır.",
   "headless.agent.k13.worker.NATIVE_CLI_WORKER_PROFILE_INVALID": "Native işçi profili geçersiz veya uyumsuz. Bu aboneliği inceleyip yeniden bağlayın; başka profil veya model seçilmez.",

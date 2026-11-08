@@ -583,6 +583,7 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/adapters/core/native-connection",
         "src/engine/core/agent-catalog",
         "src/engine/core/identity-profile",
         "src/composition/core/agent-catalog",
@@ -2227,6 +2228,7 @@
     },
     "src/adapters/core/native-coding": {
       "dependencies": [
+        "src/adapters/core/native-connection",
         "src/platform/core/config-fields",
         "src/platform/core/errors",
         "src/domain/core/run",
@@ -2244,6 +2246,7 @@
     },
     "src/composition/core/native-coding": {
       "dependencies": [
+        "src/adapters/core/native-connection",
         "src/engine/core/installation",
         "src/domain/core/run",
         "src/adapters/core/native-coding",
@@ -2261,6 +2264,7 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
+        "src/adapters/core/local-principal",
         "src/platform/core/host",
         "src/domain/core/primitives",
         "src/domain/core/worker-event",
@@ -5202,9 +5206,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42188,
+      "adapters": 42340,
       "surfaces": 45000,
-      "composition": 13543
+      "composition": 13557
     },
     "totalSrcLines": 200000,
     "testCases": 8218,
@@ -5362,6 +5366,7 @@
       ".agents/skills/deckent-authority-bootstrap/*.md",
       ".agents/skills/deckent-beuser/*.md",
       ".agents/skills/deckent-closure/*.md",
+      ".agents/skills/deckent-untangle/*.md",
       ".agents/skills/deckent-design-critic/*.md",
       ".agents/skills/deckent-design-dna/*.md",
       ".agents/skills/deckent-design-dna/references/*.md",

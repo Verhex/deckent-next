@@ -1,24 +1,21 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readLocalOsOwner } from '#adapters/index.js';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { get, request } from 'node:http';
-import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openNativeConnection } from '../../../dist/adapters/core/native-connection/index.js';
+import { openNativeConnection, readLocalNativeCredential } from '../../../dist/adapters/core/native-connection/index.js';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
-import type { SandboxRequest } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
 
-const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const roots: string[] = []; const closes: (() => Promise<void>)[] = [];
 const capabilities = new Map<string, string>();
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, secret: 'claude-access' })).toString('base64url') + '.sig-claude-e2e';
-const credential = () => ({ claudeAiOauth: { accessToken: access, refreshToken: 'never-forward', expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } });
 async function fixture() { const root = await mkdtemp(join(tmpdir(), 'dn-ev-')); roots.push(root); return root; }
+// Owner 2026-11-08: Claude has no Docker gateway; the provider-neutral gateway checks run on Cursor's projected token.
 async function gateway(root: string, received: WorkerEvent[][]) {
-  const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'claude' }, directory: root, credential: credential(), deadlineMs: 20000,
+  const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 1, provider: 'cursor' }, directory: root, credential: { accessToken: access }, deadlineMs: 20000,
     onEvents: events => { received.push([...events]); } });
   closes.push(connection.close);
   // A real worker presents the per-attempt capability it receives through its private mount (RC-S1).
@@ -80,52 +77,33 @@ it('charges loss markers to the event budget and refuses further batches once it
   expect(stats.eventsUnreported).toBeGreaterThanOrEqual(50);
 });
 
-describe.skipIf(!imageId)('real container bridge to gateway event stream', () => {
-  it('normalizes a native Claude stream inside Docker, redacts the credential and delivers ordered contract events to the host', async () => {
-    const root = await fixture(); const workspace = join(root, 'work'); await mkdir(workspace);
-    const stream = (await readFile(new URL('../../fixtures/worker-events/claude-stream.jsonl', import.meta.url), 'utf8')).split('\n').filter(Boolean);
-    // The native process echoes its own credential into assistant text and a shell command; neither may leave the container.
-    stream.splice(8, 0, JSON.stringify({ type: 'assistant', message: { id: 'leak', content: [{ type: 'text', text: `token ${access}` },
-      { type: 'tool_use', id: 'leak-tool', name: 'Bash', input: { command: `echo ${access}`, description: `send ${access}` } }] } }));
-    await writeFile(join(workspace, 'native.jsonl'), stream.join('\n') + '\n');
-    const received: WorkerEvent[][] = []; const connection = await gateway(root, received);
-    const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
-      logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1, tmpBytes: 67108864, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536,
-      connection: connection.descriptor });
-    const sandbox: SandboxRequest = { protocolVersion: 1, identity: { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test', generation: 1, layoutRevision: 'layout' },
-      workspace, argv: ['node', '-e', "process.stdout.write(require('node:fs').readFileSync('/workspace/native.jsonl','utf8'))"] };
-    closes.push(async () => { await supervisor.cancel(sandbox); await supervisor.release(sandbox); });
-    const result = await supervisor.execute(sandbox);
-    expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
-    const events = received.flat();
-    expect(events.map(item => item.sequence)).toEqual(events.map((_, index) => index + 1));
-    expect(events[0]).toMatchObject({ kind: 'session.started', provider: 'claude' });
-    expect(events.find(item => item.kind === 'session.ended')).toMatchObject({ outcome: 'success', turns: 4 });
-    expect(events.filter(item => item.kind === 'tool.call').map(item => item.kind === 'tool.call' && item.name).sort()).toEqual(['Bash', 'Bash', 'Read', 'Write']);
-    const serialized = JSON.stringify(events);
-    expect(serialized).not.toContain(access); expect(serialized).not.toContain('claude-access'); expect(serialized).toContain('[REDACTED]');
-    expect(result.stdout).not.toContain(access);
-    expect(connection.statistics()).toMatchObject({ eventsDropped: 0 });
-  });
+// Owner 2026-11-08: no Claude stream reaches a Docker gateway any more. The floor: the typed refusal comes before any login read, credential projection,
+// socket or container (a read would fail NATIVE_CREDENTIAL_UNAVAILABLE on the absent login, a projection of the empty credential likewise).
+it('a Claude Docker gateway is refused with NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE before any login read, projection, socket or container', async () => {
+  const root = await fixture(), refused = { code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' };
+  await expect(readLocalNativeCredential('claude', { HOME: join(root, 'absent-home') })).rejects.toMatchObject(refused);
+  await expect(openNativeConnection({ binding: { schemaVersion: 1, provider: 'claude' }, directory: root, credential: {}, deadlineMs: 20000 })).rejects.toMatchObject(refused);
+  expect(await readdir(root)).toEqual([]);
 });
 
+// Owner 2026-11-08: Claude has no Docker gateway, so the forged-verdict custody is held on Codex (client-reported evidence) with the same rules.
 it('refuses a worker-forged model verdict and derives the host verdict from accepted events against the admitted model (WORKER-CURRENCY-1)', async () => {
   const received: WorkerEvent[][] = []; const root = await fixture();
-  const connection = await openNativeConnection({ binding: { schemaVersion: 2, provider: 'claude', model: { channelId: 'claude-cli-subscription',
-    modelId: 'claude-sonnet-5-5', auxiliaryModelIds: ['claude-haiku-4-5-20251001'] } }, directory: root, credential: credential(), deadlineMs: 20000,
+  const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 2, provider: 'codex', model: { channelId: 'codex-cli-subscription',
+    modelId: 'gpt-6.1-sol', auxiliaryModelIds: [] } }, directory: root, credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 20000,
   onEvents: events => { received.push([...events]); } });
   closes.push(connection.close); const socket = connection.descriptor.socketPath;
   capabilities.set(socket, await readFile(connection.descriptor.capabilityPath, 'utf8'));
   expect(await call(socket, 'GET', '/bootstrap')).toBe(200);
   expect(connection.modelVerification()).toBeNull();
-  const started = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'claude', model: 'claude-sonnet-5-5', cliVersion: '2.1.285' });
-  const forged = JSON.stringify({ schemaVersion: 1, sequence: 2, atMs: 2, kind: 'model.verification', status: 'verified', admitted: 'claude-sonnet-5-5', observed: [], unexpected: [] });
+  const started = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'codex', model: 'gpt-6-luna', cliVersion: '0.167.0' });
+  const forged = JSON.stringify({ schemaVersion: 1, sequence: 2, atMs: 2, kind: 'model.verification', status: 'verified', admitted: 'gpt-6.1-sol', observed: [], unexpected: [] });
   const ended = JSON.stringify({ schemaVersion: 1, sequence: 3, atMs: 3, kind: 'session.ended', outcome: 'success', turns: 1, durationMs: 3, apiDurationMs: null,
-    costUsd: null, costBasis: null, tokens: null, permissionDenials: 0, models: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'] });
+    costUsd: null, costBasis: null, tokens: null, permissionDenials: 0, models: ['gpt-6-luna', 'gpt-6.1-sol'] });
   expect(await call(socket, 'POST', '/events', [started, forged, ended].join('\n') + '\n')).toBe(204);
   expect(received.flat().map(item => item.kind)).toEqual(['session.started', 'session.ended', 'dropped']);
-  expect(connection.modelVerification()).toEqual({ status: 'substituted', admitted: 'claude-sonnet-5-5', evidenceCapability: 'session-events',
-    observed: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'], unexpected: ['claude-fable-5-1'] });
+  expect(connection.modelVerification()).toEqual({ status: 'client-reported-mismatch', admitted: 'gpt-6.1-sol', evidenceCapability: 'client-reported',
+    observed: ['gpt-6-luna', 'gpt-6.1-sol'], unexpected: ['gpt-6-luna'] });
 });
 
 });

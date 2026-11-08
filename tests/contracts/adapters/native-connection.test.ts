@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { get } from 'node:http';
+import { get, request } from 'node:http';
 import { connect, createServer } from 'node:net';
 import { connect as tlsConnect } from 'node:tls';
 import { randomUUID, createHash } from 'node:crypto';
@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, expect, it, describe } from 'vitest';
 import { openNativeConnection, projectNativeCredential, readLocalNativeCredential, isPublicNativeAddress, inspectNativeClientHello } from '../../../dist/adapters/core/native-connection/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
+import { DockerSupervisor, readLocalOsOwner } from '#adapters/index.js';
 import type { SandboxRequest } from '#engine/index.js';
 
 const roots: string[] = []; const closes: (() => Promise<void>)[] = [];
@@ -19,10 +19,27 @@ const credential = () => ({ tokens: { access_token: jwt(), id_token: 'synthetic-
 async function fixture() { const root = await mkdtemp(join(tmpdir(), 'dn-')); roots.push(root); return root; }
 type Preflight = Parameters<typeof openNativeConnection>[0]['binding']['preflight'];
 type Delivery = Parameters<typeof openNativeConnection>[0]['binding']['promptDelivery'];
-async function gateway(root: string, preflight?: Preflight, promptDelivery?: Delivery) {
-  const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'codex', ...(preflight ? { preflight } : {}),
-    ...(promptDelivery ? { promptDelivery } : {}) }, directory: root, credential: credential(), deadlineMs: 20000 });
+type Upstream = NonNullable<Parameters<typeof openNativeConnection>[0]['relayUpstream']>;
+async function gateway(root: string, preflight?: Preflight, promptDelivery?: Delivery, provider: 'codex' | 'cursor' = 'codex', relayUpstream?: Upstream) {
+  const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 1, provider, ...(preflight ? { preflight } : {}),
+    ...(promptDelivery ? { promptDelivery } : {}) }, directory: root, credential: provider === 'cursor' ? { accessToken: jwt(), refreshToken: 'never-forward' } : credential(), deadlineMs: 20000,
+    ...(relayUpstream ? { relayUpstream } : {}) });
   closes.push(connection.close); return connection;
+}
+/** A fake provider origin: records what the host relay sent and answers with an echo of the bearer it received (the relay must mask it). */
+function fakeOrigin() {
+  const calls: { method: string; url: string; headers: Readonly<Record<string, string>>; body: string }[] = [];
+  const upstream: Upstream = async input => { calls.push({ method: input.method, url: input.url, headers: input.headers, body: input.body.toString('utf8') });
+    return { status: 200, headers: { 'content-type': 'text/event-stream', 'set-cookie': 'never-forward' }, body: (async function* () { yield Buffer.from(`data: ${input.headers['authorization']}\n\n`); })() }; };
+  return { calls, upstream };
+}
+function relayCall(socketPath: string, path: string, bearer: string, body?: object) {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const data = body ? JSON.stringify(body) : '';
+    const call = request({ socketPath, path, method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(data)) } },
+      response => { let text = ''; response.on('data', p => text += p); response.on('end', () => resolve({ status: response.statusCode!, body: text })); });
+    call.on('error', reject); call.end(data);
+  });
 }
 function bootstrap(socketPath: string, capability?: string) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
@@ -30,12 +47,12 @@ function bootstrap(socketPath: string, capability?: string) {
     request.on('error', reject);
   });
 }
-it('projects only native short-lived credential fields for all three providers', () => {
+it('projects only native short-lived credential fields; a CLI without a Docker subscription path is never projected', () => {
   const data = [projectNativeCredential('codex', credential()),
-    projectNativeCredential('claude', { claudeAiOauth: { accessToken: 'synthetic', expiresAt: Date.now() + 10000, refreshToken: 'never-forward' }, unrelated: 'never-forward' }),
     projectNativeCredential('cursor', { accessToken: jwt(), refreshToken: 'never-forward', unrelated: 'never-forward' })];
   expect(JSON.stringify(data)).not.toContain('never-forward'); expect(JSON.stringify(data)).not.toContain('unrelated');
-  expect(() => projectNativeCredential('claude', { claudeAiOauth: { accessToken: 'synthetic', expiresAt: 0 } })).toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
+  // Owner 2026-11-08: Claude's local login is never read, projected or served into a container (Anthropic terms); refused typed even when present.
+  expect(() => projectNativeCredential('claude', { claudeAiOauth: { accessToken: 'synthetic', expiresAt: Date.now() + 10000 } })).toThrow('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE');
   expect(() => projectNativeCredential('codex', { tokens: { access_token: 'invalid' } })).toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native credential ownership — reads only the owned private native file and rejects symlinks or broad permissions', async () => {
@@ -47,7 +64,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native credentia
   await rm(file); await writeFile(file, JSON.stringify(credential()), { mode: 0o644 });
   await expect(readLocalNativeCredential('codex', { HOME: root, USERPROFILE: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
 });
-it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — delivers auth once over the private socket and closes capability on revocation', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — delivers auth once over the private socket and closes capability on revocation; Codex is relayed only with this Attempt\'s capability', async () => {
   const connection = await gateway(await fixture());
   expect(connection.descriptor.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
   expect(dirname(connection.descriptor.capabilityPath)).toBe(dirname(connection.descriptor.socketPath));
@@ -58,6 +75,40 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
   expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
   expect(JSON.stringify(connection.descriptor)).not.toContain('synthetic');
   await connection.close(); await expect(bootstrap(connection.descriptor.socketPath)).rejects.toThrow();
+  // Owner 2026-11-08 (alpha.64 card): Codex is relayed. Its worker gets a placeholder and this Attempt's one-time capability; the host attaches the login.
+  // The capability binds to the login's owner: another person's Attempt gets no gateway, so it can never bootstrap.
+  const owner = readLocalOsOwner();
+  await expect(openNativeConnection({ principal: { issuer: owner.issuer, subject: String(Number(owner.subject) + 1) }, binding: { schemaVersion: 1, provider: 'codex' }, directory: await fixture(),
+    credential: credential(), deadlineMs: 20000 })).rejects.toMatchObject({ code: 'NATIVE_SUBSCRIPTION_OTHER_PERSON' });
+  const origin = fakeOrigin(), other = fakeOrigin(), modelId = 'exact-relay-model';
+  const open = async (upstream: Upstream) => { const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 2, provider: 'codex', model: { channelId: 'c', modelId, auxiliaryModelIds: [] } },
+    directory: await fixture(), credential: { tokens: { access_token: jwt(), id_token: 'synthetic-id', account_id: 'account-synthetic-1', refresh_token: 'never-forward' } }, deadlineMs: 20000, relayUpstream: upstream });
+    closes.push(connection.close); return connection; };
+  const a = await open(origin.upstream), b = await open(other.upstream), keyA = await readFile(a.descriptor.capabilityPath, 'utf8');
+  expect((await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', 'early', { model: modelId })).status).toBe(401); // no capability before bootstrap
+  const setupA = JSON.parse((await bootstrap(a.descriptor.socketPath, keyA)).body), setupB = JSON.parse((await bootstrap(b.descriptor.socketPath, await readFile(b.descriptor.capabilityPath, 'utf8'))).body);
+  // The container's bootstrap payload carries no login: only the placeholder, the capability and the CLI configuration that points at the relay.
+  expect(setupA.credential).toBeUndefined(); expect(JSON.stringify(setupA)).not.toMatch(/header\.|synthetic-id|account-synthetic-1|never-forward/u);
+  expect(setupA.relay).toMatchObject({ placeholder: 'deckent-relay-placeholder', config: { 'model_providers.deckent_relay.auth.refresh_interval_ms': 0 } });
+  const capabilityA = setupA.relay.capability as string;
+  expect((await bootstrap(a.descriptor.socketPath, keyA)).status).toBe(403); // issued once
+  const answered = await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId, input: [] });
+  expect(answered.status).toBe(200); expect(answered.body).toBe('data: Bearer [REDACTED]\n\n');
+  expect(origin.calls).toHaveLength(1);
+  expect(origin.calls[0]).toMatchObject({ method: 'POST', url: 'https://chatgpt.com/backend-api/codex/responses', headers: { 'chatgpt-account-id': 'account-synthetic-1' } });
+  expect(origin.calls[0]!.headers['authorization']).toMatch(/^Bearer header\./u);
+  expect((await relayCall(a.descriptor.socketPath, '/backend-api/codex/models?client_version=0.166.0', capabilityA)).status).toBe(200);
+  // Refusals: another Attempt's capability, the bootstrap key a tool can read, a placeholder, another model, another route — none reaches the origin.
+  for (const [bearer, path, body, status] of [[setupB.relay.capability, '/backend-api/codex/responses', { model: modelId }, 401], [keyA, '/backend-api/codex/responses', { model: modelId }, 401],
+    ['deckent-relay-placeholder', '/backend-api/codex/responses', { model: modelId }, 401], [capabilityA, '/backend-api/codex/responses', { model: 'other-model' }, 400],
+    [capabilityA, '/backend-api/codex/other', { model: modelId }, 404]] as const) expect((await relayCall(a.descriptor.socketPath, path, bearer, body)).status).toBe(status);
+  expect(origin.calls).toHaveLength(2); expect(other.calls).toHaveLength(0);
+  expect(a.statistics()).toMatchObject({ relay: { relayed: 2, refused: 6 } });
+  await new Promise<void>((resolve, reject) => { // a relayed CLI gets no CONNECT tunnel
+    const socket = connect(a.descriptor.socketPath, () => socket.write('CONNECT chatgpt.com:443 HTTP/1.1\r\nHost: chatgpt.com:443\r\n\r\n'));
+    socket.on('data', () => reject(new Error('unexpected permit'))); socket.on('close', resolve); socket.on('error', reject);
+  });
+  await a.close(); await expect(relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId })).rejects.toThrow();
 });
 // BeUser D-05: a worker's gateway under a project whose `.deckent/workspaces` path is too long for sun_path (104 bytes) still opens, in a private
 // 0700 directory under /tmp removed on close; before the fix the first run failed NATIVE_CONNECTION_UNAVAILABLE (the M-01 class, worker side).
@@ -69,7 +120,7 @@ it.skipIf(process.platform === 'win32')('NEGATIVE: a long workspace directory st
   await connection.close(); await expect(stat(dirname(socketPath))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — rejects foreign destinations, arbitrary ports and private or non-IPv4 addresses', async () => {
-  const connection = await gateway(await fixture());
+  const connection = await gateway(await fixture(), undefined, undefined, 'cursor');
   for (const target of ['api.anthropic.com:443', '127.0.0.1:443', 'chatgpt.com:80', 'chatgpt.com.evil.example:443']) {
     await new Promise<void>((resolve, reject) => {
       const socket = connect(connection.descriptor.socketPath, () => socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`));
@@ -80,6 +131,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
   for (const address of ['10.0.0.1', '127.0.0.1', '169.254.169.254', '172.17.0.1', '192.168.0.1', '100.64.0.1', '::1', '::ffff:8.8.8.8', '224.0.0.1']) expect(isPublicNativeAddress(address)).toBe(false);
   expect(isPublicNativeAddress('8.8.8.8')).toBe(true);
 });
+
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 it('checks a real TLS ClientHello, TCP/record fragmentation, wrong SNI, non-TLS and oversized lengths', async () => {
@@ -108,9 +160,9 @@ it('checks a real TLS ClientHello, TCP/record fragmentation, wrong SNI, non-TLS 
   expect(inspectNativeClientHello(fragmented, 'chatgpt.com', 8192)).toBe('accepted');
 });
 describe.skipIf(!imageId)('real connected Docker confinement and custody', () => {
-  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight, promptDelivery?: Delivery, deep = false) {
+  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight, promptDelivery?: Delivery, deep = false, provider: 'codex' | 'cursor' = 'codex', relayUpstream?: Upstream) {
     // D-05: `deep` puts the installation under a path too long for sun_path, so the gateway socket the container binds lives under /tmp.
-    const root = deep ? join(await fixture(), 'a'.repeat(60), 'b'.repeat(40)) : await fixture(); await mkdir(root, { recursive: true, mode: 0o700 }); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight, promptDelivery);
+    const root = deep ? join(await fixture(), 'a'.repeat(60), 'b'.repeat(40)) : await fixture(); await mkdir(root, { recursive: true, mode: 0o700 }); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight, promptDelivery, provider, relayUpstream);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!,
       uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1,
       tmpBytes: 67108864, deadlineMs, controlTimeoutMs: 10000, outputBytes: 65536, connection: connection.descriptor });
@@ -145,12 +197,12 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
   });
   it('keeps network none and host/foreign identities hidden; raw native output is suppressed', async () => {
     const f = await worker(['node', '-e', `const fs=require('node:fs');const os=require('node:os');const net=require('node:net');const http=require('node:http');
-      (async()=>{const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.codex/auth.json'));
-      const forbidden=['/var/run/docker.sock','/home/alperen/.codex/auth.json',process.env.HOME+'/.claude/.credentials.json',process.env.HOME+'/.config/cursor/auth.json'];
-      if(auth.tokens.refresh_token!==''||forbidden.some(p=>fs.existsSync(p))||Object.keys(os.networkInterfaces()).some(k=>k!=='lo'))process.exit(11);
+      (async()=>{const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.config/cursor/auth.json'));
+      const forbidden=['/var/run/docker.sock','/home/alperen/.codex/auth.json',process.env.HOME+'/.claude/.credentials.json',process.env.HOME+'/.codex/auth.json'];
+      if(Object.keys(auth).join()!=='accessToken'||forbidden.some(p=>fs.existsSync(p))||Object.keys(os.networkInterfaces()).some(k=>k!=='lo'))process.exit(11);
       for(const host of ['1.1.1.1','172.17.0.1','169.254.169.254'])await new Promise((resolve,reject)=>{const s=net.connect({host,port:443});s.setTimeout(500,()=>s.destroy());s.on('connect',()=>{s.destroy();reject(Error())});s.on('error',()=>{});s.on('close',resolve)});
       await new Promise((resolve,reject)=>{const proxy=new URL(process.env.HTTPS_PROXY);const req=http.request({hostname:proxy.hostname,port:proxy.port,method:'CONNECT',path:'example.com:443'});req.on('connect',()=>reject(Error()));req.on('error',resolve);req.end()});
-      fs.writeFileSync('boundary.json',JSON.stringify({confined:true}));console.log('synthetic-sensitive-output');})().catch(()=>process.exit(12));`]);
+      fs.writeFileSync('boundary.json',JSON.stringify({confined:true}));console.log('synthetic-sensitive-output');})().catch(()=>process.exit(12));`], 10000, undefined, undefined, false, 'cursor');
     const result = await f.supervisor.execute(f.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 }); expect(result.stdout).not.toContain('synthetic-sensitive-output');
     expect(JSON.parse(await readFile(join(f.request.workspace, 'boundary.json'), 'utf8'))).toEqual({ confined: true });
@@ -166,21 +218,41 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     await expect(readFile(join(f.request.workspace, 'unexpected'))).rejects.toThrow();
     expect(f.connection.statistics().connected).toBe(0);
   });
+  // Owner 2026-11-08 (alpha.64 card): the live worker is a fake Codex CLI. Its env, files and argv hold only the placeholder; its model call reaches
+  // the origin with the login attached on the host, and the bootstrap key a tool can read is refused by the relay.
   it('restores exact custody without auth and cancels a live connected worker', async () => {
-    const f = await worker(['node', '-e', "require('node:fs').writeFileSync('ready','yes');setInterval(()=>{},1000)"]);
+    const origin = fakeOrigin();
+    const f = await worker(['node', '-e', `const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
+      const files=[];const walk=d=>{let names=[];try{names=fs.readdirSync(d)}catch{return}for(const n of names){const p=path.join(d,n);let st;try{st=fs.lstatSync(p)}catch{continue}
+        if(st.isDirectory())walk(p);else if(st.isFile())try{files.push(p+'='+fs.readFileSync(p,'latin1'))}catch{}}};
+      for(const root of [process.env.HOME,'/tmp','/run'])walk(root);
+      const pair=process.argv.find(a=>a.startsWith('model_providers.deckent_relay.base_url='));const base=JSON.parse(pair.slice(pair.indexOf('=')+1));
+      const call=(p,bearer,body,socketPath)=>new Promise((resolve,reject)=>{const u=new URL(base+p);const r=http.request({...(socketPath?{socketPath}:{host:u.hostname,port:u.port}),path:u.pathname+u.search,method:'POST',
+        headers:{authorization:'Bearer '+bearer,'content-type':'application/json'}},res=>{let t='';res.on('data',c=>t+=c);res.on('end',()=>resolve(res.statusCode+' '+t))});r.on('error',reject);r.end(JSON.stringify(body))});
+      (async()=>{const answer=await call('/responses','deckent-relay-placeholder',{model:'m'});
+        const key=fs.readFileSync('/run/deckent-bootstrap.key','utf8');const direct=await call('/responses',key,{model:'m'},'/run/deckent-connection.sock');
+        fs.writeFileSync('dump.json',JSON.stringify({env:process.env,argv:process.argv,files,answer,direct}));fs.writeFileSync('ready','yes');setInterval(()=>{},1000);})().catch(()=>process.exit(12));`,
+      '--', 'task', '--', 'prompt'], 20000, undefined, undefined, false, 'codex', origin.upstream);
     const profile = await f.supervisor.captureProfile(); const execution = f.supervisor.execute(f.request);
     let ready = false;
     for (let i = 0; i < 100; i++) { try { ready = await readFile(join(f.request.workspace, 'ready'), 'utf8') === 'yes'; } catch { /* wait bounded */ } if (ready) break; await sleep(50); }
-    expect(ready).toBe(true); await f.connection.close();
+    expect(ready).toBe(true);
+    const dump = await readFile(join(f.request.workspace, 'dump.json'), 'utf8'), seen = JSON.parse(dump);
+    expect(dump).not.toMatch(/header\.ey|synthetic-id|never-forward/u); expect(dump).toContain('deckent-relay-placeholder');
+    expect(seen.files.some((row: string) => row.includes('/.codex/auth.json'))).toBe(false); expect(seen.env.HTTPS_PROXY).toBeUndefined();
+    expect(seen.answer).toBe('200 data: Bearer [REDACTED]\n\n'); expect(seen.direct.startsWith('401 ')).toBe(true);
+    expect(origin.calls).toHaveLength(1); expect(origin.calls[0]!.headers['authorization']).toMatch(/^Bearer header\./u);
+    expect(f.connection.statistics()).toMatchObject({ bootstrapReads: 1, relay: { relayed: 1, refused: 1 } });
+    await f.connection.close();
     const restored = await DockerSupervisor.restoreProfile(profile); const cancelled = await restored.cancel(f.request);
     expect(cancelled.result.kind).toBe('exited'); expect((await execution).result.kind).toBe('exited');
     const replay = await restored.execute(f.request); expect(replay.result.kind).toBe('exited');
     expect((await restored.recoverOutput(f.request)).completeness).toBe('partial');
   });
   it('rejects a different TLS SNI even after admitting the provider CONNECT destination', async () => {
-    const connection = await gateway(await fixture());
+    const connection = await gateway(await fixture(), undefined, undefined, 'cursor');
     await new Promise<void>((resolve, reject) => {
-      const socket = connect(connection.descriptor.socketPath, () => socket.write('CONNECT chatgpt.com:443 HTTP/1.1\r\nHost: chatgpt.com:443\r\n\r\n'));
+      const socket = connect(connection.descriptor.socketPath, () => socket.write('CONNECT api2.cursor.sh:443 HTTP/1.1\r\nHost: api2.cursor.sh:443\r\n\r\n'));
       socket.once('data', header => {
         if (!header.toString().startsWith('HTTP/1.1 200')) { reject(new Error('not admitted')); socket.destroy(); return; }
         const client = tlsConnect({ socket, servername: 'foreign.example' });

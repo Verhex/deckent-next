@@ -13,12 +13,14 @@ import { runCommand } from '../../../src/surfaces/core/cli/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { changeConfiguredWorkerInstructionTrust, classifyConfiguredRunSpending, inspectConfiguredWorkerInstructions } from '../../../src/composition/core/runs/index.js';
 import { admittedToolchains } from '../../../src/engine/core/toolchain-currency/index.js';
-import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, FileArtifactStore, gitRefFileSource, nativeCodingTemplateBase, openHostProjectInstructionReader, openSqliteAttemptStore } from '#adapters/index.js';
-import { bindTaskAcceptance, encodeExecutionProfileDefinition, readWorkerModelPin, validateTaskGraph, TASK_GRAPH_SCHEMA_VERSION, type AttemptIdentity } from '#domain/index.js';
+import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, FileArtifactStore, gitRefFileSource, nativeCodingTemplateBase, openHostProjectInstructionReader, openSqliteAttemptStore,
+  resolveNativeCliWorkerProfile } from '#adapters/index.js';
+import { bindTaskAcceptance, encodeExecutionProfileDefinition, readWorkerModelPin, validateTaskGraph, workerTaskParameters, TASK_GRAPH_SCHEMA_VERSION, type AttemptIdentity } from '#domain/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+import { nativeClaudeWorkers } from '../support/native-claude-worker.js';
 
 /** K3 = A (owner 2026-09-30): task graph v3 typed work input + reusable coding template compiled once at Run admission. */
 const roots: string[] = [];
@@ -32,9 +34,10 @@ const claudeInvocation = { provider: 'claude', cliVersion: '2.1.293 (Claude Code
 const codexInvocation = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const template = (id: string, invocation: object) => ({ id, version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation } });
 const TASK = 'Append the line "done" to note.txt.', ACCEPTANCE = 'note.txt ends with the line "done".', PATHS = ['note.txt', 'src/notes/**'];
-const workInput = (modelId = 'claude-sonnet-5-5', extra: object = {}, auxiliaryModelIds = [HAIKU]) => ({ schemaVersion: 1, task: TASK, scope: { paths: PATHS },
+// Owner 2026-11-08: Claude work runs on the tokenless worker, which takes no helper model; helper (auxiliary) inputs are checked on Codex Docker.
+const workInput = (modelId = 'claude-sonnet-5-5', extra: object = {}, auxiliaryModelIds: string[] = []) => ({ schemaVersion: 1, task: TASK, scope: { paths: PATHS },
   acceptance: ACCEPTANCE, model: { channelId: SEED_CHANNEL, modelId, auxiliaryModelIds }, ...extra });
-/** What an operator prepared by hand before K3 (one registry profile per card, task text inside): `coding prepare` output. */
+/** What an operator prepared by hand before K3 (one registry profile per card, task text inside): `coding prepare` output (a pre-alpha.64 Claude Docker row). */
 const handPrepared = (id: string, maxTurns = 40, policy = false) => ({ ...compileNativeCodingDockerProfile(
   { id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], ...docker } },
   { schemaVersion: 4, ...claudeInvocation, maxTurns, model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [HAIKU] },
@@ -48,6 +51,13 @@ const graph = (kind: string, input?: object, schemaVersion = 3) => ({ schemaVers
   tasks: [{ id: 't', kind, dependencies: [], acceptanceCriteria: ['exit'], ...(input ? { workInput: input } : {}) }], criterionDefinitions: criteria });
 const run = (runId: string, kind: string, input?: object, schemaVersion = 3) => ({ schemaVersion: 1 as const, commandId: `create-${runId}`, scopeId: 's', runId,
   graph: graph(kind, input, schemaVersion) });
+/** The frozen task command and binding fields, for a Docker profile and a tokenless worker (whose task base carries them) alike. */
+const taskParameters = (profile: { parameters: unknown }) => workerTaskParameters(profile.parameters) as Record<string, unknown>;
+/** A tokenless worker's compiled task (its binding carries the connection and the admission's model-use pin). */
+const base = (profile: unknown) => encodeExecutionProfileDefinition(resolveNativeCliWorkerProfile(profile as never).base);
+const CODEX_SEED = await seedCatalog('codex-cli-subscription'), CODEX_CHANNEL: string = CODEX_SEED.providers[0].id;
+const [CODEX, CODEX_HELPER] = CODEX_SEED.recommendedActivations[0].modelIds as string[];
+const codexWork = (auxiliaryModelIds: string[], extra: object = {}) => ({ ...workInput(CODEX, extra), model: { channelId: CODEX_CHANNEL, modelId: CODEX, auxiliaryModelIds } });
 
 async function seeded(localRegistry: object = registry, suppliedCatalog?: object, extraConfig: object = {}, home?: string) {
   const project = await mkdtemp(join(tmpdir(), 'dn-work-input-')); roots.push(project); const data = join(project, 'd');
@@ -73,12 +83,24 @@ async function seeded(localRegistry: object = registry, suppliedCatalog?: object
   await catalog({ action: 'register', catalog: suppliedCatalog ?? await effortless() });
   // Opus stays inactive on purpose: a work input naming it is refused as not active.
   await activation(null); await activation('claude-sonnet-5-5'); await activation(HAIKU);
+  await catalog({ action: 'register', catalog: CODEX_SEED }); await activation(null, 'activate', 0, CODEX_CHANNEL);
+  for (const modelId of [CODEX, CODEX_HELPER]) await activation(modelId!, 'activate', 0, CODEX_CHANNEL);
+  // Owner 2026-11-08: the Claude kinds move to the person's login (`coding template --connection`): the template keeps its turn limit and parts,
+  // the hand-prepared card becomes the same prepared worker on that login.
+  const workers = await nativeClaudeWorkers(project, 's', options), configPath = join(project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+  const codingTemplate = workers.template('coding', docker, { maxTurns: 40, composition: parts });
+  const handPrepared = (id: string, maxTurns = 40, policy = false) => workers.prepared({ ...nativeCodingTemplateBase(codingTemplate), id }, { maxTurns,
+    model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] }, composition: { schemaVersion: 1, ...parts, task: TASK, scope: 'note.txt\nsrc/notes/**', acceptance: ACCEPTANCE } },
+  policy ? { schemaVersion: 1, level: 'xhigh', source: 'policy-default', status: 'selected', workClass: 'feature', policyRevision: 'work-classes-2026-11-08', target: 'xhigh' } : undefined);
+  const local = localRegistry as typeof registry;
+  config.admission.registry = { ...local, profiles: local.profiles.map(profile => profile.id === 'coding' ? codingTemplate : profile.id === 'hand' ? handPrepared('hand') : profile) };
+  await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
   const read = <T>(sql: string, ...args: string[]) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(...args) as T[]; } finally { db.close(); } };
   const runs = () => read<{ n: number }>('SELECT count(*) AS n FROM runs')[0]!.n;
   const snapshotProfile = (runId: string) => (JSON.parse(read<{ snapshot: string }>('SELECT snapshot FROM runs WHERE run_id = ?', runId)[0]!.snapshot) as
     { execution: { schemaVersion: number; tasks: { profile: { id: string; parameters: Record<string, unknown> } }[] } }).execution;
   const snapshotAttempt = (attemptId: string) => JSON.parse(read<{ snapshot: string }>('SELECT snapshot FROM attempts WHERE attempt_id = ?', attemptId)[0]!.snapshot);
-  return { project, options, path, activation, runs, snapshotProfile, snapshotAttempt };
+  return { project, options, path, activation, runs, snapshotProfile, snapshotAttempt, workers, codingTemplate, handPrepared };
 }
 
 /** Real terminal dispatch fixture: no worker/provider is launched and monitor output access stays denied. */
@@ -138,20 +160,24 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     expect(compiled.schemaVersion).toBe(1); // Run execution snapshot unchanged
     const v3 = compiled.tasks[0]!.profile, v2 = prepared.tasks[0]!.profile;
     expect(v3.id).toBe('coding'); // provenance: the template's registry identity
-    expect(v2.parameters.deadlineMs).toBe(v3.parameters.deadlineMs);
-    expect((v2.parameters.nativeSubscription as { promptDelivery: { task: string } }).promptDelivery.task).toBe((v3.parameters.nativeSubscription as { promptDelivery: { task: string } }).promptDelivery.task);
-    expect(encodeExecutionProfileDefinition(v3)).toBe(encodeExecutionProfileDefinition(handPrepared('coding', 40, true)));
+    expect(taskParameters(v2).deadlineMs).toBe(taskParameters(v3).deadlineMs);
+    expect((taskParameters(v2).nativeSubscription as { promptDelivery: { task: string } }).promptDelivery.task).toBe((taskParameters(v3).nativeSubscription as { promptDelivery: { task: string } }).promptDelivery.task);
+    // The compiled task equals the hand-prepared one on the same login; the admission adds only its model-use pin to the connection binding.
+    expect(base(v3)).toBe(base(f.handPrepared('coding', 40, true)));
+    expect(resolveNativeCliWorkerProfile(v3 as never).binding).toMatchObject({ resourceKey: f.workers.binding.resourceKey, connectionId: f.workers.binding.connectionId, modelUsePin: expect.any(Object) });
     expect(() => assertNativeWorkerBinding(v3 as never)).not.toThrow(); // WC-R2
-    const argv = v3.parameters['argv'] as string[];
+    const argv = taskParameters(v3)['argv'] as string[];
     expect(argv.slice(-4)).toEqual(['--model', 'claude-sonnet-5-5', '--', '__DECKENT_TASK_PROMPT__']);
     expect(argv).toContain('--max-turns');
-    expect((v3.parameters['nativeSubscription'] as { model: unknown }).model).toEqual({ channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [HAIKU] });
+    expect((taskParameters(v3)['nativeSubscription'] as { model: unknown }).model).toEqual({ channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] });
+    // A declared helper model is compiled into the exact pin (Codex Docker; the tokenless Claude worker takes none).
+    await createRun(f.project, run('helper', 'codex-coding', codexWork([CODEX_HELPER!])), f.options); expect((taskParameters(f.snapshotProfile('helper').tasks[0]!.profile)['nativeSubscription'] as { model: unknown }).model).toMatchObject({ channelId: CODEX_CHANNEL, modelId: CODEX, auxiliaryModelIds: [CODEX_HELPER] }); // plus the catalog's reported-name evidence
     // The work input's turn limit overrides the template's; the template itself holds no task text.
     await createRun(f.project, run('turns', 'coding', workInput('claude-sonnet-5-5', { maxTurns: 7 })), f.options);
-    expect(encodeExecutionProfileDefinition(f.snapshotProfile('turns').tasks[0]!.profile)).toBe(encodeExecutionProfileDefinition(handPrepared('coding', 7, true)));
+    expect(base(f.snapshotProfile('turns').tasks[0]!.profile)).toBe(base(f.handPrepared('coding', 7, true)));
     await createRun(f.project, run('turns-eq', 'coding', workInput('claude-sonnet-5-5', { maxTurns: 40 })), f.options);
-    expect(encodeExecutionProfileDefinition(f.snapshotProfile('turns-eq').tasks[0]!.profile)).toBe(encodeExecutionProfileDefinition(handPrepared('coding', 40, true)));
-    expect(JSON.stringify(registry.profiles[0])).not.toContain(TASK);
+    expect(base(f.snapshotProfile('turns-eq').tasks[0]!.profile)).toBe(base(f.handPrepared('coding', 40, true)));
+    expect(JSON.stringify(f.codingTemplate)).not.toContain(TASK);
   });
 
   it('refuses alias, unknown, inactive, unsupported effort, turn limit and unpaired inputs with typed codes before any Run effect', async () => {
@@ -161,6 +187,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
       ['cli-alias', workInput('sonnet'), 'coding', 'WORKER_MODEL_ALIAS_REFUSED'],
       ['catalog-alias', workInput('claude-haiku-4-5', {}, []), 'coding', 'WORKER_MODEL_ALIAS_REFUSED'],
       ['helper-alias', workInput('claude-sonnet-5-5', {}, ['haiku']), 'coding', 'WORKER_MODEL_ALIAS_REFUSED'],
+      ['codex-helper-alias', codexWork(['default']), 'codex-coding', 'WORKER_MODEL_ALIAS_REFUSED'],
       ['unknown', workInput('claude-sonnet-9-9'), 'coding', 'WORKER_MODEL_UNKNOWN'],
       ['inactive', workInput('claude-opus-5-5', {}, []), 'coding', 'WORKER_MODEL_NOT_ACTIVE'],
       ['effort', workInput(HAIKU, { effort: 'high' }, []), 'coding', 'WORKER_EFFORT_UNSUPPORTED'],
@@ -179,8 +206,8 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     // WORKER-EFFORT: a declared effort reaches the frozen command, before any worker starts.
     const created = await createRun(f.project, run('effort-ok', 'coding', workInput('claude-sonnet-5-5', { effort: 'high' })), f.options);
     expect(created.admission.run.runId).toBe('effort-ok');
-    expect(f.snapshotProfile('effort-ok').tasks[0]!.profile.parameters.argv).toContain('--effort');
-    expect(f.snapshotProfile('effort-ok').tasks[0]!.profile.parameters.nativeSubscription).toMatchObject({ reasoningEffort: { level: 'high', source: 'explicit', status: 'selected' } });
+    expect(taskParameters(f.snapshotProfile('effort-ok').tasks[0]!.profile).argv).toContain('--effort');
+    expect(taskParameters(f.snapshotProfile('effort-ok').tasks[0]!.profile).nativeSubscription).toMatchObject({ reasoningEffort: { level: 'high', source: 'explicit', status: 'selected' } });
   });
 
   it('a proposal\'s spending classification refuses an unsupported turn limit typed, as creation does (live /do 2026-10-16 QUERY_UNEXPECTED_FAILURE)', async () => {
@@ -237,7 +264,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     const f = await seeded({ ...registry, workClasses });
     const created = await createRun(f.project, run('prepared-default', 'hand', undefined, 2), f.options);
     expect(created.admission.run.tasks[0]!.reasoningEffort).toMatchObject({ level: 'max', source: 'policy-default', policyRevision: 'custom' });
-    expect(f.snapshotProfile('prepared-default').tasks[0]!.profile.parameters.argv).toContain('--effort');
+    expect(taskParameters(f.snapshotProfile('prepared-default').tasks[0]!.profile).argv).toContain('--effort');
   });
 
   it('replays idempotently from the frozen snapshot after the model is deactivated; a changed work input under the same command conflicts', async () => {
@@ -269,7 +296,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
       expect((await client.createRun(run('svc-ok', 'coding', workInput()))).admission.run.runId).toBe('svc-ok');
       expect(f.runs()).toBe(1);
     } finally { await service.stop(); await service.done; }
-    expect(encodeExecutionProfileDefinition(f.snapshotProfile('svc-ok').tasks[0]!.profile)).toBe(encodeExecutionProfileDefinition(handPrepared('coding', 40, true)));
+    expect(base(f.snapshotProfile('svc-ok').tasks[0]!.profile)).toBe(base(f.handPrepared('coding', 40, true)));
     const graphPath = join(f.project, 'card.json'); await writeFile(graphPath, JSON.stringify(graph('coding', workInput())));
     let out = '';
     await runCommand(['run', 'create', '--scope', 's', '--id', 'cli', '--command-id', 'create-cli', '--graph', graphPath, '--json'],
@@ -445,9 +472,9 @@ describe.skipIf(process.platform === 'win32')('recovery bounds through the real 
 describe.skipIf(process.platform === 'win32')('worker instruction snapshot through the real admission composition', () => {
   const execution = (workerInstructions?: object) => ({ execution: { docker: { executable: '/usr/bin/docker', imageId: docker.imageId },
     git: { gitExecutable: '/usr/bin/git' }, ...(workerInstructions ? { workerInstructions } : {}) } });
-  const contextIds = (f: Awaited<ReturnType<typeof seeded>>, runId: string) => ((f.snapshotProfile(runId).tasks[0]!.profile.parameters['nativeSubscription'] as
+  const contextIds = (f: Awaited<ReturnType<typeof seeded>>, runId: string) => ((taskParameters(f.snapshotProfile(runId).tasks[0]!.profile)['nativeSubscription'] as
     { promptDelivery: { segments: { kind: string; id: string }[] } }).promptDelivery.segments).filter(s => s.kind === 'context').map(s => s.id);
-  const promptTask = (f: Awaited<ReturnType<typeof seeded>>, runId: string) => (f.snapshotProfile(runId).tasks[0]!.profile.parameters['nativeSubscription'] as { promptDelivery: { task: string } }).promptDelivery.task;
+  const promptTask = (f: Awaited<ReturnType<typeof seeded>>, runId: string) => (taskParameters(f.snapshotProfile(runId).tasks[0]!.profile)['nativeSubscription'] as { promptDelivery: { task: string } }).promptDelivery.task;
   // Persisted consent lives in the owner-private user state directory outside the project, as on a real host (inside it the reader refuses it).
   const home = async () => { const path = await mkdtemp(join(tmpdir(), 'dn-worker-home-')); roots.push(path); await chmod(path, 0o700); return path; };
   const trust = async (f: Awaited<ReturnType<typeof seeded>>, file?: string) => {
@@ -659,7 +686,7 @@ describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exac
     await setTarget(A); const card = await status(); await change('trust', card);
     await writeFile(join(A, name), 'Uncommitted edit.');
     expect((await createRun(f.project, run('at-ref', 'coding', workInput()), f.options)).warnings).toEqual([]);
-    const task = (f.snapshotProfile('at-ref').tasks[0]!.profile.parameters['nativeSubscription'] as { promptDelivery: { task: string } }).promptDelivery.task;
+    const task = (taskParameters(f.snapshotProfile('at-ref').tasks[0]!.profile)['nativeSubscription'] as { promptDelivery: { task: string } }).promptDelivery.task;
     expect(task).toContain(`Project instructions from ${REF}:${name} at commit ${card.commit} (sha256 ${card.digest})`);
     expect(task).toContain(TEXT); expect(task).not.toContain('Uncommitted edit.');
   });
@@ -684,7 +711,7 @@ describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exac
     const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
     await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'target', effect: 'allow', actions: ['use'], scopes: ['s'],
       principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'work-target', ids: 'all' } }] }), { mode: 0o600 });
-    const contexts = (runId: string) => ((f.snapshotProfile(runId).tasks[0]!.profile.parameters['nativeSubscription'] as
+    const contexts = (runId: string) => ((taskParameters(f.snapshotProfile(runId).tasks[0]!.profile)['nativeSubscription'] as
       { promptDelivery: { segments: { kind: string; id: string }[] } }).promptDelivery.segments).filter(s => s.kind === 'context').map(s => s.id);
     await git(A, 'branch', 'other'); await setTarget(A); const cardA = await status();
     expect(await change('trust', cardA)).toMatchObject({ trusted: true, changed: true }); expect(sealed()).toBe(1);

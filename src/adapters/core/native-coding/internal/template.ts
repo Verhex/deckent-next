@@ -8,6 +8,12 @@ import { nativePromptCompositionSchema, promptPartSchema } from './composition.j
 import { nativeCodingTemplateEnvironment } from './environment.js';
 import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, nativeCliWorkerTaskBase, nativeCliWorkerStoredBase, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { assertNativeDockerSubscription } from '#adapters/core/native-connection/index.js';
+
+/** Owner 2026-11-08: a CLI whose Docker subscription path is prohibited (registry data) gets no new Docker template; an existing one refuses at Run admission. */
+function dockerSubscription(provider: Parameters<typeof assertNativeDockerSubscription>[0]) {
+  try { assertNativeDockerSubscription(provider); } catch { throw new NativeCodingProfileError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE'); }
+}
 
 /**
  * K3 = A (owner 2026-09-30): a reusable native coding TEMPLATE is an ordinary registry profile of this adapter identity. It holds
@@ -61,6 +67,7 @@ export function createNativeCodingTemplate(limits: unknown, invocation: unknown,
   const resourceLimits = limits ?? (worker ? DOCKER_EXECUTION_SETTINGS.omit({ executable: true, imageId: true }).parse({}) : limits), declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits, worker?.protocolFamily) } : resourceLimits;
   const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: declared, invocation, ...(worker ? { worker } : {}) });
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
+  if (!worker) dockerSubscription(parsed.data.invocation.provider);
   const parameters = immutableJsonObjectSchema.parse(parsed.data);
   const profile = executionProfileDefinitionSchema.parse({ id: `native-coding-template-${createHash('sha256').update(JSON.stringify(parameters)).digest('hex')}`,
     version: 1, adapter: { ...NATIVE_CODING_TEMPLATE_ADAPTER, version: worker ? 2 : 1 }, parameters });
@@ -96,8 +103,9 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_UNASSIGNED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'AGENT_PROMPT_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_UNASSIGNED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'AGENT_PROMPT_TOO_LARGE' | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
+  if (error.code === 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') return error.code;
   if (error.code === 'NATIVE_CODING_CONTEXT_OVERFLOW') return 'WORKER_INSTRUCTIONS_TOO_LARGE';
   if (error.code === 'NATIVE_CODING_AGENT_OVERFLOW') return 'AGENT_PROMPT_TOO_LARGE';
   return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED' || error.code === 'WORKER_MODEL_UNASSIGNED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'

@@ -1,3 +1,4 @@
+import { readLocalOsOwner } from '#adapters/index.js';
 import { readFileSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -32,14 +33,14 @@ const post = (socketPath: string, provider: string) => new Promise<void>((resolv
 
 const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
 it.for([
-  ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } }, 'session-events', 'verified'],
+  // Owner 2026-11-08: Claude has no Docker gateway (its session-events evidence runs on the tokenless worker); refused in native-connection.test.ts.
   // Codex: the client's own session log names the model (owner Q4 2026-10-23); the name equals the admitted exact id.
   ['codex', { auth_mode: 'chatgpt', tokens: { access_token: access, refresh_token: 'fixture-refresh', id_token: 'fixture-id' }, last_refresh: new Date().toISOString() }, 'client-reported', 'client-reported'],
   // Cursor reports only a start name; this pin carries no catalog names, so the reported name is unrecorded: unverified (owner K1 2026-10-22).
   ['cursor', { accessToken: access }, 'session-start-name', 'unverified'],
 ] as const)('projects bound %s registry capabilities and host model-evidence custody through the real UNIX gateway', async ([provider, credential, evidenceCapability, status], context) => {
   const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
-  const input = { binding: { schemaVersion: 2 as const, provider,
+  const input = { principal: readLocalOsOwner(), binding: { schemaVersion: 2 as const, provider,
     model: { channelId: `${provider}-cli-subscription`, modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root, credential, deadlineMs: 10000 };
   if (process.platform === 'win32') {
     await expect(openNativeConnection(input)).rejects.toMatchObject({ code: 'NATIVE_CONNECTION_UNAVAILABLE' });
@@ -61,7 +62,7 @@ it.for([
 ] as const)('seals the frozen pin catalog start-name evidence %j through the real UNIX gateway (owner K1/K2 2026-10-22)', async ([evidence, status, unexpected], context) => {
   if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: private UNIX gateway requires POSIX ownership and socket permissions');
   const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
-  const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'cursor',
+  const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 2 as const, provider: 'cursor',
     model: { channelId: 'cursor-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [], ...evidence } }, directory: root, credential: { accessToken: access }, deadlineMs: 10000 });
   cleanups.push(connection.close);
   await fetchBootstrap(connection.descriptor.socketPath);
@@ -72,7 +73,7 @@ it.for([
 it('keeps the first session start for the host verdict: a later start cannot replace the reported model (alpha.54 CX)', async context => {
   if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: private UNIX gateway requires POSIX ownership and socket permissions');
   const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
-  const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'codex',
+  const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 2 as const, provider: 'codex',
     model: { channelId: 'codex-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root,
     credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 10000 });
   cleanups.push(connection.close);
@@ -90,7 +91,6 @@ const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 describe('candidate standalone bootstrap through the real pinned Docker worker', () => {
   it.for([
-    ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000 } }],
     ['codex', { tokens: { access_token: access, id_token: 'fixture-id' } }],
     ['cursor', { accessToken: access }],
   ] as const)('%s receives the registry prompt channel, preflight, turn probe and structured-report flag', async ([provider, credential], context) => {
@@ -120,7 +120,7 @@ else writeFileSync('/workspace/capture.json', JSON.stringify({ argv, core: readF
       ...(capabilities.maxTurns ? [capabilities.maxTurns.flag, '7'] : []), '--', '__DECKENT_TASK_PROMPT__'];
     const segments = (['core', 'persona', 'task', 'scope'] as const).map(kind => ({ kind, id: kind, version: 1, sha256: hash(kind) }));
     const body = { schemaVersion: 1 as const, channel: capabilities.promptChannel, core: 'Fixture core', task: 'Fixture task', segments };
-    const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider, finalReport: { schemaVersion: 1 },
+    const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 1, provider, finalReport: { schemaVersion: 1 },
       preflight: { schemaVersion: 1, cliVersion: 'fixture-1', discovery: 'repository', helpArgs: command.helpArgs, requiredFlags },
       promptDelivery: { ...body, sha256: hash(JSON.stringify(body)), argvSha256: hash(JSON.stringify(argv)) } },
     directory: root, credential, deadlineMs: 20000 });
@@ -176,7 +176,7 @@ else writeFileSync('/workspace/capture.json', JSON.stringify({ argv }));
     const argv = ['/workspace/native-cli', ...command.args, ...command.disabledArgs!, ...command.coreArgs, command.modelFlag, 'fixture-model', '--', '__DECKENT_TASK_PROMPT__'];
     const body = { schemaVersion: 1 as const, channel: capabilities.promptChannel, core: 'Fixture core', task: 'Fixture task',
       segments: (['core', 'persona', 'task', 'scope'] as const).map(kind => ({ kind, id: kind, version: 1, sha256: hash(kind) })) };
-    const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider, preflight: { schemaVersion: 1, cliVersion: 'fixture-1', discovery: 'disabled', helpArgs: command.helpArgs, requiredFlags },
+    const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 1, provider, preflight: { schemaVersion: 1, cliVersion: 'fixture-1', discovery: 'disabled', helpArgs: command.helpArgs, requiredFlags },
       promptDelivery: { ...body, sha256: hash(JSON.stringify(body)), argvSha256: hash(JSON.stringify(argv)) } }, directory: root, credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 20000 });
     cleanups.push(connection.close);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
@@ -222,7 +222,7 @@ setTimeout(() => process.stdout.write(JSON.stringify({ type: 'turn.completed', u
 `;
     await writeFile(join(workspace, 'native-cli'), fake); await chmod(join(workspace, 'native-cli'), 0o700);
     const events: Record<string, unknown>[] = [];
-    const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'codex',
+    const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 2 as const, provider: 'codex',
       model: { channelId: 'codex-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root,
       credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 20000, onEvents: batch => events.push(...batch) });
     cleanups.push(connection.close);
