@@ -2,7 +2,7 @@ export { DockerSupervisor } from './internal/docker.js';
 export { dockerNodeHeapCeilingBytes } from './internal/node-heap.js';
 export type { DockerSupervisorOptions } from './internal/options.js';
 export { identifyDockerRequest } from './internal/identity.js';
-export { runNodeDockerCommand, DockerCommandFailure, dockerCommandEnvironment } from './internal/command.js';
+export { runNodeDockerCommand, DockerCommandFailure, dockerCommandEnvironment, dockerClientEnvironment } from './internal/command.js';
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from './internal/command.js';
 export { validateDockerSupervisorProfile, dockerProfileObservesWorker, recordedWorkerIsolation } from './internal/profile.js';
 export { validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError } from './internal/task-profile.js';

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getConfigFieldDefault, loadConfig, normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, ErrorRegistry } from '#platform/index.js';
 import { affectedToolchainProfiles, workerImageBudget, matchingWorkerConsent, workerConsentBinding, type WorkerConsentBinding } from '#engine/index.js';
-import { readNewestWorkerReceipt, readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
+import { readNewestWorkerReceipt, readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, dockerClientEnvironment, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { writeArtifact } from './update.js';
 const counter = (value: string) => Number(/^r([0-9]+)/u.exec(value)?.[1] ?? 0);
@@ -29,8 +29,7 @@ export async function configuredWorkerBuilder<T>(projectRoot: string, options: C
     matchingWorkerConsent(current.toolchains.image.consents, binding, input.imageId);
   };
   await authorize(config, input.binding);
-  const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'
-    && ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0])));
+  const env = dockerClientEnvironment(options.env ?? process.env);
   const runner = input.runner ?? runNodeProcess;
   const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath,
     args: [join(input.packageRoot, 'assets/worker-image/build.mjs'), '--daemon-identity'], cwd: input.packageRoot, env,

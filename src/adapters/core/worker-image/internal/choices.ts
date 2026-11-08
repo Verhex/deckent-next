@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { persistedString, ErrorRegistry } from '#platform/index.js';
 import { layeredWorkerRecipeSchema } from '#engine/index.js';
 import { runNodeProcess } from '#adapters/core/process-runner/index.js';
+import { dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.js';
 import type { WorkerImageBuildRunner } from './build.js';
 import { readWorkerImageSources, privateDirectory } from './build.js';
 import limits from './limits.json' with { type: 'json' };
@@ -21,8 +22,7 @@ export async function inspectWorkerImageChoices(input: { packageRoot: string; ho
   const lock = JSON.parse(await readFile(join(directory, 'lineage.lock.json'), 'utf8')) as { sha256: string };
   if (createHash('sha256').update(bytes).digest('hex') !== lock.sha256) throw ErrorRegistry.createError('WORKER_LINEAGE_INVALID');
   const lineage = lineageSchema.parse(JSON.parse(bytes.toString('utf8')));
-  const env = Object.fromEntries(Object.entries(input.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'
-    && ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0])));
+  const env = dockerClientEnvironment(input.env);
   const command = async (args: string[]) => {
     const result = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: input.executable!, args, cwd: directory, env,
       timeoutMs: limits.probeTimeoutMs, outputBytes: limits.probeOutputBytes });

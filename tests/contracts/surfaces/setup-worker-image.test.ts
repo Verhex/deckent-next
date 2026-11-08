@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planSetup, planFirstWorkerImage, SetupStageRegistry, WORK_SETUP_FAMILY, WorkerImageSetupApplication, type SetupObservation, type WorkerImageCard, type WorkerImagePorts } from '#engine/index.js';
 import { nativeCliIds } from '#domain/index.js';
@@ -180,12 +180,13 @@ describe.skipIf(process.platform !== 'linux')('BR1 adapters: receipts, read-only
     expect(() => stages({ worker: { ...observed, provider: 'claude', providerPending: false, acquisition } as Worker })).not.toThrow();
   });
 
-  /** A fake docker: `image inspect` knows only IMAGE; FAKE_DAEMON=down makes every call fail (exit 1). Logs every argv line. */
+  /** A fake docker: `image inspect` knows only IMAGE; a `down` file beside it makes every call fail (exit 1; a file, since the docker client
+   * inherits only the Docker client environment table, A6-3). Logs every argv line. */
   const fakeDocker = async () => {
     const bin = await temp('bin'), log = join(bin, 'argv.log');
     await writeFile(join(bin, 'docker'), `#!/bin/sh
 echo "$*" >> '${log}'
-[ "$FAKE_DAEMON" = down ] && exit 1
+[ -e '${join(bin, 'down')}' ] && exit 1
 case "$*" in
   'context inspect --format {{json .Endpoints.docker}}') echo '{"Host":"unix:///fixture.sock"}';;
   *'info --format {{.ID}}') echo 'FIXTURE:DAEMON';;
@@ -200,8 +201,8 @@ esac
     const fake = await fakeDocker();
     expect(await workerImagePresence({ executable: fake.path, imageId: IMAGE })).toBe('present');
     expect(await workerImagePresence({ executable: fake.path, imageId: OTHER })).toBe('missing');
-    process.env['FAKE_DAEMON'] = 'down';
-    try { expect(await workerImagePresence({ executable: fake.path, imageId: IMAGE })).toBe('unknown'); } finally { delete process.env['FAKE_DAEMON']; }
+    await writeFile(join(dirname(fake.path), 'down'), '');
+    expect(await workerImagePresence({ executable: fake.path, imageId: IMAGE })).toBe('unknown');
     const verbs = (await readFile(fake.log, 'utf8')).trim().split('\n').map(line => line.replace(/^--host \S+ /u, '').split(' ')[0]);
     expect([...new Set(verbs)].sort()).toEqual(['context', 'image', 'info']);
     expect(await readFile(fake.log, 'utf8')).not.toMatch(/\b(run|create|start|pull|build|rm)\b/u);

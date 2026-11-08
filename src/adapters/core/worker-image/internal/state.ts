@@ -6,6 +6,7 @@ import { constants } from 'node:fs';
 import { ErrorRegistry, writeJsonAtomic } from '#platform/index.js';
 import { workerImageStateSchema, type WorkerImageState } from '#engine/index.js';
 import { runNodeProcess } from '#adapters/core/process-runner/index.js';
+import { dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.js';
 import type { WorkerImageBuildRunner } from './build.js';
 import limits from './limits.json' with { type: 'json' };
 export async function readWorkerImageState(home: string): Promise<WorkerImageState | null> {
@@ -31,7 +32,7 @@ export async function recoverWorkerImageContext(home: string, state: WorkerImage
   if (!info.isDirectory() || info.uid !== process.getuid?.() || info.mode & 0o077 || await realpath(context) !== context) throw ErrorRegistry.createError('WORKER_IMAGE_CONTEXT_UNSAFE');
   const command = async (args: string[]) => {
     const result = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath,
-      args: [join(packageRoot, 'assets/worker-image/recover.mjs'), context, state.daemonId ?? '', ...args], cwd: context, env: Object.fromEntries(Object.entries(env).filter(([key]) => ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(key))), timeoutMs: limits.probeTimeoutMs, outputBytes: limits.probeOutputBytes });
+      args: [join(packageRoot, 'assets/worker-image/recover.mjs'), context, state.daemonId ?? '', ...args], cwd: context, env: dockerClientEnvironment(env), timeoutMs: limits.probeTimeoutMs, outputBytes: limits.probeOutputBytes });
     if (result.reason !== 'exit' || result.exitCode !== 0) throw ErrorRegistry.createError('WORKER_IMAGE_BUILD_INTERRUPTED');
   };
   const names = await readdir(context);

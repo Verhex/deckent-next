@@ -24,3 +24,13 @@ it.skipIf(process.platform === 'win32')('requires POSIX self signals: reports re
   await expect(runNodeDockerCommand(command('process.kill(process.pid,"SIGTERM")')))
     .rejects.toMatchObject({ code: null, killed: true, message: 'SUPERVISOR_COMMAND_FAILED' });
 });
+
+it('A6-3: the docker client inherits only the Docker client table, never a provider key from the service environment', async () => {
+  const saved = { ...process.env };
+  Object.assign(process.env, { ANTHROPIC_API_KEY: 'sk-ant-fake', OPENAI_API_KEY: 'sk-fake', DOCKER_HOST: 'unix:///tmp/fake.sock', DOCKER_CONFIG: '/tmp/fake-docker' });
+  try {
+    const env = JSON.parse((await runNodeDockerCommand(command('process.stdout.write(JSON.stringify(process.env))'))).stdout) as Record<string, string>;
+    expect(Object.keys(env).filter(name => !['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(name))).toEqual([]);
+    expect(env).toMatchObject({ DOCKER_HOST: 'unix:///tmp/fake.sock', DOCKER_CONFIG: '/tmp/fake-docker', PATH: saved.PATH });
+  } finally { for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name]; Object.assign(process.env, saved); }
+});

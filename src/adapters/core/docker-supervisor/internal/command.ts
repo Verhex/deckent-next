@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { callerEnvironment } from '#platform/index.js';
 export interface DockerCommand {
   readonly executable: string; readonly args: readonly string[]; readonly timeoutMs: number; readonly outputBytes: number;
 }
@@ -13,6 +12,12 @@ export class DockerCommandFailure extends Error {
     readonly stop: 'deadline' | 'signal' | null = null, readonly stopReason?: unknown) {
     super('SUPERVISOR_COMMAND_FAILED'); this.name = 'DockerCommandFailure';
   }
+}
+/** A6-3 (owner 2026-11-08, alpha.63.2): the only inherited service variables a Docker client process receives, one table for every caller;
+ * a provider key or token in the service environment never reaches the docker CLI, its plugins or credential helpers. */
+const DOCKER_CLIENT_ENV_NAMES: readonly string[] = Object.freeze(['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']);
+export function dockerClientEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  return Object.fromEntries(DOCKER_CLIENT_ENV_NAMES.flatMap(name => typeof env[name] === 'string' ? [[name, env[name]]] : []));
 }
 /** A pinned local endpoint must not inherit a conflicting context or TLS selector. */
 export function dockerCommandEnvironment(command: DockerCommand, env: Readonly<Record<string, string | undefined>>) {
@@ -29,7 +34,7 @@ export const runNodeDockerCommand: DockerCommandRunner = async (command, signal)
   const deadline = AbortSignal.timeout(command.timeoutMs), bound = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
     return await exec(command.executable, [...command.args], { maxBuffer: command.outputBytes, encoding: 'utf8',
-      env: dockerCommandEnvironment(command, callerEnvironment(process.env)), signal: bound });
+      env: dockerCommandEnvironment(command, dockerClientEnvironment(process.env)), signal: bound });
   } catch (error) {
     const failure = error as { stdout?: unknown; stderr?: unknown; code?: unknown; killed?: unknown };
     const killed = !!failure.killed || typeof failure.code !== 'number', stop = killed && bound.aborted ? bound.reason === deadline.reason ? 'deadline' : 'signal' : null;
