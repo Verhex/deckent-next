@@ -300,3 +300,22 @@ it('refuses reserved sessions before generic resolution, admission checks or gra
     .rejects.toMatchObject({ code: 'SECRET_SESSION_RESERVED' });
   expect(called).toBe(false);
 });
+
+describe.skipIf(process.platform !== 'linux')('A6-3 service environment and main-vault grants (Astra 3042 R2)', () => {
+  it('the autostarted service keeps a granted plain environment name, never an ungranted one or an unrelated token', async () => {
+    const { ensureConfiguredRuntimeService } = await import('../../../src/composition/core/cli/index.js');
+    const { grantedMainSecretNames } = await import('#composition/core/secrets/index.js');
+    const { base, env: start } = await home(), root = await project(base, 'granted');
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ storage: { driver: 'sqlite' }, terminal: { serviceStartTimeoutMs: 1_000 } }), { mode: 0o600 });
+    const env = { ...start, FIXTURE_PROVIDER_TOKEN: MAIN_VALUE, FIXTURE_UNGRANTED: 'not-granted', UNRELATED_TOKEN: 'leak' };
+    expect(await grantedMainSecretNames(root, { env })).toEqual([]);
+    expect(await changeProjectSecretGrant(root, 'scope', 'FIXTURE_PROVIDER_TOKEN', 'grant', 'admin', { env }, human)).toMatchObject({ granted: true });
+    clearConfigCache();
+    expect(await grantedMainSecretNames(root, { env })).toEqual(['FIXTURE_PROVIDER_TOKEN']);
+    const launches: Array<{ env: Record<string, string> }> = [];
+    await ensureConfiguredRuntimeService(root, { env }, async input => { launches.push(input); return { pid: 1 }; }, import.meta.filename).catch((error: unknown) => { if (!launches.length) throw error; });
+    expect(launches[0]?.env).toMatchObject({ FIXTURE_PROVIDER_TOKEN: MAIN_VALUE, DECKENT_ANTHROPIC_KEY: MAIN_VALUE });
+    expect(Object.keys(launches[0]?.env ?? {})).not.toContain('FIXTURE_UNGRANTED');
+    expect(Object.keys(launches[0]?.env ?? {})).not.toContain('UNRELATED_TOKEN');
+  }, 30_000);
+});

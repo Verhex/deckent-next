@@ -3899,7 +3899,9 @@
       "dependencies": [
         "src/engine/core/setup",
         "src/engine/core/worker-setup",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/host",
+        "src/adapters/core/docker-supervisor"
       ],
       "plan": "INSTALLATION"
     },
@@ -5192,12 +5194,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42113,
+      "adapters": 42116,
       "surfaces": 45000,
-      "composition": 13502
+      "composition": 13518
     },
     "totalSrcLines": 200000,
-    "testCases": 8209,
+    "testCases": 8210,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

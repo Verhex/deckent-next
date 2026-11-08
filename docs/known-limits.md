@@ -193,9 +193,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   masked. *Workaround:* keep such files out of the home folder the sandbox sees, or isolate separately.
 - **The runtime service sees only the environment names it is started with (alpha.63.2).** The terminal's autostart passes the
   service base (path, home, locale, user, session bus, Node's CA file), every `DECKENT_` name, the agent and CI markers, the Docker
-  client and native CLI home names and the secret names the installation config references with `$DECK:`; Deckent's child processes
+  client and native CLI home names, the names config fields read, the agent shell's `terminal.shell.environment` names, the names granted
+  to this project's main vault and the secret names the installation config references with `$DECK:`; Deckent's child processes
   get only the names they need, except the person's own editor, sign-in browser and init first commit. *Impact:* with the environment
-  secret store, a `$DECK:` reference added after the service started resolves only after a restart; a tool that relied on another
+  secret store, a `$DECK:` reference, grant or shell environment name added after the service started takes effect only after a restart; a tool that relied on another
   inherited variable no longer sees it. *Workaround:* `deckent runtime restart` after adding a reference; use the encrypted-file store.
 - **Only the installation config may name a secret.** A `$DECK:NAME` reference in the project config (`.deckent/config.json`)
   refuses the whole config load with `SECRET_REFERENCE_PROJECT_LAYER`, and the delivery commit author may not be a reference

@@ -1,4 +1,5 @@
-import { persistedString } from '#platform/index.js';
+import { persistedString, inheritedEnvironment } from '#platform/index.js';
+import { dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.js';
 import { constants } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { userInfo } from 'node:os';
@@ -51,7 +52,9 @@ async function detectRuntime(entry: ExecutionRuntimeEntry, env: DetectEnvironmen
   const path = await ports.find(entry.executable, env, limits.pathDirectories, signal);
   if (!path) return { ...base, cli: signal.aborted ? 'unknown' : 'absent' };
   if (entry.support === 'unsupported' || !entry.versionArgs || !entry.endpointArgs || !entry.infoArgs) return { ...base, cli: 'found', path };
-  const run = (args: readonly string[], executable = path) => ports.run(executable, args, { env, timeoutMs: limits.commandTimeoutMs, outputBytes: limits.outputBytes, signal });
+  // A6-3 (Astra 3042 R1): a Docker probe gets the Docker client table, the group tool only PATH; never the caller's whole environment.
+  const run = (args: readonly string[], executable = path, childEnv: DetectEnvironment = dockerClientEnvironment(env)) =>
+    ports.run(executable, args, { env: childEnv, timeoutMs: limits.commandTimeoutMs, outputBytes: limits.outputBytes, signal });
   const versions = await run(entry.versionArgs), parsed = json(versions.stdout), serverVersion = version(record(parsed['Server'])['Version']);
   const real = await ports.realpath(path).catch(() => path), desktopCli = (entry.desktop?.cliPrefixes ?? []).some(prefix => real.startsWith(prefix));
   const host = json((await run(entry.endpointArgs)).stdout)['Host'], socket = typeof host === 'string' && host.startsWith('unix://') ? host.slice('unix://'.length) : null;
@@ -72,10 +75,10 @@ async function detectRuntime(entry: ExecutionRuntimeEntry, env: DetectEnvironmen
 
 /** `member`: this session holds the socket's group; `relogin`: the user is in it, but this session started before (log in again or newgrp). */
 async function groupState(entry: ExecutionRuntimeEntry, gid: number | null, env: DetectEnvironment, ports: ExecutionDetectPorts,
-  run: (args: readonly string[], executable?: string) => ReturnType<DetectRunner>): Promise<RuntimeFacts['group']> {
+  run: (args: readonly string[], executable?: string, childEnv?: DetectEnvironment) => ReturnType<DetectRunner>): Promise<RuntimeFacts['group']> {
   if (gid === null) return 'unknown';
   if (ports.groups().includes(gid)) return 'member';
   const tool = entry.groupExecutable && entry.groupArgs ? await ports.find(entry.groupExecutable, env, limits.pathDirectories, AbortSignal.timeout(limits.commandTimeoutMs)) : null;
-  const listed = tool ? await run([...entry.groupArgs!, ports.user()], tool) : null;
+  const listed = tool ? await run([...entry.groupArgs!, ports.user()], tool, inheritedEnvironment(env, ['PATH'])) : null;
   return listed?.code !== 0 ? 'unknown' : listed.stdout.trim().split(/\s+/u).map(Number).includes(gid) ? 'relogin' : 'not-member';
 }

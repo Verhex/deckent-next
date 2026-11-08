@@ -2,10 +2,11 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ErrorRegistry, serviceEnvironment, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
-import { launchDetachedRuntimeService, DOCKER_CLIENT_ENV_NAMES, nativeHomeOverrideNames, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, readLocalOsIdentity, runtimeSocketHealable } from '#adapters/index.js';
+import { ErrorRegistry, CONFIG_ENVIRONMENT_KEYS, serviceEnvironment, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
+import { launchDetachedRuntimeService, DOCKER_CLIENT_ENV_NAMES, nativeHomeOverrideNames, readTerminalShellConfig, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, readLocalOsIdentity, runtimeSocketHealable } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { grantedMainSecretNames } from '#composition/core/secrets/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, awaitRuntimeServiceStart, awaitRuntimeServiceRestart, describeRuntimeServiceWithin, runtimeServiceReadiness as readiness, runtimeMonotonicDeadline as monotonicDeadline, runtimeDeadlineSignal as within,
   type RuntimeServiceReadiness, type LifecycleDeadline, type RuntimeStartable } from '#engine/index.js';
 export type { RuntimeServiceReadiness } from '#engine/index.js';
@@ -19,12 +20,14 @@ const describeWithin = (client: ReturnType<typeof createConfiguredRuntimeClient>
 /** RESTART-HUNT (LAW-AUDIT-2): a describe's `parent-mode` refusal is a state the service start heals only when the read-only adapter predicate agrees. */ const startableFor = (projectRoot: string, options: ConfigLoadOptions): RuntimeStartable => async error => (error as { code?: unknown } | null)?.code === 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' && (error as { params?: Record<string, unknown> }).params?.['reason'] === 'parent-mode' && await runtimeSocketHealable((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout);
 /**
  * A6-3 (owner 2026-11-08, alpha.63.2): the service starts with an explicit environment, never the terminal's whole one: the service base, the
- * configured agent markers (a service started from an agent keeps that floor), the Docker client and native CLI home names, and every secret
+ * configured agent markers (a service started from an agent keeps that floor), the Docker client and native CLI home names, the names config fields
+ * read, the agent shell's configured `terminal.shell.environment` names, the names the person granted this project's main vault, and every secret
  * name the global configuration references (the environment secret store reads them; a reference added later needs a restart). A failing
  * second load keeps only the base and markers: the service then reports the unresolved reference itself.
  */
 async function runtimeServiceEnvironment(projectRoot: string, options: ConfigLoadOptions, config: unknown) {
-  const names = new Set<string>([...((config as { cli?: { agentEnvironment?: readonly string[] } }).cli?.agentEnvironment ?? []), ...DOCKER_CLIENT_ENV_NAMES, ...nativeHomeOverrideNames()]);
+  const names = new Set<string>([...((config as { cli?: { agentEnvironment?: readonly string[] } }).cli?.agentEnvironment ?? []), ...DOCKER_CLIENT_ENV_NAMES,
+    ...nativeHomeOverrideNames(), ...CONFIG_ENVIRONMENT_KEYS, ...readTerminalShellConfig(config as Record<string, unknown>).environment, ...await grantedMainSecretNames(projectRoot, options)]);
   await loadComposedConfig(projectRoot, { ...options, force: true, heal: false, onWarning: () => {}, secretResolver: async name => { names.add(name); return undefined; } }).catch(() => undefined);
   return serviceEnvironment(options.env ?? process.env, names);
 }

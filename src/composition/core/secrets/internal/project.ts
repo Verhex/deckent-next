@@ -152,3 +152,16 @@ export async function handOverProjectSecrets(projectRoot: string, scopeId: strin
   });
   return Object.freeze({ project: record.anchor.projectRoot, handedOverAtMs: record.handedOverAtMs });
 }
+
+/** A6-3 (alpha.63.2, Astra 3042 R2): the names the person granted this project's main vault; the runtime service keeps those environment names so
+ * an environment-backed grant still resolves. The grant is the authority: a name that only appears in a config file is not passed. Names only. */
+export async function grantedMainSecretNames(projectRoot: string, options: ConfigLoadOptions): Promise<readonly string[]> {
+  try {
+    const config = await loadComposedConfig(projectRoot, { ...options, heal: false, onWarning: () => {} });
+    const installation = await loadConfiguredInstallationIdentity(config.projectRoot, options);
+    const project = await new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs).read();
+    if (installation.status !== 'available' || project.status !== 'available') return [];
+    const opened = await openProjectSecrets({ config, layout: config.productLayout, installationId: installation.value.installationId, projectId: project.value.projectId } as ProjectSecretContext, options);
+    return opened?.grants ? opened.grants.grants.map(grant => grant.name) : [];
+  } catch { return []; }
+}
