@@ -33,6 +33,8 @@ export interface FakeAgentScenario {
   readonly loginCanary?: string;
   readonly proposalBeforeItem?: boolean;
   readonly hang?: boolean;
+  /** How long the agent call waits before its first tool call: a test acts while the worker runs (a sandboxed worker sees no test-made file). */
+  readonly delayMs?: number;
   /** Claude CLI keepalive during a pending call; 'foreign' names an unknown parent. */
   readonly heartbeat?: 'known' | 'foreign';
   readonly thinkingTokens?: boolean;
@@ -78,6 +80,7 @@ async function main() {
  if (claude) for (const event of x.events ?? []) await line({...event,session_id:'s-1',uuid:'u-ev'});
  if (claude && x.thinkingTokens) await line({type:'system',subtype:'thinking_tokens',estimated_tokens:40,estimated_tokens_delta:40,session_id:'s-1',uuid:'u-tt'});
  if (x.hang) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:'K16-WAITING '}]}}); else await line({type:'item.completed',item:{id:'waiting',type:'agent_message',text:'K16-WAITING '}}); await new Promise(()=>setInterval(()=>{},1000)); }
+ if (x.delayMs) await new Promise(r=>setTimeout(r,x.delayMs));
  if (x.preamble) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:x.preamble}]}}); else await line({type:'item.completed',item:{id:'preamble',type:'agent_message',text:x.preamble}}); }
  let n=0;
  for (const call of x.calls ?? []) { const id='use-'+(++n), itemId='item-'+n;
