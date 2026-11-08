@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Text, usePaste, type Key } from 'ink';
+import { Text, type Key } from 'ink';
 import { graphemes, nextBoundary, previousBoundary } from '#surfaces/core/terminal-composer/index.js';
 import { span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
@@ -61,18 +61,18 @@ export function EntryWindow({ title, body = [], hints, position, masked = false,
     if (next) { live.current = next; setState(next); setProblem(null); }
     return true;
   };
-  // Owner 2026-11-08 (F2-18): a pasted value (an API key) lands in this entry; an open window keeps it from the composer, so without this it was lost.
-  usePaste(text => {
+  // Owner 2026-11-08 (F2-18): a pasted value (an API key) lands in this entry through the window, which hands it on only while it holds the keyboard.
+  const onPaste = (text: string) => {
     if (busy.current) return;
     const next = editEntry(live.current, text, PASTED);
     if (next) { live.current = next; setState(next); setProblem(null); }
-  });
+  };
   const after = typeof masked === 'object' ? masked.after : undefined, mark = glyphs.ascii ? '*' : '•';
   // The caret is placed in the drawn text: a masked part draws one mark per cluster.
   const shown = masked ? maskEntry(state.text, mark, after) : state.text;
   const at = masked ? maskEntry(state.text.slice(0, state.caret), mark, after).length : state.caret;
   const caret = glyphs.ascii ? '|' : '▏';
-  return <Window title={[span(title)]} body={body} hints={hints} position={position} footerRows={problem ? 2 : 1} onInput={onInput}
+  return <Window title={[span(title)]} body={body} hints={hints} position={position} footerRows={problem ? 2 : 1} onInput={onInput} onPaste={onPaste}
     footer={() => <>
       <Text wrap="truncate-start">{`> ${shown.slice(0, at)}${caret}${shown.slice(at)}`}</Text>
       {problem ? <Text {...palette.warning} wrap="wrap">{problem}</Text> : null}

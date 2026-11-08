@@ -242,9 +242,11 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // (Ink would otherwise deliver it as ordinary keys); pasted text never decides and restarts the arming wait.
   usePaste(text => {
     if (!acceptsInput()) return;
+    // An entry window takes a paste only while it holds the keyboard (owner F2-18, Astra 3052 R1); a decision card never decides on one.
+    if (!guarded) { latest.current.onPaste?.(text); return; }
     if (!arming.armed()) { arming.touch(); return; }
     if (latest.current.onPaste) latest.current.onPaste(text); else arming.restart();
-  }, { isActive: focused && guarded });
+  }, { isActive: focused && (guarded || onPaste !== undefined) });
   const first = clampScroll(offset, rows.length, visible);
   // Body rows start under the top border, the title row and the note row.
   geometry.current = { first, visible, above: 2 + (noteText === null ? 0 : 1), hidden: queue.hidden, rows: rows.map(row => plainText(row)), rowLines };

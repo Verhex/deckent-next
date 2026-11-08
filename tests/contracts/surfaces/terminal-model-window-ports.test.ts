@@ -192,6 +192,12 @@ it('an empty /model in the workline offers "Connect a model…" first and Enter 
   await until(() => view.stdout.frame.includes('API key'), 'key entry');
   await settle(60); view.stdin.write(`\u001b[200~${CANARY}\u001b[201~`);
   await until(() => view.stdout.frame.includes('•'.repeat(CANARY.length)), 'pasted key masked in the entry');
+  // Astra 3052 R1: with the composer focused (Ctrl+O) a paste goes only to the composer; back in the window the entry still holds the key alone.
+  view.stdin.write('\u000f'); await settle(80); view.stdin.write('\u001b[200~COMPOSER-ONLY\u001b[201~'); await settle(80);
+  expect(view.stdout.frame).not.toContain('•'.repeat(CANARY.length + 1));
+  view.stdin.write('\u000f'); await settle(80);
+  await until(() => view.stdout.frame.includes('•'.repeat(CANARY.length)), 'entry unchanged after the composer paste');
+  expect(view.stdout.frame).not.toContain('•'.repeat(CANARY.length + 1));
   view.stdin.write(ENTER);
   await until(() => keys.length === 1, 'key reached the provider port');
   expect(keys).toEqual([CANARY]);
