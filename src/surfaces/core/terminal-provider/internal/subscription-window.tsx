@@ -73,7 +73,7 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
       }} />;
   }
   const { outcome, configDir, now, ticked } = step, box = (id: ProviderDelegateClass) => `[${ticked.includes(id) ? 'x' : ' '}] `;
-  return <PickerWindow title={title(fillTemplate(words.consentTitle, { kind: kind.label }))} body={[fillTemplate(words.consentNow, { who: who(now) }), words.configPolicy,
+  return <PickerWindow title={title(fillTemplate(words.consentTitle, { kind: kind.label }))} body={[fillTemplate(words.consentNow, { who: who(now) }), ...now.includes('ai') ? [words.aiShared] : [], words.configPolicy,
     ...(outcome.delegationBlocked ? [outcome.delegationBlocked] : [])].map(text => ({ spans: [span(text)] }))} bodyRows={4} bodyPages
     labels={labels.picker} position={labels.position} pickerKey={`consent:${ticked.join(',')}`} initial={{ ...PICKER_INITIAL, pos: step.pos }}
     tree={{ title: words.consentTitle, items: [{ id: 'confirm', label: fillTemplate(words.consentConfirm, { who: who(ticked) }) },

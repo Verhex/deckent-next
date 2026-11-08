@@ -20,6 +20,7 @@
   "cli.workers.empty": "  No workers.",
   "cli.workers.model": "  Task {task}: {line}",
   "cli.workers.usage": "  Usage: {turns} turns · {duration} · tokens {input} in / {output} out · {cost} · {outcome}",
+  "cli.workers.usage.subscription": "  Usage: {turns} turns · {duration} · tokens {input} in / {output} out · on your subscription · {outcome}",
   "doctor.startability": "Runtime startability: {status} · socket {endpoint}",
   "cli.audit.status.match": "match",
   "cli.audit.status.truncated": "truncated",

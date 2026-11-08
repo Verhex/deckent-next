@@ -18,10 +18,11 @@ export async function assertModelUseSource(ports: ModelUseReadPorts, context: Mo
   assertModelUsePerson(context, profile, actor);
   await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('invoke', profile, actor);
   const binding = await new ModelBindingApplication({ read: async () => context.config['provider_catalog'] }).inspect(profile.reference);
-  if (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  if (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) return attachmentFailure('MODEL_USE_BINDING_CHANGED');
   if (!requireActive) return binding;
   const active = await ports.activation(context, profile.scopeId, profile.reference);
-  if (!active || active.state !== 'active' || active.binding?.digest !== binding.binding.digest) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  if (!active || active.state !== 'active') return attachmentFailure('MODEL_USE_NOT_ACTIVE');
+  if (active.binding?.digest !== binding.binding.digest) return attachmentFailure('MODEL_USE_BINDING_CHANGED');
   const activationRevision = active.revision;
   return { ...binding, activationRevision };
 }
@@ -91,7 +92,7 @@ function assertModelUsePerson(context: ModelUseContext, profile: ModelInvocation
       || !sameAttachmentPerson(bound.principal, owner)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   }
   const refusal = subscriptionDelegationRefusal({ billing: 'subscription', ...caller, consent: delegatedUseOf(definition) });
-  if (refusal) throw new ModelUseDelegationError(refusal);
+  if (refusal) throw ErrorRegistry.createError(refusal);
 }
 
 async function assertFreshModelUse(ports: ModelUseReadPorts, target: ModelUseContext, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive: boolean) {
@@ -100,7 +101,3 @@ async function assertFreshModelUse(ports: ModelUseReadPorts, target: ModelUseCon
   await assertModelUseSource(ports, target, fresh, actor, requireActive);
 }
 
-/** Preserve the shared delegation rule's typed reason without importing a transport or renderer into this owner. */
-class ModelUseDelegationError extends Error {
-  constructor(readonly code: NonNullable<ReturnType<typeof subscriptionDelegationRefusal>>) { super(code); this.name = 'ModelUseDelegationError'; }
-}

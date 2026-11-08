@@ -8,7 +8,7 @@ import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, shownOutloo
   taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, notAcceptedNextStep, stopCauseText, blockerDetailText, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { formatBytes, formatKnown, formatUsd, untitledWorkName } from '#surfaces/core/cli-human/index.js';
-import { humanWorkerLines } from './human-worker.js';
+import { humanWorkerLines, usageText } from './human-worker.js';
 import { renderResourceLine, renderResourceDetail } from './resources.js';
 import { renderCostSummary, renderRecommendationLines } from './costs.js';
 import { globalRunCell, globalStateCell, globalStateLabel, globalStateLines, globalSummary } from './global-state.js';
@@ -301,7 +301,7 @@ function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) 
       activityLine,
       [span(t('monitor.detail.heartbeat', { heartbeat: w.heartbeat(worker).text, process: w.processText(worker), pid: worker.files?.pid ?? '—', handle: worker.handle ?? '—' }, locale))],
       ...(own ? attemptLines(w, own.attempt, failureCause(own.task), own.task.phase === 'active' && !worker.terminal) : []),
-      ...(usage ? [[span(t('monitor.detail.usage', { turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—',
+      ...(usage ? [[span(usageText(Boolean(worker.model), 'detail', { turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—',
         cost: usage.costUsd === null ? '—' : formatUsd(usage.costUsd, locale), tools: usage.toolErrors }, locale))]]
         : worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable' ? [[span(t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale), 'warning')]] : []),
       ...(worker.model ? [[span(renderWorkerModelLine(worker.model, locale))]] : []),

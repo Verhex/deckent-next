@@ -7,6 +7,8 @@ const published = (version: string) => ({ kind: 'published' as const, published:
 it('extracts comparable versions from provider version output using catalog patterns', () => {
   expect(extractToolchainVersion('codex', 'codex-cli 0.155.1')).toBe('0.155.1');
   expect(extractToolchainVersion('claude', '2.1.278 (Claude Code)')).toBe('2.1.278');
+  // NF-1: a connection-bound template records the connection's comparable version itself (no `--version` line).
+  expect(extractToolchainVersion('claude', '2.1.319')).toBe('2.1.319');
   // Cursor's version is extractable, but its distribution mechanism has no currency source (status stays unsupported).
   expect(extractToolchainVersion('cursor', '2026.09.18-9a7762b')).toBe('2026.09.18-9a7762b');
   expect(extractToolchainVersion('codex', 'claude 2.1.278')).toBe(null);

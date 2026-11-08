@@ -29,8 +29,8 @@ export interface JobWindowLabels {
 export type JobWindowPresentation = Readonly<{ kind: 'job-window'; title: string; lines: readonly WindowLine[] }>
   | Readonly<{ kind: 'job-picker'; title: string; rows: readonly (readonly Span[])[] }>;
 
-/** Only projections, not hashes or command text, provide a run's human title. */
-export function displayId(value: string): string { return value.length > 12 ? shortId(value).slice(0, 8) : value; }
+/** Only projections, not hashes or command text, provide a run's human title. A generated id shows its head; a human task id stays whole (F2-6). */
+export function displayId(value: string): string { return shortId(value); }
 
 /** The Brain-authored title when a task carries one, else the first line of the task text with its whitespace collapsed (owner 2026-10-17:
  * a row showed the whole multi-line task). */

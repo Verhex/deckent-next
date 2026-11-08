@@ -26,3 +26,8 @@ export function renderWorkerModelLine(view: WorkerModelView, locale: Locale): st
     + (view.reasoningEffort?.policyRevision ? t('cli.worker.effort.policy_revision', { revision: view.reasoningEffort.policyRevision }, locale) : '')
     + (view.unexpected.length ? t('cli.worker.model.unexpected', { models: view.unexpected.join(', ') }, locale) : '');
 }
+/** F2-11: the agent the system bound to a task and its pinned skill revisions (the plan card's words), for run and task inspect. */
+export function renderTaskAgentLines(agent: Readonly<{ agentId: string; revision: number; standing: 'active' | 'candidate'; skills: readonly Readonly<{ skillId: string; revision: number }>[] }>, locale: Locale): string[] {
+  return [t('agent.card.selected', { agentId: agent.agentId, revision: agent.revision, standing: agent.standing === 'active' ? t('agent.standing.active', {}, locale) : t('agent.standing.candidate', {}, locale) }, locale),
+    ...(agent.skills.length ? [t('agent.card.skills', { skills: agent.skills.map(row => t('agent.card.skill', { skillId: row.skillId, revision: row.revision }, locale)).join(', ') }, locale)] : [])];
+}

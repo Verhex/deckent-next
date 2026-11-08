@@ -1,21 +1,28 @@
 import preview from './preview.json' with { type: 'json' };
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
-import { ErrorRegistry, getConfigFieldDefault, redactForRecord, t, type Locale, MESSAGE_REGISTRY } from '#platform/index.js';
+import { ErrorRegistry, getConfigFieldDefault, redactForRecord, shortId, t, type Locale, MESSAGE_REGISTRY } from '#platform/index.js';
 import type { EffectConfirmationView, QueueConsent, TargetQueueView } from '#engine/index.js';
 const word = (key: string, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[key] ?? key;
 const text = (value: string) => redactForRecord(value).replace(/[\p{Cc}\p{Cf}]/gu, ' ');
-/** One window, one explicit y. EOF, cancellation, blank input and every other answer decline. */
+/** The card's operation words: a working-tree rollback puts files back, an adoption rollback moves a branch back (F2-9: no "adoption" jargon). */
+export function deliveryOperationLabel(operation: EffectConfirmationView['operation'], locale: Locale): string {
+  return operation === 'deliver-integration' ? t('cli.help.action.integration-deliver', {}, locale) : operation === 'rollback-working-tree' ? t('cli.task.delivery.operation.rollbackFiles', {}, locale)
+    : operation === 'rollback-integration' ? t('cli.task.delivery.operation.rollbackAdoption', {}, locale) : t('cli.help.action.integration-adopt', {}, locale);
+}
+/** The exact card's lines. Generated ids (the Run, the commits) show their 8-character head here; the confirmation binds the full values (F2-9). */
+export function deliveryCardText(view: EffectConfirmationView, locale: Locale, files: readonly string[], omitted: number, clean: (value: string) => string = text): string {
+  return t('cli.task.delivery.card', { operation: deliveryOperationLabel(view.operation, locale),
+    title: clean(view.title), run: clean(shortId(view.runId)), task: clean(view.taskId), ref: view.changes ? t('cli.task.delivery.files', {}, locale) : clean(view.resource),
+    from: clean(shortId(view.from)), to: clean(shortId(view.to)), count: view.files.length, added: view.added, removed: view.removed, files: files.map(clean).join('\n'), omitted }, locale);
+}
+/** One window, one explicit y. EOF, cancellation, blank input and every other answer decline. The question names what a yes does. */
 export async function askDeliveryConfirmation(view: EffectConfirmationView, locale: Locale,
   input: Readable = process.stdin, output: Writable = process.stderr, control: { readonly timeoutMs?: number; readonly signal?: AbortSignal } = {}): Promise<boolean> {
   if (!(input as { isTTY?: boolean }).isTTY) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED');
-  const operation = view.operation === 'deliver-integration' ? t('cli.help.action.integration-deliver', {}, locale)
-    : view.operation === 'rollback-integration' || view.operation === 'rollback-working-tree' ? t('cli.help.action.integration-rollback', {}, locale) : t('cli.help.action.integration-adopt', {}, locale);
-  output.write(t('cli.task.delivery.card', { operation,
-    title: text(view.title), run: text(view.runId), task: text(view.taskId), ref: view.changes ? t('cli.task.delivery.files', {}, locale) : text(view.resource),
-    from: text(view.from), to: text(view.to), count: view.files.length, added: view.added, removed: view.removed,
-    files: view.files.slice(0, preview.maxFiles).map(text).join('\n'), omitted: Math.max(0, view.files.length - preview.maxFiles) }, locale) + '\n');
-  return askLine(locale, input, output, control);
+  output.write(deliveryCardText(view, locale, view.files.slice(0, preview.maxFiles), Math.max(0, view.files.length - preview.maxFiles)) + '\n');
+  return askLine(locale, input, output, control, view.operation === 'rollback-working-tree' ? t('cli.task.delivery.prompt.rollbackFiles', {}, locale)
+    : view.operation === 'deliver-integration' && view.changes ? t('cli.task.delivery.prompt.files', {}, locale) : undefined);
 }
 /** `summary`: TESLIM-KARTI-OZET lines written ABOVE the exact card (the card and its digest stay unchanged); a consent card never carries a shadow line. */
 export async function askQueueConfirmation(view: Omit<QueueConsent, 'capability'>, locale: Locale,

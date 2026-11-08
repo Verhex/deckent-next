@@ -20,6 +20,8 @@ export type SubscriptionReadinessObservations = Readonly<{
   toolSurface?: boolean | null;
   plugins?: boolean | null;
   bridge?: boolean | null;
+  /** NF-7: a display read's verification time (host clock, ms); presentation only, never part of readiness. */
+  checkedAtMs?: number;
 }>;
 export interface SubscriptionReadinessReader {
   /** Read only existing observations for this exact surface/scope/reference. The caller owns inspection authorization.

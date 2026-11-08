@@ -1,7 +1,7 @@
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { AutonomyEvaluation, DeliverySummary } from '#engine/index.js';
 import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
-import { actionLabels, flagLabels, holdReasonLabels, modelVerdictLabels, operationLabels, phaseLabels, verdictLabels } from './labels.js';
+import { actionLabels, flagLabels, holdReasonLabels, modelVerdictLabels, operationLabels, phaseLabels, sizeLabels, verdictLabels } from './labels.js';
 import limits from './limits.json' with { type: 'json' };
 
 /**
@@ -51,8 +51,11 @@ export function renderDeliverySummary(summary: DeliverySummary, locale: Locale, 
     : tests.verification.state === 'withheld' ? t('delivery.tests.verification.withheld', {}, locale) : t('delivery.tests.verification.unavailable', {}, locale));
   lines.push(model.state === 'available' ? t('delivery.model', { channel: safe(model.requested.channelId), model: safe(model.requested.modelId),
     verdict: modelVerdictLabels(locale, safe(model.requested.channelId))[model.verdict] }, locale) : model.state === 'withheld' ? t('delivery.model.withheld', {}, locale) : t('delivery.model.unavailable', {}, locale));
-  const parts = [risk.class === 'small' ? t('delivery.risk.small', {}, locale) : t('delivery.risk.other', {}, locale), ...(risk.protectedTarget === true ? [t('delivery.risk.protected', {}, locale)] : []),
-    ...(risk.sizeBucket ? [t('delivery.risk.size', { size: safe(risk.sizeBucket) }, locale)] : []), ...risk.flags.map(flag => flagLabels(locale)[flag])];
+  // F2-2: one sentence for the work class and the change size (a small change of a task not classed small says both, without contradiction).
+  const size = risk.sizeBucket ? sizeLabels(locale)[risk.sizeBucket] ?? safe(risk.sizeBucket) : null;
+  const head = risk.class === 'small' ? [t('delivery.risk.small', {}, locale), ...(size ? [t('delivery.risk.size', { size }, locale)] : [])]
+    : [size ? t('delivery.risk.otherSized', { size }, locale) : t('delivery.risk.other', {}, locale)];
+  const parts = [...head, ...(risk.protectedTarget === true ? [t('delivery.risk.protected', {}, locale)] : []), ...risk.flags.map(flag => flagLabels(locale)[flag])];
   lines.push(t('delivery.risk', { parts: parts.join(' · ') }, locale));
   if (!omit.has('actions')) lines.push(t('delivery.actions', { yes: actionLabels(locale)[summary.actions.yes], no: actionLabels(locale)[summary.actions.no] }, locale));
   return Object.freeze(lines.map(line => bound(line, max)));

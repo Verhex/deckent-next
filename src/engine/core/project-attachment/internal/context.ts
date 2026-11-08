@@ -1,10 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
-import { installationRegistrationSchema, projectAttachmentSchema, type AttachmentPerson, type InstallationRegistration, type InstallationSource,
+import { delegationOwner, installationRegistrationSchema, projectAttachmentSchema, type AttachmentPerson, type InstallationRegistration, type InstallationSource,
   type ProjectAttachment, type InstallationIdentity } from '#domain/index.js';
 import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/index.js';
 
 export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
-  | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED';
+  | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED'
+  | 'PROJECT_ATTACHMENT_PERSON_MISMATCH' | 'MODEL_USE_NOT_ACTIVE' | 'MODEL_USE_BINDING_CHANGED';
 export class ProjectAttachmentError extends Error {
   constructor(readonly code: ProjectAttachmentErrorCode) { super(code); this.name = 'ProjectAttachmentError'; }
 }
@@ -35,8 +36,9 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   const registration = installationRegistrationSchema.parse(registry);
   if (registration.registrationId !== request.registrationId || attachment.registrationId !== registration.registrationId
     || request.companyId !== registration.source.companyId || attachment.companyId !== request.companyId
-    || (request.scopeId !== undefined && attachment.scopeId !== request.scopeId)
-    || (request.actor !== undefined && !sameAttachmentPerson(attachment.actor, request.actor))) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+    || (request.scopeId !== undefined && attachment.scopeId !== request.scopeId)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  // A workload (the MCP channel of a native chat turn) is held to the person it acts for; source scope membership still checks the workload itself.
+  if (request.actor !== undefined && !sameAttachmentPerson(attachment.actor, delegationOwner(request.actor))) return attachmentFailure('PROJECT_ATTACHMENT_PERSON_MISMATCH');
   const entry = registration.entries.find(item => item.attachment.projectId === attachment.projectId);
   if (!entry || JSON.stringify(entry.attachment) !== JSON.stringify(attachment)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   if (entry.state === 'revoked') return attachmentFailure('PROJECT_ATTACHMENT_REVOKED');

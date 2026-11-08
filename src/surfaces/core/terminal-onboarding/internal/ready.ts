@@ -4,7 +4,7 @@ import type { OnboardingPort, OnboardingPresentation, OnboardingUi } from './con
 
 /** Reobserve each owner after every write, including a relaunch after a partial ready card. */
 export async function settleOnboardingReady(port: OnboardingPort, ui: OnboardingUi, refresh: () => Promise<OnboardingPresentation>,
-  confirmProfile: (preview: Awaited<ReturnType<NonNullable<OnboardingPort['previewProfile']>>>) => Promise<boolean>) {
+  confirmProfile: (preview: Awaited<ReturnType<NonNullable<OnboardingPort['previewProfile']>>>) => Promise<boolean>, confirmed = false) {
   for (const id of ['execution:worker-settings', 'work:kind', 'work:pool']) {
     const fresh = await refresh(), current = fresh.snapshot.plan.stages.find(row => row.id === id);
     if (current?.state === 'done' && !current.operation) continue;
@@ -16,7 +16,8 @@ export async function settleOnboardingReady(port: OnboardingPort, ui: Onboarding
       if (!await confirmProfile(preview)) return false;
       stage = { ...current, operation: { ...current.operation, input: { ...current.operation.input, digest: preview.digest, expect: preview.expect } } };
     }
-    const result = id === 'execution:worker-settings' || current.operation.id === 'work.profile-add'
+    // `confirmed` (R8b): the person's subscription choice already confirmed these writes, so none asks again.
+    const result = id === 'execution:worker-settings' || current.operation.id === 'work.profile-add' || confirmed
       ? await port.apply(stage, fresh.snapshot.configBasis) : await ui.foreground(stage);
     if (result.status !== 'applied') return false;
     const after = await refresh(), settled = after.snapshot.plan.stages.find(row => row.id === id);

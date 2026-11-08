@@ -58,7 +58,8 @@ export async function recordNativeAgentObservation(profile: ModelInvocationProfi
   } finally { await rm(temporary, { force: true }); }
 }
 /** Bounded read-only K7 input: missing/malformed/foreign/stale records are unknown. Never spawn, refresh, sign in or read credentials.
- * `display` (R8e, /provider and /model only, never a gate): the last verification counts past its age and the CLI's own login-file writes. */
+ * `display` (R8e, /provider and /model only, never a gate): the last verification counts past its age and the CLI's own login-file writes, and
+ * carries `checkedAtMs` (when that verification was recorded) so a person is told its time; the K16 age still gates every turn. */
 export async function readNativeAgentObservation(profile: ModelInvocationProfile, now: () => number = Date.now, display = false) {
   try {
     const { entry, definition } = agentTarget(profile);
@@ -80,6 +81,6 @@ export async function readNativeAgentObservation(profile: ModelInvocationProfile
       || execution.ownerUid !== definition.ownerUid || execution.executable !== await realpath(definition.executable)
       || !display && record.identity !== await identity(profile)) return null;
     return Object.freeze({ ...record.observed, toolSurface: record.observed.toolSurface ?? null,
-      plugins: record.observed.plugins ?? null, bridge: record.observed.bridge ?? null });
+      plugins: record.observed.plugins ?? null, bridge: record.observed.bridge ?? null, ...(display ? { checkedAtMs: record.checkedAtMs } : {}) }); // NF-7: display says when
   } catch { return null; }
 }

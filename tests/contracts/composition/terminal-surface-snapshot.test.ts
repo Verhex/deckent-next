@@ -36,10 +36,10 @@ it('loads pending approval, Run (including never dispatched) and worker at open 
   // open, they show in their windows (the runs at the end of this test).
   await until(() => view.stdout.text.includes('A-NOTIFY 1'), 'opening snapshot'); await snapshotDone(read, 1);
   expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker']]);
-  expect(view.stdout.text).not.toContain('worker 1 · ');
+  expect(view.stdout.text).not.toContain('Task 1 · ');
   expect(view.stdout.text).not.toContain('foreign-run'); expect(view.stdout.text).not.toContain('foreign-approval');
   await type(view.stdin, '/tasks\r');
-  await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1'), 'actual WorkerPanel');
+  await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('Task 1'), 'actual WorkerPanel');
   await snapshotDone(read, 2); await settle(60);
   expect(read).toHaveBeenCalledTimes(2); // Opening/watch snapshots, before the first 100 ms heartbeat. Empty idle is tested below.
   await f.publishWorker();
@@ -68,7 +68,7 @@ it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars throu
   };
   await snapshotDone(read, 1);
   await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2);
-  expect(view.stdout.frame).not.toContain('worker 1');
+  expect(view.stdout.frame).not.toContain('Task 1');
   await settle(350); expect(read).toHaveBeenCalledTimes(2); // No active worker: no heartbeat snapshots.
   const connections = follow.mock.calls.length;
   const worker = await f.startLiveWorker(async () => {
@@ -77,7 +77,7 @@ it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars throu
     const snapshot = await read.mock.results[index]!.value;
     expect(snapshot.workers?.sources[0]?.workers[0]).toMatchObject({ process: 'unknown', files: { heartbeat: { state: 'missing' } } });
   });
-  await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1'), 'Run invalidation discovers the new unsealed worker');
+  await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('Task 1'), 'Run invalidation discovers the new unsealed worker');
   expect(read.mock.calls.some(call => call[0].join(',') === 'run,worker')).toBe(true);
   worker.usage(123);
   await until(() => view.stdout.frame.includes('246 tokens'), 'first live sidecar usage');

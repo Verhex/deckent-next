@@ -186,7 +186,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(await f.rollbackCli('rollback', 'n')).toMatchObject({ exit: 1, code: 'DELIVERY_CONFIRMATION_DECLINED' });
     expect(await f.tip()).toBe(f.plan.commit); expect(await f.fence()).toBe(adoptedFence); expect(rollbacks()).toEqual([]);
     const rolled = await f.rollbackCli('rollback', 'y');
-    expect(rolled.exit).toBe(0); expect('output' in rolled ? rolled.output : '').toContain('Roll back an adoption');
+    expect(rolled.exit).toBe(0); expect('output' in rolled ? rolled.output : '').toContain('Move the branch back');
     expect(JSON.parse(rolled.stdout)).toMatchObject({ status: 'rolled-back', targetRef: target, fromCommit: f.plan.commit, toCommit: f.base, sequence: 2 });
     expect(await f.tip()).toBe(f.base);
     expect(JSON.parse((await f.rollbackCli('rollback')).stdout)).toEqual(JSON.parse(rolled.stdout)); // completed replay does not ask

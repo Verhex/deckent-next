@@ -22,6 +22,10 @@ export interface FakeAgentScenario {
   readonly traceFile?: string;
   readonly calls?: readonly { name: string; arguments: Record<string, unknown> }[];
   readonly answer?: string;
+  /** The answer of a call without the MCP bridge (a Brain plan, a text-only turn); default 'text-only still available'. */
+  readonly text?: string;
+  /** A function body `(prompt, argv, fs) => string` for that answer, when it depends on the request (a Brain plan naming the supplied kinds). */
+  readonly textFrom?: string;
   readonly preamble?: string;
   readonly pluginMismatch?: boolean;
   readonly nativeItem?: boolean | 'collab_tool_call';
@@ -29,6 +33,8 @@ export interface FakeAgentScenario {
   readonly loginCanary?: string;
   readonly proposalBeforeItem?: boolean;
   readonly hang?: boolean;
+  /** How long the agent call waits before its first tool call: a test acts while the worker runs (a sandboxed worker sees no test-made file). */
+  readonly delayMs?: number;
   /** Claude CLI keepalive during a pending call; 'foreign' names an unknown parent. */
   readonly heartbeat?: 'known' | 'foreign';
   readonly thinkingTokens?: boolean;
@@ -48,14 +54,15 @@ if (argv[0] === '--version') { console.log((claude ? '' : 'codex-cli ') + '9.1.0
 if (argv.includes('--help')) { console.log(s.help); process.exit(0); }
 if (argv[0] === '--max-turns') { console.error(e.command.capabilities.maxTurns.hiddenHelpProbe.refusal); process.exit(1); }
 if (argv.length === 2 && argv[1] === e.headless.systemPromptFlag) { console.error("option '" + e.headless.systemPromptFlag + " <file>' argument missing"); process.exit(1); }
+if (argv.at(-1) === 'login' || argv.slice(0, 2).join(' ') === 'auth login') { console.log('fixture sign-in complete'); process.exit(0); }
 if (argv.includes('status')) { if (claude) console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty',configDirectory:process.env[e.headless.env.configDir]})); else console.error('Logged in using ChatGPT'); process.exit(0); }
 const chunks=[]; process.stdin.on('data', c => chunks.push(c)); process.stdin.on('end', () => main().catch(() => { console.error('fixture-agent-error'); process.exitCode=1; }));
 const line = value => new Promise(resolve => { if(s.scenario.traceFile) fs.appendFileSync(s.scenario.traceFile,JSON.stringify(value)+'\\n'); process.stdout.write(JSON.stringify(value)+'\\n', resolve); });
 async function main() {
  const prompt=Buffer.concat(chunks).toString('utf8'); const selected=(x.turns??[]).filter(row=>prompt.includes(row.when)).sort((a,b)=>prompt.lastIndexOf(b.when)-prompt.lastIndexOf(a.when))[0]; if(selected) x={...x,...selected};
  const model = argv[argv.indexOf(e.command.modelFlag)+1], agent = claude ? argv.includes('--mcp-config') : argv.some(a => a.startsWith('mcp_servers.'));
- if (!agent) { if (claude) { await line({...s.init,cwd:process.cwd(),model}); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:'text-only still available'}]}}); await line({...s.result,result:'text-only still available',modelUsage:{[model]:{inputTokens:2,outputTokens:9}}}); }
- else for (const value of s.codex) await line(value.item?.type === 'agent_message' ? {...value,item:{...value.item,text:'text-only still available'}} : value); return; }
+ if (!agent) { const text=x.textFrom ? String(new Function('prompt','argv','fs',x.textFrom)(prompt,argv,fs)) : x.text ?? 'text-only still available'; if (claude) { await line({...s.init,cwd:process.cwd(),model}); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text}]}}); await line({...s.result,result:text,modelUsage:{[model]:{inputTokens:2,outputTokens:9}}}); }
+ else for (const value of s.codex) await line(value.item?.type === 'agent_message' ? {...value,item:{...value.item,text}} : value); return; }
  let token, server;
  if (claude) { const file=argv[argv.indexOf('--mcp-config')+1]; server=JSON.parse(fs.readFileSync(file,'utf8')).mcpServers[e.bridge.serverName]; token=server.headers[e.bridge.tokenHeaderName].slice('Bearer '.length);
   try { fs.appendFileSync(file,' '); throw new Error('mcp-config-writable'); } catch(error) { if (error.message==='mcp-config-writable') throw error; }
@@ -73,6 +80,7 @@ async function main() {
  if (claude) for (const event of x.events ?? []) await line({...event,session_id:'s-1',uuid:'u-ev'});
  if (claude && x.thinkingTokens) await line({type:'system',subtype:'thinking_tokens',estimated_tokens:40,estimated_tokens_delta:40,session_id:'s-1',uuid:'u-tt'});
  if (x.hang) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:'K16-WAITING '}]}}); else await line({type:'item.completed',item:{id:'waiting',type:'agent_message',text:'K16-WAITING '}}); await new Promise(()=>setInterval(()=>{},1000)); }
+ if (x.delayMs) await new Promise(r=>setTimeout(r,x.delayMs));
  if (x.preamble) { if(claude) await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:x.preamble}]}}); else await line({type:'item.completed',item:{id:'preamble',type:'agent_message',text:x.preamble}}); }
  let n=0;
  for (const call of x.calls ?? []) { const id='use-'+(++n), itemId='item-'+n;

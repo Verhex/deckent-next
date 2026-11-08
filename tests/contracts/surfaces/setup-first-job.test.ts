@@ -35,12 +35,18 @@ describe('U3-1a first-job states', () => {
     expect(settings!.evaluate(at({ runtimes: [], worker: { ...observed, connection: 'configured' } })).state).toBe('done');
   });
 
-  it('no observation, apply-port or doctor unit starts a registry preview', async () => {
-    const forbidden = /initializeNativeCodingRegistry|detectNativeCliVersion|native-coding|configureNativeCodingTemplate/u;
+  it('no observation or doctor unit starts a registry preview; the apply port reaches the registry owner only for a chosen subscription (R8b)', async () => {
+    const forbidden = /initializeNativeCodingRegistry|detectNativeCliVersion|native-coding|configureNativeCodingTemplate/gu, wiring = 'src/composition/core/setup/internal/wiring.ts';
     const foreground = new Set(['src/surfaces/core/setup/internal/foreground.ts', 'src/surfaces/core/setup/internal/contract.ts']);
     for (const unit of ['src/composition/core/setup', 'src/surfaces/core/setup', 'src/surfaces/core/doctor']) {
       const files = (await readdir(unit, { recursive: true, encoding: 'utf8' })).filter(file => /\.(ts|json)$/u.test(file) && !foreground.has(`${unit}/${file}`));
-      for (const file of files) expect(forbidden.test(await readFile(join(unit, file), 'utf8')), `${unit}/${file}`).toBe(false);
+      for (const file of files) {
+        const text = await readFile(join(unit, file), 'utf8'), hits = [...text.matchAll(forbidden)].map(hit => hit.index);
+        // R8b "confirms once": wiring reaches the registry owner only inside applySetupStage (after observeSetup), never in the observation.
+        const [from, to] = [text.indexOf('const applySetupStage'), text.indexOf('const inspectExecutionEnvironment')];
+        if (`${unit}/${file}` !== wiring) expect(hits, `${unit}/${file}`).toEqual([]);
+        else { expect(hits.length).toBeGreaterThan(0); expect(hits.every(at => at! > from && at! < to), wiring).toBe(true); }
+      }
     }
   });
 });

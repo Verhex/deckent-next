@@ -18,8 +18,8 @@ function worker(live: Partial<Live> | null, extra: Partial<WorkLedgerWorkerEntry
 
 describe('worker live line', () => {
   it('renders the owner example in Turkish and English from worker-reported activity and the host clock', () => {
-    expect(formatWorkerLine(worker({}), TR)).toEqual({ text: 'worker 2 · claude claude-opus-5-5 · düzenliyor src/x.ts · 12 sn önce · 18,4k token (önbellek %83)', tone: 'normal' });
-    expect(formatWorkerLine(worker({}), EN).text).toBe('worker 2 · claude claude-opus-5-5 · editing src/x.ts · 12 s ago · 18.4k tokens (cache 83%)');
+    expect(formatWorkerLine(worker({}), TR)).toEqual({ text: 'Task 2 · claude claude-opus-5-5 · düzenliyor src/x.ts · 12 sn önce · 18,4k token (önbellek %83)', tone: 'normal' });
+    expect(formatWorkerLine(worker({}), EN).text).toBe('Task 2 · claude claude-opus-5-5 · editing src/x.ts · 12 s ago · 18.4k tokens (cache 83%)');
   });
 
   it('formats ages in seconds, minutes and hours and never shows a negative age', () => {
@@ -49,14 +49,14 @@ describe('worker live line', () => {
 
   it('shows a Codex/Cursor worker that only reports session start as muted progress, not as an error', () => {
     const line = formatWorkerLine(worker({ phase: 'starting', target: null, model: null, tokens: null, cacheReadRatio: null, unmapped: 7 }, { provider: 'codex' }), EN);
-    expect(line).toEqual({ text: 'worker 2 · codex · starting · 12 s ago · 7 provider events not itemized yet', tone: 'muted' });
+    expect(line).toEqual({ text: 'Task 2 · codex · starting · 12 s ago · 7 provider events not itemized yet', tone: 'muted' });
   });
 
   it('keeps the process line when the worker reported no events and shows shell detail when there is no target', () => {
-    expect(formatWorkerLine(worker(null, { provider: 'docker' }), EN)).toEqual({ text: 'worker 2 · docker · running', tone: 'muted' });
+    expect(formatWorkerLine(worker(null, { provider: 'docker' }), EN)).toEqual({ text: 'Task 2 · docker · running', tone: 'muted' });
     // The host-known provider wins; the worker's own claim only fills an unknown provider.
-    expect(formatWorkerLine(worker({ provider: 'codex' }), EN).text).toMatch(/^worker 2 · claude /);
-    expect(formatWorkerLine(worker({}, { provider: 'unknown' }), EN).text).toMatch(/^worker 2 · claude claude-opus-5-5 /);
+    expect(formatWorkerLine(worker({ provider: 'codex' }), EN).text).toMatch(/^Task 2 · claude /);
+    expect(formatWorkerLine(worker({}, { provider: 'unknown' }), EN).text).toMatch(/^Task 2 · claude claude-opus-5-5 /);
     expect(formatWorkerLine(worker({ phase: 'running', target: null, detail: 'npm test --silent' }), EN).text).toContain('· running npm test --silent ·');
     expect(ledgerEntrySummary(worker({}))).toBe('worker task-1 running editing src/x.ts');
   });

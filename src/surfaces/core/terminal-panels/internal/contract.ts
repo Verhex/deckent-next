@@ -151,7 +151,9 @@ export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label:
   /** R2c: the exact scoped profile's billing axis (absent: not declared, read as metered). */
   billing?: 'subscription' | 'local' | 'metered';
   /** The configured default (`terminal.chat.reference`). */
-  configured: boolean }>;
+  configured: boolean;
+  /** J1: the chosen Brain model (`brain_planner.reference`), marked on the row. */
+  brain?: boolean }>;
 export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPanelChoice[]; notes: readonly string[];
   /** Why "also make default" cannot be offered (null: it can). */
   defaultBlocked: string | null; fixTitle?: string; fixApply?: string; fixKeep?: string }>;
@@ -214,8 +216,8 @@ export interface ModelPanelLabels {
   readonly hints: string;
   /** Scope step: this session only; this session and the user default. */
   readonly session: string; readonly sessionAndDefault: string;
-  /** Row marks: pinned for this session; the configured default. */
-  readonly pinnedMark: string; readonly configuredMark: string;
+  /** Row marks: pinned for this session; the configured default; the chosen Brain model. */
+  readonly pinnedMark: string; readonly configuredMark: string; readonly brainMark?: string;
   /** `{model}`: the notice after a pin. */
   readonly pinned: string;
   /** T4-B shadow window: `{model}` the project's model; its two governed choices and "keep as it is". */

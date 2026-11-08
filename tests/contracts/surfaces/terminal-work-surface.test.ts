@@ -96,10 +96,10 @@ describe('work surface: live worker panel', () => {
     await view.type('/tasks\r');
     await until(() => view.stdout.text.includes('LIVE-PANEL'), 'panel');
     // The window may open before its first poll answers (an empty list for one frame); the first read fills it in place.
-    await until(() => view.stdout.text.includes('worker 1 · claude'), 'first poll in the window');
-    expect(view.stdout.text).toContain('worker 1 · claude claude-model · editing src/x.ts · 12 s ago · 18.4k tokens (cache 50%)');
-    expect(view.stdout.text).toContain('worker 2 · codex · starting · 2 s ago · 4 provider events not itemized yet');
-    expect(view.stdout.text).toContain('worker 3 · docker · running');
+    await until(() => view.stdout.text.includes('Task 1 · claude'), 'first poll in the window');
+    expect(view.stdout.text).toContain('Task 1 · claude claude-model · editing src/x.ts · 12 s ago · 18.4k tokens (cache 50%)');
+    expect(view.stdout.text).toContain('Task 2 · codex · starting · 2 s ago · 4 provider events not itemized yet');
+    expect(view.stdout.text).toContain('Task 3 · docker · running');
     await settle(400);
     // Single-flight polls never run faster than the heartbeat: at most one per interval after the first. Intervals use the
     // monotonic clock: the WSL wall clock steps back by seconds (a -2877 ms interval was observed in a full verify).
@@ -112,8 +112,8 @@ describe('work surface: live worker panel', () => {
   it('shows the live line in the /workers list window', async () => {
     const view = mount({ ledger: baseLedger });
     await view.type('/workers\r');
-    await until(() => view.stdout.text.includes('worker 2'), 'cards');
-    expect(view.stdout.text).toContain('worker 1 · claude claude-model · editing src/x.ts');
+    await until(() => view.stdout.text.includes('Task 2'), 'cards');
+    expect(view.stdout.text).toContain('Task 1 · claude claude-model · editing src/x.ts');
   });
 });
 
@@ -123,10 +123,10 @@ describe('work surface: /transcript', () => {
     const view = mount({ ledger: { ...baseLedger, async inspectTranscript(attempt) {
       asked.push(attempt.attemptId); if (attempt.attemptId === 'a2') throw new Error('POLICY_DENIED'); return 'RENDERED-TIMELINE';
     } } });
-    await view.type('/transcript\r'); await view.card('> worker 1', 'worker picker'); await view.type('\r');
+    await view.type('/transcript\r'); await view.card('> Task 1', 'worker picker'); await view.type('\r');
     await view.card('RENDERED-TIMELINE', 'transcript window'); expect(view.frame()).toContain('T-HEADER 1 a1');
     view.stdin.write('\u001B'); await view.card('◆ Deckent system', 'summary'); await settle(40);
-    await view.type('/transcript\r'); await view.card('> worker 1', 'second picker'); view.stdin.write('\u001B[B'); await settle(30); await view.type('\r');
+    await view.type('/transcript\r'); await view.card('> Task 1', 'second picker'); view.stdin.write('\u001B[B'); await settle(30); await view.type('\r');
     await view.card('ERR:POLICY_DENIED', 'policy denial window'); view.stdin.write('\u001B');
     expect(asked).toEqual(['a1', 'a2']);
   });

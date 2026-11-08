@@ -96,7 +96,7 @@
   "cli.help.action.integration-inspect": "Birleştirme adayını incele",
   "cli.help.action.integration-deliver": "Birleştirme adayını teslim et",
   "cli.help.action.integration-adopt": "Teslim edilen adayı benimse",
-  "cli.help.action.integration-rollback": "Benimsemeyi geri al",
+  "cli.help.action.integration-rollback": "Dal taşımayı ya da dosyalarınıza yazılan teslimi geri al",
   "cli.help.action.transcript": "İşçi dökümünü oku",
   "cli.help.action.hold": "Yeni rezervasyonları beklet",
   "cli.help.action.binding": "Kesin model bağlamasını incele",

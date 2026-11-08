@@ -94,7 +94,8 @@ export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
-    readonly dirty?: Readonly<{ check: () => Promise<boolean>; title: string; body: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => Promise<boolean>; readonly chatReady?: () => Promise<boolean>; readonly tree?: () => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>;
+    /** `check`: the card body when the folder has uncommitted changes (worded for the delivery mode), null when no card applies. */
+    readonly dirty?: Readonly<{ check: () => Promise<string | null>; title: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => Promise<boolean>; readonly chatReady?: () => Promise<boolean>; readonly tree?: () => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>;
     readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; noModel: string; prompt: string; cancelled: string; changed: string; unchanged: string; unread: string; canSetup?: () => Promise<boolean> }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
@@ -498,7 +499,7 @@ export function WorklineApp(props: WorklineProps) {
       };
       const selectedIntent = onboarding.intent(execution.input.inputId), commandId = selectedIntent?.commandId ?? globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
         props.doPlan!.quotaWait ? observe : undefined, selectedIntent?.pending);
-      const dirty = props.doPlan.dirty && !selectedIntent?.pending && await props.doPlan.dirty.check().catch(() => false) ? props.doPlan.dirty : null; if (dirty &&  await windows.ask({ title: dirty.title, hints: dirty.prompt, body: () => [{ spans: [span(dirty.body)] }], bodyRows: 2, tree: { title: dirty.title, items: [{ id: 'continue', label: dirty.go }, { id: 'cancel', label: dirty.cancel }] } }) !== 'continue') { push([notice('info', dirty.cancelled)]); return true; } // BeUser M-32: the worker starts from the last commit
+      const dirtyBody = props.doPlan.dirty && !selectedIntent?.pending ? await props.doPlan.dirty.check().catch(() => null) : null, dirty = dirtyBody ? props.doPlan.dirty! : null; if (dirty && dirtyBody && await windows.ask({ title: dirty.title, hints: dirty.prompt, body: () => [{ spans: [span(dirtyBody)] }], bodyRows: 3, tree: { title: dirty.title, items: [{ id: 'continue', label: dirty.go }, { id: 'cancel', label: dirty.cancel }] } }) !== 'continue') { push([notice('info', dirty.cancelled)]); return true; } // BeUser M-32 / NF-4: the card says where the worker starts (the last commit, or the current files in working-tree delivery)
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {

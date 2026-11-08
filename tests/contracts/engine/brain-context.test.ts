@@ -10,7 +10,7 @@ const profiles = Array.from({ length: 130 }, (_, i) => ({ ...fixture.profiles[0]
 const registry = executionRegistrySchema.parse({ ...fixture, profiles,
   kinds: profiles.map(row => ({ kind: row.id, profile: { id: row.id, version: row.version } })) });
 it.each([{}, { context: { ...brainPlannerConfigSchema.parse({}).context, maxKinds: 5 } },
-  { context: { ...brainPlannerConfigSchema.parse({}).context, maxBytes: 4500 } }])('bounds 130 prepared profiles deterministically without prompts: %j', config => {
+  { context: { ...brainPlannerConfigSchema.parse({}).context, maxBytes: 5500 } }])('bounds 130 prepared profiles deterministically without prompts: %j', config => {
   const prompt = prepareBrainRegistryPrompt(command, registry, null, config);
   const context = JSON.parse(prompt.messages[1]!.content).context;
   expect(new TextEncoder().encode(JSON.stringify(context)).length).toBeLessThanOrEqual(brainPlannerConfigSchema.parse(config).context.maxBytes);
@@ -18,7 +18,7 @@ it.each([{}, { context: { ...brainPlannerConfigSchema.parse({}).context, maxKind
   expect(context.context.schemaVersion).toBe(3); expect(context.context.memory).toBeNull(); // S4B-6: template v4 (default) plans with context v3
   expect(context.context.kinds.every((row: { type: string }) => row.type === 'prepared')).toBe(true);
   expect(context.context.truncation.omittedKinds).toBeGreaterThan(0);
-  expect(context.context.truncation.reason).toBe(brainPlannerConfigSchema.parse(config).context.maxBytes === 4500 ? 'bytes' : 'count');
+  expect(context.context.truncation.reason).toBe(brainPlannerConfigSchema.parse(config).context.maxBytes === 5500 ? 'bytes' : 'count');
   expect(prepareBrainRegistryPrompt(command, { ...registry, kinds: [...registry.kinds].reverse(), profiles: [...registry.profiles].reverse() }, null, config).contextDigest).toBe(prompt.contextDigest);
   expect(context.context.evaluators[0].parameters.properties.acceptedExitCodes).toBeDefined();
   expect(context.context.evaluators[0].parameters.additionalProperties).toBe(false);
@@ -28,6 +28,7 @@ it.each([{}, { context: { ...brainPlannerConfigSchema.parse({}).context, maxKind
     truncation: context.context.truncation, contextDigest: prompt.contextDigest }));
 });
 // alpha.56: the hub, installation inspect/uninstall/purge and nervous-rule vocabulary grew the fixed part past 4000 bytes again (4093), so the bytes case bounds at 4500.
+// F2-11 (2026-11-08): the WorkClass planning descriptions grew the fixed part to 5118 bytes, so the bytes case bounds at 5500 (default 49152 unchanged).
 // fs1 (alpha.55): the vocabulary's new resources grew the fixed part (permissions ~2 KB), so at 4000 bytes the kinds and the one evaluator list tied
 // and the evaluator went first. A list now keeps its first row; a bound that cannot hold one kind and one evaluator is a typed refusal, never a context
 // the Brain cannot plan a valid Run from.
@@ -68,7 +69,7 @@ it('enforces byte limits even without a declared window or a provider counter', 
 // and evidence types per class) and the class/binding vocabulary; scoring internals, standing-admission data and worker lists stay out.
 it('the planning context names each class with its declarable criterion and evidence types, never its scoring, admission or worker data', () => {
   const content = prepareBrainRegistryPrompt(command, fixture, null, {}).messages[1]!.content, view = JSON.parse(content).context.workClasses;
-  expect(view.classes.find((row: { id: string }) => row.id === 'feature')).toEqual({ id: 'feature', defaultEffort: 'xhigh',
+  expect(view.classes.find((row: { id: string }) => row.id === 'feature')).toEqual({ id: 'feature', description: expect.stringContaining('New or changed behaviour'), defaultEffort: 'xhigh',
     acceptance: { criterionTypes: ['completion'], evidenceTypes: ['retained-artifact'] } });
   expect(view.bindings).toContainEqual({ kind: 'coding', classId: 'feature' });
   for (const hidden of ['rubric', 'ceilingRules', 'decisionThresholds', 'proposalAdmission', 'standingAdmission', 'candidatePolic', 'inactivity'])

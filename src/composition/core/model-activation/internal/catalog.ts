@@ -34,7 +34,7 @@ export async function inspectConfiguredModelCatalog(projectRoot: string, query: 
         const chat = await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: query.scopeId,
           reference: { providerId: provider!.id, providerVersion: provider!.version, modelId: model.id, modelVersion: model.version } }, options);
         const chatState = chat.activation?.state ?? null;
-        return { ...entry, chatState, activationConflict: (chatState === 'active') !== (channel.activation?.state === 'active' && entry.activation?.state === 'active') };
+        return { ...entry, chatState, activationConflict: !(chatState === 'active' && (!channel.activation || !entry.activation)) && (chatState === 'active') !== (channel.activation?.state === 'active' && entry.activation?.state === 'active') }; // workers never activated = /setup, not reconcile
       })) };
     })) };
   } catch (error) { throw queryFailure(error); }

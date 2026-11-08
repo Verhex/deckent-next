@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import type { ModelConnectCommand } from '#domain/index.js';
+import { DEFAULT_DELEGATED_CLASSES, type ModelConnectCommand } from '#domain/index.js';
 import { ModelConnectError, assertAuthorityWitness, modelUseProfiles, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessConsent, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
   bindCapacityResource, headlessCapacityBinding, openSqliteLedger,
@@ -73,7 +73,8 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       if (!existing.some(Boolean) || existing.some(definition => definition && definition['sourceBinding'] === undefined))
         await assertAuthorityWitness('models.connect', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
           headlessPersonWitness(env, context.config.cli.agentEnvironment));
-      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, principal, Date.now());
+      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never,
+        command.delegate ?? (existing.some(Boolean) ? undefined : DEFAULT_DELEGATED_CLASSES), principal, Date.now()); // a first connect takes the owner default
       const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = headlessConnectionAdapter(definition, protocol);
       const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
       try { bindCapacityResource(db, headlessCapacityBinding(definition), { executionSlots: adapter.maxInFlight, inFlightSlots: adapter.maxInFlight }); } finally { db.close(); }

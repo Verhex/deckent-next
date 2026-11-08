@@ -70,6 +70,7 @@
   "cli.task.menu.confirm.deliver": "Write {ref}?",
   "cli.task.menu.confirm.files": "Write the change into these {count} files (no commit)?",
   "cli.task.menu.confirm.move": "Move {ref} to this commit?",
+  "cli.task.menu.confirm.restoreFiles": "Put these {count} files back as they were before the delivery?",
   "cli.task.menu.deliver.title": "Deliver task {task}: {title}",
   "cli.task.menu.deliver.moreFiles": "… {count} more file(s)",
   "cli.task.menu.deliver.base": "Base {base} · source {source}",

@@ -1,6 +1,7 @@
 import type { AttemptIdentity } from '#domain/index.js';
 import { queueTargetConfigRefusal, type DeliverySummary, type EffectConfirmationView, type RunView, type TargetQueueView, type QueueConsent, type TargetBatchExecution } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import WINDOW from './window.json' with { type: 'json' };
 
 /**
  * TESLIM-PENCERESI (owner 2026-10-14): the terminal delivery window's port. The surface never writes Git, refs or the ledger itself:
@@ -83,14 +84,20 @@ export function consentMatches(consent: DeliveryConsent, view: EffectConfirmatio
     && (consent.to === undefined || consent.to === view.to);
 }
 
+/** F2-5: a task's human title: the Brain-authored title, else the instruction's first line within the window's bound (never the whole instruction). */
+function taskTitle(task: RunView['tasks'][number], fallbackTitle: string): string {
+  const titled = task.taskBrief?.title?.trim(), first = task.taskBrief?.task?.split(/\r?\n/u).find(line => line.trim())?.trim().replace(/\s+/gu, ' ');
+  const text = titled || first, chars = text ? [...text] : [];
+  return !text ? fallbackTitle : chars.length > WINDOW.titleChars ? `${chars.slice(0, WINDOW.titleChars - 1).join('')}…` : text;
+}
 /** BeUser M-25/DR2-07: accepted tasks of finished Runs whose result is delivered to its ref and adopted nowhere yet (the brief's delivery receipt). */
 export function deliveredTargets(runs: readonly RunView[], fallbackTitle: string): readonly DeliveryTarget[] {
   const out: DeliveryTarget[] = [];
   for (const run of runs) if (run.state.kind === 'terminal') for (const task of run.tasks) {
-    const delivery = task.resultBrief?.runDelivery, instruction = task.taskBrief?.task;
+    const delivery = task.resultBrief?.runDelivery;
     if (task.phase !== 'accepted' || delivery?.state !== 'delivered' || !delivery.commit || !delivery.commandId) continue;
     out.push(Object.freeze({ key: `${run.scopeId}:${run.runId}:${task.id}`, scopeId: run.scopeId, runId: run.runId, taskId: task.id,
-      title: instruction?.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle,
+      title: taskTitle(task, fallbackTitle),
       delivered: Object.freeze({ ref: delivery.targetRef ?? delivery.commit, commit: delivery.commit, commandId: delivery.commandId }) }));
   }
   return Object.freeze(out);
@@ -107,7 +114,7 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
       const instruction = task.taskBrief?.task;
       const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
       if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
-      const key = `${run.scopeId}:${run.runId}:${task.id}`, title = instruction.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle;
+      const key = `${run.scopeId}:${run.runId}:${task.id}`, title = taskTitle(task, fallbackTitle);
       if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(aside ? { setAside: title } : {}) }));
     }
   }

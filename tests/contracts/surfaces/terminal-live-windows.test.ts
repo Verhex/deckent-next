@@ -36,10 +36,12 @@ describe('live window content (pure)', () => {
       const labels = labelsOf(work);
       const rows = (kind: 'workers' | 'tasks', data: { workers: WorkLedgerWorkerEntry[]; runs: WorkLedgerRunEntry[] }) => liveWindowLines(kind, data, labels).map(line => plainText(line.spans));
       expect(rows('workers', { workers: [], runs: [] }), locale).toEqual([work.live!.empty]);
-      expect(rows('workers', { workers: [worker(0)], runs: [] })[0]).toContain('worker 1');
+      expect(rows('workers', { workers: [worker(0)], runs: [] })[0]).toContain('Task 1');
       const tasks = rows('tasks', { workers: [worker(0)], runs: [run(0, { cancellationRequested: true })] });
       expect(tasks[0]).toBe(work.panel.title); expect(tasks).toContain(work.live!.runsTitle); expect(tasks).toContain('');
       expect(tasks.at(-1)).toContain(shortId('run-0'));
+      // F2-3: a generated 64-hex Run id shows its 8-character head; a human id stays whole (F2-6 `notlar-s`).
+      expect([shortId('0ab01bb5'.padEnd(64, 'c')), shortId('notlar-satiri-ekle')]).toEqual(['0ab01bb5', 'notlar-satiri-ekle']);
       expect(rows('tasks', { workers: [], runs: [] }), locale).toEqual([work.panel.title, work.live!.empty, '', work.live!.runsTitle, work.live!.empty]);
       expect(liveWindowStatus({ workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 workers · 2 runs' : '1 işçi · 2 iş');
       expect(liveWindowClosedText({ workers: [worker(0)], runs: [run(0)] }, work.live!)).toContain('1');
@@ -86,11 +88,11 @@ describe('live windows in the workline', () => {
     const inspected = vi.fn(async (runId: string) => ({ runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false, tasks: [{ phase: 'active' }] }) as never);
     const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', async listWorkers() { calls++; return report(count); }, async listRunIds() { return ['run-a']; }, inspectRun: inspected } }); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r');
-    await until(() => view.stdout.frame.includes(EN.live!.tasksTitle) && view.stdout.frame.includes('worker 1') && view.stdout.frame.includes('rev 3'), 'both lists in one window');
+    await until(() => view.stdout.frame.includes(EN.live!.tasksTitle) && view.stdout.frame.includes('Task 1') && view.stdout.frame.includes('rev 3'), 'both lists in one window');
     expect(view.stdout.frame).toContain(EN.live!.runsTitle); expect(view.stdout.frame).toContain('1 workers · 1 runs');
-    count = 2; await until(() => view.stdout.frame.includes('worker 2 · docker'), 'the second worker appears in the open window');
+    count = 2; await until(() => view.stdout.frame.includes('Task 2 · docker'), 'the second worker appears in the open window');
     // In place: one row each, no card appended to the scrollback.
-    expect(occurrences(view.stdout.frame, 'worker 1 · docker')).toBe(1); expect(occurrences(view.stdout.frame, 'worker 2 · docker')).toBe(1);
+    expect(occurrences(view.stdout.frame, 'Task 1 · docker')).toBe(1); expect(occurrences(view.stdout.frame, 'Task 2 · docker')).toBe(1);
     view.stdin.write(ESC);
     await until(() => !view.stdout.frame.includes(EN.live!.tasksHints!) && view.stdout.frame.includes('2 workers and 1 runs at the last read'), 'closed with the summary');
     const after = calls; await settle(120); expect(calls - after).toBeLessThanOrEqual(1);
@@ -107,7 +109,7 @@ describe('live windows in the workline', () => {
       inspectTranscript: async target => { transcripts.push(target); return 'SELECTED-TRANSCRIPT'; },
       cancelRun: async (...args) => { cancelled.push(args); return 'CANCELLED-SELECTED-RUN'; },
     } }); mounted.push(view.instance);
-    await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.frame.includes('worker 1'), 'task rows');
+    await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.frame.includes('Task 1'), 'task rows');
     view.stdin.write('\r'); await until(() => view.stdout.frame.includes('SELECTED-TRANSCRIPT'), 'selected transcript');
     expect(transcripts).toEqual([attempt]); expect(cancelled).toEqual([]);
     view.stdin.write(ESC); await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks returns');
@@ -148,7 +150,7 @@ describe('live window frame', () => {
     const instance = render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
     mountedStandalone.push(instance);
     await settle(60);
-    expect(stdout.frame).toContain(EN.live!.tasksTitle); expect(stdout.frame).toContain('worker 1'); expect(stdout.frame).toContain('cancel');
+    expect(stdout.frame).toContain(EN.live!.tasksTitle); expect(stdout.frame).toContain('Task 1'); expect(stdout.frame).toContain('cancel');
     expect(stdout.frame).toMatch(/\+-+\+/u); expect(stdout.frame).not.toMatch(/[╭╮╰╯│─]/u);
   });
 });

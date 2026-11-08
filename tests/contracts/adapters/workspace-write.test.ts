@@ -28,8 +28,9 @@ describe.skipIf(process.platform !== 'linux')('workspace write (T-L4 slice 2)', 
     expect(await planWorkspaceEdit(scope, 'edit_file', { path: 'src/a.ts', old_string: 'export', new_string: 'x', replace_all: true })).toMatchObject({ ok: true, after: 'x const a = 1;\nx const b = 2;\n' });
     expect(await planWorkspaceEdit(scope, 'edit_file', { path: 'src/a.ts', old_string: 'nope', new_string: 'x' })).toMatchObject({ ok: false, error: 'old_string not found' });
     expect(await planWorkspaceEdit(scope, 'edit_file', { path: 'src/new.ts', old_string: 'a', new_string: 'b' })).toMatchObject({ ok: false, error: expect.stringMatching(/^not-found/) });
+    // NF-8: a one-line file is one added line (its final newline is no phantom second line).
     expect(await planWorkspaceEdit(scope, 'write_file', { path: 'src/new.ts', content: 'hello\n' })).toMatchObject({ ok: true, beforeVersion: ABSENT_FILE_VERSION,
-      preview: expect.stringContaining('--- /dev/null') });
+      preview: expect.stringContaining('--- /dev/null'), added: 1, removed: 0 });
   });
 
   it('never resolves a write outside the workspace, onto a denied path or through a symlinked directory', async () => {

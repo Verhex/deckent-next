@@ -443,8 +443,24 @@ describe('/model source', () => {
     await writeFile(configPath, JSON.stringify({ ...config, brain_planner: { reference: ref('chat') } })); clearConfigCache();
     expect((await source.setBrain!(row('coder'), 'global')).lines[0]).toBe('This project names its own Brain model, so the project setting still wins here.');
     const after = await source.inspect();
-    expect(after.choices.find(choice => choice.reference.modelId === 'chat')!.detail).toMatch(/ · plans \/do work \(Brain model\)$/u);
+    // J1: the chosen Brain model is marked on its row (`brain`), not in the detail line the list does not show.
+    const brainRow = after.choices.find(choice => choice.reference.modelId === 'chat')!; expect(brainRow.brain).toBe(true); expect(brainRow.detail).not.toContain('plans /do work');
     expect(after.notes.some(note => note.startsWith('No Brain model chosen'))).toBe(false);
+    { // F2-14 (owner walk 2026-11-08): /model lists the higher registry tier first, then the catalog's own priority, not the declared (alphabetical) order
+    // The tier comes from the tier/role registry overlay; `keyless` is frontier, the rest are not registered. The catalog has no release date.
+    const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'tiers-1', roles: [], exceptions: [],
+      models: [{ channelId: 'local-openai', modelId: 'native-keyless', version: 1, tier: 'frontier', roles: [] }] }] };
+    const { root, options } = await project({ terminal: { scopeId: 'scope' } });
+    await mkdir(join(root, 'global'), { recursive: true }); await writeFile(join(root, 'global/config.json'), JSON.stringify({ model_roles: roles }), { mode: 0o600 }); // a global-layer section
+    const priority: Readonly<Record<string, number>> = { chat: 3, coder: 1, fast: 2 };
+    const host: Parameters<typeof modelPanelSource>[2] = {
+      inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
+      inspectInvocableModels: async () => reading(() => ({ invocable: true, reason: null })),
+      inspectModelCatalog: async () => ({ channels: [{ access: 'allowed', channelId: 'local-openai', providerVersion: 1, activation: null,
+        models: catalog.providers[0]!.models.map(model => ({ model: { id: model.id, version: 1, ...(priority[model.id] ? { priority: priority[model.id] } : {}) }, activation: null })) }] }) as never,
+    };
+    expect((await modelPanelSource(root, 'scope', host, options, 'en').inspect()).choices.map(choice => choice.reference.modelId)).toEqual(['keyless', 'coder', 'fast', 'chat']);
+    }
   });
   it('OpenRouter carries the seed models and no next-slice note on its row or connect result', async () => {
     const { root, options } = await project({});

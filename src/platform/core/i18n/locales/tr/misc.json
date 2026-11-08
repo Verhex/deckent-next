@@ -717,6 +717,7 @@
   "brain.here.unread": "Klasör değişiklikleri bilinmiyor: kısmi Git/stat gözlemi alınamadı. Ignored dosyalar ve submodule içeriği dahil klasörü kontrol edin.",
   "brain.dirty.title": "Bu klasörde kaydedilmemiş değişiklikler var",
   "brain.dirty.body": "Bazı değişiklikler henüz kaydedilmedi (bir kısmı burada, terminalde yapılmış olabilir). İşçi son kayıttan (commit) başlar; sonucu bu değişikliklerle çakışabilir. Önce kaydedin ya da devam edin.",
+  "brain.dirty.bodyWorkingTree": "Bazı değişiklikler henüz kaydedilmedi (bir kısmı burada, terminalde yapılmış olabilir). İşçi bu değişiklikler dahil dosyalarınızın şu anki hâlinden başlar; sonucu, teslim ettiğinizde dosyalarınıza yazılır. Deckent commit yapmaz. Devam edin ya da iptal edin.",
   "brain.dirty.continue": "Devam et",
   "brain.here.run": "Burada çalıştır",
   "brain.here.setupChoice": "İşçileri kur (/setup, işçi adımları)",

@@ -60,7 +60,7 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
   it.each(['n', 'EOF', 'yes', ' '])('refuses %s after showing the exact card and keeps refs untouched', async answer => {
     const f = await fixture(), before = await f.refs(), result = await f.execute('deliver', answer);
     expect(result).toMatchObject({ ok: false, error: { code: 'DELIVERY_CONFIRMATION_DECLINED' } });
-    expect(result.output).toContain('Ship useful change'); expect(result.output).toContain('note.txt'); expect(result.output).toContain(f.base);
+    expect(result.output).toContain('Ship useful change'); expect(result.output).toContain('note.txt'); expect(result.output).toContain(f.base.slice(0, 8));
     expect(await f.refs()).toBe(before); await expect(readFile(join(f.root, 'delivery.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('cannot carry a forged confirmation through either typed command input', async () => {
@@ -131,7 +131,7 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
   it.each(['n', 'EOF'])('rollback %s after the shown card keeps the branch, its fence and the journal unchanged', async answer => {
     const { f, commit } = await adopted(), before = await f.refs(), result = await f.execute('rollback', answer);
     expect(result).toMatchObject({ ok: false, error: { code: 'DELIVERY_CONFIRMATION_DECLINED' } });
-    expect(result.output).toContain('Roll back an adoption: Ship useful change'); expect(result.output).toContain(`${commit} → ${f.base}`);
+    expect(result.output).toContain('Move the branch back: Ship useful change'); expect(result.output).toContain(`${commit.slice(0, 8)} → ${f.base.slice(0, 8)}`); // F2-9: short commits on the card
     expect(await f.git('rev-parse', f.target)).toBe(commit); expect(await f.refs()).toBe(before);
     await expect(readFile(join(f.root, 'rollback.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
@@ -143,7 +143,7 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
   });
   it('rollback y moves the branch back once after the shown card; replay returns the same result without asking', async () => {
     const { f, commit } = await adopted(), result = await f.execute('rollback', 'y');
-    expect(result.ok, result.output).toBe(true); expect(result.output).toContain('Roll back an adoption: Ship useful change');
+    expect(result.ok, result.output).toBe(true); expect(result.output).toContain('Move the branch back: Ship useful change');
     expect(result.result).toMatchObject({ status: 'rolled-back', targetRef: f.target, fromCommit: commit, toCommit: f.base, sequence: 2 });
     expect(await f.git('rev-parse', f.target)).toBe(f.base);
     const replay = await f.execute('rollback-sdk', '', 'piped-input'); expect(replay.result).toEqual(result.result); expect(replay.output).not.toContain('y/N: ');
@@ -158,7 +158,7 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
     const before = await f.refs();
     expect(await f.execute('rollback-sdk', '', 'piped-input')).toMatchObject({ ok: false, error: { code: 'DELIVERY_INTERACTIVE_REQUIRED' } });
     expect(await f.refs()).toBe(before); expect(await f.git('rev-parse', f.target)).toBe(commit);
-    const resumed = await f.execute('rollback', 'y'); expect(resumed.ok, resumed.output).toBe(true); expect(resumed.output).toContain('Roll back an adoption');
+    const resumed = await f.execute('rollback', 'y'); expect(resumed.ok, resumed.output).toBe(true); expect(resumed.output).toContain('Move the branch back');
     expect(await f.git('rev-parse', f.target)).toBe(f.base);
     await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false, repository }));
     const settled = await f.execute('rollback-sdk', '', 'piped-input'); expect(settled.ok, settled.output).toBe(true); expect(settled.result).toEqual(resumed.result);

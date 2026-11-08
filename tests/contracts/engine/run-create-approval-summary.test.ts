@@ -17,9 +17,12 @@ for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses 
   expect(text).toContain('task'); expect(text).toContain('purchase'); expect(text).toContain('small');
   expect(text).toContain('task / execute / purchase'); expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00'); expect(text).toContain('owner-purchase');
   expect(text).toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
-  expect(text).toContain('APPROVAL_REQUIRED'); expect(text).toContain('run-business');
+  // F2-12: the plain approval requirement is said in words (no raw code); the head (title) comes before the details (rule, permissions, Run id).
+  expect(text).not.toContain('APPROVAL_REQUIRED'); expect(text).toContain('run-business');
+  expect(text.indexOf(locale === 'tr' ? 'Ayrıntılar:' : 'Details:')).toBeGreaterThan(text.indexOf('• task'));
+  expect(text.indexOf(locale === 'tr' ? 'Ayrıntılar:' : 'Details:')).toBeLessThan(text.indexOf('owner-purchase'));
   // R9: a Run with a worker shows the recorded worker ceiling; without one the card has no such line.
-  const line = locale === 'tr' ? 'Arka plan işçisi en fazla şu modda çalışır: ' : 'Background worker: at most ';
+  const line = locale === 'tr' ? 'İşçi en fazla şu modda çalışır: ' : 'The worker runs at most in this mode: ';
   expect(text).not.toContain(line);
   for (const [workerMode, word] of [[{ mode: 'full-auto', askEdits: false }, locale === 'tr' ? 'tam otomatik' : 'full auto'], [{ mode: 'standart', askEdits: true }, locale === 'tr' ? 'dikkatli' : 'careful']] as const)
     expect(renderRunCreateApprovalSummary(command, { ...create, execution: { ...create.execution, workerMode } }, verdict, locale)).toContain(line + word);
@@ -32,7 +35,7 @@ it('raw create reports undeclared permissions/ceiling/class; a registry gate is 
   // acceptance profile, reusing the proposal graph's execution would seal that graph's class and the card would rightly name it.
   const text = renderRunCreateApprovalSummary({ ...raw, graph }, { ...create, graph, execution: fixtureExecution(graph) }, noRule);
   expect(text).toContain('work class: not declared'); expect(text).toContain('Also mentioned by the proposal (advisory, not evaluated, grants nothing): not declared');
-  expect(text).not.toContain('Checked by policy at admission');
+  expect(text).not.toContain('Checked by policy at the start');
   expect(text).toContain('Declared budget ceiling: not declared'); expect(text).toContain('work-class registry');
 });
 it('redacts complete fields before cutting and again after ANSI/control reconstruction, including known secrets', () => {
@@ -83,7 +86,7 @@ it('proposer-authored long titles cannot push declared permissions off the card;
     const text = renderRunCreateApprovalSummary({ ...command, graph, proposal: { ...command.proposal!, requiredPermissions: permissions } }, { ...create, graph }, verdict, locale);
     expect(text.length).toBeLessThanOrEqual(2048);
     for (const row of ['operation / execute / erp-write-invoice', 'secret / switch / live-key', 'config / write / policy']) expect(text).toContain(row);
-    expect(text).toContain(locale === 'tr' ? 'yine politikayla yetkilendirilir' : 'still authorized by policy');
+    expect(text).toContain(locale === 'tr' ? 'yine politikayla denetlenir' : 'still checked by policy');
     expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00'); expect(text).toContain('owner-purchase');
   }
 });
@@ -91,7 +94,7 @@ it.each(['en', 'tr'] as const)('a proposal card shows the system-checked task se
   const permissions = [{ kind: 'task', action: 'execute', resourceId: 'task' }, { kind: 'scope', action: 'inspect', resourceId: 'live' },
     { kind: 'model-invocation', action: 'invoke', resourceId: 'gpt-6.1-sol' }];
   const text = renderRunCreateApprovalSummary({ ...command, proposal: { ...command.proposal!, requiredPermissions: permissions } }, create, verdict, locale);
-  expect(text).toContain(locale === 'tr' ? 'Başlatılırken policy\'nin denetlediği: 1 görevin her biri için task / execute' : 'Checked by policy at admission: task / execute for each of the 1 tasks');
+  expect(text).toContain(locale === 'tr' ? 'Başlarken politika her görevin çalıştırma iznini denetler (1 görev)' : 'Checked by policy at the start: permission to run each task (tasks: 1)');
   expect(text).toContain(locale === 'tr' ? 'Önerinin ayrıca andığı izinler (yalnız bilgi, değerlendirilmedi, yetki vermez): 2' : 'Also mentioned by the proposal (advisory, not evaluated, grants nothing): 2');
   expect(text).toContain('scope / inspect / live'); expect(text).toContain('model-invocation / invoke / gpt-6.1-sol'); expect(text).not.toContain('task / execute / task');
 });

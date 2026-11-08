@@ -69,7 +69,8 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     let choice: QuestionAnswer;
     if (step.kind === 'work') {
       const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id)), admitted = model.snapshot.admittedProviders ?? [];
-      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = model.snapshot.connections ?? [];
+      // F2-13: one row per subscription CLI (its first connected profile): the system assigns the worker model per WorkClass, so per-model rows only repeated the CLI.
+      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = (model.snapshot.connections ?? []).filter((row, index, all) => all.findIndex(other => other.provider === row.provider) === index);
       // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
       const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => ({ id: `connection:${row.id}`, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale) })) }
         : { title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale), body, choices: provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : [] };
@@ -83,7 +84,7 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
         await session.answer('work:kind', { connection: connection.id }); await session.finish(step);
         // R8f: choosing the subscription also confirms the worker-ready writes (one card, not two in a row); a refusal leaves the ready card to show.
         const ready = session.model().steps[0];
-        if (ready?.kind === 'ready' && await settleOnboardingReady(port, ui, session.refresh, async () => false).catch(() => false)) await session.finish(ready);
+        if (ready?.kind === 'ready' && await settleOnboardingReady(port, ui, session.refresh, async () => false, true).catch(() => false)) await session.finish(ready);
         continue;
       }
       const changing = choice.id === 'change';

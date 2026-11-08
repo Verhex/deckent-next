@@ -151,6 +151,51 @@ jobs:
           path: .pack/ci-evidence/
           if-no-files-found: error
           retention-days: 7
+  journey:
+    # Owner 2026-11-08: the owner journey (tests/e2e/owner-journey.test.ts) is the acceptance gate the owner asked for; it takes
+    # ~7-9 minutes, longer than a test shard's budget, so it runs here on its own and the required verify depends on it.
+    needs: prepare
+    name: owner journey (node 26)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '26', check-latest: true, cache: npm }
+      - run: node scripts/ci-temporary-environment.mjs
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-node26-${{ github.run_attempt }}
+          path: .pack/download
+      - run: tar -xzf .pack/download/ci-build.tar.gz
+      - name: Prepare pinned Docker fixture and prove product sandbox
+        run: |
+          bash scripts/ci-docker-fixture.sh
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          export DECKENT_GLOBAL_HOME="$RUNNER_TEMP/deckent-global"
+          echo "DECKENT_GLOBAL_HOME=$DECKENT_GLOBAL_HOME" >> "$GITHUB_ENV"
+          node scripts/ci-shell-realm.mjs
+      - name: Walk the owner journey
+        shell: bash
+        run: |
+          mkdir -p .pack/journey-evidence
+          set -o pipefail
+          npx vitest run --configLoader runner tests/e2e/owner-journey.test.ts 2>&1 | tee .pack/journey-evidence/journey.log
+          # The gate holds only when all three journey cases ran and passed (no skipped or pending case), Astra 3048 R1.
+          sed 's/\x1b\[[0-9;]*m//g' .pack/journey-evidence/journey.log | grep -Eq '^ +Tests +3 passed \(3\)$'
+        env:
+          JOURNEY_HOSTED: '1'
+          JOURNEY_OUT: '${{ github.workspace }}/.pack/journey-evidence'
+          VITEST_MAX_FORKS: '1'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: journey-node26-${{ github.run_attempt }}
+          path: .pack/journey-evidence/
+          if-no-files-found: warn
+          retention-days: 7
   weights:
     # Main push, nightly and manual runs only (owner 2026-11-02): report drift as a warning, then refresh the weights from this
     # run's receipts into the cache every later run's prepare restores. Never commits; not a required check.
@@ -189,7 +234,7 @@ jobs:
   verify:
     name: required verify (ubuntu-latest, node ${{ matrix.node }})
     if: always()
-    needs: [prepare, lint, tests]
+    needs: [prepare, lint, tests, journey]
     runs-on: ubuntu-latest
     timeout-minutes: 3
     strategy:
@@ -202,10 +247,12 @@ jobs:
           PREPARE: '${{ needs.prepare.result }}'
           LINT: '${{ needs.lint.result }}'
           TESTS: '${{ needs.tests.result }}'
+          JOURNEY: '${{ needs.journey.result }}'
         run: |
           test "$PREPARE" = success
           test "$LINT" = success
           test "$TESTS" = success
+          test "$JOURNEY" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

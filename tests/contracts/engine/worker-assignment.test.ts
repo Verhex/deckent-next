@@ -61,7 +61,7 @@ it('takes the first admissible candidate of the WorkClass list and seals it; ear
   const execution = await resolveWorkerEffortExecution(graph('coding'), registry(), reader, validation, compiler, context());
   const task = execution.tasks[0]!, pin = readWorkerModelPin(task.profile.parameters)!;
   expect(pin.pin).toEqual({ channelId: standard.channel, modelId: standard.model, auxiliaryModelIds: [] });
-  expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'standard', version: 2 },
+  expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'standard', version: 2 },
     candidateIndex: 0, channelId: standard.channel, modelId: standard.model, catalogRevision: 'claude-cli-subscription-2026-10-31', modelRevision: 7, activationRevision: 5,
     // A1: the Claude catalog declares no vendor default and the list names no deviation, so the CLI's own default stays in place.
     effort: { level: null, source: 'cli-default' }, skipped: [] });
@@ -152,7 +152,7 @@ it('an Enterprise overlay replaces a Core list only by compare-and-set and the a
     ceilingRules: [], decisionThresholds: { rejectBelow: 0.5, acceptAt: 1 } } }], bindings: [], evidenceExtensions: [],
     candidatePolicies: [{ id: 'standard', version: 3, override: { previousVersion: 2 }, candidates: [{ channelId: standard.channel, modelId: 'claude-sonnet-5-5', effort: 'medium' }] }] };
   const execution = await resolveWorkerEffortExecution(graph('coding'), registry(replaced), reader, validation, compiler, context());
-  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'feature', workClassRevision: JSON.stringify(['atama-m3-2026-10-23', 'acme-1']),
+  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'feature', workClassRevision: JSON.stringify(['work-classes-2026-11-08', 'acme-1']),
     candidatePolicy: { id: 'standard', version: 3 }, candidateIndex: 0, modelId: 'claude-sonnet-5-5', effort: { level: 'medium', source: 'candidate' } });
   const stale = { ...replaced, candidatePolicies: [{ ...replaced.candidatePolicies[0]!, override: undefined }] };
   await expect(resolveWorkerEffortExecution(graph('coding'), registry(JSON.parse(JSON.stringify(stale))), reader, validation, compiler, context()))
@@ -176,9 +176,11 @@ it('the approval card shows the assigned worker, its effort and the list positio
     execution, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } };
   const verdict = { decision: 'require-approval', revision: 'p1', reason: 'APPROVAL_REQUIRED' } as const;
   const en = renderRunCreateApprovalSummary(command, create, verdict, 'en'), tr = renderRunCreateApprovalSummary(command, create, verdict, 'tr');
-  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription) · effort: high · from the design list deep@2, choice 2');
+  // F2-12: the head names the worker; how it was chosen (reasoning level, list, choice) stands under the details.
+  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription)'); expect(en).toContain('chosen with reasoning level high · from the design list deep@2, choice 2');
+  expect(en.indexOf('chosen with')).toBeGreaterThan(en.indexOf('Details:'));
   expect(en).toContain('skipped before it: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
-  expect(tr).toContain('çalışan: claude-fable-5-1 (claude-cli-subscription) · effort: high · design listesinden (deep@2), 2. seçenek');
+  expect(tr).toContain('işçi: claude-fable-5-1 (claude-cli-subscription)'); expect(tr).toContain('seçim: akıl yürütme düzeyi high · design listesinden (deep@2), 2. seçenek');
   expect(tr).toContain('ondan önce atlananlar: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
   // A pinned task's card is byte-identical to before: no worker line.
   const pinned = graph('coding', input({ model: { channelId: standard.channel, modelId: 'claude-fable-5-1', auxiliaryModelIds: [] } }));

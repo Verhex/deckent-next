@@ -1,6 +1,7 @@
 [
   "agent.create.file",
   "agent.create.model",
+  "approval.plan.task",
   "approvals.federated.hint_autonomous",
   "approvals.federated.hint_checkpoint",
   "approvals.federated.hint_confirmation",

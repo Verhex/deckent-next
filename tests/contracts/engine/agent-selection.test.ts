@@ -6,10 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteAgentCatalogStore, bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeWorkerEffortCapability,
   NATIVE_PROMPT_LIMITS } from '#adapters/index.js';
-import { AgentCatalogApplication, assertRunExecution, composeModelRolePolicy, personaDigest, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, selectTaskAgents, skillContentDigest,
+import { AgentCatalogApplication, assertRunExecution, composeModelRolePolicy, personaDigest, projectRunView, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, selectTaskAgents, skillContentDigest,
   skillSetDigest, type AgentCatalogDependencies, type ModelCatalogReader } from '#engine/index.js';
-import { parseProviderCatalogDocument, readWorkerModelPin, type ExecutionProfileDefinition, type ModelCatalogModelRecord } from '#domain/index.js';
+import { createRun, parseProviderCatalogDocument, readWorkerModelPin, type ExecutionProfileDefinition, type ModelCatalogModelRecord } from '#domain/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
+import { renderRunInspect } from '#surfaces/core/cli-run/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 import { moved, tamperSkillRevision, writeStanding } from '../support/agent-standing.js';
 
@@ -113,6 +114,24 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     const execution = await f.admit(), card = renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: graph() },
       { graph: graph(), execution } as never, { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, 'tr');
     expect(card).toContain('ajan: b-second (sürüm 1, terfili)');
+  });
+  it('F2-11 (owner walk 2026-11-08): a Brain answer naming `small` binds the agent defined for `small` with its pinned skill revision, on the card and in the seal; the walk\'s `feature` answer binds none', async () => {
+    const f = await fixture(), k = await f.skill('satir-ekle', 'Dosyanın sonuna tek satır ekle.'); await f.agent('not-yazici', [k], ['small']);
+    const answer = (workClass: string) => { const g = graph('notlar.txt sonuna "yedinci satır" ekle'); return { ...g, tasks: [{ ...g.tasks[0]!, workClass, workInput: { ...g.tasks[0]!.workInput, workClass } }] }; };
+    const walked = await f.admit(answer('feature'));
+    expect(walked.tasks[0]).not.toHaveProperty('agent');
+    const execution = await f.admit(answer('small')), task = execution.tasks[0]!;
+    expect(task.agent).toMatchObject({ agentId: 'not-yazici', revision: 1, workClass: 'small', skills: [{ skillId: 'satir-ekle', revision: 1, digest: k.contentDigest }] });
+    expect(prompt(task.profile)).toMatchObject({ persona: [{ id: 'not-yazici', version: 1 }], skills: [{ id: 'satir-ekle', version: 1 }] });
+    expect(task.assignment).toMatchObject({ workClass: 'small' }); // the system still assigns the worker from the class list
+    const card = (locale: 'en' | 'tr') => renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: answer('small') },
+      { graph: answer('small'), execution } as never, { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, locale);
+    expect(card('tr')).toContain('iş sınıfı: small'); expect(card('tr')).toContain('ajan: not-yazici (sürüm 1, aday)'); expect(card('tr')).toContain("skill'ler: satir-ekle (sürüm 1)");
+    expect(card('en')).toContain('skills: satir-ekle (revision 1)');
+    // Job detail: the frozen Run's view carries the bound agent and its pinned skills, and run inspect names them in the card's words.
+    const view = projectRunView(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, answer('small'), 1, execution));
+    expect(view.tasks[0]!.agent).toEqual({ agentId: 'not-yazici', revision: 1, workClass: 'small', standing: 'candidate', skills: [{ skillId: 'satir-ekle', revision: 1, digest: k.contentDigest }] });
+    expect(renderRunInspect({ run: view, models: [] }, 'tr', false)).toContain("ajan: not-yazici (sürüm 1, aday)\n    skill'ler: satir-ekle (sürüm 1)");
   });
   it('negative: two active agents of one WorkClass in a scope is a corrupt catalog, never a silent choice', async () => {
     const f = await fixture(); await f.agent('one'); await f.agent('two');

@@ -66,7 +66,7 @@ it('PROOF: a new model added only as data (catalog row + role row + activation) 
   const execution = await assign(reader, policy), task = execution.tasks[0]!;
   expect(readWorkerModelPin(task.profile.parameters)!.pin).toEqual({ channelId: CHANNEL, modelId: id, auxiliaryModelIds: [] });
   const expansionDigest = createHash('sha256').update(JSON.stringify([{ role: 'worker', minTier: 'frontier' }, policy.revision, [[CHANNEL, id]]]), 'utf8').digest('hex');
-  expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'standard', version: 2 },
+  expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'standard', version: 2 },
     candidateIndex: 3, channelId: CHANNEL, modelId: id, catalogRevision: packaged.revision, modelRevision: 7, activationRevision: 5,
     effort: { level: null, source: 'cli-default' },
     selector: { roleRevision: JSON.stringify(['model-roles-2026-10-31', 'acme-roles-1']), expanded: 1, position: 0, expansionDigest },
@@ -173,4 +173,9 @@ it('the Brain worker-model list applies the same worker role gate as assignment:
   expect(await listed(roles([roleRow(id, 'frontier')]))).toContain(id);
   // A model whose row lacks the worker role is not listed either, though it is catalog-registered and active.
   expect(await listed(roles([roleRow(id, 'frontier', ['brain'])]))).not.toContain(id);
+  // NF-1 (owner R8): a connection-bound template records a bare version; Haiku needs 2.1.293, so the connection's 2.1.284 floor does not admit it
+  // and its proved current CLI 2.1.319 does.
+  const bare = async (cliVersion: string) => (await inspectAdmissibleWorkerModels([{ ...templates[0]!, cliVersion }], 's', catalog(['claude-haiku-5-5']), context().nowMs,
+    { roles: roles(), workerRole: WORK_CLASS_WORKER_ROLE })).map(row => row.modelId);
+  expect(await bare('2.1.284')).toEqual([]); expect(await bare('2.1.319')).toEqual(['claude-haiku-5-5']);
 });

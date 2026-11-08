@@ -245,7 +245,9 @@ export async function planWorkspaceEdit(scope: WorkspaceScope, tool: string, arg
   } else return { ok: false, error: 'unknown-tool' };
   if (after === before) return { ok: false, error: 'no change' };
   if (Buffer.byteLength(after, 'utf8') > maxFileBytes) return { ok: false, error: 'too-large' };
-  const preview = unifiedDiff(target.rel, before, after), lines = preview.split('\n');
+  // NF-8: a trailing newline is not a phantom line (the delivery stat's reading), unless it is the only difference; the two header lines are not counted.
+  const trim = (before === null || before.endsWith('\n')) && after.endsWith('\n');
+  const preview = unifiedDiff(target.rel, trim ? before?.slice(0, -1) ?? null : before, trim ? after.slice(0, -1) : after), lines = preview.split('\n').slice(2);
   return { ok: true, rel: target.rel, beforeVersion: current.version === ABSENT_FILE_VERSION ? ABSENT_FILE_VERSION : current.version, after, preview,
-    added: lines.filter(line => line.startsWith('+') && !line.startsWith('+++')).length, removed: lines.filter(line => line.startsWith('-') && !line.startsWith('---')).length };
+    added: lines.filter(line => line.startsWith('+')).length, removed: lines.filter(line => line.startsWith('-')).length };
 }

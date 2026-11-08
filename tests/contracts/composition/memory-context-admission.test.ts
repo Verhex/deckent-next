@@ -94,8 +94,8 @@ describe.skipIf(process.platform === 'win32')('S4B-5 verified memory into the wo
     // `run inspect` (shared EN/TR renderer) names the memory part.
     const brief = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'on' }, f.options)).run.tasks[0]!.taskBrief;
     const segment = f.delivery('on').segments.find(row => row.id === ids[1])!;
-    expect(renderBriefLines(brief, undefined, 'en')).toContain(`Memory: ${ids[1]}@1 (${segment.sha256}) (verified entries, sent as data; they grant no permission)`);
-    expect(renderBriefLines(brief, undefined, 'tr')).toContain(`Hafıza: ${ids[1]}@1 (${segment.sha256}) (doğrulanmış kayıtlar, veri olarak gönderilir; hiçbir yetki vermez)`);
+    expect(renderBriefLines(brief, undefined, 'en')).toContain(`Memory: ${ids[1]}@1 (${segment.sha256.slice(0, 8)}) (verified entries, sent as data; they grant no permission)`);
+    expect(renderBriefLines(brief, undefined, 'tr')).toContain(`Hafıza: ${ids[1]}@1 (${segment.sha256.slice(0, 8)}) (doğrulanmış kayıtlar, veri olarak gönderilir; hiçbir yetki vermez)`);
     expect(renderBriefLines((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'off' }, f.options)).run.tasks[0]!.taskBrief, undefined, 'en').join('\n')).not.toContain('Memory:');
     // A purge after the freeze tombstones the journal; the frozen Run copy stays (the purge card says so), and later Runs get nothing of it.
     await purgeConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'purge-m1', scopeId: 's', entryId: 'm1', expectedRevision: 2, reasonCode: 'personal-data' }, f.options, person);

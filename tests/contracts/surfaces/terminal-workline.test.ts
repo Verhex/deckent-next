@@ -236,15 +236,15 @@ describe('workline view rendered by Ink', () => {
     const view = mount({ labels: liveLabels, completeTurn: async () => 'ok', pollMs: 5, ledger: { scopeId: 'scope-a',
       async listWorkers() { polls += 1; return workers(1, 0); }, async inspectRun() { return null; }, followWorkers } });
     await view.type('/tasks\r');
-    await until(() => view.stdout.text.includes('worker 1 · docker'), 'pushed worker');
+    await until(() => view.stdout.text.includes('Task 1 · docker'), 'pushed worker');
     await settle(40);
     expect(polls).toBe(0);
   });
 
   it('keeps all 300 workers in the scrollable list without appending ledger cards', async () => {
     const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a', async listWorkers() { return workers(300, 0); }, async inspectRun() { return null; } } });
-    await view.type('/workers\r'); await until(() => view.stdout.frame.includes('worker 1'), 'list'); await settle(40);
-    view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('worker 300'), 'last row');
+    await view.type('/workers\r'); await until(() => view.stdout.frame.includes('Task 1'), 'list'); await settle(40);
+    view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('Task 300'), 'last row');
     view.stdin.write(ESC); await until(() => view.stdout.frame.includes('◆ Deckent system ·') && view.stdout.frame.includes(': 300'), 'list summary');
     expect(view.stdout.frame).not.toContain('task-299');
   });
@@ -340,11 +340,11 @@ describe('workline view rendered by Ink', () => {
     await settle(40);
     expect(sent).toEqual([]);
     release();
-    await until(() => view.stdout.frame.includes('worker 1'), 'worker list'); await settle(40); view.stdin.write(ESC);
+    await until(() => view.stdout.frame.includes('Task 1'), 'worker list'); await settle(40); view.stdin.write(ESC);
     await until(() => sent.length === 1 && view.stdout.text.includes('REPLY-AFTER'), 'queued text runs after /workers');
     await settle(40);
     expect(calls).toBe(1); expect(sent).toEqual(['after']);
-    expect(view.stdout.text.indexOf('worker 1')).toBeLessThan(view.stdout.text.indexOf('REPLY-AFTER'));
+    expect(view.stdout.text.indexOf('Task 1')).toBeLessThan(view.stdout.text.indexOf('REPLY-AFTER'));
   });
 
   it('applies queued slash commands in order and exits on a queued /exit without running what follows it', async () => {
@@ -365,7 +365,7 @@ describe('workline view rendered by Ink', () => {
 
   it('renders no colour escape sequences at the none tier (NO_COLOR / --no-color / non-TTY)', async () => {
     const plain = mount({ completeTurn: async () => 'ok', ledger: { scopeId: 'scope-a', async listWorkers() { return workers(1, 0); }, async inspectRun() { return null; } } }, 'none');
-    await plain.type('/workers\r'); await until(() => plain.stdout.text.includes('worker 1'), 'plain worker');
+    await plain.type('/workers\r'); await until(() => plain.stdout.text.includes('Task 1'), 'plain worker');
     const colour = new RegExp(`${String.fromCharCode(27)}\\[(3[0-7]|9[0-7]|38;)`);
     expect(plain.stdout.text).not.toMatch(colour);
   });

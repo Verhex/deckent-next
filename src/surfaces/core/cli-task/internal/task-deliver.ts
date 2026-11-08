@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { t, type Locale } from '#platform/index.js';
 import type { DeliverySummary, EffectConfirmationView, QueueConsent, TargetQueueView } from '#engine/index.js';
 import { consentSummaryLines, renderDeliverySummary, ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
-import { renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
+import { deliveryCardText, deliveryOperationLabel, renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import type { DeliveryPreview, DeliveryTarget, TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
 import REGISTRY from './task.json' with { type: 'json' };
@@ -21,13 +21,10 @@ const shown = <T>(items: readonly T[]) => ({ items: items.slice(0, REGISTRY.menu
  * the CLI card: only an explicit yes writes; Enter alone, Esc, cancellation and silence decline (the caller's bounded signal).
  */
 export function deliveryConsentCard(view: EffectConfirmationView, locale: Locale): CliCardRequest {
-  const operation = view.operation === 'deliver-integration' ? t('cli.help.action.integration-deliver', {}, locale)
-    : view.operation === 'rollback-integration' ? t('cli.help.action.integration-rollback', {}, locale) : t('cli.help.action.integration-adopt', {}, locale);
   const files = shown(view.files);
-  const [title = operation, ...body] = t('cli.task.delivery.card', { operation, title: view.title, run: view.runId, task: view.taskId, ref: view.changes ? t('cli.task.delivery.files', {}, locale) : view.resource,
-    from: view.from, to: view.to, count: view.files.length, added: view.added, removed: view.removed, files: files.items.join('\n'), omitted: files.omitted }, locale).split('\n');
+  const [title = deliveryOperationLabel(view.operation, locale), ...body] = deliveryCardText(view, locale, files.items, files.omitted, value => value).split('\n');
   return { title, body: [...body, view.operation === 'deliver-integration' ? view.changes ? t('cli.task.menu.confirm.files', { count: view.changes.length }, locale) : t('cli.task.menu.confirm.deliver', { ref: view.resource }, locale)
-    : t('cli.task.menu.confirm.move', { ref: view.resource }, locale)], options: yesNo(locale) };
+    : view.operation === 'rollback-working-tree' ? t('cli.task.menu.confirm.restoreFiles', { count: view.files.length }, locale) : t('cli.task.menu.confirm.move', { ref: view.resource }, locale)], options: yesNo(locale) };
 }
 /** The queue's exact batch card (`queue.confirm.card`, as `task integration-queue-confirm` shows it) on the CLI card; the tickets' summary goes ABOVE its body. */
 export function queueConsentCard(view: Omit<QueueConsent, 'capability'>, locale: Locale, summaries: readonly (DeliverySummary | null)[] = []): CliCardRequest {
@@ -45,7 +42,7 @@ function previewCard(preview: DeliveryPreview, locale: Locale): CliCardRequest {
     t('cli.task.menu.deliver.base', { base: preview.base, source: preview.source }, locale),
     ...(preview.outOfScope.length ? [t('cli.task.menu.deliver.outOfScope', { count: preview.outOfScope.length, paths: preview.outOfScope.join(', ') }, locale)] : []),
     // TESLIM-KARTI-OZET: what the worker claims, what acceptance rests on, model and risk (the card above already names the files).
-    ...(preview.summary === undefined ? [] : preview.summary ? renderDeliverySummary(preview.summary, locale, { omit: ['title', 'operation', 'change'] }) : ticketSummaryBlock(null, undefined, locale)),
+    ...(preview.summary === undefined ? [] : preview.summary ? renderDeliverySummary(preview.summary, locale, { omit: ['title', 'operation', 'change', ...preview.workingTree ? ['actions' as const] : []] }) : ticketSummaryBlock(null, undefined, locale)),
     preview.queueTarget ? t('cli.task.menu.deliver.queue', { target: preview.queueTarget }, locale)
       : preview.adoptionTargets.length ? t('cli.task.menu.deliver.targets', { targets: preview.adoptionTargets.join(', ') }, locale) : preview.workingTree ? t('terminal.delivery.whereFiles', {}, locale) : t('cli.task.menu.deliver.refOnly', {}, locale),
   ], options: [{ id: 'deliver', label: t('cli.task.menu.deliver.go', {}, locale), role: 'yes' }, { id: 'diff', label: t('cli.task.menu.action.diff', {}, locale), key: 'd' },

@@ -34,6 +34,7 @@ export function maskEntry(text: string, mark: string, after?: string): string {
  * A bounded window with one single-line entry (T3 L4 `/config` free values, the `/mcp` wizard's text steps). Enter submits the text to
  * `onSubmit`, which may answer a localized reason to stay open; Esc and Ctrl+C cancel. `masked` draws marks instead of the value.
  */
+const PASTED = { backspace: false, delete: false, leftArrow: false, rightArrow: false, home: false, end: false, ctrl: false, meta: false };
 export function EntryWindow({ title, body = [], hints, position, masked = false, initial = '', problem: opening = null, onSubmit, onCancel }: {
   readonly title: string; readonly body?: readonly WindowLine[]; readonly hints: string; readonly position: string; readonly initial?: string;
   /** A reason shown under the entry when it opens (the step is shown again because its value was refused). */
@@ -60,12 +61,18 @@ export function EntryWindow({ title, body = [], hints, position, masked = false,
     if (next) { live.current = next; setState(next); setProblem(null); }
     return true;
   };
+  // Owner 2026-11-08 (F2-18): a pasted value (an API key) lands in this entry through the window, which hands it on only while it holds the keyboard.
+  const onPaste = (text: string) => {
+    if (busy.current) return;
+    const next = editEntry(live.current, text, PASTED);
+    if (next) { live.current = next; setState(next); setProblem(null); }
+  };
   const after = typeof masked === 'object' ? masked.after : undefined, mark = glyphs.ascii ? '*' : '•';
   // The caret is placed in the drawn text: a masked part draws one mark per cluster.
   const shown = masked ? maskEntry(state.text, mark, after) : state.text;
   const at = masked ? maskEntry(state.text.slice(0, state.caret), mark, after).length : state.caret;
   const caret = glyphs.ascii ? '|' : '▏';
-  return <Window title={[span(title)]} body={body} hints={hints} position={position} footerRows={problem ? 2 : 1} onInput={onInput}
+  return <Window title={[span(title)]} body={body} hints={hints} position={position} footerRows={problem ? 2 : 1} onInput={onInput} onPaste={onPaste}
     footer={() => <>
       <Text wrap="truncate-start">{`> ${shown.slice(0, at)}${caret}${shown.slice(at)}`}</Text>
       {problem ? <Text {...palette.warning} wrap="wrap">{problem}</Text> : null}

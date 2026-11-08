@@ -146,8 +146,8 @@ src/surfaces/core/monitor/internal/view.ts
 monitor-surface
       09:29:55Z · message · Applying the review fixes to the
 monitor view
-Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-$0.4321 · 1 tool errors
+Usage so far: 12 turns · 12000 in / 3400 out tokens · on
+your subscription · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
@@ -162,8 +162,8 @@ Worker run-blocked-approval/lint · attempt ed5a5613-attempt
 Doing now: running · src/app.ts — apply patch
 Heartbeat ! 1 min 35 s (stale) · process running · pid 4242
 · handle ctr-lint
-Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-$0.4321 · 1 tool errors
+Usage so far: 12 turns · 12000 in / 3400 out tokens · on
+your subscription · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
@@ -177,8 +177,8 @@ Worker run-blocked-approval/pack · attempt a465c0eb-attempt
 Doing now: — · —
 Heartbeat released · process missing · pid 4242 · handle
 ctr-pack
-Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-$0.4321 · 1 tool errors
+Usage so far: 12 turns · 12000 in / 3400 out tokens · on
+your subscription · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]

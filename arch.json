@@ -929,7 +929,8 @@
         "src/engine/core/effect",
         "src/platform/core/config",
         "src/domain/core/recovery",
-        "src/engine/core/run-limits"
+        "src/engine/core/run-limits",
+        "src/platform/core/common"
       ],
       "plan": "CONTRACT"
     },
@@ -1498,6 +1499,7 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/project-instructions",
         "src/engine/core/model-invocation",
+        "src/engine/core/model-activation",
         "src/surfaces/core/run-planning",
         "src/domain/core/run",
         "src/domain/core/attempt",
@@ -2252,7 +2254,8 @@
         "src/adapters/core/attempt-store",
         "src/adapters/core/sqlite-model-invocation",
         "src/composition/core/model-use",
-        "src/engine/core/model-use"
+        "src/engine/core/model-use",
+        "src/adapters/core/native-cli-headless"
       ],
       "plan": "PROVIDERS"
     },
@@ -3556,7 +3559,8 @@
         "src/platform/core/errors",
         "src/platform/core/output",
         "src/platform/core/redaction",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/platform/core/common"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3618,7 +3622,8 @@
         "src/platform/core/errors",
         "src/platform/core/config-fields",
         "src/platform/core/i18n",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -4997,6 +5002,7 @@
     "src/engine/core/project-attachment": {
       "dependencies": [
         "src/domain/core/primitives",
+        "src/domain/core/model-invocation",
         "src/domain/core/project-attachment",
         "src/engine/core/bootstrap-identity",
         "src/platform/core/config"
@@ -5005,6 +5011,7 @@
     },
     "src/adapters/core/project-attachment": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/domain/core/project-attachment",
         "src/engine/core/project-attachment",
         "src/adapters/core/installation-files",
@@ -5194,12 +5201,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42117,
+      "adapters": 42136,
       "surfaces": 45000,
-      "composition": 13518
+      "composition": 13543
     },
     "totalSrcLines": 200000,
-    "testCases": 8211,
+    "testCases": 8218,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

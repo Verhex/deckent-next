@@ -46,10 +46,11 @@ export function toolchainMechanism(provider: string): ToolchainMechanism {
   if (!mechanism) throw new ToolchainCurrencyError('TOOLCHAIN_PROVIDER_UNKNOWN');
   return mechanism;
 }
-/** Extracts the comparable version from a provider's `--version` output using the catalog pattern; null when it does not match. */
+/** Extracts the comparable version from a provider's `--version` output using the catalog pattern; null when it does not match. A template bound
+ * to a connection records the connection's already-comparable version (R8: no `--version` line is recorded), taken as it is. */
 export function extractToolchainVersion(provider: string, cliVersion: string): string | null {
   const match = new RegExp(toolchainMechanism(provider).versionPattern, 'u').exec(cliVersion.trim());
-  const candidate = match?.[1] ?? null;
+  const candidate = match?.[1] ?? cliVersion.trim();
   return candidate !== null && version.safeParse(candidate).success ? candidate : null;
 }
 /** Semver-like ordering: numeric core, then a prerelease sorts below its release; build metadata is ignored. */
