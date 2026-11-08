@@ -183,6 +183,8 @@ jobs:
           mkdir -p .pack/journey-evidence
           set -o pipefail
           npx vitest run --configLoader runner tests/e2e/owner-journey.test.ts 2>&1 | tee .pack/journey-evidence/journey.log
+          # The gate holds only when all three journey cases ran and passed (no skipped or pending case), Astra 3048 R1.
+          sed 's/\x1b\[[0-9;]*m//g' .pack/journey-evidence/journey.log | grep -Eq '^ +Tests +3 passed \(3\)$'
         env:
           JOURNEY_HOSTED: '1'
           JOURNEY_OUT: '${{ github.workspace }}/.pack/journey-evidence'

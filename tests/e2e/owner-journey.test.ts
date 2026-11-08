@@ -94,6 +94,8 @@ function journeyTurns() {
 }
 const denied = /PROJECT_ATTACHMENT_DENIED|installation owner|only with your approval|Unexpected operation failure/u;
 const realm = !missing && await nativeAgentRealmAvailable(FILE, 'owner journey');
+// The dedicated CI journey job (JOURNEY_HOSTED=1) is the gate: a missing prerequisite fails there, never a quiet skip (Astra 3048 R1).
+if (process.env['JOURNEY_HOSTED'] === '1' && !realm) throw new Error(`OWNER_JOURNEY_PREREQUISITE_MISSING: ${missing ?? 'isolation-realm-unavailable'}`);
 
 describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disposable install)', { timeout: 300_000 }, () => {
   let root = '', project = '', global = '', bin = '', env: NodeJS.ProcessEnv = {}; const folders: string[] = []; // every project folder, stopped at the end
