@@ -134,8 +134,8 @@ Sinyal 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı ctr-build
       09:28:30Z · tool.call · edit src/surfaces/core/monitor/internal/view.ts
       09:29:30Z · tool.call · shell npm test -- monitor-surface
       09:29:55Z · message · Applying the review fixes to the monitor view
-Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1
-araç hatası
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · aboneliğinizle · 1 araç
+hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
 yok) → başlangıç model-alpha-2 → kullanım yok → bekliyor [canlı, henüz
 mühürlenmedi]
@@ -148,8 +148,8 @@ bilinmiyor · son tarih: bilinmiyor · sonraki: İşçiyi incele
 kurulum current
 Şu an: çalıştırıyor · src/app.ts — apply patch
 Sinyal ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
-Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1
-araç hatası
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · aboneliğinizle · 1 araç
+hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
 yok) → başlangıç model-alpha-2 → kullanım yok → bekliyor [canlı, henüz
 mühürlenmedi]
@@ -162,8 +162,8 @@ bilinmiyor · sonraki: İş ayrıntılarını incele
 kurulum current
 Şu an: — · —
 Sinyal bırakıldı · süreç kayıp · pid 4242 · tanıtıcı ctr-pack
-Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1
-araç hatası
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · aboneliğinizle · 1 araç
+hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
 yok) → başlangıç model-alpha-2 → kullanım yok → bekliyor [canlı, henüz
 mühürlenmedi]

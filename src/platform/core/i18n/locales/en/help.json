@@ -96,7 +96,7 @@
   "cli.help.action.integration-inspect": "Inspect an integration candidate",
   "cli.help.action.integration-deliver": "Deliver an integration candidate",
   "cli.help.action.integration-adopt": "Adopt a delivered candidate",
-  "cli.help.action.integration-rollback": "Roll back an adoption",
+  "cli.help.action.integration-rollback": "Undo a branch move or a delivery written into your files",
   "cli.help.action.transcript": "Read the worker transcript",
   "cli.help.action.hold": "Hold new reservations",
   "cli.help.action.binding": "Inspect an exact model binding",

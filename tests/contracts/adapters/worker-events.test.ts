@@ -106,6 +106,18 @@ it('maps a codex exec --json stream onto the same schema: shell and patch calls,
   expect(failed).toMatchObject([{ kind: 'session.ended', outcome: 'error' }]);
 });
 
+it('F2-7: a bridged Deckent tool keeps its own class (edit counts as a changed file, run_shell names its command); another MCP tool stays network', () => {
+  const bridge = new Map([['mcp__deckent__edit_file', 'edit'], ['mcp__deckent__run_shell', 'shell']]), state = createNormalizerState([], 0, undefined, bridge);
+  const claude = [{ type: 'assistant', message: { id: 'm1', content: [{ type: 'tool_use', id: 't1', name: 'mcp__deckent__edit_file', input: { path: 'notlar.txt' } },
+    { type: 'tool_use', id: 't2', name: 'mcp__deckent__run_shell', input: { command: 'tail -n 1 notlar.txt' } }, { type: 'tool_use', id: 't3', name: 'mcp__other__edit_file', input: {} }] } }];
+  const codex = [{ type: 'item.completed', item: { id: 'c1', type: 'mcp_tool_call', server: 'deckent', tool: 'edit_file', arguments: { path: 'b.md' }, status: 'completed' } }];
+  const events = [...claude.flatMap(line => normalizeClaudeLine(JSON.stringify(line), state, 1)), ...codex.flatMap(line => normalizeCodexLine(JSON.stringify(line), state, createCodexState(), 2))]
+    .map(event => workerEventSchema.parse(event)) as WorkerEvent[];
+  expect(events.filter(event => event.kind === 'tool.call').map(event => event.kind === 'tool.call' && [event.toolClass, event.target, event.detail]))
+    .toEqual([['edit', 'notlar.txt', null], ['shell', null, 'tail -n 1 notlar.txt'], ['network', null, null], ['edit', 'b.md', null]]);
+  expect(summarizeWorkerEvents(events).filesTouched).toEqual(['b.md', 'notlar.txt']);
+});
+
 it('keeps secrets out of every Codex-derived field, never turns unknown status into success, and survives malformed input (Astra 2066)', () => {
   const secret = 'probe-secret-value';
   const state = createNormalizerState([secret], 0), codex = createCodexState();

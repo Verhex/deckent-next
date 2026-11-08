@@ -88,7 +88,7 @@ for (const route of ['cli-do-json', 'mcp-plan', 'mcp-propose'] as const) it.skip
   const viewModel = monitor.buildMonitorView({ ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!,
     approvals: ledger.approvals.map(row => ({ ...row, requiredAssurance: null })) }] }, 'en', true);
   const monitorRows = viewModel.tabs.approvals.flatMap(block => block.kind === 'table' ? block.rows : []);
-  expect(monitorRows[0]!.cells[0]!.text).toContain('purchase');
+  expect(monitorRows[0]!.cells[0]!.text).toContain('Plan · tasks: 1 • task'); // F2-12: the row shows the short head; kind and class stand under its details
   const detailText = monitorRows[0]!.detail().map(line => line.map(part => part.text).join('')).join('\n');
   expect(detailText).toContain(summary.replace(/\s+/gu, ' ')); frames(route + ' monitor detail', detailText);
   const ports = createWorklineLedgerPorts({ root: f.project, scopeId: 's', options: f.options, listApprovals,
@@ -100,10 +100,10 @@ for (const route of ['cli-do-json', 'mcp-plan', 'mcp-propose'] as const) it.skip
   cleanup.push(() => view.instance.unmount());
   await settle(40); view.stdin.write('/approvals\r');
   await until(() => view.stdout.frame.includes('Plan · tasks: 1'), 'fresh terminal approvals list'); frames(route + ' list', view.stdout.frame);
-  expect(view.stdout.frame).toContain('purchase'); expect(view.stdout.frame).toContain('business');
+  expect(view.stdout.frame).toContain('Plan · tasks: 1 • task');
   await settle(40); view.stdin.write('\r');
   await until(() => view.stdout.frame.includes('ceiling checked only at admission'), 'stored plan in approval window'); frames(route + ' card', view.stdout.frame);
-  expect(view.stdout.frame).toContain('only at admission'); expect(view.stdout.frame).toContain('work-class registry');
+  expect(view.stdout.frame).toContain('only at admission'); expect(view.stdout.frame).toContain('work-class registry'); expect(view.stdout.frame).toContain('purchase'); expect(view.stdout.frame).toContain('business');
   expect((await client.listTools()).tools.map(tool => tool.name)).not.toContain('decide_approval');
   expect(JSON.stringify(await client.callTool({ name: 'decide_approval', arguments: { decision: 'allow' } }))).toContain('MCP_TOOL_UNKNOWN');
   expect((await listApprovals(query) as unknown[]).map(r => approvalRecordSchema.parse(r))).toEqual(records);

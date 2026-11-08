@@ -129,7 +129,7 @@ it('a verified MCP proposer produces the same durable plan for the authorized hu
   expect(approval!.request.requester).toEqual(input.proposer);
   expect(approval!.request.summary).toContain('business-process'); expect(approval!.request.summary).toContain('business');
   // The declared task/execute/task is the derived requirement itself: shown as checked, not repeated as advisory.
-  expect(approval!.request.summary).toContain('Checked by policy at admission: task / execute for each of the 1 tasks'); expect(approval!.request.summary).not.toContain('task / execute / task');
+  expect(approval!.request.summary).toContain('Checked by policy at the start: permission to run each task (tasks: 1)'); expect(approval!.request.summary).not.toContain('task / execute / task');
   expect(approval!.request.summary).toContain('$2.00');
   expect(approval!.request.summary).toContain('only at admission');
 });

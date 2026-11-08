@@ -337,7 +337,7 @@ describe('monitor human worker evidence', () => {
       if (transcript === 'sealed') expect(worker).toMatchObject({ usageEvidence: 'sealed', usage: { turns: 3 } });
       else expect(worker).not.toHaveProperty('usage');
       expect(JSON.stringify(worker)).toContain('tests passed');
-      expect(humanText).toContain('İDDİA'); expect(humanText).toContain('tests passed'); expect(humanText).toContain('Değerlendirme: ret');
+      expect(humanText).toContain('İşçinin beyanı'); expect(humanText).toContain('tests passed'); expect(humanText).toContain('Değerlendirme: ret');
       if (noChange) expect(worker.human!.resultBrief!.evaluation.reason).toBe('no-change-produced');
       else expect(humanText).toContain(count ? 'note.txt' : 'Boş yama');
       expect(humanText).not.toContain('private-value');
@@ -352,7 +352,7 @@ describe('monitor human worker evidence', () => {
       let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += chunk.toString(); done(); } });
       expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r-human', '--lang', lang, '--no-color'], { root: current.dir, env: current.options.env, stdout, inspectRun: inspectConfiguredRun })).toBe(0);
       expect(output).toContain(input.task); expect(output).toContain('src/**');
-      if (allowed) expect(output).toContain(lang === 'en' ? 'CLAIM' : 'İDDİA');
+      if (allowed) expect(output).toContain(lang === 'en' ? "Worker's claim" : 'İşçinin beyanı');
       expect(output).not.toContain('private-value'); expect(output).not.toContain('\u001b');
     }
     unchanged(before, await files(current.ledger)); expect(await readFile(current.configPath)).toEqual(configBefore);

@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { askQueueConfirmation, renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
+import { askDeliveryConfirmation, askQueueConfirmation, renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { QueueConsent, TargetQueueView } from '#engine/index.js';
 
 // QUEUE-SMALL 5: both queue cards asked "Write this reference? y/N". The adoption card moves a branch, so it asks exactly that.
@@ -27,6 +27,19 @@ describe('queue confirmation questions', () => {
     const publish = await ask('publish', 'en', 'y\r');
     expect(publish).toMatchObject({ decision: true }); expect(publish.written).toContain('Write this reference? y/N: ');
     expect(publish.written).not.toContain('to the verified commit');
+  });
+
+  it('F2-9: a working-tree rollback card says it puts the files back, asks that, and shows short generated ids', async () => {
+    const input = Object.assign(new PassThrough(), { isTTY: true }), output = new PassThrough(); let written = '';
+    output.on('data', chunk => { written += String(chunk); });
+    const view = { operation: 'rollback-working-tree', scopeId: 's', commandId: 'c', actor: { id: 'o', issuer: 'i', subject: 'o' }, resource: 'r', from: 'a'.repeat(40), to: 'b'.repeat(40),
+      runId: '0ab01bb5'.padEnd(64, 'c'), taskId: 'notlar-satiri-ekle', title: 'Add a line', files: ['notlar.txt'], added: 0, removed: 1, changes: [{ path: 'notlar.txt', before: 'x', after: 'y' }] };
+    const decision = askDeliveryConfirmation(view, 'tr', input, output, { timeoutMs: 5_000 });
+    setTimeout(() => input.write('n\r'), 20);
+    expect(await decision).toBe(false);
+    expect(written).toContain('Dosyalarınızı teslimden önceki hâline geri getir: Add a line'); expect(written).toContain('Koşum 0ab01bb5 · Görev notlar-satiri-ekle');
+    expect(written).toContain(`${'a'.repeat(8)} → ${'b'.repeat(8)}`); expect(written).toContain('Bu dosyalar teslimden önceki hâline geri yüklensin mi? y/N: ');
+    expect(written).not.toMatch(/referans|Benimseme|c{56}/u);
   });
 
   it('alpha.53 A3: summary lines stand above the exact card, which stays byte-identical; without them nothing is added', async () => {

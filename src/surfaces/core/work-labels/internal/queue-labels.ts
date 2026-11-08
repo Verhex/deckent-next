@@ -7,8 +7,9 @@ export function queueWindowLabels(locale: Locale): NonNullable<DeliveryWindowLab
     card: view => renderQueueConsent(view, locale),
     status: view => renderQueueStatus(view, locale) };
 }
-/** TESLIM-KARTI-OZET words of the delivery window: `brief` leaves out the title, operation and files the window shows in its own rows. */
+/** TESLIM-KARTI-OZET words of the delivery window: `brief` leaves out the title, operation and files the window shows in its own rows;
+ * `ownActions` also the yes/no line, when the window says it in its own sentence (a working-tree delivery, F2-4). */
 export function cardSummaryLabels(locale: Locale): NonNullable<DeliveryWindowLabels['cardSummary']> {
-  return { lines: (summary, brief) => brief && summary ? renderDeliverySummary(summary, locale, { omit: ['title', 'operation', 'change'] }) : ticketSummaryBlock(summary, undefined, locale),
+  return { lines: (summary, brief, ownActions) => brief && summary ? renderDeliverySummary(summary, locale, { omit: ['title', 'operation', 'change', ...ownActions ? ['actions' as const] : []] }) : ticketSummaryBlock(summary, undefined, locale),
     consent: summaries => consentSummaryLines(summaries, locale) };
 }

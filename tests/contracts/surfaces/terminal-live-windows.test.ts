@@ -40,6 +40,8 @@ describe('live window content (pure)', () => {
       const tasks = rows('tasks', { workers: [worker(0)], runs: [run(0, { cancellationRequested: true })] });
       expect(tasks[0]).toBe(work.panel.title); expect(tasks).toContain(work.live!.runsTitle); expect(tasks).toContain('');
       expect(tasks.at(-1)).toContain(shortId('run-0'));
+      // F2-3: a generated 64-hex Run id shows its 8-character head; a human id stays whole (F2-6 `notlar-s`).
+      expect([shortId('0ab01bb5'.padEnd(64, 'c')), shortId('notlar-satiri-ekle')]).toEqual(['0ab01bb5', 'notlar-satiri-ekle']);
       expect(rows('tasks', { workers: [], runs: [] }), locale).toEqual([work.panel.title, work.live!.empty, '', work.live!.runsTitle, work.live!.empty]);
       expect(liveWindowStatus({ workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 workers · 2 runs' : '1 işçi · 2 iş');
       expect(liveWindowClosedText({ workers: [worker(0)], runs: [run(0)] }, work.live!)).toContain('1');

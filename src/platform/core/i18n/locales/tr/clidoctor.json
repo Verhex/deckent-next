@@ -20,6 +20,7 @@
   "cli.workers.empty": "  İşçi yok.",
   "cli.workers.model": "  Görev {task}: {line}",
   "cli.workers.usage": "  Kullanım: {turns} tur · süre {duration} · token {input} giriş / {output} çıkış · maliyet {cost} · {outcome}",
+  "cli.workers.usage.subscription": "  Kullanım: {turns} tur · süre {duration} · token {input} giriş / {output} çıkış · aboneliğinizle · {outcome}",
   "doctor.startability": "Runtime başlatılabilirliği: {status} · soket {endpoint}",
   "cli.audit.status.match": "eşleşiyor",
   "cli.audit.status.truncated": "sondan silinmiş",

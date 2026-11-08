@@ -30,6 +30,9 @@ export interface NativeCliWorkerTransport {
     line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null }>;
 }
 
+/** F2-7: the worker-event class of each bridged Deckent tool (its own spec's class), so a read, edit or command reads as one and an edited path counts as changed. */
+const WORKER_CLASS: Readonly<Record<ToolSessionPort['session']['tools'][number]['toolClass'], string>> = { read: 'read', edit: 'edit', shell: 'shell', deckent: 'other', mcp: 'network' };
+const bridgeToolClasses = (prefix: string, tools: ToolSessionPort['session']['tools']) => new Map(tools.map(tool => [prefix + tool.name, WORKER_CLASS[tool.toolClass]]));
 /** Pure factory. The sole model spawn is run(), using K16's existing isolated runner and login lock. */
 export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPorts['driver']>[0], transport: NativeCliWorkerTransport,
   signal: AbortSignal): NativeCliWorkerDriver {
@@ -68,7 +71,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         args = codexAgentArgv(entry, tools.session, runDir, input.model, effortArgs, bridge.url);
         await writeFile(promptFile, input.system, { mode: 0o600, flag: 'wx' });
       }
-      const state = createNormalizerState([bridge.turnToken]), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
+      const state = createNormalizerState([bridge.turnToken], Date.now(), undefined, bridgeToolClasses(entry.bridge.toolPrefix, tools.session.tools)), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
         events => input.onEvents?.(events as import('#domain/index.js').WorkerEvent[]));
       let refused = false;
       const evidence = await transport.runIsolated(entry, { executable: checked.preflight.executable, args,

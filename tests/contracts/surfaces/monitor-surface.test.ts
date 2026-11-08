@@ -539,6 +539,22 @@ describe('untrusted text never reaches the terminal with control sequences (Fabl
         { kind: 'tool.call', atMs: 2000, toolClass: 'edit', target: NASTY, detail: NASTY, toolId: 'x', name: 'Edit' }] as never }, 'en');
     expect(text).not.toMatch(BAD); expect(text).toContain(CLEAN);
   });
+  it('F2-6/7/8: a subscription worker\'s transcript names no price, words tool classes, and shows its report as claims, never JSON', async () => {
+    const { renderWorkerTranscript } = await import('#surfaces/core/monitor/index.js');
+    const base = fullSnapshot.installs[0]!.workers[0]!.files!.usage!, model = fullSnapshot.installs[0]!.workers[0]!.model!;
+    const summary = { ...base, costUsd: 0.068, costBasis: 'list', filesTouched: [], toolCalls: { ...base.toolCalls, network: 2 } };
+    const report = { schemaVersion: 1, summary: 'appended a line', changedFiles: ['notlar.txt'], checks: [], openIssues: [] };
+    const data = { schemaVersion: 1, identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }, sealed: { eventCount: 2, sealedAt: 1 }, summary,
+      finalReport: { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report }, events: [
+        { kind: 'tool.call', atMs: 1000, toolClass: 'network', target: null, detail: null, toolId: 'x', name: 'mcp__fixture__probe' },
+        { kind: 'message', atMs: 2000, role: 'assistant', thinking: false, excerpt: '{"schemaVersion":1,"summary":"appended', textBytes: 9 }] } as never;
+    const tr = renderWorkerTranscript({ ...(data as object), model } as never, 'tr');
+    expect(tr).not.toMatch(/\$|maliyet|list\b/u); expect(tr).toContain('ağ 2'); expect(tr).toContain('İşçinin raporuna göre değişen dosyalar (beyan): notlar.txt');
+    expect(tr).toContain('getiriyor  mcp__fixture__probe'); expect(tr).toContain('son raporunu yazdı (aşağıda)'); expect(tr).not.toContain('"schemaVersion"');
+    expect(tr).toContain('İşçinin beyanı: appended a line');
+    // A metered worker (no pinned subscription model) still sees the provider's cost.
+    expect(renderWorkerTranscript(data, 'en')).toContain('Provider-reported cost $0.0680 (list)');
+  });
 });
 
 describe('terminal /monitor', () => {
@@ -748,7 +764,7 @@ it.each([{ locale: 'en' as const, columns: 80, rows: 24 }, { locale: 'tr' as con
   const snapshot = { ...sample, installs: [{ ...install, workers: [{ ...worker, human }] }] }, before = JSON.stringify(snapshot);
   const detail = surface.buildMonitorView(snapshot, locale, true).tabs.workers.flatMap(b => b.kind === 'table' ? b.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
   for (const value of ['src/**', 'Checks retain source attribution', 'still pending', 'refs/heads/main', 'frozen-profile', 'high']) expect(detail).toContain(value);
-  expect(detail).toContain(locale === 'en' ? 'CLAIM' : 'İDDİA'); expect(detail).toContain(t('task.acceptance.noChangeProduced', {}, locale));
+  expect(detail).toContain(locale === 'en' ? "Worker's claim" : 'İşçinin beyanı'); expect(detail).toContain(t('task.acceptance.noChangeProduced', {}, locale));
   const view = mount({ load: async () => snapshot, locale, columns, rows });
   try {
     await until(() => view.stdout.frame.includes(t('monitor.title', {}, locale)), 'loaded Brief frame');
@@ -756,7 +772,7 @@ it.each([{ locale: 'en' as const, columns: 80, rows: 24 }, { locale: 'tr' as con
     expect(view.stdout.frame).toContain('Preserve result evidence'); expect(view.stdout.frame).toContain('src/**');
     let frames = view.stdout.frame;
     for (let n = 0; n < 8; n++) { await view.press('\u001b[6~'); frames += '\n' + view.stdout.frame; }
-    expect(frames).toContain(locale === 'en' ? 'CLAIM' : 'İDDİA'); expect(frames).toContain('still pending');
+    expect(frames).toContain(locale === 'en' ? "Worker's claim" : 'İşçinin beyanı'); expect(frames).toContain('still pending');
     expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns); expect(frames).not.toContain('\u001b[');
     await view.press(KEY.esc); expect(JSON.stringify(snapshot)).toBe(before);
   } finally { view.instance.unmount(); }

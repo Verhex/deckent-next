@@ -1,6 +1,7 @@
 {
   "agent.shell.subscriptionHostRefused": "No sandbox is available for this subscription agent; it cannot run commands on the host. Nothing was run.",
   "agent.shell.productStateProtected": "Deckent's own state cannot be opened by any approval. Nothing was run.",
+  "agent.edit.previewCounts": "(+{added} −{removed} lines)",
   "agent.shell.fullAccessUnavailable": "Full access requires an open sandbox; nothing was run.",
   "agent.shell.sandboxNotStarted": "The sandbox could not start this command: {reason}. Nothing ran and no host shell was used; `deckent doctor` runs the same sandbox self-test.",
   "error.RUNTIME_CHAT_EVENT_TOO_LARGE": "A required conversation event exceeds the single-frame capacity. Delivery stopped; some history may be missing. Check any tool effects before retrying. Start a new conversation with /clear and use smaller parts.",
@@ -441,6 +442,7 @@
   "monitor.detail.now": "Doing now: {phase} · {target}",
   "monitor.detail.heartbeat": "Heartbeat {heartbeat} · process {process} · pid {pid} · handle {handle}",
   "monitor.detail.usage": "Usage so far: {turns} turns · {input} in / {output} out tokens · cost {cost} · {tools} tool errors",
+  "monitor.detail.usage.subscription": "Usage so far: {turns} turns · {input} in / {output} out tokens · on your subscription · {tools} tool errors",
   "monitor.detail.workspace": "Workspace {path}",
   "monitor.detail.released": "Custody released: the container and the attempt directory are gone; the patch was retained.",
   "monitor.detail.approval": "Approval {id} · scope {scope} · {kind} · install {install}",

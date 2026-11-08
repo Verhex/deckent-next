@@ -1,6 +1,6 @@
 import { nativeWorkerToolFloor } from './worker-floor.js';
 import { nativeWorkerApprovalExpired, workerToolCardSummary, nativeWorkerToolLifetime, type ToolSessionPort } from '#capabilities/index.js';
-import { ErrorRegistry, SystemTrustedClock, sha256, redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, SystemTrustedClock, sha256, redactForRecord, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { runDurableAgentTurn, requestAgentToolApproval, awaitAgentToolApproval,
   prepareApprovalPreview, projectModelIngressField, agentToolApprovalFacts, AgentToolPolicyAuthorization, type AgentTurnPorts } from '#engine/index.js';
 import { projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC,
@@ -18,7 +18,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
   const { current, context, person, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
   const clock = new SystemTrustedClock();
   const sessions = () => LocalOsSessionAuthority.create(context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-  const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority,
+  const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority, locale: resolveLocale(undefined, options.env ?? process.env, context.config.language),
     selfSource: selfSource ? isSelfSourceWriteFloored : () => false });
   const shell = createAgentShell({ worker: true, scope: workspace.scope, context, sessions, scopeId, turnId, config: readTerminalShellConfig(context.config as unknown as Record<string, unknown>),
     channel: { signal, emit() {}, async drained() {}, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes, profile: current.profile,

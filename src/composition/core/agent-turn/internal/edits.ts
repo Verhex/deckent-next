@@ -1,6 +1,6 @@
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
-import { SystemTrustedClock, prepareProductDirectory } from '#platform/index.js';
+import { SystemTrustedClock, prepareProductDirectory, t, type Locale } from '#platform/index.js';
 import { agentFileEffectCommandId, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 /**
@@ -14,7 +14,8 @@ import type { loadPeerInvocationContext } from '#composition/core/model-invocati
 export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; readonly peer?: LocalPeerIdentity; readonly sessions?: () => Promise<SessionVerifier & SessionAuthority>;
   readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
   /** MODES-3: the area's paths that decide authority (the installation's configuration file): a write there asks in every mode. */
-  readonly authority?: (rel: string) => boolean; readonly selfSource?: (rel: string) => boolean }) {
+  readonly authority?: (rel: string) => boolean; readonly selfSource?: (rel: string) => boolean;
+  /** The person's language for the card preview's count line (F2-10); the model-facing tool result stays the protocol's English. */ readonly locale?: Locale }) {
   const { area, context, scopeId, turnId } = input, descriptor = area.operation;
   const plans = new Map<string, WorkspaceEditPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
@@ -40,7 +41,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
     /** The approval card's preview: the line counts first (always visible on the card), then the planned diff. */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
-      return planned?.ok ? `(+${planned.added} −${planned.removed} lines)\n${planned.preview}` : undefined;
+      return planned?.ok ? `${t('agent.edit.previewCounts', { added: planned.added, removed: planned.removed }, input.locale ?? 'en')}\n${planned.preview}` : undefined;
     },
     /** Astra 2431: the card's fields as data — the target and the planned line counts (undefined when not planned). */
     cardCall(tool: string, args: Record<string, unknown>): { readonly kind: 'edit'; readonly path: string; readonly added: number; readonly removed: number } | undefined {

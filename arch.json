@@ -929,7 +929,8 @@
         "src/engine/core/effect",
         "src/platform/core/config",
         "src/domain/core/recovery",
-        "src/engine/core/run-limits"
+        "src/engine/core/run-limits",
+        "src/platform/core/common"
       ],
       "plan": "CONTRACT"
     },
@@ -3556,7 +3557,8 @@
         "src/platform/core/errors",
         "src/platform/core/output",
         "src/platform/core/redaction",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/platform/core/common"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3618,7 +3620,8 @@
         "src/platform/core/errors",
         "src/platform/core/config-fields",
         "src/platform/core/i18n",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -5194,12 +5197,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42117,
+      "adapters": 42125,
       "surfaces": 45000,
-      "composition": 13518
+      "composition": 13519
     },
     "totalSrcLines": 200000,
-    "testCases": 8212,
+    "testCases": 8215,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

@@ -29,7 +29,7 @@ describe('renderDeliverySummary', () => {
       'Accepted · 2 criteria · on: exit code · content not independently verified',
       'Worker-reported checks (claim): 2 passed, 0 failed, 1 not run, 0 unknown',
       'System verification (queue-verify-1): accepted · on: exit code · content not independently verified',
-      'Model channel/model-x: verified', 'Risk: small change · size tiny · proof only from the worker; check it yourself',
+      'Model channel/model-x: verified', 'Risk: small task · the change is very small · proof only from the worker; check it yourself',
       'Yes: the result is published · No: nothing is published']);
   });
   it('renders Turkish for the same card', () => {
@@ -39,7 +39,9 @@ describe('renderDeliverySummary', () => {
     expect(lines.at(-1)).toBe('Evet: sonuç yayımlanır · Hayır: hiçbir şey yayımlanmaz');
     expect(lines[2]).toContain('beyan');
     // R9q (owner D5): risk words say what it is and what to do, without internal terms.
-    expect(lines).toContain('Risk durumu: küçük değişiklik · boyut tiny · kanıt yalnız işçiden; sonucu kendin kontrol et');
+    expect(lines).toContain('Risk durumu: küçük iş · değişiklik çok küçük · kanıt yalnız işçiden; sonucu kendin kontrol et');
+    // F2-2: a task not classed small with a tiny change says both in one sentence, in Turkish, without the raw bucket id.
+    expect(renderDeliverySummary(summary({ risk: { ...summary().risk, class: 'other', workClass: 'feature' } }), 'tr').at(-2)).toBe('Risk durumu: değişiklik çok küçük, ama iş küçük iş sınıfında değil · kanıt yalnız işçiden; sonucu kendin kontrol et');
   });
   it('says plainly when sections are withheld or unavailable', () => {
     const lines = renderDeliverySummary(summary({ outcome: { state: 'withheld' }, change: { state: 'withheld' }, model: { state: 'unavailable' },
@@ -54,7 +56,7 @@ describe('renderDeliverySummary', () => {
       risk: { class: 'other', workClass: null, protectedTarget: true, sizeBucket: null, flags: ['out-of-scope', 'protected-target'] },
       change: { state: 'available', adapter: 'workspace-patch', files: 1, added: 1, removed: 0, topPaths: ['x.ts'], topPathsOmitted: 0, scope: 'out-of-scope', outOfScope: ['x.ts'], outOfScopeCount: 4 } }), 'en').join('\n');
     expect(lines).toContain('Outside the allowed scope (4): x.ts (+3 more)'); expect(lines).toContain('Accepted, but the content was not independently verified · 0 criteria · on: no evidence recorded');
-    expect(lines).toContain('Risk: not a small job; look over the change · protected target · files outside the asked area changed; check them · protected target; approve with care');
+    expect(lines).toContain('Risk: the task is not classed as small work; look over the change · protected target · files outside the asked area changed; check them · protected target; approve with care');
     expect(renderDeliverySummary(summary({ change: { state: 'available', adapter: 'workspace-patch', files: 1, added: 0, removed: 0, topPaths: [], topPathsOmitted: 0, scope: 'unscoped', outOfScope: [], outOfScopeCount: 0 } }), 'en')).toContain('No scope was declared for this work');
   });
   it('renders every model verdict (incl. start-name-matched and provider-chosen), operation and flag in both locales without unresolved keys or placeholders', () => {

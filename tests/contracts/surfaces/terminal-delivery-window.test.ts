@@ -128,6 +128,9 @@ describe('delivery window — pure rules', () => {
     expect(awaitingDeliveryTargets([awaiting('a'), run(RUNNING, 'accepted', 'awaiting-delivery', 'b'), run(COMPLETED, 'accepted', 'none', 'c'), run(COMPLETED, 'failed', 'awaiting-delivery', 'd'),
       { ...awaiting('e'), tasks: [{ ...awaiting('e').tasks[0]!, taskBrief: { ...awaiting('e').tasks[0]!.taskBrief!, task: null } }] } as RunView], 'FALLBACK').map(target => target.runId)).toEqual(['a']);
     expect(awaitingDeliveryTargets([awaiting('a', 'First line\nsecond')], 'FALLBACK')[0]).toMatchObject({ key: 's:a:task', title: 'First line' });
+    // F2-5: the Brain's title wins over the instruction (the summary after delivery names the title, never the whole request).
+    const titled = awaiting('a', 'Append the sixth line to notlar.txt with this exact wording');
+    expect(awaitingDeliveryTargets([{ ...titled, tasks: [{ ...titled.tasks[0]!, taskBrief: { ...titled.tasks[0]!.taskBrief!, title: 'Add a line' } }] } as RunView], 'FALLBACK')[0]!.title).toBe('Add a line');
   });
   it('BeUser M-25/DR2-07: a delivered, not adopted result is offered for its adoption step with its delivery command and commit; adopted or undelivered ones are not', () => {
     const withDelivery = (id: string, state: string) => { const value = run(COMPLETED, 'accepted', undefined, id);
@@ -805,6 +808,9 @@ describe('delivery card summaries in the window and its port (alpha.53 A3)', () 
     const claim = rows.findIndex(row => row.startsWith("Worker's own report")), where = rows.indexOf(WORDS.where);
     expect(claim).toBeGreaterThan(rows.findIndex(row => row.includes('note.txt'))); expect(where).toBeGreaterThan(claim);
     expect(rows.slice(claim, where).at(-1)).toBe('Yes: the target moves to this result · No: the target stays as it is');
+    // F2-4: a working-tree delivery says yes/no once, in its own sentence (no second "Yes:" from the summary).
+    const tree = texts({ ...base, stage: { kind: 'ready' }, preview: { ...preview, workingTree: true, summary: deliverySummaryFixture() } as DeliveryPreview });
+    expect(tree.filter(row => row.startsWith('Yes: '))).toEqual([WORDS.whereFiles]);
     expect(rows.join('\n')).not.toMatch(/Work: |Changed: |Main paths/u);
     expect(texts({ ...base, stage: { kind: 'ready' }, preview: { ...preview, summary: null } })).toContain('Summary: not available (no permission or no record)');
     expect(texts({ ...base, stage: { kind: 'ready' }, preview })).toEqual(texts({ ...base, stage: { kind: 'ready' }, preview: { ...preview } }));
