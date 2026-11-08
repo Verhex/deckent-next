@@ -13,7 +13,7 @@ const field = (raw: string, max: number, known?: KnownSecretSnapshot): string =>
 
 /** ATAMA-1: the worker the system chose for a task (sealed in the admission input the person approves) and the listed ones it skipped. */
 function assignmentRows(assignment: WorkerAssignment | undefined, locale: Locale, known?: KnownSecretSnapshot, agent?: TaskAgentSeal): string[] {
-  const chosen = agent ? [t('agent.card.selected', { agentId: field(agent.agentId, limits.assignmentChars, known), revision: agent.revision, standing: agent.standing === 'active' ? t('agent.standing.active', {}, locale) : t('agent.standing.candidate', {}, locale) }, locale)] : []; // S8-1b
+  const chosen = agent ? [t('agent.card.selected', { agentId: field(agent.agentId, limits.assignmentChars, known), revision: agent.revision, standing: agent.standing === 'active' ? t('agent.standing.active', {}, locale) : t('agent.standing.candidate', {}, locale) }, locale), ...(agent.skills.length ? [t('agent.card.skills', { skills: field(agent.skills.map(row => t('agent.card.skill', { skillId: row.skillId, revision: row.revision }, locale)).join(', '), limits.assignmentChars, known) }, locale)] : [])] : []; // S8-1b; F2-11 pinned skills
   if (!assignment) return chosen;
   const worker = t('assignment.card.worker', { modelId: field(assignment.modelId, limits.assignmentChars, known), channelId: field(assignment.channelId, limits.assignmentChars, known),
     effort: assignment.effort.level ?? t('assignment.effort.cliDefault', {}, locale), workClass: field(assignment.workClass, limits.workClassChars, known),

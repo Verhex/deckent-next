@@ -362,9 +362,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   text block until the turn ends, so a sentence may finish after the tool line. Keeping the filter's context across tools is a security
   floor (Astra 3030); a safe display fix is planned for alpha.64. Rarely, the last letters of a reply show as `[REDACTED]` when they
   match the start of the turn's random sign-in token; this is the filter being careful, not a leak (also planned for alpha.64).
-- **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 and the worker report
+- **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 (v6 keeps it) and the worker report
   instruction ask for titles, task text, criterion descriptions and the report summary in your language; JSON keys and ids stay unchanged.
   This has not been measured on real models. *Impact:* a model may still answer in English; Deckent does not translate model text.
+- **The Brain chooses each task's WorkClass (F2-11, 2026-11-08).** Brain template v6 reads each WorkClass's planning description from the
+  registry and asks for the narrowest class that fits; nothing checks the size of a task before it runs, and a kind's binding (`coding` →
+  `feature`) is only the default. *Impact:* a model may still choose a wider class, and then an agent defined for a narrower class (for
+  example `small`) is not bound; the plan card shows the class and any bound agent with its skill revisions before you approve.
 - **The below-recommended Brain note follows the first model (alpha.63).** Every active model can plan; when the planning model is below the
   recommended class, the plan card and `deckent do` add a note. When a subscription quota refusal continues on an API model you allowed
   (`continueBilling`), the note is still decided from the first chosen model, not the continuation model.

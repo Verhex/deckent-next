@@ -13,10 +13,12 @@ const work = (extra: object = {}) => ({ schemaVersion: 2, task: 'Append done', s
 const draft = (workInput?: object) => { const { graph, budgetCeiling, requiredPermissions } = proposalFixture('feature');
   return { graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'coding', ...(workInput ? { workInput } : {}) }] }, budgetCeiling, requiredPermissions }; };
 
-it('selects template v5 (D4 person language over v4: system assignment + context v3) by default; v1–v3 stay available with their exact bytes', () => {
-  expect(selectedBrainTemplate({})).toMatchObject({ id: 'run-proposal', version: 5, modelAssignment: 'system', contextVersion: 3 });
+it('selects template v6 (F2-11 class descriptions over v5: person language, system assignment, context v3) by default; v1–v5 stay available with their exact bytes', () => {
+  expect(selectedBrainTemplate({})).toMatchObject({ id: 'run-proposal', version: 6, modelAssignment: 'system', contextVersion: 3, personLanguage: true });
   const config = brainPlannerConfigSchema.parse({});
-  expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system'], [4, 'system'], [5, 'system']]);
+  expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system'], [4, 'system'], [5, 'system'], [6, 'system']]);
+  const [v5, v6] = [5, 6].map(version => config.templates.find(row => row.version === version)!.instruction);
+  expect(v6).toBe(v5!.replace('acceptance criteria.', "acceptance criteria. Choose each task's WorkClass from the supplied class descriptions: the narrowest class whose description fits that task; a kind's binding is only the default when no narrower class fits."));
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).modelAssignment).toBe('brain');
   expect(brainAssignsWorkers({})).toBe(false); expect(brainAssignsWorkers({ selected: { id: 'run-proposal', version: 2 } })).toBe(true);
 });
@@ -70,12 +72,22 @@ it('the Brain step refuses a v3 reply that picks the worker before any proposal 
   await expect(plan(draft({ ...work(), schemaVersion: 1, model }))).rejects.toMatchObject({ code: 'BRAIN_ASSIGNMENT_REFUSED' });
   expect(await plan(draft(work()))).toHaveLength(1);
   expect(await plan(draft({ ...work(), schemaVersion: 1, model }), { selected: { id: 'run-proposal', version: 2 } })).toHaveLength(1);
+  // F2-11 (owner walk 2026-11-08): "append one line to notlar.txt" was planned as `feature`, the `coding` kind's binding. A fake Brain answer naming
+  // `small` is proposed as `small` (the system binds the class's agent and worker at admission: agent-selection.test.ts), never the kind binding.
+  const reply = draft(work({ workClass: 'small' })), [proposal] = await plan({ ...reply, graph: { ...reply.graph, tasks: [{ ...reply.graph.tasks[0]!, workClass: 'small' }] } });
+  expect(CORE_WORK_CLASSES.bindings.find(row => row.kind === 'coding')!.classId).toBe('feature');
+  expect(proposal!.graph.tasks[0]).toMatchObject({ kind: 'coding', workClass: 'small', workInput: { workClass: 'small' } });
 });
 
-it('the planning context carries each WorkClass but none of its worker candidate lists', () => {
+it('the planning context carries each WorkClass and its description but none of its worker candidate lists', () => {
   const registry = { schemaVersion: 1 as const, revision: 'r', profiles: [{ id: 'p', version: 1, adapter: { id: 'test', version: 1 }, parameters: {} }],
     kinds: [{ kind: 'coding', profile: { id: 'p', version: 1 } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] };
   const content = prepareBrainRegistryPrompt(command, registry, null, {}).messages[1]!.content;
-  expect(JSON.parse(content).context.workClasses.classes.map((row: { id: string }) => row.id)).toContain('feature');
+  const classes = JSON.parse(content).context.workClasses.classes as { id: string; description?: string }[];
+  expect(classes.map(row => row.id)).toContain('feature');
+  // F2-11: each Core class reaches the Brain with its registry planning description (the Brain previously saw class ids only).
+  expect(classes.every(row => typeof row.description === 'string' && row.description.length > 0)).toBe(true);
+  expect(classes.find(row => row.id === 'small')!.description).toMatch(/append, insert or replace a line/u);
   for (const text of ['candidatePolic', 'claude-opus-5-5', 'gpt-6.1-sol']) expect(content).not.toContain(text);
 });
+

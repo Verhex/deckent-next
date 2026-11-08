@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedInteger, persistedString, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { exactModelIdSchema, MODEL_TIERS, REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import asset from '../../../../../assets/native-coding/work-classes.json' with { type: 'json' };
@@ -38,6 +38,8 @@ const legacyRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revis
   bindings: z.array(bindingSchema).max(1024).readonly(),
 });
 const currentClassShape = { id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS),
+  /** F2-11 (owner walk 2026-11-08): what work the class is for, in English, for the planner only (data; never scoring, admission or a worker choice). */
+  description: persistedString(z.string().min(1).max(512)).optional(),
   parentClassId: identitySchema.optional(), acceptanceProfile: workClassAcceptanceProfileSchema, proposalAdmission: proposalAdmission.optional(),
   /** R3 (owner D4a): this class's silence policy, over the installation default; admission refuses it unless it stops before the deadline. */
   inactivity: z.strictObject({ warnAfterMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), stopAfterMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })

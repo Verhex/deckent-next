@@ -2,7 +2,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
-import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderTaskAgentLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { runStateWord, runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
@@ -59,6 +59,7 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
     // PRE-1 B3: the brief's evaluation line already names it; printed once.
     ...(task.acceptedEvidence === 'model-unverified' || (task.resultBrief && briefQualifiesAcceptance(task.taskBrief, task.resultBrief.evaluation.verdict)) ? [] : acceptanceEvidenceLines(run, task, locale)),
     ...delivery,
+    ...(task.agent ? renderTaskAgentLines(task.agent, locale) : []),
     ...(models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', {
       attempt: model.attemptId ? (verbose ? model.attemptId : shownId(model.attemptId)) : '—', line: renderWorkerModelLine(model, locale) }, locale)),
     ...(task.handoffs ?? []).map(receipt => (receipt.kind === 'workspace-started-from-patch'

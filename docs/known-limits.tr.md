@@ -358,9 +358,13 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   bloğunun son kelimesini tur bitene kadar tutar; cümle araç satırından sonra bitebilir. Filtrenin araçlar arasında bağlamı koruması
   güvenlik tabanıdır (Astra 3030); güvenli bir ekran düzeltmesi alpha.64'te. Nadiren bir cevabın son harfleri, turun rastgele giriş
   anahtarının başıyla eşleşince `[REDACTED]` görünür; bu sızıntı değil, filtrenin temkinidir (o da alpha.64'te).
-- **Brain planı ve işçi raporunun sizin dilinizde olması istenir, garanti edilmez (alpha.63, D4).** Brain şablonu v5 ve işçi rapor talimatı
+- **Brain planı ve işçi raporunun sizin dilinizde olması istenir, garanti edilmez (alpha.63, D4).** Brain şablonu v5 (v6 korur) ve işçi rapor talimatı
   başlıkları, görev metnini, ölçüt açıklamalarını ve rapor özetini sizin dilinizde ister; JSON anahtarları ve kimlikler değişmez. Gerçek
   modellerde ölçülmedi. *Etki:* model yine İngilizce cevap verebilir; Deckent model metnini çevirmez.
+- **Her görevin WorkClass'ını Brain seçer (F2-11, 2026-11-08).** Brain şablonu v6 her WorkClass'ın planlama açıklamasını registry'den
+  okur ve uyan en dar sınıfı ister; çalışmadan önce görevin büyüklüğünü denetleyen bir kural yoktur, bir türün bağlaması (`coding` →
+  `feature`) yalnız varsayılandır. *Etki:* model yine daha geniş bir sınıf seçebilir; o zaman daha dar bir sınıf (örneğin `small`) için
+  tanımlı ajan bağlanmaz. Plan kartı, siz onaylamadan önce sınıfı ve bağlanan ajanı skill sürümleriyle gösterir.
 - **Önerilen sınıfın altı notu ilk modele göre verilir (alpha.63).** Her etkin model plan yapabilir; plan yapan model önerilen sınıfın
   altındaysa plan kartı ve `deckent do` not düşer. Abonelik kota reddinden sonra izin verdiğiniz API modeline devam edildiğinde
   (`continueBilling`) not, devam modeline göre değil ilk seçilen modele göre verilir.

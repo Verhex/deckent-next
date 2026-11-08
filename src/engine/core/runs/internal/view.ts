@@ -4,7 +4,7 @@ import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/hand
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
 import { taskQuotaHoldSchema, runPoolObservationSchema } from './pool-observation.js';
-import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
+import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema, taskAgentSealSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
 import { RunStoreError } from './store.js';
 import { workerTreeExclusionSchema, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -34,7 +34,7 @@ export const runViewSchema = z.strictObject({
     phase: taskProgressSchema.unwrap().shape.phase,
     notAcceptedReason: taskProgressSchema.unwrap().shape.notAcceptedReason,
     skippedReason: taskProgressSchema.unwrap().shape.skippedReason, decision: taskProgressSchema.unwrap().shape.decision, acceptedEvidence: taskProgressSchema.unwrap().shape.acceptedEvidence,
-    reasoningEffort: workerEffortSchema.optional(),
+    reasoningEffort: workerEffortSchema.optional(), agent: taskAgentSealSchema.unwrap().pick({ agentId: true, revision: true, workClass: true, standing: true, skills: true }).strict().readonly().optional(), // F2-11: the S8-1b seal's agent and pinned skills
     unresolvedEffects: z.boolean(),
     cancellation: z.strictObject({ reason: z.enum(['prevented-before-launch', 'exited-under-cancellation']) }).readonly().optional(),
   }).readonly()).readonly(),
@@ -60,6 +60,7 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
         const parsed = workerEffortSchema.safeParse(subscription && typeof subscription === 'object' && !Array.isArray(subscription) ? (subscription as Record<string, unknown>)['reasoningEffort'] : undefined);
         return parsed.success ? { reasoningEffort: parsed.data } : {};
       })(),
+      ...(() => { const agent = run.execution.tasks.find(entry => entry.taskId === task.id)!.agent; return agent ? { agent: { agentId: agent.agentId, revision: agent.revision, workClass: agent.workClass, standing: agent.standing, skills: agent.skills } } : {}; })(),
       ...(progress.get(task.id)!.workerCustody ? { workerCustody: progress.get(task.id)!.workerCustody } : {}),
       ...(progress.get(task.id)!.phase === 'reconciling' ? { custodyDisposition: progress.get(task.id)!.workerCustody?.state === 'released' ? 'released' as const : 'hold-manual' as const } : {}),
       phase: progress.get(task.id)!.phase,
