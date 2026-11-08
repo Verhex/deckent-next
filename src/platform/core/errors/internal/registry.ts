@@ -557,6 +557,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
   PATCH_WORKING_TREE_SUBFOLDER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_SUBFOLDER', p, l) }) },
   PATCH_WORKING_TREE_FILTER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_FILTER', p, l) }) },
+  // A6-1 (owner 2026-11-08, K-1): params count, paths (first 16), omitted — a patch writing a filtered path kept at HEAD; found, required — the Git floor.
+  PATCH_WORKING_TREE_FILTERED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_FILTERED', p, l) }) },
+  PATCH_WORKING_TREE_GIT_VERSION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_GIT_VERSION', p, l) }) },
   PATCH_WORKING_TREE_NOT_WRITTEN: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_NOT_WRITTEN', p, l) }) },
   PATCH_WORKING_TREE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_CHANGED', p, l) }) },
   // Params limit (bytes), maxEntries; without them (a later view of the recorded refusal) the summary stands.

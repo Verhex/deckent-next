@@ -8,14 +8,21 @@ import { recordedProcessState } from '#platform/index.js';
 import { patchDigest, SnapshotBudget, WorkspacePatchError, type IntegrationDeliveryCommand, type IntegrationDeliveryPlan, type IntegrationDeliveryTarget, type IntegrationManifest,
   type IntegrationCommitMetadata, type PatchFile, type PatchLimits, type WorkspacePatch } from '#engine/index.js';
 import { GitIntegrationDelivery } from './delivery.js';
+import { hashStreaming } from './snapshot.js';
 import format from './working-tree-format.json' with { type: 'json' };
 const DIRECTORY = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const code = (error: unknown) => (error as { code?: unknown } | null)?.code;
 const unsafe = () => { throw new WorkspacePatchError('PATCH_UNSAFE'); };
 
+type TreeFile = Readonly<{ bytes: Buffer; mode: '100644' | '100755'; permissions: number }>;
+/** A blob the caller already knows (A6-1: a HEAD entry); a file of its mode and size is only stream-hashed, never retained or charged to the byte budget. */
+type KnownBlob = Readonly<{ mode: string; size: number; oid: string; algorithm: 'sha1' | 'sha256' }>;
 /** One repository-relative file below `root`, opened through descriptors (no symlink, special file, hard link or foreign owner on the way);
- * null when it or a parent is absent. A file that changes while it is read is PATCH_CONFLICT. */
-export async function readTreeFile(root: FileHandle, path: string, budget: SnapshotBudget) {
+ * null when it or a parent is absent. A file that changes while it is read is PATCH_CONFLICT. With `known`, a file whose Git blob id Deckent
+ * computes equal to it is `'unchanged'` (no Git process hashes the file). */
+export function readTreeFile(root: FileHandle, path: string, budget: SnapshotBudget): Promise<TreeFile | null>;
+export function readTreeFile(root: FileHandle, path: string, budget: SnapshotBudget, known: KnownBlob | undefined): Promise<TreeFile | 'unchanged' | null>;
+export async function readTreeFile(root: FileHandle, path: string, budget: SnapshotBudget, known?: KnownBlob): Promise<TreeFile | 'unchanged' | null> {
   budget.entry(); budget.path(path);
   const parts = path.split('/'); let parent = root; const opened: FileHandle[] = [];
   try {
@@ -28,6 +35,13 @@ export async function readTreeFile(root: FileHandle, path: string, budget: Snaps
       if (before.uid !== process.getuid!()) throw new WorkspacePatchError('PATCH_UNSAFE');
       if (directory) { if (!before.isDirectory()) throw new WorkspacePatchError('PATCH_UNSAFE'); parent = handle; continue; }
       if (!before.isFile() || before.nlink !== 1) throw new WorkspacePatchError('PATCH_UNSAFE');
+      const mode = before.mode & 0o111 ? '100755' as const : '100644' as const;
+      if (known && known.mode === mode && known.size === before.size) {
+        const hashed = await hashStreaming(handle, before.size, known.algorithm, budget), settled = await handle.stat();
+        if (hashed.offset !== before.size || settled.size !== before.size || before.ctimeMs !== settled.ctimeMs || before.mtimeMs !== settled.mtimeMs || settled.nlink !== 1)
+          throw new WorkspacePatchError('PATCH_CONFLICT');
+        if (hashed.oid === known.oid) return 'unchanged';
+      }
       budget.size(before.size);
       const bytes = Buffer.alloc(before.size); let offset = 0;
       while (offset < bytes.length) {
@@ -37,18 +51,18 @@ export async function readTreeFile(root: FileHandle, path: string, budget: Snaps
       const after = await handle.stat();
       if (offset !== before.size || after.size !== before.size || before.ctimeMs !== after.ctimeMs || before.mtimeMs !== after.mtimeMs || after.nlink !== 1)
         throw new WorkspacePatchError('PATCH_CONFLICT');
-      return { bytes, mode: before.mode & 0o111 ? '100755' as const : '100644' as const, permissions: before.mode & 0o7777 };
+      return { bytes, mode, permissions: before.mode & 0o7777 };
     }
     throw new WorkspacePatchError('PATCH_UNSAFE');
   } finally { for (const handle of opened.reverse()) await handle.close(); }
 }
 /** A file's observed state (absent, or content digest and Git mode): what the journal keeps and the one equality both writing and settling use. */
-type Observed = Pick<PatchFile, 'digest' | 'mode'> | null; type Read = (path: string) => ReturnType<typeof readTreeFile>;
+type Observed = Pick<PatchFile, 'digest' | 'mode'> | null; type Read = (path: string) => Promise<TreeFile | null>;
 /** R1 (Astra 3017): a file moved aside that stays in the checkout (journal directory on another filesystem), with the state it was compared at. */
 type SetAside = { path: string; expected: Observed; atMs: number }; type Custody = { journal: string; kept: string[]; setAside: SetAside[] };
 type Journal = { state?: unknown; changes: { path: string; token?: unknown; before: Observed; after: Observed }[]; setAside?: SetAside[] };
 const observed = (file: Observed): Observed => file && { digest: file.digest, mode: file.mode };
-const holds = (file: Awaited<ReturnType<typeof readTreeFile>> | false, expected: Observed) =>
+const holds = (file: TreeFile | null | false, expected: Observed) =>
   file === null ? expected === null : !!file && expected !== null && file.mode === expected.mode && patchDigest(file.bytes) === expected.digest;
 const names = (token: string) => ['.tmp', '.aside', '.ours'].map(suffix => `${format.aside}${token}${suffix}`) as [string, string, string];
 const JOURNAL = /^[0-9a-f]{64}(\.rollback)?$/;

@@ -437,20 +437,44 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     try { await expect(captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'mac' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_UNSUPPORTED' }); }
     finally { Object.defineProperty(process, 'platform', platform); }
   });
-  it('A6-1: a repository filter driver never runs in the service; the base is a typed permanent refusal before any file content is read', async () => {
+  it('A6-1 (alpha.64): no filter driver runs in the service; a filtered path keeps its HEAD blob in every attribute view, is withheld, and a patch writing it is refused', async () => {
     const f = await fixture(false, 'sha1', true), s = f.sourceRoot, marker = join(f.workspaceRoot, 'ran'), git = (...args: string[]) => exec('/usr/bin/git', ['-C', s, ...args]);
-    // A racy entry: the file's mtime equals both its index stamp and the index file's mtime, so `diff-index` compares content through the driver.
-    const at = new Date(Math.floor(Date.now() / 1000) * 1000); await utimes(join(s, 'a.txt'), at, at); await git('update-index', '--refresh');
-    const config = await readFile(join(s, '.git/config'), 'utf8'), bases = await readdir(join(f.workspaceRoot, 'run-bases'));
-    // Astra 3038: an empty driver name (`[filter ""]`, attribute `filter=`) is a driver too.
-    for (const [section, attribute, drivers] of [['filter "x"', 'filter=x', 'x'], ['filter ""', 'filter=', '""']] as const) {
-      await writeFile(join(s, '.git/config'), `${config}[${section}]\n\tclean = "sh -c 'echo ran >> ${marker}; cat'"\n`); await writeFile(join(s, '.git/info/attributes'), `* ${attribute}\n`);
-      await utimes(join(s, '.git/index'), at, at);
-      const refusal = await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'a61' }, limits, workerTreeDenied).catch((error: unknown) => error);
-      expect(refusal).toMatchObject({ code: 'PATCH_WORKING_TREE_FILTER', params: { drivers } }); expect(JSON.stringify(refusal)).not.toContain(marker);
-    }
-    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases);
-    expect(classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_FILTER')).disposition).toBe('permanent');
+    const capture = (runId: string, options = f.options) => captureWorkingTreeBase(options, { scopeId: 's', runId }, limits, workerTreeDenied);
+    // An encrypting driver (base64, standing in for git-crypt) and an LFS path (pointer committed, real bytes in the file; git-lfs is not installed).
+    const plain = 'TOKEN=synthetic-plaintext\n', pointer = 'version https://git-lfs.github.com/spec/v1\noid sha256:' + '0'.repeat(64) + '\nsize 10\n';
+    await git('config', 'filter.crypt.clean', `sh -c 'echo ran >> ${marker}; base64'`); await git('config', 'filter.crypt.smudge', `sh -c 'echo ran >> ${marker}; base64 -d'`);
+    await writeFile(join(s, '.gitattributes'), '*.sec filter=crypt\n*.bin filter=lfs\n'); await writeFile(join(s, 'key.sec'), plain); await writeFile(join(s, 'big.bin'), pointer);
+    await git('add', '.'); await git('commit', '-qm', 'filtered');
+    const cipher = (await git('cat-file', 'blob', 'HEAD:key.sec')).stdout; expect(cipher).toBe(Buffer.from(plain).toString('base64') + '\n');
+    // A racy filtered entry: `diff-index` (alpha.63) hashes it through the driver (proved below on the same fixture).
+    const at = new Date(Math.floor(Date.now() / 1000) * 1000); await utimes(join(s, 'key.sec'), at, at); await git('update-index', '--refresh'); await utimes(join(s, '.git/index'), at, at);
+    await rm(marker); await writeFile(join(s, 'big.bin'), 'real bytes'); // the test's own Git ran the driver above; from here only Deckent runs Git
+    const withheld = [['big.bin', 'filter:lfs'], ['key.sec', 'filter:crypt']];
+    const holdsHead = async (runId: string) => {
+      const base = await capture(runId); expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual(withheld);
+      const lease = await new GitWorkspaceBroker(base.options).allocate({ schemaVersion: 1, identity: { scopeId: 's', runId, taskId: 't', attemptId: runId, layoutRevision: 'l', generation: 1 }, baseCommit: base.commit });
+      expect([await readFile(join(lease.workspace, 'key.sec'), 'utf8'), await readFile(join(lease.workspace, 'big.bin'), 'utf8')]).toEqual([cipher, pointer]);
+      for (const root of [s, base.options.runBase!, lease.workspace]) await expect(exec('/usr/bin/git', ['-C', root, 'cat-file', '-e', gitBlobOid(Buffer.from(plain), 'sha1')])).rejects.toBeDefined();
+      return base;
+    };
+    const base = await holdsHead('a61');
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' }); await git('diff-index', '--name-only', 'HEAD');
+    await readFile(marker); await rm(marker); // the fixture is armed: Git's own `diff-index` ran the driver here
+    // M2: attributes removed in the worktree, `.git/info/attributes` and `core.attributesFile` still leave HEAD's view: the path stays filtered.
+    await rm(join(s, '.gitattributes')); await writeFile(join(s, '.git/info/attributes'), '* -filter\n'); await writeFile(join(f.workspaceRoot, 'attributes'), '* !filter\n');
+    await git('config', 'core.attributesFile', join(f.workspaceRoot, 'attributes')); await holdsHead('a61-removed');
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    // K-1: a patch writing a filtered path is refused before delivery reads or writes any file.
+    const refused = workspacePatchSchema.parse({ ...f.patch('a61', 'key.sec', cipher, 'edited\n'), baseCommit: base.commit });
+    await expect(f.prepare(refused)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_FILTERED', params: { count: 1, paths: 'key.sec', omitted: 0 } });
+    expect(await readFile(join(s, 'key.sec'), 'utf8')).toBe(plain);
+    // A configured driver no attribute names (Astra 3038: an empty name is one too) and a Git below the `check-attr --source` floor are typed permanent refusals.
+    const bases = await readdir(join(f.workspaceRoot, 'run-bases')); await writeFile(join(s, '.git/config'), `${await readFile(join(s, '.git/config'), 'utf8')}[filter ""]\n\tclean = cat\n`);
+    await expect(capture('orphan')).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_FILTER', params: { drivers: '""' } });
+    const old = join(f.workspaceRoot, 'git-2.39'); await writeFile(old, `#!/bin/sh\nfor a; do last=$a; done\n[ "$last" = version ] && { echo 'git version 2.39.0'; exit 0; }\nexec /usr/bin/git "$@"\n`, { mode: 0o700 });
+    await expect(capture('old', { ...f.options, gitExecutable: old })).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_GIT_VERSION', params: { found: '2.39.0', required: '2.40.0' } });
+    expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases); await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(['PATCH_WORKING_TREE_FILTER', 'PATCH_WORKING_TREE_GIT_VERSION'].map(code => classifyLaunchRefusal(new WorkspacePatchError(code as never)).disposition)).toEqual(['permanent', 'permanent']);
   });
 });
 describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, crash recovery and rollback (R9p, L1c, Astra 3015)', () => {
