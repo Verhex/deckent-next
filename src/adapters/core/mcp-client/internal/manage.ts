@@ -38,6 +38,12 @@ export const mcpGlobalRoot = (environment: Readonly<Record<string, string | unde
 /** KER-17: which personal-file servers (user scope, and this project's local scope) name which `$DECK:` key; nothing is resolved (secret list, doctor, card). */
 export async function mcpSecretUsers(projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly { readonly server: string; readonly name: string }[]> { const key = await realpath(projectRoot).catch(() => projectRoot), file = await readMcpRegistryFile(mcpRegistryPaths(key, mcpGlobalRoot(environment)).personal, 'personal', key);
   return file.ok ? Object.entries({ ...file.user, ...file.local }).flatMap(([server, entry]) => [...new Set([...JSON.stringify(entry).matchAll(/\$DECK:([A-Z_][A-Z0-9_]*)/gu)].map(match => match[1]!))].map(name => ({ server, name }))) : []; }
+/** A6-3 (alpha.63.2) follow-up: the `${VAR}` names the personal file's user servers and this project's local servers read; the runtime service
+ * starts with them, as it does with referenced secret names. A project file reads only its allowlist, so it adds none. Nothing is expanded here. */
+export async function mcpEnvironmentNames(projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly string[]> {
+  const key = await realpath(projectRoot).catch(() => projectRoot), file = await readMcpRegistryFile(mcpRegistryPaths(key, mcpGlobalRoot(environment)).personal, 'personal', key);
+  return file.ok ? [...new Set([...JSON.stringify({ ...file.user, ...file.local }).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)/gu)].map(match => match[1]!))] : [];
+}
 /** `trusted`: approved definition, launchable; `pending-approval`: never decided (reason `trust-moved`: a record in the alpha.47 place, the
  * project's data root, waits for its one re-approval by card, owner A48-D6); `changed`: the entry changed since it was decided; `declined`: the
  * owner said no to this definition; `invalid-launch`: its values cannot be expanded; `trust-store-unavailable`: a trust record cannot be read. */
