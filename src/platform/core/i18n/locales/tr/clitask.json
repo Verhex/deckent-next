@@ -70,6 +70,7 @@
   "cli.task.menu.confirm.deliver": "{ref} yazılsın mı?",
   "cli.task.menu.confirm.files": "Değişiklik bu {count} dosyaya yazılsın mı (commit atılmaz)?",
   "cli.task.menu.confirm.move": "{ref} bu commit'e taşınsın mı?",
+  "cli.task.menu.confirm.restoreFiles": "Bu {count} dosya teslimden önceki hâline geri getirilsin mi?",
   "cli.task.menu.deliver.title": "{task} görevini teslim et: {title}",
   "cli.task.menu.deliver.moreFiles": "… {count} dosya daha",
   "cli.task.menu.deliver.base": "Temel {base} · kaynak {source}",

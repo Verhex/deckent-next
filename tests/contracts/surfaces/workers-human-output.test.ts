@@ -37,14 +37,15 @@ it('workers list --verbose keeps the per-source detail lines, JSON is unchanged'
   expect(lines[at('t1')]).toBe('  run1/t1 · attempt abcdefgh · gen 3 · exit 0 · heartbeat fresh · claude');
   expect(lines[at('t1') + 1]).toContain('Task t1: Model on codex-cli');
   expect(lines[at('t1') + 2]).toBe('Resources unmeasured');
-  expect(lines[at('t1') + 3]).toBe('  Usage: 6 turns · 24.7 s · tokens 8 in / 1066 out · $0.1075 · reported success');
+  // F2-8: a pinned worker (its model row above) runs on the subscription: its usage names no price.
+  expect(lines[at('t1') + 3]).toBe('  Usage: 6 turns · 24.7 s · tokens 8 in / 1066 out · on your subscription · reported success');
   expect(lines[at('t1') + 3]!.length).toBeLessThanOrEqual(100);
   expect(lines[at('t2')]).toBe('  run1/t2 · attempt 12345678 · gen 3 · running · heartbeat stale · codex');
   expect(lines.filter(l => l.includes('Usage:'))).toHaveLength(2);
   expect(lines[at('t5') + 1]).toBe('Resources unmeasured');
   expect(lines[at('t5') + 2]).toBe('  Usage: 11 turns · 48 s · tokens 18 in / 4786 out · $0.2039 · reported success');
   const tr = (await run(['--verbose'], 'list', 'tr')).text.split('\n');
-  expect(tr).toContain('  Kullanım: 6 tur · süre 24,7 sn · token 8 giriş / 1066 çıkış · maliyet 0,1075 USD · başarılı bildirdi');
+  expect(tr).toContain('  Kullanım: 6 tur · süre 24,7 sn · token 8 giriş / 1066 çıkış · aboneliğinizle · başarılı bildirdi');
   // PRE-5: one language per output — engine words (missing, unknown, available) reach a Turkish reader in Turkish.
   expect(tr).toContain('Kaynak a (/p/a): erişilebilir · daha fazla kayıt var; sonraki sayfa: deckent workers --scope s --source a --after cursor9 --verbose');
   expect(tr[tr.findIndex(l => l.includes('run1/t5 '))]).toBe('  run1/t5 · deneme released · nesil 3 · kayıp, çıkış 0 · sinyal serbest bırakıldı · bilinmiyor');

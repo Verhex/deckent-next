@@ -1,6 +1,6 @@
 import { isRunIntentResult, type RunPlanningResult, type RunIntentResult, type RunProposalResult } from '#engine/index.js';
 import { advisoryProposalPermissions, deriveProposalPermissions } from '#domain/index.js';
-import { currencyAmountText, terminalSafeText, redactForRecord, t, ErrorRegistry, type Locale } from '#platform/index.js';
+import { currencyAmountText, terminalSafeText, redactForRecord, shortId, t, ErrorRegistry, type Locale } from '#platform/index.js';
 const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => terminalSafeText(rows.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ')) || '-';
 /** BeUser DR3-02: the configured pool's hold as read for the card (`deckent pool status`'s view); a held pool never refuses the Run, it waits. */
 export type PlanningPoolHold = Readonly<{ state: string; poolId: string; hold: Readonly<{ changedBy: Readonly<{ issuer: string; subject: string }>; reason: string | null }> | null }>;
@@ -14,8 +14,9 @@ export function brainProposalLines(result: RunPlanningResult, locale: Locale, po
   const marked = new Set(unrecognised.map(row => JSON.stringify(row))), advisory = advisoryProposalPermissions(proposal.requiredPermissions, proposal.graph).filter(row => !marked.has(JSON.stringify(row)));
   const statuses = { recorded: t('proposal.status.recorded', {}, locale), pending: t('proposal.status.pending', {}, locale),
     accepted: t('proposal.status.accepted', {}, locale), rejected: t('proposal.status.rejected', {}, locale), parked: t('proposal.status.parked', {}, locale) };
-  return [...(result.run ? [held ? t('brain.nextHeld', { run: result.run.runId, ...held }, locale) : t('brain.next', { run: result.run.runId }, locale)] : held ? [t('brain.poolHeld', held, locale)] : []),
-    t('brain.preview', { run: proposal.runId, status: statuses[record.status] }, locale),
+  // F2-12: generated ids show their 8-character head in these human lines (`--json` keeps the whole id).
+  return [...(result.run ? [held ? t('brain.nextHeld', { run: shortId(result.run.runId), ...held }, locale) : t('brain.next', { run: shortId(result.run.runId) }, locale)] : held ? [t('brain.poolHeld', held, locale)] : []),
+    t('brain.preview', { run: shortId(proposal.runId), status: statuses[record.status] }, locale),
     t('brain.scope', { scope: proposal.scopeId, actor: proposal.proposer.id }, locale),
     ...proposal.graph.tasks.flatMap(task => [t('brain.task', { id: task.id, kind: task.kind, workClass: task.workClass ?? '-', text: task.workInput?.title ?? task.workInput?.task ?? task.id }, locale),
       ...task.acceptanceCriteria.map(id => t('brain.criterion', { text: proposal.graph.criterionDefinitions.find(row => row.id === id)?.description ?? id }, locale))]),
@@ -31,7 +32,7 @@ export function brainProposalLines(result: RunPlanningResult, locale: Locale, po
     ...(unrecognised.length ? [t('proposal.permissions.unrecognised', { permissions: permissionText(unrecognised) }, locale)] : []),
     ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale, ...(result.reasonParams ? { params: result.reasonParams } : {}) }).message] : []),
     ...(record.approval ? [t('brain.waiting', { id: record.approval.approvalId, expires: new Date(record.approval.expiresAt).toISOString() }, locale), t('brain.revise', {}, locale)] : []),
-    ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: proposal.source.receipt.invocationId, template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
+    ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: shortId(proposal.source.receipt.invocationId), template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
     ...planningMemoryLines(result, locale), ...brainModelLines(result, locale),
   ];
 }

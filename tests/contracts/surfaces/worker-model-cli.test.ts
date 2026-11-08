@@ -67,7 +67,7 @@ it('run inspect and the transcript report view show the same row; the transcript
   expect(report.text).toContain('→ pending [live, not sealed yet]');
   expect(report.text).toContain('it is not provider attestation');
   const raporTr = await run([...args, '--lang', 'tr'], { async inspectWorkerTranscript() { return transcript; } }, root);
-  expect(raporTr.text).toContain('sağlayıcı onayı (attestation) değildir');
+  expect(raporTr.text).toContain('sağlayıcı onayı değildir');
 });
 
 it('run inspect and worker detail carry effort + source in EN/TR and JSON', async () => {

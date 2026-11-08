@@ -7,6 +7,11 @@ import { clockText } from './labels.js';
 import { formatUsd } from '#surfaces/core/cli-human/index.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
 /** Human hierarchy from the shared snapshot. Reports are claims; only the engine's evaluation line states acceptance. */
+/** F2-8 (owner): a pinned native worker (its model row) runs on the person's subscription, so its usage names no price. */
+export function usageText(subscription: boolean, form: 'human' | 'detail', params: Readonly<Record<string, string | number>>, locale: Locale): string {
+  if (form === 'human') return subscription ? t('monitor.human.usage.subscription', params, locale) : t('monitor.human.usage', params, locale);
+  return subscription ? t('monitor.detail.usage.subscription', params, locale) : t('monitor.detail.usage', params, locale);
+}
 export function humanWorkerLines(worker: MonitorWorker, locale: Locale, fallbackTitle?: string): MonitorLine[] {
   const h = worker.human; if (!h) return [];
   const line = (text: string, role?: 'strong' | 'warning' | 'muted'): MonitorLine => [span(text, role)];
@@ -29,7 +34,7 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale, fallback
     ...(h.evaluationReason === 'no-change-produced' && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
       : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
-    usage ? line(t('monitor.human.usage', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
+    usage ? line(usageText(Boolean(worker.model), 'human', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
       turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—', cost: usage.costUsd === null ? '—' : formatUsd(usage.costUsd, locale) }, locale))
       : worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable'
         ? line(t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale), 'warning')

@@ -15,7 +15,7 @@ export interface DeliveryWindowLabels {
     status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
   /** TESLIM-KARTI-OZET (shared renderer): a ticket's or Attempt's summary lines (`brief` leaves out what the window shows itself: title, operation,
    * files) and the block placed ABOVE an exact consent card. No shadow line exists here. */
-  readonly cardSummary?: { lines(summary: DeliverySummary | null, brief: boolean): readonly string[]; consent(summaries: readonly (DeliverySummary | null)[]): readonly string[] };
+  readonly cardSummary?: { lines(summary: DeliverySummary | null, brief: boolean, ownActions?: boolean): readonly string[]; consent(summaries: readonly (DeliverySummary | null)[]): readonly string[] };
   readonly title: string; readonly ids: string; readonly loading: string; readonly check: string; readonly outOfScope: string; readonly summary: string;
   readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly reattempt: string; readonly hints: string;
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
@@ -384,7 +384,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
         preview.diffs?.length && index === (entry.fileSel ?? 0) ? { role: 'accent', bold: true } : {})));
     if (preview.files.length > WINDOW.maxFiles) rows.push(line(fillTemplate(labels.moreFiles, { count: preview.files.length - WINDOW.maxFiles }), { role: 'muted' }));
     if (!delivered) {
-      if (preview.summary !== undefined && labels.cardSummary) rows.push(...labels.cardSummary.lines(preview.summary, true).map(value => line(value)));
+      if (preview.summary !== undefined && labels.cardSummary) rows.push(...labels.cardSummary.lines(preview.summary, true, preview.workingTree === true).map(value => line(value)));
       rows.push(line(preview.workingTree ? labels.whereFiles : labels.where, { role: 'muted' }));
       if (preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
       if (preview.queueTarget && preview.reattempt) rows.push(line(labels.reattempt, { role: 'muted' }));

@@ -303,9 +303,12 @@ const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookR
 const IGNORED_SYSTEM = new Set(['thinking_tokens', 'hook_started', 'hook_response', 'hook_progress', 'compact_boundary', 'informational', 'status']);
 const NATIVE_TIMESTAMP_SCALE = 1000; // Native protocol reset timestamps are Unix seconds; contract uses milliseconds.
 export interface QuotaPolicy { readonly claudeRejectedStatuses: readonly string[]; readonly codexPatterns: readonly string[] }
-export interface NormalizerState { readonly quotaPolicy?: QuotaPolicy; sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[] }
-export function createNormalizerState(secrets: readonly string[], startMs = Date.now(), quotaPolicy?: QuotaPolicy): NormalizerState {
-  return { ...(quotaPolicy ? { quotaPolicy } : {}), sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
+/** `bridgeTools` (F2-7): the class of each Deckent tool the worker reaches through the tool bridge, keyed by its Claude wire name
+ * (`mcp__<server>__<tool>`); without it every MCP tool reads as `network` (a fetch with no target). */
+export interface NormalizerState { readonly quotaPolicy?: QuotaPolicy; sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[];
+  readonly bridgeTools?: ReadonlyMap<string, string> }
+export function createNormalizerState(secrets: readonly string[], startMs = Date.now(), quotaPolicy?: QuotaPolicy, bridgeTools?: ReadonlyMap<string, string>): NormalizerState {
+  return { ...(quotaPolicy ? { quotaPolicy } : {}), ...(bridgeTools ? { bridgeTools } : {}), sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
 }
 /** Unmapped native type names are worker text too: redacted and bounded before they become counts (Astra 2066 R1). */
 export function countUnmapped(state: NormalizerState, raw: string, count = 1): void {
@@ -391,7 +394,7 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
       else if (block.type === 'thinking' || block.type === 'redacted_thinking') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.thinking ?? '')), thinking: true, excerpt: '' });
       else if (block.type === 'tool_use') {
         const name = typeof block.name === 'string' ? red(block.name, 64) || 'unknown' : 'unknown', input = (block.input ?? {}) as Record<string, unknown>;
-        const toolClass = CLAUDE_TOOLS[name] ?? (name.startsWith('mcp__') ? 'network' : 'other');
+        const toolClass = CLAUDE_TOOLS[name] ?? state.bridgeTools?.get(name) ?? (name.startsWith('mcp__') ? 'network' : 'other');
         const path = relative(input.file_path ?? input.notebook_path ?? input.path, state.cwd);
         const target = path === null ? null : red(path, 256) || null;
         const detail = toolClass === 'shell' ? red(input.description ?? input.command, 240) : toolClass === 'search' ? red(input.pattern, 240)
@@ -519,7 +522,9 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
       });
       if (changes.length > CODEX_MAX_CHANGES) miss('file_change.changes-over-cap', changes.length - CODEX_MAX_CHANGES);
     } else if (item.type === 'mcp_tool_call') {
-      call(rawId, id, red(`mcp:${String(item.server ?? '')}/${String(item.tool ?? '')}`, 64) || 'mcp', 'network', null, null);
+      const bridged = state.bridgeTools?.get(`mcp__${String(item.server ?? '')}__${String(item.tool ?? '')}`), input = record(item.arguments) ?? {};
+      const path = bridged ? relative(input.path, state.cwd) : null;
+      call(rawId, id, red(`mcp:${String(item.server ?? '')}/${String(item.tool ?? '')}`, 64) || 'mcp', bridged ?? 'network', path === null ? null : red(path, 256) || null, bridged === 'shell' ? red(input.command, 240) : null);
       if (!done) return;
       // An unknown or missing status never becomes success.
       if (status === 'completed' || status === 'failed') emit('tool.result', { toolId: id, status: status === 'completed' ? 'ok' : 'error', bytes: 0 });

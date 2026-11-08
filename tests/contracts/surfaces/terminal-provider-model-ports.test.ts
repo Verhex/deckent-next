@@ -445,8 +445,7 @@ describe('/model source', () => {
     const after = await source.inspect();
     expect(after.choices.find(choice => choice.reference.modelId === 'chat')!.detail).toMatch(/ · plans \/do work \(Brain model\)$/u);
     expect(after.notes.some(note => note.startsWith('No Brain model chosen'))).toBe(false);
-  });
-  it('F2-14 (owner walk 2026-11-08): /model lists the higher registry tier first, then the catalog\'s own priority, not the declared (alphabetical) order', async () => {
+    { // F2-14 (owner walk 2026-11-08): /model lists the higher registry tier first, then the catalog's own priority, not the declared (alphabetical) order
     // The tier comes from the tier/role registry overlay; `keyless` is frontier, the rest are not registered. The catalog has no release date.
     const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'tiers-1', roles: [], exceptions: [],
       models: [{ channelId: 'local-openai', modelId: 'native-keyless', version: 1, tier: 'frontier', roles: [] }] }] };
@@ -460,6 +459,7 @@ describe('/model source', () => {
         models: catalog.providers[0]!.models.map(model => ({ model: { id: model.id, version: 1, ...(priority[model.id] ? { priority: priority[model.id] } : {}) }, activation: null })) }] }) as never,
     };
     expect((await modelPanelSource(root, 'scope', host, options, 'en').inspect()).choices.map(choice => choice.reference.modelId)).toEqual(['keyless', 'coder', 'fast', 'chat']);
+    }
   });
   it('OpenRouter carries the seed models and no next-slice note on its row or connect result', async () => {
     const { root, options } = await project({});

@@ -1,5 +1,5 @@
 import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLine, type ApprovalDecisionProjection } from '#surfaces/core/approval-presentation/index.js';
-import type { KnownSecretSnapshot } from '#platform/index.js';
+import { shortId, type KnownSecretSnapshot } from '#platform/index.js';
 import { AGENT_TOOL_UNDO, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo, type ApprovalPreviewCutFacts } from '#domain/index.js';
 import { agentToolUndo } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
@@ -252,12 +252,12 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   const detail = (template: string, values: Parameters<typeof approvalTemplateLine>[1]) => { const line = approvalTemplateLine(template, values); rows.push({ ...line, spans: withRole(line.spans, 'muted') }); };
   detail(labels.detail.id, { id: p(input.approvalId) });
   if (call) detail(labels.detail.binding, { summary: p(input.summary) });
-  if (input.runId !== '-') detail(labels.detail.run, { run: p(input.runId), task: p(input.taskId) });
-  if (cell) detail(labels.detail.cell, { cell: p(cell) });
+  if (input.runId !== '-') detail(labels.detail.run, { run: p(shortId(input.runId)), task: p(input.taskId) });
+  if (cell) detail(labels.detail.cell, { risk: p(riskText(cell, labels)), cell: p(cell) }); // F2-10: the rule in words, its id beside it
   if (input.undo && input.undo !== 'none' && !TOOL_UNDO.has(input.undo)) detail(labels.detail.compensation, { operation: p(input.undo) });
   if (card?.kind === 'shell') detail(labels.detail.classifier, { classifier: p(`${card.tier} (${card.reason})`) });
   if (cut) { detail(labels.detail.digest, { digest: cut.digest }); detail(cut.kept ? labels.detail.kept : labels.detail.notKept, { path: p(cut.kept ?? '') }); }
-  if (input.requiredAssurance) detail(labels.detail.assurance, { level: p(input.requiredAssurance) });
+  if (input.requiredAssurance && !input.assuranceLine) detail(labels.detail.assurance, { level: p(input.requiredAssurance) }); // F2-10: the card's assurance line says it in words
   return rows;
 }
 

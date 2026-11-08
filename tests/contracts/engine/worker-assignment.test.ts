@@ -176,9 +176,11 @@ it('the approval card shows the assigned worker, its effort and the list positio
     execution, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } };
   const verdict = { decision: 'require-approval', revision: 'p1', reason: 'APPROVAL_REQUIRED' } as const;
   const en = renderRunCreateApprovalSummary(command, create, verdict, 'en'), tr = renderRunCreateApprovalSummary(command, create, verdict, 'tr');
-  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription) · effort: high · from the design list deep@2, choice 2');
+  // F2-12: the head names the worker; how it was chosen (reasoning level, list, choice) stands under the details.
+  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription)'); expect(en).toContain('chosen with reasoning level high · from the design list deep@2, choice 2');
+  expect(en.indexOf('chosen with')).toBeGreaterThan(en.indexOf('Details:'));
   expect(en).toContain('skipped before it: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
-  expect(tr).toContain('çalışan: claude-fable-5-1 (claude-cli-subscription) · effort: high · design listesinden (deep@2), 2. seçenek');
+  expect(tr).toContain('işçi: claude-fable-5-1 (claude-cli-subscription)'); expect(tr).toContain('seçim: akıl yürütme düzeyi high · design listesinden (deep@2), 2. seçenek');
   expect(tr).toContain('ondan önce atlananlar: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
   // A pinned task's card is byte-identical to before: no worker line.
   const pinned = graph('coding', input({ model: { channelId: standard.channel, modelId: 'claude-fable-5-1', auxiliaryModelIds: [] } }));

@@ -1,1 +1,1 @@
-export { askDeliveryConfirmation, askQueueConfirmation, renderQueueConsent, renderQueueStatus } from './internal/prompt.js';
+export { askDeliveryConfirmation, askQueueConfirmation, deliveryCardText, deliveryOperationLabel, renderQueueConsent, renderQueueStatus } from './internal/prompt.js';

@@ -173,7 +173,7 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
     const view = mount({ knownSecrets: known, ledger: ledger([item]) });
     await pickFirst(view, '/approvals', '> A-ITEM 1', 'full-id card'); await until(() => view.stdout.frame.includes(DENY), 'full-id card');
     expect(view.stdout.frame).not.toContain(SECRET); expect(view.stdout.frame).toContain('‹secret:FIXTURE_ONLY›');
-    expect(view.stdout.text).not.toContain('ficti'); expect(view.stdout.frame).toMatch(/Risk: +not classified by the tool/u); expect(view.stdout.frame).toContain('Policy cell: fixture-risk'); expect(view.stdout.frame).toContain('Compensating operation: fixture-undo');
+    expect(view.stdout.text).not.toContain('ficti'); expect(view.stdout.frame).toMatch(/Risk: +not classified by the tool/u); expect(view.stdout.frame).toContain('Policy rule: not classified by the tool (fixture-risk)'); expect(view.stdout.frame).toContain('Compensating operation: fixture-undo');
     const covers = 'x'.repeat(220) + ' && echo \u200B' + SECRET;
     const safe = projectApprovalDecisionText(covers, known), line = approvalTemplateLine('COVERS {pattern}', { pattern: safe });
     const lines = assembleApprovalCard({ subject: null, summary: projectApprovalDecisionText(summary, known), risk: approvalTemplateLine('RISK', {}),
