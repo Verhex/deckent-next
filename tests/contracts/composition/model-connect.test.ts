@@ -262,4 +262,9 @@ it.skipIf(process.platform !== 'linux')('explicit model state writes both owners
   const listed = await inspectConfiguredModelCatalog(f.project, { schemaVersion: 1, scopeId: 'scope', channelId: connected.reference.providerId }, f.options);
   expect(listed.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: 'gpt-6-luna', chatState: 'active', activationConflict: true })]) });
   expect(JSON.stringify(f.rows('SELECT * FROM model_catalog_activations'))).toBe(before);
+  // Chat on with no worker activation at all (a new project whose worker registry is not set up yet) is setup to do, not a conflict.
+  const unset = new DatabaseSync(f.ledger);
+  try { unset.prepare("DELETE FROM model_catalog_activations WHERE model_id='gpt-6-luna'").run(); } finally { unset.close(); }
+  const missing = await inspectConfiguredModelCatalog(f.project, { schemaVersion: 1, scopeId: 'scope', channelId: connected.reference.providerId }, f.options);
+  expect(missing.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: 'gpt-6-luna', chatState: 'active', activation: null, activationConflict: false })]) });
 }, 40_000);

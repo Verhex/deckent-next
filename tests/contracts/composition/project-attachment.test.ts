@@ -2,6 +2,7 @@ import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import * as localPrincipal from '#adapters/core/local-principal/index.js';
+import { withMcpPrincipal } from '#adapters/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 import { carryConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
@@ -215,12 +216,16 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     expect(leased.schemaVersion).toBe(3);
     expect((await resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options))?.sourceProfile).toEqual(sourceProfile);
     await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, scopeIds: ['other'] }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    // A native chat turn runs as the person's MCP workload (turn.ts withMcpPrincipal): the attachment admits the person it acts for, the principal stays the workload.
+    const workload = await withMcpPrincipal(() => loadConfiguredScopeContext(f.b, 'target', f.options, 'write'));
+    expect(workload.principal.issuer).toBe(`${leasedContext.principal.issuer}/mcp`);
+    expect((await withMcpPrincipal(() => resolveConfiguredModelUse(f.b, leased, workload.principal, f.options)))?.sourceProfile).toEqual(sourceProfile);
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-inactive', action: 'deactivate',
       reference: sourceProfile.reference, expectedBinding: binding.binding, expectedRevision: 1 }, f.options);
-    await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-reactivate', action: 'activate',
       reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 2 }, f.options);
-    await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, issuer: 'foreign-person' }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, issuer: 'foreign-person' }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_PERSON_MISMATCH' });
     const sourceBytes = await readFile(sourcePath);
     expect((await applyConfiguredProviderSpendTemplate(f.b, 'target', { root: f.a, scopeId: 'source' }, f.options)).status).toBe('created');
     const account = await inspectConfiguredProviderSpendAccount(f.b, { schemaVersion: 1, scopeId: 'target', current: true }, f.options);
@@ -254,7 +259,7 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     const foreignRegistry = { ...registry!, entries: registry!.entries.map(entry => ({ ...entry, attachment: { ...entry.attachment, actor: foreign } })) };
     await writeFile(attachmentPath, JSON.stringify({ ...JSON.parse(attachmentBytes.toString('utf8')) as object, actor: foreign }));
     await recovery.store.hold(() => recovery.store.write(registry, foreignRegistry));
-    await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_PERSON_MISMATCH' });
     await recovery.store.hold(() => recovery.store.write(foreignRegistry, registry!)); await writeFile(attachmentPath, attachmentBytes);
     await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).resolves.toBeDefined();
     // Same person, same target membership: only the source scope membership is withdrawn, and the requester's source check refuses with no write.

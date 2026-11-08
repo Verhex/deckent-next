@@ -125,7 +125,7 @@ it('refuses another installation even when source and target now agree on the ne
 });
 it('rechecks source activation and target policy rather than treating a pin as permission', async () => {
   const f = fixture(), pin = await pinModelUse(f.ports, 'target-root', f.profile, person); f.state.activation = 'inactive';
-  await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
   f.state.activation = 'active'; Object.assign(f.state.target.document, { grants: [] });
   await expect(recheckModelUse(f.ports, 'target-root', f.profile, person, pin!)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
@@ -138,10 +138,13 @@ it('cannot issue a subscription pin without existing installation and project id
 it('observes an inactive direct connection without granting invocation or a pin', async () => {
   const f = fixture(false); f.state.activation = 'inactive';
   await expect(resolveModelUse(f.ports, 'target-root', f.profile, person, { action: 'inspect' })).resolves.toBeNull();
-  await expect(resolveModelUse(f.ports, 'target-root', f.profile, person)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
-  await expect(pinModelUse(f.ports, 'target-root', f.profile, person)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  await expect(resolveModelUse(f.ports, 'target-root', f.profile, person)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
+  await expect(pinModelUse(f.ports, 'target-root', f.profile, person)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
   await expect(resolveModelUse(f.ports, 'target-root', f.profile, { ...person, subject: '1001' }, { action: 'inspect' }))
     .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  // A profile whose binding no longer matches the catalog names that reason (reconnect), not a generic denial.
+  f.state.activation = 'active'; const stale = f.replace({ ...f.profile, bindingDigest: '0'.repeat(64) });
+  await expect(pinModelUse(f.ports, 'target-root', stale, person)).rejects.toMatchObject({ code: 'MODEL_USE_BINDING_CHANGED' });
 });
 
 it('refuses a copied direct person-only connection on first use in another installation, company, scope or principal', async () => {

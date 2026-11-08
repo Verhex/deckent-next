@@ -46,7 +46,8 @@ export function renderRetirementWarning(warning: ModelRetirementWarning, locale:
  */
 export function renderModelsTable(inspection: ModelCatalogInspection, input: Readonly<{ locale: Locale; nowMs: number; warnDays: number; verbose: boolean; style: CliTableStyle }>): string {
   const { locale } = input, today = catalogToday(input.nowMs);
-  const state = (channel: AllowedChannel, entry: CatalogModel) => entry.activationConflict ? t('tui.model.reconcile.title', {}, locale) : modelRetired(entry.model, today) ? t('climodels.models.state.retired', { day: retireDay(entry.model) ?? '?' }, locale)
+  const state = (channel: AllowedChannel, entry: CatalogModel) => entry.activationConflict ? t('tui.model.reconcile.title', {}, locale)
+    : entry.chatState === 'active' && (!channel.activation || !entry.activation) ? t('tui.model.workers.notSetUp', {}, locale) : modelRetired(entry.model, today) ? t('climodels.models.state.retired', { day: retireDay(entry.model) ?? '?' }, locale)
     : usable(channel, entry) ? t('climodels.models.state.active', {}, locale)
       : entry.activation?.state === 'active' ? t('climodels.models.state.channelOff', {}, locale) : t('climodels.models.state.inactive', {}, locale);
   const rows: unknown[][] = [];

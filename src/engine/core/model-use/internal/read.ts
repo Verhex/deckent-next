@@ -18,10 +18,11 @@ export async function assertModelUseSource(ports: ModelUseReadPorts, context: Mo
   assertModelUsePerson(context, profile, actor);
   await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('invoke', profile, actor);
   const binding = await new ModelBindingApplication({ read: async () => context.config['provider_catalog'] }).inspect(profile.reference);
-  if (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  if (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) return attachmentFailure('MODEL_USE_BINDING_CHANGED');
   if (!requireActive) return binding;
   const active = await ports.activation(context, profile.scopeId, profile.reference);
-  if (!active || active.state !== 'active' || active.binding?.digest !== binding.binding.digest) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  if (!active || active.state !== 'active') return attachmentFailure('MODEL_USE_NOT_ACTIVE');
+  if (active.binding?.digest !== binding.binding.digest) return attachmentFailure('MODEL_USE_BINDING_CHANGED');
   const activationRevision = active.revision;
   return { ...binding, activationRevision };
 }
