@@ -7,8 +7,8 @@ const environment = { schemaVersion: 1, requirements: [{ id: 'node', kind: 'exec
   { id: 'heap', kind: 'node-heap', target: 'node', expect: '1610612736' }] };
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 2147483648, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536, environment };
-const invocation = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
-const model = { channelId: 'channel', modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] };
+const invocation = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' }; // owner 2026-11-08: Claude has no Docker template
+const model = { channelId: 'channel', modelId: 'fixture-exact-model', auxiliaryModelIds: [] };
 const workInput = { schemaVersion: 1, task: 'Append "done".', scope: { paths: ['note.txt'] }, acceptance: 'note.txt ends with done.', model };
 
 it('a coding template carries its declared requirements into the compiled task profile, and K3 parity holds with them', () => {

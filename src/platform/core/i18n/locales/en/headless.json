@@ -96,6 +96,8 @@
   "headless.agent.k13.surfaceStopped": "The CLI exposed an unexpected tool or event, so this turn stopped and no tool ran without permission. Your next message works as usual.",
   "headless.agent.k13.cliNotices": "[deckent] The CLI sent an unrecognised notice ({events}); the turn went on and the notice is recorded with this turn.",
   "headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED": "The earlier worker execution path is closed for new work. Reconnect the subscription to use the governed native worker; existing admitted work keeps its recorded profile.",
+  "headless.agent.k13.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE": "Docker subscription workers are closed for this CLI: Deckent does not read its local login or pass it into a container (the provider's terms). Nothing ran. Bind the template to the tokenless worker: deckent coding template --connection <profile>.",
+  "headless.agent.k13.worker.NATIVE_SUBSCRIPTION_OTHER_PERSON": "This subscription login belongs to another person, so this Run cannot use it. Nothing ran. The Run can use an API-key connection instead.",
   "headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED": "Worker execution has not been verified for this exact CLI profile. Keep the task waiting until retained execution evidence is available; no other execution mode is chosen automatically.",
   "headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT": "The subscription resource is in use. Keep this task waiting or cancel it; capacity is released only after confirmed completion.",
   "headless.agent.k13.worker.NATIVE_CLI_WORKER_PROFILE_INVALID": "The native worker profile is invalid or incompatible. Inspect and reconnect this exact subscription; no replacement profile or model is selected.",

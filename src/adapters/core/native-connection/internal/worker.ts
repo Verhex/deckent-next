@@ -1,5 +1,5 @@
 // Standalone Node bootstrap mounted read-only. No host package imports at runtime.
-import { get, request as httpRequest } from 'node:http';
+import { get, request as httpRequest, createServer as createHttpServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createServer, connect, type Socket } from 'node:net';
 import { lstat, mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
@@ -862,7 +862,8 @@ async function main() {
     request.on('error', reject); request.on('timeout', () => request.destroy(new Error()));
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; capabilities: NativeWorkerCapabilities; home: string; file: string;
-    quotaPolicy?: QuotaPolicy; credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>;
+    quotaPolicy?: QuotaPolicy; credential?: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>;
+    relay?: { capability: string; placeholder: string; basePath: string; routes: { method: string; path: string; query: boolean }[]; config: Record<string, unknown> };
     limits: { connections: number; idleMs: number; clientModelReport?: ClientModelReportLimits };
     finalReport?: { schemaVersion: 1; limits: ReportLimits; language?: string };
     dependencyContext?: { text: string; sha256: string; maxBytes: number };
@@ -914,14 +915,36 @@ async function main() {
     if (instruction !== null) { if (argv.at(-2) === '--') argv[argv.length - 1] += '\n\n' + instruction; else if (setup.capabilities.structuredReport?.channel === 'final-text-json') reportSupported = false; }
   }
   const authRoot = join(home, setup.home); await mkdir(authRoot, { recursive: true, mode: 0o700 });
-  await writeFile(join(authRoot, setup.file), JSON.stringify(setup.credential), { mode: 0o600, flag: 'wx' });
+  // A relayed CLI gets no login file: the host relay attaches the login per request (owner 2026-11-08).
+  if (!setup.relay) await writeFile(join(authRoot, setup.file), JSON.stringify(setup.credential), { mode: 0o600, flag: 'wx' });
   if (setup.provider === 'claude') await writeFile(join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true }), { mode: 0o600 });
   if (setup.provider === 'cursor') {
     await mkdir(join(home, '.cursor'), { mode: 0o700 });
     await writeFile(join(home, '.cursor/cli-config.json'), JSON.stringify({ version: 1, editor: { vimMode: false },
       permissions: { allow: [], deny: [] }, network: { useHttp1ForAgent: true } }), { mode: 0o600 });
   }
-  const sockets = new Set<Socket>();
+  const sockets = new Set<Socket>(), relayed = setup.relay;
+  // Relayed: a loopback shim forwards only the registry routes carrying the placeholder bearer to the host relay, which takes this Attempt's
+  // capability (held in this process only, never in a file, env or argv). No proxy is offered to the CLI.
+  const shim = relayed ? createHttpServer((incoming, response) => {
+    const [path, query] = (incoming.url ?? '').split(/\?(.*)/su);
+    if (incoming.headers['authorization'] !== `Bearer ${relayed.placeholder}` || !relayed.routes.some(row => incoming.method === row.method && path === relayed.basePath + row.path && (row.query || query === undefined))) {
+      incoming.resume(); response.writeHead(403).end(); return;
+    }
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(incoming.headers)) if (typeof value === 'string' && key !== 'host' && key !== 'authorization') headers[key] = value;
+    const forward = httpRequest({ socketPath, method: incoming.method, path: incoming.url, headers: { ...headers, authorization: `Bearer ${relayed.capability}` } });
+    forward.on('response', answer => { response.writeHead(answer.statusCode ?? 502, Object.fromEntries(Object.entries(answer.headers).flatMap(([key, value]) => typeof value === 'string' ? [[key, value]] : []))); answer.pipe(response); });
+    forward.on('error', () => { if (!response.headersSent) response.writeHead(502); response.end(); });
+    incoming.pipe(forward);
+  }) : null;
+  if (shim) {
+    shim.maxConnections = setup.limits.connections; shim.headersTimeout = setup.limits.idleMs; shim.requestTimeout = 0;
+    await new Promise<void>((resolve, reject) => { shim.once('error', reject); shim.listen(0, '127.0.0.1', resolve); });
+    const address = shim.address(); if (!address || typeof address === 'string') throw new Error();
+    const pairs = Object.entries(relayed!.config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value).replaceAll('{shimPort}', String(address.port))}`]);
+    const end = argv.lastIndexOf('--'); argv.splice(end < 0 ? argv.length : end, 0, ...pairs);
+  }
   const relay = createServer(client => {
     const remote = connect(socketPath); sockets.add(client); sockets.add(remote);
     const close = () => { client.destroy(); remote.destroy(); sockets.delete(client); sockets.delete(remote); };
@@ -930,21 +953,20 @@ async function main() {
     client.pipe(remote); remote.pipe(client);
   });
   relay.maxConnections = setup.limits.connections;
-  await new Promise<void>((resolve, reject) => { relay.once('error', reject); relay.listen(0, '127.0.0.1', resolve); });
-  const address = relay.address(); if (!address || typeof address === 'string') throw new Error();
-  const proxy = `http://127.0.0.1:${address.port}`;
+  if (!relayed) await new Promise<void>((resolve, reject) => { relay.once('error', reject); relay.listen(0, '127.0.0.1', resolve); });
+  const address = relayed ? null : relay.address(); if (!relayed && (!address || typeof address === 'string')) throw new Error();
+  const proxy = address && typeof address !== 'string' ? `http://127.0.0.1:${address.port}` : null;
   const child = spawn(executable, argv, { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: home,
     LANG: 'C.UTF-8', ...setup.environment,
-    ...(setup.credentialEnvironment && typeof setup.credential.accessToken === 'string' ? { [setup.credentialEnvironment]: setup.credential.accessToken } : {}),
-    HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy,
-    NO_PROXY: '', no_proxy: '' } });
+    ...(setup.credentialEnvironment && typeof setup.credential?.accessToken === 'string' ? { [setup.credentialEnvironment]: setup.credential.accessToken } : {}),
+    ...(proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy, NO_PROXY: '', no_proxy: '' } : {}) } });
   if (delivery) child.once('spawn', () => process.stdout.write(JSON.stringify({ schemaVersion: 1,
     kind: 'native-prompt-delivery', phase: 'spawned', channel: delivery.channel, sha256: delivery.sha256,
     argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(deliveredTask!), ...(context ? { dependencyContextSha256: context.sha256 } : {}),
     segments: delivery.segments }) + '\n'));
   // Native events can contain tool output and request headers. Never forward raw events: only redacted contract events leave.
   let tail = ''; let bytes = 0;
-  const state = createNormalizerState([...secretValues(setup.credential), proxy], Date.now(), setup.quotaPolicy);
+  const state = createNormalizerState([...secretValues(setup.credential ?? {}), ...(proxy ? [proxy] : []), ...(relayed ? [relayed.capability] : [])], Date.now(), setup.quotaPolicy);
   const channel = eventChannel(socketPath, capability);
   const codex = createCodexState();
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
@@ -974,7 +996,7 @@ async function main() {
   channel.push(flushUnmapped(state)); await channel.close(state);
   process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...result, outputBytes: bytes,
     failure: result.code === 0 ? null : failure }) + '\n');
-  for (const socket of sockets) socket.destroy(); relay.close();
+  for (const socket of sockets) socket.destroy(); relay.close(); shim?.close(); shim?.closeAllConnections();
   process.exitCode = result.code === 0 ? 0 : 1;
 }
 // Runs only as the mounted bootstrap (`node /run/deckent-bootstrap.mjs ...`); importing it for tests has no side effects.

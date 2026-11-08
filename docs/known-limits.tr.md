@@ -308,6 +308,16 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 - **Claude aboneliğiyle sohbet (A62, araçlar alpha.63'ten beri):** `/model`, mevcut yalıtılmış Claude CLI bağlantısıyla API bütçesi olmadan akış, konuşma geçmişi ve iptali kullanır. alpha.63'ten beri CLI'ın kendi araçları kapalı kalır; yalnız Deckent'in araçlarıyla, Deckent'in onay, sandbox, politika ve denetim sınırında çalışır. Kendi hesabınızla Anthropic’in değiştirilmemiş binary ve giriş akışını kullanırsınız. Deckent OAuth/oturum token’ını toplamaz, okumaz, saklamaz veya aracılık etmez; profili başka principal’a devretmez, kullanımı paylaşmaz, satmaz veya başkası adına faturalamaz. Mevcut kişi şahidi ve delegasyon kontrolleri korunur. [Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance). Linux fixture/PTY, yazar kanıtıdır; gerçek hesap erişimi ve montajlı sürüm kabulü ayrıdır.
 
+- **Docker abonelik işçileri (alpha.64, owner 2026-11-08).** Claude için Docker abonelik işçisi yok: Deckent artık yerel Claude CLI girişini
+  okumaz ve token'ını konteynere aktarmaz ([Anthropic koşulları](https://code.claude.com/docs/en/legal-and-compliance)). Yeni Claude Docker
+  şablonları ve hazırlanmış profiller reddedilir; mevcut bir Claude Docker şablonu Run kabulünde `NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE` ile
+  reddedilir. *Geçici çözüm:* şablonu `deckent coding template --connection <profil>` ile token'sız işçiye bağlayın. Codex Docker işçisi artık
+  girişi almaz: CLI'si yer tutucu bir değeri loopback ara katmanına gönderir; Attempt'in host aktarıcısı token'ı ve hesap kimliğini yalnızca iki
+  Codex yolu için ve kabul edilen modelle ekler, CONNECT tüneli yoktur. Aynı konteynerdeki diğer süreçler Attempt boyunca bu ara katmana
+  ulaşabilir (aynı iki yol; token asla). Aktarıcı yalnızca girişin sahibi olan kişinin (runtime'ın çalıştığı hesap) ya da varsayılan devredilmiş kullanımla (`ai`, `models connect`
+  çıktısındaki gibi) o kişinin AI'ının kabul ettirdiği Run'lara hizmet eder; başka bir kişinin Run'ı ya da onayı olmayan bir sınıf (sistem iş
+  yükü) kabulde ve dağıtımdan önce yeniden `NATIVE_SUBSCRIPTION_OTHER_PERSON` ile reddedilir ve bunun yerine API anahtarlı bir bağlantı kullanabilir. Abonelik girişleri kişiler arasında paylaşılmaz; bunu genişletmek owner kararıdır.
+  codex-cli 0.167.0 ve sahte bir kaynakla kanıtlandı; gerçek hesapla yürüyüş açık.
 - **ChatGPT'nin iki girişi var.** Codex CLI girişi (alpha.63) Claude gibi araçlı sohbeti, işçileri ve Brain'i çalıştırır; tarayıcı girişi
   (SIWC) notuyla betada kalır ve işçisi hâlâ Docker ister.
 - **İlk kurulum ve yeni klasörler (A62):** kişinin tanığıyla tamamlanan sıfır kurulum, global kayıt yoksa kaynak olur. Eski kurulum otomatik

@@ -27,9 +27,9 @@ const refusedOffTerminal = async (path: string, run: () => Promise<number>, stde
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64,
   logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const request = { schemaVersion: 1, scopeId: 's', provider: 'claude', kind: 'feature', poolId: 'customer', executionSlots: 3,
+const request = { schemaVersion: 1, scopeId: 's', provider: 'codex', kind: 'feature', poolId: 'customer', executionSlots: 3,
   inFlightSlots: 5, discovery: 'repository', apply: false };
-const detected = { detect: async () => '2.1.285 (Claude Code)' };
+const detected = { detect: async () => 'codex-cli 0.159.2' };
 type TestConfig = Record<string, unknown> & { execution?: { docker?: typeof docker; git: { gitExecutable: string; timeoutMs: number } } };
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'initial-registry-')); roots.push(root);
@@ -47,7 +47,12 @@ async function setup() {
 // Native Windows has no POSIX installer principal; adapter refusal tests remain active on every platform.
 describe.skipIf(process.platform === 'win32')('first registry with POSIX installer custody (Windows: verify-not-run, use WSL2)', () => {
 it('U4C: an explicit image adds a second provider by preview/CAS while preserving existing registry contents and refusing stale/witnessless writes', async () => {
-  const f = await setup(), first = await initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, { ...detected, ...person });
+  const f = await setup(), untouched = await readFile(f.path, 'utf8');
+  // Owner 2026-11-08: a Claude Docker registry is refused typed with the tokenless next step, before any write.
+  await expect(initializeNativeCodingRegistry(f.root, { ...request, provider: 'claude', apply: false }, f.options, { detect: async () => '2.1.285 (Claude Code)', ...person }))
+    .rejects.toMatchObject({ code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', message: expect.stringContaining('deckent coding template --connection') });
+  expect(await readFile(f.path, 'utf8')).toBe(untouched);
+  const first = await initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, { ...detected, ...person });
   const next = { provider: 'codex', kind: 'codex-coding', image: `sha256:${'b'.repeat(64)}`, apply: false };
   const deps = { ...person, detect: async (_provider: string, settings: typeof docker) => { expect(settings.imageId).toBe(next.image); return 'codex-cli 0.163.0'; } };
   const before = await readFile(f.path, 'utf8'), audits = f.auditCount();
@@ -175,7 +180,7 @@ it('fresh policy → preview is read-only → apply writes a versioned registry 
   const preview = await initializeNativeCodingRegistry(f.root, request, f.options, { ...detected, ...person });
   expect(preview.status).toBe('preview'); expect(executionRegistrySchema.parse(preview.registry).profiles).toEqual([preview.profile]);
   expect(preview.profile).toMatchObject({ version: 1, adapter: { id: 'native-coding-template', version: 1 },
-    parameters: { invocation: { provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { mode: 'repository' } } } });
+    parameters: { invocation: { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { mode: 'repository' } } } });
   expect(await readFile(f.path, 'utf8')).toBe(before); expect(await f.files()).toEqual(files); expect(f.auditCount()).toBe(audits);
   const applied = await initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, { ...detected, ...person });
   expect(applied.registry).toEqual(preview.registry); expect(applied.write).toMatchObject({ keyPath: 'admission', beforeDigest: preview.expect });
@@ -192,8 +197,8 @@ it('fresh policy → preview is read-only → apply writes a versioned registry 
   for (const change of [{ executionSlots: 4 }, { kind: 'review' }, { discovery: 'disabled' }]) await expect(initializeNativeCodingRegistry(f.root, { ...request, ...change, apply: true }, f.options, { ...noProbe, ...person }))
     .rejects.toMatchObject({ code: 'INITIAL_REGISTRY_EXISTS' });
   expect(await readFile(f.path, 'utf8')).toBe(bytes); expect(await f.files()).toEqual(afterFiles); expect(f.auditCount()).toBe(audits + 1);
-  expect((await configureNativeCodingTemplate(f.root, { provider: 'claude', kind: 'feature', apply: true }, f.options, person)).status).toBe('unchanged');
-  const next = await configureNativeCodingTemplate(f.root, { provider: 'claude', kind: 'review', apply: true }, f.options, person);
+  expect((await configureNativeCodingTemplate(f.root, { provider: 'codex', kind: 'feature', apply: true }, f.options, person)).status).toBe('unchanged');
+  const next = await configureNativeCodingTemplate(f.root, { provider: 'codex', kind: 'review', apply: true }, f.options, person);
   expect(next.registry.kinds.map(entry => entry.kind)).toEqual(['feature', 'review']); expect(next.registry.profiles).toHaveLength(1);
   // The registry has grown beyond the first one: no longer `current`, refused before any write.
   const grown = await readFile(f.path, 'utf8');
@@ -317,7 +322,7 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
   const context = { root: f.root, env: f.options.env,
     initializeNativeCodingRegistry: (root: string, input: unknown) => initializeNativeCodingRegistry(root, input, f.options, { ...detected, ...person }),
     stdout: { write(text: string) { output += text; } }, stderr: { write(text: string) { error += text; } } };
-  const args = ['init', 'registry', '--scope', 's', '--provider', 'claude', '--kind', 'feature', '--pool', 'customer', '--execution-slots', '3', '--in-flight-slots', '5', '--discovery', 'repository'];
+  const args = ['init', 'registry', '--scope', 's', '--provider', 'codex', '--kind', 'feature', '--pool', 'customer', '--execution-slots', '3', '--in-flight-slots', '5', '--discovery', 'repository'];
   for (const locale of ['en', 'tr']) {
     output = ''; expect(await main([...args, '--preview', '--lang', locale], context), error).toBe(0);
     expect(output).toContain(locale === 'en' ? 'First registry preview' : 'İlk registry önizlemesi'); expect(output).toContain('native-coding-template');
@@ -339,7 +344,7 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
 
 it.skipIf(process.platform === 'win32')('U4-1r: selected image B reaches discovery and both previews/applies despite configured fallback A', async () => {
   const f = await setup(), image = `sha256:${'b'.repeat(64)}`, seen: string[] = [];
-  const dependencies = { ...person, detect: async (_provider: string, settings: typeof docker) => { seen.push(settings.imageId); return '2.1.285 (Claude Code)'; } };
+  const dependencies = { ...person, detect: async (_provider: string, settings: typeof docker) => { seen.push(settings.imageId); return 'codex-cli 0.159.2'; } };
   const before = await readFile(f.path, 'utf8');
   const preview = await initializeNativeCodingRegistry(f.root, { ...request, image }, f.options, dependencies);
   expect(JSON.stringify(preview.profile)).toContain(image); expect(await readFile(f.path, 'utf8')).toBe(before);

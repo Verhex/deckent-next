@@ -19,8 +19,8 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64,
   logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const registry = { schemaVersion: 1, scopeId: 's', provider: 'claude', kind: 'feature', poolId: 'customer', executionSlots: 3, inFlightSlots: 5, discovery: 'repository' };
-const detect = async () => '2.1.285 (Claude Code)';
+const registry = { schemaVersion: 1, scopeId: 's', provider: 'codex', kind: 'feature', poolId: 'customer', executionSlots: 3, inFlightSlots: 5, discovery: 'repository' };
+const detect = async () => 'codex-cli 0.159.2';
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'native-template-witness-')); roots.push(root);
   await applyPolicyTemplateInstallation(root, 's');
@@ -48,7 +48,7 @@ describe.skipIf(process.platform === 'win32')('native registry and template writ
   it('coding template --apply: refused without the witness, nothing written; the witnessed person applies it', async () => {
     const f = await setup();
     await initializeNativeCodingRegistry(f.root, { ...registry, apply: true }, f.options, { detect, witness: witness(true) });
-    const before = await readFile(f.path, 'utf8'), request = { provider: 'claude', kind: 'review', apply: true };
+    const before = await readFile(f.path, 'utf8'), request = { provider: 'codex', kind: 'review', apply: true };
     expect(await refusal(configureNativeCodingTemplate(f.root, request, f.options, { witness: witness(false) })))
       .toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED', params: { operation: 'config set admission.registry' } });
     expect(await readFile(f.path, 'utf8')).toBe(before);
@@ -61,15 +61,15 @@ describe.skipIf(process.platform === 'win32')('native registry and template writ
       const ports = { snapshot: untouched(), principal: untouched(), writer: untouched(), template: untouched(), detect: untouched(), beforeWrite: untouched(),
         ...(refuse ? { witness: refuse } : {}) };
       for (const apply of [() => initializeNativeRegistry({ ...registry, apply: true }, ports as unknown as NativeTemplatePorts),
-        () => configureNativeTemplate({ provider: 'claude', kind: 'review', apply: true }, ports as unknown as NativeTemplatePorts)])
+        () => configureNativeTemplate({ provider: 'codex', kind: 'review', apply: true }, ports as unknown as NativeTemplatePorts)])
         expect(await refusal(apply())).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
       for (const port of Object.values(ports)) if (vi.isMockFunction(port)) expect(port).not.toHaveBeenCalled();
     }
   });
   it('the CLI refuses --apply under the AI marker, through a pipe and with --json before the handler runs; --preview stays open', async () => {
     const handlers = { initializeNativeCodingRegistry: vi.fn(async () => { throw new Error('must not run'); }), configureCodingTemplate: vi.fn(async () => { throw new Error('must not run'); }) };
-    const commands = [['init', 'registry', '--scope', 's', '--provider', 'claude', '--kind', 'feature', '--pool', 'p', '--execution-slots', '1', '--in-flight-slots', '1', '--apply'],
-      ['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--apply']];
+    const commands = [['init', 'registry', '--scope', 's', '--provider', 'codex', '--kind', 'feature', '--pool', 'p', '--execution-slots', '1', '--in-flight-slots', '1', '--apply'],
+      ['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--apply']];
     const term = { TERM: 'xterm-256color', HOME: tmpdir() };
     const ios = [{ env: { ...term, CLAUDECODE: '1' }, tty: true, json: false }, { env: term, tty: false, json: false }, { env: term, tty: true, json: true }];
     for (const argv of commands) for (const io of ios) {

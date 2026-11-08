@@ -28,7 +28,7 @@ it('R8b: a person who had a Docker image consent and rebinds the work kind to a 
   }
   expect(state.presence).toEqual([]);
   // Negative: the same kind bound to a plain Docker template still waits for its image.
-  state.config = config(createNativeCodingTemplate(limits, invocation));
+  state.config = config(createNativeCodingTemplate(limits, { ...invocation, provider: 'codex' })); // owner 2026-11-08: no Claude Docker template
   expect(await configuredWorkerSetupFact('/unused', 's')).toMatchObject({ ready: false, reason: 'WORKER_SETUP_PENDING' });
   expect(state.presence).toEqual([image]);
 });

@@ -34,6 +34,8 @@ const limit = (p: Params, l: Locale) => {
 /** Error codes owned by the `headless` family (S3 subscription Brain through the person's own CLI; i18n `locales/<locale>/headless.json`). */
 export const headlessErrors: ErrorDefinitions = Object.freeze({
   NATIVE_PROJECTION_RETIRED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED', p, l) }) },
+  NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', p, l) }) },
+  NATIVE_SUBSCRIPTION_OTHER_PERSON: { category: 'config', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_SUBSCRIPTION_OTHER_PERSON', p, l) }) },
   NATIVE_WORKER_F08_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED', p, l) }) },
   NATIVE_WORKER_CAPACITY_WAIT: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT', p, l) }) },
   NATIVE_CLI_WORKER_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_CLI_WORKER_PROFILE_INVALID', p, l) }) },

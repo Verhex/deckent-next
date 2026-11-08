@@ -10,7 +10,8 @@ import { proposeConfiguredMemory, verifyConfiguredMemory } from '#composition/co
 import { inspectConfiguredMemoryRollout } from '#composition/core/memory-rollout/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import type { MemoryRolloutStatus } from '#engine/index.js';
-import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
+import { seedCatalog } from '../support/model-catalog.js';
+const SEED_CHANNEL = 'codex-cli-subscription'; // owner 2026-11-08: no Claude Docker worker; this admission path runs on a Codex Docker template
 
 // S4B-7 through the real composition (config file, policy file, integrity key, SQLite ledger with the memory journal and the audit chain):
 // `deckent memory rollout` measures the phase 3 criteria from the sealed `memory-context` seals of real shadow admissions, and every configured
@@ -20,13 +21,13 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const invocation = (context: readonly { id: string; version: number; text: string }[]) => ({ provider: 'claude', cliVersion: '2.1.293 (Claude Code)',
-  discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', maxTurns: 40, composition: { persona: { id: 'implementer', version: 1, text: 'You implement exactly one card.' }, context } });
+const invocation = (context: readonly { id: string; version: number; text: string }[]) => ({ provider: 'codex', cliVersion: 'codex-cli 0.159.2',
+  discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', composition: { persona: { id: 'implementer', version: 1, text: 'You implement exactly one card.' }, context } });
 const registry = (context: readonly { id: string; version: number; text: string }[]) => ({ schemaVersion: 1 as const, revision: 's4b7',
   profiles: [{ id: 'coding', version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation: invocation(context) } }],
   kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] });
 const workInput = { schemaVersion: 1, task: 'Fix the invoice approval queue for invoices without a delivery note.', scope: { paths: ['src/invoice/**'] },
-  acceptance: 'Invoices without a delivery note reach the approval queue.', model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] } };
+  acceptance: 'Invoices without a delivery note reach the approval queue.', model: { channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', auxiliaryModelIds: [] } };
 const run = (runId: string) => ({ schemaVersion: 1 as const, commandId: `create-${runId}`, scopeId: 's', runId, graph: { schemaVersion: 3, revision: 1,
   tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], workInput }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } });
@@ -51,9 +52,9 @@ async function seeded(context: readonly { id: string; version: number; text: str
   ] }), { mode: 0o600 });
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog() });
+  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
   await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', expectedRevision: 0 });
+  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', expectedRevision: 0 });
   await proposeConfiguredMemory(project, { schemaVersion: 1, commandId: 'm1', scopeId: 's', content: { kind: 'fact', title: 'Invoice approval',
     body: 'Invoices without a delivery note go to the approval queue.', tags: [], lesson: null }, origin: { kind: 'human', ref: null } }, options);
   await verifyConfiguredMemory(project, { schemaVersion: 1, commandId: 'v-m1', scopeId: 's', entryId: 'm1', expectedRevision: 1, basis: { kind: 'human-review', note: 'checked' } }, options,

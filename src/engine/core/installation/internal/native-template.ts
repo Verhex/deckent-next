@@ -36,9 +36,9 @@ function limits(snapshot: ConfigSnapshot, worker: NativeCliWorkerBinding | undef
   const docker = snapshot.effective.execution?.docker; if (!docker) return worker ? undefined : refuse(missing);
   const { executable, ...rest } = docker; void executable; return { ...rest, imageId: image ?? rest.imageId };
 }
-/** The adapter's typed refusal for a discovery mode the selected CLI cannot honour, named instead of a generic template failure. */
+/** The adapter's typed refusals named instead of a generic template failure: a discovery mode the CLI cannot honour, a CLI without a Docker subscription path (owner 2026-11-08). */
 function discoveryRefusal(error: unknown, provider: string, fallback: string): never {
-  if ((error as { code?: unknown } | null)?.code === 'NATIVE_CODING_DISCOVERY_UNSUPPORTED') throw ErrorRegistry.createError('CODING_DISCOVERY_UNSUPPORTED', { params: { provider } });
+  const typed = ({ NATIVE_CODING_DISCOVERY_UNSUPPORTED: 'CODING_DISCOVERY_UNSUPPORTED', NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' } as Record<string, string>)[String((error as { code?: unknown } | null)?.code)]; if (typed) throw ErrorRegistry.createError(typed, { params: { provider } });
   refuse(fallback);
 }
 
@@ -97,8 +97,8 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   const pins = affectedToolchainProfiles(read.effective).filter(pin => pin.provider === request.provider && pin.imageId === request.image);
   const cliVersion = pins[0]?.cliVersion ?? await ports.detect(request.provider, { ...settings, imageId: request.image });
   const { executable, ...resources } = settings; void executable;
-  const candidate = ports.template({ ...resources, imageId: request.image }, { provider: request.provider, cliVersion, permissionMode: 'unattended',
-    ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}) });
+  const candidate = ((): ExecutionProfileDefinition => { try { return ports.template({ ...resources, imageId: request.image }, { provider: request.provider, cliVersion, permissionMode: 'unattended',
+    ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}) }); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } })();
   const plan = proposal(read, request, ports.template, candidate);
   const digest = sha256(JSON.stringify({ project: read.digest, global: read.global, profile: plan.profile, registry: plan.registry }));
   const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, digest };

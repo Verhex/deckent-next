@@ -19,13 +19,4 @@ export function siwcWorkerRequestBody(raw: string, model: string): Readonly<{ bo
   if (!Array.isArray(tools) || !tools.every(local)) return { refusal: 'tool' };
   return { body: JSON.stringify(parsed) };
 }
-/** Byte-stream masking of exact secret values (latin1 keeps bytes 1:1); a value split across chunks is held until it can be decided. */
-export function secretScrubber(values: readonly string[]) {
-  const secrets = values.filter(value => value.length >= 8), hold = Math.max(0, ...secrets.map(value => value.length - 1));
-  let pending = '';
-  const mask = (text: string) => secrets.reduce((current, secret) => current.split(secret).join('[REDACTED]'), text);
-  return Object.freeze({
-    push(chunk: Buffer): Buffer { const text = mask(pending + chunk.toString('latin1')), cut = Math.max(0, text.length - hold); pending = text.slice(cut); return Buffer.from(text.slice(0, cut), 'latin1'); },
-    end(): Buffer { const text = mask(pending); pending = ''; return Buffer.from(text, 'latin1'); },
-  });
-}
+export { secretScrubber } from '#adapters/core/native-connection/index.js';

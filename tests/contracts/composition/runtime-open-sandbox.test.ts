@@ -4,7 +4,7 @@ import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:f
 import { createServer, type Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DockerSupervisor, landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
+import { DockerSupervisor, landlockShellSandbox, type ShellSandboxFactory, readLocalOsOwner } from '#adapters/index.js';
 import type { SandboxRequest } from '#engine/index.js';
 import { openNativeConnection, openNativeEgressGateway } from '../../../dist/adapters/core/native-connection/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
@@ -63,7 +63,7 @@ it.skipIf(!bwrapReady)('RC-S1: an approved open shell cannot see/connect to long
     rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS], 'full-auto', 'ipc-card');
   const directory = join(f.data, 'state/workspaces', 'a'.repeat(80)); await mkdir(directory, { recursive: true, mode: 0o700 });
   const connections: Awaited<ReturnType<typeof openNativeConnection>>[] = [];
-  const open = async () => { const value = await openNativeConnection({ directory, binding: { schemaVersion: 1, provider: 'codex' },
+  const open = async () => { const value = await openNativeConnection({ principal: readLocalOsOwner(), directory, binding: { schemaVersion: 1, provider: 'codex' },
     credential: { tokens: { access_token: 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic', id_token: 'fixture' } }, deadlineMs: 30_000 }); connections.push(value); return value; };
   const before = await open();
   const probe = `import json,os,socket
@@ -110,8 +110,9 @@ it.skipIf(!bwrapReady || !imageId)('RC-S1: project A cannot list/read/bootstrap 
     expect(Buffer.byteLength(join(f.data, 'workspaces/connection-XXXXXX/gateway.sock'))).toBeLessThanOrEqual(103);
     expect(directory.startsWith(f.home + '/')).toBe(false); expect(directory.startsWith(f.project + '/')).toBe(false);
     expect(Buffer.byteLength(join(directory, 'connection-XXXXXX/gateway.sock'))).toBeLessThanOrEqual(103);
-    const open = async () => { const value = await openNativeConnection({ directory, binding: { schemaVersion: 1, provider: 'codex' },
-      credential: { tokens: { access_token: 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic', id_token: 'fixture' } }, deadlineMs: 60_000 }); connections.push(value); return value; };
+    // Owner 2026-11-08: a relayed Codex worker holds no login file, so the projected-credential bootstrap is proven on Cursor.
+    const open = async () => { const value = await openNativeConnection({ principal: readLocalOsOwner(), directory, binding: { schemaVersion: 1, provider: 'cursor' },
+      credential: { accessToken: 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic' }, deadlineMs: 60_000 }); connections.push(value); return value; };
     const before = await open();
     const probe = `import json,os,socket
 rows=json.load(open('src/short-ipc-paths.json')); results=[]
@@ -148,7 +149,7 @@ print('SHORT_CROSS_PROJECT_IPC_ISOLATED')`;
       uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1,
       tmpBytes: 67108864, deadlineMs: 20_000, controlTimeoutMs: 10_000, outputBytes: 65536, connection: after.descriptor });
     request = { protocolVersion: 1, identity: { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test', generation: 1, layoutRevision: 'layout' },
-      workspace, argv: ['node', '-e', "const fs=require('node:fs');const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.codex/auth.json'));if(!auth.tokens.access_token.endsWith('.synthetic'))process.exit(12);fs.writeFileSync('bootstrapped','yes')"] };
+      workspace, argv: ['node', '-e', "const fs=require('node:fs');const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.config/cursor/auth.json'));if(!auth.accessToken.endsWith('.synthetic'))process.exit(12);fs.writeFileSync('bootstrapped','yes')"] };
     expect((await supervisor.execute(request)).result).toEqual({ kind: 'exited', exitCode: 0 });
     expect(await readFile(join(workspace, 'bootstrapped'), 'utf8')).toBe('yes'); expect(after.statistics().bootstrapReads).toBe(1);
     expect(before.statistics().bootstrapReads).toBe(0);

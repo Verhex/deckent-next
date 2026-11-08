@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
 import { finalReportTextInstruction, nativeProjectionDispatch, reportLanguageInstruction } from '#adapters/core/native-connection/index.js';
@@ -39,7 +40,7 @@ it('K27: native defaults use the enforcing native bound, preserve declarations a
     const declared = { schemaVersion: 1, requirements: [{ id: 'operator', kind: 'executable', target: 'operator-node' }] };
     expect(resolveNativeCliWorkerProfile(compileNativeCodingWorkInput(createNativeCodingTemplate({ ...docker, environment: declared }, call, native), workInput)).environment).toEqual(declared);
   }
-  const template = createNativeCodingTemplate(docker, invocation);
+  const template = createNativeCodingTemplate(docker, { ...invocation, provider: 'codex' });
   expect((template.parameters['docker'] as { environment: unknown }).environment).toEqual({ schemaVersion: 1,
     requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'node-heap', kind: 'node-heap', target: 'node', expect: '201326592' }] });
 });
@@ -67,8 +68,13 @@ async function prepared(f = fixture(), language?: string) {
   return { ...f, supervisor: result.supervisor };
 }
 
+/** A v1 Claude Docker template as written before alpha.64 (owner 2026-11-08: creating one is refused now; Run admission refuses it). */
+const legacyTemplate = () => { const codex = createNativeCodingTemplate(docker, { ...invocation, provider: 'codex' }), parameters = codex.parameters as { invocation: object };
+  return { ...codex, parameters: { ...parameters, invocation: { ...parameters.invocation, provider: invocation.provider } } }; };
 it('K12: v2 template freezes a separate tokenless backend; legacy v1 remains unchanged and no silent migration occurs', () => {
-  const legacy = compileNativeCodingWorkInput(createNativeCodingTemplate(docker, invocation), workInput);
+  const legacy = compileNativeCodingWorkInput(legacyTemplate(), workInput);
+  expect(() => createNativeCodingTemplate(docker, invocation)).toThrow(expect.objectContaining({ code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' })); // no new v1 Claude template
+  for (const locale of ['en', 'tr'] as const) expect(ErrorRegistry.createError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', { locale }).message).toContain('deckent coding template --connection');
   expect(legacy.adapter).toEqual({ id: 'docker', version: 2 });
   const template = createNativeCodingTemplate(docker, invocation, binding), worker = profile();
   expect(template.adapter).toEqual({ id: 'native-coding-template', version: 2 });
