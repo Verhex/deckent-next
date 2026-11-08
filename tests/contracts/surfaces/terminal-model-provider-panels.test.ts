@@ -256,7 +256,8 @@ describe('/provider window', () => {
     expect(view.frame()).toContain(t('tuicopy.card.hint', {}, 'en'));
     await view.press(ENTER, 40); // an empty required key is refused in place
     expect(view.frame()).toContain('This provider needs a key.'); expect(requests).toEqual([]);
-    await view.press(CANARY, 40);
+    // Owner 2026-11-08 (F2-18): a key is typed or pasted; part typed, the rest as a bracketed paste, both land in the masked entry.
+    await view.press(CANARY.slice(0, 3), 40); await view.raw(`\u001b[200~${CANARY.slice(3)}\u001b[201~`, 60);
     expect(view.frame()).toContain('•'.repeat(CANARY.length));
     // alpha.59 L3: Ctrl+Y copies the card as drawn (title, body) and never the typed key, which also stays in the entry untouched.
     await view.raw('\u0019', 60);

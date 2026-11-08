@@ -172,8 +172,13 @@ it('N2: a discovered model reads as its own name and its connection kind, never 
 // never appeared in the real terminal although the panel-only test passed. Through `useWorklineSettings` here.
 it('an empty /model in the workline offers "Connect a model…" first and Enter opens the provider window', async () => {
   const empty: ModelPanelView = { title: 'Models · scope', notes: ['No model is connected yet.'], defaultBlocked: null, choices: [] };
-  const provider = { inspect: async () => ({ title: 'PROVIDERS-WINDOW', kinds: [], notes: [] }), endpoint: () => ({ ok: false as const, reason: '-' }), connect: async () => ({ stored: false, title: '-', lines: [] }),
-    disconnect: async () => [], transparency: [] } as unknown as NonNullable<ModelPanelSource['provider']>;
+  // Owner 2026-11-08 (F2-18): a key pasted into the provider window's masked entry reaches the provider port, never the chat composer under it.
+  const keys: string[] = [], CANARY = 'sk-paste-canary-7b2e';
+  const kind = { id: 'anthropic-api', label: 'Anthropic API', detail: 'not connected', blocked: null, keyName: 'DECKENT_ANTHROPIC_KEY', keyStored: false, endpointEditable: false,
+    endpointDefault: 'https://api.anthropic.com', keyRequired: true, endpointChoices: [], models: [], modelBlocked: null };
+  const provider = { inspect: async () => ({ title: 'PROVIDERS-WINDOW', kinds: [kind], notes: [] }), endpoint: () => ({ ok: false as const, reason: '-' }),
+    connect: async (request: { key: string | null }) => { keys.push(request.key ?? ''); return { stored: true, title: 'KEY-STORED', lines: [] }; },
+    disconnect: async () => [], transparency: [], keyName: () => 'DECKENT_ANTHROPIC_KEY' } as unknown as NonNullable<ModelPanelSource['provider']>;
   const view = open({ inspect: async () => empty, provider, budget: source().model.budget! });
   await settle(40);
   view.stdin.write(`/model${ENTER}`);
@@ -183,4 +188,12 @@ it('an empty /model in the workline offers "Connect a model…" first and Enter 
   view.stdin.write(ENTER);
   await until(() => view.stdout.frame.includes('PROVIDERS-WINDOW'), 'provider window');
   expect(view.stdout.frame).not.toContain('25 USD');
+  await settle(60); view.stdin.write(`Anthropic${ENTER}`); await settle(80); view.stdin.write(ENTER);
+  await until(() => view.stdout.frame.includes('API key'), 'key entry');
+  await settle(60); view.stdin.write(`\u001b[200~${CANARY}\u001b[201~`);
+  await until(() => view.stdout.frame.includes('•'.repeat(CANARY.length)), 'pasted key masked in the entry');
+  view.stdin.write(ENTER);
+  await until(() => keys.length === 1, 'key reached the provider port');
+  expect(keys).toEqual([CANARY]);
+  expect(view.stdout.frame).not.toContain(CANARY);
 });

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Text, type Key } from 'ink';
+import { Text, usePaste, type Key } from 'ink';
 import { graphemes, nextBoundary, previousBoundary } from '#surfaces/core/terminal-composer/index.js';
 import { span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
@@ -34,6 +34,7 @@ export function maskEntry(text: string, mark: string, after?: string): string {
  * A bounded window with one single-line entry (T3 L4 `/config` free values, the `/mcp` wizard's text steps). Enter submits the text to
  * `onSubmit`, which may answer a localized reason to stay open; Esc and Ctrl+C cancel. `masked` draws marks instead of the value.
  */
+const PASTED = { backspace: false, delete: false, leftArrow: false, rightArrow: false, home: false, end: false, ctrl: false, meta: false };
 export function EntryWindow({ title, body = [], hints, position, masked = false, initial = '', problem: opening = null, onSubmit, onCancel }: {
   readonly title: string; readonly body?: readonly WindowLine[]; readonly hints: string; readonly position: string; readonly initial?: string;
   /** A reason shown under the entry when it opens (the step is shown again because its value was refused). */
@@ -60,6 +61,12 @@ export function EntryWindow({ title, body = [], hints, position, masked = false,
     if (next) { live.current = next; setState(next); setProblem(null); }
     return true;
   };
+  // Owner 2026-11-08 (F2-18): a pasted value (an API key) lands in this entry; an open window keeps it from the composer, so without this it was lost.
+  usePaste(text => {
+    if (busy.current) return;
+    const next = editEntry(live.current, text, PASTED);
+    if (next) { live.current = next; setState(next); setProblem(null); }
+  });
   const after = typeof masked === 'object' ? masked.after : undefined, mark = glyphs.ascii ? '*' : '•';
   // The caret is placed in the drawn text: a masked part draws one mark per cluster.
   const shown = masked ? maskEntry(state.text, mark, after) : state.text;
