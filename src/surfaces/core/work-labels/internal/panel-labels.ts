@@ -31,7 +31,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
         args: t('tui.panel.mcp.entry.args', {}, locale), env: t('tui.panel.mcp.entry.env', {}, locale), headers: t('tui.panel.mcp.entry.headers', {}, locale) },
       pairInvalid: t('tui.panel.mcp.pairInvalid', {}, locale), empty: t('tui.panel.mcp.required', {}, locale), trustKeys: t('tui.panel.mcp.trust.keys', {}, locale) },
     model: { hints: t('tui.panel.model.hints', {}, locale), session: t('tui.panel.model.session', {}, locale), sessionAndDefault: t('tui.panel.model.sessionAndDefault', {}, locale),
-      pinnedMark: t('tui.panel.model.pinnedMark', {}, locale), configuredMark: t('tui.panel.model.configuredMark', {}, locale), pinned: t('tui.panel.model.pinned', {}, locale),
+      pinnedMark: t('tui.panel.model.pinnedMark', {}, locale), configuredMark: t('tui.panel.model.configuredMark', {}, locale), brainMark: t('tui.model.brain.current', {}, locale), pinned: t('tui.panel.model.pinned', {}, locale),
       shadowTitle: t('tui.panel.model.shadowTitle', {}, locale), shadowRemove: t('tui.panel.model.shadowRemove', {}, locale),
       shadowAlign: t('tui.panel.model.shadowAlign', {}, locale), shadowKeep: t('tui.panel.model.shadowKeep', {}, locale), connect: t('tui.panel.model.connect', {}, locale),
       switch: { title: t('tui.panel.model.switch.title', {}, locale), fresh: t('tui.panel.model.switch.fresh', {}, locale), keep: t('tui.panel.model.switch.keep', {}, locale),

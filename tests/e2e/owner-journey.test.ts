@@ -133,6 +133,8 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     expect(plan).not.toMatch(/\$\s?\d|APPROVAL_REQUIRED|[0-9a-f]{64}/u);
     expect(seen.slice(seen.indexOf('admitted. Follow'))).not.toContain('Approval needed');
     expect(seen).toContain('the change is written into your files (no commit');
+    // NF-4: the uncommitted-changes card says the true start for working-tree delivery (the current files, not the last commit).
+    expect(seen).toContain('The worker starts from your current files'); expect(seen).not.toContain('starts from the last commit');
     expect(await readFile(join(project, 'notes.txt'), 'utf8')).toBe('first line\nperson line\nsecond line\n');
     expect(git(project, 'rev-list', '--count', 'HEAD')).toBe('1');
     // /tasks: the task is named "Task 1" and its text shows once.

@@ -32,8 +32,9 @@ const dirLine = (dir: Readonly<{ configDir: string; owned: boolean }>, locale: L
 export function renderHeadlessLogin(view: HeadlessLoginView, locale: Locale, connection: string): string {
   const lines = [dirLine(view, locale)];
   if (view.exit !== 'completed') lines.push(view.exit === 'cancelled' ? t('headless.login.cancelled', {}, locale) : t('headless.login.failed', {}, locale));
-  lines.push(view.signedIn ? t('headless.login.signedIn', { method: terminalSafeText(view.authMethod ?? '-'), plan: view.subscriptionType ? ` (${terminalSafeText(view.subscriptionType)})` : '',
-    connection: terminalSafeText(connection) }, locale) : t('headless.login.notSignedIn', { connection: terminalSafeText(connection) }, locale));
+  // NF-8: an unfinished sign-in never reads "Signed in"; a login that was already there is named as the earlier one, unchanged.
+  const login = { method: terminalSafeText(view.authMethod ?? '-'), plan: view.subscriptionType ? ` (${terminalSafeText(view.subscriptionType)})` : '', connection: terminalSafeText(connection) };
+  lines.push(!view.signedIn ? t('headless.login.notSignedIn', { connection: login.connection }, locale) : view.exit === 'completed' ? t('headless.login.signedIn', login, locale) : t('headless.login.stillSignedIn', login, locale));
   return lines.join('\n');
 }
 

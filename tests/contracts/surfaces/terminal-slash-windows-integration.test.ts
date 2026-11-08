@@ -67,7 +67,7 @@ describe('slash windows integrated on one workline', () => {
     expect(captured.entries).toEqual([]);
     view.stdin.write(ESC); await until(() => summaries().length === 1, 'status summary');
     await settle(40); await type(view, '/workers\r');
-    await until(() => view.stdout.frame.includes('worker 1'), 'workers window');
+    await until(() => view.stdout.frame.includes('Task 1'), 'workers window');
     expect(summaries()).toHaveLength(1);
     view.stdin.write(ESC); await until(() => summaries().length === 2, 'workers summary');
     await settle(40); await type(view, '/clear\r');

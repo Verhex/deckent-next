@@ -443,7 +443,8 @@ describe('/model source', () => {
     await writeFile(configPath, JSON.stringify({ ...config, brain_planner: { reference: ref('chat') } })); clearConfigCache();
     expect((await source.setBrain!(row('coder'), 'global')).lines[0]).toBe('This project names its own Brain model, so the project setting still wins here.');
     const after = await source.inspect();
-    expect(after.choices.find(choice => choice.reference.modelId === 'chat')!.detail).toMatch(/ · plans \/do work \(Brain model\)$/u);
+    // J1: the chosen Brain model is marked on its row (`brain`), not in the detail line the list does not show.
+    const brainRow = after.choices.find(choice => choice.reference.modelId === 'chat')!; expect(brainRow.brain).toBe(true); expect(brainRow.detail).not.toContain('plans /do work');
     expect(after.notes.some(note => note.startsWith('No Brain model chosen'))).toBe(false);
     { // F2-14 (owner walk 2026-11-08): /model lists the higher registry tier first, then the catalog's own priority, not the declared (alphabetical) order
     // The tier comes from the tier/role registry overlay; `keyless` is frontier, the rest are not registered. The catalog has no release date.

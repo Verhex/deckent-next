@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 import { DRIVER } from '../support/pty-steps.js';
@@ -117,6 +117,9 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     expect(await reader.read(query)).toEqual(firstSeal);
     expect(await reader.read({ ...query, flagSetDigest: '0'.repeat(64) })).toBeNull();
     expect((await describeTerminalChat(h.f.project, h.options)).tools).toBe('available');
+    // NF-7: past the K16 age the plan stays unverified (the next turn rechecks) and names when the tools were last verified.
+    const realNow = Date.now, aged = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 3_600_000);
+    try { expect(await describeTerminalChat(h.f.project, h.options)).toMatchObject({ tools: 'unverified', toolsVerifiedAtMs: firstRecord.checkedAtMs }); } finally { aged.mockRestore(); }
     expect(await call('K16-READ-SECOND', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
     const secondSeal = await readNativeAgentObservation(h.profile);
     expect(secondSeal).toMatchObject({ execution: firstSeal!.execution });

@@ -52,7 +52,7 @@ function onlySummary() { expect(captured.entries).toHaveLength(1); expect(captur
 describe('SW-2 job windows', () => {
   it.each(['/workers', '/runs'] as const)('%s opens a list, never appends cards, and closes with one labelled line', async command => {
     const view = await open(command);
-    await until(() => view.stdout.frame.includes(command === '/workers' ? 'worker 1' : 'Fix checkout'), 'list');
+    await until(() => view.stdout.frame.includes(command === '/workers' ? 'Task 1' : 'Fix checkout'), 'list');
     expect(captured.entries).toEqual([]); expect(view.stdout.frame).not.toContain('Info:');
     await snapshot(command.slice(1), view);
     await close(view); onlySummary(); await snapshot(`${command.slice(1)}-summary`, view); expect(view.stdout.frame).toContain('◆ Deckent system ·'); expect(view.stdout.frame).not.toContain('rows 1');
@@ -93,7 +93,7 @@ describe('SW-2 job windows', () => {
   });
   it('picks the worker and pages the complete transcript by keys in a short terminal', async () => {
     const inspect = vi.fn(ports().inspectTranscript!), view = await open('/transcript', ports({ inspectTranscript: inspect }), 'en', 24);
-    await until(() => view.stdout.frame.includes('> worker 1'), 'worker picker'); await choose(view);
+    await until(() => view.stdout.frame.includes('> Task 1'), 'worker picker'); await choose(view);
     await until(() => view.stdout.frame.includes('TRANSCRIPT 0'), 'transcript'); await snapshot('transcript', view); expect(view.stdout.frame).not.toContain('TRANSCRIPT 89');
     await settle(40); view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('TRANSCRIPT 89'), 'last page');
     expect(inspect.mock.calls[0]![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
@@ -114,7 +114,7 @@ describe('SW-2 job windows', () => {
     await until(() => captured.entries.length > 0, 'closed'); expect(cancel).not.toHaveBeenCalled(); onlySummary();
     // R9m: `x` in /tasks on a finished Run says it already finished, never "Run details closed".
     const tasks = await open('/tasks', ports({ inspectRun: async () => ({ ...run, state: { kind: 'terminal', outcome: 'failed' } }) as RunView, cancelRun: cancel }));
-    await until(() => tasks.stdout.frame.includes('worker 1'), 'task rows'); await settle(40); tasks.stdin.write('x');
+    await until(() => tasks.stdout.frame.includes('Task 1'), 'task rows'); await settle(40); tasks.stdin.write('x');
     await until(() => tasks.stdout.text.includes('Fix checkout has already finished; there is nothing to cancel.'), 'already finished');
     expect(tasks.stdout.text).not.toContain('Run details closed'); expect(cancel).not.toHaveBeenCalled();
   });
@@ -155,14 +155,14 @@ describe('SW-2 job windows', () => {
       await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     }, readSurfaceSnapshot: async () => ({ scopeId: 'scope-a', denied: [], runs: [run], workers: await ports().listWorkers(), approvals: [] }) });
     const view = await open('/tasks', ledger);
-    await until(() => view.stdout.frame.includes('Fix checkout') && view.stdout.frame.includes('worker 1'), 'snapshot window');
+    await until(() => view.stdout.frame.includes('Fix checkout') && view.stdout.frame.includes('Task 1'), 'snapshot window');
     expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary', text: 'Work running: 1 runs, 1 workers · /runs /workers' });
     view.stdin.write(ESC); await until(() => captured.entries.length === 2, 'close summary');
     expect(captured.entries.every(entry => entry.kind === 'notice' && entry.id === 'system-summary')).toBe(true);
   });
   it('keeps policy refusal inside a transcript window and leaves only one summary after close', async () => {
     const view = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
-    await until(() => view.stdout.frame.includes('> worker 1'), 'picker'); await choose(view);
+    await until(() => view.stdout.frame.includes('> Task 1'), 'picker'); await choose(view);
     await until(() => view.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(view); onlySummary();
   });
 });

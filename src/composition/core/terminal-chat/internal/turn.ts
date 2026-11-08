@@ -1,4 +1,4 @@
-import { inspectNativeChat } from './native.js';
+import { inspectNativeChat, nativeChatVerifiedAtMs } from './native.js';
 import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import { modelInvocationProfileSchema, NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -23,6 +23,8 @@ export type TerminalChatPlan = Readonly<{
   historyMessages: number | null;
   tools: 'available' | 'none' | 'unknown' | 'unverified'; // R4b `unverified`: a subscription CLI's tools not observed yet (its first turn verifies them)
   skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
+  /** NF-7: with `tools: 'unverified'` only because the last verification passed the K16 age, when it was recorded (the next turn rechecks). */
+  toolsVerifiedAtMs?: number;
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
 export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
@@ -65,10 +67,12 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const config = await loadComposedConfig(projectRoot, options) as Record<string, unknown>;
   const profile = nativeChatProfile(config, (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
+  // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
+  const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true)).catch(() => null) : null;
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
-    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more });
+    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more, ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}) });
 }
 /**
  * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
