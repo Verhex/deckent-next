@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
+import { counterSchema, persistedString, persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { OPENAI_RESERVATION_POLICY } from './reservation-policy.js';
 import { z } from 'zod';
 import { requestToolChoiceAccepted, responseDialect, finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
@@ -40,11 +40,11 @@ export interface OpenAiChatNativePortOptions {
 const finishReason = z.string(), usageSchema = openAiChatUsageSchema;
 const messageSchema = z.looseObject({ role: z.literal('assistant'), content: z.string().nullable(), refusal: z.string().nullable().optional() });
 const choiceSchema = z.looseObject({ index: z.literal(0), finish_reason: finishReason, message: messageSchema });
-const responseSchema = z.looseObject({ id: persistedString(z.string().min(1)), object: z.literal('chat.completion').optional(), created: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+const responseSchema = z.looseObject({ id: persistedString(z.string().min(1)), object: z.literal('chat.completion').optional(), created: counterSchema,
   model: persistedString(z.string().min(1)), choices: z.array(choiceSchema).length(1), usage: z.unknown().optional() });
 /** Largest `/tokenize` answer read (the server lists every token id: ~7 bytes each, so a 131k-token prompt is about 1 MiB). */
 export const OPENAI_CHAT_TOKENIZE_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
-const tokenizeSchema = z.looseObject({ count: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), max_model_len: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional() });
+const tokenizeSchema = z.looseObject({ count: counterSchema, max_model_len: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional() });
 /** Counter deadline: 2 s plus 250 ms per KiB of request, at most 30 s and bounded by the profile timeout. */
 const tokenizeTimeoutMs = (bodyBytes: number) => Math.min(30_000, 2_000 + Math.ceil(bodyBytes / 1024) * 250);
 /**

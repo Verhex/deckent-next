@@ -1,8 +1,8 @@
-import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
 import { verifiedPrincipal, TaskEvaluationApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserEvaluatorFor, assertBeuserAccess, type BeuserContext } from '#engine/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 /** The system evaluator consumes the retained dispatch file through the existing acceptance owner. */
 export async function evaluateConfiguredBeuserTask(root: string, context: BeuserContext, commandId: string, options: ConfigLoadOptions) {
@@ -13,7 +13,7 @@ export async function evaluateConfiguredBeuserTask(root: string, context: Beuser
   const authorization = { authorize: (id: typeof identity, actor: typeof principal) => policy.authorizeIdentity('evaluate', id, actor) };
   await authorization.authorize(identity, principal);
   await new RunPolicyAuthorization(source).authorize('inspect', identity, principal);
-  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid');
+  const store = await openConfiguredLedger(c, { migration: 'forbid' });
   try {
     const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });
     const run = await store.loadRun(identity.scopeId, identity.runId);

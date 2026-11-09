@@ -4,3 +4,4 @@ export * from './internal/tree.js';
 export * from './internal/pinned-file.js';
 export * from './internal/private-file.js';
 export * from './internal/error-code.js';
+export { digestPrivateFile } from './internal/private-digest.js';

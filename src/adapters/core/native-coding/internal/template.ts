@@ -7,7 +7,7 @@ import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, promptPartSchema } from './composition.js';
 import { nativeCodingTemplateEnvironment } from './environment.js';
 import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
-import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { optionalField, DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { assertNativeDockerSubscription } from '#adapters/core/native-connection/index.js';
 
 /** Owner 2026-11-08: a CLI whose Docker subscription path is prohibited (registry data) gets no new Docker template; an existing one refuses at Run admission. */
@@ -96,7 +96,7 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   if (agent && nativePromptCompositionSchema.safeParse(plain).success && !nativePromptCompositionSchema.safeParse(base).success) throw new NativeCodingProfileError('NATIVE_CODING_AGENT_OVERFLOW');
   const admitted = context.length ? { ...base, context: [...(composition?.context ?? []), ...context] } : base;
   if (context.length && nativePromptCompositionSchema.safeParse(base).success && !nativePromptCompositionSchema.safeParse(admitted).success) throw new NativeCodingProfileError('NATIVE_CODING_CONTEXT_OVERFLOW');
-  const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
+  const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...optionalField('maxTurns', turns),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
     model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence, !!worker);
   return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(compiled, worker), id: template.id, version: template.version }) : compiled;

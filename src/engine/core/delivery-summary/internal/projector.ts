@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema, type AttemptIdentity, type RunSnapshot, type WorkerFinalReportResult, type WorkerModelView } from '#domain/index.js';
+import { counterSchema, identitySchema, type AttemptIdentity, type RunSnapshot, type WorkerFinalReportResult, type WorkerModelView } from '#domain/index.js';
 import { redactForRecord, terminalSafeText, EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import { evaluatorEvidence } from '#capabilities/index.js';
@@ -8,7 +8,7 @@ import { DELIVERY_SUMMARY_ACTIONS, DELIVERY_SUMMARY_LIMITS as LIMITS, deliveryCh
 
 /** Risk classification data (versioned asset): which frozen work classes count as `small` and the adapter size buckets, smallest first. */
 export const deliveryRiskDataSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, smallWorkClasses: z.array(identitySchema).readonly(),
-  sizeBuckets: z.array(z.strictObject({ id: identitySchema, maxFiles: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxLines: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly()).min(1).readonly(),
+  sizeBuckets: z.array(z.strictObject({ id: identitySchema, maxFiles: counterSchema, maxLines: counterSchema }).readonly()).min(1).readonly(),
   overflowBucket: identitySchema }).refine(value => new Set([...value.sizeBuckets.map(row => row.id), value.overflowBucket]).size === value.sizeBuckets.length + 1).readonly();
 export type DeliveryRiskData = z.infer<typeof deliveryRiskDataSchema>;
 export const DELIVERY_RISK_DATA: DeliveryRiskData = deliveryRiskDataSchema.parse(riskAsset);

@@ -1,9 +1,8 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentToolCallCell, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { agentFetchEffectCommandId, createLocalPeerSession, describeFetchApproval, describeFetchRefusal, describeFetchResult, NETWORK_FETCH_OPERATION,
-  NETWORK_FETCH_TARGET_KIND, NetworkFetchTarget, openSqliteAttemptStore, planFetchCall, type FetchPlan, type FetchRun, type HttpFetchTransport, type LocalPeerIdentity,
-  type ScratchSession, type TerminalFetchConfig } from '#adapters/index.js';
+import { agentFetchEffectCommandId, createLocalPeerSession, describeFetchApproval, describeFetchRefusal, describeFetchResult, NETWORK_FETCH_OPERATION, NETWORK_FETCH_TARGET_KIND, NetworkFetchTarget, planFetchCall, type FetchPlan, type FetchRun, type HttpFetchTransport, type LocalPeerIdentity, type ScratchSession, type TerminalFetchConfig } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 /**
@@ -37,7 +36,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
       const target = new NetworkFetchTarget({ settings, transport: input.transport, signal, deposit: (rel, data, wait) => input.scratch.deposit(rel, data, wait),
         redirectAllowed: host => host === planned.host || settings.allowedHosts.includes(host), onResult: value => { ran = value; } });
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
+      const store = await openConfiguredLedger(context, { migration: 'forbid' });
       try {
         await new EffectApplication({ async resolve(ref) { return ref.id === NETWORK_FETCH_OPERATION.operation.id && ref.version === 1 ? NETWORK_FETCH_OPERATION : null; } },
           { resolve: kind => kind === NETWORK_FETCH_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);

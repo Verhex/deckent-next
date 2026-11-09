@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 type Schema = Record<string, unknown>;
 const isObjectSchema = (value: unknown): value is Schema => !!value && typeof value === 'object' && !Array.isArray(value) && (value as Schema)['type'] === 'object';
 const isEmpty = (value: unknown) => !!value && typeof value === 'object' && Object.keys(value).length === 0;
@@ -30,6 +32,6 @@ function mergeProperty(values: readonly unknown[], key: 'anyOf' | 'allOf'): unkn
   const literals = distinct.map(value => { const entry = value as Schema; return 'const' in entry ? [entry['const']] : Array.isArray(entry['enum']) ? entry['enum'] as unknown[] : null; });
   const type = (distinct[0] as Schema)['type'];
   if (key === 'anyOf' && literals.every(list => list !== null) && distinct.every(value => (value as Schema)['type'] === type))
-    return { ...(type === undefined ? {} : { type }), enum: [...new Set(literals.flat())] };
+    return { ...optionalField('type', type), enum: [...new Set(literals.flat())] };
   return { [key]: distinct };
 }

@@ -2,11 +2,11 @@ import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { persistedString, persistedInteger } from '#platform/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { agentToolDiagnosticSchema } from '#domain/index.js';
+import { counterSchema, agentToolDiagnosticSchema } from '#domain/index.js';
 import { AttemptStoreError, AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, agentTurnSteerRecordSchema, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
-const id = persistedString(z.string().min(1).max(256)), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/);
+const id = persistedString(z.string().min(1).max(256)), count = counterSchema, digest = z.string().regex(/^[a-f0-9]{64}$/);
 const outcomeSchema = z.strictObject({ finish: z.enum(['stop', 'length', 'cancelled', 'error']), note: persistedString(z.string().max(4096)).nullable(), rounds: count, toolCalls: count,
   // v30 (additive, optional): a turn that accepted steered lines keeps their ids; rows without it stay byte-identical.
   answer: z.string().nullable(), answerBytes: count, appendedDigest: digest.nullable(), steer: agentTurnSteerRecordSchema.optional() })

@@ -1,4 +1,4 @@
-import { persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition, type CatalogTariffLookup, type ModelInvocationNativeResponse, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ProviderSpendQuote } from '#domain/index.js';
+import { counterSchema, modelInvocationProfileSchema, parseModelBindingDefinition, type CatalogTariffLookup, type ModelInvocationNativeResponse, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ProviderSpendQuote } from '#domain/index.js';
 import { anthropicResponseSpendMeasurement, anthropicSpendMeasurement, anthropicUsageForSpending } from './measurement.js';
 import type { AnthropicUsage } from './assemble.js';
 import { z } from 'zod';
@@ -24,7 +24,7 @@ const VERSION_HEADERS = Object.freeze({ 'anthropic-version': ANTHROPIC_MESSAGES_
 const workspaceHeaders = (definition: AnthropicMessagesDefinition) => ({ ...VERSION_HEADERS,
   ...(definition.workspaceId ? { 'anthropic-workspace-id': definition.workspaceId } : {}) });
 const adapter = Object.freeze({ id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION });
-const countSchema = z.looseObject({ input_tokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
+const countSchema = z.looseObject({ input_tokens: counterSchema });
 const COUNT_RESPONSE_MAX_BYTES = 64 * 1024;
 /** Deadline of a counter (same shape as the OpenAI one): 2 s plus 250 ms per KiB of request, at most 30 s. */
 const countTimeoutMs = (bodyBytes: number) => Math.min(30_000, 2_000 + Math.ceil(bodyBytes / 1024) * 250);

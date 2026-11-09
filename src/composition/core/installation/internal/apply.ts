@@ -1,12 +1,12 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { isCodedError, persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
+import { persistedString, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, isCodedError, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { attestLocalInteractiveTerminal, ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, localPrincipalChannel, withInstallationJournal } from '#adapters/index.js';
-import { immutableJsonObjectSchema } from '#domain/index.js';
+import { counterSchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { assertAuthorityWitness, InstallationPublicationApplication, InstallationPublicationError, suppliedPolicyWithinTemplate, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
@@ -25,7 +25,7 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
   // Structural read only: the engine cross-validates recovery against preparation and current identity before publication.
   const schema = z.looseObject({ material: z.looseObject({ authoredProfile: immutableJsonObjectSchema,
     configuration: immutableJsonObjectSchema, allowShutdown: z.boolean() }),
-    consent: z.looseObject({ id: persistedString(z.string().min(1)), atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
+    consent: z.looseObject({ id: persistedString(z.string().min(1)), atMs: counterSchema }) });
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }

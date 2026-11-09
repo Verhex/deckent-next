@@ -3,10 +3,10 @@ import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#plat
 import { verifiedPrincipal, ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
   resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities,
   EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type EffectTarget } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type AuditEvent, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 for (const id of ['local-terminal-card', 'local-cli', 'local-sdk', 'mcp']) registerApprovalChannel(id);
 export async function configuredApproval(projectRoot: string, action: 'list' | 'inspect' | 'decide' | 'renew', input: unknown,
@@ -51,7 +51,7 @@ export async function applyConfirmedEffects(root: string, context: Awaited<Retur
   const clock = new SystemTrustedClock(), policy = contextPolicySource({ layout, config });
   const sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), path = await context.path();
-  const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+  const store = await openConfiguredLedger({ config, path: async () => path }, { migration: 'forbid' });
   const approvals = openSqliteApprovalStore(path, config.storage.sqlite);
   try {
     const broker = new OperationApprovalBroker(approvals.store, integrity, policy, clock,

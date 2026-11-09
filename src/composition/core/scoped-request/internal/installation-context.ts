@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { inspectInstallationSourceFiles, localInstallationProjectContextPorts, FileProjectAttachmentStore } from '#adapters/index.js';
@@ -12,4 +14,4 @@ export async function inspectConfiguredInstallationSource(root: string, scopeId:
 export const configuredAttachmentStore = (config: ResolvedConfig, options: ConfigLoadOptions) => new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
 export const configuredInstallationProjectContext = (config: ResolvedConfig, options: ConfigLoadOptions, scopeId?: string, actor?: { readonly issuer: string; readonly subject: string }) =>
   resolveInstallationProjectContext(localInstallationProjectContextPorts(config, options, source => inspectConfiguredInstallationSource(source.projectRoot, source.scopeId, actor ?? source.owner, options)),
-    { registrationId: config.installation.sharedRegistrationId ?? null, companyId: config.company.id, ...(scopeId === undefined ? {} : { scopeId }), ...(actor === undefined ? {} : { actor }) });
+    { registrationId: config.installation.sharedRegistrationId ?? null, companyId: config.company.id, ...optionalField('scopeId', scopeId), ...optionalField('actor', actor) });

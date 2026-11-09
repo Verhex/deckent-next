@@ -2,7 +2,7 @@ import { open } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { auditVerifyQuerySchema, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { renderAuditStatus, renderAuditReason } from '#surfaces/core/doctor/index.js';
-import { emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { optionalField, emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { formatAgo, formatClock } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
@@ -119,7 +119,7 @@ async function auditListCommand(argv: readonly string[], context: AdminCommandCo
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   const number = (flag: string) => { const raw = values.get(flag); if (raw === undefined) return undefined; if (!/^\d{1,15}$/u.test(raw)) throw ErrorRegistry.createError('CLI_USAGE', { params: { command: t('cli.audit.list.command', { action: 'list' }, locale), flag } }); return Number(raw); };
   const after = show ? Number(argv[2]) - 1 : number('--after') ?? 0, limit = show ? 1 : number('--limit');
-  const view = await context.listAudit(root, { schemaVersion: 1, scopeId, after, ...(limit === undefined ? {} : { limit }) }, { env });
+  const view = await context.listAudit(root, { schemaVersion: 1, scopeId, after, ...optionalField('limit', limit) }, { env });
   if (show) {
     const record = view.records[0];
     if (!record || record.sequence !== Number(argv[2])) throw ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND', { params: { sequence: argv[2]!, scope: terminalSafeText(scopeId) } });

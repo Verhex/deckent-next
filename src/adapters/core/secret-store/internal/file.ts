@@ -2,7 +2,7 @@ import type { Stats } from 'node:fs';
 import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { persistedString, DeckentError, ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, serializeJsonDocument, withConfigWriteLock,
+import { isAbsent as missing, persistedString, DeckentError, ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, serializeJsonDocument, withConfigWriteLock,
   writeTextAtomic } from '#platform/index.js';
 import { FILE_SECRET_STORE_ID, SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue, type SecretStore, type SecretStoreErrorCode, type SecretStoreFactory,
   type SecretStoreContext, type SecretStoreInspection } from '#engine/index.js';
@@ -40,7 +40,6 @@ export interface PrivateSecretDocumentSpec {
   readonly codec?: (root: string, fail: (code: SecretStoreErrorCode) => DeckentError) => SecretDocumentCodec;
 }
 const FILE_DOCUMENT: PrivateSecretDocumentSpec = Object.freeze({ id: FILE_SECRET_STORE_ID, fileName: FILE_SECRET_STORE_NAME });
-const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
 const initializers = new WeakMap<SecretStore, () => Promise<void>>();
 /** The same bounded document writer, including read-back custody, initializes an absent envelope without inventing a secret. */
 export async function initializePrivateSecretDocument(store: SecretStore): Promise<void> {

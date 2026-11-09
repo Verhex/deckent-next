@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -14,14 +14,14 @@ export const costComparisonTrialSchema = z.strictObject({ evidenceId: digest, pa
   modelVerified: z.boolean(), heldOut: z.boolean(), followupComplete: z.boolean(),
   criteria: z.array(z.strictObject({ id: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']) }).readonly()).min(1).max(256)
     .refine(rows => new Set(rows.map(row => row.id)).size === rows.length).readonly(),
-  interventions: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), rework: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), rollbacks: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
+  interventions: counterSchema.nullable(), rework: counterSchema.nullable(), rollbacks: counterSchema.nullable(),
 }).refine(row => row.axis !== 'api-usd-nanos' || row.cost === null || Number.isSafeInteger(row.cost)).readonly();
 export type CostComparisonTrial = z.infer<typeof costComparisonTrialSchema>;
 export const costRecommendationSchema = z.strictObject({ schemaVersion: z.literal(1), authority: z.literal('proposal-only'), workClass: identitySchema,
   baselineProfile: identitySchema, candidateProfile: identitySchema, axis,
   state: z.enum(['proposal', 'insufficient-evidence', 'quality-loss', 'no-savings']),
   reason: z.enum(['paired-savings', 'unregistered-profile', 'evidence-conflict', 'unmatched-evidence', 'quality-unknown', 'sample-size', 'risk-bound', 'quality-regression', 'cost-unknown', 'no-cost-gain']),
-  evidencePairs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), lossRiskUpper: z.number().min(0).max(1).nullable(), confidence: z.number().positive().lt(1),
+  evidencePairs: counterSchema, lossRiskUpper: z.number().min(0).max(1).nullable(), confidence: z.number().positive().lt(1),
   baselineMean: z.number().nonnegative().finite().nullable(), candidateMean: z.number().nonnegative().finite().nullable(), savingFraction: z.number().finite().nullable(),
 }).readonly();
 export type CostRecommendation = z.infer<typeof costRecommendationSchema>;

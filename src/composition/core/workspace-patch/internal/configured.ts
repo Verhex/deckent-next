@@ -2,10 +2,10 @@ import { ArtifactError } from '#capabilities/index.js';
 import { resolve } from 'node:path';
 import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { executionTaskHiddenPaths, FileArtifactStore, GitWorkspaceBroker, GitWorkspacePatchSource, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, selectWorkTarget, validateExecutionSupervisorProfile, recordedTaskSupervisor, taskProfileObservesWorker, gitDockerAttemptCustody } from '#adapters/index.js';
+import { executionTaskHiddenPaths, FileArtifactStore, GitWorkspaceBroker, GitWorkspacePatchSource, openSqliteInventoryReader, resolveGitWorkTarget, selectWorkTarget, validateExecutionSupervisorProfile, recordedTaskSupervisor, taskProfileObservesWorker, gitDockerAttemptCustody } from '#adapters/index.js';
 import { AttemptCustodyReleaseApplication, assertSameWorkSource, DispatchPolicyAuthorization, WorkspacePatchApplication, workTargetAttemptAuthorization, type ScopeAccess } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function workspacePatchContext(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean, access: ScopeAccess, readsTarget = true) {
   const identity = attemptIdentitySchema.parse(input), context = await loadConfiguredScopeContext(root, identity.scopeId, options, access);
@@ -29,7 +29,7 @@ async function preparePatch(root: string, input: AttemptIdentity, options: Confi
   try {
     const c = await workspacePatchContext(root, input, options, true, 'write'), execution = c.config.execution;
     if (!execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateExecutionSupervisorProfile });
+    const store = await openConfiguredLedger(c, { migration: 'forbid', validate: validateExecutionSupervisorProfile });
     try {
       const git = { ...execution.git, ...(await resolveGitWorkTarget(resolve(root), execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
       // C2: the attempt's pinned checkout shaping comes from the Run's frozen task profile, never from a file beside the checkout.

@@ -1,10 +1,10 @@
 import { ErrorRegistry } from '#platform/index.js';
-import { persistedInteger } from '#domain/index.js';
+import { counterSchema, persistedInteger } from '#domain/index.js';
 import { z } from 'zod';
 import templates from './templates.json' with { type: 'json' };
 export const brainContextLimitsSchema = z.strictObject({ maxKinds: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxModels: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   maxEvaluators: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  requestMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), tokenFramingAllowance: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  requestMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), tokenFramingAllowance: counterSchema,
 }).prefault(templates.context);
 /** S4B-6 (§7.2): one verified memory entry as the Brain reads it (data; redacted and projected by the memory engine). */
 export interface BrainMemoryEntry { readonly entryId: string; readonly revision: number; readonly kind: 'fact' | 'lesson'; readonly title: string; readonly body: string }

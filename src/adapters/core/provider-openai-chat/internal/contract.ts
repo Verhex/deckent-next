@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 import { persistedString, persistedInteger, persistedUrl, openAiChatDialectSchema, type OpenAiChatDialect, parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest, OpenAiChatHttpError as ProtocolHttpError, wellFormedModelJson, type JsonObject } from '#domain/index.js';
 
 export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from '#domain/index.js';
@@ -74,7 +76,7 @@ export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDef
   return Object.freeze({ endpoint: parsed.data.endpoint, maxOutputTokens: parsed.data.maxOutputTokens, authentication,
     ...(dialect ? { dialect: Object.freeze({ ...dialect, toolChoice: Object.freeze([...dialect.toolChoice]) }) } : {}),
     ...(parsed.data.tls ? { tls: Object.freeze({ ...parsed.data.tls }) } : {}), tariff: Object.freeze({ ...parsed.data.tariff }),
-    ...(tokenize !== undefined ? { tokenizeEndpoint: tokenize } : {}) });
+    ...optionalField('tokenizeEndpoint', tokenize) });
 }
 
 function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer', hasTls: boolean): boolean {

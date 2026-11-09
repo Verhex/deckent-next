@@ -1,5 +1,5 @@
+import { sha256 } from '#platform/index.js';
 import { persistedString, persistedInteger, memoryTemplate, workerReportLimits } from '#domain/index.js';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import core from './worker-core.json' with { type: 'json' };
 import limits from './prompt-limits.json' with { type: 'json' };
@@ -17,7 +17,8 @@ export const nativePromptCompositionSchema = z.strictObject({ schemaVersion: z.l
     ctx.addIssue({ code: 'custom', message: 'Duplicate prompt selection' });
   if (Buffer.byteLength(JSON.stringify(value)) > limits.compositionMaxBytes) ctx.addIssue({ code: 'custom', message: 'Prompt composition too large' });
 }).readonly();
-export const promptHash = (value: string) => createHash('sha256').update(value).digest('hex');
+/** @deprecated Use sha256 from the platform; retained for one release. */
+export const promptHash = sha256;
 
 /** S4B-2 (§4.4): the one worker instruction sentence for the optional report `lessons` claim. The text is the versioned `memory-templates` row; its
  * `id@version` heads the appended paragraph, so the sealed core segment digest covers the template identity and the rendered bound (never a literal in

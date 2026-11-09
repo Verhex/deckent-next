@@ -2,7 +2,7 @@ import { EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent
 import { AuditApplication, recordAuditSummary, PolicyAuthorizationError, agentCallAuditEvent, approvedWriteEntryAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, PolicyTurnRecord, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
-import { t, resolveLocale, getConfigKnownSecrets, redactForRecord, sha256, type TrustedClock } from '#platform/index.js';
+import { optionalField, t, resolveLocale, getConfigKnownSecrets, redactForRecord, sha256, type TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -62,7 +62,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     const standing = standingOf(tool, cell, args);
     // An MCP tool is authorized on its server (`mcp-server`); a tool the turn does not know cannot name one and fails on the `agent-tool` side.
     const server = mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined;
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, ...(server === undefined ? {} : { mcpServer: server }),
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, ...optionalField('mcpServer', server),
       standing: probeSession && standing ? { ...standing, session: true } : standing,
       ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}), ...(input.person ? { person: input.person } : {}), ...(input.origin ? { origin: input.origin } : {}) }); }
     catch { return null; }

@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, catalogActionBytes, encodeCommandProjection, identitySchema, SIGNATURE_LABELS } from '#domain/index.js';
+import { counterSchema, persistedString, catalogActionBytes, encodeCommandProjection, identitySchema, SIGNATURE_LABELS } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { open, rename, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -42,7 +42,7 @@ export function localSignerKeyCustody(layout: ProductLayout): SignerKeyCustody {
 }
 
 const entrySchema = z.strictObject({ scopeId: identitySchema, keyId: z.string().regex(/^[a-f0-9]{64}$/), by: z.strictObject({ issuer: identitySchema, subject: identitySchema }),
-  atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), commandId: identitySchema });
+  atMs: counterSchema, commandId: identitySchema });
 const lineSchema = z.strictObject({ entry: z.unknown().optional(), prev: z.string().regex(/^[a-f0-9]{64}$/), keyId: persistedString(z.string().min(1)), mac: z.string().regex(/^[a-f0-9]{64}$/) });
 const GENESIS = '0'.repeat(64), SEAL = 'signer-revocations:1';
 /**

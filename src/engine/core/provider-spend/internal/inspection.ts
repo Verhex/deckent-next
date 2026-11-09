@@ -1,4 +1,4 @@
-import { persistedString, persistedNumber, persistedInteger, immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_HOLD_PAGE_MAX, type ProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
+import { counterSchema, persistedString, persistedNumber, immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_HOLD_PAGE_MAX, type ProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import { advanceProviderSpendPeriod, providerSpendPeriodUsedExact, providerSpendPeriodStateSchema } from './period.js';
@@ -23,12 +23,12 @@ export interface ProviderSpendAccountReader {
 /** Settled totals may combine local calculations and provider-reported charges; source subtotals are not exposed.
  * Reserved amounts include held reservations; hold-reason breakdown is not exposed. Neither total is an invoice.
  * reservationCount counts financial records, not model-call quota. Checksums do not constitute a history audit. */
-const holdPageSchema = z.strictObject({ entries: z.array(z.strictObject({ invocationId: persistedString(z.string().min(1)), amountMinorUnits: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+const holdPageSchema = z.strictObject({ entries: z.array(z.strictObject({ invocationId: persistedString(z.string().min(1)), amountMinorUnits: counterSchema,
   reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly()).max(PROVIDER_SPEND_HOLD_PAGE_MAX),
   nextAfterInvocationId: persistedString(z.string().min(1)).nullable() }).readonly();
 export type ProviderSpendHoldPage = z.infer<typeof holdPageSchema>;
-const periodViewSchema = z.strictObject({ schemaVersion: z.literal(1), asOfMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  state: providerSpendPeriodStateSchema, localTimeZone: persistedString(z.string().min(1).max(128)), usedExactMinorUnits: z.string(), remainingMinorUnits: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
+const periodViewSchema = z.strictObject({ schemaVersion: z.literal(1), asOfMs: counterSchema,
+  state: providerSpendPeriodStateSchema, localTimeZone: persistedString(z.string().min(1).max(128)), usedExactMinorUnits: z.string(), remainingMinorUnits: counterSchema }).readonly();
 export function providerSpendPeriodView(checkpoint: ProviderSpendCheckpoint, asOfMs: number, localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   const account = advanceProviderSpendPeriod(checkpoint.account, asOfMs);
   if (!account.period) return undefined;

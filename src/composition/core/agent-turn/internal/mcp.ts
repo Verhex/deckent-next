@@ -3,13 +3,10 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, assertAuthorityWitness, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { getConfigKnownSecrets, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
-  McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand,
-  type LocalPeerIdentity, type McpImportFrom,
-  type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
+import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes, McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand, type LocalPeerIdentity, type McpImportFrom, type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { projectCredentialResolver } from '#composition/core/secrets/index.js'; import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { projectCredentialResolver } from '#composition/core/secrets/index.js'; import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { configuredMcpToolGrants } from '#composition/core/approvals/index.js';
 /**
  * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
@@ -72,7 +69,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
       admit: call => authority({ ...call, binding: call.server === entry.server ? entry.binding : null }) });
     const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-    const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger(context, { migration: 'forbid' });
     try {
       await new EffectApplication({ async resolve(ref) { return ref.id === MCP_TOOL_CALL_OPERATION.operation.id && ref.version === 1 ? MCP_TOOL_CALL_OPERATION : null; } },
         { resolve: kind => kind === MCP_TOOL_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);

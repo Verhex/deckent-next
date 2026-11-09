@@ -1,6 +1,6 @@
 import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, authorityDocuments, firstRunBindingsRevision, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, matchFirstRunPolicyTemplate, mcpPrincipalRef, planPolicyChange, principalGrants,
   type FirstRunPolicyTemplateInput, type FirstRunProposalCover, type Policy, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
-import { sha256 } from '#platform/index.js';
+import { optionalField, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
 import { administeredSince, policyTemplateUpgradeKeyVersion, type AuthorityRevision, type AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
@@ -49,7 +49,7 @@ export class PolicyTemplateUpgrade {
     const before = entry.before, added = entry.after.schemaVersion === 2 ? entry.after.grants.find(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown
       && !before.grants.some(item => item.id === rule.id)) : undefined;
     const serviceId = added && added.resource.ids !== 'all' && added.resource.ids.length === 1 ? added.resource.ids[0] : this.names.serviceId;
-    const prior = authorityDocuments(entry.before).policy, aiGrants = principalGrants(entry.before, mcpPrincipalRef(principal)), plan = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...(serviceId === undefined ? {} : { serviceId }), aiGrants });
+    const prior = authorityDocuments(entry.before).policy, aiGrants = principalGrants(entry.before, mcpPrincipalRef(principal)), plan = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), aiGrants });
     if (plan.status !== 'plan') return false;
     // The governed key binds the exact plan it submitted: the current one, or the same plan without the v12 owner rules (a governed upgrade
     // made before option A, owner 2026-10-16, must stay recognizable).
@@ -58,7 +58,7 @@ export class PolicyTemplateUpgrade {
     const without = (ids: readonly string[]) => plan.change.changes.filter(change => change.kind !== 'grant.add' || !ids.includes(change.grant.id));
     const variants = [without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
       .filter((changes, index, all) => changes.length > 0 && changes.length < plan.change.changes.length && all.findIndex(other => other.length === changes.length) === index);
-    const scoped = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...(serviceId === undefined ? {} : { serviceId }), only: 'ai-proposals', aiGrants });
+    const scoped = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), only: 'ai-proposals', aiGrants });
     return [plan.change, ...variants.map(changes => ({ ...plan.change, changes })), ...(scoped.status === 'plan' ? [scoped.change] : [])].some(change => { // scoped: /policy's re-enable (alpha.64)
       const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
       const commandId = sha256(`${UPGRADE}:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);

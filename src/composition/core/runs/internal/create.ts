@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
+import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
 import { verifiedPrincipal, runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 import { withRunCreationAuthority } from './authority.js';
@@ -24,7 +24,7 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
   const { config, layout, document, principal, path } = context, instructions = await readWorkerInstructions(projectRoot, config, options);
   const siwc = await configuredSiwcWorkerConnections(projectRoot, context, options), [scopeId] = principal.scopeIds; // U9-7 producer facts (none while held)
   const store = runAdmissionStorePerCall({ reader: async () => openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
-    writer: async () => openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid') });
+    writer: async () => openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' }) });
   return withRunCreationAuthority(context, async (authority, sealing) => {
   const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity, agentUses); // S4B-5 memory, K8 exact work selection
   const app = new RunAdmissionApplication(store, verifiedPrincipal(principal), authority,
@@ -75,7 +75,7 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
       const policy = contextPolicySource({ layout, config }), authorization = new DispatchPolicyAuthorization(policy);
       await authorizeWorkTargetUse(policy, selectWorkTarget(config.execution)?.id ?? null, command.scopeId, principal); // pinning reads the target
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
-      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+      const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
       try {
         return await pinRunToDelivery(store, new GitIntegrationDelivery(git), new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)),
           identity => authorization.authorizeIdentity('read-output', identity, principal),

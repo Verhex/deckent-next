@@ -2,12 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { DeckentError, ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, withConfigWriteLock } from '#platform/index.js';
+import { isAbsent as missing, DeckentError, ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, withConfigWriteLock } from '#platform/index.js';
 import { CORE_SECRET_GRANT_STORE_ID, DECK_FILE, PROJECT_VAULT, assessProjectVaultOwnership, emptySecretGrantFile, projectVaultClaimed, projectVaultHandover,
   projectVaultKey, projectVaultRecordSchema, secretGrantFileSchema, type ProjectVaultAnchor, type ProjectVaultLocation, type ProjectVaultRecord,
   type SecretGrant, type SecretGrantFile, type SecretGrantStoreContext, type SecretGrantStoreFactory } from '#engine/index.js';
 
-const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
 const unsafe = (path: string) => ErrorRegistry.createError('SECRET_STORE_UNSAFE', { params: { path } });
 
 export async function directoryLocation(path: string): Promise<ProjectVaultLocation | null> {

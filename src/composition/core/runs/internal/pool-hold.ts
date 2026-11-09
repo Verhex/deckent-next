@@ -1,8 +1,8 @@
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { verifiedPrincipal, AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, RunPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema, localRunOffered, localRunFallbackClosed } from '#engine/index.js';
-import { openLocalIntegrityAuthority, openSqliteAttemptStore, readIdentityProfileConfig } from '#adapters/index.js';
+import { openLocalIntegrityAuthority, readIdentityProfileConfig } from '#adapters/index.js';
 import { SystemTrustedClock, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** K2/K3: company policy, pool hold and profile posture close the shared offer; an unreadable authority source fails closed. */
 export async function configuredLocalRunOffer(root: string, scopeId: string, options: ConfigLoadOptions = {}, code: unknown = 'RUN_ADMISSION_NOT_CONFIGURED'): Promise<boolean> {
@@ -22,7 +22,7 @@ async function poolControl<T>(root: string, input: unknown, options: ConfigLoadO
     const parsed = schema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(root, parsed.scopeId, options, write ? 'write' : 'read');
     const integrity = write ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null, clock = new SystemTrustedClock();
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
     try {
       const args = [verifiedPrincipal(principal), new PoolControlPolicyAuthorization({ async load() { return document; } }),
         store, (audit: import('#engine/index.js').AuditStore) => new AuditApplication(audit, integrity!), () => clock.sample().wallMs, config.admission?.poolId ?? null] as const;

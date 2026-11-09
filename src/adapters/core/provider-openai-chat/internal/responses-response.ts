@@ -1,11 +1,11 @@
-import { persistedString, persistedInteger } from '#domain/index.js';
+import { counterSchema, persistedString } from '#domain/index.js';
 import { z } from 'zod';
 import type { JsonObject } from '#domain/index.js';
 import type { NativeJsonHttpParsed } from '#adapters/core/provider-http-json/index.js';
 import { openAiChatWireObjectSchema, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
 import { checkedToolCalls } from './tool-calls.js';
 
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 const usageSchema = z.looseObject({ input_tokens: count, output_tokens: count, total_tokens: count,
   input_tokens_details: z.looseObject({ cached_tokens: count, cache_write_tokens: count.optional() }),
   output_tokens_details: z.looseObject({ reasoning_tokens: count }) })

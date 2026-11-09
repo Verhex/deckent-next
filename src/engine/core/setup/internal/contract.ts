@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema, type JsonValue } from '#domain/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema, type JsonValue } from '#domain/index.js';
 import { LOCALES } from '#platform/index.js';
 import { z } from 'zod';
 
@@ -28,7 +28,7 @@ export const setupObservationSchema = z.strictObject({
   get profile() { return z.strictObject({ available: z.array(setupProfileRefSchema).max(256), selected: setupProfileRefSchema.nullable().prefault(null) }); },
   get policy() { return z.strictObject({ state: z.enum(['absent', 'current', 'upgradable', 'hand-built', 'conflict', 'pending']) }); },
   get sandbox() { return z.strictObject({ realm: z.enum(['bubblewrap', 'landlock', 'none']), selfTest: z.enum(['ok', 'failed', 'not-run']), usernsRestricted: z.boolean() }); },
-  get model() { return z.strictObject({ connections: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }); },
+  get model() { return z.strictObject({ connections: counterSchema }); },
   get check() { return z.strictObject({ state: z.enum(['ok', 'warnings', 'errors', 'not-run']) }); },
   get families() { return z.record(z.string(), z.unknown().optional()).prefault({}); },
 });

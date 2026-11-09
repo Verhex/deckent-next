@@ -1,4 +1,4 @@
-import { loadConfig, patchBody, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { optionalField, loadConfig, patchBody, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { workingTreeSource, patchChangeDigests, type DeliverySummaryRequest, type IntegrationAdoptionCommand, type IntegrationCommand, type IntegrationDeliveryCommand, type QueueConsent, type QueueQuery,
   type QueueSubmitClient, type RunQuery, type RunView, type TargetBatchExecution, type TargetQueueView, type WorkspaceAdoptionApplication, type WorkspaceDeliveryApplication,
@@ -118,7 +118,7 @@ export function terminalDeliveryPort(root: string, context: DeliveryPortHost, op
       // The direct path writes a dedicated delivery ref (no target branch yet, no system verification Run); the window lists the files itself.
       const summary = describe ? (await summaries([{ schemaVersion: 1, identity, operation: 'deliver', target: null, verificationRunId: null, topPaths: 0 }]))[0] ?? null : undefined;
       const files = workingTreeSource(preview.patch.source); // R9p/R9n: the Run's own mode; the yes writes these exact before/after contents into the files
-      return Object.freeze({ target, identity, ...stat, diffs, ...(summary !== undefined ? { summary } : {}), source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
+      return Object.freeze({ target, identity, ...stat, diffs, ...optionalField('summary', summary), source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
         ...(files ? { workingTree: true as const, changes: patchChangeDigests(preview.patch, 'forward') } : {}),
         outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze(files ? [] : [...config.execution?.adoption.targets ?? []]),
         verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null,

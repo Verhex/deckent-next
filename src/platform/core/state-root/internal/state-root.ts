@@ -1,3 +1,4 @@
+import { processExists } from './process-exists.js';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import module from 'node:module';
@@ -93,7 +94,7 @@ function recordWriter(cache: string, uid: number, join: (...parts: string[]) => 
   for (const name of readdirSync(directory)) {
     const pid = Number(/^(\d+)-/u.exec(name)?.[1] ?? 0), leaf = join(directory, name);
     if (!Number.isSafeInteger(pid) || pid < 1 || pid === process.pid) continue;
-    try { process.kill(pid, 0); continue; } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue; }
+    if (processExists(pid)) continue;
     try { const entry = lstatSync(leaf); if (entry.isFile() && entry.nlink === 1 && entry.uid === uid) unlinkSync(leaf); } catch { /* pruned by another start */ }
   }
   const startedAtMs = Math.floor(performance.timeOrigin), name = `${process.pid}-${startedAtMs}-${randomBytes(8).toString('hex')}`;

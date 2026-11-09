@@ -1,9 +1,9 @@
-import { persistedInteger } from '#domain/index.js';
+import { counterSchema, persistedInteger } from '#domain/index.js';
 import { z } from 'zod';
 import { BeuserContractError, type BeuserArrangePort, type BeuserArrangeStep, type BeuserContext, type BeuserUnarrangedState } from '#engine/core/beuser-contract/index.js';
 import type { BeuserController } from './controller.js';
 
-const ranSchema = z.strictObject({ exitCode: persistedInteger().nullable(), stdoutBytes: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+const ranSchema = z.strictObject({ exitCode: persistedInteger().nullable(), stdoutBytes: counterSchema,
   stdoutDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
 /** Retained as an `arrange` transcript row: harness setup values only, never target output, a persona action or acceptance evidence. A `check` runs nothing. */
 export interface BeuserArrangeReceipt { readonly id: string; readonly version: number; readonly ran: z.infer<typeof ranSchema> | null;

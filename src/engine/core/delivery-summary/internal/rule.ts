@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/index.js';
+import { counterSchema, persistedInteger, identitySchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import ruleAsset from '../../../../../assets/delivery-summary/autonomy-1.json' with { type: 'json' };
@@ -12,7 +12,7 @@ import { deliveryModelVerdictSchema, deliverySummaryOperationSchema, deliveryVer
 export const autonomyRuleDataSchema = z.strictObject({ schemaVersion: z.literal(1), rule: z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly(),
   operations: z.array(deliverySummaryOperationSchema).readonly(), riskClasses: z.array(z.enum(['small', 'other'])).readonly(),
   acceptanceVerdicts: z.array(z.enum(['accepted', 'accepted-unverified'])).readonly(), verificationPhases: z.array(deliveryVerificationPhaseSchema).readonly(),
-  modelVerdicts: z.array(deliveryModelVerdictSchema).readonly(), maxSizeBucket: identitySchema, maxOutOfScope: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  modelVerdicts: z.array(deliveryModelVerdictSchema).readonly(), maxSizeBucket: identitySchema, maxOutOfScope: counterSchema,
   requireDeclaredScope: z.boolean() }).readonly();
 export type AutonomyRuleData = z.infer<typeof autonomyRuleDataSchema>;
 export const AUTONOMY_RULE: AutonomyRuleData = autonomyRuleDataSchema.parse(ruleAsset);

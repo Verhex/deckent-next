@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { SystemTrustedClock, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteAttemptStore } from '#adapters/index.js';
 import { verifiedPrincipal, authenticate, cancellationRecoveryCommandSchema, CancellationRecoveryApplication, DispatchInventoryPolicyAuthorization,
   RunPolicyAuthorization, type CancellationRecoveryCommand } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createRecordedCancellationDelivery } from './cancellation-runtime.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
 /** Manually drain one bounded page of durable cancellation intent. This does not host a daemon
  * or register an automatic startup loop. */
@@ -20,7 +19,7 @@ export async function recoverConfiguredCancellations(projectRoot: string, input:
     const actor = await authenticate(verifier, undefined, command.scopeId);
     await scope.authorize(command.scopeId, actor);
     if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: 'cancellation' } });
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
 
     try {
       const clock = new SystemTrustedClock();

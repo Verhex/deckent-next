@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { isCodedError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, loadConfig, t, terminalSafeText, isCodedError, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, formatClock, formatDuration, formatKnown, formatUsd, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { renderWorkersView, sourceStatusText } from './workers-view.js';
@@ -94,7 +94,7 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
     interactive: mode.mode === 'interactive', listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) return;
   const query = { schemaVersion: 1 as const, scopeId: scope.scopeId, ...(values.has('--source') ? { source: values.get('--source')! } : {}),
-    after: values.get('--after') ?? null, ...(limit === undefined ? {} : { limit }) };
+    after: values.get('--after') ?? null, ...optionalField('limit', limit) };
   const live = action === 'watch' && mode.mode === 'interactive', style = cliTableStyle(context);
   // PRE-5: the next page is a command the person can run as is: the same scope, view and bounds, one source, after its cursor.
   const nextPage = (source: string, after: string) => ['deckent workers', '--scope', scope.scopeId, '--source', source, '--after', after,

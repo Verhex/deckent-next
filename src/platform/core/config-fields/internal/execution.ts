@@ -1,4 +1,4 @@
-import { persistedString, persistedEmail, persistedInteger } from '#platform/core/validate/index.js';
+import { persistedCounter, persistedString, persistedEmail, persistedInteger } from '#platform/core/validate/index.js';
 import { z } from 'zod';
 import quotaDefaults from './quota-policy.json' with { type: 'json' };
 import stallDefaults from './stall-policy.json' with { type: 'json' };
@@ -89,12 +89,12 @@ export const ARTIFACT_STORAGE_LIMITS = z.strictObject({ get maxBytes() { return 
 export const RUN_PARKING_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); },
   get timeoutMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(86_400_000); } });
 
-export const QUOTA_RECOVERY_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); }, get maxResumes() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(quotaDefaults.maxResumes).describe('config.field.runRuntime.quotaRecovery.maxResumes'); },
+export const QUOTA_RECOVERY_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); }, get maxResumes() { return persistedCounter().prefault(quotaDefaults.maxResumes).describe('config.field.runRuntime.quotaRecovery.maxResumes'); },
   get maxWaitMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(quotaDefaults.maxWaitMs).describe('config.field.runRuntime.quotaRecovery.maxWaitMs'); },
   /** S9: how often a person may choose to keep waiting after the ask; the ask itself never ends the Run. */
-  get maxRewaits() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(quotaDefaults.maxRewaits).describe('config.field.runRuntime.quotaRecovery.maxRewaits'); } });
+  get maxRewaits() { return persistedCounter().prefault(quotaDefaults.maxRewaits).describe('config.field.runRuntime.quotaRecovery.maxRewaits'); } });
 /** R3 (owner D4a): installation silence policy for watchable workers (frozen per task at admission; a work class may override warn/stop),
  * at most `maxRetries` automatic re-runs of a stalled Attempt after `backoffMs`. Warn must come before stop. */
 export const STALL_RECOVERY_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); }, get warnAfterMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.warnAfterMs).describe('config.field.runRuntime.stallRecovery.warnAfterMs'); },
-  get stopAfterMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.stopAfterMs).describe('config.field.runRuntime.stallRecovery.stopAfterMs'); }, get maxRetries() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.maxRetries).describe('config.field.runRuntime.stallRecovery.maxRetries'); },
-  get backoffMs() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.backoffMs).describe('config.field.runRuntime.stallRecovery.backoffMs'); } }).refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });
+  get stopAfterMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.stopAfterMs).describe('config.field.runRuntime.stallRecovery.stopAfterMs'); }, get maxRetries() { return persistedCounter().prefault(stallDefaults.maxRetries).describe('config.field.runRuntime.stallRecovery.maxRetries'); },
+  get backoffMs() { return persistedCounter().prefault(stallDefaults.backoffMs).describe('config.field.runRuntime.stallRecovery.backoffMs'); } }).refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });

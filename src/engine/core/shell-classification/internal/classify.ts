@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 import type { ShellReasonCode, ShellStage } from './scanner.js';
 import { strictShellScan, type ShellCommandScan } from './scan.js';
 import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PROGRAM_ALIASES, PROGRAMS, TEE_PROGRAMS, VERSION_FLAGS, VERSION_ONLY_PROGRAMS,
@@ -58,7 +60,7 @@ async function classifyStage(stage: ShellStage, paths: ShellPathContext): Promis
  */
 export async function classifyReadOnlyShellCommand(command: string, paths: ShellPathContext, dialect: ShellDialect = 'posix', shared?: ShellCommandScan): Promise<ShellReadOnlyVerdict> {
   const refuse = (reasonCode: ShellReasonCode, detail?: string, programs: readonly string[] = [], stageCount = 0): ShellReadOnlyVerdict =>
-    Object.freeze({ readOnly: false, risk: null, reasonCode, programs, stageCount, ...(detail === undefined ? {} : { detail }) });
+    Object.freeze({ readOnly: false, risk: null, reasonCode, programs, stageCount, ...optionalField('detail', detail) });
   if (dialect !== 'posix') return refuse('UNSUPPORTED_DIALECT', dialect);
   if (typeof command !== 'string' || command.trim().length === 0) return refuse('EMPTY_COMMAND');
   const scan = strictShellScan(command, shared);

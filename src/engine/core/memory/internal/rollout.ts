@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
+import { counterSchema, persistedString, persistedInteger, assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
 import { MEMORY_AUTOMATION_MODES } from '#platform/index.js';
 import { z } from 'zod';
 import rolloutSeed from '../../../../../assets/memory/rollout.json' with { type: 'json' };
@@ -20,7 +20,7 @@ export const MEMORY_ROLLOUT_SECTIONS = Object.freeze(['extraction', 'verificatio
 export type MemoryRolloutSection = typeof MEMORY_ROLLOUT_SECTIONS[number];
 export type MemoryRolloutModes = Readonly<Record<MemoryRolloutSection, typeof MEMORY_AUTOMATION_MODES[number]>>;
 const PER_MILLE = 1000;
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), perMille = persistedInteger().min(0).max(PER_MILLE);
+const count = counterSchema, perMille = persistedInteger().min(0).max(PER_MILLE);
 const criterionSchema = z.strictObject({ id: identitySchema, get metric() { return z.enum(MEMORY_ROLLOUT_METRICS); }, get minSample() { return count.optional(); }, get minPerMille() { return perMille.optional(); },
   get maxPerMille() { return perMille.optional(); }, get maxCount() { return count.optional(); } }).readonly();
 const phaseSchema = z.strictObject({ phase: count, get section() { return z.enum(MEMORY_ROLLOUT_SECTIONS); }, get set() { return z.enum(MEMORY_AUTOMATION_MODES); }, get reached() { return z.array(z.enum(MEMORY_AUTOMATION_MODES)).min(1).readonly(); },

@@ -1,14 +1,10 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { relative, resolve, sep } from 'node:path';
 import { PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellAuthority, classifyShellRisk, scanShellCommand, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification, isolatesAsSubscription } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { agentGlobalStateRoots, agentLoginIdentityPaths, createShellGlobalStateCheck, hostGlobalStateUnresolved, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
-  describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
-  describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
-  type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
-  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, inspectAgentShellRealm, readTerminalShellConfig, sandboxNotStartedNote,
-  compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange, protectedPathShellNote, onWriteFloor } from '#adapters/index.js';
+import { agentGlobalStateRoots, agentLoginIdentityPaths, createShellGlobalStateCheck, hostGlobalStateUnresolved, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm, describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture, type ShellCallAuthority, type ShellRealmResolution, type HostShellResult, type LocalPeerIdentity, type ShellSandbox, type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, inspectAgentShellRealm, readTerminalShellConfig, sandboxNotStartedNote, compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange, protectedPathShellNote, onWriteFloor } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { settleSandboxWriteSet } from './sandbox-writes.js';
 
@@ -188,7 +184,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         return { text: `\n${line}`, ...(change ? { counts: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
       };
-      const store = await (async () => openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid'))()
+      const store = await (async () => openConfiguredLedger(context, { migration: 'forbid' }))()
         .catch(async (error: unknown) => { if (directory) await removeSandboxWriteSetDirectory(directory.dir); throw error; });
       try {
         await new EffectApplication({ async resolve(ref) {

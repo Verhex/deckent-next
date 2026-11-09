@@ -1,13 +1,11 @@
-import { persistedString, persistedDateTime, PRIVATE_PERMISSION_MASK, readPrivateFile } from '#platform/index.js';
+import { sha256 as hash, persistedString, persistedDateTime, PRIVATE_PERMISSION_MASK, readPrivateFile } from '#platform/index.js';
 import { constants } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, opendir, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { privateDirectory } from './build.js';
 import type { WorkerReferenceOwner } from './removal-driver.js';
 import limits from './limits.json' with { type: 'json' };
-const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const leaseSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: persistedString(z.string().min(1)), imageId, kind: z.enum(['build', 'adopt']), at: persistedDateTime() });
 const participationSchema = z.strictObject({ schemaVersion: z.literal(1), daemonId: persistedString(z.string().min(1)), since: persistedDateTime() });

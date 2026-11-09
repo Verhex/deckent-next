@@ -11,7 +11,7 @@ import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, AssistantLive, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render-ink/index.js';
 import { humanRecordText, projectHumanPickerText, HumanTextContext, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
-import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
+import { optionalField, ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
@@ -947,7 +947,7 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
   // alpha.60 C: the launch shell's host is taken as it is (closed in the shell with Ctrl+D: nothing opens); otherwise the host opens here.
   // The shell's host keeps the palette it draws (TH-A: its theme request and later background answers); passing one here would replace it.
   if (shell) { if (!shell.host.open()) return; const handed = shell.take(); shell.host.setView(context => view(context, handed)); await shell.host.wait(); }
-  else await runTerminalHost({ palette, ...(theme ? { theme } : {}), ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}), ...(signal ? { signal } : {}), ...(ascii !== undefined ? { ascii } : {}),
+  else await runTerminalHost({ palette, ...(theme ? { theme } : {}), ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}), ...(signal ? { signal } : {}), ...optionalField('ascii', ascii),
     ...(props.attention ? { attention: true } : {}),
     ...(props.clearScreen !== undefined ? { clearScreen: props.clearScreen } : {}), ...(props.fullscreen !== undefined ? { fullscreen: props.fullscreen } : {}),
     ...(startup ? { inlineStartup: (out, chosen) => writeStartup(out, startup, chosen) } : {}), view: context => view(context) });

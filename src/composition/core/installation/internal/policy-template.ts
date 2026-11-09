@@ -5,7 +5,7 @@ import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInt
 import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type InstallationIdentityRead, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { optionalField, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { asPolicy, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
@@ -90,7 +90,7 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   const owner = await ownsAuthority(layout, callerUid);
   const writer = contextPolicySource({ layout, config, ownerUid: callerUid });
   const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply,
-    peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) };
+    peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...optionalField('expect', expect), ...optionalField('person', person) };
   const observed = await observeBootstrapState(projectRoot), seeded = observed.record?.phase === 'committed' ? observed.record.recovery['systemRows'] : null;
   const history = await writer.authorityHistory();
   if (history === null) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');

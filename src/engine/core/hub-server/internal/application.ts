@@ -5,6 +5,7 @@ import { canonicalHubManifest, hubPackageSignatureMessage, requireHubSignature, 
 import { requireHubDependencies, newerHubVersion } from './dependencies.js';
 import { HubServerError, hubActorSchema, hubRegisteredKeySchema, type HubRegisteredKey, type HubServerAction, type HubServerContext, type HubServerPorts, type HubStoredVersion, type HubServerTransaction, type HubServerSigner } from './ports.js';
 
+const secretGates = REDACTION_GATE_PATTERNS.map(pattern => new RegExp(pattern.source, pattern.flags));
 export class HubServerApplication {
   constructor(readonly ports: HubServerPorts) {
     if (!/^[a-f0-9]{64}$/.test(ports.hubId) || !ports.scopeId) throw new HubServerError('HUB_STORE_UNSAFE');
@@ -85,7 +86,7 @@ export class HubServerApplication {
     const verified = await verify();
     if (manifest.items.some(item => item.kind === 'skill' && item.files.some(f => ['deckent-package.json', 'deckent-envelope.json'].includes(f.path.toLowerCase())))) throw new HubError('HUB_SKILL_INVALID');
     const known = this.ports.knownSecrets();
-    const secret = (text: string) => hasSecret(text, known) || REDACTION_GATE_PATTERNS.some(pattern => new RegExp(pattern.source, pattern.flags).test(text));
+    const secret = (text: string) => hasSecret(text, known) || secretGates.some(pattern => { pattern.lastIndex = 0; return pattern.test(text); });
     if (secret(canonicalHubJson(manifest)) || files.some(file => secret(Buffer.from(file.bytes).toString('utf8')))) throw new HubServerError('HUB_SECRET_REFUSED');
     await this.requirePublication(this.ports.store, manifest, verified.publisher.publisherId!, this.clock());
     const artifacts: { path: string; artifact: HubStoredVersion['files'][number]['artifact'] }[] = [];

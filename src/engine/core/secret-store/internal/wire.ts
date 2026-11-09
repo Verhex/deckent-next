@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/index.js';
+import { counterSchema, persistedString, identitySchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { z } from 'zod';
 import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
@@ -41,7 +41,7 @@ export const secretStoreSwitchCommandSchema = z.strictObject({ schemaVersion: z.
   confirmDowngrade: z.boolean(), confirmEnvMissing: z.boolean().optional() }).readonly();
 /** The answer names stores and counts only: never a secret name or value. */
 export const secretStoreSwitchResultSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, status: z.enum(['switched', 'current']),
-  from: storeId, to: storeId, entries: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), downgrade: z.boolean(), cleaned: z.boolean() }).readonly();
+  from: storeId, to: storeId, entries: counterSchema, downgrade: z.boolean(), cleaned: z.boolean() }).readonly();
 export type SecretStoreSwitchCommand = z.infer<typeof secretStoreSwitchCommandSchema>;
 /** An answer is trusted only for the switch that was asked (same scope and target); anything else is null (a transport fault). */
 export function acceptSecretStoreSwitchResult(command: SecretStoreSwitchCommand, answer: unknown) {

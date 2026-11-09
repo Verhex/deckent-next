@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
-import { LOCALES, NODE_ENGINE_RANGE, assessNodeSupport, envValue, isWslHost, loadConfig, loadConfigLanguage, productResourcePath, type Locale } from '#platform/index.js';
+import { optionalField, LOCALES, NODE_ENGINE_RANGE, assessNodeSupport, envValue, isWslHost, loadConfig, loadConfigLanguage, productResourcePath, type Locale } from '#platform/index.js';
 import { SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, WORK_SETUP_FAMILY, setupProfileRefSchema, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY, projectInstructionFacts, projectSkeleton } from '#surfaces/core/project-instructions/index.js';
 import { assessPoolReadiness } from '#surfaces/core/cli-admin/index.js';
@@ -30,7 +30,7 @@ const exists = (path: string) => stat(path).then(() => true, () => false);
  * as its own typed error, never guessed around. `person` (a person answers in the window) is passed on to the composition.
  */
 export async function observeSetup(context: SetupCommandContext, root: string, flagLanguage: string | undefined, person = false): Promise<Observed> {
-  if (context.observeSetup) return context.observeSetup(root, { env: context.env ?? process.env, person, ...(flagLanguage === undefined ? {} : { language: flagLanguage }) });
+  if (context.observeSetup) return context.observeSetup(root, { env: context.env ?? process.env, person, ...optionalField('language', flagLanguage) });
   return observeCoreSetup(context, root, flagLanguage);
 }
 type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;

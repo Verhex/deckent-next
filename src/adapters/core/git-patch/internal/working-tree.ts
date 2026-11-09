@@ -129,8 +129,9 @@ export class GitWorkingTreeDelivery implements IntegrationDeliveryTarget {
   private async journalAt(directory: string) {
     const path = join(directory, format.journal), seen = await lstat(path).catch((error: unknown) => { if (code(error) === 'ENOENT') return null; throw new WorkspacePatchError('PATCH_CORRUPT'); });
     const bound = this.limits.maxEntries * (format.journalEntry.pathCopies * this.limits.maxPathBytes + format.journalEntry.fixedBytes);
-    const bytes = seen && await readPrivateFile(path, Math.min(seen.size, bound), { mode: 'mask' }).catch(() => { throw new WorkspacePatchError('PATCH_CORRUPT'); });
+    const bytes = seen && await readPrivateFile(path, bound, { mode: 'mask' }).catch(() => { throw new WorkspacePatchError('PATCH_CORRUPT'); });
     if (!bytes) return null;
+    if (bytes.length > seen!.size) throw new WorkspacePatchError('PATCH_CORRUPT');
     let text: unknown; try { text = JSON.parse(bytes.toString('utf8')); } catch { throw new WorkspacePatchError('PATCH_CORRUPT'); }
     const journal = journalSchema.safeParse(text); if (!journal.success) throw unsupported(directory);
     return journal.data;

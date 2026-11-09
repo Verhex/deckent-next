@@ -1,7 +1,7 @@
 import { resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteInventoryReader } from '#adapters/index.js';
 import { verifiedPrincipal, RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, false);
 export const parkConfiguredRunProgression = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, 'park');
@@ -24,7 +24,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
       const app = new RunLifecycleApplication({ loadRun: (scope, run) => store.loadRun(scope, run), hasTaskEvaluation: (identity, revision) => store.hasTaskEvaluation(identity, revision),
         loadRunReceipt: (scope, commandId) => store.loadRunReceipt(scope, commandId),
         async commitRunLifecycle(write, audit) {
-          const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+          const writer = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
           try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
         } }, verifier, authorization,
         { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),

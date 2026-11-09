@@ -1,9 +1,8 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority } from '#engine/index.js';
 import { prepareProductDirectory, sha256, SystemTrustedClock } from '#platform/index.js';
-import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
-  removeSandboxWriteSetDirectory, scanSandboxWriteSetCall, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
-  type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
+import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, EMPTY_DIRECTORY_VERSION, removeSandboxWriteSetDirectory, scanSandboxWriteSetCall, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget, type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 
@@ -17,7 +16,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
   readonly authority: (rel: string) => boolean; readonly selfSource?: boolean; readonly sealed?: (rel: string) => boolean; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly peer?: LocalPeerIdentity; readonly sessions?: () => Promise<SessionVerifier & SessionAuthority>;
   readonly scopeId: string; readonly shellCommandId: string; readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
   const { scope, context } = input;
-  type Store = Awaited<ReturnType<typeof openSqliteAttemptStore>>;
+  type Store = Awaited<ReturnType<typeof openConfiguredLedger>>;
   let store: Store | null = null;
   try {
     const { scan, clock: clockVerdict } = await scanSandboxWriteSetCall(input.directory, scope.root);
@@ -27,7 +26,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
     let opened: Promise<{ sessions: SessionVerifier & SessionAuthority; store: Store }> | null = null;
     const lazy = () => opened ??= (async () => {
       const sessions = await (input.sessions ? input.sessions() : input.peer ? createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock) : Promise.reject(new SessionAuthenticationError('SESSION_REQUIRED')));
-      const attempts = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
+      const attempts = await openConfiguredLedger(context, { migration: 'forbid' });
       store = attempts;
       return { sessions, store: attempts };
     })();

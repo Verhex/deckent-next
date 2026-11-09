@@ -1,7 +1,8 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { userInfo } from 'node:os';
 import { existsSync } from 'node:fs';
 import { loadConfig, prepareProductDirectory, prepareProductFile, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { DockerSupervisor, openSqliteAttemptStore } from '#adapters/index.js';
+import { DockerSupervisor } from '#adapters/index.js';
 /** REVISE 2691: the service-start consumer of environment probes. No probe is live at a start, so every labelled probe container of this
  * installation (workspace root) is removed and observed absent; unproven ones are returned, never assumed gone. Null without execution
  * or before any workspace exists. */
@@ -25,8 +26,7 @@ async function probeContext(projectRoot: string, options: ConfigLoadOptions) {
   return { config, settings: { ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid } };
 }
 async function settleProbeHolds({ config, settings }: NonNullable<Awaited<ReturnType<typeof probeContext>>>, filter: Readonly<{ scopeId: string; runId: string }> | undefined) {
-  const store = await openSqliteAttemptStore(await prepareProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite,
-    { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+  const store = await openConfiguredLedger({ config, path: () => prepareProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']) }, { migration: 'forbid' });
   try {
     let released = 0; const held: string[] = [], settlementFailed: { probes: readonly string[]; code?: string }[] = [];
     for (const hold of await store.environmentProbeHolds(filter)) {

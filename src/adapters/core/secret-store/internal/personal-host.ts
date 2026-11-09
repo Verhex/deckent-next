@@ -3,12 +3,11 @@ import { lstat, open, readdir, readlink, realpath, statfs } from 'node:fs/promis
 import { dirname, join, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PersonalCustodyError } from '#engine/index.js';
-import { privateFile } from '#platform/index.js';
+import { PRIVATE_PERMISSION_MASK,isAbsent as absent, privateFile } from '#platform/index.js';
 import { PERSONAL_CUSTODY_REGISTRY as registry } from './personal-registry.js';
 import { ENCRYPTED_FILE_SECRET_STORE_KEY, ENCRYPTED_FILE_SECRET_STORE_NAME } from './encrypted.js';
 
 export const custodyDigest = (input: unknown) => createHash('sha256').update(JSON.stringify(input)).digest('hex');
-const absent = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
 const unsafe = () => new PersonalCustodyError('unsafe-root');
 const identity = (info: Stats) => [info.dev, info.ino, info.uid, info.mode, info.nlink];
 /** Reads only bounded host metadata; never a key or envelope's bytes. */
@@ -45,7 +44,7 @@ export async function personalPrivateFile(path: string, uid: number, maxBytes: n
 export async function unsafeStoreDirectory(root: string, uid: number): Promise<Readonly<{ path: string; mode: string; parent: boolean }> | null> {
   const found = (path: string, info: Stats, parent: boolean) => Object.freeze({ path, mode: (info.mode & 0o7777).toString(8).padStart(4, '0'), parent });
   const rootInfo = await lstat(root);
-  if (!rootInfo.isDirectory() || rootInfo.uid !== uid || (rootInfo.mode & 0o077) !== 0) return found(root, rootInfo, false);
+  if (!rootInfo.isDirectory() || rootInfo.uid !== uid || (rootInfo.mode & PRIVATE_PERMISSION_MASK) !== 0) return found(root, rootInfo, false);
   // On the allowlisted Linux filesystems POSIX ACL named entries cannot override a zero group-class mask (0700/0600).
   for (let path = dirname(root); ; path = dirname(path)) {
     const info = await lstat(path);
@@ -61,7 +60,7 @@ export async function observePersonalStoreHost(root: string, uid: number): Promi
   if (canonical !== resolve(root)) throw unsafe();
   if (await unsafeStoreDirectory(root, uid)) throw unsafe();
   const rootInfo = await lstat(root);
-  if (!rootInfo.isDirectory() || rootInfo.uid !== uid || (rootInfo.mode & 0o077) !== 0) throw unsafe();
+  if (!rootInfo.isDirectory() || rootInfo.uid !== uid || (rootInfo.mode & PRIVATE_PERMISSION_MASK) !== 0) throw unsafe();
   const [mountEvidenceDigest, envelope, key] = await Promise.all([observeLocalBacking(root, rootInfo.dev),
     personalPrivateFile(join(root, ENCRYPTED_FILE_SECRET_STORE_NAME), uid, Number.MAX_SAFE_INTEGER),
     personalPrivateFile(join(root, ENCRYPTED_FILE_SECRET_STORE_KEY), uid, 32)]);
