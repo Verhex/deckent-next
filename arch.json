@@ -3241,10 +3241,7 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/utils",
-        "src/engine/core/audit",
         "src/domain/core/principal",
-        "src/adapters/core/audit-store",
-        "src/adapters/core/local-keyring",
         "src/adapters/core/docker-supervisor"
       ],
       "plan": "CONFIG-SURFACE"
@@ -5419,9 +5416,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42240,
+      "adapters": 42230,
       "surfaces": 45000,
-      "composition": 13655
+      "composition": 13656
     },
     "totalSrcLines": 200000,
     "testCases": 8206,
