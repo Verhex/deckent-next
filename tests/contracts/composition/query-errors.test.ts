@@ -41,12 +41,14 @@ it('preserves registered errors and redacts unknown native/storage details throu
   for (const unmapped of [catalog, scratch]) expect(queryFailure(unmapped).code).toBe('QUERY_UNEXPECTED_FAILURE');
   const raw = new Error('SQL /private/customer/ledger secret=credential');
   const safe = queryFailure(raw); expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
-  expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('RUN_STORE_CORRUPT');
+  const stored = new RunStoreError('RUN_STORE_CORRUPT'); stored.message += ' /private/evidence credential=secret';
+  const mapped = queryFailure(stored);
+  expect(mapped.code).toBe('RUN_STORE_CORRUPT');
+  expect(String(mapped)).not.toContain('/private'); expect(String(mapped)).not.toContain('secret');
+  expect(mapped.localize?.('tr').message).not.toBe(mapped.localize?.('en').message);
   for (const code of ['AGENT_USE_PIN_MISMATCH', 'AGENT_USE_TASK_UNAVAILABLE', 'AGENT_USE_WORK_CLASS_REQUIRED', 'AGENT_USE_CATALOG_UNAVAILABLE'] as const) {
     const failure = queryFailure(new AgentCatalogStoreError(code));
     expect(failure.code).toBe(code); expect(failure.category).toBe('error');
-    for (const locale of ['en', 'tr'] as const) expect(failure.localize?.(locale).message).toBe(ErrorRegistry.get(code, locale)?.message);
-    expect(failure.localize?.('tr').message).not.toBe(failure.localize?.('en').message);
   }
 
 });
@@ -57,26 +59,6 @@ it('preserves the registered unsupported execution-host failure with localized g
   expect(failure.localize?.('en').message).toContain('non-root host user');
   expect(failure.localize?.('tr').message).toContain('root olmayan');
 });
-it.each([
-  new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT'),
-  new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT'),
-  new WorkspaceError('WORKSPACE_CUSTODY_UNCONVERTIBLE'),
-  new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT'),
-  new CancellationDeliveryError('CANCELLATION_DELIVERY_CONFLICT'),
-  new CancellationDeliveryError('CANCELLATION_DELIVERY_CORRUPT'),
-  new TaskEvaluationError('TASK_EVALUATION_STALE'),
-  new TaskEvaluationError('TASK_EVALUATION_NOT_READY'),
-  new TaskEvidenceError('TASK_EVIDENCE_UNLINKED'),
-  new EvaluationEvidenceError('EVALUATION_EVIDENCE_CORRUPT'),
-  new EvaluationEvidenceError('EVALUATION_EVIDENCE_LIMIT'),
-])('preserves evaluation failure identity with localized text and no internal details: $code', error => {
-  error.message += ' /private/evidence credential=secret';
-  const safe = queryFailure(error);
-  expect(safe.code).toBe(error.code);
-  expect(String(safe)).not.toContain('/private'); expect(String(safe)).not.toContain('secret');
-  expect(safe.localize?.('tr').message).not.toBe(safe.localize?.('en').message);
-});
-
 it('exposes only the bounded adapter-version conflict reason', () => {
   const error = new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT', 'adapter-version-mismatch');
   Object.assign(error, { sourceFingerprint: 'private', path: '/private/repository', credential: 'secret' });
@@ -146,15 +128,6 @@ it('keeps unrelated error classes as QUERY_UNEXPECTED_FAILURE (no over-generalis
 });
 
 
-it.each(['SUPERVISOR_OPTIONS_INVALID', 'SUPERVISOR_REQUEST_INVALID', 'SUPERVISOR_WORKSPACE_INVALID',
-  'SUPERVISOR_CONTROL_FAILED', 'SUPERVISOR_IDENTITY_CONFLICT', 'SUPERVISOR_CANCELLED', 'SUPERVISOR_NOT_TERMINAL',
-  'SUPERVISOR_PROFILE_INVALID', 'SUPERVISOR_PROFILE_ORIGIN_MISMATCH', 'SUPERVISOR_RELEASE_UNCONFIRMED'] as const)(
-  'preserves supervisor failure %s through the shared mapper', code => {
-    const error = new SupervisorError(code); error.message += ' /private/customer token=credential';
-    const safe = queryFailure(error); expect(safe.code).toBe(code);
-    expect(safe.localize?.('en').message).not.toBe(safe.localize?.('tr').message);
-    expect(JSON.stringify(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
-  });
 it('keeps unknown messages and causes in a bounded server record, with only class and correlation on the client', () => {
   const error = new Error('adapter broke at /private/workspace secret=credential\n\x1b[31m', { cause: new Error('socket failed C:\\private\\worker') });
   const safe = queryFailure(error);

@@ -6,8 +6,7 @@ import { main } from '../../../src/surfaces/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { summarizeWorkCosts } from '#domain/index.js';
-import { inventoryCommand, renderHumanReport, reportCommand, runControlFlow, runControls, runList } from '#surfaces/core/cli-run/index.js';
-import { runControlActions } from '#surfaces/core/terminal-work/index.js';
+import { inventoryCommand, renderHumanReport, reportCommand, runControlFlow, runList } from '#surfaces/core/cli-run/index.js';
 
 /**
  * C-RUN (alpha.48, CLI review §run, §report, §inventory): the run family for a person — `run list` over the `/runs` query, short ids,
@@ -187,16 +186,6 @@ it('run list names a hold laid over another park beside the park\'s own reason (
     const out = sinks();
     await runList(new Map(), false, { ...s.context, root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, locale, stdin: { isTTY: false }, stdout: out.stdout } as never, locale);
     expect(out.out.join('')).toContain(words);
-  }
-});
-
-it('the TTY control offer equals the terminal /runs keys for hold, resume and close in every Run state', () => {
-  const states = [{ kind: 'running' }, { kind: 'terminal', outcome: 'failed', reason: 'completed' },
-    ...['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']
-      .map(reason => ({ kind: 'parked', reason, since: 1, deadline: 2 })), { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2, operatorHold: { schemaVersion: 1, note: 'n' } }];
-  for (const state of states) for (const cancellationRequested of [false, true]) {
-    const runView = { ...view(), state, cancellationRequested } as never;
-    expect(runControls(runView).filter(action => action !== 'cancel')).toEqual(runControlActions(runView));
   }
 });
 

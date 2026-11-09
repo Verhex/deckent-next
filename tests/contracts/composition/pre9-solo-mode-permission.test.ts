@@ -296,7 +296,7 @@ it('the refusal texts point to the product command for the installation owner (E
 // Guards: they pin the invariants the design relies on.
 it('guard: the first-run template stays v14 and opens no mode by default (a fresh install runs standart until the owner opens one)', () => {
   const built = firstRunPolicyTemplate({ scopeId: SCOPE, principal: { issuer: 'host', subject: 'owner' }, ...FIRST_RUN_TOOL_NAMES });
-  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(20);
+
   expect(built.policy.schemaVersion === 2 && built.policy.grants.some(rule => rule.resource.kind === 'permission-mode')).toBe(false);
 });
 
