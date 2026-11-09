@@ -1,9 +1,10 @@
 import type { Dirent } from 'node:fs';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
+import { relativeInside } from '#platform/index.js';
 import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout, ShellSandboxWriteView } from './realm.js';
 import { describeShellWritePosture, sandboxHardFloored, sandboxWriteView } from './realm.js';
@@ -91,7 +92,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   // protected path is not one read-write grant: it is carved — listing only, its denied entries take no rule, the ancestors of protected
   // paths are carved in turn, every other entry keeps its read-write grant unscanned (as ignored). A symbolic link on such a chain
   // cannot be carved by path → the set is refused.
-  const anchors = [...input.project.protectedAnchors, '.deckent', ...(input.hardFloor?.roots ?? []).map(path => relative(root, path)).filter(path => path && !path.startsWith('..') && !isAbsolute(path))];
+  const anchors = [...input.project.protectedAnchors, '.deckent', ...(input.hardFloor?.roots ?? []).flatMap(path => relativeInside(root, path) || [])];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const carveProtected = async (rel: string, depth: number, cls: 'w' | 'r'): Promise<readonly LandlockRule[]> => {

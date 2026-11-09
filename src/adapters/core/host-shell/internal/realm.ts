@@ -1,8 +1,8 @@
 import { modelTextPrefix, type AgentShellPosture, type ShellRealm, type ShellRealmContainment, type ShellRealmMode } from '#domain/index.js';
 import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
-import { isAbsolute, relative } from 'node:path';
-import { DECKENT_DIR } from '#platform/index.js';
+import { resolve } from 'node:path';
+import { DECKENT_DIR, DOCS_DIR, relativeInside } from '#platform/index.js';
 import { runHostShell } from './run.js';
 
 /** The host has no write boundary, so it never accepts a write set (SHELL-OVERLAY): such a request is refused, nothing runs. */
@@ -25,16 +25,13 @@ export function sandboxHardFloored(layout: ShellSandboxLayout, rel: string): boo
     return under(DECKENT_DIR);
   }
   return floor.roots.some(root => {
-    const path = relative(layout.project.root, root);
-    return path !== '' && !path.startsWith('..') && !isAbsolute(path) && (rel === path || rel.startsWith(`${path}/`));
+    const path = relativeInside(layout.project.root, root);
+    return !!path && (rel === path || rel.startsWith(`${path}/`));
   });
 }
-const DOCS_DIR = `${DECKENT_DIR}/docs`;
-/** The configured data root as a project-relative POSIX path, or null when it lies outside the project (an absolute input is normalized). */
+/** The configured data root as a project-relative POSIX path, or null when it is the project or lies outside it (absolute or relative input, normalized). */
 function projectRelativeDataRoot(layout: ShellSandboxLayout): string | null {
-  if (!layout.dataRoot) return null;
-  const rel = (isAbsolute(layout.dataRoot) ? relative(layout.project.root, layout.dataRoot) : layout.dataRoot).split('\\').join('/').replace(/\/+$/u, '');
-  return rel === '' || rel === '.' || rel.startsWith('..') || isAbsolute(rel) ? null : rel.replace(/^\.\//u, '');
+  return layout.dataRoot ? relativeInside(layout.project.root, resolve(layout.project.root, layout.dataRoot))?.split('\\').join('/') || null : null;
 }
 /**
  * The write facts one sandboxed call's card describes (merge Astra 2170 x MODES-3, owner 2026-09-29): the same `writeFloorReadOnly`/

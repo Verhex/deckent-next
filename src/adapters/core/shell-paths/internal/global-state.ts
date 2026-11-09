@@ -1,11 +1,10 @@
 import { realpath, stat } from 'node:fs/promises';
 import { posix } from 'node:path';
-import { JSON_SCHEMA_LIMITS, StepBudgetExceeded } from '#platform/index.js';
+import { JSON_SCHEMA_LIMITS, pathWithin, StepBudgetExceeded } from '#platform/index.js';
 import { classifyShellContainment, shellNamedPaths } from '#engine/index.js';
 import { expandGlob, segmentMatcher, SHELL_GLOB_MAX_MATCHES } from './paths.js';
 
 const GLOB = /[*?[]/u;
-const within = (root: string, path: string) => root === '/' || path === root || path.startsWith(`${root}/`);
 
 /** Names, not contents: resolve existing ancestors without dropping `link/..`; absent children still inherit their real parent. */
 async function realName(path: string): Promise<string> {
@@ -20,7 +19,7 @@ async function realName(path: string): Promise<string> {
 export async function createShellGlobalStateCheck(projectRoot: string, roots: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env,
   loginFiles: readonly string[] = []): Promise<(text: string) => Promise<boolean>> {
   const protectedRoots = [...new Set([...roots, ...await Promise.all(roots.map(realName))])];
-  const protectedPath = (path: string) => protectedRoots.some(root => within(root, path));
+  const protectedPath = (path: string) => protectedRoots.some(root => pathWithin(root, path));
   const home = env['HOME'];
   const loginAlias = async (path: string) => {
     const info = await stat(path, { bigint: true }).catch(() => null);

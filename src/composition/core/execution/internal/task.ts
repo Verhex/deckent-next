@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
-import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, resolveLocale, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
+import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
+import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, relativeInside, resolveLocale, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
@@ -100,7 +100,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const configured = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
       const queue = await store.loadTargetQueueVerification(identity.scopeId, identity.runId), recorded = await store.loadRunWorkspaceCustody(identity.scopeId, identity.runId);
       // R9n: a working-tree Run starts from the person's current files, committed in its own private base repository; the Run keeps the mode it began with.
-      const product = [layout.root, dirname(layout.bootstrapConfigPath)].map(root => relative(configured.sourceRoot, root)).filter(path => path && !path.startsWith('..') && !isAbsolute(path));
+      const product = [layout.root, dirname(layout.bootstrapConfigPath)].flatMap(root => relativeInside(configured.sourceRoot, root) || []);
       const base = !queue && (recorded ? workingTreeSource(recorded.source) : configured.workingTree) ? await captureWorkingTreeBase(configured, identity, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes },
         path => workerTreeDenied(path) ?? (product.some(root => path === root || path.startsWith(root + '/')) ? 'product-state' : null)) : undefined, git = base?.options ?? configured;
       if (base?.count) { await audit(withheldBaseEvent({ identity, principal, policyRevision: document.revision, now: Date.now }, base.count, base.excluded)); start = withheldBaseStart(start, base.count, base.excluded, WORKER_TREE_SHOWN_PATHS); }
