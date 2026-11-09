@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approvalCommandSchema, approvalListSchema, runCommandSchema } from '#engine/index.js';
+import { PolicyAuthorizationError, approvalCommandSchema, approvalListSchema, runCommandSchema } from '#engine/index.js';
 import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 
 const hex = (char: string) => char.repeat(64);
@@ -103,7 +103,7 @@ it.each(['revoke', 'binding', 'abort'] as const)('does not release a snapshot wh
 it('does not downgrade a data-port policy denial to an empty successful snapshot', async () => {
   const ports = createWorklineLedgerPorts({ ...base,
     async inspectSurfaceAccess() { return { binding: 'same-principal', kinds: ['worker'] }; },
-    async inspectWorkers() { throw Object.assign(new Error('denied'), { code: 'POLICY_DENIED' }); },
+    async inspectWorkers() { throw new PolicyAuthorizationError('POLICY_DENIED'); },
   })!;
   expect(await ports.readSurfaceSnapshot!(['worker'], new AbortController().signal)).toEqual({ scopeId: 's', denied: ['worker'] });
 });

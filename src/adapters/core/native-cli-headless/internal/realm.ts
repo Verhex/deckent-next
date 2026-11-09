@@ -161,7 +161,17 @@ type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 
 export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
   // f5: one spawn per login dir across the person's connections, none while the CLI's own refresh lock exists (item 5).
-  return withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, () => runLocked(entry, isolation, spawn, bounds, signal, onLine), signal);
+  const start = performance.now(); let entered = false;
+  try { return await withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, () => {
+    entered = true; return runLocked(entry, isolation, spawn, bounds, signal, onLine);
+  }, signal); }
+  catch (error) {
+    // Only cancellation before the realm callback proves that no process started; later failures retain their uncertainty.
+    if (entered || !signal?.aborted || error !== signal.reason && !(error instanceof Error && error.name === 'AbortError')) throw error;
+    return { schemaVersion: 1, requestId: randomUUID(), started: false, reason: 'cancelled', exitCode: null, signal: null,
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: performance.now() - start,
+      egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
+  }
 }
 async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
