@@ -1,11 +1,11 @@
 import { inspectNativeChat, nativeChatVerifiedAtMs } from './native.js';
 import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
-import { modelInvocationProfileSchema, NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
-import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
+import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, modelUseProfiles, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
   OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
@@ -47,25 +47,25 @@ export interface TerminalChatTurnInput {
   readonly signal?: AbortSignal;
 }
 const describeModel = (reference: ModelReference): string => `${reference.providerId}/${reference.modelId}@${reference.modelVersion}`;
-/** The scope's native CLI profile of a reference: the one whose seal the chat plan and `/provider` read. */
-const nativeChatProfile = (config: Record<string, unknown>, scopeId: string | undefined, reference: ModelReference) => ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)
-  ?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value)).find(profile => profile.scopeId === scopeId && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
-    && isDeepStrictEqual(profile.reference, reference));
-/** R8e: the host's chat readiness read for `/provider` and `/model` (read only: no preflight, spawn or sign-in). */
-export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; reference: ModelReference }>, options: ConfigLoadOptions = {}) {
-  const profile = query.surface === 'chat' ? nativeChatProfile(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>, query.scopeId, query.reference) : undefined;
-  return profile ? inspectNativeChat(profile, { readiness: configuredNativeChatReadiness(projectRoot, options, true) }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
+const nativeChatProfile = (profiles: readonly ModelInvocationProfile[], scopeId: string | undefined, reference: ModelReference) => profiles.find(profile => profile.scopeId === scopeId
+  && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && isDeepStrictEqual(profile.reference, reference));
+/** R8e: the host's chat readiness read for `/provider` and `/model` (read only: no preflight, spawn or sign-in). KG6 F5: one view build is one call,
+ * one forced config load and one profile parse; each model still reads its own observation, and nothing is kept for the next build. */
+export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; references: readonly ModelReference[] }>, options: ConfigLoadOptions = {}) {
+  const profiles = query.surface === 'chat' ? modelUseProfiles(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>) : [];
+  const readiness = configuredNativeChatReadiness(projectRoot, options, true, profiles);
+  return Promise.all(query.references.map(reference => { const profile = nativeChatProfile(profiles, query.scopeId, reference);
+    return profile ? inspectNativeChat(profile, { readiness }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const; }));
 }
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<TerminalChatPlan> {
   runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options) };
-  const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
+  const config = await loadComposedConfig(projectRoot, options) as Record<string, unknown>, chat = readTerminalChatConfig(config);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
   const { choice, skipped } = await terminalModelHere(projectRoot, options), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
   if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
   const binding = await inspectModelBinding(projectRoot, reference, options);
-  const config = await loadComposedConfig(projectRoot, options) as Record<string, unknown>;
-  const profile = nativeChatProfile(config, (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
+  const profile = nativeChatProfile(modelUseProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
   const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true)).catch(() => null) : null;
@@ -74,11 +74,6 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
     tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more, ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}) });
 }
-/**
- * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
- * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
- */
-/** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
   settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off'; jsonOutput?: 'if-supported' }> = {}) {
   const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
@@ -110,7 +105,6 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
     nativeRequest: cliStep ? textOnlyModelInvocationRequest(nativeRequest) : nativeRequest };
   return { chat, command };
 }
-/** Governed cancellation of the turn's exact invocation, as a separately authorized command. */
 export function terminalChatCancellation(command: ModelInvocationCommand): ModelInvocationCancellationCommand {
   return { schemaVersion: 1, commandId: randomUUID(), scopeId: command.scopeId, targetCommandId: command.commandId,
     reference: command.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };

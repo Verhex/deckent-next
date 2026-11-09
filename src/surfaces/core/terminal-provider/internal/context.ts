@@ -9,6 +9,8 @@ export type SubscriptionSurface = 'chat' | 'worker' | 'brain' | 'agent' | 'skill
 export interface SubscriptionReadinessPort {
   recognizes(reference: ModelReference): boolean;
   inspect(surface: SubscriptionSurface, reference: ModelReference): Promise<NativeAgentReadiness>;
+  /** One view build's references in one host read, results in the same order (KG6 F5); nothing is kept for the next call. */
+  inspectMany(surface: SubscriptionSurface, references: readonly ModelReference[]): Promise<readonly NativeAgentReadiness[]>;
 }
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
@@ -60,7 +62,7 @@ export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schem
 export type ProviderDelegationPermission = Readonly<{ layers: readonly ('global' | 'project')[]; decisions: readonly Readonly<{
   layer: 'global' | 'project'; decision: 'allow' | 'require-approval' | 'deny' | 'refused'; ruleId: string | null }>[] }>;
 export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels' | 'connectModel' | 'siwc'> {
-  inspectSubscriptionReadiness?: (root: string, query: Readonly<{ scopeId: string; surface: SubscriptionSurface; reference: ModelReference }>, options: ConfigLoadOptions) => Promise<NativeAgentReadiness>;
+  inspectSubscriptionReadiness?: (root: string, query: Readonly<{ scopeId: string; surface: SubscriptionSurface; references: readonly ModelReference[] }>, options: ConfigLoadOptions) => Promise<readonly NativeAgentReadiness[]>;
   /** Read-only doctor projection; optional custody facts never authorize a connection. */
   inspectSecretStore?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; writable: boolean; enumerable: boolean;
     status: 'ready' | 'unavailable' | 'unsafe' | 'corrupt'; code: string | null }>>;

@@ -1093,8 +1093,8 @@ it('K13: the provider and onboarding subscription window offers the registry met
 
 it('R2a: /model pins an unverified (unknown) subscription model; its first turn verifies the tools', async () => {
   const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
-  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
-    inspect: async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }) } };
+  const unknown = async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }) as const;
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true, inspect: unknown, inspectMany: async (_surface, refs) => Promise.all(refs.map(unknown)) } };
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
   await until(() => ui.frame().includes(t('headless.agent.k13.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
   await ui.press(ENTER + ENTER);
@@ -1105,9 +1105,9 @@ it('R2a: /model pins an unverified (unknown) subscription model; its first turn 
 it('K13: /model rechecks subscription readiness at confirmation and does not pin after capability revocation', async () => {
   const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
   let ready = true;
-  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
-    inspect: async () => ready ? { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
-      profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } } : { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' } } };
+  const inspect: NonNullable<ProviderWindowPort['subscriptionReadiness']>['inspect'] = async () => ready ? { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
+    profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } } : { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true, inspect, inspectMany: async (_surface, refs) => Promise.all(refs.map(inspect)) } };
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
   await until(() => ui.frame().includes(t('headless.agent.k13.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
   ready = false;

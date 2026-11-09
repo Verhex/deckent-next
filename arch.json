@@ -582,6 +582,7 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/agent-turn",
         "src/engine/core/model-invocation",
+        "src/engine/core/model-use",
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/capabilities/core/native-agent-execution",
@@ -1870,7 +1871,6 @@
       "dependencies": [
         "src/capabilities/core/native-agent-execution",
         "src/engine/core/model-use",
-        "src/adapters/core/sqlite-model-activation",
         "src/composition/core/installation",
         "src/composition/core/terminal-chat",
         "src/composition/core/runtime-service",
@@ -5186,6 +5186,7 @@
         "src/composition/core/root",
         "src/domain/core/model-invocation",
         "src/engine/core/model-invocation",
+        "src/engine/core/model-use",
         "src/platform/core/config"
       ],
       "plan": "PROVIDERS"
@@ -5273,7 +5274,7 @@
       "engine": 60000,
       "adapters": 42376,
       "surfaces": 45000,
-      "composition": 13733
+      "composition": 13703
     },
     "totalSrcLines": 200000,
     "testCases": 8196,

@@ -393,6 +393,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CATALOG_COMMAND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_COMMAND_CONFLICT', p, l) }) },
   MODEL_CATALOG_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_CORRUPT', p, l) }) },
   MODEL_CATALOG_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_UNAVAILABLE', p, l) }) },
+  MODEL_CATALOG_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_READ_ONLY', p, l) }) },
   MODEL_CATALOG_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_OUTCOME_UNKNOWN', p, l) }) },
   WORKER_MODEL_BINDING_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_MODEL_BINDING_MISMATCH', p, l) }) },
   MODEL_CATALOG_ALIAS_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_ALIAS_CONFLICT', p, l) }) },

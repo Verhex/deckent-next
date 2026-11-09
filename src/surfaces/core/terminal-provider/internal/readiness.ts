@@ -22,28 +22,31 @@ export function subscriptionReadinessText(value: NativeAgentReadiness, locale: L
 }
 /** The host owns K7's scoped observation read. No inspection can mint a seal or refresh a login. */
 export function subscriptionReadinessPort(root: string, scopeId: string, host: ProviderPanelHost, options: ConfigLoadOptions): SubscriptionReadinessPort {
+  const inspectMany: SubscriptionReadinessPort['inspectMany'] = async (surface, references) => {
+    if (!host.inspectSubscriptionReadiness) return references.map(unknown);
+    if (!references.length) return [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const values = await Promise.race([host.inspectSubscriptionReadiness(root, { scopeId, surface, references }, options),
+        new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), presentation.readinessInspectionMs); })]);
+      return references.map((_, index) => { const parsed = nativeAgentReadinessSchema.safeParse(values?.[index]); return parsed.success ? parsed.data : unknown(); });
+    } catch { return references.map(() => ({ state: 'unknown', reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' })); }
+    finally { if (timer !== undefined) clearTimeout(timer); }
+  };
   return {
     recognizes: reference => Boolean(host.providerConnect?.kinds.some(kind => kind.headlessLogin && (kind.catalogProviderId ?? kind.id) === reference.providerId)),
-    async inspect(surface, reference) {
-      if (!host.inspectSubscriptionReadiness) return unknown();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const value = await Promise.race([host.inspectSubscriptionReadiness(root, { scopeId, surface, reference }, options),
-          new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), presentation.readinessInspectionMs); })]);
-        const parsed = nativeAgentReadinessSchema.safeParse(value);
-        return parsed.success ? parsed.data : unknown();
-      } catch { return { state: 'unknown', reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' }; }
-      finally { if (timer !== undefined) clearTimeout(timer); }
-    },
+    inspectMany,
+    async inspect(surface, reference) { return (await inspectMany(surface, [reference]))[0]!; },
   };
 }
 /** `/model` keeps the existing catalog/activation owner, adding the same subscription prerequisite read as `/provider`. */
 export async function subscriptionModelView(view: ModelPanelView, provider: ProviderPanelPort | undefined, locale: Locale): Promise<ModelPanelView> {
   const port = (provider as ProviderWindowPort | undefined)?.subscriptionReadiness;
   if (!port) return view;
-  return { ...view, choices: await Promise.all(view.choices.map(async choice => {
-    if (!port.recognizes(choice.reference)) return choice;
-    const readiness = await port.inspect('chat', choice.reference), text = subscriptionReadinessText(readiness, locale);
-    return { ...choice, detail: text, blocked: choice.blocked ?? (readiness.state === 'unavailable' ? text : null) }; // unknown stays selectable: the guarded first turn verifies it
-  })) };
+  const logins = view.choices.filter(choice => port.recognizes(choice.reference)), readiness = await port.inspectMany('chat', logins.map(choice => choice.reference));
+  return { ...view, choices: view.choices.map(choice => {
+    const at = logins.indexOf(choice); if (at < 0) return choice;
+    const text = subscriptionReadinessText(readiness[at]!, locale);
+    return { ...choice, detail: text, blocked: choice.blocked ?? (readiness[at]!.state === 'unavailable' ? text : null) }; // unknown stays selectable: the guarded first turn verifies it
+  }) };
 }

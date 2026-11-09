@@ -15,7 +15,7 @@ export const MODEL_CATALOG_SCHEMA_VERSION = 1;
 export const MODEL_CATALOG_TARGET_PREFIX = 'deckent.model-catalog-target.v1\n';
 export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REVISION_CONFLICT' | 'MODEL_CATALOG_NOT_FOUND'
   | 'MODEL_CATALOG_NOT_ACTIVE' | 'MODEL_CATALOG_COMMAND_CONFLICT' | 'MODEL_CATALOG_CORRUPT' | 'MODEL_CATALOG_UNAVAILABLE'
-  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT' | 'MODEL_CATALOG_MODEL_RETIRED';
+  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT' | 'MODEL_CATALOG_MODEL_RETIRED' | 'MODEL_CATALOG_READ_ONLY';
 export class ModelCatalogError extends Error {
   constructor(readonly code: ModelCatalogErrorCode, readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
 }
