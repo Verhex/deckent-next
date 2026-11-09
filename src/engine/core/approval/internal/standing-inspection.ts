@@ -1,7 +1,7 @@
 import { persistedString, persistedInteger, STANDING_GRANT_KIND, evaluatePolicy, identitySchema, isStandingGrantId, policyResources, policySchema, standingGrantChange, type VerifiedPrincipal } from '#domain/index.js';
 import { redactForRecord } from '#platform/index.js';
 import { z } from 'zod';
-import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import { effectInputDigest } from '#engine/core/effect/index.js';
 import bounds from './standing-list.json' with { type: 'json' };
 
@@ -44,8 +44,8 @@ export class StandingGrantsInspection {
       loaded = await this.deps.policy.load();
       decision = evaluatePolicy(loaded, { principal, scopeId: query.scopeId, action: policyResources.policy.actions[0], resource: { kind: policyResources.policy.kind, id: query.scopeId } });
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
     const policy = policySchema.parse(loaded);
     const standing = policy.grants.filter(grant => grant.resource.kind === STANDING_GRANT_KIND && isStandingGrantId(grant.id) && (grant.scopes === 'all' || grant.scopes.includes(query.scopeId)))
       .map(grant => ({ grant, key: sortKey(grant) })).sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);

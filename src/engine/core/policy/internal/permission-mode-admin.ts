@@ -3,6 +3,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePe
   policySchema, resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
   type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 import { AuthorityChangeError, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore } from './authority.js';
 
 export class PermissionModeError extends Error {
@@ -82,7 +83,8 @@ export class PermissionModeApplication {
         // A refusal is recorded when possible; an unrecordable refusal is still a refusal.
         try { if (session) session(); else record(null); } catch { /* refused either way */ }
         // A refused mode is its own typed answer (which mode, which grant is missing), not the generic denial.
-        throw decision.decision === 'require-approval' ? new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED') : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
+        const refusal = policyVerdictRefusal(decision.decision, { deny: 'PERMISSION_MODE_DENIED' });
+        throw refusal === 'POLICY_APPROVAL_UNSUPPORTED' ? new PolicyAuthorizationError(refusal) : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
       }
       if (session) {
         // No record, no switch: the event is durable before the service answers.

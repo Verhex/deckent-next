@@ -9,7 +9,7 @@ export { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 export type { Params } from '#platform/core/i18n/index.js';
 export { DeckentError } from '#platform/core/errors/index.js';
 export type { ErrorCategory } from '#platform/core/errors/index.js';
-export { ErrorRegistry, ERROR_CODES, isAuthorizationRefusal, launchRefusal } from '#platform/core/errors/index.js';
+export { ErrorRegistry, ERROR_CODES, isAuthorizationRefusal, launchRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';
 export type { ExitCode } from '#platform/core/errors/index.js';
 export { lintErrorRegistry, assertErrorRegistry } from '#platform/core/errors/index.js';

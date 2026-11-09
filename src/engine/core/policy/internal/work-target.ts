@@ -1,6 +1,7 @@
 import { evaluatePolicy, matchingRuleIds, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 import { PoolPolicyAuthorization, type PoolAuthorization } from './pool.js';
 
 export type WorkTargetAction = typeof policyResources.workTarget.actions[number];
@@ -11,9 +12,8 @@ export class WorkTargetPolicyAuthorization {
     let decision;
     try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId, resource: { kind: policyResources.workTarget.kind, id: targetId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // As for pools: outside the operation catalog there is no approval broker, so require-approval never collapses into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
 }
 /** Execution resources a Run consumes at admission and reservation: its pool and, when a work target is configured, that target

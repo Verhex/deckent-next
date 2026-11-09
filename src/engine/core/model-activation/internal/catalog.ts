@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { catalogModelRetired, retiredModelActivationRefusal, encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
   parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { catalogDay } from './worker-admission.js';
 
@@ -96,7 +97,7 @@ export class ModelCatalogInspectionApplication {
       for (const record of (await reader.channels()).filter(entry => query.channelId === undefined || entry.channelId === query.channelId)) {
         try { await this.authorizer.authorize('inspect', query.scopeId, { channelId: record.channelId, modelId: null }, principal, 'scope'); }
         catch (error) {
-          if (!(error instanceof Error && 'code' in error && ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED'].includes(String(error.code)))) throw error;
+          if (!(error instanceof Error && 'code' in error && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS }))) throw error;
           channels.push(Object.freeze({ channelId: record.channelId, access: 'denied' })); continue;
         }
         const models = [];

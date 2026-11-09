@@ -1,6 +1,7 @@
 import { delegationWithin, evaluatePolicy, policyResources, policySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
+import { policyVerdictRefusal } from './verdict.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
 export interface PolicySource { load(): Promise<unknown> }
 /** Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
@@ -29,9 +30,8 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization, Dispa
     try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId: identity.scopeId,
       resource: { kind: policyResources.attempt.kind, id: identity.attemptId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
 }
 
@@ -41,7 +41,7 @@ export class DispatchInventoryPolicyAuthorization implements DispatchInventoryAu
     let decision;
     try { decision = evaluatePolicy(await this.source.load(), { principal, action: policyResources.scope.actions[0], scopeId, resource: { kind: policyResources.scope.kind, id: scopeId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
 }

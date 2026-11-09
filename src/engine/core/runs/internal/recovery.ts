@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema, type AttemptIdentity } from '#domain/index.js';
 import { authenticate, AuthenticationError, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import { isAuthorizationRefusal } from '#platform/index.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 import type { DispatchApplication, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { RunAuthorization } from './application.js';
@@ -74,7 +75,7 @@ export class CancellationRecoveryApplication {
         } catch (error) {
           outcome = { attemptId: identity.attemptId, taskId: identity.taskId,
             status: error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
-              && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable' };
+              && isAuthorizationRefusal(error.code, { include: ['policy-denied', 'approval-unsupported', 'scope-unknown'] })) ? 'denied' : 'unavailable' };
           outcomes[index] = Object.freeze({ identity, outcome, reason: failureReason(error) });
           continue;
         }

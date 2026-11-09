@@ -1,6 +1,7 @@
 import { delegationWithin, evaluatePolicy, policyResources, policySchema, type VerifiedPrincipal } from '#domain/index.js';
 import { modelActivationTargetId, modelCatalogTargetId, type ModelActivationAuthorizer, type ModelCatalogAuthorizer } from '#engine/core/model-activation/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 
 /** Stable reference target, separate from the mutable native semantic binding held by activation state. */
 export class ModelActivationPolicyAuthorization implements ModelActivationAuthorizer {
@@ -12,9 +13,8 @@ export class ModelActivationPolicyAuthorization implements ModelActivationAuthor
       decision = evaluatePolicy(await this.source.load(), { principal, scopeId: target.scopeId, action,
         resource: { kind: policyResources.modelActivation.kind, id: modelActivationTargetId(target.reference) } });
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
     if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
     return Object.freeze({ revision: decision.revision, ruleId: decision.ruleId });
   }
@@ -36,8 +36,8 @@ export class ModelCatalogPolicyAuthorization implements ModelCatalogAuthorizer {
       if (level === 'installation') installation = delegationWithin(policySchema.parse(policy), principal, [{ id: 'model-catalog-facts', effect: 'allow',
         actions: [action], scopes: 'all', resource: { kind: policyResources.modelActivation.kind, ids: [id] } }]).ok;
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow' || !installation) throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal || !installation) throw new PolicyAuthorizationError(refusal ?? 'POLICY_DENIED');
     if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
     return Object.freeze({ revision: decision.revision, ruleId: decision.ruleId });
   }

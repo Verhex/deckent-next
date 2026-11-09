@@ -1,6 +1,7 @@
 import type { AttemptIdentity } from '#domain/index.js';
 import type { DispatchApplication } from '#engine/core/dispatch/index.js';
 import { AuthenticationError } from '#engine/core/authentication/index.js';
+import { isAuthorizationRefusal } from '#platform/index.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 import { cancellationDeliveryLimitsSchema, type CancellationDeliveryStore, type CancellationDeliveryLimits } from './delivery-port.js';
 import type { RunCancellationDispatchStore, RunCancellationOutcome } from './cancellation.js';
@@ -28,7 +29,7 @@ export class CancellationDeliveryWorker {
           let outcome: 'terminal' | 'prevented' | 'unresolved' | 'denied' | 'unavailable';
           try { outcome = (await this.dispatch.cancel(record.request, credential)).kind; }
           catch (error) { onFailure?.(error); outcome = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
-            && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable'; }
+            && isAuthorizationRefusal(error.code, { include: ['policy-denied', 'approval-unsupported', 'scope-unknown'] })) ? 'denied' : 'unavailable'; }
           persisted = await this.store.finishCancellationDelivery({ ...input, now: this.runtime.now(), outcome });
         }
         status = persisted.state === 'terminal' || persisted.state === 'prevented' ? persisted.state : persisted.lastOutcome ?? 'unresolved';
@@ -37,7 +38,7 @@ export class CancellationDeliveryWorker {
     } catch (error) {
       onFailure?.(error);
       status = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
-        && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable';
+        && isAuthorizationRefusal(error.code, { include: ['policy-denied', 'approval-unsupported', 'scope-unknown'] })) ? 'denied' : 'unavailable';
     }
     // Durable intent plus recorded terminal evidence settle the bound task; a failed settlement never changes the delivery status.
     let settlement: RunCancellationOutcome['settlement'];

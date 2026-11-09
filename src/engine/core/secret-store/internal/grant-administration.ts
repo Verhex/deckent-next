@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policyResources, type AuthorityDecisionSubject, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import type { SecretGrantStore } from './grant.js';
 import { assertPublicSecretName } from './protection.js';
 import { isSecretName } from './port.js';
@@ -47,8 +48,8 @@ export async function decideSecretGrant(request: SecretGrantRequest, ports: Secr
     inputDigest: hash('secret-grant:1', { installationId: ports.anchor.installationId, projectId: ports.anchor.projectId, name, source: request.source, action: request.action }),
     basisDigest: null, policyDigest: hash('policy:1', ports.policy),
     verdict: { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason, ...(verdict.ruleId === undefined ? {} : { ruleId: verdict.ruleId }) } }, atMs);
-  if (verdict.decision === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
-  if (verdict.decision !== 'allow') throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: 'set', name } });
+  const refusal = policyVerdictRefusal(verdict.decision, { deny: 'SECRET_CHANGE_DENIED' });
+  if (refusal) throw ErrorRegistry.createError(refusal, refusal === 'SECRET_CHANGE_DENIED' ? { params: { action: 'set', name } } : {});
   return ports.store.update(current => {
     const others = current.grants.filter(grant => grant.name !== name);
     return request.action === 'revoke' ? others : [...others, { name, scopeId, by: { issuer: principal.issuer, subject: principal.subject }, atMs,
@@ -82,6 +83,6 @@ export function decideProjectVaultHandover(request: Omit<SecretGrantRequest, 'na
     inputDigest: hash('secret-vault-handover:1', { installationId: ports.to.installationId, projectId: ports.to.projectId, from: ports.from.binding, to: ports.to.binding }),
     basisDigest: null, policyDigest: hash('policy:1', ports.policy),
     verdict: { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason, ...(verdict.ruleId === undefined ? {} : { ruleId: verdict.ruleId }) } }, ports.now());
-  if (verdict.decision === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
-  if (verdict.decision !== 'allow') throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: 'set', name: PROJECT_VAULT.handoverResourceId } });
+  const refusal = policyVerdictRefusal(verdict.decision, { deny: 'SECRET_CHANGE_DENIED' });
+  if (refusal) throw ErrorRegistry.createError(refusal, refusal === 'SECRET_CHANGE_DENIED' ? { params: { action: 'set', name: PROJECT_VAULT.handoverResourceId } } : {});
 }

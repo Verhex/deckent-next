@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES, ERROR_DEFINITION_FRAGMENTS, ErrorRegistry, isAuthorizationRefusal, launchRefusal, mergeErrorDefinitions, type AuthorizationRefusal,
+import { ERROR_CODES, ERROR_DEFINITION_FRAGMENTS, ErrorRegistry, isAuthorizationRefusal, launchRefusal, mergeErrorDefinitions, PERSON_AUTHORIZATION_REFUSALS, type AuthorizationRefusal,
   type ErrorDefinition } from '../../../src/platform/index.js';
-import { ENVIRONMENT_UNCERTAIN_CODE } from '../../../src/domain/index.js';
+import { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_TIMED_OUT_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '../../../src/domain/index.js';
 import { classifyLaunchRefusal } from '../../../src/engine/index.js';
 
 const definition = (message: string): ErrorDefinition => ({ category: 'error', render: () => ({ message }) });
@@ -42,10 +42,16 @@ describe('error registry family fragments', () => {
       [['policy-denied', 'approval-denied'], [P, D]], [['delivery'], ['DELIVERY_WORKING_TREE_DENIED', 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED']]];
     for (const [include, codes] of sets) expect(ERROR_CODES.filter(code => isAuthorizationRefusal(code, { include })).sort(), include.join()).toEqual([...codes].sort());
     expect([isAuthorizationRefusal('ENTERPRISE_POLICY_DENIED', { include: ['policy-denied'] }), isAuthorizationRefusal(undefined, { include: ['policy-denied'] })]).toEqual([false, false]);
+    // B2-1: the one person-facing class (owner 2026-11-09); the delivery refusals join it (traced: they reach no classifier today).
+    expect(ERROR_CODES.filter(code => isAuthorizationRefusal(code, { include: PERSON_AUTHORIZATION_REFUSALS })).sort()).toEqual([P, A, S, D, 'DELIVERY_WORKING_TREE_DENIED', 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED'].sort());
     // S2-e4: over every registered code, `classifyLaunchRefusal` (its private sets) agrees with the registry field; an environment refusal carries its requirement.
     const disposition = (code: string) => classifyLaunchRefusal({ code, params: { requirement: 'r', ...(code === ENVIRONMENT_UNCERTAIN_CODE ? { probe: 'p' } : {}) } }).disposition;
     expect(Object.fromEntries(ERROR_CODES.map(code => [code, disposition(code)]).filter(([, value]) => value !== 'transient')))
       .toEqual(Object.fromEntries(ERROR_CODES.flatMap(code => launchRefusal(code) ? [[code, launchRefusal(code)]] : [])));
-    expect(ERROR_CODES.filter(code => launchRefusal(code) === 'permanent')).toHaveLength(16);
+    // The closure classifier reads the registry field, so the parity above holds by construction; the membership itself is pinned here.
+    expect([ERROR_CODES.filter(code => launchRefusal(code) === 'permanent').sort(), ERROR_CODES.filter(code => launchRefusal(code) === 'held')]).toEqual([['EXECUTION_NOT_CONFIGURED',
+      'EXECUTION_HOST_UNSUPPORTED', 'EXECUTION_PROFILE_INVALID', 'DISPATCH_ARTIFACT_REQUIRED', 'HUB_SKILL_FILES_UNAVAILABLE', 'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
+      'PATCH_WORKING_TREE_SUBFOLDER', 'PATCH_WORKING_TREE_FILTER', 'PATCH_WORKING_TREE_GIT_VERSION', 'PATCH_WORKING_TREE_LISTING_LIMIT', 'PATCH_WORKING_TREE_UNSUPPORTED',
+      ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE, 'SIWC_WORKER_ISOLATION_UNAVAILABLE', 'SIWC_APP_SERVER_AUTH_UNAVAILABLE'].sort(), [ENVIRONMENT_TIMED_OUT_CODE]]);
   });
 });

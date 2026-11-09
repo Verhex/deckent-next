@@ -242,6 +242,8 @@ describe('DeliverySummaryApplication (authorized reads only)', () => {
     const ok = await app().application.describe(request, principal);
     expect(ok).toMatchObject({ outcome: { state: 'unavailable' }, model: { state: 'unavailable' }, tests: { verification: { state: 'available', runId: 'queue-verify-1', phase: 'accepted' } } });
     expect((await app({ change: deny }).application.describe(request, principal))?.change).toEqual({ state: 'withheld' });
+    // B2-1: the change source's refusals are the one person-facing class (a scope refusal included), not only POLICY_DENIED.
+    expect((await app({ change: () => Promise.reject(Object.assign(new Error('SCOPE_UNKNOWN'), { code: 'SCOPE_UNKNOWN' })) }).application.describe(request, principal))?.change).toEqual({ state: 'withheld' });
     expect((await app({ change: async () => null }).application.describe({ ...request, verificationRunId: null }, principal))).toMatchObject({ change: { state: 'unavailable' },
       tests: { verification: { state: 'unavailable' } } });
     await expect(app({ change: () => Promise.reject(new Error('STORE_BROKEN')) }).application.describe(request, principal)).rejects.toThrow('STORE_BROKEN');
