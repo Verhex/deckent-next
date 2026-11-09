@@ -800,7 +800,15 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/principal",
-        "src/domain/core/approval",
+        "src/domain/core/approval"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/policy-template": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
         "src/domain/core/audit",
         "src/domain/core/recovery",
         "src/domain/core/agent-tool"
@@ -906,7 +914,8 @@
         "src/platform/core/integrity",
         "src/domain/core/approval",
         "src/domain/core/command",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/policy-template"
       ],
       "plan": "SECURITY"
     },
@@ -1671,7 +1680,8 @@
         "src/engine/core/system-policy-rows",
         "src/capabilities/core/native-agent-execution",
         "src/domain/core/worker-event",
-        "src/engine/core/uninstall"
+        "src/engine/core/uninstall",
+        "src/domain/core/policy-template"
       ],
       "plan": "INSTALLATION"
     },
@@ -2652,7 +2662,8 @@
         "src/domain/core/adapter-registry",
         "src/capabilities/core/native-agent-execution",
         "src/platform/core/errors",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/domain/core/policy-template"
       ],
       "plan": "SECURITY"
     },
@@ -3959,7 +3970,8 @@
         "src/domain/core/policy",
         "src/domain/core/recovery",
         "src/engine/core/recovery",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/domain/core/policy-template"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4190,7 +4202,6 @@
         "src/platform/core/config",
         "src/platform/core/common",
         "src/platform/core/host",
-        "src/domain/core/policy",
         "src/engine/core/setup",
         "src/engine/core/identity-profile",
         "src/engine/core/project-instructions",
@@ -4204,7 +4215,8 @@
         "src/surfaces/core/cli-admin",
         "src/engine/core/installation",
         "src/engine/core/worker-setup",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/domain/core/policy-template"
       ],
       "plan": "INSTALLATION",
       "ink": true
@@ -5424,7 +5436,8 @@
         "src/domain/core/audit",
         "src/platform/core/integrity",
         "src/engine/core/policy",
-        "src/engine/core/installation"
+        "src/engine/core/installation",
+        "src/domain/core/policy-template"
       ],
       "plan": "INSTALLATION"
     },
@@ -5541,7 +5554,7 @@
     "maxLinesPerFile": 1500,
     "packageLines": {
       "platform": 25000,
-      "domain": 11250,
+      "domain": 11300,
       "capabilities": 25000,
       "engine": 60000,
       "adapters": 42167,

@@ -1,8 +1,7 @@
 import { catalogAggregatorPrincipalRef, isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, recoveryPrincipalRef } from '#domain/core/principal/index.js';
 import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
-import { bindingsFileSchema, policyFileSchema, policyGrantSchema, principalGrants, resolvePolicyBindings, type PolicyFile, type PolicyGrant } from './schema.js';
-import { policyResources } from './vocabulary.js';
-import { POLICY_CHANGE_MAX, policyChangeSchema, type PolicyChange } from './administer.js';
+import { anchorsPerson, namesPerson, bindingsFileSchema, policyFileSchema, policyGrantSchema, principalGrants, resolvePolicyBindings, policyResources,
+  POLICY_CHANGE_MAX, policyChangeSchema, type PolicyFile, type PolicyGrant, type PolicyChange } from '#domain/core/policy/index.js';
 import { RECOVERY_ACTIONS } from '#domain/core/audit/index.js';
 import { RECOVERY_DECISION_ACTIONS, RECOVERY_ROLLOUT } from '#domain/core/recovery/index.js'; import { aiSettingResourceIds } from '#domain/core/agent-tool/index.js';
 
@@ -181,7 +180,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
 }
-export const firstRunBindingsRevision = (policyRevision: string) => `${policyRevision}-bindings`; // the template's own bindings revision
+export const firstRunBindingsRevision = (policyRevision: string) => `${policyRevision}-bindings`;
 /** Key-order independent JSON of a parsed document (both sides went through the same schema). */
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
   ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
@@ -242,8 +241,6 @@ type AdditionNames = V19Names & { readonly proposeMcpToolName: string; readonly 
   readonly executionEnvironmentIds: readonly string[];
   /** v16: the measured lost-worker rules at their seed version (absent: no promotion cell). */
   readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[]; readonly scopeId?: string; /** alpha.64: only the current (v20) delta, /policy's re-enable. */ readonly only?: 'ai-proposals'; /** alpha.64: the AI actor's effective grants the v20 skip reads (absent: the file's rules). */ readonly aiGrants?: readonly PolicyGrant[] };
-/** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
-export const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
  * The first-run v4 → v5 additions (owner 2026-10-07): over any v2 policy that carries the template's `first-run-read-tools` rule naming this person
  * explicitly (a rule for `all` principals does not count)
@@ -312,27 +309,6 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     change: policyChangeSchema.parse({ schemaVersion: 1, changes: batch.map(grant => ({ kind: 'grant.add', grant })) }) });
 }
 
-/** An allow rule that names this person explicitly in exactly this scope (its scopes list it; `all` scopes or `all` principals never count). */
-export const anchorsPerson = (grant: PolicyGrant, person: Person, scopeId: string) => grant.effect === 'allow' && namesPerson(grant, person)
-  && grant.scopes !== 'all' && grant.scopes.includes(scopeId);
-/**
- * The people a v2 policy explicitly names on an allow rule of this scope (first appearance order, distinct, at most `limit`): the display hint
- * the installer's refusal gives its file owner, who may read these files anyway. Nothing here grants anything; `all` principals are skipped.
- */
-export function policyNamedPeople(current: unknown, scopeId: string, limit: number): readonly Person[] {
-  const parsed = policyFileSchema.safeParse(current);
-  if (!parsed.success || parsed.data.schemaVersion !== 2) return Object.freeze([]);
-  const people: Person[] = [];
-  for (const grant of parsed.data.grants) {
-    if (grant.effect !== 'allow' || grant.principals === 'all' || grant.scopes === 'all' || !grant.scopes.includes(scopeId)) continue;
-    for (const item of grant.principals) {
-      if (isWorkloadPrincipalRef(item)) continue;
-      if (people.length >= limit) return Object.freeze(people);
-      if (!people.some(held => held.issuer === item.issuer && held.subject === item.subject)) people.push(Object.freeze({ issuer: item.issuer, subject: item.subject }));
-    }
-  }
-  return Object.freeze(people);
-}
 export type NamedPersonAdditions = Extract<FirstRunTemplateAdditions, { readonly status: 'plan' | 'current' }>
   | { readonly status: 'unavailable'; readonly reason: 'person-not-named' | 'invalid' };
 /**
