@@ -6,7 +6,7 @@ import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } f
 import { cardCopy, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, type TerminalThemeRequest, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
-import { parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, surfaceFollowLine, type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion, WorklinePaletteProvider, useWorklinePalette, useWorklineWatch, useSurfacePushFeed } from '#surfaces/core/terminal-kit-ink/index.js';
+import { parseSlashLine, keepsTypedArgument, type LocalSlashCommand, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, surfaceFollowLine, type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion, WorklinePaletteProvider, useWorklinePalette, useWorklineWatch, useSurfacePushFeed } from '#surfaces/core/terminal-kit-ink/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, AssistantLive, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render-ink/index.js';
@@ -22,6 +22,7 @@ import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/i
 import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
   WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
+import { turnRefusal } from './turn-refusal.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, type ComposerLabels, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -221,6 +222,11 @@ function useLedgerBuffer(historyLimit: number) {
   }, [buffer.pending.length]);
   return { buffer, push, reset, hold };
 }
+/** Commands answered by an optional line port (`props.mcp`, `props.monitor`, ...); the answer is one notice, or the part-unavailable line. */
+const LINE_PORT_COMMANDS: ReadonlySet<string> = new Set(['mcp', 'monitor', 'config', 'provider', 'theme', 'policy', 'hub']);
+const SESSION_COMMANDS = ['resume', 'context', 'clear', 'rename'] as const;
+const isSessionCommand = (command: string): command is typeof SESSION_COMMANDS[number] => (SESSION_COMMANDS as readonly string[]).includes(command);
+
 export function WorklineApp(props: WorklineProps) {
   const { labels, target, systemPrompt, historyMessages, completeTurn, errorText, ledger } = props;
   const palette = useWorklinePalette();
@@ -476,16 +482,16 @@ export function WorklineApp(props: WorklineProps) {
         push(assistantLedgerEntries(renderCompleteReply(humanRecordText(reply, props.knownSecrets), startedAtMs, Date.now())));
       } serviceStarted.current = false;
     } catch (error) {
-      const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
-      const waitsForModel = code === 'TERMINAL_CHAT_NOT_CONFIGURED' && !signal.aborted && await onboarding.usable();
-      history.current = (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService) || waitsForModel ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
+      const { next } = turnRefusal(error);
+      const waitsForModel = next === 'draft' && !signal.aborted && await onboarding.usable();
+      history.current = (next === 'start-service' && props.startService) || waitsForModel ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
       // Owner 2026-11-02: keep the unsent draft and name /provider without opening a card.
       if (waitsForModel) { push([notice('info', props.onboarding!.modelDraft)]); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })); return; }
-      if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
+      if (next === 'start-service' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
         const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
         if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
       push([notice('error', errorText(error))]);
-      if (props.spending && props.info && !signal.aborted && (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN')) {
+      if (props.spending && props.info && !signal.aborted && next === 'show-spending') {
         try { await infoWindow.show(await props.spending(), props.info.labels, signal); }
         catch (failure) { push([notice('error', errorText(failure))]); }
       }
@@ -517,9 +523,24 @@ export function WorklineApp(props: WorklineProps) {
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = onboarding.intent(execution.input.inputId)?.destination === 'chat' ? null : parseSlashLine(line);
     if (!slash) { try { await runTurn(line, mentioned, execution); } finally { onboarding.settled(execution.input.inputId); } return true; }
-    if (slash.command === 'setup') { if (await onboarding.usable()) await openSetup.current(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
-    if (slash.command === 'do') {
-      if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
+    // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
+    const rich = labels.windows;
+    const unavailable = (): boolean => { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; };
+    if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
+      const typed = slash.command, nearest = nearestSlashCommand(typed, WORKLINE_SLASH_COMMANDS, labels.composer.slash); // owner S4: one nearest English command, never a guess
+      const choice = await windows.ask(unknownCommandSpec(rich, typed, nearest ? [nearest] : [], command => labels.composer.slash[command.descriptionKey] ?? ''));
+      if (choice !== null && !execution.signal.aborted) return performRef.current(`/${choice}`, [], execution);
+      return true;
+    }
+    // SW-1 info windows; SLASH-WINDOWS D1 (integration): the rich terminal ignores a typed argument and opens the window, as every other slash
+    // command there does; without window words (TERM=dumb) a typed argument keeps the text command.
+    if (props.info && (rich || !slash.args || slash.command === 'help') && INFO_WINDOW_COMMANDS.has(slash.command)) {
+      const shown = await infoWindow.run(slash.command, execution, slash.args);
+      if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
+    }
+    if (await settings.open(slash.command, rich && slash.command === 'mode' ? '' : slash.args, execution)) return true;
+    const doCommand = async (): Promise<boolean> => {
+      if (!props.doPlan) return unavailable();
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
         hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
@@ -552,25 +573,26 @@ export function WorklineApp(props: WorklineProps) {
         await handOff(result.run ? [result.run] : [], execution);
       } catch (error) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
-        if (!execution.signal.aborted && props.doPlan.localFallback && props.doPlan.here && await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { // owner option A: K1 data, K4 card, K5 every time
+        const { code: refused, next } = turnRefusal(error);
+        if (!execution.signal.aborted && props.doPlan.localFallback && props.doPlan.here && await props.doPlan.offerHere?.(refused)) { // owner option A: K1 data, K4 card, K5 every time
           onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; const here = props.doPlan.here, tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
           const chat = Boolean(sessionModel.pinned()) || (await props.doPlan.chatReady?.().catch(() => false) ?? true);
           if (!chat) { push([notice('info', here.noModel)]); return true; }
           // Owner 2026-11-02: terminal execution is the default; the host's policy/pause answer still owns admission.
-          if (execution.signal.aborted || !await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { push([notice('info', here.cancelled)]); return true; }
+          if (execution.signal.aborted || !await props.doPlan.offerHere?.(refused)) { push([notice('info', here.cancelled)]); return true; }
           push([notice('info', here.effect), ...(tools === false && props.doPlan.localNoTools ? [notice('info', props.doPlan.localNoTools)] : [])]);
           push([notice('info', props.doPlan.localFallback)]); const before = await props.doPlan.tree?.().catch(() => null) ?? null; // K5: partial folder observations, not attributed effects
           await runTurn(slash.args.trim(), mentioned, execution).finally(async () => push([notice('info', treeChangeLine(before, before?.state === 'unknown' ? null : await props.doPlan!.tree?.().catch(() => null) ?? null, here))])); return true;
         }
-        if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
+        if (!execution.signal.aborted) await show([errorText(error)]); else if (next !== 'cancelled') push([notice('error', errorText(error))]);
       }
       finally { setPlanning(false); setPlanWait(null); setDoRunning(false); setActiveDo(null); }
       return true;
-    }
-    if (slash.command === 'deliver') {
+    };
+    const deliverCommand = async (): Promise<boolean> => {
       // TESLIM-PENCERESI: a picker of tasks awaiting delivery (fresh /runs read model plus this session's Runs); the chosen window takes focus.
       const words = labels.delivery;
-      if (!deliveries.available || !words || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
+      if (!deliveries.available || !words || !ledger) return unavailable();
       try {
         const targets = await deliveries.offered(deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)])); // M-33: set-aside rows last
         if (!targets.length) {
@@ -583,27 +605,14 @@ export function WorklineApp(props: WorklineProps) {
         if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
       } catch (error) { push([notice('error', errorText(error))]); }
       return true;
-    }
-    if (slash.command === 'copy') {
-      push([labels.copy ? (copied => notice(copied.level, copied.text))(runCopyCommand(slash.args, history.current, props.clipboard, labels.copy, props.knownSecrets)) : notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]);
+    };
+    const copyCommand = async (): Promise<boolean> => {
+      if (!labels.copy) return unavailable();
+      const copied = runCopyCommand(slash.args, history.current, props.clipboard, labels.copy, props.knownSecrets);
+      push([notice(copied.level, copied.text)]);
       return true;
-    }
-    // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
-    const rich = labels.windows;
-    if (slash.command === 'uninstall') { await uninstallWindow(); return true; }
-    if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
-      const typed = slash.command, nearest = nearestSlashCommand(typed, WORKLINE_SLASH_COMMANDS, labels.composer.slash); // owner S4: one nearest English command, never a guess
-      const choice = await windows.ask(unknownCommandSpec(rich, typed, nearest ? [nearest] : [], command => labels.composer.slash[command.descriptionKey] ?? ''));
-      if (choice !== null && !execution.signal.aborted) return performRef.current(`/${choice}`, [], execution);
-      return true;
-    }
-    // SW-1 info windows; SLASH-WINDOWS D1 (integration): the rich terminal ignores a typed argument and opens the window, as every other slash
-    // command there does; without window words (TERM=dumb) a typed argument keeps the text command.
-    if (props.info && (rich || !slash.args || slash.command === 'help') && INFO_WINDOW_COMMANDS.has(slash.command)) {
-      const shown = await infoWindow.run(slash.command, execution, slash.args);
-      if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
-    }
-    if (slash.command === 'reasoning') {
+    };
+    const reasoningCommand = async (): Promise<boolean> => {
       const offSupported = await props.panels?.ports.model?.reasoningOffSupported?.(sessionModel.pinned()).catch(() => false) ?? false;
       if (!rich) {
         const wantsOff = slash.args.trim().toLowerCase() === 'off' || (!slash.args.trim() && reasoning.current.current);
@@ -613,29 +622,35 @@ export function WorklineApp(props: WorklineProps) {
       const choice = await windows.ask(reasoningSpec(rich, reasoning, offSupported));
       if (isReasoningChoice(choice)) reasoning.set(choice);
       return true;
-    }
-    if (await settings.open(slash.command, rich && slash.command === 'mode' ? '' : slash.args, execution)) return true;
-    if (slash.command === 'scratch' && rich && props.scratch) {
+    };
+    const scratchCommand = async (): Promise<boolean> => {
+      if (!rich || !props.scratch) { await scratch(slash.args); return true; }
       const port = props.scratch, words = rich.scratch;
       const confirm = async (summary: { count: number; bytes: number; path: string }) => (await panel.pick(execution, { kind: 'window', title: words.clearTitle,
         body: [fillTemplate(words.clearBody, summary)], hints: words.clearPrompt, confirm: true }, ['allow', 'deny'])) === 'allow';
       try { await runScratchWindow({ port, sessionId: session.id(), words: rich, ask: windows.ask, confirm, push, clearedText: labels.scratch?.cleared, signal: execution.signal }); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
-    }
-    if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
+    };
+    const commands: Readonly<Record<LocalSlashCommand, () => Promise<boolean>>> = {
+      setup: async () => { if (!await onboarding.usable()) return unavailable(); await openSetup.current(execution.signal); return true; },
+      do: doCommand, deliver: deliverCommand, copy: copyCommand, reasoning: reasoningCommand, scratch: scratchCommand,
+      uninstall: async () => { await uninstallWindow(); return true; }, mode: async () => { await mode.run(slash.args); return true; },
+    };
+    // The one dispatcher for what the workline answers itself: a name in LOCAL_SLASH_COMMANDS has exactly one handler.
+    if (Object.hasOwn(commands, slash.command)) return commands[slash.command as LocalSlashCommand]();
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, usage, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     const showLive = (kind: Parameters<typeof liveWin.show>[0]) => liveWin.show(kind, parseSlashLine(execution.input.text)?.command === 'do' ? 'background' : 'foreground');
     if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: { ...liveWin, show: showLive }, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable, onRunsSeen: completion.dismiss })) return true;
     // T4: `/provider` and `/hub` are windows only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'theme' || slash.command === 'policy' || slash.command === 'hub' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+    if (LINE_PORT_COMMANDS.has(slash.command) || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
       try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
-    if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear' || slash.command === 'rename') {
+    if (isSessionCommand(slash.command)) {
       try {
         const sessionResult = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
         const result = slash.command === 'context' ? { ...sessionResult, entries: [...sessionResult.entries, ...instructions.sourceLines().map(line => notice('info', line))] } : sessionResult;

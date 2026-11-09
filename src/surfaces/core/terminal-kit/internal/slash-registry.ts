@@ -77,6 +77,10 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help', typedArgument: true },
 ]);
 
+/** The commands the workline answers in its own process (it owns their handler); every other registry name goes to a port or a work window. One name, one handler. */
+export const LOCAL_SLASH_COMMANDS = Object.freeze(['setup', 'do', 'deliver', 'copy', 'uninstall', 'reasoning', 'scratch', 'mode'] as const);
+export type LocalSlashCommand = typeof LOCAL_SLASH_COMMANDS[number];
+
 /**
  * Names alpha.54 terminal lanes may still register. They are held out of `WORKLINE_SLASH_COMMANDS` until their behaviour exists, so the palette
  * and `/help` never list a command that does nothing; the lane that lands the behaviour moves its name into the registry and out of this list.

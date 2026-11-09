@@ -100,13 +100,15 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
   return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
+const homeOf = (env: NodeJS.ProcessEnv): string | undefined => env['HOME'] ?? env['USERPROFILE'];
+
 /**
  * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
  * a list (TERM=dumb) there are none and the slash commands stay the text commands.
  */
 function panelProps(root: string, scopeId: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv, config: { cli: { invocationInputMaxBytes: number }; approvals: { sessionTtlMs: number } }) {
   if (pickerNeedsTextFallback(env, true)) return {};
-  const providerConnect = context.providerConnect;
+  const providerConnect = context.providerConnect, grantCard = context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, homeOf(env)) : undefined;
   // Stage 1: the scope budget window (create / change) in `/model` and `/provider`, when the host binds the spend read and the governed command.
   const budget = context.inspectProviderSpendAccount && context.manageProviderSpend ? { budget: budgetPanelPort(root, scopeId, { inspectProviderSpendAccount: context.inspectProviderSpendAccount,
     manageProviderSpend: context.manageProviderSpend }, options, locale, error => errorText(error, locale)) } : {};
@@ -125,13 +127,13 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
         capability: colorCapability({ env, isTTY: true, argv: process.argv }), colorfgbg: env['COLORFGBG'], ...control }) } : {}),
     ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation, context.upgradePolicyTemplate) } : {}),
     ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
-    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}),
+    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, grantCard) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), grantCard) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
     // PRE-8 v2: the same first-use card as the chat turn when a model list, a model connection or a just-stored key needs a grant here.
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
-      context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined), ...budget, ...cache } } : {}) } } };
+      grantCard), ...budget, ...cache } } : {}) } } };
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
@@ -401,7 +403,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const theme: TerminalThemeRequest = { setting: presentation.theme ?? TERMINAL_THEME_SETTINGS[0], capability: colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), colorfgbg: env['COLORFGBG'] };
   const palette = () => terminalPalette(theme.setting, theme.capability, theme.colorfgbg, reportedTerminalBackground());
   const ascii = prefersAsciiGlyphs(env);
-  const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
+  const home = homeOf(env), where = shortenHomePath(root, home);
   const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
