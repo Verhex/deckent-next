@@ -7,5 +7,7 @@ export type { HandoffDeliveryLimits } from './internal/handoff.js';
 export { handoffStartRecordSchema, handoffEventCommandId, readAttemptHandoffEvents, recordAttemptHandoffStart } from '#engine/core/handoff-observation/index.js';
 export type { HandoffStartRecord, HandoffStartEvent } from '#engine/core/handoff-observation/index.js';
 export { HandoffError, evaluateHandoff, verifyAcceptedHandoffSource } from '#engine/core/handoff-observation/index.js';
-export { prepareTaskStart, withheldBaseStart } from './internal/start.js';
+export { prepareTaskStart, prepareOpenedTaskStart, withheldBaseStart } from './internal/start.js';
 export { recordHandoffRefusal } from './internal/refusal.js';
+export { TaskStartApplication } from './internal/open.js';
+export type { TaskStartContext } from './internal/open.js';

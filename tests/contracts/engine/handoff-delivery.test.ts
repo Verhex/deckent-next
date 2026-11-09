@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
-import { TaskEvaluationApplication, TaskHandoffApplication, TaskPatchStartApplication, recordAttemptHandoffStart, readAttemptHandoffEvents,
+import { prepareTaskStart, prepareOpenedTaskStart, TaskStartApplication, TaskEvaluationApplication, TaskHandoffApplication, TaskPatchStartApplication, recordAttemptHandoffStart, readAttemptHandoffEvents,
   HandoffError, recordHandoffRefusal, RunInspectionApplication } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -39,7 +39,7 @@ async function fixture(mode: 'valid' | 'invalid' | 'absent' = 'valid', verdict: 
   const root = await mkdtemp(join(tmpdir(), 'handoff-delivery-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: () => 100, timeoutMs: 1000 }, 'allow', custodyProfiles); stores.push(store);
   const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
-  const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: source.taskId, kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }, { id: 'b', kind: 'fixture', dependencies: [source.taskId], acceptanceCriteria: ['verified'] }, { id: 'c', kind: 'fixture', dependencies: ['b'], acceptanceCriteria: ['verified'] }], criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
+  const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: source.taskId, kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }, { id: 'b', kind: 'fixture', dependencies: [source.taskId], inputs: [{ name: 'code', taskId: source.taskId, output: 'code' }], acceptanceCriteria: ['verified'] }, { id: 'c', kind: 'fixture', dependencies: ['b'], acceptanceCriteria: ['verified'] }], criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
   await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: 'l' }, now: 0, graph, execution: fixtureExecution(graph), policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: [source.taskId, 'b', 'c'] } });
   await store.reserveRunTasks({ commandId: 'reserve-a', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [source] });
@@ -70,6 +70,38 @@ describe('sealed report to accepted dependent', () => {
     const view = await new RunInspectionApplication(f.store, verifier, { async authorize() {} }).inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' });
     expect(view!.tasks.find(task => task.id === 'b')!.handoffs).toHaveLength(1);
     expect(await new TaskPatchStartApplication(f.store, f.artifacts, verifier, authorization, 65536).resolve(target)).toEqual([]);
+    const port = { put: f.artifacts.put.bind(f.artifacts), read: f.artifacts.read.bind(f.artifacts),
+      async prepareReadOnlyFile(scope: string, receipt: import('#capabilities/index.js').ArtifactReceipt) {
+        return { path: join(f.root, receipt.digest), bytes: await f.artifacts.read(scope, receipt) };
+      } };
+    const actions: string[] = [], actorCheck = vi.fn(async () => principal);
+    const policy = { async authorizeIdentity(action: string, identity: typeof target, actor: typeof principal) {
+      expect(actor).toEqual(principal); actions.push(action);
+      if (action === 'read-output') expect(identity).toEqual(source);
+    } };
+    const loaded = vi.spyOn(f.store, 'loadRun'), attempts = vi.spyOn(f.store, 'load');
+    const prepared = await prepareTaskStart(target, f.store, port, { verify: actorCheck }, policy, { artifacts: { maxInputs: 4, maxBytes: 65536 } });
+    expect(loaded).toHaveBeenCalledTimes(1); expect(attempts).toHaveBeenCalledTimes(1); expect(actorCheck).toHaveBeenCalledTimes(1);
+    expect(prepared.inputs).toHaveLength(1); expect(prepared.events).toEqual(start.events);
+    expect(actions.filter(action => action === 'execute')).toHaveLength(3);
+    expect(actions.filter(action => action === 'read-output')).toHaveLength(2);
+    for (const deniedAt of [1, 2, 3]) {
+      let executions = 0; loaded.mockClear();
+      const read = vi.spyOn(port, 'prepareReadOnlyFile');
+      await expect(prepareTaskStart(target, f.store, port, verifier, { async authorizeIdentity(action) {
+        if (action === 'execute' && ++executions === deniedAt) throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' });
+      } }, { artifacts: { maxInputs: 4, maxBytes: 65536 } })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      expect(executions).toBe(deniedAt);
+      expect(loaded).toHaveBeenCalledTimes(deniedAt === 1 ? 0 : 1);
+      if (deniedAt === 1) expect(read).not.toHaveBeenCalled();
+      read.mockRestore();
+    }
+    const context = await new TaskStartApplication(f.store, verifier, policy).open(target);
+    await expect(prepareOpenedTaskStart({ ...context }, f.store, port, policy, { artifacts: { maxInputs: 4, maxBytes: 65536 } }))
+      .rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+    await expect(prepareOpenedTaskStart(context, f.store, port, authorization, { artifacts: { maxInputs: 4, maxBytes: 65536 } }))
+      .rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+    loaded.mockRestore(); attempts.mockRestore();
   });
   it('invalid artifact note does not change acceptance or deliver handoff, but accepted shared notes remain', async () => {
     const f = await fixture('invalid');

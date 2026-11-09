@@ -9,18 +9,27 @@ import type { AttemptStore } from '#engine/core/attempts/index.js';
 import type { RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { DispatchError, type DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
-import { TaskInputApplication, selectTaskInputArtifact, TaskHandoffApplication, TaskPatchStartApplication
- } from '#engine/core/task-inputs/index.js';
+import { resolveTaskInputs, selectTaskInputArtifact } from './resolve.js';
+import { resolveTaskHandoff } from './handoff.js';
+import { resolveTaskPatches } from './patch-start.js';
+import { TaskStartApplication, assertTaskStartContext, type TaskStartContext } from './open.js';
 type StartArtifacts = ArtifactStore & { prepareReadOnlyFile(scopeId: string, receipt: import('#capabilities/index.js').ArtifactReceipt): Promise<{ path: string; bytes: Uint8Array }> };
 type StartStore = Partial<TaskHandoffEvidenceStore> & Pick<RunStore, 'loadRun'> & AttemptStore & RunBoundDispatchStore;
 type StartConfig = { artifacts: { maxInputs: number; maxBytes: number } };
 /** Trusted paths are prepared from exact ledger receipts; the engine owns accepted source selection. */
 export async function prepareTaskStart(identity: AttemptIdentity, store: StartStore, artifacts: StartArtifacts,
   verifier: PrincipalVerifier, authorization: DispatchIdentityAuthorization, config: StartConfig) {
-  const run = await store.loadRun(identity.scopeId, identity.runId);
+  const context = await new TaskStartApplication(store, verifier, authorization).open(identity);
+  return prepareOpenedTaskStart(context, store, artifacts, authorization, config);
+}
+/** Internal continuation of the authenticated open; never a wire-input entry point. */
+export async function prepareOpenedTaskStart(context: TaskStartContext, store: StartStore, artifacts: StartArtifacts,
+  authorization: DispatchIdentityAuthorization, config: StartConfig) {
+  assertTaskStartContext(context, store, authorization);
+  const { identity, run, principal } = context;
   const count = run?.graph.tasks.find(task => task.id === identity.taskId)?.inputs?.length ?? 0;
   if (count > config.artifacts.maxInputs) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
-  const declarations = count ? await new TaskInputApplication(store, verifier, authorization).resolve(identity) : [];
+  const declarations = await resolveTaskInputs(context, store, authorization);
   let remaining = config.artifacts.maxBytes;
   for (const { binding } of declarations) {
     if (binding.receipt.byteLength > remaining) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
@@ -36,12 +45,14 @@ export async function prepareTaskStart(identity: AttemptIdentity, store: StartSt
     }
     inputs.push({ ...selected, path: binding.output ? (await artifacts.prepareReadOnlyFile(identity.scopeId, selected.receipt)).path : prepared.path });
   }
-  const handoff = await new TaskHandoffApplication(store, verifier, authorization, artifacts, { maxBytes: Math.min(remaining, workerReportLimits.deliveredInputBytes),
-    maxSourceBytes: config.artifacts.maxBytes, maxSharedNotes: workerReportLimits.runSharedNotes, promptBytes: workerReportLimits.promptBytes }).resolve(identity);
+  await authorization.authorizeIdentity('execute', identity, principal);
+  const handoff = await resolveTaskHandoff(context, store, authorization, artifacts, { maxBytes: Math.min(remaining, workerReportLimits.deliveredInputBytes),
+    maxSourceBytes: config.artifacts.maxBytes, maxSharedNotes: workerReportLimits.runSharedNotes, promptBytes: workerReportLimits.promptBytes });
   if (inputs.some(input => input.name === '_handoff') && handoff.files.some(file => file.target.startsWith('/deckent/inputs/_handoff/'))) throw new HandoffError('HANDOFF_INVALID');
   const handoffInputs = [];
   for (const file of handoff.files) handoffInputs.push({ ...file, path: (await artifacts.prepareReadOnlyFile(identity.scopeId, file.receipt)).path });
-  const patches = await new TaskPatchStartApplication(store, artifacts, verifier, authorization, config.artifacts.maxBytes).resolve(identity);
+  await authorization.authorizeIdentity('execute', identity, principal);
+  const patches = await resolveTaskPatches(context, store, authorization, artifacts, config.artifacts.maxBytes);
   const answer = run?.progress.find(task => task.taskId === identity.taskId)?.inputAnswer;
   if (answer && (identity.generation !== answer.source.generation + 1 || identity.attemptId === answer.source.attemptId)) throw new HandoffError('HANDOFF_INVALID');
   const continuation = answer ? JSON.stringify({ kind: 'human-input-answer', ...answer }) : '';

@@ -1,11 +1,11 @@
-import { readWorkerModelPin, attemptIdentitySchema, attemptSnapshotSchema, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { readWorkerModelPin, attemptIdentitySchema, attemptSnapshotSchema, parseRun, sameAttemptIdentity } from '#domain/index.js';
 import { RunStoreError } from './store.js';
 import { assertRunExecution } from './registry.js';
 
 /** Select an admitted task template before workspace effects. Atomic launch remains the final fence. */
 export function selectReservedTaskProfile(runInput: unknown, attemptInput: unknown, identityInput: unknown) {
   const identity = attemptIdentitySchema.parse(identityInput);
-  const run = runSnapshotSchema.parse(runInput); const attempt = attemptSnapshotSchema.parse(attemptInput);
+  const run = parseRun(runInput); const attempt = attemptSnapshotSchema.parse(attemptInput);
   assertRunExecution(run.graph, run.execution);
   if (!sameAttemptIdentity(attempt.identity, identity) || !run.bindings.some(binding => sameAttemptIdentity(binding.identity, identity))
     || run.cancelRequested || attempt.cancelRequested || attempt.lastObservation !== null

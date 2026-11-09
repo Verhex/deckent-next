@@ -1,4 +1,4 @@
-import { evaluationAcceptanceSchema, runSnapshotSchema, type RunSnapshot } from '#domain/core/run/index.js';
+import { evaluationAcceptanceSchema, parseRun, type RunSnapshot } from '#domain/core/run/index.js';
 import { workerReportRefusal } from '#domain/core/worker-event/index.js';
 import { TaskEvaluationError, type TaskEvaluation } from './evaluation.js';
 
@@ -43,7 +43,7 @@ export function bindTaskAcceptance(run: RunSnapshot, evaluation: TaskEvaluation)
   return { ...evaluation, criteria, acceptance };
 }
 export function inspectAcceptanceConclusion(runInput: unknown, evaluation: TaskEvaluation): 'pass' | 'fail' | 'unknown' | null {
-  const run = runSnapshotSchema.parse(runInput);
+  const run = parseRun(runInput);
   const rebound = bindTaskAcceptance(run, evaluation);
   if (!rebound.acceptance) return null;
   if (JSON.stringify(rebound.acceptance) !== JSON.stringify(evaluation.acceptance)
