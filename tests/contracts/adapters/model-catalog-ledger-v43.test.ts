@@ -81,7 +81,7 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
       const first = await store.apply(admission(register));
       expect(first.replayed).toBe(false);
       expect(first.receipt.changes.map(change => `${change.kind}:${change.modelId ?? '-'}:${change.revision}`)).toEqual(['channel:-:1',
-        'model:claude-fable-5-1:1', 'model:claude-haiku-4-5-20251001:1', 'model:claude-haiku-5-5:1', 'model:claude-opus-5-5:1', 'model:claude-sonnet-5-5:1']);
+        'model:claude-fable-5-1:1', 'model:claude-fable-5-2:1', 'model:claude-haiku-4-5-20251001:1', 'model:claude-haiku-5-5:1', 'model:claude-opus-5-5:1', 'model:claude-sonnet-5-5:1']);
       expect(await store.apply(admission(register))).toEqual({ replayed: true, receipt: first.receipt });
       await expect(store.apply(admission({ ...register, scopeId: 's', catalog: { ...catalog, revision: 'other' } }))).rejects.toMatchObject({ code: 'MODEL_CATALOG_COMMAND_CONFLICT' });
       // Unchanged facts are not rewritten; a lifecycle change bumps only that model.
@@ -103,7 +103,7 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     const reader = await openSqliteModelCatalogReader(path, options);
     try {
       expect((await reader.channel(channel))?.channel).toMatchObject({ kind: 'native-cli', cli: 'claude' });
-      expect((await reader.models(channel)).map(entry => [entry.modelId, entry.model.lifecycle.state])).toEqual([['claude-fable-5-1', 'active'],
+      expect((await reader.models(channel)).map(entry => [entry.modelId, entry.model.lifecycle.state])).toEqual([['claude-fable-5-1', 'active'], ['claude-fable-5-2', 'active'],
         ['claude-haiku-4-5-20251001', 'retired'], ['claude-haiku-5-5', 'active'], ['claude-opus-5-5', 'active'], ['claude-sonnet-5-5', 'active']]);
       expect(await reader.activation('s', channel, null)).toMatchObject({ state: 'active', revision: 1 });
       expect(await reader.activation('s', channel, 'claude-sonnet-5-5')).toMatchObject({ state: 'active', revision: 1 });

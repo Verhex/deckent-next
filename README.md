@@ -264,6 +264,12 @@ from scratch yet ([known limits](docs/known-limits.md)).
 
 ### One-time setup
 
+The packaged Claude recommendations use Opus 5.5 for everyday work and
+[Fable 5.2](https://platform.claude.com/docs/en/models/fable-5-2/overview) for demanding reasoning.
+Fable 5.2 requires [Claude Code 2.1.321 or later](https://code.claude.com/docs/en/model-config).
+Fable 5.1 remains selectable in the catalog; registration and recommendations do not activate a model.
+Using Fable 5.1 for a role requires assigning that role explicitly with `deckent models roles set`.
+
 Work runs in a worker container, so Deckent needs a worker image, settings that say where work runs, a first kind of
 work and a worker pool. `deckent init` installs; the first time you open `deckent` its setup steps (`/setup`) prepare all
 four at your own terminal. Each step asks on a card and writes nothing until you confirm.

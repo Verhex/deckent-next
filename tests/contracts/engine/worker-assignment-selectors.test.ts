@@ -10,7 +10,7 @@ import { bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTem
 // tier/role registry (S2) ∩ the scope's catalog ∩ activation, then the unchanged worker admission; exact candidates must hold the worker role too.
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const claude = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
+const claude = { provider: 'claude', cliVersion: '2.1.321 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const template = { id: 'claude-t', version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation: claude } };
 const profile = { schemaVersion: 1, version: 1, criterionTypes: ['completion'], evidenceTypes: ['retained-artifact'],
   rubric: [{ criterionType: 'completion', evidenceTypes: ['retained-artifact'], weight: 1 }], ceilingRules: [], decisionThresholds: { rejectBelow: 0.5, acceptAt: 1 } };
@@ -66,10 +66,10 @@ it('PROOF: a new model added only as data (catalog row + role row + activation) 
   const execution = await assign(reader, policy), task = execution.tasks[0]!;
   expect(readWorkerModelPin(task.profile.parameters)!.pin).toEqual({ channelId: CHANNEL, modelId: id, auxiliaryModelIds: [] });
   const expansionDigest = createHash('sha256').update(JSON.stringify([{ role: 'worker', minTier: 'frontier' }, policy.revision, [[CHANNEL, id]]]), 'utf8').digest('hex');
-  expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'standard', version: 2 },
+  expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'work-classes-2026-11-09', candidatePolicy: { id: 'standard', version: 2 },
     candidateIndex: 3, channelId: CHANNEL, modelId: id, catalogRevision: packaged.revision, modelRevision: 7, activationRevision: 5,
     effort: { level: null, source: 'cli-default' },
-    selector: { roleRevision: JSON.stringify(['model-roles-2026-10-31', 'acme-roles-1']), expanded: 1, position: 0, expansionDigest },
+    selector: { roleRevision: JSON.stringify(['model-roles-2026-11-09', 'acme-roles-1']), expanded: 1, position: 0, expansionDigest },
     skipped: [{ index: 0, channelId: CHANNEL, modelId: 'claude-opus-5-5', reason: 'WORKER_MODEL_NOT_ACTIVE' },
       { index: 1, channelId: 'codex-cli-subscription', modelId: 'gpt-6.1-sol', reason: 'WORKER_CHANNEL_NOT_ACTIVE' },
       { index: 2, channelId: 'cursor-cli-subscription', modelId: 'claude-opus-5-thinking-high', reason: 'WORKER_CHANNEL_NOT_ACTIVE' }] });
@@ -87,13 +87,13 @@ it('PROOF: a new model added only as data (catalog row + role row + activation) 
 it('an exact candidate without the worker role is skipped typed (the bypass is closed); a choice that met no selector keeps the v1 seal', async () => {
   // An installation overlay withdraws the worker role from one Core row by compare-and-set.
   const policy = roles([roleRow('claude-opus-5-5', 'frontier', ['brain'], { version: 2, override: { previousVersion: 1 } })]);
-  const reader = catalog(['claude-opus-5-5', 'claude-fable-5-1']);
+  const reader = catalog(['claude-opus-5-5', 'claude-fable-5-2']);
   const execution = await assign(reader, policy), seal = execution.tasks[0]!.assignment!;
-  expect(seal).toMatchObject({ schemaVersion: 2, candidateIndex: 3, modelId: 'claude-fable-5-1', selector: { expanded: 1, position: 0 } });
+  expect(seal).toMatchObject({ schemaVersion: 2, candidateIndex: 3, modelId: 'claude-fable-5-2', selector: { expanded: 1, position: 0 } });
   expect(seal.skipped[0]).toEqual({ index: 0, channelId: CHANNEL, modelId: 'claude-opus-5-5', reason: 'WORKER_MODEL_ROLE_REFUSED' });
   // The design list names Fable second: no selector reached, so the seal is the alpha.54 v1 shape (rollback-readable).
   const deep = (await assign(reader, policy, 'design')).tasks[0]!.assignment!;
-  expect(deep).toMatchObject({ schemaVersion: 1, candidatePolicy: { id: 'deep', version: 2 }, candidateIndex: 1, modelId: 'claude-fable-5-1', effort: { source: 'candidate' } });
+  expect(deep).toMatchObject({ schemaVersion: 1, candidatePolicy: { id: 'deep', version: 3 }, candidateIndex: 1, modelId: 'claude-fable-5-2', effort: { source: 'candidate' } });
   expect('selector' in deep).toBe(false);
 });
 
@@ -167,13 +167,13 @@ it('the approval card says when the worker was chosen through a selector (seal v
 });
 
 it('the Brain worker-model list applies the same worker role gate as assignment: no role row, no listing (fail closed)', async () => {
-  const id = 'acme-frontier-next', reader = catalog([id, 'claude-opus-5-5'], [newModel(id)]), templates = [{ profile: { id: 'claude-t', version: 1 }, provider: 'claude', cliVersion: '2.1.293 (Claude Code)' }];
+  const id = 'acme-frontier-next', reader = catalog([id, 'claude-opus-5-5'], [newModel(id)]), templates = [{ profile: { id: 'claude-t', version: 1 }, provider: 'claude', cliVersion: '2.1.321 (Claude Code)' }];
   const listed = async (policy: ReturnType<typeof roles>) => (await inspectAdmissibleWorkerModels(templates, 's', reader, context().nowMs, { roles: policy, workerRole: WORK_CLASS_WORKER_ROLE })).map(row => row.modelId);
   expect(await listed(roles())).not.toContain(id);
   expect(await listed(roles([roleRow(id, 'frontier')]))).toContain(id);
   // A model whose row lacks the worker role is not listed either, though it is catalog-registered and active.
   expect(await listed(roles([roleRow(id, 'frontier', ['brain'])]))).not.toContain(id);
-  // NF-1 (owner R8): a connection-bound template records a bare version; Haiku needs 2.1.293, so the connection's 2.1.284 floor does not admit it
+  // NF-1 (owner R8): a connection-bound template records a bare version; Haiku needs 2.1.321, so the connection's 2.1.284 floor does not admit it
   // and its proved current CLI 2.1.319 does.
   const bare = async (cliVersion: string) => (await inspectAdmissibleWorkerModels([{ ...templates[0]!, cliVersion }], 's', catalog(['claude-haiku-5-5']), context().nowMs,
     { roles: roles(), workerRole: WORK_CLASS_WORKER_ROLE })).map(row => row.modelId);

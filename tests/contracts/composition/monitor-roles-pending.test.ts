@@ -43,22 +43,25 @@ async function fixture() {
 const pendingCodes = async (f: Awaited<ReturnType<typeof fixture>>) => { clearConfigCache();
   return (await inspectMonitor(f.project, f.options, { schemaVersion: 1 })).installs[0]!.diagnostics.filter(code => code.startsWith('model-roles-pending')); };
 
-it('the snapshot counts catalog models without a role row, in words in both locales, and an assignment clears it', async () => {
+it('the snapshot counts catalog models without a role row, in words in both locales, and an assignment clears only its row', async () => {
   const f = await fixture();
-  expect(await pendingCodes(f)).toEqual(['model-roles-pending:1']);
-  expect(describeDiagnostic('model-roles-pending:1', 'en')).toMatchObject({ note: false, text: expect.stringContaining('New model: role pending (1)'), action: expect.stringContaining('deckent models roles') });
-  expect(describeDiagnostic('model-roles-pending:1', 'tr').text).toContain('Yeni model: rol bekliyor (1)');
+  // FABLE52: the unassigned historical 5.1 row remains pending after the synthetic model receives its own role.
+  expect(await pendingCodes(f)).toEqual(['model-roles-pending:2']);
+  expect(describeDiagnostic('model-roles-pending:2', 'en')).toMatchObject({ note: false, text: expect.stringContaining('New model: role pending (2)'), action: expect.stringContaining('deckent models roles') });
+  expect(describeDiagnostic('model-roles-pending:2', 'tr').text).toContain('Yeni model: rol bekliyor (2)');
   const { inspectConfiguredModelRoles } = await import('#composition/core/model-activation/index.js');
   const view = await inspectConfiguredModelRoles(f.project, { schemaVersion: 1, scopeId: 'scope' }, f.options);
+  expect(view.models.filter(row => row.state === 'pending').map(row => row.modelId).sort()).toEqual(['claude-fable-5-1', NEW.modelId].sort());
   await assignConfiguredModelRole(f.project, { schemaVersion: 1, commandId: 'roles-1', scopeId: 'scope', ...NEW, tier: 'frontier', roles: ['brain', 'worker'], expect: view.digest },
     f.options, { attest: async () => true });
-  expect(await pendingCodes(f)).toEqual([]);
+  expect(await pendingCodes(f)).toEqual(['model-roles-pending:1']);
 });
 
 it('the SDK entry exports the same roles read (pending model visible) and no write', async () => {
   const f = await fixture(), sdk = await import('../../../src/index.js');
   const view = await sdk.inspectModelRoles(f.project, { schemaVersion: 1, scopeId: 'scope' }, f.options);
   expect(view.models.find(row => row.modelId === NEW.modelId)).toMatchObject({ state: 'pending', tier: null, roles: [] });
-  expect(view.pending).toBe(1);
+  expect(view.pending).toBe(2);
+  expect(view.models.find(row => row.modelId === 'claude-fable-5-1')).toMatchObject({ state: 'pending', tier: null, roles: [] });
   expect(Object.keys(sdk).filter(name => /role/iu.test(name))).toEqual(['inspectModelRoles']);
 });

@@ -11,7 +11,7 @@ const overlay = (extra: object) => workClassRegistrySchema.parse({ schemaVersion
   bindings: [], evidenceExtensions: [], candidatePolicies: [], ...extra });
 
 it('the Core seed is registry v5: every class names a declared list of exact catalog models in owner order, ending in one role selector', async () => {
-  expect(CORE_WORK_CLASSES.schemaVersion).toBe(5); expect(CORE_WORK_CLASSES.revision).toBe('work-classes-2026-11-08');
+  expect(CORE_WORK_CLASSES.schemaVersion).toBe(5); expect(CORE_WORK_CLASSES.revision).toBe('work-classes-2026-11-09');
   const policy = mergeWorkClassRegistries(CORE_WORK_CLASSES, []);
   const lists = Object.fromEntries(policy.classes.map(row => [row.id, resolveWorkClassCandidates(policy, row)?.id]));
   expect(lists).toEqual({ small: 'light', test: 'light', feature: 'standard', design: 'deep', architecture: 'deep', 'security-critical': 'deep' });
@@ -29,7 +29,7 @@ it('the Core seed is registry v5: every class names a declared list of exact cat
     .toEqual([['claude-opus-5-5', null], ['gpt-6.1-sol', 'medium'], ['claude-opus-5-thinking-high', null], [WORK_CLASS_WORKER_ROLE, null]]);
   // M3: each Core list ends in exactly one selector of the worker role, so a model admitted as data (catalog + role row) joins it.
   expect(Object.fromEntries((policy.candidatePolicies ?? []).map(list => [list.id, [list.version, list.candidates.filter(isCandidateSelector)]]))).toEqual({
-    light: [2, [{ role: 'worker', maxTier: 'worker' }]], standard: [2, [{ role: 'worker', minTier: 'frontier' }]], deep: [2, [{ role: 'worker', minTier: 'frontier', effort: 'high' }]] });
+    light: [2, [{ role: 'worker', maxTier: 'worker' }]], standard: [2, [{ role: 'worker', minTier: 'frontier' }]], deep: [3, [{ role: 'worker', minTier: 'frontier', effort: 'high' }]] });
   for (const list of policy.candidatePolicies ?? []) expect(isCandidateSelector(list.candidates.at(-1)!)).toBe(true);
   // The pinned-model path keeps the class targets unchanged (a person's explicit pin; A1 retuning applies to the system assignment).
   expect(Object.fromEntries(CORE_WORK_CLASSES.classes.map(row => [row.id, row.defaultEffort]))).toEqual({ small: 'high', test: 'high', feature: 'xhigh',

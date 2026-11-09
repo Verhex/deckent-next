@@ -40,7 +40,8 @@ async function seeded() {
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
     { id: 'catalog', effect: 'allow', actions: ['activate', 'deactivate'], scopes: 'all', principals, resource: { kind: 'model-activation', ids: 'all' } },
   ] }), { mode: 0o600 });
-  const workers = await nativeClaudeWorkers(project, 's', options), config = JSON.parse(await readFile(configPath, 'utf8'));
+  // FABLE52: this fixture must admit both candidates before exercising stale-proposal refusal, including Fable's new CLI minimum.
+  const workers = await nativeClaudeWorkers(project, 's', options, '2.1.321'), config = JSON.parse(await readFile(configPath, 'utf8'));
   await writeFile(configPath, JSON.stringify({ ...config, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order',
     registry: registry(workers.template('coding', { ...docker })) } })); clearConfigCache();
   let sequence = 0;
@@ -70,7 +71,7 @@ it('small work takes the active listed model; the Run freezes the pin and its se
   const task = f.execution('small');
   expect(readWorkerModelPin(task.profile.parameters)!.pin).toEqual({ channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] });
   expect(isNativeCliWorkerProfile(task.profile as never)).toBe(true); // the tokenless worker on the person's login, never a Docker profile
-  expect(task.assignment).toMatchObject({ workClass: 'small', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 0,
+  expect(task.assignment).toMatchObject({ workClass: 'small', workClassRevision: 'work-classes-2026-11-09', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 0,
     modelId: 'claude-sonnet-5-5', effort: { level: null, source: 'cli-default' }, skipped: [] });
   const replay = await createRun(f.project, run('small', 'small'), f.options);
   expect(replay.admission).toEqual(created.admission); expect(f.runs()).toBe(1);
@@ -108,7 +109,7 @@ it('a proposal no listed worker can run is rejected with the task, class and eve
   expect(f.runs()).toBe(0);
 });
 it('a pending proposal whose assignment would change is parked as stale on resubmission, never re-assigned to the next listed model', async () => {
-  const f = await seeded(); await f.activate('claude-opus-5-5'); await f.activate('claude-fable-5-1');
+  const f = await seeded(); await f.activate('claude-opus-5-5'); await f.activate('claude-fable-5-2');
   const first = await proposeRun(f.project, proposal('deep', 'design'), f.options);
   expect(first.proposal.status).toBe('pending');
   await f.activate('claude-opus-5-5', 'deactivate', 1);

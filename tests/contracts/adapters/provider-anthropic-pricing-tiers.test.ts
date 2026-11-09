@@ -15,7 +15,12 @@ const SOURCE = { url: 'https://platform.claude.com/docs/en/about-claude/pricing'
 
 describe('pricing registry v2', () => {
   it('ships Haiku 5.5 as a v2 tiered tariff and keeps every flat row a byte-identical v1 tariff', () => {
-    expect(ANTHROPIC_PUBLISHED_TARIFFS.map(row => row.modelId)).toEqual(['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', HAIKU, 'claude-haiku-4-5-20251001']);
+    expect(ANTHROPIC_PUBLISHED_TARIFFS.map(row => row.modelId)).toEqual(['claude-fable-5-2', 'claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', HAIKU, 'claude-haiku-4-5-20251001']);
+    // FABLE52: published 2026-11-09 prices apply only to the new id; the historical flat tariffs below keep their bytes.
+    expect(anthropicPublishedTariff('claude-fable-5-2')).toEqual({ kind: 'anthropic-published', version: 1, currency: 'USD', modelId: 'claude-fable-5-2',
+      usdPerMTok: { input: '8', cacheWrite5m: '10', cacheWrite1h: '16', cacheRead: '0.2', output: '40' },
+      source: { url: 'https://platform.claude.com/docs/en/models/fable-5-2/overview', retrievedAt: '2026-11-09' } });
+    expect(anthropicMaxChargeMinorUnits(anthropicPublishedTariff('claude-fable-5-2')!, '1h', 1_000_000, 0)).toBe(Math.ceil((1_002_048 * 16) / 10_000));
     expect(anthropicPublishedTariff(HAIKU)).toEqual({ kind: 'anthropic-published', version: 2, currency: 'USD', modelId: HAIKU, usdPerMTok: LOWER,
       source: { ...SOURCE, retrievedAt: '2026-10-08' }, promptTokenBasis: 'input+cache-write+cache-read', promptTiers: [{ aboveTokens: THRESHOLD, usdPerMTok: UPPER }] });
     // The v1 objects (key order included) as they were before the registry moved to v2: same digest, so copied profiles stay equal.

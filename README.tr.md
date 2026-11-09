@@ -265,6 +265,12 @@ aşağıdaki iş adımları Deckent'in kendi geliştirmesinde her gün kullanıl
 
 ### Bir kez yapılan kurulum
 
+Paketle gelen Claude önerileri günlük işler için Opus 5.5'i, zor akıl yürütme işleri için
+[Fable 5.2'yi](https://platform.claude.com/docs/en/models/fable-5-2/overview) kullanır.
+Fable 5.2 için [Claude Code 2.1.321 veya sonrası](https://code.claude.com/docs/en/model-config) gerekir.
+Fable 5.1 katalogda seçilebilir kalır; katalog kaydı ve öneriler modeli etkinleştirmez.
+Fable 5.1'i bir rolde kullanmak için `deckent models roles set` ile o rolü açıkça atamanız gerekir.
+
 İş bir işçi konteynerinde çalışır; bu yüzden Deckent'in bir işçi imajına, işin nerede çalışacağını söyleyen ayarlara, ilk
 iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` kurar; `deckent`i ilk açtığınızda kurulum adımları (`/setup`)
 dördünü de kendi terminalinizde hazırlar. Her adım bir kartla sorar ve siz onaylamadan hiçbir şey yazmaz.

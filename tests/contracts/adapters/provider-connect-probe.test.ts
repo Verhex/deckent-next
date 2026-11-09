@@ -77,6 +77,9 @@ describe('provider connection check', () => {
         }
         const built = build();
         expect(built.tariff).toBe('published');
+        // FABLE52: connecting the new exact id uses the verified 2026-11-09 prices and its full output bound.
+        if (model.nativeId === 'claude-fable-5-2') expect(built.adapter.definition).toMatchObject({ maxOutputTokens: 128_000,
+          tariff: { modelId: model.nativeId, usdPerMTok: { input: '8', cacheWrite5m: '10', cacheWrite1h: '16', cacheRead: '0.2', output: '40' } } });
         expect(JSON.stringify(built.adapter.definition)).toContain(kind.key!.secretName!);
       }
     }
