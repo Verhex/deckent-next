@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import { createBackupCoverage, verifyBackupCoverage, type BackupLimits } from '#adapters/core/backup-store/index.js';
+import { createBackupCoverage, verifyBackupCoverage, verifyBackupSet, type BackupLimits, type VerifiedBackup } from '#adapters/core/backup-store/index.js';
 import { pathWithin, sha256, readPinnedFile, restorePinnedFile, lineCut, ErrorRegistry, type BoundMember } from '#platform/index.js';
 import { PROJECT_VAULT, type BackupContributionOwner, type BackupCoverageManifest } from '#engine/index.js';
 import { memberStat, type DataRemovalMember } from './data.js';
@@ -32,8 +32,9 @@ function owner(roots: readonly string[], members: ReadonlyMap<string, BoundMembe
 /** K7 uninstall archive (lead 2026-10-27): every file a tier deletes outside the semantic set goes into the backup owner's encrypted coverage
  * companion of the set (same passphrase and envelope), bound to D0, verified by re-reading and decrypting it with each file's digest checked;
  * the returned members bind every file (and a bridge's exact cut) to those bytes. */
-export async function createUninstallArchive(set: string, roots: readonly string[], members: readonly DataRemovalMember[], ids: { installationId: string; approved: string; plan: string },
+export async function createUninstallArchive(base: VerifiedBackup, roots: readonly string[], members: readonly DataRemovalMember[], ids: { installationId: string; approved: string; plan: string },
   passphrase: string, limits: BackupLimits, standard: (path: string) => boolean = () => false) {
+  const set = base.set;
   const byId = new Map<string, BoundMember>(), resources: BackupCoverageManifest['resources'][number][] = [];
   for (const member of members) {
     const read = await memberStat(member.path, true) && await readPinnedFile(member.path); if (!read) continue;
@@ -43,24 +44,26 @@ export async function createUninstallArchive(set: string, roots: readonly string
     resources.push({ resourceId: sha256(member.path), owner: OWNER, version: read.identity.digest, transfer: 'portable' });
   }
   const manifest = { schemaVersion: 1 as const, installationId: ids.installationId, generation: ids.plan, planDigest: ids.approved, resources };
-  const input = { set, companion: set + companionSuffix, manifest, deletionRoots: roots }, owners = [owner(roots, byId)];
-  await createBackupCoverage(input, passphrase, limits, owners, work => work());
-  (await verifyBackupCoverage(input, passphrase, limits, owners)).close();
+  const input = { companion: set + companionSuffix, manifest, deletionRoots: roots }, owners = [owner(roots, byId)];
+  await createBackupCoverage(base, input, passphrase, limits, owners, work => work());
+  (await verifyBackupCoverage(base, input, passphrase, limits, owners)).close();
   const text = JSON.stringify(manifest); await writeFile(set + manifestSuffix, text, { mode: 0o600, flag: 'wx' });
   return { members: [...byId.values()], archive: { digest: sha256(text), roots } };
 }
 /** M2: before a resumed tail deletes anything, the archive beside the final set is exactly the one the intent bound, names every archived
  * member's bytes and decrypts and verifies with the person's passphrase. */
-export async function verifyUninstallArchive(set: string, archive: { readonly digest: string; readonly roots: readonly string[] }, members: readonly BoundMember[], passphrase: string, limits: BackupLimits) {
-  const text = await readFile(set + manifestSuffix, 'utf8').catch(() => ''), manifest = sha256(text) === archive.digest ? JSON.parse(text) as BackupCoverageManifest : null;
+export async function verifyUninstallArchive(base: VerifiedBackup, archive: { readonly digest: string; readonly roots: readonly string[] }, members: readonly BoundMember[], passphrase: string, limits: BackupLimits) {
+  const set = base.set, text = await readFile(set + manifestSuffix, 'utf8').catch(() => ''), manifest = sha256(text) === archive.digest ? JSON.parse(text) as BackupCoverageManifest : null;
   if (!manifest || members.some(member => member.archived && !manifest.resources.some(item => item.resourceId === sha256(member.path) && item.version === member.digest))) throw new Error('UNINSTALL_ARCHIVE_INVALID');
-  (await verifyBackupCoverage({ set, companion: set + companionSuffix, manifest, deletionRoots: archive.roots }, passphrase, limits, [owner(archive.roots, new Map())])).close();
+  (await verifyBackupCoverage(base, { companion: set + companionSuffix, manifest, deletionRoots: archive.roots }, passphrase, limits, [owner(archive.roots, new Map())])).close();
 }
 /** `deckent backup restore <set>` brings back the archive written beside that set: only files that do not exist again are written. */
 export async function restoreUninstallArchive(set: string, roots: readonly string[], passphrase: string, limits: BackupLimits) {
   const text = await readFile(set + manifestSuffix, 'utf8').catch(absent); if (text === null) return false;
-  const input = { set, companion: set + companionSuffix, manifest: JSON.parse(text) as BackupCoverageManifest, deletionRoots: roots }, kept: string[] = [];
-  await (await verifyBackupCoverage(input, passphrase, limits, [owner(roots, new Map(), kept)])).restore();
+  const input = { companion: set + companionSuffix, manifest: JSON.parse(text) as BackupCoverageManifest, deletionRoots: roots }, kept: string[] = [];
+  // The audited restore closed its handle: this custody boundary verifies the set once more for the companion.
+  const base = await verifyBackupSet(set, passphrase, limits);
+  try { await (await verifyBackupCoverage(base, input, passphrase, limits, [owner(roots, new Map(), kept)])).restore(); } finally { base.close(); }
   if (kept.length) throw ErrorRegistry.createError('UNINSTALL_RESTORE_KEPT', { params: { paths: kept.join(', ') } }); return true;
 }
 export const hasUninstallArchive = (set: string) => existsSync(set + manifestSuffix);

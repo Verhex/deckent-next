@@ -9,7 +9,7 @@ import { resolveProductLayout, productResourcePath } from '#platform/index.js';
 
 it('round trips exact encrypted owner coverage alongside the existing backup, refusing missing/protected session coverage and unsafe destinations before export or restore', async () => {
   if (process.platform === 'win32') {
-    await expect(createBackupCoverage({ set: 'not-opened', companion: 'not-opened', manifest: { schemaVersion: 1, installationId: 'fixture', generation: 'g1', planDigest: 'a'.repeat(64), resources: [] }, deletionRoots: ['not-opened'] }, 'fixture', { maxFiles: 10, maxDepth: 3, maxFileBytes: 100, maxTotalBytes: 1000 }, [], async work => work())).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
+    await expect(createBackupCoverage({ set: 'not-opened' } as never, { companion: 'not-opened', manifest: { schemaVersion: 1, installationId: 'fixture', generation: 'g1', planDigest: 'a'.repeat(64), resources: [] }, deletionRoots: ['not-opened'] }, 'fixture', { maxFiles: 10, maxDepth: 3, maxFileBytes: 100, maxTotalBytes: 1000 }, [], async work => work())).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
     console.info('verify-not-run: backup coverage POSIX file custody unavailable'); return;
   }
   const base = await mkdtemp(join(tmpdir(), 'deckent-backup-coverage-'));
@@ -36,22 +36,23 @@ it('round trips exact encrypted owner coverage alongside the existing backup, re
       async export(resource) { exports++; return values[resource.resourceId as keyof typeof values]; },
       async validateRestore(resource, bytes) { expect(Buffer.from(bytes)).toEqual(values[resource.resourceId as keyof typeof values]); },
       async restore(resource, bytes) { restored.set(resource.resourceId, Buffer.from(bytes)); } };
-    const input = { set, companion: join(recovery, 'coverage.enc'), manifest, deletionRoots: [project, dataRoot] };
-    await expect(createBackupCoverage(input, phrase, limits, [], async work => work())).rejects.toMatchObject({ code: 'BACKUP_COVERAGE_INCOMPLETE' });
-    await expect(createBackupCoverage({ ...input, manifest: { ...manifest, resources: [{ resourceId: 'session', owner: owner.id, version: 'v1', transfer: 'portable' }] } }, phrase, limits, [owner], async work => work())).rejects.toMatchObject({ code: 'BACKUP_COVERAGE_INCOMPLETE' });
-    await expect(createBackupCoverage({ ...input, companion: join(dataRoot, 'unsafe.enc') }, phrase, limits, [owner], async work => work())).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
+    const input = { companion: join(recovery, 'coverage.enc'), manifest, deletionRoots: [project, dataRoot] }, verifiedSet = await verifyBackupSet(set, phrase, limits);
+    await expect(createBackupCoverage(verifiedSet, input, phrase, limits, [], async work => work())).rejects.toMatchObject({ code: 'BACKUP_COVERAGE_INCOMPLETE' });
+    await expect(createBackupCoverage(verifiedSet, { ...input, manifest: { ...manifest, resources: [{ resourceId: 'session', owner: owner.id, version: 'v1', transfer: 'portable' }] } }, phrase, limits, [owner], async work => work())).rejects.toMatchObject({ code: 'BACKUP_COVERAGE_INCOMPLETE' });
+    await expect(createBackupCoverage(verifiedSet, { ...input, companion: join(dataRoot, 'unsafe.enc') }, phrase, limits, [owner], async work => work())).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
     expect(exports).toBe(0);
-    await createBackupCoverage(input, phrase, limits, [owner], async work => work());
+    await createBackupCoverage(verifiedSet, input, phrase, limits, [owner], async work => work());
     const ciphertext = await readFile(input.companion, 'utf8');
     expect(ciphertext).not.toContain('fixture-synthetic-credential'); expect(ciphertext).not.toContain(values.secret.toString('base64'));
-    const verified = await verifyBackupCoverage(input, phrase, limits, [owner]); await verified.restore(); verified.close();
+    const verified = await verifyBackupCoverage(verifiedSet, input, phrase, limits, [owner]); await verified.restore(); verified.close();
     expect(Object.fromEntries(restored)).toEqual(values);
     const oldBackup = await verifyBackupSet(set, phrase, limits); expect(oldBackup.state.schemaVersion).toBe(2); oldBackup.close();
-    await expect(verifyBackupCoverage({ ...input, manifest: { ...manifest, planDigest: 'b'.repeat(64) } }, phrase, limits, [owner])).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' });
+    await expect(verifyBackupCoverage(verifiedSet, { ...input, manifest: { ...manifest, planDigest: 'b'.repeat(64) } }, phrase, limits, [owner])).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' });
     // Same ledger bytes do not make a different snapshot interchangeable with this recovery companion.
     await file(join(productResourcePath(layout, 'audit'), 'event'), 'new-audit-snapshot');
     const secondSet = join(base, 'second-set'); await createBackupSet(layout, project, 'temporary', 'authority.key', secondSet, phrase, limits);
-    await expect(verifyBackupCoverage({ ...input, set: secondSet }, phrase, limits, [owner])).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' });
+    const second = await verifyBackupSet(secondSet, phrase, limits);
+    await expect(verifyBackupCoverage(second, input, phrase, limits, [owner])).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' }); second.close(); verifiedSet.close();
     expect(exports).toBe(5);
   } finally { await rm(base, { recursive: true, force: true }); }
 });

@@ -1,7 +1,8 @@
 import type { Stats } from 'node:fs';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { dirname, isAbsolute, join, parse } from 'node:path';
+import { dirname, isAbsolute, parse } from 'node:path';
+import { currentSetDigest } from '#adapters/core/backup-store/index.js';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
 import { pathWithin as inside, boundState, removeBoundMembers, type BoundMember } from '#platform/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -54,7 +55,7 @@ export class InstallationDataRemovalTarget implements EffectTarget {
     const snapshot = await this.beforeRemove(), bound = members.map(member => snapshot.members.find(item => item.path === member.path));
     // Every member is compared with the verified backup before the first removal: changed bytes are never deleted with an older backup.
     if (snapshot.members.some(item => !this.members.some(member => member.path === item.path))
-      || createHash('sha256').update(await readFile(join(snapshot.set, 'MANIFEST.sha256'))).digest('hex') !== snapshot.manifestDigest) refuse('EFFECT_TARGET_PRECONDITION');
+      || await currentSetDigest(snapshot.set) !== snapshot.manifestDigest) refuse('EFFECT_TARGET_PRECONDITION');
     for (const [index, member] of members.entries()) { const state = bound[index] ? await boundState(bound[index]) : await memberStat(member.path, member.archived).then(info => info ? 'changed' : 'absent');
       if (state !== 'bound' && (state !== 'absent' || bound[index])) refuse('EFFECT_TARGET_PRECONDITION'); }
     try { await removeBoundMembers(bound.filter(item => !!item), snapshot.root); return { version: null }; }

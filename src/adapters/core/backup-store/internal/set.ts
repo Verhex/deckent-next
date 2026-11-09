@@ -14,10 +14,18 @@ const SOURCE_BUSY_BUDGET = 1000;
 const PAYLOAD = ['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'] as const;
 const FILES = [...PAYLOAD, 'authority.key.enc'] as const;
 const manifestLine = (digest: string, name: string) => `${digest}  ${name}\n`;
+/** The one carrier of a verified set (KG11 F1): what verify read and checked (`manifestDigest` of its manifest bytes, the ledger `fingerprint`) and the key. */
 export class VerifiedBackup {
   readonly #key: Buffer;
-  constructor(readonly set: string, readonly state: BackupState, readonly ledgerDigest: string, key: Buffer) { this.#key = key; }
+  constructor(readonly set: string, readonly state: BackupState, readonly ledgerDigest: string, readonly manifestDigest: string, readonly fingerprint: string, key: Buffer) { this.#key = key; }
   integrity() { return createHmacIntegrity(sha256(this.#key.toString('hex')), this.#key); }
+  assertInstallation(installationId: string, fail: () => never) { if (this.state.installationId !== installationId) fail(); }
+  /** A member's current bytes are in this set: the ledger by its table fingerprint, the authority key by its key id, any other file as archived. */
+  holds(member: { readonly resourceId: string; readonly path: string; readonly archivePath: string }, bytes: Uint8Array) {
+    if (member.resourceId === 'ledger') return ledgerFingerprint(member.path) === this.fingerprint;
+    if (member.resourceId === 'approvals') return sha256(Buffer.from(bytes).toString('hex')) === this.integrity().keyId;
+    return this.state.entries.some(entry => entry.resource === member.resourceId && entry.path === member.archivePath && sha256(Buffer.from(entry.content, 'base64')) === sha256(bytes));
+  }
   async restoreKey(path: string) { await writePrivate(path, this.#key); }
   close() { this.#key.fill(0); }
   result(action: BackupResult['action']): BackupResult { return { schemaVersion: 1, action, set: this.set, ledgerDigest: this.ledgerDigest,
@@ -39,7 +47,7 @@ export async function verifyBackupSet(set: string, passphrase: string, limits: B
   if (!passphrase) return refuse('BACKUP_PASSPHRASE_REQUIRED');
   // A member that vanished after the listing changed the set; one this user cannot open is unreadable. Typed refusals pass unchanged.
   const member = (error: unknown): never => fsCode(error) === 'ENOENT' ? refuse('BACKUP_MANIFEST_INVALID') : unreadable(set)(error);
-  const { expected, payload } = await readManifest(set, limits).catch(member);
+  const { expected, payload, manifestDigest } = await readManifest(set, limits).catch(member);
   const envelope = await readPrivate(join(set, 'authority.key.enc'), 4096).catch(member);
   const { createHash } = await import('node:crypto');
   if (createHash('sha256').update(envelope).digest('hex') !== expected.get('authority.key.enc')) return refuse('BACKUP_MANIFEST_INVALID');
@@ -55,19 +63,17 @@ export async function verifyBackupSet(set: string, passphrase: string, limits: B
     const resources = Object.fromEntries(Object.entries(state.resources).filter(([name]) => !PRODUCT_LAYOUT_REGISTRY.fixedResources.includes(name)));
     resolveProductLayout({ projectRoot: state.projectRoot, root: state.layoutRoot, resources });
     const identity = state.entries.find(item => item.resource === 'installationIdentity' && item.path === 'identity.json');
-    if (state.schemaVersion === 3) {
-      if (identity) return refuse('BACKUP_SET_INVALID');
-      return new VerifiedBackup(resolve(set), state, expected.get('ledger.db')!, key);
-    }
+    const verified = () => new VerifiedBackup(resolve(set), state, expected.get('ledger.db')!, manifestDigest, fingerprint, key);
+    if (state.schemaVersion === 3) return identity ? refuse('BACKUP_SET_INVALID') : verified();
     if (!identity) return refuse('BACKUP_SET_INVALID');
     const record: unknown = JSON.parse(Buffer.from(identity.content, 'base64').toString('utf8'));
     assertUnsealedInstallation(record);
     if (!record || typeof record !== 'object' || !('installationId' in record) || record.installationId !== state.installationId) return refuse('BACKUP_SET_INVALID');
-    return new VerifiedBackup(resolve(set), state, expected.get('ledger.db')!, key);
+    return verified();
   } catch (error) { key.fill(0); throw error; }
 }
 async function readManifest(set: string, limits: BackupLimits) {
-  const text = (await readPrivate(join(set, 'MANIFEST.sha256'), 4096)).toString('utf8');
+  const raw = await readPrivate(join(set, 'MANIFEST.sha256'), 4096), text = raw.toString('utf8');
   const expected = new Map<string, string>();
   for (const line of text.trimEnd().split('\n')) {
     const match = /^([a-f0-9]{64}) {2}([a-zA-Z0-9.-]+)$/.exec(line);
@@ -84,8 +90,10 @@ async function readManifest(set: string, limits: BackupLimits) {
     if (digest !== expected.get(name)) return refuse('BACKUP_MANIFEST_INVALID');
     if ((PAYLOAD as readonly string[]).includes(name)) payload.push(manifestLine(digest, name));
   }
-  return { expected, payload };
+  return { expected, payload, manifestDigest: sha256(raw) };
 }
+/** KG11 F2: the set's manifest digest read again now (private, no link, stable) for a custody check right before deletion. */
+export const currentSetDigest = async (set: string) => sha256(await readPrivate(join(set, 'MANIFEST.sha256'), 4096));
 export async function createBackupSet(layout: ProductLayout, projectRoot: string, installationId: string, keyFile: string,
   destination: string, passphrase: string, limits: BackupLimits, config?: BackupConfigLayers): Promise<BackupResult> {
   await FileInstallationIdentityStore.assertTransferAllowed(layout);

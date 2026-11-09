@@ -16,6 +16,8 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
   if (!parsed.success) throw ErrorRegistry.createError('BACKUP_INPUT_INVALID');
   const command = parsed.data;
   let recovered: VerifiedBackup | undefined;
+  // KG11 F4: one verified set per command; the first site that needs it decides the limits (the defaults only while the config is unreadable).
+  const recover = async (limits: Parameters<typeof verifyBackupSet>[2]) => recovered ??= await verifyBackupSet(command.set, passphrase, limits);
   try {
     let config: ResolvedConfig;
     try {
@@ -24,21 +26,19 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
       config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {}, ...(command.action === 'restore' ? { restoreHold: 'admit' as const } : {}) }); }
     catch (error) {
       if (command.action !== 'restore') throw error;
-      const limits = validateConfig({}).config.installation.packageMeasurement;
-      recovered ??= await verifyBackupSet(command.set, passphrase, limits);
-      const document = validateConfig(archivedConfigDocument(recovered.state)).config;
-      const current = resolve(projectRoot) === recovered.state.projectRoot;
-      const resources = Object.fromEntries(Object.entries(recovered.state.resources).filter(([key]) => !PRODUCT_LAYOUT_REGISTRY.fixedResources.includes(key)));
-      const productLayout = resolveProductLayout({ projectRoot: resolve(projectRoot), ...(current ? { root: recovered.state.layoutRoot } : {}), resources });
+      const { state } = await recover(validateConfig({}).config.installation.packageMeasurement);
+      const document = validateConfig(archivedConfigDocument(state)).config;
+      const current = resolve(projectRoot) === state.projectRoot;
+      const resources = Object.fromEntries(Object.entries(state.resources).filter(([key]) => !PRODUCT_LAYOUT_REGISTRY.fixedResources.includes(key)));
+      const productLayout = resolveProductLayout({ projectRoot: resolve(projectRoot), ...(current ? { root: state.layoutRoot } : {}), resources });
       config = { ...document, projectRoot: resolve(projectRoot), productLayout, secretPaths: [] };
     }
-    if (command.action === 'restore' && config.installation.sharedRegistrationId) recovered ??= await verifyBackupSet(command.set, passphrase, config.installation.packageMeasurement);
+    if (command.action === 'restore' && config.installation.sharedRegistrationId) await recover(config.installation.packageMeasurement);
     const sharedRestore = command.action === 'restore' && recovered ? await verifySharedProjectRestore(config, recovered, command.target, command.scopeId, options) : false;
     if (!sharedRestore) await attachmentLifecycle(config, options).assert(command.action === 'restore' ? [command.target] : [], 'backup');
     const layout = config.productLayout, limits = config.installation.packageMeasurement;
     const existingPolicy = await lstat(productResourcePath(layout, 'policy')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const identity = readLocalOsIdentity();
-    // Restoring exactly the final set of an interrupted purge ends that purge (its hold) once the restore succeeded.
     const release = command.action === 'restore' ? await uninstallRestoreRelease(uninstallRecoveryDirectory(config, options.env ?? process.env), layout.root, { ...identity, scopeIds: [] }, config.installation.profileMaxBytes, command.set) : null;
     let document, authority: BackupAuthority;
     // Astra 2471 R1: a held installation's policy pair is what the interrupted restore left; only then may restore fall back to the set's policy.
@@ -59,7 +59,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
       }
       if (installation?.status !== 'available' && !config.installation.sharedRegistrationId) {
         if (command.action !== 'restore') throw ErrorRegistry.createError('BACKUP_STATE_MISSING');
-        recovered ??= await verifyBackupSet(command.set, passphrase, limits);
+        await recover(limits);
       }
       authority = { principal: verifiedPrincipalSchema.parse({ ...identity, scopeIds: [command.scopeId] }),
         installationId: config.installation.sharedRegistrationId ? sharedRestore ? recovered!.state.installationId : await attachmentLifecycle(config, options).identityId() : installation?.status === 'available' ? installation.value.installationId : recovered!.state.installationId,
@@ -67,19 +67,19 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
           const path = join(productResourcePath(layout, 'approvals'), config.approvals.keyFile);
           const present = await lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
           if (present || command.action !== 'restore') return openLocalIntegrityAuthority(layout, config.approvals.keyFile);
-          recovered ??= await verifyBackupSet(command.set, passphrase, limits); return recovered.integrity();
+          return (await recover(limits)).integrity();
         })() };
     } else {
       // Total loss: only a fully authenticated recovery set may supply the retained policy and identity. A malformed existing policy never falls back.
       if (command.action === 'create') throw ErrorRegistry.createError('BACKUP_STATE_MISSING');
-      recovered ??= await verifyBackupSet(command.set, passphrase, limits);
-      const item = recovered.state.entries.find(entry => entry.resource === 'policy' && entry.path === '');
+      const backup = await recover(limits);
+      const item = backup.state.entries.find(entry => entry.resource === 'policy' && entry.path === '');
       const policy = policyFileSchema.parse(JSON.parse(Buffer.from(item!.content, 'base64').toString('utf8')));
-      const bindingEntry = recovered.state.entries.find(entry => entry.resource === 'bindings' && entry.path === '');
+      const bindingEntry = backup.state.entries.find(entry => entry.resource === 'bindings' && entry.path === '');
       const bindings = bindingsFileSchema.parse(JSON.parse(Buffer.from(bindingEntry!.content, 'base64').toString('utf8')));
       document = resolveBackupPolicyDocuments(policy, bindings);
       authority = { principal: verifiedPrincipalSchema.parse({ ...identity, scopeIds: [command.scopeId] }),
-        installationId: recovered.state.installationId, integrity: recovered.integrity() };
+        installationId: backup.state.installationId, integrity: backup.integrity() };
     }
     const auditNextToSet = command.action === 'restore' || !existingPolicy;
     const auditDirectory = auditNextToSet ? join(dirname(resolve(command.set)), '.deckent-backup-audit') : join(productResourcePath(layout, 'audit'), 'backup-operations');

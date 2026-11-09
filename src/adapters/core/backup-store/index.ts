@@ -1,4 +1,4 @@
-export { createBackupSet, verifyBackupSet, VerifiedBackup } from './internal/set.js';
+export { createBackupSet, currentSetDigest, verifyBackupSet, VerifiedBackup } from './internal/set.js';
 export { FileBackupStorage, restoreLeftovers } from './internal/storage.js';
 export { recordBackupAudit } from './internal/audit.js';
 export type { BackupLimits, BackupState } from './internal/archive.js';
