@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { hubOperationSchemas, hubOperationWrites, type HubOperation, type HubOperationName } from '#engine/index.js';
-import { ErrorRegistry, MESSAGE_REGISTRY, t, type KnownSecretSnapshot, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, messageText, t, type KnownSecretSnapshot, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { CLI_CATALOG, readJsonInput, type CliCommandSpec } from '#surfaces/core/cli-kit/index.js';
 import { hubResultLines, hubCardLines, hubExample, hubRefusal, hubRequest, type HubCommandContext } from '#surfaces/core/cli-hub/index.js';
 import { EntryWindow, QuestionWindow, LinesWindow, PickerWindow, type PanelLabels, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
@@ -12,7 +12,7 @@ import { span } from '#surfaces/core/terminal-render/index.js';
 function opLabel(operation: HubOperationName, locale: Locale): string {
   const [family, ...path] = operation.split('.');
   const spec = path.reduce<CliCommandSpec | undefined>((node, name) => node?.children?.find(child => child.name === name), CLI_CATALOG.find(command => command.name === family));
-  return spec ? (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[spec.summary] ?? operation : operation;
+  return spec ? messageText(spec.summary, locale) ?? operation : operation;
 }
 /** Shared with the CLI: a file cannot redirect the terminal card to another scope. */
 export function hubWindowRequest(operation: HubOperationName, input: unknown, scopeId: string): HubOperation {

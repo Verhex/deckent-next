@@ -1,7 +1,7 @@
 import { NODE_ENGINE_FLOOR_TEXT } from '#platform/core/common/index.js';
 import { families } from './families.js';
 import identicalMessages from './identical-messages.json' with { type: 'json' };
-import { LOCALES, type Catalog, type MessageFamily, type MessageRegistry, type Params } from './types.js';
+import { LOCALES, type Catalog, type Locale, type MessageFamily, type MessageRegistry, type Params } from './types.js';
 
 const placeholders = (value: string) => [...new Set([...value.matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort().join(',');
 /** The same constructor validates production catalogs and extension catalogs. No mutation authority escapes. */
@@ -31,3 +31,5 @@ export const MESSAGE_REGISTRY = createMessageRegistry(families, {
   'desktop.error.node_not_found': { floor: NODE_ENGINE_FLOOR_TEXT },
 }, [...identicalMessages, 'cli.version']); // Existing K0 machine identity format is intentionally identical.
 export const MESSAGE_KEYS = MESSAGE_REGISTRY.keys;
+/** The one raw catalog read for a key held as data (registry labels, plan codes); unfilled, undefined when absent, other locales read English like `t`. */
+export const messageText = (key: string, locale: Locale): string | undefined => MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'][key];

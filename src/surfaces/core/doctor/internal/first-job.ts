@@ -1,5 +1,5 @@
 import { WORK_SETUP_FAMILY, SetupStageRegistry, type SetupStage, type SetupStageState } from '#engine/index.js';
-import { MESSAGE_REGISTRY, t, type Locale, type MessageKey } from '#platform/index.js';
+import { messageText, t, type Locale } from '#platform/index.js';
 
 /** Configuration and pool-ledger facts; the work family's own evaluators interpret them. Never run a registry preview here. */
 export type FirstJobFacts = Readonly<{ execution: boolean; registry: boolean; pool: boolean }>;
@@ -20,5 +20,5 @@ export function firstJobStages(facts: FirstJobFacts, scopeId: string | null): re
 export function firstJobSteps(stages: readonly FirstJobStep[]): readonly FirstJobStep[] {
   return stages.filter(stage => stage.phase === 'onboarding' && stage.state !== 'done' && stage.state !== 'skipped');
 }
-export const firstJobTitle = (step: FirstJobStep, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[step.title as MessageKey] ?? step.title;
+export const firstJobTitle = (step: FirstJobStep, locale: Locale) => messageText(step.title, locale) ?? step.title;
 export const onboardingNext = (step: string, locale: Locale) => t('doctor.firstJob.next', { step }, locale);

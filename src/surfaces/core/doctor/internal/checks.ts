@@ -1,4 +1,4 @@
-import { ErrorRegistry, MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
@@ -242,7 +242,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
 
 /** The setup family's reason in the catalogs' words (the same `setup.execution.*` text `deckent init` shows); an unknown key stays visible as itself. */
 function setupReasonText(key: string, params: Readonly<Record<string, string | number>>, l: Locale): string {
-  const text = (MESSAGE_REGISTRY.catalogs[l] as Readonly<Record<string, string>>)[key];
+  const text = messageText(key, l);
   return text === undefined ? key : text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? terminalSafeText(String(params[name])) : whole);
 }
 /** PRE-34: Docker (the execution environment) through the same detection and decision `deckent init` uses: ready is ok; not reachable is an

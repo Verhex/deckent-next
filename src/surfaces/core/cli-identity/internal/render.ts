@@ -1,10 +1,9 @@
 import { IdentityProfileRegistry, type IdentityProfileListing, type IdentityProfilePreview } from '#engine/index.js';
 import { coreIdentityProfileData } from '#domain/index.js';
-import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
+import { messageText, t, type Locale } from '#platform/index.js';
 // Catalog data chooses labels; extension labels are package data, never commands or authority.
 const safe = (value: string) => value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
 type ProfileEntry = IdentityProfileListing['profiles'][number];
-const catalog = (locale: Locale) => MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
 /** Presentation order comes from the profile registry's authored order; extension profiles keep their relative order. */
 export function orderedProfiles<T>(entries: readonly T[], id: (entry: T) => string): T[] {
   const order = new Map(coreIdentityProfileData.profiles.map((entry, index) => [entry.id, index]));
@@ -12,7 +11,7 @@ export function orderedProfiles<T>(entries: readonly T[], id: (entry: T) => stri
 }
 /** A profile's name in the person's language (package labels first, then the catalog label, else its key). */
 export const profileLabel = (entry: ProfileEntry, locale: Locale): string =>
-  safe(entry.labels?.[locale] ?? catalog(locale)[entry.definition.labelKey] ?? entry.definition.labelKey);
+  safe(entry.labels?.[locale] ?? messageText(entry.definition.labelKey, locale) ?? entry.definition.labelKey);
 /** A profile id in the person's words (its registry label, e.g. "Solo"), never the raw `core:solo`; an unregistered id stays as itself. */
 export const profileName = (id: string, locale: Locale): string => {
   const entry = new IdentityProfileRegistry().list().find(row => row.definition.id === id);
@@ -20,7 +19,7 @@ export const profileName = (id: string, locale: Locale): string => {
 };
 /** What a profile means, one line: the catalog's description of its label (`<labelKey>.description`), else its role templates (package data). */
 export function profileMeaning(entry: ProfileEntry, locale: Locale): string {
-  const described = catalog(locale)[`${entry.definition.labelKey}.description`];
+  const described = messageText(`${entry.definition.labelKey}.description`, locale);
   if (described) return described;
   const roles = entry.definition.roleTemplates.map(role => safe(role.id));
   return roles.length ? t('climodels.identity.rolesOnly', { roles: roles.join(', ') }, locale) : t('climodels.identity.noRoles', {}, locale);

@@ -1,6 +1,6 @@
 import type { PanelLine } from '#surfaces/core/terminal-panels/index.js';
 import type { ModelConnectResult, McpCapabilityPreview, McpCapabilityRequest, McpCapabilityView } from '#domain/index.js';
-import { t, type ConfigLoadOptions, type Locale, MESSAGE_REGISTRY } from '#platform/index.js';
+import { t, type ConfigLoadOptions, type Locale, messageText } from '#platform/index.js';
 
 export interface McpCapabilityHandlers {
   listMcpCapabilityScopes(root: string, options: ConfigLoadOptions): Promise<readonly string[]>;
@@ -21,9 +21,8 @@ export function mcpCapabilityPreviewLines(view: McpCapabilityPreview, locale: Lo
 
 /** Registry labels resolve as catalog data; state messages have static i18n keys. Missing extension labels expose the selected id. */
 export function mcpCapabilityWords(locale: Locale) {
-  const catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
   return {
-    label: (key: string, fallback: string) => catalog[key] ?? fallback,
+    label: (key: string, fallback: string) => messageText(key, locale) ?? fallback,
     state: { 'wider-earlier': t('policy.mcp.state.wider-earlier', {}, locale), none: t('policy.mcp.state.none', {}, locale), partial: t('policy.mcp.state.partial', {}, locale),
       granted: t('policy.mcp.state.granted', {}, locale), conflict: t('policy.mcp.state.conflict', {}, locale) },
     effective: { denied: t('policy.mcp.effective.denied', {}, locale), partial: t('policy.mcp.effective.partial', {}, locale), allowed: t('policy.mcp.effective.allowed', {}, locale) },
