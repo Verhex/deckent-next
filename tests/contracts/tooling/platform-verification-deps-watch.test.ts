@@ -115,6 +115,7 @@ describe('platform verification dependency watch schedule', () => {
     expect(depsWatch).toMatch(/^ {4}permissions:\n {6}contents: read$/mu);
     const publishJob = jobBlock('deps-publish');
     expect(publishJob).toMatch(/^ {4}permissions:\n {6}contents: write\n {6}pull-requests: write$/mu);
+    expect(publishJob).toMatch(/^ {6}issues: write$/mu);
     expect(publishJob).toMatch(/^ {4}needs: deps-watch$/mu);
     // Gated on the verified refresh alone: a red dependency report (same job) must not hold back the pin PR, and must stay red itself.
     expect(publishJob).toMatch(/^ {4}if: \$\{\{ !cancelled\(\) && needs\.deps-watch\.outputs\.refresh-verified == 'true' && needs\.deps-watch\.outputs\.integrity-clear == 'true' \}\}$/mu);
@@ -128,7 +129,7 @@ describe('platform verification dependency watch schedule', () => {
     expect(publishJob).toContain('persist-credentials: false');
     expect(publishJob).not.toMatch(/npm (ci|install|run)|cache: npm|refresh-bwrap|build-bwrap|docker/u);
     for (const [name, block] of [...workflow.matchAll(/^ {2}([\w-]+):\n((?: {4}.*\n|\n)*)/gmu)].map(match => [match[1], match[2]] as const))
-      if (name !== 'deps-publish') expect(block, name).not.toMatch(/contents: write|pull-requests: write/u);
+      if (name !== 'deps-publish') expect(block, name).not.toMatch(/contents: write|pull-requests: write|issues: write/u);
   });
 
   it('pins every action to a full SHA and reuses the verify checkout and setup-node pins with Node 24', () => {

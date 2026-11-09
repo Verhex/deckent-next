@@ -34,7 +34,8 @@ export function verifyBuild(dir, lock, arches) {
   }
   for (const arch of arches) check(`${arch}/bwrap`, lock.outputs[arch].sha256);
   for (const [key, path] of [['host', 'host-packages.txt'], ...arches.map(arch => [`sysroot-${arch}`, `${arch}/sysroot-packages.txt`])]) {
-    if (JSON.stringify(lines(path)) !== JSON.stringify(lock.resolvedPackages[key])) throw new Error(`BWRAP_CACHE_INVALID: package closure differs: ${key}`);
+    const actual = lines(path);
+    if (!actual.length || (key !== 'host' && JSON.stringify(actual) !== JSON.stringify(lock.resolvedPackages[key]))) throw new Error(`BWRAP_CACHE_INVALID: package closure differs: ${key}`);
     const apkDir = join(dir, 'out', 'apk', key);
     if (!readdirSync(apkDir).some(name => name.endsWith('.apk'))) throw new Error(`BWRAP_CACHE_INVALID: missing fetched APKs: ${key}`);
   }

@@ -1,6 +1,6 @@
 // GitHub REST publisher. A token stays in the step's environment/Authorization header, never argv, git config or logs.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REFRESH_PATHS, refreshBody } from './refresh-bwrap.mjs';
@@ -11,6 +11,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
  * (the bundled identity module interpolates the output sha256 values into source). */
 const REFRESHABLE = Object.freeze(['hostPackages', 'sysrootPackages', 'resolvedPackages', 'outputs']);
 const PIN = /^[a-z0-9][a-z0-9+._-]{0,63}=[0-9][A-Za-z0-9._+~]{0,63}-r[0-9]{1,4}$/u;
+const HOST_PACKAGE = /^[a-z0-9][a-z0-9+._-]{0,63}(?:=[0-9][A-Za-z0-9._+~]{0,63}-r[0-9]{1,4})?$/u;
 const RESOLVED = /^[a-z0-9][a-z0-9+._-]{0,63}-[0-9][A-Za-z0-9._+~]{0,63}-r[0-9]{1,4}$/u;
 const TITLE = /^build\(bwrap\): refresh pins \(Alpine [0-9][0-9.]{0,15}\)$/u;
 const EVIDENCE = /^https:\/\/[a-z0-9.-]{1,253}\/[\w.-]{1,100}\/[\w.-]{1,100}\/actions\/runs\/[0-9]{1,20}$/u;
@@ -25,7 +26,9 @@ export function verifiedCandidate(root, out, title) {
   const lock = JSON.parse(files[REFRESH_PATHS[0]]), base = JSON.parse(readFileSync(join(root, REFRESH_PATHS[0]), 'utf8'));
   if (JSON.stringify(Object.keys(lock).sort()) !== JSON.stringify(Object.keys(base).sort())) throw invalid('candidate lock keys differ from the base');
   for (const key of Object.keys(base)) if (!REFRESHABLE.includes(key) && JSON.stringify(lock[key]) !== JSON.stringify(base[key])) throw invalid(`${key} may not change in a pin refresh`);
-  strings(lock.hostPackages, PIN, 64, 'hostPackages'); strings(lock.sysrootPackages, PIN, 64, 'sysrootPackages');
+  strings(lock.hostPackages, HOST_PACKAGE, 64, 'hostPackages'); strings(lock.sysrootPackages, PIN, 64, 'sysrootPackages');
+  if (JSON.stringify(lock.hostPackages.map(spec => spec.split('=')[0])) !== JSON.stringify(base.hostPackages.map(spec => spec.split('=')[0]))) throw invalid('host package names changed');
+  if (lock.hostPackages.some((spec, index) => !base.hostPackages[index].includes('=') && spec.includes('='))) throw invalid('host tools may not be re-pinned');
   if (JSON.stringify(Object.keys(lock.resolvedPackages).sort()) !== JSON.stringify(Object.keys(base.resolvedPackages).sort())) throw invalid('resolvedPackages groups changed');
   for (const [group, list] of Object.entries(lock.resolvedPackages)) strings(list, RESOLVED, 512, `resolvedPackages.${group}`);
   if (JSON.stringify(Object.keys(lock.outputs).sort()) !== JSON.stringify(Object.keys(base.outputs).sort())) throw invalid('outputs architectures changed');
@@ -51,6 +54,18 @@ export async function publish({ root = ROOT, out, repository, base, baseSha, evi
   const title = result.title;
   // The artifact's PR-BODY.md was written beside npm-installed code (SEC F36): the body is rebuilt from the base and the verified candidate lock.
   const body = refreshBody(JSON.parse(readFileSync(join(root, REFRESH_PATHS[0]), 'utf8')), JSON.parse(candidate[REFRESH_PATHS[0]]), evidenceUrl);
+  // Only orphan refs produced by this publisher are disposable; reviewed PRs and unproven ownership are preserved.
+  const refs = await request('GET', `${api}/git/matching-refs/heads/build/bwrap-pins-`);
+  for (const ref of refs) {
+    if (!/^refs\/heads\/build\/bwrap-pins-[a-f0-9]{16}$/u.test(ref.ref)) continue;
+    const branch = ref.ref.slice('refs/heads/'.length);
+    const open = await request('GET', `${api}/pulls?state=open&head=${encodeURIComponent(`${headOwner}:${branch}`)}`);
+    if (open.length) continue;
+    const prior = await request('GET', `${api}/commits/${ref.object.sha}`);
+    if (prior.author?.login !== 'github-actions[bot]' || !TITLE.test(prior.commit?.message ?? '')
+      || !prior.files?.length || !prior.files.every(file => REFRESH_PATHS.includes(file.filename))) continue;
+    await request('DELETE', `${api}/git/refs/heads/${branch}`);
+  }
   const trees = await request('GET', `${api}/git/commits/${baseSha}`);
   const tree = await request('POST', `${api}/git/trees`, { base_tree: trees.tree.sha,
     tree: REFRESH_PATHS.map(path => ({ path, mode: '100644', type: 'blob', content: candidate[path] })) });
@@ -62,8 +77,19 @@ export async function publish({ root = ROOT, out, repository, base, baseSha, evi
     const prior = await request('GET', `${api}/git/commits/${existing.object.sha}`);
     if (prior.tree.sha !== tree.sha) throw new Error('BWRAP_REFRESH_REF_CONFLICT: existing candidate differs; lead must reconcile');
   } else await request('POST', `${api}/git/refs`, { ref: `refs/heads/${result.branch}`, sha: commit.sha });
-  const pr = await request('POST', `${api}/pulls`, { title, body, head: result.branch, base, draft: true });
-  return { changed: true, url: pr.html_url };
+  try {
+    const pr = await request('POST', `${api}/pulls`, { title, body, head: result.branch, base, draft: true });
+    return { changed: true, url: pr.html_url };
+  } catch (error) {
+    const summary = `BWRAP_REFRESH_PR_FAILED: draft PR could not be opened for ${result.branch}: ${error.message}`;
+    try {
+      const issue = await request('POST', `${api}/issues`, { title: `${title} - PR publication failed`,
+        body: `${summary}\n\nCandidate branch: \`${result.branch}\`\n\n${body}` });
+      return { changed: true, issue: issue.html_url, warning: summary };
+    } catch (issueError) {
+      throw new Error(`${summary}; issue creation also failed: ${issueError.message}. Evidence: ${evidenceUrl}`, { cause: issueError });
+    }
+  }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const request = async (method, path, body, allowMissing = false) => {
@@ -73,11 +99,19 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       ...(body ? { body: JSON.stringify(body) } : {}) });
     if (allowMissing && response.status === 404) return null;
     if (!response.ok) throw new Error(`GitHub request failed: ${method} ${path} HTTP ${response.status}`); // no token or response body
+    if (response.status === 204) return null;
     return response.json();
   };
   const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: runId } = process.env;
   publish({ out: resolve(process.argv[2]), repository, base: process.env.BWRAP_REFRESH_BASE, evidenceUrl: `${server}/${repository}/actions/runs/${runId}`,
     baseSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), request })
-    .then(result => process.stdout.write(JSON.stringify(result) + '\n'))
-    .catch(error => { process.stderr.write(`publish-bwrap-refresh: ${error.message}\n`); process.exitCode = 1; });
+    .then(result => {
+      process.stdout.write(JSON.stringify(result) + '\n');
+      if (process.env.GITHUB_STEP_SUMMARY && result.issue) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${result.warning}\n\nIssue: ${result.issue}\n`);
+    })
+    .catch(error => {
+      process.stderr.write(`publish-bwrap-refresh: ${error.message}\n`);
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `publish-bwrap-refresh failed: ${error.message}\n`);
+      process.exitCode = 1;
+    });
 }

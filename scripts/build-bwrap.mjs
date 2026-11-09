@@ -27,6 +27,15 @@ export const NODE_ARCH = Object.freeze({ x86_64: 'x64', aarch64: 'arm64' });
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const option = (name, fallback) => { const at = process.argv.indexOf(name); return at > -1 && process.argv[at + 1] ? process.argv[at + 1] : fallback; };
+const recovery = 'Retry with a fresh directory: node scripts/build-bwrap.mjs --out <fresh-directory>; then DECKENT_BWRAP_BUILD=<fresh-directory> npm run build. Keep the failed output for diagnosis.';
+
+/** Container root already maps to the caller under rootless Docker/Podman; chown would give the bind mount to a subordinate uid. */
+export function dockerOutputOwner(execute = execFileSync) {
+  const info = JSON.parse(execute('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8', timeout: 30000 }));
+  const rootless = info.SecurityOptions?.some(option => /^name=rootless(?:,|$)/u.test(option))
+    || (info.host ?? info.Host)?.security?.rootless;
+  return rootless ? '' : `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`;
+}
 
 /** A cached download whose bytes must hash to the lock's value; a mismatch (cached or fetched) refuses the build. */
 async function verifiedFile(url, expected, path) {
@@ -65,9 +74,8 @@ export function lockProblems(lock) {
   if (!lock.source?.url?.includes(`/v${lock.version}/`)) problems.push(`source.url does not name version ${lock.version}`);
   if (!SHA256.test(lock.source?.sha256 ?? '')) problems.push(`source.sha256 is not a sha256: ${lock.source?.sha256}`);
   if (!/@sha256:[0-9a-f]{64}$/u.test(lock.buildImage?.reference ?? '')) problems.push(`buildImage.reference is not pinned by digest: ${lock.buildImage?.reference}`);
-  for (const key of ['hostPackages', 'sysrootPackages']) {
-    (lock[key] ?? []).forEach((spec, index) => { if (!/^[a-z0-9][\w.+-]*=[\w.+-]+$/u.test(spec)) problems.push(`${key}[${index}] is not pinned (name=version): ${spec}`); });
-  }
+  (lock.hostPackages ?? []).forEach((spec, index) => { if (!/^[a-z0-9][\w.+-]*(?:=[\w.+-]+)?$/u.test(spec)) problems.push(`hostPackages[${index}] is not a package name or pin: ${spec}`); });
+  (lock.sysrootPackages ?? []).forEach((spec, index) => { if (!/^[a-z0-9][\w.+-]*=[\w.+-]+$/u.test(spec)) problems.push(`sysrootPackages[${index}] is not pinned (name=version): ${spec}`); });
   for (const key of ['host', ...BWRAP_ARCHES.map(arch => `sysroot-${arch}`)]) {
     if (!Array.isArray(lock.resolvedPackages?.[key]) || !lock.resolvedPackages[key].length) problems.push(`resolvedPackages.${key} is missing`);
     else lock.resolvedPackages[key].forEach((entry, index) => {
@@ -119,6 +127,10 @@ export function bundleProblems(dir, lock) {
  * regenerated from the lock. */
 export function stageBundle(from, target, lock) {
   const out = existsSync(join(from, 'out')) ? join(from, 'out') : from;
+  const required = [...lock.shipArches.map(arch => `${arch}/bwrap`), 'licenses/bubblewrap-COPYING', 'licenses/musl-COPYRIGHT',
+    'licenses/libcap-License', `source/bubblewrap-${lock.version}.tar.xz`];
+  const missing = required.filter(path => !existsSync(join(out, path)));
+  if (missing.length) throw new Error(`Incomplete bubblewrap output at ${from}: missing ${missing.join(', ')}. ${recovery}`);
   for (const arch of lock.shipArches) {
     const digest = sha256(readFileSync(join(out, arch, 'bwrap')));
     if (digest !== lock.outputs[arch].sha256) throw new Error(`${join(out, arch, 'bwrap')} sha256 ${digest} is not the locked ${lock.outputs[arch].sha256}`);
@@ -145,7 +157,7 @@ export function bwrapNotice(lock) {
   const lines = [`bubblewrap ${lock.version} (${lock.license}) — a separate program shipped with Deckent, run as a subprocess.`,
     `Corresponding source (included): source/bubblewrap-${lock.version}.tar.xz, identical to ${lock.source.url}`,
     `  sha256 ${lock.source.sha256}; git tag ${lock.source.tag} (commit ${lock.source.commit}), signed by ${lock.source.tagSigningPrimaryKey}.`,
-    '  Build recipe and exact toolchain: source/build.sh and source/bwrap.lock.json.', '',
+    '  Build recipe and sysroot pins: source/build.sh and source/bwrap.lock.json; host tools resolve at build time.', '',
     'Statically linked into this executable:'];
   for (const part of lock.linked) lines.push(`  ${part.name} ${part.version} — ${part.license}`);
   lines.push('', 'License texts: licenses/bubblewrap-COPYING (LGPL-2.1), licenses/musl-COPYRIGHT, licenses/libcap-License.', '');
@@ -166,7 +178,7 @@ async function main() {
   if (problems.length) throw new Error(`bwrap.lock.json is incomplete: ${problems.join('; ')}`);
   const cache = resolve(option('--cache', join(ROOT, '.pack', 'bwrap', 'cache')));
   const out = resolve(option('--out', join(ROOT, '.pack', 'bwrap', `build-${Date.now()}`)));
-  if (existsSync(out) && readdirSync(out).length) throw new Error(`--out ${out} is not empty; refusing to overwrite`);
+  if (existsSync(out) && readdirSync(out).length) throw new Error(`--out ${out} is not empty; refusing to overwrite. ${recovery}`);
   const cachedBuild = join(cache, `build-${arches.join('-')}`);
   if (process.argv.includes('--verify-cache')) {
     verifyCache(cachedBuild, ROOT, lock, arches);
@@ -184,18 +196,22 @@ async function main() {
   copyFileSync(await verifiedFile(lock.source.url, lock.source.sha256, join(cache, tarball)), join(out, 'in', tarball));
   copyFileSync(join(PACKAGING, 'build.sh'), join(out, 'in', 'build.sh'));
 
-  const uid = process.getuid?.() ?? 0, gid = process.getgid?.() ?? 0;
   const env = { BWRAP_VERSION: lock.version, SOURCE_DATE_EPOCH: lock.sourceDateEpoch, HOST_PACKAGES: lock.hostPackages.join(' '),
-    SYSROOT_PACKAGES: lock.sysrootPackages.join(' '), ARCHES: arches.join(' '), OUT_OWNER: `${uid}:${gid}`,
-    HOST_RESOLVED_PACKAGES: resolvedPackagePins(lock.resolvedPackages?.host ?? []).join(' ') };
+    SYSROOT_PACKAGES: lock.sysrootPackages.join(' '), ARCHES: arches.join(' ') };
   for (const name of arches) env[`SYSROOT_${name.toUpperCase()}_RESOLVED_PACKAGES`] = resolvedPackagePins(lock.resolvedPackages?.[`sysroot-${name}`] ?? []).join(' ');
   let log;
-  try { log = execFileSync('docker', ['run', '--rm', ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
+  try {
+    const owner = dockerOutputOwner();
+    if (owner) env.OUT_OWNER = owner;
+    log = execFileSync('docker', ['run', '--rm', ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
     '-v', `${join(out, 'in')}:/in:ro`, '-v', `${join(out, 'out')}:/out`, lock.buildImage.reference, 'sh', '/in/build.sh'],
   { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024, timeout: 10 * 60 * 1000 });
   } catch (error) {
-    writeFileSync(join(out, 'build.log'), `${error.stdout ?? ''}\n${error.stderr ?? ''}`);
-    throw new Error(`BWRAP_BUILD_FAILED: cache miss build failed. If Alpine pins vanished, run the platform verification deps-watch refresh (CONTRIBUTING.md). See ${join(out, 'build.log')}`, { cause: error });
+    const diagnostic = `${error.stderr ?? ''}\n${error.stdout ?? ''}`.trim() || error.message;
+    writeFileSync(join(out, 'build.log'), `${diagnostic}\n`);
+    const first = diagnostic.split('\n').find(line => /error|failed|cannot|denied|unreachable|BWRAP_PIN_REFRESH_REQUIRED/iu.test(line)) ?? diagnostic.split('\n')[0];
+    const hint = diagnostic.includes('BWRAP_PIN_REFRESH_REQUIRED') ? ' Run platform verification deps-watch (CONTRIBUTING.md).' : '';
+    throw new Error(`BWRAP_BUILD_FAILED: Docker build/probe failed: ${first}.${hint} See ${join(out, 'build.log')}. ${recovery}`, { cause: error });
   }
   writeFileSync(join(out, 'build.log'), log);
 
@@ -203,11 +219,11 @@ async function main() {
   copyFileSync(texts.libcap, join(out, 'out', 'licenses', 'libcap-License'));
   writeFileSync(join(out, 'out', 'NOTICE-bubblewrap.txt'), bwrapNotice(lock));
 
-  // The whole resolved package set (dependencies included) must equal the lock's: a silently upgraded toolchain is a different build.
+  // Host tools may drift; only the linked sysroot closures and the executable bytes are build constraints.
   const lines = path => readFileSync(path, 'utf8').split('\n').filter(Boolean);
   const resolved = { host: lines(join(out, 'out', 'host-packages.txt')) };
   for (const name of arches) resolved[`sysroot-${name}`] = lines(join(out, 'out', name, 'sysroot-packages.txt'));
-  const drift = Object.entries(resolved).filter(([key, list]) => lock.resolvedPackages?.[key] && lock.resolvedPackages[key].join('\n') !== list.join('\n'))
+  const drift = Object.entries(resolved).filter(([key, list]) => key !== 'host' && lock.resolvedPackages?.[key] && lock.resolvedPackages[key].join('\n') !== list.join('\n'))
     .map(([key]) => key);
   const results = {};
   let mismatch = drift.length > 0 && !record;

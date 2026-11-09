@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { BWRAP_ARCHES, bundledIdentityModule, resolvedPackagePins } from './build-bwrap.mjs';
+import { BWRAP_ARCHES, bundledIdentityModule, dockerOutputOwner, resolvedPackagePins } from './build-bwrap.mjs';
 import { CACHE_INPUTS, licenseInput } from './bwrap-cache.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -26,7 +26,7 @@ export function refreshedLock(lock, resolved) {
     if (versions.some(value => !value) || new Set(versions).size !== 1) throw new Error(`direct pin missing or differs across architectures: ${name}`);
     return `${name}=${versions[0]}`;
   });
-  result.hostPackages = pins(lock.hostPackages, ['host']);
+  result.hostPackages = lock.hostPackages.map(spec => spec.includes('=') ? pins([spec], ['host'])[0] : spec);
   result.sysrootPackages = pins(lock.sysrootPackages, BWRAP_ARCHES.map(arch => `sysroot-${arch}`));
   result.resolvedPackages = resolved;
   for (const linked of result.linked) {
@@ -65,8 +65,9 @@ export function refresh({ root = ROOT, out, execute = run }) {
   writeFileSync(join(out, 'scratch.txt'), `${scratch}\n`);
   const resolvedDir = join(out, 'resolved'); mkdirSync(resolvedDir);
   const env = { HOST_NAMES: lock.hostPackages.map(pin => pin.split('=')[0]).join(' '),
-    SYSROOT_NAMES: lock.sysrootPackages.map(pin => pin.split('=')[0]).join(' '), ARCHES: BWRAP_ARCHES.join(' '),
-    OUT_OWNER: `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}` };
+    SYSROOT_NAMES: lock.sysrootPackages.map(pin => pin.split('=')[0]).join(' '), ARCHES: BWRAP_ARCHES.join(' ') };
+  const owner = dockerOutputOwner(execute);
+  if (owner) env.OUT_OWNER = owner;
   const args = ['run', '--rm', ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
     '-v', `${join(root, 'packaging/bwrap/resolve.sh')}:/resolve.sh:ro`, '-v', `${resolvedDir}:/out`, lock.buildImage.reference, 'sh', '/resolve.sh'];
   logged(join(out, 'resolve.log'), 'docker', args);
