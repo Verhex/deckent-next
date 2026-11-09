@@ -144,14 +144,11 @@ describe('requires POSIX Git environment: tracked-file measurement of a full-acc
 });
 
 it('reports the typed Git execution failure for a missing working root instead of claiming a clean repository', async context => {
+  expect(describeTrackedFilesUnchecked({ kind: 'unavailable' })).toContain('not checked'); // also without a reason
   if (process.platform === 'win32') context.skip('GIT_POSIX_ENVIRONMENT_UNSUPPORTED: process listing uses the fixed POSIX environment');
   const root = await mkdtemp(join(tmpdir(), 'deckent-tracked-missing-'));
   await rm(root, { recursive: true });
   const baseline = await snapshotTrackedFiles(root);
   expect(baseline).toEqual({ kind: 'unavailable', reason: 'GIT_LIST_EXECUTION_FAILED' });
   expect(describeTrackedFilesUnchecked(baseline)).toContain('not checked');
-});
-
-it('formats an unavailable tracked-file measurement visibly without claiming a clean repository', () => {
-  expect(describeTrackedFilesUnchecked({ kind: 'unavailable' })).toContain('not checked');
 });

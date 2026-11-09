@@ -22,17 +22,14 @@ export async function inspectWorkerImageChoices(input: { packageRoot: string; ho
   const lock = JSON.parse(await readFile(join(directory, 'lineage.lock.json'), 'utf8')) as { sha256: string };
   if (createHash('sha256').update(bytes).digest('hex') !== lock.sha256) throw ErrorRegistry.createError('WORKER_LINEAGE_INVALID');
   const lineage = lineageSchema.parse(JSON.parse(bytes.toString('utf8')));
-  const env = dockerClientEnvironment(input.env);
   const command = async (args: string[]) => {
-    const result = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: input.executable!, args, cwd: directory, env,
+    const result = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: input.executable!, args, cwd: directory, env: dockerClientEnvironment(input.env, args[0] === '--host'),
       timeoutMs: limits.probeTimeoutMs, outputBytes: limits.probeOutputBytes });
     if (result.reason !== 'exit' || result.exitCode !== 0 || result.stdoutTruncated) throw ErrorRegistry.createError('WORKER_IMAGE_DOCKER_WAITING');
     return Buffer.from(result.stdoutBase64, 'base64').toString('utf8').trim();
   };
   const endpoint = persistedString(z.string().min(1)).parse(JSON.parse(await command(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'])));
   if (!endpoint.startsWith('unix:///') || endpoint.includes('\0')) throw ErrorRegistry.createError('WORKER_IMAGE_DOCKER_WAITING');
-  // Explicit endpoint and no conflicting inherited context/TLS selectors, as in the builder.
-  for (const key of ['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']) delete env[key];
   const docker = (args: string[]) => command(['--host', endpoint, ...args]);
   const daemon = await docker(['info', '--format', '{{.ID}}']);
   const tags = (await docker(['image', 'ls', recipe.repository, '--no-trunc', '--format', '{{json .}}'])).split('\n').filter(Boolean).slice(0, limits.candidateImages);

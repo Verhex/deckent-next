@@ -49,14 +49,13 @@ function assertBuilderExited(evidence: ProcessEvidence, timeout: WorkerImageBuil
   const reason = /^Error: (WORKER_[A-Z_]+)(?::|$)/.exec(errorLine(evidence) ?? '')?.[1];
   throw new WorkerImageBuildError(BUILDER_REASONS.find(code => code === reason) ?? fallback, evidence);
 }
-const allowedEnvironment = dockerClientEnvironment;
 /** Highest daemon-held counter, read-only; malformed answers refuse. */
 export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: string; home?: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
   runner: WorkerImageBuildRunner = runNodeProcess): Promise<string | null> {
   if (!isAbsolute(input.packageRoot)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   const directory = join(input.packageRoot, WORKER_IMAGE_ASSET_DIRECTORY);
   const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(directory, 'build.mjs'), '--held-version', ...(input.home ? [input.home, String(limits.receiptScan), String(limits.receiptBytes)] : [])], cwd: directory,
-    env: allowedEnvironment(input.env ?? process.env), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }, input.signal); // a stopping service ends the daemon check too
+    env: dockerClientEnvironment(input.env ?? process.env), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }, input.signal); // a stopping service ends the daemon check too
   assertBuilderExited(evidence, 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT', 'WORKER_IMAGE_VERSION_CHECK_FAILED');
   const answer = /^\{"heldVersion":(null|"r[1-9][0-9]*-\d{8}")\}\n?$/.exec(Buffer.from(evidence.stdoutBase64, 'base64').toString('utf8')); // a truncated answer never matches
   if (!answer) throw new WorkerImageBuildError('WORKER_IMAGE_VERSION_CHECK_FAILED', evidence);
@@ -109,7 +108,7 @@ export async function runWorkerImageBuild(input: Readonly<{ context: string; rec
   runner: WorkerImageBuildRunner = runNodeProcess) {
   if (!isAbsolute(input.context) || !isAbsolute(input.receiptPath)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   await privateDirectory(input.context);
-  const env = allowedEnvironment(input.env ?? process.env);
+  const env = dockerClientEnvironment(input.env ?? process.env);
   const command: ProcessCommand = { schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(input.context, 'build.mjs'), input.receiptPath, ...(input.imageId ? ['--image-id', input.imageId] : []), ...(input.npmrcSecret ? ['--npmrc-secret', input.npmrcSecret] : [])],
     cwd: input.context, env, timeoutMs: input.timeoutMs, outputBytes: input.outputBytes };
   // An aborted signal ends the builder process through the runner's own termination (reason `cancelled`); it is a failed build, never a receipt.

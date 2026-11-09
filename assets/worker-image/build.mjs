@@ -47,11 +47,14 @@ if (!heldCheck) {
 const sha256 = name => createHash('sha256').update(readFileSync(join(root, name))).digest('hex');
 const readJson = name => { try { return JSON.parse(readFileSync(join(root, name), 'utf8')); } catch { return null; } };
 const recipe = validateRecipe(readJson('recipe.json'));
+// The docker-supervisor client table (`forward`, `stripOnHost`), pinned equal by tests/contracts/supervisor/command.test.ts: a pinned `--host`
+// inherits no conflicting context or TLS selector.
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(key)));
+const hostEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_TLS'].includes(key)));
 /** One docker call. A build's output is captured, replayed (the runner's bounded evidence) and searched for an installer's typed refusal. */
 const run = (args, timeout, build = false) => {
-  const result = spawnSync('docker', args, { env, timeout: Math.max(1, timeout), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  const result = spawnSync('docker', args, { env: args[0] === '--host' ? hostEnv : env, timeout: Math.max(1, timeout), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   if (build) { process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? ''); }
   if (result.error || result.status !== 0) {
     const reason = build ? /WORKER_[A-Z_]+(?::[^\n]*)?/.exec(`${result.stdout ?? ''}\n${result.stderr ?? ''}`.split('\n').filter(line => /Error: WORKER_/.test(line)).pop() ?? '') : null;
@@ -102,7 +105,7 @@ try {
   cleanup = () => {
     for (const cidfile of cidfiles.filter(existsSync)) {
       const id = readFileSync(cidfile, 'utf8').trim();
-      if (/^[a-f0-9]{64}$/.test(id)) spawnSync('docker', ['--host', endpoint, 'rm', '--force', id], { env, timeout: 20_000, stdio: 'ignore' });
+      if (/^[a-f0-9]{64}$/.test(id)) spawnSync('docker', ['--host', endpoint, 'rm', '--force', id], { env: hostEnv, timeout: 20_000, stdio: 'ignore' });
     }
   };
   /** A short hardened container on a local image with no network and a read-only root (the probe, and the base's package list). */

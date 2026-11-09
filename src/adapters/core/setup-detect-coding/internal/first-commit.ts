@@ -4,7 +4,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdtemp, open, readFile, readlink, realpath, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { workerTreeDenyForms } from '#engine/index.js';
+import { checkAttrSet, workerTreeDenyForms } from '#engine/index.js';
 import { ErrorRegistry, redactForRecord, personProcessEnvironment, sha256 } from '#platform/index.js';
 import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY } from '#adapters/core/workspace-read/index.js';
 import { configSecretHit, isConfigFile, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
@@ -89,13 +89,10 @@ const stagedOf = (file: Candidate, stored: Buffer, fileMode: boolean): Staged =>
 /** Paths whose Git attributes ask for a clean conversion (filter, working-tree-encoding, ident); one read-only `check-attr` for all. */
 async function converting(git: FirstCommitGit, paths: readonly string[]): Promise<ReadonlySet<string>> {
   if (!paths.length) return new Set();
-  const names = policy.conversionAttributes, fields = step('check-attr', await git(['check-attr', '-z', '--stdin', ...names],
-    { input: `${paths.join('\0')}\0`, outputBytes: paths.length * names.length * limits.attributeRowBytes })).split('\0'), found = new Set<string>();
-  // `-z` rows are path NUL attribute NUL value NUL.
-  for (let row = 0; row < fields.length - 1; row += ROW_FIELDS) if (!['unspecified', 'unset'].includes(fields[row + ROW_FIELDS - 1]!)) found.add(fields[row]!);
-  return found;
+  const names = policy.conversionAttributes;
+  return new Set(checkAttrSet(step('check-attr', await git(['check-attr', '-z', '--stdin', ...names],
+    { input: `${paths.join('\0')}\0`, outputBytes: paths.length * names.length * limits.attributeRowBytes }))).keys());
 }
-const ROW_FIELDS = ['path', 'attribute', 'value'].length;
 /** The form Git stores for a candidate (`git add`'s clean conversion: filter, working-tree-encoding, ident, line endings). Without such an
  * attribute and without a CR byte Git keeps the bytes as they are; otherwise Git converts the bytes this read holds (`hash-object --path`) into
  * the private `objects` directory, never the repository's, and the result is read back. Nothing here is accepted yet. */
