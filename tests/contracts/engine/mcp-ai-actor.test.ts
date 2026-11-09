@@ -162,15 +162,19 @@ it('pure hold preserves progression failure even when the actor is unknown', () 
   expect(holdRun(run, run.revision, 'hold', 50, 5000).state).toMatchObject({ reason: 'progression-failed', since: 10, deadline: 1010 });
 });
 
-it.each(['edit-floor', 'edit-authority', 'mcp-floor'])('the approval card itself refuses AI %s even with decide permission', async cell => {
-  const f = await fixture(baseRun());
-  const card = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: ai.id, issuer: ai.issuer, subject: ai.subject },
-    subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'write_file', toolVersion: 1, resource: 'protected-file', argsDigest: 'a'.repeat(64) },
-    policyRevision: 'p', summary: 'Risky protected write', createdAt: 10, expiresAt: 1010,
-    facts: { risk: { source: 'cell', cell }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'turn-bound' } });
-  await expect(f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: card.request.approvalId, commandId: 'risky-approval',
-    expectedRevision: 0, decision: 'allow', reason: 'explicit policy says allow' })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
-  expect(f.approvals.store.load('s', card.request.approvalId)).toEqual(card); expect(f.approvals.store.receipt('s', 'risky-approval')).toBeNull();
+// The AI check and the unwitnessed-decider check refuse the same cards (APPR-1: one predicate); a risk the card does not declare is never AI-answerable.
+it.each([...['edit-floor', 'edit-authority', 'mcp-floor'].map(cell => ({ source: 'cell' as const, cell })), { source: 'effect-class' as const, effectClass: 'write' as const, authority: true }, null])(
+  'the approval card itself refuses AI and an unwitnessed person %j even with decide permission', async risk => {
+  for (const person of [ai, human]) {
+    const f = await fixture(baseRun(), [], person);
+    const card = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: ai.id, issuer: ai.issuer, subject: ai.subject },
+      subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'write_file', toolVersion: 1, resource: 'protected-file', argsDigest: 'a'.repeat(64) },
+      policyRevision: 'p', summary: 'Risky protected write', createdAt: 10, expiresAt: 1010,
+      facts: { risk, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'turn-bound' } });
+    await expect(f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: card.request.approvalId, commandId: 'risky-approval',
+      expectedRevision: 0, decision: 'allow', reason: 'explicit policy says allow' })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
+    expect(f.approvals.store.load('s', card.request.approvalId)).toEqual(card); expect(f.approvals.store.receipt('s', 'risky-approval')).toBeNull();
+  }
 });
 it('script card waits for a witnessed decision, admits only its bound command and refuses expiry', async () => {
   const f = await fixture(awaiting(), [], human, false), input = command('reject', 0, { taskId: 't' });

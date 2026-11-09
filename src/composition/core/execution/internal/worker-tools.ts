@@ -40,7 +40,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
       const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
       let kept: string | null = null;
       try {
-        const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), policy = await context.policy.load() as { revision: string };
+        const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), policy = await context.policy.load();
         const started = clock.sample(), { id, issuer, subject: actor } = context.principal;
         const raw = edits.preview(input.tool.name, input.args) ?? shell.previewText(input.tool.name, input.args) ?? chatTurnApprovalPreview(input.tool.name, input.args);
         const preview = await prepareApprovalPreview(redactForRecord(raw, known), async text => kept = await keepFullPreview(context.layout, sha256(`${turnId}\0${input.round}\0${input.index}`), text));

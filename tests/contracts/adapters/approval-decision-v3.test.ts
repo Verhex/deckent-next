@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteApprovalStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { approvalDecisionClass, approvalDecisionAssurance, approvalRecordSchema, approvalRequestSchema } from '#domain/index.js';
+import { approvalDecisionClass, approvalDecisionAssurance, approvalRecordSchema, approvalRequestSchema, encodeCommandProjection } from '#domain/index.js';
 import { agentToolApprovalNote, sealApproval, verifyApproval } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 
@@ -46,6 +46,20 @@ describe('approval decision v2 / v3 (APPROVER-NOTE)', () => {
     // A pre-B1 decision (no version, no assurance) still reads.
     const legacy: Record<string, unknown> = { ...base }; delete legacy['assurance'];
     expect(approvalRecordSchema.safeParse({ ...decide(6, { schemaVersion: 2, ...base, reason: 'r' }), decision: { ...legacy, reason: 'r' } }).success).toBe(true);
+    // S1-e2 (S1-R9): a shape the lifecycle never writes does not verify, even under a valid MAC.
+    const signed = (record: Record<string, unknown>) => ({ ...record, keyId: integrity.keyId, mac: integrity.sign(encodeCommandProjection('approval-record:1',
+      { request: record['request'], revision: record['revision'], status: record['status'], decision: record['decision'], keyId: integrity.keyId })) });
+    const task = { schemaVersion: 1, approvalId: 'task-1', scopeId: 'scope', runId: 'run', taskId: 'task', requester, actionDigest: digest('task'), policyRevision: 'p1',
+      summary: 'Execute task', createdAt: 1_000, expiresAt: 61_000 }, decision = { schemaVersion: 2, ...base, reason: 'r' };
+    expect(verifyApproval(signed({ request: task, revision: 1, status: 'decided', decision }), integrity).status).toBe('decided');
+    for (const shape of [{ request: task, revision: 1, status: 'pending', decision: null }, { request: task, revision: 1, status: 'expired', decision },
+      { request: task, revision: 1, status: 'decided', decision: { ...decision, decidedAt: 61_000 } }, { request: task, revision: 1, status: 'decided', decision: { ...decision, decidedAt: 999 } }])
+      expect(() => verifyApproval(signed(shape), integrity)).toThrow('APPROVAL_INTEGRITY');
+    // KG4 F3 expand: a v3 request reads the typed worker origin a later writer seals; a malformed origin is refused.
+    const origin = { kind: 'worker-tool-call', identity: { runId: 'run', taskId: 'task', attemptId: 'attempt', scopeId: 'scope', layoutRevision: 'l', generation: 1 },
+      turnId: 'turn-1', resourceDigest: digest('src/a.ts'), argsDigest: digest('args-9') };
+    expect(verifyApproval(sealApproval({ ...pending(9), request: approvalRequestSchema.parse({ ...pending(9).request, origin }) }, integrity), integrity).request).toMatchObject({ origin });
+    expect(approvalRequestSchema.safeParse({ ...pending(9).request, origin: { ...origin, kind: 'chat' } }).success).toBe(false);
   });
 
   it('through the real store: only a v3 decision yields the approver note; v2 yields none', async () => {
