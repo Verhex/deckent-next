@@ -632,6 +632,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`ADOPTION_BASE_CHANGED`). Deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
 - **A patch made on a stale checkout can fail to apply.** The delivery check stops it before anything is written.
   *Workaround:* re-run the request on the current source.
+- **No rollback from alpha.64 to alpha.63.3.** Once alpha.64 writes worker approval origins or version 2 delivery summaries, alpha.63.3 cannot read those records. Recovery requires a forward fix.
 - **An older delivery consent without per-file digests needs a fresh yes (alpha.64).** If the confirmation card carries
   change digests but the pending consent does not, the terminal asks you to confirm the exact card again after upgrading.
 - **An unreadable retained patch blocks the delivered-result preview (alpha.64).** The terminal shows the read error;

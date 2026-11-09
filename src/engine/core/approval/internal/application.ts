@@ -63,7 +63,7 @@ export class ApprovalApplication {
     identitySchema.parse(channel); counterSchema.positive().parse(pageLimit);
   }
   private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: Policy, decision: 'allow' | 'deny'): Promise<boolean> {
-    const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request.summary);
+    const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request);
     if (worker && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
     if (decision === 'allow' && (worker || record.request.schemaVersion === 3 && record.request.preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);

@@ -244,6 +244,22 @@ it('a legacy-shaped card (no facts, no class) is never read as human: AI and unw
       await expect(decide()).rejects.toMatchObject({ code: expected });
       expect(f.approvals.store.load('s', legacy.request.approvalId)?.status).toBe('pending');
     } else expect((await decide()).decision).toMatchObject({ deciderClass: 'human-tty' });
+    const subject = { kind: 'agent-tool-call' as const, turnId: 'worker-turn', round: 1, index: 0, tool: 'read_file', toolVersion: 1, resource: 'src/a.ts', argsDigest: 'a'.repeat(64) };
+    const worker = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: human.id, issuer: human.issuer, subject: human.subject }, subject,
+      policyRevision: 'p', summary: 'Human-readable worker call', createdAt: 100, expiresAt: 900,
+      origin: { kind: 'worker-tool-call', identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' },
+        turnId: subject.turnId, resourceDigest: sha256(subject.resource), argsDigest: subject.argsDigest },
+      preview: { schemaVersion: 1, argsDigest: subject.argsDigest, text: 'reviewed read', cut: null },
+      facts: { risk: { source: 'cell', cell: 'read' }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } });
+    for (const decision of tty && person === human ? ['allow'] as const : ['allow', 'deny'] as const) {
+      const deciding = f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: worker.request.approvalId,
+        commandId: `worker-${person.id}-${tty}-${decision}`, expectedRevision: 0, decision, reason: 'reviewed' });
+      if (person === human && tty) expect((await deciding).decision).toMatchObject({ deciderClass: 'human-tty' });
+      else {
+        await expect(deciding).rejects.toMatchObject({ code: person === ai ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED' });
+        expect(f.approvals.store.load('s', worker.request.approvalId)?.status).toBe('pending');
+      }
+    }
   }
 });
 

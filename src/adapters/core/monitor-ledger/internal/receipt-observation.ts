@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { deriveRunBlocker, deriveRunState, type MonitorDeliveryState, type MonitorLedgerReading, type MonitorLedgerRun, type ResultBrief } from '#engine/index.js';
+import { runWorkspaceCustodySchema, workingTreeSource, RunWorkspaceCustodyError, deriveRunBlocker, deriveRunState, type MonitorDeliveryState, type MonitorLedgerReading, type MonitorLedgerRun, type ResultBrief } from '#engine/index.js';
 
 type Receipt = NonNullable<MonitorLedgerRun['deliveryReceipts']>[number];
 // First ledger versions of integration, delivery and adoption evidence (schema.ts history).
@@ -9,13 +9,20 @@ const INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33;
 export function readDeliveryReceipts(db: DatabaseSync, version: number, scopeIds?: readonly string[]) {
   // M-VIS: receipts of other scopes are not read when the monitor read is scoped (same `IN (json_each)` form as the reader).
   const within = scopeIds ? { sql: ' scope_id IN (SELECT value FROM json_each(?))', args: [JSON.stringify(scopeIds)] } : { sql: '', args: [] as string[] };
-  const histories = new Map<string, Receipt[]>();
+  const histories = new Map<string, Receipt[]>(), modes = new Map<string, 'working-tree' | 'reference-only'>();
+  for (const row of db.prepare(`SELECT scope_id,run_id,record FROM run_workspace_custody${within.sql ? ' WHERE' + within.sql : ''}`).all(...within.args)) {
+    let custody;
+    try { custody = runWorkspaceCustodySchema.parse(JSON.parse(String(row.record))); } catch { throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT'); }
+    if (custody.scopeId !== row.scope_id || custody.runId !== row.run_id) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT');
+    modes.set(`${row.scope_id}/${row.run_id}`, workingTreeSource(custody.source) ? 'working-tree' : 'reference-only');
+  }
   const put = (row: Record<string, unknown>, state: MonitorDeliveryState, commit: unknown, targetRef: unknown) => {
     let identity;
     try { identity = attemptIdentitySchema.safeParse(JSON.parse(String(row.identity))); } catch { identity = null; }
     const producer = identity?.success && identity.data.scopeId === row.scope_id && identity.data.runId === row.run_id ? identity.data : null;
     const key = `${row.scope_id}/${row.run_id}`, receipts = histories.get(key) ?? [];
-    receipts.push(Object.freeze({ identity: producer, receipt: Object.freeze({ state,
+    const application = modes.get(key);
+    receipts.push(Object.freeze({ identity: producer, receipt: Object.freeze({ ...(application ? { schemaVersion: 2 as const, application } : {}), state,
       commit: typeof commit === 'string' && /^[0-9a-f]{40,64}$/.test(commit) ? commit : null,
       commandId: typeof row.command_id === 'string' ? row.command_id : null, targetRef: typeof targetRef === 'string' ? targetRef : null }) }));
     histories.set(key, receipts);
