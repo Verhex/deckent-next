@@ -27,6 +27,7 @@ export interface NativeCliWorkerPorts {
   readiness(binding: NativeCliWorkerBinding): Promise<NativeAgentReadiness>;
   /** Retained F08 for this exact execution seal, not a test result boolean supplied by the task. Missing/stale = null. */
   f08(binding: NativeCliWorkerBinding): Promise<NativeAgentExecution | null>;
+  /** One readiness point: readiness and its F08 (for the seal readiness returned) on one K5 snapshot and one observation read. */ readinessPoint?(binding: NativeCliWorkerBinding): Promise<Readonly<{ readiness: NativeAgentReadiness; f08(execution: NativeAgentExecution): Promise<NativeAgentExecution | null> }>>;
   verification?: { acquire(request: SandboxRequest, binding: NativeCliWorkerBinding, execution: NativeAgentExecution): Promise<null | {
     finish(verdict: import('#capabilities/index.js').NativeWorkerEvidenceVerdict): Promise<void>; abandon(): Promise<void> }> };
   /** K5b: principal, installation/company, delegation, activation, lease, profile revision; on every spawn and tool admission. */

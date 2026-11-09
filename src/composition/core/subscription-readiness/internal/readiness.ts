@@ -35,16 +35,19 @@ const incomplete = (state: 'unknown' | 'unavailable', reason: NativeAgentReadine
 
 /** Prerequisite projection only: a ready seal is neither consent, a policy grant, a capacity reservation nor admission.
  * Brain uses its tool-less profile's observations; tool/plugin/bridge failures only block tool-bearing surfaces.
- * No cached result or fallback exists here. K0 requires an execution seal even for a ready Brain projection. */
-export async function inspectSubscriptionReadiness(input: SubscriptionReadinessQuery, reader: SubscriptionReadinessReader): Promise<NativeAgentReadiness> {
+ * No cached result or fallback exists here. K0 requires an execution seal even for a ready Brain projection.
+ * `unknownSurfaceFacts: 'allow'`: an unknown tool/plugin/bridge fact does not block (a guarded first run checks it); a false one still does. */
+export async function inspectSubscriptionReadiness(input: SubscriptionReadinessQuery, reader: SubscriptionReadinessReader,
+  options: Readonly<{ unknownSurfaceFacts?: 'allow' }> = {}): Promise<NativeAgentReadiness> {
   const query = Object.freeze({ ...input, reference: Object.freeze({ ...input.reference }) });
   let observed: SubscriptionReadinessObservations | null | undefined;
   try { observed = await reader.read(query); }
   catch { return incomplete('unknown', 'NATIVE_AGENT_ENVIRONMENT_REFUSED'); }
   const checks: Check[] = [[observed?.cli, 'NATIVE_AGENT_CLI_UNAVAILABLE'], [observed?.login, 'NATIVE_AGENT_LOGIN_REQUIRED'],
     [observed?.environment, 'NATIVE_AGENT_ENVIRONMENT_REFUSED']];
-  if (query.surface !== 'brain') checks.push([observed?.plugins, 'NATIVE_AGENT_PLUGIN_UNEXPECTED'],
-    [observed?.toolSurface, 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'], [observed?.bridge, 'NATIVE_AGENT_BRIDGE_UNAVAILABLE']);
+  const surface = (value: boolean | null | undefined) => options.unknownSurfaceFacts === 'allow' ? value !== false : value;
+  if (query.surface !== 'brain') checks.push([surface(observed?.plugins), 'NATIVE_AGENT_PLUGIN_UNEXPECTED'],
+    [surface(observed?.toolSurface), 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'], [surface(observed?.bridge), 'NATIVE_AGENT_BRIDGE_UNAVAILABLE']);
   const seal = nativeAgentExecutionSchema.safeParse(observed?.execution);
   checks.push([seal.success ? seal.data.profileDigest === query.profileDigest && seal.data.flagSetDigest === query.flagSetDigest : undefined,
     'NATIVE_AGENT_CAPABILITY_UNSEALED']);

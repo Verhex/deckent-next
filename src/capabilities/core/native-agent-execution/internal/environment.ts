@@ -47,8 +47,10 @@ export function headlessFlagSetDigest(entry: HeadlessEntry): string {
       limits: { ...headless.isolation.limits, boundsSource: undefined, limiterSource: undefined } } })).digest('hex');
 }
 /** Expand-only agent seal: includes its transport/guards/bridge data and all inherited text-profile bounds; v1's digest never changes. */
+const agentDigests = new WeakMap<AgentEntry, string>();
 export function nativeAgentFlagSetDigest(entry: AgentEntry): string {
-  return createHash('sha256').update(JSON.stringify({ headless: headlessFlagSetDigest(entry), agent: entry.agent, bridge: entry.bridge })).digest('hex');
+  const digest = agentDigests.get(entry) ?? createHash('sha256').update(JSON.stringify({ headless: headlessFlagSetDigest(entry), agent: entry.agent, bridge: entry.bridge })).digest('hex');
+  agentDigests.set(entry, digest); return digest;
 }
 /** The call argv: no prompt and no secret (system prompt by 0600 file, user message by stdin); a forbidden flag or alias refuses. The turn bound is the
  * CLI's flag, or (`turnBound: stream`, no such flag) the line guard; the prompt file goes in the registry's template (a quoted config value: no quote in it). */
