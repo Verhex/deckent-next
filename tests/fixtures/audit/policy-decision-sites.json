@@ -51,9 +51,7 @@
     "src/engine/core/project-instructions/internal/worker-trust.ts": { "sites": 1, "class": "sealed", "kind": "authority-decision" },
     "src/engine/core/runs/internal/authority.ts": { "sites": 2, "class": "partial", "kind": "authority-decision", "note": "run/create sealed; proposal require-approval deferred to task admission" },
     "src/engine/core/runs/internal/decision-approval.ts": { "sites": 1, "class": "unsealed", "note": "only allow sealed (run-lifecycle)" },
-    "src/engine/core/secret-store/internal/administration.ts": { "sites": 1, "class": "sealed", "kind": "secret-change" },
-    "src/engine/core/secret-store/internal/grant-administration.ts": { "sites": 3, "class": "sealed", "kind": "authority-decision", "note": "secret list --all is a read-gate" },
-    "src/engine/core/secret-store/internal/switch.ts": { "sites": 1, "class": "sealed", "kind": "secret-store-switch" },
+    "src/engine/core/secret-store/internal/administration.ts": { "sites": 1, "class": "sealed", "kind": "secret-change", "note": "Shared evaluateSecretCell: change decisions seal secret-change; grant administration seals authority-decision (list --all is a read-gate); store switching seals secret-store-switch. Callers remain in grant-administration.ts and switch.ts." },
     "src/engine/core/setup/internal/install.ts": { "sites": 1, "class": "sealed", "kind": "execution-environment-install" }
   }
 }

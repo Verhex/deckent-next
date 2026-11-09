@@ -1,11 +1,10 @@
-import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
 import { runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
@@ -73,7 +72,7 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
     const command = runAdmissionSchema.parse(fields);
     return await admitConfiguredRun(projectRoot, command, options, async ({ config, layout, principal, path }, replay) => {
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = new DispatchPolicyAuthorization(policy);
+      const policy = contextPolicySource({ layout, config }), authorization = new DispatchPolicyAuthorization(policy);
       await authorizeWorkTargetUse(policy, selectWorkTarget(config.execution)?.id ?? null, command.scopeId, principal); // pinning reads the target
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
       const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');

@@ -1,10 +1,9 @@
 import { lstat } from 'node:fs/promises';
-import { userInfo } from 'node:os';
 import { AuditApplication, upgradeFirstRunProposalRules } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAuditStore, readLocalOsIdentity } from '#adapters/index.js';
 import { prepareProductFile, productResourcePath, SystemTrustedClock } from '#platform/index.js';
 import type { AuditEvent } from '#domain/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import type { loadComposedConfig } from '#composition/core/root/index.js';
 
 /** Owner S6 (2026-11-09): the service start's v20 proposal rules on an installed first-run policy of the OS person who owns both authority files (no card,
@@ -13,7 +12,7 @@ export async function upgradeProposalPolicyAtStart(config: Awaited<ReturnType<ty
   const layout = config.productLayout, identity = readLocalOsIdentity();
   const owns = async (path: string) => { try { const stat = await lstat(path); return uid !== undefined && stat.isFile() && !stat.isSymbolicLink() && stat.uid === uid; } catch { return false; } };
   if (!await owns(productResourcePath(layout, 'policy')) || !await owns(productResourcePath(layout, 'bindings'))) return 'skipped' as const;
-  const writer = createLayoutPolicySource(layout, uid ?? userInfo().uid, config.inspection.policyMaxBytes), history = await writer.authorityHistory();
+  const writer = contextPolicySource({ layout, config, ownerUid: uid }), history = await writer.authorityHistory();
   return history === null ? 'skipped' as const : upgradeFirstRunProposalRules(writer, { person: { issuer: identity.issuer, subject: identity.subject }, history, scopeId: config.service.identity?.scopeId, now: () => new SystemTrustedClock().sample().wallMs,
     openAudit: async () => {
       const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');

@@ -1,4 +1,4 @@
-import { evaluatePolicy, isAiPrincipal, policyResources, policySchema, principalGrants, type VerifiedPrincipal } from '#domain/index.js';
+import { evaluatePolicy, isAiPrincipal, policyResources, principalGrants, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { AgentCatalogAction, SignerAction } from './contract.js';
 /** `agent-catalog`/<action> (S8-5: or `skill-signer`/<action>) on the scope itself — S8-4: a standing or suggestion action on `<scopeId>/<workClass>`;
@@ -15,7 +15,7 @@ export class AgentCatalogPolicyAuthorization {
     if (refusal) throw new PolicyAuthorizationError(refusal);
     if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
     if (resourceId !== undefined && resourceId !== scopeId && isAiPrincipal(principal)
-      && principalGrants(policySchema.parse(document), principal).find(rule => rule.id === decision.ruleId)?.resource.ids === 'all') throw new PolicyAuthorizationError('POLICY_DENIED');
+      && principalGrants(document, principal).find(rule => rule.id === decision.ruleId)?.resource.ids === 'all') throw new PolicyAuthorizationError('POLICY_DENIED');
     return { revision: decision.revision, ruleId: decision.ruleId };
   }
 }

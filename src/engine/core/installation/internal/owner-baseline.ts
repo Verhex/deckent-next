@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { chainAuthorityRevision, governedPolicyDigest } from '#engine/core/policy/index.js';
-import { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,  identitySchema, immutableJsonObjectSchema,
-  mcpCapabilityIdChunks, getDecisionSteps, personOnlyBaselineCells, OWNER_BASELINE_DEFAULT_FAMILIES, OWNER_BASELINE_FAMILIES, policySchema, authorityDocuments, planOwnerBaseline, type McpCapabilityGroup, type OperationDescriptor, type AuditEvent, type OwnerBaselineState, type OwnerBaselineCell, type PolicyGrant } from '#domain/index.js';
+import { asPolicy, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,  identitySchema, immutableJsonObjectSchema,
+  mcpCapabilityIdChunks, getDecisionSteps, personOnlyBaselineCells, OWNER_BASELINE_DEFAULT_FAMILIES, OWNER_BASELINE_FAMILIES, authorityDocuments, planOwnerBaseline, type McpCapabilityGroup, type OperationDescriptor, type AuditEvent, type OwnerBaselineState, type OwnerBaselineCell, type PolicyGrant } from '#domain/index.js';
 import { installerAuthorityChangeEvent } from './authority-audit.js';
 import type { PolicyTemplateDocumentWriter } from './policy-template.js';
 
@@ -94,7 +94,7 @@ export function ownerBaselineCells(groups: readonly McpCapabilityGroup[], descri
 
 /** Read-only doctor projection. Counts the missing registry-derived cells without invoking the conditional writer. */
 export function describeOwnerBaseline(document: unknown, person: Person, scopeId: string, candidates: readonly OwnerBaselineCell[]) {
-  const files = authorityDocuments(policySchema.parse(document));
+  const files = authorityDocuments(asPolicy(document));
   const plan = planOwnerBaseline(files.policy, files.bindings, { person, explicit: true, scopeId, families: OWNER_BASELINE_DEFAULT_FAMILIES, candidates, peopleLimit: 1, digest: digestOf });
   return { status: plan.status, missing: plan.added.length + plan.remaining, digest: digestOf(JSON.stringify(plan.cells)) };
 }

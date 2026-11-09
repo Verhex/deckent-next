@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policySchema, type AuditEvent } from '#domain/index.js';
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 /** Where an approved install comes from (audited; never a command line, path or password). */
@@ -12,7 +12,7 @@ export type ExecutionInstallRequest = Readonly<{ environment: string; scopeId: s
 /** `execution-environment` / `install` (policy v13): installation-wide like backup, so only a grant over all scopes allows it; the AI floor
  * (domain) already denies every AI actor whatever a policy grants. */
 export function policyExecutionInstallAuthorization(input: unknown) {
-  const document = policySchema.parse(input);
+  const document = asPolicy(input);
   return (request: ExecutionInstallRequest): ExecutionInstallDecision => {
     const decision = evaluatePolicy(document, { principal: { ...request.principal, scopeIds: [request.scopeId] }, scopeId: request.scopeId, action: 'install',
       resource: { kind: 'execution-environment', id: request.environment } });

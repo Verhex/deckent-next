@@ -10,7 +10,7 @@ vi.mock('#composition/core/scoped-request/index.js', () => ({
     storage: { sqlite: {} }, runRuntime: { parking: { timeoutMs: 1000 } }, artifacts: { maxBytes: 65536 }, approvals: { keyFile: 'key' } },
     layout: {}, document: { revision: 'policy' }, principal: custodyPrincipal, path: async () => 'fixture-ledger' }; },
 }));
-vi.mock('#composition/core/policy/index.js', () => ({ createLayoutPolicySource: () => ({}) }));
+vi.mock('#composition/core/policy/index.js', () => ({ contextPolicySource: () => ({}) }));
 vi.mock('#platform/index.js', async importOriginal => ({ ...await importOriginal<typeof import('#platform/index.js')>(),
   inspectProductDirectory: async () => 'fixture-artifacts' }));
 vi.mock('#engine/index.js', async importOriginal => ({ ...await importOriginal<typeof import('#engine/index.js')>(),

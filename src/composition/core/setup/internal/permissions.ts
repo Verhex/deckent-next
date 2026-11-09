@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
 import { selectSetupPermissionProfile, finishSetupPermissionPreview, inspectPermissionMode, PermissionModeApplication, AuditApplication,
   AUDIT_PAGE_MAX, assertAuthorityWitness, type AuthorityWitness, type SetupPermissionPreview } from '#engine/index.js';
 import { readIdentityProfileConfig, localPrincipalChannel, attestLocalInteractiveTerminal, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority } from '#adapters/index.js';
 import { ErrorRegistry, sha256, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openOwnPermissionMode, openPermissionModesInstallation } from '#composition/core/installation/index.js';
 import { createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 
@@ -79,7 +78,7 @@ export async function applySetupPermissions(root: string, scopeId: string, diges
     try {
       await assertAuthorityWitness('policyPermissionModes', localPrincipalChannel(), witness);
       const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true));
-      await new PermissionModeApplication(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes),
+      await new PermissionModeApplication(contextPolicySource(context),
         event => { audit.record(event); }, () => new SystemTrustedClock().sample().wallMs).set(context.principal,
         { schemaVersion: 1, scopeId, mode, expectedRevision: fresh.revision });
     } finally { store.close(); }

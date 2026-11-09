@@ -1,6 +1,6 @@
 import { BeuserTransferError, assertUnsealedInstallation } from '#engine/core/beuser-realm/index.js';
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policySchema, principalGrants, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, principalGrants, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry, DeckentError, sha256 } from '#platform/index.js';
 import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { backupCommandSchema, type BackupAuthority, type BackupAudit, type BackupAuthorization, type BackupStoragePort } from './contract.js';
@@ -47,7 +47,7 @@ export class BackupApplication {
 
 /** A whole-installation backup needs an all-scopes grant, explicit or role-bound (owner B3 (a), the M14 preflight rule); a scoped grant never exports another company's state. */
 export function policyBackupAuthorization(input: unknown): import('./contract.js').BackupAuthorization {
-  const document = policySchema.parse(input);
+  const document = asPolicy(input);
   return async (request, authority) => {
     const decision = evaluatePolicy(document, { principal: authority.principal, scopeId: request.scopeId, action: request.action,
       resource: { kind: 'backup', id: authority.installationId } });

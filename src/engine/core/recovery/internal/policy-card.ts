@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, policySchema, sameMcpCapabilityRule, type PolicyGrant,
+import { POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, sameMcpCapabilityRule, type PolicyGrant,
   type Policy, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
 import { PolicyAdministrationInspection } from '#engine/core/policy/index.js';
@@ -46,7 +46,7 @@ export class RecoveryPolicyCard {
   private async read(input: Readonly<{ schemaVersion: 1; scopeId: string }>, principal: VerifiedPrincipal): Promise<Readonly<{ policy: Policy; view: RecoveryPolicyView }>> {
     const { scopeId } = input;
     if (!principal.scopeIds.includes(scopeId)) throw ErrorRegistry.createError('POLICY_DENIED');
-    const policy = policySchema.parse(await this.deps.policy.load());
+    const policy = await this.deps.policy.load();
     await new PolicyAdministrationInspection({ load: async () => policy }).inspect(principal, { schemaVersion: 1, scopeId });
     const rollout = await this.ports.rollout(scopeId);
     const row = (kind: RecoveryPolicyRow['kind'], id: string, available: boolean, exits: boolean | null): RecoveryPolicyRow => {

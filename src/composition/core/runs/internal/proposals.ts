@@ -1,6 +1,5 @@
 import { brainInputDigest } from '#capabilities/index.js';
 import { withPlanningSpending } from './planning-spending.js';
-import { userInfo } from 'node:os';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation, withLocalPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
@@ -9,7 +8,7 @@ import { agentSelectionSummary, assertRunProposalSource, configuredProposalRegis
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { readConfiguredRunBudget, classifyConfiguredRunSpending } from './budget.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { withConfiguredRunAdmission } from './create.js';
 export async function proposeConfiguredRun(projectRoot: string, input: RunProposal, options: ConfigLoadOptions = {}) {
@@ -54,7 +53,7 @@ export async function inspectConfiguredRunProposal(projectRoot: string, input: R
       const reader = await openSqliteRunProposalReader(await context.path(), context.config.storage.sqlite);
       try { return await reader.loadProposal(scopeId, commandId); } finally { reader.close(); }
     } }, { verify: async () => context.principal },
-    new RunPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes)), configuredProposalRegistry(context.config.admission)).inspect(query);
+    new RunPolicyAuthorization(contextPolicySource(context)), configuredProposalRegistry(context.config.admission)).inspect(query);
     return result ? await withPlanningSpending(projectRoot, result, options) : null;
   } catch (error) { throw queryFailure(error); }
 }

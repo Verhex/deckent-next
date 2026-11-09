@@ -1,17 +1,16 @@
-import { userInfo } from 'node:os';
-import { policySchema, IdentityProfileError, identityPreviewRequestSchema } from '#domain/index.js';
+import { IdentityProfileError, identityPreviewRequestSchema } from '#domain/index.js';
 import { IdentityProfileApplication, IdentityProfileRegistry, type IdentityPreviewSource } from '#engine/index.js';
 import { readIdentityProfileConfig, readLocalOsIdentity } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** One read-only snapshot producer shared by drafts and governed distribution. No identity bootstrap or ledger writer. */
 export async function identityProfileContext(root: string, packages: readonly unknown[], options: ConfigLoadOptions) {
   const config = await loadComposedConfig(root, { ...options, heal: false }), selection = readIdentityProfileConfig(config['identity']);
   const source: IdentityPreviewSource = { async load(scopes) {
-    const identity = readLocalOsIdentity(), policy = policySchema.parse(await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load());
+    const identity = readLocalOsIdentity(), policy = (await contextPolicySource({ layout: config.productLayout, config }).load());
     const scopeIds = await resolveConfiguredScopeMembership(config, policy, identity, scopes, 'read');
     return { companyId: config.company.id, principal: { ...identity, scopeIds }, policy, projectScopeIds: scopeIds };
   } }; return { config, selection, source, registry: new IdentityProfileRegistry([...(selection?.packages ?? []), ...packages]) };

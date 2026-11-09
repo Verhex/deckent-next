@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
   resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities,
   EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type EffectTarget } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity } from '#adapters/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type AuditEvent, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 for (const id of ['local-terminal-card', 'local-cli', 'local-sdk', 'mcp']) registerApprovalChannel(id);
@@ -35,8 +34,8 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
       const producers = action !== 'decide' ? [] : resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, decisions,
         { scopeId: parsed.scopeId, principal, policyRevision: document.revision, atMs: clock.sample().wallMs }, event => { new AuditApplication(audit!, integrity).record(event); });
       const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
-        { load: async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
-          : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document }, integrity, clock,
+        contextPolicySource(context, async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
+          : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document), integrity, clock,
         'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers, channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
       const result = action === 'list' ? await app.list(parsed, undefined, view) : action === 'inspect' ? await app.inspect(parsed) : action === 'renew' ? await app.renew(parsed, config.approvals.requestTtlMs) : ('standing' in parsed && parsed.standing === 'session' ? await (answers ?? new SessionApprovalAnswers()).answer(approvalCommandSchema.parse(parsed), principal, peer?.pid ?? null, app) : await app.decide(parsed));
       const answer = action === 'decide' ? parseApprovalAnswer('standing' in parsed, result) : result;
@@ -49,7 +48,7 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
 export async function applyConfirmedEffects(root: string, context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, descriptor: OperationDescriptor,
   target: EffectTarget, commands: readonly EffectCommand[], reason: string, options: ConfigLoadOptions) {
   const { config, layout, principal } = context;
-  const clock = new SystemTrustedClock(), policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+  const clock = new SystemTrustedClock(), policy = contextPolicySource({ layout, config });
   const sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), path = await context.path();
   const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');

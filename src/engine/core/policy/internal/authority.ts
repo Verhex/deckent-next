@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, assertPolicyAdministrationPreserved, authorityDocuments, policyNamedPeople, type Policy, type ApprovalActor, policySchema, resolvePolicyBindings, type AdministrationAssurance, type AuditEvent, type DelegationCell, type DelegationVerdict } from '#domain/index.js';
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, assertPolicyAdministrationPreserved, authorityDocuments, policyNamedPeople, type Policy, type ApprovalActor, resolvePolicyBindings, type AdministrationAssurance, type AuditEvent, type DelegationCell, type DelegationVerdict } from '#domain/index.js';
 import { auditPolicyDigest } from '#engine/core/audit/index.js';
 import type { PermissionModeSnapshot } from './permission-mode-admin.js';
 
@@ -79,7 +79,7 @@ export function authorityChangeAuditEvent(input: { readonly scopeId: string; rea
  * document it cannot resolve has no digest, and a governed event without one cannot extend a checkpoint's policy chain (fails closed).
  */
 export function governedPolicyDigest(policy: unknown, bindings: unknown): string | undefined {
-  try { return auditPolicyDigest(bindings === null || bindings === undefined ? policySchema.parse(policy) : resolvePolicyBindings(policy, bindings)); } catch { return undefined; }
+  try { return auditPolicyDigest(bindings === null || bindings === undefined ? asPolicy(policy) : resolvePolicyBindings(policy, bindings)); } catch { return undefined; }
 }
 
 /** The sealed-audit event of one refused authority change (audit subject `authority-refusal`): the stage it stopped at and its stable code. */

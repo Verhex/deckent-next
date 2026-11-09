@@ -1,4 +1,4 @@
-import { evaluatePolicy, matchingRuleIds, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import { type Policy, evaluatePolicy, matchingRuleIds, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { policyVerdictRefusal } from './verdict.js';
@@ -8,9 +8,9 @@ export type WorkTargetAction = typeof policyResources.workTarget.actions[number]
 /** Current authority over one configured work target (WORK-TARGETS, owner 2026-09-30 K2 = A); the resource id is the target id. */
 export class WorkTargetPolicyAuthorization {
   constructor(private readonly source: PolicySource) {}
-  async authorize(action: WorkTargetAction, targetId: string, scopeId: string, principal: VerifiedPrincipal): Promise<void> {
+  async authorize(action: WorkTargetAction, targetId: string, scopeId: string, principal: VerifiedPrincipal, policy?: Policy): Promise<void> {
     let decision;
-    try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId, resource: { kind: policyResources.workTarget.kind, id: targetId } }); }
+    try { decision = evaluatePolicy(policy ?? await this.source.load(), { principal, action, scopeId, resource: { kind: policyResources.workTarget.kind, id: targetId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
     if (refusal) throw new PolicyAuthorizationError(refusal);
@@ -50,10 +50,10 @@ export function workTargetAttemptAuthorization<A extends DispatchAuthorization &
   const target = new WorkTargetPolicyAuthorization(source);
   const consumed = (action: CorePolicyAction<'attempt'>): WorkTargetAction | null => TARGET_ACTIONS[action]
     ?? (readsTarget && (action === 'read-output' || action === 'recover-output') ? 'use' : null);
-  const authorizeIdentity = async (action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal) => {
-    await attempts.authorizeIdentity(action, identity, principal);
+  const authorizeIdentity = async (action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal, policy?: Policy) => {
+    await attempts.authorizeIdentity(action, identity, principal, policy);
     const targetAction = consumed(action);
-    if (targetAction) await target.authorize(targetAction, workTargetId, identity.scopeId, principal);
+    if (targetAction) await target.authorize(targetAction, workTargetId, identity.scopeId, principal, policy);
   };
   return { authorizeIdentity, authorize: (action, request, principal) => authorizeIdentity(action, request.identity, principal) };
 }
@@ -62,11 +62,13 @@ export function workTargetAttemptAuthorization<A extends DispatchAuthorization &
  * checked at every `deliver-integration` check of that delivery. A deny is a typed refusal, never a fall back to the reference path. */
 export function workingTreeDeliveryAuthorization(attempts: DispatchIdentityAuthorization, source: PolicySource): DispatchIdentityAuthorization {
   return { async authorizeIdentity(action, identity, principal) {
-    await attempts.authorizeIdentity(action, identity, principal);
-    if (action !== 'deliver-integration') return;
+    if (action !== 'deliver-integration') return attempts.authorizeIdentity(action, identity, principal);
+    let policy;
+    try { policy = await source.load(); } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    await attempts.authorizeIdentity(action, identity, principal, policy);
     // L1c: a company `require-approval` here would need a second approver this delivery has no path for: refused typed, never ignored.
     let denied, asked;
-    try { const policy = await source.load(), request = { principal, action: 'deliver-working-tree', scopeId: identity.scopeId, resource: { kind: policyResources.attempt.kind, id: identity.attemptId } };
+    try { const request = { principal, action: 'deliver-working-tree', scopeId: identity.scopeId, resource: { kind: policyResources.attempt.kind, id: identity.attemptId } };
       denied = matchingRuleIds(policy, request, 'deny'); asked = matchingRuleIds(policy, request, 'require-approval'); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     if (denied.length) throw new PolicyAuthorizationError('DELIVERY_WORKING_TREE_DENIED');

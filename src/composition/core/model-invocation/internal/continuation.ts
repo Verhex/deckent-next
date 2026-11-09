@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, policySchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelReference } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelReference } from '#domain/index.js';
 import { subscriptionActor, readSubscriptionRejection, modelInvocationProfileDigest, ModelBindingApplication, modelInvocationBillingAxis, type ModelInvocationResult } from '#engine/index.js';
 import { SIWC_USAGE_LIMIT_STATUS, SIWC_INFERENCE, siwcResponsesDefinitionSchema } from '#adapters/index.js';
 import { ErrorRegistry, sha256, type ConfigLoadOptions } from '#platform/index.js';
@@ -57,7 +57,7 @@ export async function prepareConfiguredSiwcContinuation(context: Context, option
   const auditOwner = await withConfiguredSiwcModel(context.config.projectRoot, source, context.principal, options, 'lease', async (app, caller) => { await app.inspectForLease(sourceDefinition.connectionId, caller); return subscriptionActor(context.principal).owner; });
   await withScopeAudit(context, async audit => audit.record({
     schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: original.scopeId, principal: auditOwner,
-    atMs: Date.now(), policyRevision: policySchema.parse(await context.policy.load()).revision,
+    atMs: Date.now(), policyRevision: (await context.policy.load()).revision,
     subject: { kind: 'subscription-api-continuation', schemaVersion: 1, actor: { issuer: context.principal.issuer, subject: context.principal.subject }, sourceInvocationId: result.receipt.claim.invocationId,
       connectionId: sourceDefinition.connectionId, profileDigest: expectedTargetDigest!, reference: target.reference, commandId: command.commandId, phase: 'intent' } }), false);
   await notice(target.reference);

@@ -1,5 +1,5 @@
 import { DecisionDelegationError, aiAuthorityFloor, delegationCommandSchema, delegationQuerySchema, delegationWithin, encodeCommandProjection, explicitDecisionGrant,
-  getDecisionSteps, isAiPrincipal, mcpPrincipalRef, policySchema, principalGrants, sameMcpCapabilityRule, type DecisionDelegationView, type DecisionStep, type DelegationCommand,
+  getDecisionSteps, isAiPrincipal, mcpPrincipalRef, principalGrants, sameMcpCapabilityRule, type DecisionDelegationView, type DecisionStep, type DelegationCommand,
   type DelegationQuery, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { PolicyAdministrationInspection } from '#engine/core/policy/index.js';
@@ -11,7 +11,7 @@ export class DecisionDelegations {
     private readonly interactive: () => Promise<boolean> = async () => false) {}
   private async snapshot(query: DelegationQuery, principal: VerifiedPrincipal) {
     if (!principal.scopeIds.includes(query.scopeId)) throw new DecisionDelegationError('POLICY_DENIED');
-    const policy = policySchema.parse(await this.deps.policy.load());
+    const policy = await this.deps.policy.load();
     await new PolicyAdministrationInspection({ load: async () => policy }).inspect(principal, { schemaVersion: 1, scopeId: query.scopeId });
     return policy;
   }

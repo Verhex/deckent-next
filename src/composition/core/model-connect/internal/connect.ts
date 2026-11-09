@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
 import { SIWC_INFERENCE } from '#adapters/index.js';
 import type { ModelInvocationProfile, ModelConnectResult } from '#domain/index.js';
@@ -60,7 +61,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async preflight(scopeId, principal, target) {
         const kind = parsed.success ? kindOf(parsed.data.connection) : null;
         const channelId = target?.reference.providerId ?? kind?.connect?.seed ?? (kind ? providerDiscoveryChannel(kind, parsed.success ? parsed.data.endpoint : null) : 'unknown');
-        const source = { load: async () => (await scope()).document };
+        const source = contextPolicySource(await scope(), async () => (await scope()).document);
         await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: null }, principal, 'scope');
         if (target) {
           await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: target.nativeId }, principal, 'scope');

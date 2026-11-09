@@ -1,4 +1,4 @@
-import { delegationWithin, evaluatePolicy, policyResources, policySchema, type VerifiedPrincipal } from '#domain/index.js';
+import { delegationWithin, evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 import { modelActivationTargetId, modelCatalogTargetId, type ModelActivationAuthorizer, type ModelCatalogAuthorizer } from '#engine/core/model-activation/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { policyVerdictRefusal } from './verdict.js';
@@ -33,7 +33,7 @@ export class ModelCatalogPolicyAuthorization implements ModelCatalogAuthorizer {
     try {
       const policy = await this.source.load(), id = modelCatalogTargetId(target);
       decision = evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: policyResources.modelActivation.kind, id } });
-      if (level === 'installation') installation = delegationWithin(policySchema.parse(policy), principal, [{ id: 'model-catalog-facts', effect: 'allow',
+      if (level === 'installation') installation = delegationWithin(policy, principal, [{ id: 'model-catalog-facts', effect: 'allow',
         actions: [action], scopes: 'all', resource: { kind: policyResources.modelActivation.kind, ids: [id] } }]).ok;
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });

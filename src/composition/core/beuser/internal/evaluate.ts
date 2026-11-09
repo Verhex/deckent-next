@@ -1,16 +1,15 @@
-import { userInfo } from 'node:os';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
 import { TaskEvaluationApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserEvaluatorFor, assertBeuserAccess, type BeuserContext } from '#engine/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 /** The system evaluator consumes the retained dispatch file through the existing acceptance owner. */
 export async function evaluateConfiguredBeuserTask(root: string, context: BeuserContext, commandId: string, options: ConfigLoadOptions) {
   const identity = context.binding.identity, c = await loadConfiguredScopeContext(root, identity.scopeId, options, 'write');
   const principal = beuserEvaluatorFor(c.principal, identity.scopeId);
   assertBeuserAccess(context, context.binding, principal, { kind: 'attempt', id: identity.attemptId }, 'evaluate');
-  const source = createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes), policy = new DispatchPolicyAuthorization(source);
+  const source = contextPolicySource(c), policy = new DispatchPolicyAuthorization(source);
   const authorization = { authorize: (id: typeof identity, actor: typeof principal) => policy.authorizeIdentity('evaluate', id, actor) };
   await authorization.authorize(identity, principal);
   await new RunPolicyAuthorization(source).authorize('inspect', identity, principal);

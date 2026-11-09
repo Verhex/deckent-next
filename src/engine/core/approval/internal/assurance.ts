@@ -1,4 +1,4 @@
-import { APPROVAL_ASSURANCE, HARD_FLOOR_CARD_CELLS, type AgentToolUndo, type AgentToolUndoKind, type McpToolChangeHints, approvalFacts, approvalSubject, identitySchema, policySchema, type ApprovalFacts, type ApprovalRequest,
+import { safePolicy, APPROVAL_ASSURANCE, HARD_FLOOR_CARD_CELLS, type AgentToolUndo, type AgentToolUndoKind, type McpToolChangeHints, approvalFacts, approvalSubject, identitySchema, type ApprovalFacts, type ApprovalRequest,
   type ApprovalSubject, type OperationDescriptor } from '#domain/index.js';
 import { ApprovalAssuranceRegistry, DecisionCapabilityRing, type ApprovalAssuranceProducer } from '#engine/core/authentication/index.js';
 import type { AgentToolCallCell } from '#engine/core/policy/index.js';
@@ -35,7 +35,7 @@ function matches(rule: { readonly subject: string; readonly scopes: 'all' | read
 export function minimumApprovalAssurance(policyInput: unknown, scopeId: string, subject: ApprovalSubject['kind'], risk: Risk,
   registry: ApprovalAssuranceRegistry = CORE_LEVELS): string {
   let minimum: string = coreMinimum(subject, risk);
-  const parsed = policyInput === null || policyInput === undefined ? null : policySchema.safeParse(policyInput);
+  const parsed = policyInput === null || policyInput === undefined ? null : safePolicy(policyInput);
   const rules = parsed?.success && parsed.data.schemaVersion === 2 ? parsed.data.approvalAssurance ?? [] : [];
   for (const rule of rules) if (matches(rule, scopeId, subject, risk) && registry.rank(rule.minimum) > registry.rank(minimum)) minimum = rule.minimum;
   return minimum;

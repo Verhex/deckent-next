@@ -1,4 +1,4 @@
-export { policySchema, policyRequestSchema, evaluatePolicy, matchingRuleIds, modeEligibleApproval, PolicyError } from './internal/evaluate.js';
+export { policySchema, asPolicy, safePolicy, policyRequestSchema, evaluatePolicy, matchingRuleIds, modeEligibleApproval, PolicyError } from './internal/evaluate.js';
 export { INSTALLER_PERMISSION_MODE_RULE_PREFIX, INSTALLER_PERMISSION_MODES_COMMAND_PREFIX, OPENABLE_PERMISSION_MODES, installerPermissionModeRuleId, planInstallerPermissionModes,
   type OpenablePermissionMode, type PermissionModeGrantPlan, type PermissionModeGrantState } from './internal/permission-mode-grant.js';
 export { bindingsFileSchema, PERMISSION_MODES, policyFileSchema, policyHasResourceRules, principalPermissionMode, resolvePolicyBindings, separationOfDutiesViolation,

@@ -1,11 +1,10 @@
-import { userInfo } from 'node:os';
 import { AuditApplication, ExecutionEnvironmentInstallApplication, assertAuthorityWitness, policyExecutionInstallAuthorization, type AuthorityWitness } from '#engine/index.js';
 import { DOCKER_APT, attestLocalInteractiveTerminal, detectExecutionFacts, dockerCardBody, dockerPrintLines, dockerResultLines, dockerSource, executionSetupFamily, installedDockerVersion,
   localPrincipalChannel, observeDockerHost, openLocalIntegrityAuthority, openSqliteAuditStore, planDockerInstall, readLocalOsIdentity, resolveSudo, runDockerInstall, spawnForeground,
   stageDockerFiles, type DockerHostPorts, type DockerInstallPorts, type ExecutionDetectPorts } from '#adapters/index.js';
 import { ErrorRegistry, emit, prepareProductFile, t } from '#platform/index.js';
 import { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 
 /** `preview`: the dry run: detect and plan, print the exact card (or the print-only next step), stage and run nothing, ask nothing. */
@@ -30,7 +29,7 @@ export async function installExecutionEnvironment(root: string, scopeId: string,
     return 'printed';
   }
   const config = await loadComposedConfig(root, { env, heal: false }), layout = config.productLayout;
-  const owner = new ExecutionEnvironmentInstallApplication(policyExecutionInstallAuthorization(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()),
+  const owner = new ExecutionEnvironmentInstallApplication(policyExecutionInstallAuthorization(await contextPolicySource({ layout, config }).load()),
     async event => {
       const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');
       try { new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { store.close(); }

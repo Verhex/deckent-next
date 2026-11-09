@@ -1,5 +1,4 @@
-import { AI_NON_DELEGABLE_CARD_CELLS, isAiPrincipal, mcpPrincipalRef, samePrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
-  standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, AI_NON_DELEGABLE_CARD_CELLS, isAiPrincipal, mcpPrincipalRef, samePrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
 
 /**
@@ -135,7 +134,8 @@ export interface AgentToolCallDecision {
  *    are not standing cells.
  * The turn's authorization and the effect gate call this same function; it throws on an invalid snapshot (callers fail closed).
  */
-export function decideAgentToolCall(policy: unknown, request: AgentToolCallRequest): AgentToolCallDecision {
+export function decideAgentToolCall(policyInput: unknown, request: AgentToolCallRequest): AgentToolCallDecision {
+  const policy = asPolicy(policyInput);
   const ask = (kind: string, id: string, action: string) => ({ principal: request.principal, scopeId: request.scopeId, action, resource: { kind, id } });
   const tool = agentToolPolicyResource(request.tool, request.mcpServer);
   const sides = [ask(tool.kind, tool.id, 'invoke'), ...(request.operation ? [ask(policyResources.operation.kind, request.operation.id, 'execute')] : [])];
@@ -170,7 +170,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
     if (key === undefined || (!standingCell(request.cell) && request.cell !== 'edit-self-source')) return null;
     const grant = evaluatePolicy(policy, ask(STANDING_GRANT_KIND, key, STANDING_GRANT_ACTION));
     const { principal, scopeId } = request;
-    const explicit = request.cell !== 'edit-self-source' && grant.decision === 'allow' ? policySchema.parse(policy).grants.find(rule => rule.effect === 'allow' && isStandingGrantId(rule.id)
+    const explicit = request.cell !== 'edit-self-source' && grant.decision === 'allow' ? policy.grants.find(rule => rule.effect === 'allow' && isStandingGrantId(rule.id)
       && rule.resource.kind === STANDING_GRANT_KIND && rule.resource.ids !== 'all' && rule.resource.ids.includes(key) && (rule.actions === 'all' || rule.actions.includes(STANDING_GRANT_ACTION))
       && (rule.scopes === 'all' || rule.scopes.includes(scopeId)) && rule.principals !== 'all' && rule.principals.some(item => item.issuer === principal.issuer && item.subject === principal.subject)) : undefined;
     if (explicit) return Object.freeze({ source: 'grant' as const, key, grantId: explicit.id });

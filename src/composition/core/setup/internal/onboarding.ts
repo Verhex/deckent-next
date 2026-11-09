@@ -2,7 +2,6 @@ import { previewFirstCommit, observeFirstCommitRecovery } from '#adapters/index.
 import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { userInfo } from 'node:os';
 import { onboardingNeedsBudget, type OnboardingBillingProfile } from './onboarding-budget.js';
 import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
@@ -10,7 +9,7 @@ import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalIntera
 import { loadModelsSurface } from '#surfaces/index.js';
 import type { TerminalLaunchContext } from '#surfaces/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { consentConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
 import { startConfiguredRunIntent, transitionConfiguredRunIntent } from '#composition/core/run-planner/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -65,7 +64,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     signal?.throwIfAborted(); const pending: RunIntentRecord[] = [];
     const reader = await openSqliteRunProposalReader(await context.path(), config.storage.sqlite);
     try {
-      const auth = new RunPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, config.inspection.policyMaxBytes));
+      const auth = new RunPolicyAuthorization(contextPolicySource({ layout: context.layout, config }));
       for (const intent of await reader.listIntents(scopeId)) {
         if (JSON.stringify(intent.proposer) !== JSON.stringify({ id: context.principal.id, issuer: context.principal.issuer, subject: context.principal.subject })) continue;
         await auth.authorize('inspect', { scopeId, runId: intent.runId }, context.principal);

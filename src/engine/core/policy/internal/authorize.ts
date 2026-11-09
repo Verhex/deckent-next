@@ -1,4 +1,4 @@
-import { delegationWithin, evaluatePolicy, policyResources, policySchema, type AttemptIdentity, type Policy, type VerifiedPrincipal } from '#domain/index.js';
+import { delegationWithin, evaluatePolicy, policyResources, type AttemptIdentity, type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 import { policyVerdictRefusal } from './verdict.js';
@@ -17,7 +17,7 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization, Dispa
    * any intersecting deny/require-approval refuses the collection before its rows are read. */
   async authorizeScopeReadOutput(scopeId: string, principal: VerifiedPrincipal): Promise<void> {
     if (!principal.scopeIds.includes(scopeId)) throw new PolicyAuthorizationError('SCOPE_UNKNOWN');
-    const policy = policySchema.parse(await this.source.load());
+    const policy = await this.source.load();
     const verdict = delegationWithin(policy, principal, [{ id: 'collection-read', effect: 'allow', scopes: [scopeId],
       actions: ['read-output'], resource: { kind: policyResources.attempt.kind, ids: 'all' } }]);
     const refusal = verdict.ok ? null : policyVerdictRefusal(verdict.reason, { deny: 'POLICY_DENIED' });
@@ -26,9 +26,9 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization, Dispa
   async authorize(action: Parameters<DispatchAuthorization['authorize']>[0], request: SandboxRequest, principal: VerifiedPrincipal): Promise<void> {
     return this.authorizeIdentity(action, request.identity, principal);
   }
-  async authorizeIdentity(action: Parameters<DispatchAuthorization['authorize']>[0], identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void> {
+  async authorizeIdentity(action: Parameters<DispatchAuthorization['authorize']>[0], identity: AttemptIdentity, principal: VerifiedPrincipal, policy?: Policy): Promise<void> {
     let decision;
-    try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId: identity.scopeId,
+    try { decision = evaluatePolicy(policy ?? await this.source.load(), { principal, action, scopeId: identity.scopeId,
       resource: { kind: policyResources.attempt.kind, id: identity.attemptId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });

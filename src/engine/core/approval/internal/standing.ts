@@ -1,5 +1,5 @@
-import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, POLICY_RECOVERY_CHANGE_KIND, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
-  planPolicyChange, policySchema, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
+import { type Policy, AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, POLICY_RECOVERY_CHANGE_KIND, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
+  planPolicyChange, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
   type DelegationOptions, type VerifiedPrincipal } from '#domain/index.js';
 import { hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import type { AgentToolCallDecision, PolicySource } from '#engine/core/policy/index.js';
@@ -133,12 +133,12 @@ export class PersistentStanding {
   constructor(private readonly deps: PersistentStandingDependencies) {}
   private async snapshot() {
     let policy;
-    try { policy = policySchema.parse(await this.deps.policy.load()); } catch (error) { throw new StandingApprovalError('STANDING_UNSUPPORTED', error instanceof Error ? error.message : null); }
+    try { policy = await this.deps.policy.load(); } catch (error) { throw new StandingApprovalError('STANDING_UNSUPPORTED', error instanceof Error ? error.message : null); }
     // Role-based authority (policy v2 + bindings) is what the governed change and its bound are made of; a v1 policy has neither.
     if (policy.schemaVersion !== 2) throw new StandingApprovalError('STANDING_UNSUPPORTED', 'policy v1');
     return policy;
   }
-  private mine(policy: ReturnType<typeof policySchema.parse>, principal: { readonly issuer: string; readonly subject: string }) {
+  private mine(policy: Policy, principal: { readonly issuer: string; readonly subject: string }) {
     return policy.grants.filter(grant => grant.resource.kind === STANDING_GRANT_KIND && isStandingGrantId(grant.id) && grant.principals !== 'all'
       && grant.principals.length === 1 && grant.principals[0]!.issuer === principal.issuer && grant.principals[0]!.subject === principal.subject);
   }

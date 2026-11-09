@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
 import { executeConfiguredTask, settleConfiguredEnvironmentProbes, withNativeCliWorkerOptions } from '#composition/core/execution/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type ConfiguredRunProgressionResult = Awaited<ReturnType<RunProgressionTurn['advance']>> & Readonly<{ waitedForSlotMs?: number }>;
 export type RunExecutionAdmission = (work: () => Promise<void>, onSlotWait?: (waitedForSlotMs: number) => void) => Promise<void>;
@@ -19,7 +18,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
     const query = runQuerySchema.parse(input), initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'write'); let waitedForSlotMs = 0;
     async function withRunStore<T>(request: RunQuery, work: (store: Awaited<ReturnType<typeof openSqliteAttemptStore>>) => Promise<T>) {
       const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
-      await new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes))
+      await new RunPolicyAuthorization(contextPolicySource({ layout, config }))
         .authorize('inspect', request, await authenticate({ async verify() { return principal; } }, undefined, request.scopeId));
       const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await work(store); } finally { store.close(); }

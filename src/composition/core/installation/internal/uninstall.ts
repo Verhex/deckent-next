@@ -1,7 +1,5 @@
-import { userInfo } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attachmentLifecycle, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, openLocalIntegrityAuthority,
   uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, nativeUserUnitLinks, withExclusiveFileLock, type LedgerLock, selectWorkTarget, resolveGitWorkTarget, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, DispatchPolicyAuthorization, workTargetAttemptAuthorization, resolvePolicyScopeMembership, type UninstallInteraction } from '#engine/index.js';
@@ -11,7 +9,7 @@ import { createConfiguredRuntimeClient, withQueueContext, assertQueueWorkTarget 
 import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
-import { createLayoutPolicySource, policyFileRefusal } from '#composition/core/policy/index.js';
+import { contextPolicySource, policyFileRefusal } from '#composition/core/policy/index.js';
 const load = (root: string, options: ConfigLoadOptions) => loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
 const marked = (env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>, names: readonly string[]) => automationMarker(process.env, names) ?? automationMarker(env, names);
 /** Trusted local composition: read-only previews and witnessed application admission use the same owned inventory. */
@@ -19,7 +17,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env; let shutdownSeenMs: number | undefined;
   await attachmentLifecycle(config, options).assert();
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
-  const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, { ...options, heal: false, uninstallHold: 'admit' });
+  const source = contextPolicySource({ layout, config }), client = createConfiguredRuntimeClient(root, { ...options, heal: false, uninstallHold: 'admit' });
   // Lane J P1: an unsafe policy or bindings file decides no tier: a typed refusal naming it, never an untyped crash and never a repair.
   const policy = () => source.load().catch((error: unknown) => { const refusal = policyFileRefusal(layout, error); throw refusal ? ErrorRegistry.createError('UNINSTALL_POLICY_UNREADABLE', { params: refusal }) : error; });
   const scopes = (document: unknown) => uninstallAffectedScopes(document, [scopeId,
@@ -31,10 +29,10 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   return new UninstallApplication({
     channel: localPrincipalChannel(), witness: { attest: async () => { const peer = localPrincipalPeer(); return !marked(env, config.cli.agentEnvironment) && attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } }, principal: person,
     // M14, R8: every tier's own decision covers every ledger-recorded scope too (as again under custody), before any card.
-    async authorize(action, principal) { const document = policySchema.parse(await policy()), affected = action === 'inspect' ? scopes(document)
+    async authorize(action, principal) { const document = (await policy()), affected = action === 'inspect' ? scopes(document)
       : installationScopes(productResourcePath(layout, 'ledger'), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopes(document));
       authorizeUninstall(document, { ...principal, scopeIds: affected }, await installationId(), affected, action); },
-    async inventory() { const document = policySchema.parse(await policy()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
+    async inventory() { const document = (await policy()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
       // R13: each unknown result's own (ledger-recorded) scope is checked against company control too.
       return { ...inventory, managedScopes: uninstallManagedScopes(document, [...scopes(document), ...inventory.work.uncertain.map(item => item.scopeId)]), resources: [...inventory.resources, ...handMadeLaunchers(root, env).map(uninstallLauncherResource)] };
     },

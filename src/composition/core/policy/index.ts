@@ -1,1 +1,1 @@
-export { createLayoutPolicySource, contextDispatchAuthorization, policyFileRefusal } from './internal/source.js';
+export { createLayoutPolicySource, contextPolicySource, contextDispatchAuthorization, policyFileRefusal } from './internal/source.js';

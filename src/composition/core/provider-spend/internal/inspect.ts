@@ -1,10 +1,9 @@
-import { userInfo } from 'node:os';
 import { providerSpendAccountQueryInputSchema, type ProviderSpendAccountQuery } from '#domain/index.js';
 import { ProviderSpendAccountInspectionApplication, ProviderSpendAccountPolicyAuthorization, ProviderSpendError } from '#engine/index.js';
 import { openSqliteProviderSpendAccountReader, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 export async function inspectConfiguredProviderSpendAccount(projectRoot: string, input: ProviderSpendAccountQuery,
@@ -24,7 +23,7 @@ async function inspect(input: ProviderSpendAccountQuery,
     catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
     const context = await loadContext(query.scopeId);
     return await new ProviderSpendAccountInspectionApplication({ async verify() { return context.principal; } },
-      new ProviderSpendAccountPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes)),
+      new ProviderSpendAccountPolicyAuthorization(contextPolicySource(context)),
       async () => openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs })).inspect(query);
   } catch (error) { throw queryFailure(error); }
 }

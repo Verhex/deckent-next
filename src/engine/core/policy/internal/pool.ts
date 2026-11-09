@@ -1,4 +1,4 @@
-import { delegationWithin, evaluatePolicy, policyResources, policySchema, type VerifiedPrincipal } from '#domain/index.js';
+import { delegationWithin, evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { policyVerdictRefusal } from './verdict.js';
 
@@ -37,7 +37,7 @@ export class PoolControlPolicyAuthorization implements PoolControlAuthorization 
     try {
       const policy = await this.source.load(), resource = { kind: policyResources.pool.kind, id: poolId };
       const scoped = evaluatePolicy(policy, { principal, scopeId, action, resource });
-      const installation = action === 'inspect' || scoped.decision !== 'allow' || delegationWithin(policySchema.parse(policy), principal,
+      const installation = action === 'inspect' || scoped.decision !== 'allow' || delegationWithin(policy, principal,
         [{ id: 'pool-control', effect: 'allow', actions: [action], scopes: 'all', resource: { kind: resource.kind, ids: [poolId] } }]).ok;
       // A scoped allow without the installation bound is a denial no single rule decided (ruleId null).
       return Object.freeze({ effect: installation ? scoped.decision : 'deny', ruleId: installation ? scoped.ruleId ?? null : null, revision: scoped.revision });

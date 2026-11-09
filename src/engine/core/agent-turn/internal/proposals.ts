@@ -1,4 +1,4 @@
-import { AI_PROPOSAL_REGISTRY, aiSettingResourceIds, evaluatePolicy, isAiSettingKey, type AgentToolSpec, type AiSettingKey, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, AI_PROPOSAL_REGISTRY, aiSettingResourceIds, evaluatePolicy, isAiSettingKey, type AgentToolSpec, type AiSettingKey, type VerifiedPrincipal } from '#domain/index.js';
 import { projectModelIngressField } from './model-ingress-project.js';
 
 /**
@@ -51,7 +51,7 @@ export function planAiProposal(name: string, args: Record<string, unknown>): AiP
  * The revision is the snapshot's, for the turn's `policy-turn` record (`unknown`: an unreadable policy). */
 export function aiProposalToolDecision(policy: unknown, principal: VerifiedPrincipal, scopeId: string, tool: string): { readonly decision: 'allow' | 'deny'; readonly revision: string } {
   try {
-    const ask = (action: string, kind: string, id: string) => evaluatePolicy(policy, { principal, scopeId, action, resource: { kind, id } });
+    const ask = (action: string, kind: string, id: string) => evaluatePolicy(asPolicy(policy), { principal, scopeId, action, resource: { kind, id } });
     const invoke = ask('invoke', 'agent-tool', tool), decided = (decision: 'allow' | 'deny') => ({ decision, revision: invoke.revision });
     if (invoke.reason === 'DENIED') return decided('deny');
     return decided((tool === tools.work ? ask('create', 'run', 'proposal').decision !== 'deny' : aiSettingResourceIds().some(id => ask('write', 'config', id).decision !== 'deny')) ? 'allow' : 'deny');

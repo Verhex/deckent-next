@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -166,7 +167,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   return withConfiguredBeuserWalkCustody(root, input.scopeId, options, async () => {
   const capacity = { executionSlots: installed.executionSlots, inFlightSlots: installed.inFlightSlots };
   if (replace && heldPool && !isDeepStrictEqual(heldPool.capacity, capacity, { skipPrototype: true })) {
-    assertPoolControlAllowed(await new PoolControlPolicyAuthorization({ load: async () => c.document })
+    assertPoolControlAllowed(await new PoolControlPolicyAuthorization(contextPolicySource(c, c.document))
       .decide('set-capacity', admitted.poolId, input.scopeId, c.principal));
   }
   let status = 'current';

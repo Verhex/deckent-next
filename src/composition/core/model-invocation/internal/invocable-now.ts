@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { randomUUID } from 'node:crypto';
 import { textOnlyModelInvocationRequest, ModelBindingApplication, DeclaredModelsApplication, ModelInvocableNowApplication, inspectModelSwitch, type InvocableModel, type InvocableModels } from '#engine/index.js';
 import { terminalTextChatFamilies, isNativeCliHeadlessAdapter, effectiveTerminalOutputCap, WORKSPACE_READ_TOOL_SPECS, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY, SIWC_INFERENCE, type NativeJsonHttpAuthentication } from '#adapters/index.js';
@@ -12,7 +13,7 @@ import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 export async function inspectConfiguredInvocableModels(root: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<InvocableModels> {
   // One read-only snapshot: every model is checked against the same config and policy document (re-reading both per model took ~1 s for 16).
   const loaded = await loadInvocationContext(root, scopeId, { ...options, heal: false }, 'read'), config = await loaded.freshConfig();
-  const context = { ...loaded, policy: { load: async () => loaded.document }, freshConfig: async () => config }, catalog = await new DeclaredModelsApplication({ async read() { return config['provider_catalog']; } }).inspect();
+  const context = { ...loaded, policy: contextPolicySource(loaded, loaded.document), freshConfig: async () => config }, catalog = await new DeclaredModelsApplication({ async read() { return config['provider_catalog']; } }).inspect();
   if (catalog.status !== 'declared') return { schemaVersion: 1, scopeId, models: [] };
   const bindings = new ModelBindingApplication({ read: async () => (await context.freshConfig())['provider_catalog'] });
   const targets: Omit<InvocableModel, 'availability'>[] = [];

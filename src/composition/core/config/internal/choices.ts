@@ -1,11 +1,10 @@
 import { basename, dirname } from 'node:path';
-import { userInfo } from 'node:os';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { modelInvocabilityText, IdentityProfileRegistry, installationOwnScopes, PoolControlPolicyAuthorization } from '#engine/index.js';
-import { executionRegistrySchema, policySchema } from '#domain/index.js';
+import { executionRegistrySchema } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
 import { ErrorRegistry, inspectProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
@@ -53,10 +52,10 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
       // J2c/J2d: a folder with no installation (no product directory or no policy file) refuses with the typed setup answer
       // (`CLI_INSTALLATION_MISSING`: run `deckent init`). Only a missing file means "no installation": an unsafe, changed or invalid
       // authority file still refuses with its own error. An installation with no scope this person may read stays an empty list.
-      const loaded = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
+      const loaded = await contextPolicySource({ layout: config.productLayout, config }).load()
         .catch((error: unknown) => { if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return null; throw error; });
       if (loaded === null) throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING');
-      const document = policySchema.parse(loaded);
+      const document = loaded;
       const candidates = installationOwnScopes(document, [scopeId, config.service.identity?.scopeId, ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])].filter((value): value is string => !!value));
       const identity = readLocalOsIdentity(), admitted: string[] = [];
       for (const scope of candidates) { try { admitted.push(...await resolveConfiguredScopeMembership(config, document, identity, [scope], 'read')); } catch { /* Foreign/unregistered scopes are not displayed. */ } }
@@ -72,7 +71,7 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
     if (source === 'companies') return values([context.config.company.id]); // Policy/membership pins this installation to one company; no foreign enumeration.
     if (source === 'pools') {
-      const authorizer = new PoolControlPolicyAuthorization({ load: async () => context.document }), admitted: string[] = [];
+      const authorizer = new PoolControlPolicyAuthorization(contextPolicySource(context, context.document)), admitted: string[] = [];
       for (const id of discoverConfigPools(await context.path(), config.storage.sqlite.busyTimeoutMs, limits.maxEntries)) if ((await authorizer.decide('inspect', id, scopeId, context.principal)).effect === 'allow') admitted.push(id);
       return values(admitted);
     }

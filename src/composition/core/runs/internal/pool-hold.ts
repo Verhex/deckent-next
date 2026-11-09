@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, RunPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema, localRunOffered, localRunFallbackClosed } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAttemptStore, readIdentityProfileConfig } from '#adapters/index.js';
 import { SystemTrustedClock, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
@@ -6,7 +7,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 /** K2/K3: company policy, pool hold and profile posture close the shared offer; an unreadable authority source fails closed. */
 export async function configuredLocalRunOffer(root: string, scopeId: string, options: ConfigLoadOptions = {}, code: unknown = 'RUN_ADMISSION_NOT_CONFIGURED'): Promise<boolean> {
   const paused = await loadConfiguredScopeContext(root, scopeId, options, 'read').then(context =>
-    new RunPolicyAuthorization({ load: async () => context.document }).creationPaused(scopeId, context.principal)).catch(() => true);
+    new RunPolicyAuthorization(contextPolicySource(context, context.document)).creationPaused(scopeId, context.principal)).catch(() => true);
   if (paused) return false;
   const config = await loadConfig(root, { ...options, heal: false }), held = (config['admission'] as { poolId?: unknown } | undefined)?.poolId ? await inspectConfiguredPoolHold(root, { schemaVersion: 1, scopeId }, { ...options, heal: false }).then(view => view.state !== 'open', () => true) : false;
   return localRunOffered(code, { closed: localRunFallbackClosed(readIdentityProfileConfig(config['identity'])?.profile ?? null), paused: held }); }

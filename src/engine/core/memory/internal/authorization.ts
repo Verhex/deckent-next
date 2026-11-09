@@ -1,4 +1,4 @@
-import { evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
+import { type Policy, evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { MemoryAction, MemoryReadFilter } from './contract.js';
 /** `memory`/<action> on the scope itself; require-approval is not offered for memory transitions in v1. */
@@ -16,7 +16,7 @@ export class MemoryPolicyAuthorization {
   /** S4B-1 §7.4: one policy load, then a pure view (`allow` only; require-approval and every refusal withhold). An unreadable policy withholds nothing
    * silently: it is POLICY_UNAVAILABLE, like the read's own authorization. */
   async readFilter(principal: VerifiedPrincipal, scopeId: string): Promise<MemoryReadFilter> {
-    let document: unknown;
+    let document: Policy;
     try { document = await this.source.load(); } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     return (resource, action) => { try { return evaluatePolicy(document, { principal, scopeId, action, resource }).decision === 'allow'; } catch { return false; } };
   }

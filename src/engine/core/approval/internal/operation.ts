@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffectOpen, policySchema, ApprovalError, type ApprovalActor, type ApprovalRecord,
+import { type Policy, approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffectOpen, ApprovalError, type ApprovalActor, type ApprovalRecord,
   type ApprovalSubject, type EffectCommand, type EffectIntentApproval, type OperationDescriptor, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
@@ -71,8 +71,8 @@ export class OperationApprovalBroker implements EffectApprovalGate {
   }
 
   private async open(descriptor: OperationDescriptor, command: EffectCommand, subject: OperationSubject, requester: ApprovalActor, actionDigest: string, now: number): Promise<ApprovalRecord> {
-    let policy: ReturnType<typeof policySchema.parse>;
-    try { policy = policySchema.parse(await this.policy.load()); } catch { throw new ApprovalError('APPROVAL_INVALID'); }
+    let policy: Policy;
+    try { policy = await this.policy.load(); } catch { throw new ApprovalError('APPROVAL_INVALID'); }
     const scopeId = command.scopeId;
     const binding = `${subject.operation.id}@${subject.operation.version} · ${subject.target.kind}/${subject.target.id} · ${subject.inputDigest.slice(0, 12)}`.slice(0, 2048);
     let described: string | null = null;

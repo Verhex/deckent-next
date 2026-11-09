@@ -2,12 +2,12 @@ import { describeConfiguredOperationTools } from '#composition/core/operations/i
 import { firstSessionTargets, firstSessionPublication } from '#adapters/index.js';
 import { lstat, readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
-import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
+import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type InstallationIdentityRead, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
 import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { policySchema, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { asPolicy, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -88,7 +88,7 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   // Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the same custody the policy source enforces on every read);
   // missing, foreign or unreadable documents fail closed as `not-owner`.
   const owner = await ownsAuthority(layout, callerUid);
-  const writer = createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes);
+  const writer = contextPolicySource({ layout, config, ownerUid: callerUid });
   const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply,
     peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) };
   const observed = await observeBootstrapState(projectRoot), seeded = observed.record?.phase === 'committed' ? observed.record.recovery['systemRows'] : null;
@@ -96,7 +96,7 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   if (history === null) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
   // The original publication retains its own data revision, not a reconstruction from today's registry seed.
   const initial = seeded && typeof seeded === 'object' && 'key' in seeded && 'before' in seeded && 'after' in seeded
-    ? [{ key: String(seeded.key), before: policySchema.parse(seeded.before), after: policySchema.parse(seeded.after) }] : [];
+    ? [{ key: String(seeded.key), before: asPolicy(seeded.before), after: asPolicy(seeded.after) }] : [];
   return upgradeInstalledPolicyTemplate(writer, identityPort(projectRoot, scopeId, options), { ...input,
     systemRows: { data: CORE_SYSTEM_POLICY_ROWS.data, history: [...initial, ...history], lookup: key => writer.lookupAuthority(key) }, openAudit: () => installerAudit(layout, config) });
 }
@@ -117,7 +117,7 @@ export async function openPermissionModesInstallation(projectRoot: string, scope
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
   if (input.apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   const owner = await ownsAuthority(layout, callerUid), clock = new SystemTrustedClock();
-  return setInstallerPermissionModes(createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes), { scopeId,
+  return setInstallerPermissionModes(contextPolicySource({ layout, config, ownerUid: callerUid }), { scopeId,
     principal: { issuer: identity.issuer, subject: identity.subject }, ...(input.person === undefined ? {} : { person: input.person }), modes: input.modes, apply: input.apply,
     ...(input.expect === undefined ? {} : { expect: input.expect }), owner, peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, openAudit: () => installerAudit(layout, config) });
 }
@@ -128,7 +128,7 @@ export async function openOwnerBaselineInstallation(projectRoot: string, scopeId
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
   if (input.apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   const owner = await ownsAuthority(layout, callerUid), clock = new SystemTrustedClock();
-  return setInstallerOwnerBaseline(createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes), { scopeId,
+  return setInstallerOwnerBaseline(contextPolicySource({ layout, config, ownerUid: callerUid }), { scopeId,
     principal: { issuer: identity.issuer, subject: identity.subject }, ...(input.person === undefined ? {} : { person: input.person }), families: input.families, candidates: ownerBaselineCells(mcpCapabilityRegistry.list(), await describeConfiguredOperationTools(projectRoot, options)), apply: input.apply,
     ...(input.expect === undefined ? {} : { expect: input.expect }), owner, peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, openAudit: () => installerAudit(layout, config) });
 }
@@ -162,7 +162,7 @@ async function softPolicySource(projectRoot: string, options: ConfigLoadOptions)
 /** Read-only, read-soft doctor information; no writer, audit store, network call or implicit baseline installation. */
 export async function inspectOwnerBaselineInstallation(root: string, scopeId: string, options: ConfigLoadOptions = {}) {
   const config = await loadComposedConfig(root, { ...options, heal: false }), identity = readLocalOsIdentity();
-  const document = await createLayoutPolicySource(config.productLayout, process.getuid?.() ?? userInfo().uid, config.inspection.policyMaxBytes).load();
+  const document = await contextPolicySource({ layout: config.productLayout, config, ownerUid: process.getuid?.() }).load();
   return describeOwnerBaseline(document, { issuer: identity.issuer, subject: identity.subject }, scopeId,
     ownerBaselineCells(mcpCapabilityRegistry.list(), await describeConfiguredOperationTools(root, options)));
 }

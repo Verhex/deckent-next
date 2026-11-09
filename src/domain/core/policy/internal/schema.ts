@@ -127,9 +127,8 @@ const resolvedRolePolicySchema = z.strictObject({ schemaVersion: z.literal(2), r
     if (policy.bindings.entries.some(value => value.roles.some(id => !roles.has(id)))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'POLICY_ROLE_UNKNOWN' });
   }).readonly();
 
-/** Evaluator input: a v1 document (unchanged) or a resolved v2 snapshot. Every authorization consumer parses this. */
+/** Evaluator input: a v1 document (unchanged) or a resolved v2 snapshot. Sources validate before authorization. */
 export const policySchema = z.union([grantPolicySchema, resolvedRolePolicySchema]);
-/** What policy.json may contain. */
 export const policyFileSchema = z.union([grantPolicySchema, rolePolicyFileSchema]);
 export type Policy = z.infer<typeof policySchema>;
 export type PolicyFile = z.infer<typeof policyFileSchema>;
