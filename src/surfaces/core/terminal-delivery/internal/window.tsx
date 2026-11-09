@@ -6,7 +6,7 @@ import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/c
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { Window, WindowOpeningContext, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { awaitingDeliveryTargets, consentMatches, deliveredTargets, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
-  type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from './contract.js';
+  type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from '#surfaces/core/delivery-port/index.js';
 import WINDOW from './window.json' with { type: 'json' };
 
 /** Catalog words of the delivery window (terminal.delivery.*); `next` maps a typed error code to its next-step sentence. */

@@ -1232,13 +1232,11 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
         "src/platform/core/common",
-        "src/domain/core/attempt",
         "src/engine/core/effect",
         "src/engine/core/runs",
         "src/platform/core/redaction",
         "src/engine/core/delivery-summary",
-        "src/engine/core/workspace-patch",
-        "src/platform/core/errors"
+        "src/surfaces/core/delivery-port"
       ],
       "plan": "SURFACES"
     },
@@ -1334,7 +1332,8 @@
         "src/domain/core/run",
         "src/surfaces/core/terminal-onboarding",
         "src/surfaces/core/terminal-session",
-        "src/surfaces/core/terminal-provider"
+        "src/surfaces/core/terminal-provider",
+        "src/surfaces/core/delivery-port"
       ],
       "plan": "SURFACES"
     },
@@ -1468,7 +1467,6 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
-        "src/engine/core/workspaces",
         "src/surfaces/core/terminal-beuser",
         "src/platform/core/config-fields",
         "src/surfaces/core/terminal-host",
@@ -1514,17 +1512,16 @@
         "src/domain/core/attempt",
         "src/engine/core/effect",
         "src/engine/core/workspace-patch",
-        "src/surfaces/core/terminal-delivery",
         "src/engine/core/run-proposal",
         "src/surfaces/core/delivery-summary",
-        "src/engine/core/delivery-summary",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-onboarding",
         "src/surfaces/core/cli-hub",
         "src/surfaces/core/terminal-hub",
         "src/engine/core/bootstrap-identity",
         "src/surfaces/core/terminal-conversation",
-        "src/surfaces/core/terminal-provider"
+        "src/surfaces/core/terminal-provider",
+        "src/surfaces/core/delivery-port"
       ],
       "plan": "SURFACES"
     },
@@ -3402,6 +3399,23 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/delivery-port": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/workspace-patch",
+        "src/engine/core/delivery-summary",
+        "src/engine/core/effect",
+        "src/engine/core/runs",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/common",
+        "src/engine/core/workspaces",
+        "src/surfaces/core/delivery-summary",
+        "src/surfaces/core/monitor"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/delivery-summary": {
       "dependencies": [
         "src/engine/core/delivery-summary",
@@ -3760,11 +3774,12 @@
         "src/capabilities/core/artifacts",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/effect-confirmation",
-        "src/surfaces/core/terminal-delivery",
         "src/engine/core/effect",
         "src/engine/core/delivery-summary",
         "src/surfaces/core/delivery-summary",
-        "src/engine/core/working-tree-rollback"
+        "src/engine/core/working-tree-rollback",
+        "src/surfaces/core/delivery-port",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },

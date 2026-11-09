@@ -101,6 +101,7 @@ export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit, Con
 export { EMPTY_RECORD_STREAM, RECORD_STREAM_LOOKBACK, feedRecordStream, previewRecordStream, finishRecordStream } from '#platform/core/redaction/index.js';
 export type { RecordStreamState } from '#platform/core/redaction/index.js';
 export { unifiedDiff } from '#platform/core/common/index.js';
+export { patchBody } from '#platform/core/common/index.js';
 
 export { workerImageConsentSchema, type WorkerImageConsent } from '#platform/core/config-fields/index.js';
 export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/core/common/index.js';
