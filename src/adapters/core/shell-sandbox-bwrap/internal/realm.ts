@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, sandboxHardFloored, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
-import { DECKENT_DIR, privateIpcRoot, resolveLocale, t } from '#platform/index.js';
+import { DECKENT_DIR, pathWithin, privateIpcRoot, relativeInside, resolveLocale, t } from '#platform/index.js';
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
 export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
@@ -43,7 +43,7 @@ export const BUBBLEWRAP_MASK_MAX = 4_096;
 const MAX_DEPTH = 32;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
 const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys', '/var'];
-const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`); // kept (KG12 F2): canonical paths; `/` holds only itself here, pathWithin('/') would hold every path
 /** SANDBOX-SPAWN (2026-10-18): a read-only path inside another adds nothing (`--ro-bind` is recursive; read-only paths mount after every writable one), so
  * only the outermost is bound; deny masks inside stay. Before, a floored tree cost a mount per file (13 430 on the owner's checkout, over ARG_MAX). */
 const outermost = (paths: ReadonlySet<string>): string[] => [...paths].filter(path => { for (let up = dirname(path); up !== dirname(up); up = dirname(up)) if (paths.has(up)) return false; return true; });
@@ -56,7 +56,7 @@ export interface BubblewrapOptions {
 }
 
 /** Whether `a` and `b` (real paths) are the same or one holds the other: overlay layers may not (bubblewrap man page; undefined otherwise). */
-const nested = (a: string, b: string) => { const up = relative(a, b), down = relative(b, a); return up === '' || !up.startsWith('..') && !isAbsolute(up) || !down.startsWith('..') && !isAbsolute(down); };
+const nested = (a: string, b: string) => pathWithin(a, b) || pathWithin(b, a);
 
 /** PATH entries bound read-only are program directories only: `bin`, `.bin` or `sbin` by name (a `bin` brings its `lib*`/`libexec` siblings). */
 const TOOLCHAIN_DIR_NAMES = new Set(['bin', '.bin', 'sbin']);
@@ -309,7 +309,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   // Astra 2162: the product's own state and its ancestors stay protected under an ignored tree. An ignored directory that holds a
   // protected path is not skipped whole: it is listed, its denied entries masked, and only the ancestors of protected paths are entered
   // (siblings stay unscanned, as ignored). A symbolic link on such a chain cannot be masked by path → the call is refused.
-  const anchors = [...layout.project.protectedAnchors, DECKENT_DIR, ...(layout.hardFloor?.roots ?? []).map(path => relative(root, path)).filter(path => path && !path.startsWith('..') && !isAbsolute(path))];
+  const anchors = [...layout.project.protectedAnchors, DECKENT_DIR, ...(layout.hardFloor?.roots ?? []).flatMap(path => relativeInside(root, path) || [])];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const stateOnly = (dir: string, rel: string, names: ListedEntries, depth: number) => holdsProductStateOnly({ dir, rel, names, depth, denied: layout.project.denied,

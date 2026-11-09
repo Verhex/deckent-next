@@ -69,10 +69,11 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
     const args = bubblewrapArguments((view as { view: Parameters<typeof bubblewrapArguments>[0] }).view);
     expect(args.join(' ')).toContain(`--overlay-src ${f.project} --overlay ${f.writeSet.upper} ${f.writeSet.work} ${f.project}`);
     expect(args.join(' ')).not.toContain(`--bind ${f.project} ${f.project}`);
-    const inside = join(f.project, '.deckent-writes');
-    await mkdir(join(inside, 'upper'), { recursive: true, mode: 0o700 }); await mkdir(join(inside, 'work'), { mode: 0o700 });
-    expect(await resolveBubblewrapView(f.layout, {}, {}, { writeSet: { upper: join(inside, 'upper'), work: join(inside, 'work') } }))
-      .toEqual({ ok: false, reason: 'the write set directories overlap the project' });
+    for (const inside of [join(f.project, '.deckent-writes'), join(f.project, '..x-writes')]) { // KG12 F2: a child named `..x` is inside too
+      await mkdir(join(inside, 'upper'), { recursive: true, mode: 0o700 }); await mkdir(join(inside, 'work'), { mode: 0o700 });
+      expect(await resolveBubblewrapView(f.layout, {}, {}, { writeSet: { upper: join(inside, 'upper'), work: join(inside, 'work') } }))
+        .toEqual({ ok: false, reason: 'the write set directories overlap the project' });
+    }
   }, 60_000);
 
   it('writes stay aside; the scan reads creations, changes, deletions, opaque directories, renames and refuses what cannot be applied', async () => {

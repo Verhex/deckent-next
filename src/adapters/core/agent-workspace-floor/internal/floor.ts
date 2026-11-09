@@ -1,6 +1,6 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { globalStateRoot, PRODUCT_LAYOUT_REGISTRY, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
+import { DOCS_DIR, globalStateRoot, PRODUCT_LAYOUT_REGISTRY, productResourcePath, relativeInside, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceScope, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
@@ -22,9 +22,9 @@ export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, f
 }
 /** MODES-3 `edit-authority`: the installation's configuration file inside the project (it decides where policy, bindings and approvals live, the realm and the network), its sidecars and a writer's temporary — never written without the owner's card, full access included. Details: agent-turn-engine module note. */
 export function agentAuthorityPaths(projectRoot: string, layout: ProductLayout): (rel: string) => boolean {
-  const rel = relative(projectRoot, productResourcePath(layout, 'config')).split(sep).join('/'), slash = rel.lastIndexOf('/');
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return () => false;
-  const matchers = [`${rel}*`, `${rel.slice(0, slash + 1)}.${rel.slice(slash + 1)}*`].map(createGlobMatcher);
+  const rel = relativeInside(projectRoot, productResourcePath(layout, 'config'))?.split(sep).join('/');
+  if (!rel) return () => false;
+  const slash = rel.lastIndexOf('/'), matchers = [`${rel}*`, `${rel.slice(0, slash + 1)}.${rel.slice(slash + 1)}*`].map(createGlobMatcher);
   return path => matchers.some(match => match(path));
 }
 /** OPEN-SANDBOX (owner MODES-3 checkpoint 4): the hard floor of a full-access turn's open shell view (`ShellSandboxLayout.hardFloor`). Details: agent-turn-engine module note. */
@@ -43,11 +43,11 @@ export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, 
 }
 /** Astra 2486 P1: a write set keeps a sealed in-project root (`.deckent`) inside the overlay, so its entries are refused here unless they lie in the owner-Y exception — the root's `docs` subtree (creatable) or another EXISTING non-product, non-link subdirectory; the root's own names and product paths never reach the host from a write set. Details: agent-turn-engine module note. */
 export function sealedRootEntryRefused(projectRoot: string, hardFloor: ReturnType<typeof agentShellHardFloor>): (rel: string) => boolean {
-  const inside = hardFloor.roots.map(root => relative(projectRoot, root).split(sep).join('/')).filter(rel => rel !== '' && !rel.startsWith('..') && !isAbsolute(rel));
+  const inside = hardFloor.roots.flatMap(root => relativeInside(projectRoot, root)?.split(sep).join('/') || []);
   return rel => inside.some(root => {
     if (rel !== root && !rel.startsWith(`${root}/`)) return false;
     const child = rel.slice(root.length + 1).split('/')[0] ?? '', dir = `${root}/${child}`;
-    if (root === '.deckent' && child === 'docs') return false;
+    if (dir === DOCS_DIR) return false;
     if (!child || rel === dir || hardFloor.product?.(dir)) return true;
     try { const info = lstatSync(join(projectRoot, dir)); return !info.isDirectory(); } catch { return true; }
   });
@@ -70,8 +70,8 @@ const globalLayout = (root: string) => resolveProductLayout({ projectRoot: root,
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
   return Object.freeze((Object.keys(layout.resources) as ProductResource[]).filter(resource => !AGENT_READABLE_PRODUCT_RESOURCES.includes(resource)).flatMap(resource => {
-    const rel = relative(projectRoot, productResourcePath(layout, resource));
-    return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split(sep).join('/')];
+    const rel = relativeInside(projectRoot, productResourcePath(layout, resource));
+    return rel ? [rel.split(sep).join('/')] : [];
   }));
 }
 /** The deny patterns of the product's own state: each protected resource, anything under it, its sidecars and a writer's hidden temporary; a shell command naming one of these is refused outright — no approval opens product management (owner F2, Astra 2162). Details: agent-turn-engine module note. */
@@ -79,8 +79,8 @@ export function agentProductStateDeny(projectRoot: string, layout: ProductLayout
   const globals = agentGlobalStateRoots([env, process.env]);
   const paths = [layout, ...globals.map(globalLayout)].flatMap(each => agentProductStatePaths(projectRoot, each));
   const globalDeny = globals.flatMap(root => {
-    const rel = relative(projectRoot, root).split(sep).join('/');
-    return rel === '' ? ['**'] : rel.startsWith('..') || isAbsolute(rel) ? [] : [rel, `${rel}/**`];
+    const rel = relativeInside(projectRoot, root)?.split(sep).join('/');
+    return rel === '' ? ['**'] : rel ? [rel, `${rel}/**`] : [];
   });
   return Object.freeze([...globalDeny, ...[...new Set(paths)].flatMap(path => {
     const slash = path.lastIndexOf('/');
@@ -98,7 +98,7 @@ export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel:
 
 /** The configured data root as a project-relative POSIX path, or undefined when it is the project or lies outside it (`ShellSandboxLayout.dataRoot`). */
 export function agentDataRootRel(projectRoot: string, layout: ProductLayout): string | undefined {
-  const rel = relative(projectRoot, layout.root); return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel.split(sep).join('/');
+  return relativeInside(projectRoot, layout.root)?.split(sep).join('/') || undefined;
 }
 /** SANDBOX-SPAWN (2026-10-18): a turn's shell sandbox layout — one derivation for the turn and doctor's self-test, so doctor runs the view a call gets. */
 export function agentShellSandboxLayout(projectRoot: string, layout: ProductLayout, scope: WorkspaceScope, writeFloor: (rel: string) => boolean, fullAccess: boolean, scratchDir: string | null,

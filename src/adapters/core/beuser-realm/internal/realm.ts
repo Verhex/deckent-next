@@ -39,7 +39,7 @@ export async function canonicalRealmPath(path: string, kind: 'directory' | 'file
   if (await realpath(path) !== path || (kind === 'directory' ? !info.isDirectory() : !info.isFile())) return refuseRealm();
   return path;
 }
-export function pathContains(parent: string, child: string) { return child === parent || child.startsWith(parent + sep); }
+export function pathContains(parent: string, child: string) { return child === parent || child.startsWith(parent + sep); } // kept (KG12 F2): canonical paths; `/` holds only itself here, pathWithin('/') would hold every path
 export const realmFileIdentity = async (path: string) => {
   const info = await lstat(path, { bigint: true });
   return `${info.dev}:${info.ino}`;

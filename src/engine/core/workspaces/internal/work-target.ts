@@ -1,4 +1,4 @@
-import { sep } from 'node:path';
+import { pathWithin } from '#platform/index.js';
 /** WORK-TARGETS (owner 2026-09-30 K1 = W2): a work target is a named source repository that Deckent's coding work runs against
  * instead of the project root. Slice 1 implements the Git kind only; a future non-Git workspace kind is another adapter producing
  * the same observation for its realm. Business systems (ERP) are not work targets: their effects stay on the C11 operation catalog
@@ -29,7 +29,6 @@ export interface WorkTargetContext {
   /** Canonical product data roots (layout root and separately located resources). */
   readonly dataRoots: readonly string[];
 }
-const within = (path: string, root: string) => path === root || path.startsWith(root.endsWith(sep) ? root : root + sep);
 /** Refuses, in a fixed order, every target Deckent must not write: a non-canonical path, an unsafe directory, product data, the project
  * itself, anything that is not a non-bare repository root, a repository sharing the running project's refs (a live worktree: Deckent
  * never targets its running source), borrowed objects, or a base branch that does not name a commit. */
@@ -37,7 +36,7 @@ export function assertWorkTarget(observation: WorkTargetObservation, context: Wo
   const { path, realPath } = observation;
   if (!path.startsWith('/') || realPath === null || realPath !== path) throw new WorkTargetError('WORK_TARGET_PATH_INVALID');
   if (!observation.safeDirectory) throw new WorkTargetError('WORK_TARGET_UNSAFE');
-  if (context.dataRoots.some(root => within(path, root))) throw new WorkTargetError('WORK_TARGET_IN_DATA_ROOT');
+  if (context.dataRoots.some(root => pathWithin(root, path))) throw new WorkTargetError('WORK_TARGET_IN_DATA_ROOT');
   if (path === context.projectRoot) throw new WorkTargetError('WORK_TARGET_IS_PROJECT');
   if (observation.bare !== false || observation.repositoryRoot !== path || observation.commonDirectory === null) throw new WorkTargetError('WORK_TARGET_NOT_WORKTREE');
   if (observation.commonDirectory === context.projectCommonDirectory) throw new WorkTargetError('WORK_TARGET_SHARES_PROJECT_REPOSITORY');

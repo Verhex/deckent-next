@@ -2,6 +2,7 @@ import { lstat, realpath } from 'node:fs/promises';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { PRODUCT_LAYOUT_REGISTRY as registry } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
+import { pathWithin } from '#platform/core/utils/index.js';
 import { productRootOverride, type Environment } from './env.js';
 import { normalizeGlobalScopePlatform, resolveGlobalScopePaths } from './global-scope.js';
 
@@ -26,7 +27,6 @@ const HOST_PORTS: ProjectRootPorts = Object.freeze({
 /** The identity record inside the installation identity resource (the installation-files adapter's `identity.json`, as backup reads it). */
 const IDENTITY_RECORD = 'identity.json';
 const refuse = (code: string, params: Record<string, string>) => ErrorRegistry.createError(code, { params });
-const inside = (parent: string, path: string) => path === parent || path.startsWith(parent.endsWith(sep) ? parent : parent + sep);
 
 /**
  * U7 (İ-6): the project a command started in a subfolder belongs to — the one reader of the launch folder for product commands. Walks up from
@@ -71,7 +71,7 @@ const gitMarker = async (directory: string, ports: ProjectRootPorts): Promise<bo
 };
 async function adopt(directory: string, physical: string, data: string, ports: ProjectRootPorts): Promise<ProjectRootResolution | null> {
   // A worker clone under the data root (workspaces) never resolves the installation that holds it.
-  if (inside(data, physical)) throw refuse('INSTALLATION_ROOT_INSIDE_DATA_ROOT', { path: data });
+  if (pathWithin(data, physical)) throw refuse('INSTALLATION_ROOT_INSIDE_DATA_ROOT', { path: data });
   if (ports.platform === 'win32' || ports.uid === undefined) throw refuse('INSTALLATION_ROOT_WALK_UNSUPPORTED', { root: directory });
   const policyPath = join(data, registry.resources.policy), [root, policy] = await Promise.all([ports.lstat(data), ports.lstat(policyPath)]);
   if (!root || !policy || root.isSymbolicLink() || policy.isSymbolicLink()) throw refuse('INSTALLATION_ROOT_UNSAFE', { path: data, reason: 'symlink' });

@@ -190,7 +190,8 @@
         "src/engine/core/resource-observation",
         "src/domain/core/attempt",
         "src/adapters/core/native-cli-registry",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/platform/core/utils"
       ],
       "plan": "ISOLATION"
     },
@@ -1017,7 +1018,8 @@
         "src/platform/core/errors",
         "src/engine/core/attempts",
         "src/platform/core/config-fields",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/utils"
       ],
       "plan": "ISOLATION"
     },
@@ -2389,7 +2391,8 @@
         "src/platform/core/i18n",
         "src/platform/core/clock",
         "src/platform/core/validate",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -2398,7 +2401,8 @@
         "src/adapters/core/workspace-read",
         "src/engine/core/shell-classification",
         "src/adapters/core/workspace-write",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -2412,7 +2416,8 @@
         "src/platform/core/host",
         "src/platform/core/common",
         "src/engine/core/effect",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -2855,7 +2860,8 @@
         "src/adapters/core/workspace-read",
         "src/domain/core/agent-tool",
         "src/platform/core/common",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -5251,12 +5257,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42379,
+      "adapters": 42374,
       "surfaces": 45000,
       "composition": 13576
     },
     "totalSrcLines": 200000,
-    "testCases": 8196,
+    "testCases": 8197,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
@@ -6440,7 +6446,7 @@
       ]
     },
     "parentPrefix": {
-      "note": "KG12 F2 (alpha.64 PRIV-E): containment is decided by pathWithin or relativeInside (#platform); a bare startsWith('..') takes a child named ..x for a parent. Written now and off: LINT-R sets enforce after the migrating cards (PRIV-M1) lower or drop their rows. Shrink-only once enforced.",
+      "note": "KG12 F2 (alpha.64 PRIV-E): containment is decided by pathWithin or relativeInside (#platform); a bare startsWith('..') takes a child named ..x for a parent. Written now and off: PRIV-M1 migrated the fail-open rows; LINT-R sets enforce. Shrink-only once enforced.",
       "enforce": false,
       "patterns": [
         "\\.startsWith\\((['\"`])\\.\\.\\1\\)"
@@ -6448,18 +6454,8 @@
       "allow": [
         {
           "file": "src/adapters/core/agent-workspace-floor/internal/floor.ts",
-          "count": 6,
-          "reason": "Lines 26, 46, 74, 83, 101: KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1). Line 34: KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
-        },
-        {
-          "file": "src/adapters/core/host-shell/internal/landlock.ts",
           "count": 1,
-          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
-        },
-        {
-          "file": "src/adapters/core/host-shell/internal/realm.ts",
-          "count": 2,
-          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
+          "reason": "KG12 F2 over-refusing (agentShellHardFloor): a project below the bootstrap folder in a child named ..x adds the bootstrap folder as a hard-floor root; kept as it is (owner decision A25)."
         },
         {
           "file": "src/adapters/core/host-shell/internal/result.ts",
@@ -6467,29 +6463,14 @@
           "reason": "KG12 F2 display only (note or prompt text); no boundary decision."
         },
         {
-          "file": "src/adapters/core/host-shell/internal/write-set.ts",
-          "count": 2,
-          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
-        },
-        {
           "file": "src/adapters/core/shell-paths/internal/paths.ts",
           "count": 3,
           "reason": "KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
         },
         {
-          "file": "src/adapters/core/shell-sandbox-bwrap/internal/realm.ts",
-          "count": 3,
-          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
-        },
-        {
           "file": "src/adapters/core/workspace-read/internal/scope.ts",
           "count": 1,
           "reason": "KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
-        },
-        {
-          "file": "src/composition/core/execution/internal/task.ts",
-          "count": 1,
-          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
         },
         {
           "file": "src/engine/core/agent-turn/internal/system-prompt.ts",
