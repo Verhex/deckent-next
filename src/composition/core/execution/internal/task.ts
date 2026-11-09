@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as wait } from 'node:timers/promises';
 import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, relativeInside, resolveLocale, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
@@ -33,7 +34,7 @@ async function nativeWorkerWaiting(projectRoot: string, identity: AttemptIdentit
 }
 /** Execute a reserved identity using its pinned task template. The trusted project root is the Git source; the command cannot supply argv,
  * image, workspace, base commit or host paths. */
-export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: NativeCliWorkerOptions = {}) {
+export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: NativeCliWorkerOptions = {}, signal: AbortSignal = new AbortController().signal) {
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, ownerUid, principal, path, document } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
@@ -119,8 +120,23 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (native) {
         if (profile.environment?.requirements.length) {
           if (!nativePorts?.checkEnvironment) { await release(); return await waiting('NATIVE_AGENT_ENVIRONMENT_REFUSED'); }
-          await nativePorts.checkEnvironment(request, native.binding, profile.environment,
-            { ...(readOnlyMounts ? { readOnlyMounts } : {}), inputs: start.inputs, handoffInputs: start.handoffInputs }, new AbortController().signal);
+          const stop = new AbortController(), probeSignal = AbortSignal.any([signal, stop.signal]);
+          const watched = (async () => {
+            try {
+              while (!probeSignal.aborted) {
+                if (!await nativeCliWorkerFence(store, identity)) { stop.abort(); return; }
+                await wait(config.runRuntime.pollIntervalMs, undefined, { signal: probeSignal });
+              }
+            } catch (error) { if (!probeSignal.aborted) stop.abort(error); }
+          })();
+          try {
+            await nativePorts.checkEnvironment(request, native.binding, profile.environment,
+              { ...(readOnlyMounts ? { readOnlyMounts } : {}), inputs: start.inputs, handoffInputs: start.handoffInputs }, probeSignal);
+            if (probeSignal.aborted) throw ErrorRegistry.createError('DISPATCH_FENCED');
+          } catch (error) {
+            if (!probeSignal.aborted || queryFailure(error).code === 'NATIVE_WORKER_CUSTODY_UNKNOWN') throw error;
+            await release(); await preparation.settle(); throw ErrorRegistry.createError('DISPATCH_FENCED');
+          } finally { stop.abort(); await watched; }
         }
       } else if (docker) {
       const probeOptions = { ...docker.options, executable: executable!, workspaceRoot, uid: os.uid, gid: os.gid, ...(readOnlyMounts ? { readOnlyMounts } : {}) }, probe = new DockerSupervisor(probeOptions);

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it, vi } from 'vitest';
@@ -8,12 +8,12 @@ import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type Nativ
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
-  resolveNativeCliWorkerProfile, inspectNativeCliWorker, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding } from '#adapters/index.js';
+  resolveNativeCliWorkerProfile, inspectNativeCliWorker, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding, type NativeCliWorkerPorts } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest, connectedModelProfile } from '#engine/index.js';
 import { FIRST_RUN_UPGRADE_RULE_IDS, firstRunPolicyTemplate, modelInvocationProfileSchema } from '#domain/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, productResourcePath } from '#platform/index.js';
 
 it('K17: worker ports use fresh K5 workload authority and the existing K6 reservation without an invocation claim', async () => {
   const owner = readLocalOsIdentity(), f = await brainProviderFixture({ headless: { executable: process.execPath,
@@ -144,7 +144,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const release = vi.fn(async () => undefined), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
       const ports = { readiness: async () => ({ state: 'ready' as const, execution: seal }), f08: async () => seal, recheck: async () => undefined,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release }) },
-        checkEnvironment: vi.fn(async (request, _binding, requirements) => {
+        checkEnvironment: vi.fn<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>(async (request, _binding, requirements) => {
           expect(await readFile(join(request.workspace, 'note.txt'), 'utf8')).toBe('fixed base\n'); expect(requirements).toEqual(environment);
         }),
         openTools: vi.fn(async (request, _binding, _signal, context) => {
@@ -163,6 +163,35 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       expect(run).toHaveBeenCalledOnce(); expect(release).toHaveBeenCalledOnce(); expect(ports.checkEnvironment).toHaveBeenCalledOnce(); expect(credential).not.toHaveBeenCalled();
       await store.cancelRun({ commandId: 'cancel-finished', actor, scopeId: 's', runId: 'run', expectedRevision: (await store.loadRun('s', 'run'))!.revision });
       await store.settleCancelledAttempt(identity);
+      for (const cause of ['run-cancel', 'service-stop', 'service-stop-unknown']) {
+        const probing = { ...identity, runId: cause, attemptId: cause }, stop = new AbortController();
+        await store.createRun({ commandId: `create-${cause}`, actor, identity: { scopeId: 's', runId: cause, layoutRevision: identity.layoutRevision }, graph,
+          execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
+          policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: `reserve-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: 0, now: 0, identities: [probing] });
+        let started!: () => void, finish!: () => void, probeSignal!: AbortSignal, probeWorkspace!: string;
+        const entered = new Promise<void>(resolve => { started = resolve; });
+        ports.checkEnvironment.mockImplementationOnce(async (request, _binding, _requirements, _resources, signal) => {
+          probeSignal = signal; probeWorkspace = request.workspace; started();
+          await new Promise<void>(resolve => { finish = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
+          if (cause === 'service-stop-unknown') throw ErrorRegistry.createError('NATIVE_WORKER_CUSTODY_UNKNOWN');
+        });
+        const pending = executeConfiguredTask(project, probing, { ...options, nativeCliWorker: { ports, projectionRetired: true } }, stop.signal);
+        const outcome = pending.then(result => ({ result }), (error: unknown) => ({ error }));
+        await entered;
+        try {
+          if (cause === 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
+          else stop.abort();
+          await vi.waitFor(() => expect(probeSignal.aborted).toBe(true), { timeout: 3000 });
+        } finally { finish(); }
+        expect(await outcome).toMatchObject({ error: { code: cause === 'service-stop-unknown' ? 'NATIVE_WORKER_CUSTODY_UNKNOWN' : 'DISPATCH_FENCED' } });
+        if (cause === 'service-stop-unknown') expect(await readFile(join(probeWorkspace, 'note.txt'), 'utf8')).toBe('fixed base\n');
+        else await expect(readFile(join(probeWorkspace, 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+        expect(await readdir(join(productResourcePath(opened.layout, 'crashes'), 'dispatch-preparation'))).toHaveLength(cause === 'service-stop-unknown' ? 1 : 0);
+        expect(await store.loadBoundDispatch(probing)).toBeNull();
+        expect(run).toHaveBeenCalledOnce(); expect(ports.openTools).toHaveBeenCalledOnce();
+        if (cause !== 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
+      }
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,

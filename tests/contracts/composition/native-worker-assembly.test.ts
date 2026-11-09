@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as adapters from '#adapters/index.js';
 import * as runs from '#composition/core/runs/index.js';
+import * as engine from '#engine/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest } from '#engine/index.js';
@@ -78,6 +79,13 @@ it('K21: K1 tools use the exact Attempt tree with an MCP workload session and du
   const f = await brainProviderFixture(), c = await connection(), attempt = await mkdtemp(join(tmpdir(), 'k21-tools-')); temporary.push(attempt);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
+    const run = engine.runDurableAgentTurn;
+    let cancelled!: ReturnType<typeof vi.spyOn>, revoked!: ReturnType<typeof vi.spyOn>;
+    vi.spyOn(engine, 'runDurableAgentTurn').mockImplementation((input, store, ports) => run(input, store, { ...ports,
+      invokeAgent: async (...args) => {
+        cancelled = vi.spyOn(args[0].session, 'cancel'); revoked = vi.spyOn(args[0].session, 'revoke');
+        return ports.invokeAgent!(...args);
+      } }));
     // R4a: the real first-run template (v19), never injected MCP grants: the worker's tool session runs as the MCP actor on its v19 rules.
     const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
     await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 });
@@ -95,6 +103,13 @@ it('K21: K1 tools use the exact Attempt tree with an MCP workload session and du
     await expect(readFile(join(f.project, 'result.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await adapters.withMcpPrincipal(() => port!.cancel())).toMatchObject({ effects: 'settled', pendingCallIds: [], termination: 'unverified' });
     expect((await propose('late-write', 'write_file', { path: 'result.txt', content: 'late-overwrite' })).outcome.status).toBe('error');
+    expect(await readFile(join(attempt, 'result.txt'), 'utf8')).toBe('durable-attempt-result'); port = undefined;
+    port = await adapters.withMcpPrincipal(() => runtime.openTools({ ...request, identity: { ...identity, attemptId: 'revoked' } },
+      {} as NativeCliWorkerBinding, new AbortController().signal, {}));
+    expect(await adapters.withMcpPrincipal(() => port!.revoke())).toMatchObject({ kind: 'revoked', effects: 'settled', pendingCallIds: [], termination: 'unverified' });
+    expect(cancelled).not.toHaveBeenCalled(); expect(revoked).toHaveBeenCalledTimes(2);
+    expect((await propose('revoked-write', 'write_file', { path: 'result.txt', content: 'revoked-overwrite' })).outcome)
+      .toMatchObject({ status: 'error', text: expect.stringContaining('tool-session-closed') });
     expect(await readFile(join(attempt, 'result.txt'), 'utf8')).toBe('durable-attempt-result'); port = undefined;
     const { DatabaseSync } = await import('node:sqlite'), db = new DatabaseSync(f.path, { readOnly: true });
     try { expect(db.prepare('SELECT count(*) AS n FROM model_invocations').get()).toEqual({ n: 0 }); } finally { db.close(); }
@@ -221,22 +236,29 @@ async function verificationHarness(family: string, scenario: import('../../fixtu
   await writeFile(executable, source.replace("async function main() {", `async function main() { if (fs.existsSync(${JSON.stringify(inputCanary)}) || fs.existsSync('/deckent/inputs/prior')) throw Error('input-visible-in-login-realm');`), { mode: 0o700 });
   const f = await brainProviderFixture({ headless: { executable, configDir, stateDir, protocolFamily: family }, subscription: true });
   const options = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: global } }, profile = modelInvocationProfileSchema.parse(f.config.provider_invocation_profiles.profiles[0]);
+  const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: profile.scopeId,
+    principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 });
+  await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 }); clearConfigCache();
   vi.spyOn(runs, 'recheckNativeWorkerUse').mockResolvedValue({ profile } as never);
   const entry = adapters.nativeCliAgent(family)!, execution = (await adapters.preflightNativeAgent(profile, Date.now, (await import('../../fixtures/native-headless/connection.js')).testIsolation)).execution;
   const binding = { schemaVersion: 1, protocolFamily: family, profileDigest: modelInvocationProfileDigest(profile), definition: profile.adapter.definition,
     connectionId: '12345678-1234-4234-8234-123456789abc', resourceKey: 'slot', modelUsePin: { scopeId: profile.scopeId } } as NativeCliWorkerBinding;
   const runtime = createConfiguredNativeCliWorkerRuntime(f.project, options)!, query = { scopeId: profile.scopeId, reference: profile.reference, binding };
-  const session = { schemaVersion: 1 as const, turnId: 'verification-turn', generation: 1, approvalTtlMs: 1000, tools: [{ name: 'read_file', version: 1, toolClass: 'read' as const, description: 'read', inputSchema: { type: 'object' as const, properties: {} } }] };
-  const closure = { turnId: session.turnId, generation: session.generation, effects: 'settled' as const, termination: 'unverified' as const, pendingCallIds: [] };
-  const tools = { session, propose: vi.fn(), cancel: async () => ({ ...closure, kind: 'cancelled' as const }), revoke: async () => ({ ...closure, kind: 'revoked' as const }) };
+  const tools = { propose: vi.fn() };
   const ports: NativeCliWorkerPorts = { readiness: async () => ({ state: 'ready', execution }), f08: () => runtime.f08(query), verification: runtime.verification,
-    driver: runtime.driver, openTools: async () => tools, bridgeLimits: runtime.bridgeLimits, recheck: async () => {}, capacity: { acquire: async () => ({ state: 'acquired', release: async () => {} }) } };
+    driver: runtime.driver, async openTools(...args) {
+      const session = await adapters.withMcpPrincipal(() => runtime.openTools(...args));
+      return { ...session, propose: (...args) => { tools.propose(...args); return adapters.withMcpPrincipal(() => session.propose(...args)); },
+        cancel: () => adapters.withMcpPrincipal(() => session.cancel()), revoke: () => adapters.withMcpPrincipal(() => session.revoke()) };
+    }, bridgeLimits: runtime.bridgeLimits, recheck: async () => {}, capacity: { acquire: async () => ({ state: 'acquired', release: async () => {} }) } };
   const task = adapters.compileNativeCodingWorkInput(adapters.createNativeCodingTemplate({ imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 },
   { provider: entry.id, cliVersion: execution.cliVersion, discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding),
   { schemaVersion: 1, task: 'Complete the business task.', scope: { paths: ['result.txt'] }, acceptance: 'A durable result.', model: { channelId: profile.reference.providerId, modelId: 'vendor/model', auxiliaryModelIds: [] } });
   const request = { protocolVersion: 1 as const, identity: { scopeId: profile.scopeId, runId: 'verification-run', taskId: 'first', attemptId: 'verify-first', generation: 1, layoutRevision: 'layout' },
     workspace: join(c.root, 'attempt', 'workspace'), argv: adapters.resolveNativeCliWorkerProfile(task).argv };
+  await mkdir(request.workspace, { recursive: true });
   const prepare = (requestOverride = request) => adapters.prepareNativeCliWorker({ profile: task, request: requestOverride, ports, fence: async () => true, custody: adapters.nativeWorkerCustodyFile(requestOverride) });
   return { f, runtime, query, binding, execution, prepare, request, tools };
 }

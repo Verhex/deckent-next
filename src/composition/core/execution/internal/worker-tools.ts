@@ -77,5 +77,5 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
   void turn.then(() => lifetime.failed(ErrorRegistry.createError('NATIVE_AGENT_BRIDGE_UNAVAILABLE')), lifetime.failed);
   const session = await lifetime.opened;
   return { session: session.session, terminalFailure: () => failure, propose: async (...args) => {
-    if (failure) throw ErrorRegistry.createError('APPROVAL_EXPIRED'); return session.propose(...args); }, cancel: () => lifetime.close(session, turn, 'cancelled'), revoke: () => lifetime.close(session, turn, 'revoked') };
+    if (failure) throw ErrorRegistry.createError('APPROVAL_EXPIRED'); return session.propose(...args); }, cancel: () => lifetime.close(() => session.cancel(), turn), revoke: () => lifetime.close(() => session.revoke(), turn) };
 }

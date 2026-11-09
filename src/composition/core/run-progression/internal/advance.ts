@@ -34,7 +34,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       },
       canExecute: identity => withRunStore(query, async store => { const run = await store.loadRun(identity.scopeId, identity.runId);
         return !!run && !(await store.quotaHeldTasks(run, Date.now())).includes(identity.taskId); }),
-      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, executionOptions); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }, waited => { waitedForSlotMs += waited; }); },
+      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, executionOptions, signal); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }, waited => { waitedForSlotMs += waited; }); },
       async evaluate(command) {
         try { await evaluateConfiguredTask(projectRoot, command, options); return 'recorded'; }
         catch (error) {

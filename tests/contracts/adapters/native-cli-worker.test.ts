@@ -184,11 +184,27 @@ it('K12: each tool admission rechecks the fence and lease; a later denial is nev
     f.fence.mockResolvedValue(false);
     await expect(input.tools.propose({ ...call, id: 'second-call' }, { kind: 'claude-tool-use', toolUseId: 'second-tool', deckentCallId: 'second-call' }, new AbortController().signal))
       .rejects.toThrow('SUPERVISOR_CANCELLED');
+    expect(f.tools.revoke).toHaveBeenCalledOnce();
+    f.fence.mockResolvedValue(true);
+    await expect(input.tools.propose({ ...call, id: 'after-revocation' }, { kind: 'claude-tool-use', toolUseId: 'late-tool', deckentCallId: 'after-revocation' }, new AbortController().signal))
+      .rejects.toThrow('SUPERVISOR_CANCELLED');
     return { termination: 'confirmed', status: 'completed', text: 'one scoped call' };
   } }));
-  const p = await prepared(f); await p.supervisor.execute(request);
+  const p = await prepared(f);
+  expect(await p.supervisor.execute(request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, interrupted: true });
   expect(f.tools.propose).toHaveBeenCalledTimes(1); expect(f.tools.propose).toHaveBeenCalledWith(call, expect.anything(), expect.any(AbortSignal));
   expect(f.ports.recheck).toHaveBeenCalledTimes(4); await p.supervisor.release(request);
+  const withdrawn = fixture();
+  withdrawn.ports.driver = vi.fn(async input => ({ tools: input.tools, close: async () => {}, async run() {
+    withdrawn.ports.recheck = async () => { throw new Error('lease-revoked'); };
+    await expect(input.tools.propose(call, { kind: 'claude-tool-use', toolUseId: 'original-tool', deckentCallId: call.id }, new AbortController().signal))
+      .rejects.toThrow('lease-revoked');
+    expect(withdrawn.tools.revoke).toHaveBeenCalledOnce();
+    return { termination: 'confirmed', status: 'completed', text: 'must not succeed after revocation' };
+  } }));
+  const denied = await prepared(withdrawn);
+  expect(await denied.supervisor.execute(request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, interrupted: true });
+  expect(withdrawn.tools.propose).not.toHaveBeenCalled(); await denied.supervisor.release(request);
 });
 it('K12: cancellation aborts the same driver, closes the facade/session and keeps the first stop cause', async () => {
   const f = fixture(); let entered!: () => void;
