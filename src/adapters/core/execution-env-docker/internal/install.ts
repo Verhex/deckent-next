@@ -19,7 +19,7 @@ export async function resolveSudo(data: DockerAptData = DOCKER_APT): Promise<str
   for (const path of data.sudo) if (await access(path, constants.X_OK).then(() => true, () => false)) return path;
   return null;
 }
-/** The environment every sudo step gets: a fixed PATH and the terminal's type and language. No Deckent variable, token or secret. */
+/** No Deckent variable, token or secret. */
 export const sudoEnvironment = (env: DetectEnvironment): DetectEnvironment =>
   Object.fromEntries(Object.entries({ PATH: '/usr/sbin:/usr/bin:/sbin:/bin', TERM: env['TERM'], LANG: env['LANG'], LC_ALL: env['LC_ALL'] }).filter(([, value]) => value));
 export const spawnForeground: DockerInstallPorts['spawn'] = (file, args, options) => new Promise(done => {

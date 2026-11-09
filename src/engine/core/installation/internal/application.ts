@@ -9,7 +9,7 @@ import { hashInstallationProfilePayload, installationProfileSchema, profilePaylo
   | 'INSTALLATION_PROFILE_EVALUATOR' | 'INSTALLATION_PROFILE_POOL' | 'INSTALLATION_PROFILE_POLICY'
   | 'INSTALLATION_PROFILE_SHUTDOWN' | 'INSTALLATION_PROFILE_PATHS'
   // C12 Q8 follow-up (owner 2026-09-27): installation's own typed require-approval refusal, config category, exit 78 —
-  // no longer the shared cross-module 'POLICY_APPROVAL_UNSUPPORTED' code the other 9 authorization points use.
+  // instead of the shared cross-module POLICY_APPROVAL_UNSUPPORTED the other authorization points outside the operation catalog use.
   | 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED';
 export class InstallationProfileError extends CodedError {
   constructor(override readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }

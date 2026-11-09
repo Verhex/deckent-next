@@ -7,7 +7,6 @@ import type { HeadlessPreflight } from './preflight.js';
 /** What `prepare` sealed for one call (the port's token). */
 export type Prepared = Readonly<{ profile: ModelInvocationProfile; definition: NativeCliHeadlessDefinition; entry: HeadlessEntry; model: string; system: string; user: string;
   effortArgs: readonly string[] }>;
-/** A typed rejection: the receipt's reason and status and the adapter's own body (diagnostic text is bounded and redacted). */
 export type Refusal = Readonly<{ reason: ModelInvocationRejectionReason; status: number | null; body: HeadlessRejectionBody }>;
 export const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extract<HeadlessRejectionBody, { schemaVersion: 1 }>, 'schemaVersion'>, status: number | null = null) =>
   Object.freeze({ reason, status, body: { schemaVersion: 1 as const, ...body } });
