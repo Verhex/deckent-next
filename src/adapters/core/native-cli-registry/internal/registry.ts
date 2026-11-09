@@ -33,8 +33,10 @@ export function nativeCliAgent(protocolFamily: string) {
   if (!agents.has(entry.command)) agents.set(entry.command, Object.freeze({ ...entry, agent: entry.command.agent, bridge: registry.agentBridge }));
   return agents.get(entry.command) as Readonly<typeof entry & { agent: NonNullable<typeof entry.command.agent>; bridge: NonNullable<typeof registry.agentBridge> }>;
 }
+const loginEntries = Object.freeze(Object.entries(registry.adapters).map(([id, command]) => Object.freeze({ id, names: command.headless?.isolation.configVisible ?? [] })));
+/** KG7 F4: each registry CLI's login-context file names (its login dir is `<loginRoot>/<id>`); the one source of the login read deny and the shell's login identity paths. */
+export const nativeCliLoginEntries = (): readonly { readonly id: string; readonly names: readonly string[] }[] => loginEntries;
 /** Login-context files from the CLI registry, scoped to the layout's login tree (never a blanket auth.json ban). */
 export function nativeCliLoginReadDeny(loginRoot: string): readonly string[] {
-  return Object.freeze(Object.entries(registry.adapters).flatMap(([id, command]) =>
-    (command.headless?.isolation.configVisible ?? []).map(name => `**/${loginRoot}/${id}/${name}`)));
+  return Object.freeze(loginEntries.flatMap(({ id, names }) => names.map(name => `**/${loginRoot}/${id}/${name}`)));
 }

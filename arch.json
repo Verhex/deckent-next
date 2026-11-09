@@ -2421,6 +2421,7 @@
     "src/adapters/core/agent-workspace-floor": {
       "dependencies": [
         "src/adapters/core/shell-sandbox-bwrap",
+        "src/adapters/core/native-cli-registry",
         "src/adapters/core/workspace-read",
         "src/adapters/core/workspace-write",
         "src/adapters/core/host-shell",
@@ -5283,7 +5284,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42189,
+      "adapters": 42191,
       "surfaces": 45000,
       "composition": 13704
     },
