@@ -613,7 +613,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   dosyanızda (`~/.config/git/attributes`) tanımlı filtre okunmaz; deponun Git ayarlarının tanımladığı ama yukarıdaki attribute
   dosyalarından hiçbirinin anmadığı bir filtre sürücüsü Run'ı reddeder (`PATCH_WORKING_TREE_FILTER`). Filtreyi `.gitattributes`'tan
   kaldıran bir commit, depoyu o dosyaları filtresiz tutar hâle getirir ve Deckent buna uyar. Şimdiki dosyalardan başlamak Git
-  2.40.0 ya da sonrasını gerektirir (`PATCH_WORKING_TREE_GIT_VERSION`). *Yol:* `deckent config set execution.deliveryMode reference`.
+  2.40.0 ya da sonrasını gerektirir (`PATCH_WORKING_TREE_GIT_VERSION`). Özel taban HEAD'in bütün geçmişini kopyalar;
+  `execution.git.copyBytes` değerini (ayarlanmamışsa 8 GiB) aşan bir geçmiş Run'ı reddeder (`PATCH_WORKING_TREE_COPY_LIMIT`). setuid,
+  setgid ya da sticky biti olan bir dosyaya hiç teslim yapılmaz (`PATCH_UNSAFE`, alpha.64). *Yol:* `deckent config set execution.deliveryMode reference`.
 - **Başka dosya sistemindeki kenar dosya sizin için silinmez.** Deckent'in durumu ile proje farklı dosya sistemlerindeyse (örneğin
   `/mnt/c` altındaki bir WSL projesi), teslimin ya da geri almanın değiştirdiği dosya yanında gizli `.deckent-<uuid>.aside` olarak
   kalır ve not onu adlandırır. Deckent bunu hiç silmez; bu dosyalar birikir ve `git status`'ta izlenmeyen dosya olarak görünür.

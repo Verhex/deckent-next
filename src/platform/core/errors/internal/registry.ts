@@ -562,6 +562,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_WORKING_TREE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_CHANGED', p, l) }) },
   // Params limit (bytes), maxEntries; without them (a later view of the recorded refusal) the summary stands.
   PATCH_WORKING_TREE_LISTING_LIMIT: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.PATCH_WORKING_TREE_LISTING_LIMIT.summary', p, l) : t('error.PATCH_WORKING_TREE_LISTING_LIMIT', p, l) }) },
+  PATCH_WORKING_TREE_COPY_LIMIT: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_COPY_LIMIT', p, l) }) },
   DELIVERY_WORKING_TREE_DENIED: { category: 'error', refusal: 'delivery', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_DENIED', p, l) }) },
   DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED: { category: 'error', refusal: 'delivery', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED', p, l) }) },
   PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },

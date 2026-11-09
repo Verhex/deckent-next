@@ -2328,7 +2328,9 @@
         "src/capabilities/core/artifacts",
         "src/engine/core/runs",
         "src/adapters/core/native-cli-worker",
-        "src/platform/core/host"
+        "src/platform/core/config-fields",
+        "src/platform/core/utils",
+        "src/adapters/core/file-lock"
       ],
       "plan": "ISOLATION"
     },

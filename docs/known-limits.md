@@ -618,7 +618,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`~/.config/git/attributes`) is not read; a filter driver your repository's Git configuration defines but no attribute file
   above names refuses the Run (`PATCH_WORKING_TREE_FILTER`). A commit that removes the filter from `.gitattributes` makes the
   repository keep those files unfiltered, and Deckent follows it. Starting from your current files needs Git 2.40.0 or later
-  (`PATCH_WORKING_TREE_GIT_VERSION`). *Workaround:* `deckent config set execution.deliveryMode reference`.
+  (`PATCH_WORKING_TREE_GIT_VERSION`). The private base copies all of HEAD's history; a history over `execution.git.copyBytes`
+  (unset: 8 GiB) refuses the Run (`PATCH_WORKING_TREE_COPY_LIMIT`). A file with a setuid, setgid or sticky bit is never delivered into
+  (`PATCH_UNSAFE`, alpha.64). *Workaround:* `deckent config set execution.deliveryMode reference`.
 - **A cross-device aside is never deleted for you.** When Deckent's state and the project are on different filesystems (for
   example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
   `.deckent-<uuid>.aside`, and the note names it. Deckent never deletes it, so these files accumulate and show as untracked in

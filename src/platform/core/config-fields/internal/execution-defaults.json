@@ -12,6 +12,7 @@
     "outputBytes": 1048576
   },
   "git": {
-    "timeoutMs": 180000
+    "timeoutMs": 180000,
+    "copyBytes": 8589934592
   }
 }

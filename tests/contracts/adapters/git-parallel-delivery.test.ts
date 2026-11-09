@@ -2,12 +2,14 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, open, readFile, readdir, rename, rm, utimes, writeFile, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
   GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
+import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
+import { workingTreeRemovalPatterns } from '#adapters/core/git-patch/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
   targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
@@ -21,7 +23,9 @@ vi.mock('node:fs/promises', async importOriginal => {
     rename: (async (from: string, to: string) => { await fsHook.rename?.(String(from), String(to)); return actual.rename(from, to); }) as typeof actual.rename,
     open: (async (path: string, ...rest: unknown[]) => { await fsHook.open?.(String(path), ''); return (actual.open as (...args: unknown[]) => unknown)(path, ...rest); }) as typeof actual.open };
 });
-const exec = promisify(execFile), roots: string[] = [];
+const exec = promisify(execFile), roots: string[] = [], json = async (path: string) => JSON.parse(await readFile(new URL(`../../../src/adapters/core/${path}`, import.meta.url), 'utf8'));
+const format = await json('git-patch/internal/working-tree-format.json') as Record<'locks' | 'pending' | 'deliveries' | 'journal' | 'rollback' | 'lockOwner', string> & { journalVersion: number };
+const removal = await json('installation-removal/internal/paths.json') as { archive: { members: string[] } };
 const once = (kind: 'link' | 'rename' | 'open', match: (from: string, to: string) => boolean, run: () => Promise<void>) => { fsHook[kind] = async (from, to) => { if (match(from, to)) { fsHook[kind] = null; await run(); } }; };
 afterEach(async () => { vi.restoreAllMocks(); fsHook.link = fsHook.rename = fsHook.open = null; for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const limits = { maxBytes: 65536, maxEntries: 1000, maxDepth: 32, maxPathBytes: 1024 };
@@ -422,7 +426,9 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     await expect(captureWorkingTreeBase({ ...f.options, sourceRoot: join(s, 'sub') }, { scopeId: 's', runId: 'sub' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_SUBFOLDER' });
     await expect(captureWorkingTreeBase({ ...f.options, outputBytes: s.length + 200 }, { scopeId: 's', runId: 'big' }, limits, workerTreeDenied))
       .rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_LISTING_LIMIT', params: { limit: s.length + 200, maxEntries: limits.maxEntries } });
-    expect([classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_SUBFOLDER')).disposition, classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_LISTING_LIMIT')).disposition]).toEqual(['permanent', 'permanent']);
+    // A6-6: the copy of HEAD's objects into the private repository stops at `copyBytes` (both Git processes end), a typed permanent refusal.
+    await expect(captureWorkingTreeBase({ ...f.options, copyBytes: 64 }, { scopeId: 's', runId: 'copy' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_COPY_LIMIT', params: { limit: 64 } });
+    expect(['PATCH_WORKING_TREE_SUBFOLDER', 'PATCH_WORKING_TREE_LISTING_LIMIT', 'PATCH_WORKING_TREE_COPY_LIMIT'].map(code => classifyLaunchRefusal(new WorkspacePatchError(code as never)).disposition)).toEqual(['permanent', 'permanent', 'permanent']);
     expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases); await rm(join(s, 'build'), { recursive: true });
     // L1c lifecycle: a settled Run's base goes (verified, detached, removed); its later use is typed; a stale capture remnant is swept, a fresh one kept.
     const stale = join(f.workspaceRoot, 'run-bases', '.00000000-0000-4000-8000-000000000000'), young = join(f.workspaceRoot, 'run-bases', '.00000000-0000-4000-8000-000000000001');
@@ -444,6 +450,7 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     const plain = 'TOKEN=synthetic-plaintext\n', pointer = 'version https://git-lfs.github.com/spec/v1\noid sha256:' + '0'.repeat(64) + '\nsize 10\n';
     await git('config', 'filter.crypt.clean', `sh -c 'echo ran >> ${marker}; base64'`); await git('config', 'filter.crypt.smudge', `sh -c 'echo ran >> ${marker}; base64 -d'`);
     await writeFile(join(s, '.gitattributes'), '*.sec filter=crypt\n*.bin filter=lfs\n'); await writeFile(join(s, 'key.sec'), plain); await writeFile(join(s, 'big.bin'), pointer);
+    await exec('ln', ['-s', 'a.txt', join(s, 'same.lnk')]); // an unchanged tracked symlink is HEAD's own entry, never withheld (F2: the reader names it with its target)
     await git('add', '.'); await git('commit', '-qm', 'filtered');
     const cipher = (await git('cat-file', 'blob', 'HEAD:key.sec')).stdout; expect(cipher).toBe(Buffer.from(plain).toString('base64') + '\n');
     // A racy filtered entry: `diff-index` (alpha.63) hashes it through the driver (proved below on the same fixture).
@@ -533,24 +540,28 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     p.changes.push(f.patch('wt', 'link/x.txt', null, 'escaped\n').changes[0]!);
     await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
     expect(await readdir(outside)).toEqual([]); expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
+    // B2-6 (owner 2026-11-09): a file carrying a setuid, setgid or sticky bit is refused before anything is written; its bits and bytes stay.
+    p.changes.pop(); for (const bits of ['4644', '2644', '1644']) { await exec('chmod', [bits, join(f.sourceRoot, 'a.txt')]); await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
+      expect([(await exec('stat', ['-c', '%a', join(f.sourceRoot, 'a.txt')])).stdout.trim(), await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')]).toEqual([bits, 'a before\n']); }
   });
   it('serializes deliveries into one checkout: a held lock is waited for, and still held at the bound it is a typed refusal', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'), { manifest, plan } = await planned(f, p);
-    const lock = join(f.workspaceRoot, 'working-tree-locks', patchDigest(f.sourceRoot)); await mkdir(lock, { recursive: true });
-    const quick = new GitWorkingTreeDelivery({ ...f.options, timeoutMs: 150 }, limits);
+    // B1-12 (owner 2026-11-09): the shared kernel lock; held by another description it is waited for, and still held at the bound it is BUSY.
+    const lock = join(f.workspaceRoot, format.locks, patchDigest(f.sourceRoot)); await mkdir(join(f.workspaceRoot, format.locks), { recursive: true });
+    const holder = (await withExclusiveFileLock(lock, { waitMs: 0, pollMs: 0 }))!, quick = new GitWorkingTreeDelivery({ ...f.options, timeoutMs: 150 }, limits);
     await expect(quick.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_BUSY' });
     expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
-    const waiting = f.files.publish(plan, manifest, p); setTimeout(() => void rm(lock, { recursive: true }), 200); await waiting;
+    const waiting = f.files.publish(plan, manifest, p); setTimeout(() => holder.release(), 200); await waiting;
     expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a after\n'); expect(await f.files.delivered(plan)).toBe(true);
-    // L1c: a lock whose recorded holder is gone (a crash mid-write) is taken over; its `writing` journal is classified from the files first, never rewritten.
+    // L1c: a holder that died mid-write left its journal `writing` and its custody entry (written before `writing`); the next holder classifies it from the files first, never rewritten.
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt2' }, limits, workerTreeDenied);
-    const gone = (await exec('sh', ['-c', 'echo $$'])).stdout.trim(), other = f.patch('wt2', 'b.txt', 'b before\n', 'b after\n'), second = await planned(f, other);
-    const crashed = join(f.workspaceRoot, 'working-tree-deliveries', 'c'.repeat(64)); await mkdir(crashed, { recursive: true });
-    // F2/F3 (Astra 3015): the owner record names the operation it ran; its journal keeps each path's full state (existence, digest, Git mode).
-    const seen = (text: string, mode = '100644') => ({ digest: patchDigest(text), mode }), journal = async () => JSON.parse(await readFile(join(crashed, 'journal.json'), 'utf8'));
-    const crash = async (changes: object[]) => { await mkdir(lock);
-      await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: `refs/deckent/deliveries/${'c'.repeat(64)}`, operation: 'deliver' }));
-      await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 2, state: 'writing', written: [], changes })); return f.files.publish(second.plan, second.manifest, other); };
+    const other = f.patch('wt2', 'b.txt', 'b before\n', 'b after\n'), second = await planned(f, other), custody = join(f.workspaceRoot, format.pending, patchDigest(f.sourceRoot));
+    const crashed = join(f.workspaceRoot, format.deliveries, 'c'.repeat(64)); await mkdir(crashed, { recursive: true });
+    // F2/F3 (Astra 3015): the journal keeps each path's full state (existence, digest, Git mode).
+    const seen = (text: string, mode = '100644') => ({ digest: patchDigest(text), mode }), journal = async () => JSON.parse(await readFile(join(crashed, format.journal), 'utf8'));
+    const died = async (changes: object[], version = format.journalVersion) => { await mkdir(custody, { recursive: true }); await writeFile(join(custody, 'c'.repeat(64)), '');
+      await writeFile(join(crashed, format.journal), JSON.stringify({ schemaVersion: version, state: 'writing', written: [], changes }), { mode: 0o600 }); };
+    const crash = async (changes: object[]) => { await died(changes); return f.files.publish(second.plan, second.manifest, other); };
     await writeFile(join(f.sourceRoot, 'a.txt'), 'a third\n'); // the crashed delivery wrote a.txt, not yet old.txt: mixed
     await expect(crash([{ path: 'a.txt', before: seen('a after\n'), after: seen('a third\n') }, { path: 'old.txt', before: seen('remove\n'), after: null }]))
       .rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
@@ -569,22 +580,23 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect([await readFile(join(f.sourceRoot, 'a.txt'), 'utf8'), await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')]).toEqual(['a third\n', 'b after\n']);
     expect((await readdir(f.sourceRoot)).filter(name => name.startsWith('.deckent-'))).toEqual([]); expect(await readdir(crashed)).toContain(`.deckent-${token(1)}.aside`);
     await f.files.publish(second.plan, second.manifest, other); // the lock is free again
-    // R2 (Astra 3017): A died mid-write (mixed); B took A's lock over and died too before settling A, leaving its own record that names only B's delivery.
-    // A's operation stayed in durable custody, so C finds and settles it: PARTIAL, and C writes nothing.
-    const custody = join(f.workspaceRoot, 'working-tree-pending', patchDigest(f.sourceRoot)), owner = (n: number, ref: string, operation?: string) =>
-      writeFile(join(lock, `owner-00000000-0000-4000-8000-00000000000${n}.json`), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref, ...operation ? { operation } : {} }));
-    once('open', path => path === f.sourceRoot, () => Promise.reject(new Error('B died before settling A'))); // B's first open after taking the lock is A's settle
+    // R2 (Astra 3017): A died mid-write (mixed); B took the lock and died too before settling A. A's operation stayed in durable custody, so C finds
+    // and settles it: PARTIAL, and C writes nothing.
+    once('open', path => path === f.sourceRoot, () => Promise.reject(new Error('B died before settling A'))); // B's first open under the lock is A's settle
     await expect(crash([{ path: 'a.txt', before: seen('a after\n'), after: seen('a third\n') }, { path: 'old.txt', before: seen('remove\n'), after: null }])).rejects.toThrow('B died');
     expect([await readdir(custody), (await journal()).state]).toEqual([['c'.repeat(64)], 'writing']);
-    await mkdir(lock); await owner(1, second.plan.ref, 'deliver');
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt5' }, limits, workerTreeDenied);
     await writeFile(join(f.sourceRoot, 'b.txt'), 'b before\n'); const late = f.patch('wt5', 'b.txt', 'b before\n', 'b fifth\n'), third = await planned(f, late);
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
     expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), (await journal()).state, await readdir(custody)]).toEqual(['b before\n', 'partial', []]);
-    // R3017: a journal or a gone holder's record of another version is an explicit typed refusal (nothing settled or written) naming what to check and remove.
-    await mkdir(lock); await owner(2, `refs/deckent/deliveries/${'c'.repeat(64)}`, 'deliver'); await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 1, state: 'writing', changes: [] }));
+    // R3017: a journal of another version, an earlier version's lock directory, and (F3, A6-5) a journal path outside the patch form are
+    // an explicit typed refusal naming what to check and remove: nothing settled, walked or written.
+    await died([], 1);
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: crashed } });
-    await rm(crashed, { recursive: true }); await mkdir(lock); await owner(3, second.plan.ref);
+    const escape = join(f.sourceRoot, '..', `.deckent-${token(3)}.aside`); await writeFile(escape, 'outside\n'); await died([{ path: '../escape.txt', token: token(3), before: seen('outside\n'), after: null }]);
+    await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: crashed } });
+    await expect(readFile(join(f.sourceRoot, '..', 'escape.txt'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(escape, 'utf8')).toBe('outside\n');
+    await rm(crashed, { recursive: true }); await rm(lock); await mkdir(lock); await writeFile(join(lock, `${format.lockOwner}${token(4)}.json`), '{}');
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: lock } });
     await rm(lock, { recursive: true }); await f.files.publish(third.plan, third.manifest, late);
     expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), await readdir(custody)]).toEqual(['b fifth\n', []]);
@@ -595,6 +607,10 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     finally { await exec('chmod', ['700', custody]); }
     expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b before\n'); await f.files.publish(blocked.plan, blocked.manifest, sixth);
     expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b sixth\n');
+    // F7: the uninstall inventory rows of these files are the formats' own (paths.json pinned equal), and every file left here matches one.
+    const rows = workingTreeRemovalPatterns(), left = (await exec('find', [f.workspaceRoot, '-type', 'f', '(', '-path', '*/working-tree-*', '-o', '-path', '*/run-bases/*', ')'])).stdout.split('\n').filter(Boolean);
+    expect([removal.archive.members.filter(row => /^\^workspaces\/(run-bases|working-tree-)/u.test(row)), left.filter(file => !rows.some(row => new RegExp(`^${row}`, 'u').test(relative(f.workspaceRoot, file))))])
+      .toEqual([rows.map(row => `^workspaces/${row}`), []]);
   });
   it('L1c rollback: the yes puts the delivery\'s originals back with the delivery\'s card and authority; a file changed since is refused and nothing is written', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'); p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!);
@@ -613,17 +629,17 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect(await app.rollback({ ...command, commandId: 'undo-again' })).toMatchObject({ status: 'working-tree-rolled-back' }); // already back: nothing rewritten
     await expect(new WorkingTreeRollbackApplication({} as never, f.files, store, await LocalOsSessionAuthority.create(['s'], 10000, clock), { async authorizeIdentity() {} }, clock, undefined).rollback(command))
       .rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
-    // F3 (Astra 3015): a rollback that died after its first file. The lock record names the rollback, so another delivery taking over settles the
+    // F3 (Astra 3015): a rollback that died after its first file. Its custody entry names the rollback's journal, so the next delivery settles the
     // rollback's own journal (mixed: PARTIAL and stops; all before: interrupted; all after: written), never the delivery's written one.
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt3' }, limits, workerTreeDenied);
-    const other = f.patch('wt3', 'b.txt', 'b before\n', 'b after\n'), next = await planned(f, other), lock = join(f.workspaceRoot, 'working-tree-locks', patchDigest(f.sourceRoot));
-    const seen = (text: string) => ({ digest: patchDigest(text), mode: '100644' }), gone = (await exec('sh', ['-c', 'echo $$'])).stdout.trim();
-    const journal = async (suffix: string) => JSON.parse(await readFile(join(f.workspaceRoot, 'working-tree-deliveries', record.intent.plan.ref.split('/').pop()! + suffix, 'journal.json'), 'utf8'));
+    const other = f.patch('wt3', 'b.txt', 'b before\n', 'b after\n'), next = await planned(f, other), custody = join(f.workspaceRoot, format.pending, patchDigest(f.sourceRoot));
+    const seen = (text: string) => ({ digest: patchDigest(text), mode: '100644' }), id = record.intent.plan.ref.split('/').pop()!;
+    const journal = async (suffix: string) => JSON.parse(await readFile(join(f.workspaceRoot, format.deliveries, id + suffix, format.journal), 'utf8'));
     for (const [a, added, state] of [['a before\n', 'added\n', 'partial'], ['a after\n', 'added\n', 'interrupted'], ['a before\n', null, 'written']] as const) {
       await writeFile(join(f.sourceRoot, 'a.txt'), a); await (added ? writeFile(join(f.sourceRoot, 'dir/new.txt'), added) : rm(join(f.sourceRoot, 'dir/new.txt'), { force: true }));
-      await mkdir(lock); await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: record.intent.plan.ref, operation: 'rollback' }));
-      await writeFile(join(f.workspaceRoot, 'working-tree-deliveries', record.intent.plan.ref.split('/').pop()! + '.rollback', 'journal.json'), JSON.stringify({ schemaVersion: 2, state: 'writing', written: [],
-        changes: [{ path: 'a.txt', before: seen('a after\n'), after: seen('a before\n') }, { path: 'dir/new.txt', before: seen('added\n'), after: null }] }));
+      await mkdir(custody, { recursive: true }); await writeFile(join(custody, id + format.rollback), '');
+      await writeFile(join(f.workspaceRoot, format.deliveries, id + format.rollback, format.journal), JSON.stringify({ schemaVersion: format.journalVersion, state: 'writing', written: [],
+        changes: [{ path: 'a.txt', before: seen('a after\n'), after: seen('a before\n') }, { path: 'dir/new.txt', before: seen('added\n'), after: null }] }), { mode: 0o600 });
       const taken = f.files.publish(next.plan, next.manifest, other);
       if (state === 'partial') { await expect(taken).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'dir/new.txt' } }); expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b before\n'); }
       else await taken;
