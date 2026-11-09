@@ -1,5 +1,7 @@
 # Bilinen sınırlar
 
+Patch dışlamaları çalışma alanının okuma kimlik bilgisi tabanını da kullanır. `.gnupg`, `.docker`, `.config/gh`, `.git-credentials`, `.pypirc`, `*.pem`, `*.key`, `secrets.json` ve `*.jks` dahil kimlik bilgisi yolları artık patch dışında tutulur. Mevcut patch dışlamaları da geçerlidir.
+
 Alpha.63 işçi adayı, kalıcı işçi kanıtını ilk korumalı Attempt ile üretir. Okunamayan kayıt veya sonucu belirsiz doğrulama kilidi uzlaştırma bekletir; kendiliğinden yeniden denenmez. Görev girdileri ve önceki görevin çıktıları yalnız araçların salt okunur görünümündedir; CLI giriş realm’ine girmez. Gerçek hesap ve monte sürüm kabulü açıktır.
 
 Native işçinin girdi görünümleri (görev çıktıları, devir girdileri ve bağımlılık bağları), kabul sırasında mevcut girdi sınırları içinde Attempt gözetimine kopyalanır. Kaynak dosyalarda daha sonra yapılan değişiklikler, kabul edilmiş bu görünümde artık görülmez ve ret üretmez. Her okuma ve shell çalıştırması özel kopyanın içeriğini ve gözetimini denetler; kopya, Attempt gözetimi bırakılana kadar disk kullanır. Ortam kontrolleri ve araç oturumları kendi görünümlerini ayrı kabul eder.

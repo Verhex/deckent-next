@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { CodedError, persistedString, attemptIdentitySchema } from '#domain/index.js';
 import { workspaceSourceSchema } from '#engine/core/workspaces/index.js';
+import { createGlobMatcher, WORKSPACE_CREDENTIAL_DENY } from '#platform/index.js';
 import rules from './rules.json' with { type: 'json' };
 /** Bounded reason for PATCH_LIMIT: which configured budget or Git output bound was exceeded. Never carries paths or content. */
 export type WorkspacePatchLimitDetail = 'git-output' | 'git-timeout' | 'git-copy' | 'time' | 'bytes' | 'entries' | 'depth' | 'path';
@@ -19,15 +20,14 @@ export class WorkspacePatchError extends CodedError {
   }
 }
 export const patchDigest = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
-export const patchExclusions = Object.freeze(rules);
+export const patchExclusions = Object.freeze(rules), credentialMatchers = WORKSPACE_CREDENTIAL_DENY.map(createGlobMatcher);
 export function isPatchExcluded(path: string) {
-  return path.split('/').some(part => rules.excludedSegments.includes(part) || rules.excludedPrefixes.some(prefix => part.startsWith(prefix)));
+  return credentialMatchers.some(match => match(path)) || path.split('/').some(part => rules.excludedSegments.includes(part) || rules.excludedPrefixes.some(prefix => part.startsWith(prefix)));
 }
 /** A well-formed repository-relative path (no traversal, separators or control characters). History written by others is read with this:
  * it may name paths a patch may never write (e.g. tracked `.deckent/docs`), which are only "touched". */
 export const historyPathSchema = persistedString(z.string().min(1)).refine(path => !path.includes('\\') && [...path].every(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
   && path.split('/').every(part => part !== '' && part !== '.' && part !== '..'));
-/** A path the patch itself may write: well formed AND outside every exclusion. */
 export const patchPathSchema = historyPathSchema.refine(path => !isPatchExcluded(path));
 const fileSchema = z.strictObject({ mode: z.enum(['100644', '100755']), text: z.string(), digest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly();
 export type PatchFile = z.infer<typeof fileSchema>;

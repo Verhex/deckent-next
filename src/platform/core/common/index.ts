@@ -7,3 +7,4 @@ export { unifiedDiff } from './internal/unified-diff.js';
 export { patchBody } from './internal/unified-diff.js';
 export { displayAddress } from './internal/display-address.js';
 export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from './internal/input-limits.js';
+export { WORKSPACE_CREDENTIAL_DENY, HOME_CREDENTIAL_PATHS } from './internal/credential-paths.js';

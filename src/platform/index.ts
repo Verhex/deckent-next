@@ -106,3 +106,4 @@ export { patchBody } from '#platform/core/common/index.js';
 export { workerImageConsentSchema, type WorkerImageConsent } from '#platform/core/config-fields/index.js';
 export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/core/common/index.js';
 export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedCounter, persistedNumber, persistedIssueCode, toInputJsonSchema } from '#platform/core/validate/index.js';
+export { WORKSPACE_CREDENTIAL_DENY, HOME_CREDENTIAL_PATHS } from '#platform/core/common/index.js';
