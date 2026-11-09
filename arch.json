@@ -286,6 +286,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/engine/core/secret-store",
         "src/adapters/core/native-cli-registry",
         "src/platform/core/state-root",
         "src/adapters/core/local-principal",
@@ -1607,7 +1608,6 @@
         "src/engine/core/config",
         "src/adapters/core/contract",
         "src/engine/core/runtime",
-        "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
         "src/domain/core/audit",
         "src/composition/core/policy",
@@ -5208,12 +5208,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42364,
+      "adapters": 42366,
       "surfaces": 45000,
       "composition": 13558
     },
     "totalSrcLines": 200000,
-    "testCases": 8221,
+    "testCases": 8222,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

@@ -1,11 +1,11 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { DeckentError, serializeJsonDocument } from '#platform/index.js';
-import type { SecretStore, SecretStoreContext, SecretStoreErrorCode, SecretStoreFactory } from '#engine/index.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, type SecretStore, type SecretStoreContext, type SecretStoreErrorCode, type SecretStoreFactory } from '#engine/index.js';
 import { withPrivateKeyFile } from '#adapters/core/local-keyring/index.js';
 import { FILE_SECRET_STORE_MAX_BYTES, createFileSecretStore, type FileSecretStoreOptions, type SecretDocumentCodec } from './file.js';
 
-export const ENCRYPTED_FILE_SECRET_STORE_ID = 'core.secret-store.encrypted-file@1';
+export { ENCRYPTED_FILE_SECRET_STORE_ID };
 export const ENCRYPTED_FILE_SECRET_STORE_NAME = 'secrets.sealed.json';
 export const ENCRYPTED_FILE_SECRET_STORE_KEY = 'secrets.key';
 const ALGORITHM = 'aes-256-gcm';

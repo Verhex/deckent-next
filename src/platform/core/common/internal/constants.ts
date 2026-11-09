@@ -6,6 +6,8 @@ export const HOST_LIMITS_REGISTRY = Object.freeze({ ...hostLimits });
 export const PRODUCT_LAYOUT_REGISTRY = Object.freeze({ ...layoutResources, resources: Object.freeze(layoutResources.resources) });
 /** Paths and schema identities; execution policy belongs to the owning package. */
 export const DECKENT_DIR = PRODUCT_LAYOUT_REGISTRY.rootName;
+/** Owner decision Y (2026-09-30): the one `.deckent` subtree an agent may create and write; the write floors read this, never a literal. */
+export const DOCS_DIR = `${DECKENT_DIR}/docs`;
 export const CONFIG_FILE = PRODUCT_LAYOUT_REGISTRY.resources.config;
 export const PROJECT_CONFIG_PATH = `${DECKENT_DIR}/${CONFIG_FILE}`;
 export const CONFIG_SCHEMA_VERSION = 4;

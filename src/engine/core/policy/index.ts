@@ -1,4 +1,5 @@
 export { DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError } from './internal/authorize.js';
+export { policyVerdictRefusal } from './internal/verdict.js';
 export type { PolicySource, PolicyRefusalReason } from './internal/authorize.js';
 export { RunPolicyAuthorization } from './internal/run.js';
 export { PoolPolicyAuthorization, PoolControlPolicyAuthorization, assertPoolControlAllowed } from './internal/pool.js';

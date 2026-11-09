@@ -187,6 +187,8 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
   return Object.freeze({
     kind: 'landlock' as const,
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
+      // KG3 F5: Landlock mounts nothing, so it cannot hide a contained workspace's state ancestor. Refused per call, not in `usable()`, where prefer-sandbox would fall back to the host.
+      if (input.containedWorkspaceRoot) return refuse('this sandbox cannot hide the installation state around a contained workspace');
       if (abi < 3) return refuse('Landlock ABI 3 is required to protect read-only files from truncation');
       if (resolve(request.cwd) !== input.project.root) return refuse('the working directory is not the sandboxed project root');
       // SHELL-OVERLAY: Landlock mounts nothing, so it cannot keep a call's writes aside (design §9); a caller that asks anyway is refused.

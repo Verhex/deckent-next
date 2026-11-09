@@ -3,11 +3,11 @@ import { lstat, mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { persistedString, DeckentError, ErrorRegistry, serializeJsonDocument, withConfigWriteLock, writeTextAtomic } from '#platform/index.js';
-import { SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue, type SecretStore, type SecretStoreErrorCode, type SecretStoreFactory,
+import { FILE_SECRET_STORE_ID, SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue, type SecretStore, type SecretStoreErrorCode, type SecretStoreFactory,
   type SecretStoreContext, type SecretStoreInspection } from '#engine/index.js';
 import { assertSecretStorageProtection } from '#engine/index.js';
 
-export const FILE_SECRET_STORE_ID = 'core.secret-store.file@1';
+export { FILE_SECRET_STORE_ID };
 export const FILE_SECRET_STORE_NAME = 'secrets.json';
 /** The one bound of the store document, in UTF-8 bytes of its JSON text: the reader refuses a larger document and the writer never produces one. */
 export const FILE_SECRET_STORE_MAX_BYTES = 1_048_576;
