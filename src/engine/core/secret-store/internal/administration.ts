@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, samePrincipalRef, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
+import { ErrorRegistry, type DeckentError } from '#platform/index.js';
 import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
 import { assertPublicSecretName, assertSecretStorageProtection } from './protection.js';
@@ -25,20 +25,39 @@ export type SecretChangeAuthorization = (request: SecretChangeRequest & { readon
 /** Persists one sealed audit event before the change; throws when it cannot (no record, no change). */
 export type SecretChangeAudit = (event: AuditEvent) => void | Promise<void>;
 
+/** The one `secret` policy cell table (KG12 F3): `set|delete` of a name, `switch` of the installation store, `set` of the vault handover. */
+export const evaluateSecretCell = (policy: unknown, principal: VerifiedPrincipal, scopeId: string, action: 'set' | 'delete' | 'switch', id: string) =>
+  evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: policyResources.secret.kind, id } });
+/** A refused verdict as its typed error: require-approval is `POLICY_APPROVAL_UNSUPPORTED` without params, deny is `deny`; allow is null. */
+export function secretVerdictRefusal(verdict: SecretChangeDecision['effect'], deny: string, params: Readonly<Record<string, string>>): DeckentError | null {
+  const refusal = policyVerdictRefusal(verdict, { deny });
+  return refusal === null ? null : ErrorRegistry.createError(refusal, refusal === 'POLICY_APPROVAL_UNSUPPORTED' ? {} : { params });
+}
+/** The verified caller's decision on one `secret` cell; a request naming another principal is `refused()`, never evaluated for someone else
+ * (X4: the strict reference comparison over issuer and subject). */
+export function decideSecretCell(policy: unknown, verified: VerifiedPrincipal, requested: SecretChangeRequest['principal'], scopeId: string,
+  action: 'set' | 'delete' | 'switch', id: string, refused: () => DeckentError): SecretChangeDecision {
+  if (!samePrincipalRef({ issuer: requested.issuer, subject: requested.subject }, { issuer: verified.issuer, subject: verified.subject })) throw refused();
+  const decision = evaluateSecretCell(policy, verified, scopeId, action, id);
+  return Object.freeze({ policyRevision: decision.revision, effect: decision.decision, ruleId: decision.ruleId ?? null });
+}
+/** Records one decision (KG12 F3 pair 1): no record of an allowed change, no change; a refusal that cannot be recorded is still a refusal
+ * (the permission-mode rule) and is thrown typed. */
+export async function recordSecretDecision(decision: SecretChangeDecision, event: AuditEvent, audit: SecretChangeAudit, deny: string,
+  params: Readonly<Record<string, string>>): Promise<void> {
+  if (decision.effect === 'allow') { await audit(event); return; }
+  try { await audit(event); } catch { /* an unrecordable refusal is still a refusal */ }
+  throw secretVerdictRefusal(decision.effect, deny, params)!;
+}
+
 /**
  * SECRET-WRITE (owner 2026-09-29 option A): the policy cell of a secret change is resource kind `secret`, action `set|delete`, id = the
  * secret's name, for the verified principal in the request's scope. The request must name that same principal (the service passes the
  * socket peer); anything else is refused, never evaluated for someone else.
  */
 export function policySecretChangeAuthorization(policy: unknown, principal: VerifiedPrincipal): SecretChangeAuthorization {
-  return async request => {
-    if (request.principal.issuer !== principal.issuer || request.principal.subject !== principal.subject) {
-      throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: request.action, name: request.name } });
-    }
-    const decision = evaluatePolicy(policy, { principal, scopeId: request.scopeId, action: request.action,
-      resource: { kind: policyResources.secret.kind, id: request.name } });
-    return Object.freeze({ policyRevision: decision.revision, effect: decision.decision, ruleId: decision.ruleId ?? null });
-  };
+  return async request => decideSecretCell(policy, principal, request.principal, request.scopeId, request.action, request.name,
+    () => ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: request.action, name: request.name } }));
 }
 
 /**
@@ -92,9 +111,6 @@ export class SecretStoreAdministration {
       principal: { issuer: request.principal.issuer, subject: request.principal.subject }, policyRevision: decision.policyRevision, atMs: this.now(),
       subject: { kind: 'secret-change', action, name: request.name, backend: this.store.descriptor.id,
         decision: { effect: decision.effect, ruleId: decision.ruleId } } };
-    if (decision.effect === 'allow') { await this.audit(event); return; }
-    try { await this.audit(event); } catch { /* an unrecordable refusal is still a refusal */ }
-    const refusal = policyVerdictRefusal(decision.effect, { deny: 'SECRET_CHANGE_DENIED' });
-    throw ErrorRegistry.createError(refusal ?? 'SECRET_CHANGE_DENIED', refusal === 'POLICY_APPROVAL_UNSUPPORTED' ? {} : { params: { action, name: request.name } });
+    await recordSecretDecision(decision, event, this.audit, 'SECRET_CHANGE_DENIED', { action, name: request.name });
   }
 }

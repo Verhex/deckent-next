@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { installationSecretRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
+import { installationSecretRoot, listProjectVaults, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
@@ -141,6 +141,9 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     await writeFile(path, JSON.stringify(granted)); await chmod(path, 0o644); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE');
     await chmod(path, 0o600); await link(path, join(base, 'second')); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE'); await unlink(join(base, 'second'));
     await writeFile(path, ' '.repeat(PROJECT_VAULT.grantsMaxBytes + 1)); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE');
+    // KG12 F6: `secret list --all` and uninstall list a vault whose ownership record is not private without a record, never failing the listing.
+    const owner = join(dirname(path), PROJECT_VAULT.projectFile); await chmod(owner, 0o644);
+    expect(await listProjectVaults(installationSecretRoot(env)!)).toEqual([{ directory: dirname(path), record: null }]); await chmod(owner, 0o600);
     // Owner decision A23 (KG12 F1): without getuid the vault folder and its grants are never private (no skipped owner check).
     await writeFile(path, JSON.stringify(granted)); const getuid = Object.getOwnPropertyDescriptor(process, 'getuid')!;
     Object.defineProperty(process, 'getuid', { value: undefined, configurable: true });

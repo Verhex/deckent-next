@@ -1,7 +1,7 @@
 export interface InstallationStartabilityView { readonly status: 'ready' | 'blocked'; readonly endpoint: string | null; readonly checks: readonly { readonly code: string; readonly message: string }[] }
 import { renderAuditStatus, renderAuditReason } from './audit.js';
 import { t, type Locale } from '#platform/index.js';
-import type { ToolchainCurrencyReport } from '#engine/index.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, FILE_SECRET_STORE_ID, type ToolchainCurrencyReport } from '#engine/index.js';
 
 /** One realm resolution as doctor shows it (the adapter's `ShellRealmReport` shape; surfaces keep their own view). */
 interface ShellRealmSelection { readonly selected: string | null; readonly marker: string | null; readonly notice: string | null; readonly code: string | null;
@@ -76,9 +76,9 @@ function shellSelfTestLines(report: ShellRealmDoctorView, locale: Locale): strin
 
 /** SECRET-AT-REST transparency (owner 2026-10-08): who can read the keys in each Core backend, in plain words; another backend has its own. */
 function secretStoreCustodyLine(backend: string, locale: Locale): readonly string[] {
-  if (backend === 'core.secret-store.env@1') return [t('doctor.secretStore.custody.env', {}, locale)];
-  if (backend === 'core.secret-store.file@1') return [t('doctor.secretStore.custody.file', {}, locale)];
-  if (backend === 'core.secret-store.encrypted-file@1') return [t('doctor.secretStore.custody.encryptedFile', {}, locale)];
+  if (backend === ENV_SECRET_STORE_ID) return [t('doctor.secretStore.custody.env', {}, locale)];
+  if (backend === FILE_SECRET_STORE_ID) return [t('doctor.secretStore.custody.file', {}, locale)];
+  if (backend === ENCRYPTED_FILE_SECRET_STORE_ID) return [t('doctor.secretStore.custody.encryptedFile', {}, locale)];
   return [];
 }
 

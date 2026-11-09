@@ -96,6 +96,10 @@ it.skipIf(process.platform === 'win32')('requires POSIX private file secret stor
     expect(leaks(error)).toBe(false);
     expect((error as { cause?: unknown }).cause).toBeUndefined();
   }
+  // Owner B2-8 (KG12 F4): the value bound counts UTF-8 bytes; a hand-edited value of 65,538 bytes in 21,846 UTF-16 units makes the whole store corrupt.
+  await writeFile(f.path, JSON.stringify({ schemaVersion: 1, secrets: { A: '€'.repeat(21_846), B: 'synthetic-b' } }), { mode: 0o600 });
+  await expect(store.get('B')).rejects.toMatchObject({ code: 'SECRET_STORE_CORRUPT' });
+  expect(await store.inspect()).toEqual({ status: 'corrupt', code: 'SECRET_STORE_CORRUPT' });
 });
 
 it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: a held config write lock on the store is contention, not a lost or partial write', async () => {

@@ -12,9 +12,10 @@ export { FILE_SECRET_STORE_ID };
 export const FILE_SECRET_STORE_NAME = 'secrets.json';
 /** The one bound of the store document, in UTF-8 bytes of its JSON text: the reader refuses a larger document and the writer never produces one. */
 export const FILE_SECRET_STORE_MAX_BYTES = 1_048_576;
-/** Store document v1: names in the `$DECK` grammar, bounded non-empty values; nothing else. */
+/** Store document v1: names in the `$DECK` grammar, non-empty values within the byte bound (owner B2-8: a hand-edited value over it makes
+ * the whole store corrupt); `persistedString` keeps the UTF-16 check for Astra 2935 parity. Nothing else. */
 const documentSchema = z.strictObject({ schemaVersion: z.literal(1),
-  secrets: z.record(z.string().regex(SECRET_NAME_PATTERN), persistedString(z.string().min(1).max(SECRET_VALUE_MAX_BYTES))) });
+  secrets: z.record(z.string().regex(SECRET_NAME_PATTERN), persistedString(z.string().min(1).max(SECRET_VALUE_MAX_BYTES)).refine(isSecretValue)) });
 
 export interface FileSecretStoreOptions {
   /** The installation (global) root; null when none resolves (no HOME and no override): the store is then unavailable. */

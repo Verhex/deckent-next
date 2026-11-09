@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { ErrorRegistry } from '#platform/index.js';
-import { createSecretHelperBackend, SECRET_VALUE_MAX_BYTES, type SecretHelperOptions, type SecretStoreFactory } from '#engine/index.js';
+import { createSecretHelperBackend, isSecretValue, type SecretHelperOptions, type SecretStoreFactory } from '#engine/index.js';
 export type { SecretHelperOptions } from '#engine/index.js';
 /** Optional trusted-host adapter. Registration grants nothing; engine owns authorization, deadline and factory-wide admission.
  * Protocol v1: NAME + LF on stdin, one UTF-8 value + optional LF/CRLF on stdout, empty = absent. No shell, inherited env or output log.
@@ -42,7 +42,7 @@ function readHelper(options: SecretHelperOptions, name: string, signal: AbortSig
       try { value = new TextDecoder('utf-8', { fatal: true }).decode(buffer).replace(/\r?\n$/, ''); }
       catch { buffer.fill(0); finish('SECRET_VALUE_INVALID'); return; }
       buffer.fill(0);
-      if (value.includes('\n') || value.includes('\r') || value.includes('\0') || Buffer.byteLength(value) > SECRET_VALUE_MAX_BYTES) {
+      if (value.includes('\n') || value.includes('\r') || value.includes('\0') || (value !== '' && !isSecretValue(value))) {
         finish('SECRET_VALUE_INVALID'); return;
       }
       finish(undefined, value === '' ? undefined : value);

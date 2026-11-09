@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, withConfigWriteLock } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, withConfigWriteLock } from '#platform/index.js';
 import { CORE_SECRET_GRANT_STORE_ID, DECK_FILE, PROJECT_VAULT, assessProjectVaultOwnership, emptySecretGrantFile, projectVaultClaimed, projectVaultHandover,
   projectVaultKey, projectVaultRecordSchema, secretGrantFileSchema, type ProjectVaultAnchor, type ProjectVaultLocation, type ProjectVaultRecord,
   type SecretGrant, type SecretGrantFile, type SecretGrantStoreContext, type SecretGrantStoreFactory } from '#engine/index.js';
@@ -16,7 +16,6 @@ export async function directoryLocation(path: string): Promise<ProjectVaultLocat
     return info.isDirectory() && info.ino !== 0n ? { canonicalRoot, device: String(info.dev), inode: String(info.ino) } : null;
   } catch { return null; }
 }
-const sameLocation = (a: ProjectVaultLocation | null, b: ProjectVaultLocation) => a !== null && a.canonicalRoot === b.canonicalRoot && a.device === b.device && a.inode === b.inode;
 /**
  * Astra REVISE 2706 P2-2: the handover's strict observation of the recorded owner's data root. `gone` only when proven: the path does not resolve
  * (ENOENT, ENOTDIR) or it resolves to another directory identity; `present` for the recorded identity; `unknown` for any other error (EACCES, EIO,
@@ -29,8 +28,6 @@ export async function observeOwnerRoot(location: ProjectVaultLocation): Promise<
     return info.isDirectory() && canonicalRoot === location.canonicalRoot && String(info.dev) === location.device && String(info.ino) === location.inode ? 'present' : 'gone';
   } catch (error) { return absent(error) ? 'gone' : 'unknown'; }
 }
-/** Whether a recorded directory still exists with its recorded identity (the handover rule: only a moved owner is gone). */
-export const locationPresent = async (location: ProjectVaultLocation) => sameLocation(await directoryLocation(location.canonicalRoot), location);
 
 /**
  * The Git repository a project root belongs to, read from its `.git` (no Git process, no inherited Git environment):
@@ -161,7 +158,8 @@ export async function listProjectVaults(globalRoot: string): Promise<readonly { 
   const rows = [];
   for (const entry of entries.filter(name => /^[a-f0-9]{64}$/u.test(name)).sort()) {
     const directory = join(parent, entry);
-    const record = await loadOwnership(directory).catch(() => 'lost' as const);
+    // KG12 F6: only the typed unsafe-vault refusal is listed without a record (as a lost one is today; showing it apart is an owner item).
+    const record = await loadOwnership(directory).catch((error: unknown) => { if (error instanceof DeckentError && error.code === 'SECRET_STORE_UNSAFE') return 'unsafe' as const; throw error; });
     rows.push({ directory, record: typeof record === 'string' ? null : record });
   }
   return rows;
