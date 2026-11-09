@@ -2,8 +2,8 @@ import { t } from '#platform/core/i18n/index.js';
 import { errorTable, plainErrors, type ErrorDefinitions } from '../definition.js';
 /** Error codes owned by the `clisetup` family (i18n `locales/<locale>/clisetup.json`); texts live in that family. */
 export const clisetupErrors: ErrorDefinitions = errorTable('clisetup', {
-  CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('k29.coding.connection.discoveryUnsupported', p, l) }) },
-  CODING_TEMPLATE_CONNECTION_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('k29.coding.connection.unsupported', p, l) }) },
+  CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('coding.connection.discoveryUnsupported', p, l) }) },
+  CODING_TEMPLATE_CONNECTION_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('coding.connection.unsupported', p, l) }) },
   // C-SETUP: `config set <key>` without a value off a terminal; names the key and what it takes, exit 2, nothing written.
   // CONFIG-PARTIAL-CLI: params partial (time | size) and found when the listed values are partial; the sentence says which limit cut them.
   CLI_CONFIG_VALUE_MISSING: { category: 'usage', render: (p, l) => ({ message: [t('error.CLI_CONFIG_VALUE_MISSING', p, l),

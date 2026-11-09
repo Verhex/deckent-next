@@ -190,7 +190,6 @@
   "cli.help.action.run.hold": "Yeni iş denemelerini bir nedenle beklet",
   "cli.help.action.propose": "Makbuzlu iş önerisi ver",
   "cli.help.action.inspectProposal": "Öneri makbuzunu incele",
-  "cli.coding.template.help": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur ve önizleme kartı onaylanır; başka yerde eksik seçim kabul edilmiş değerleri listeler. --image verilmezse yapılandırılmış işçi imajı kullanılır; orada kabul edilmiş CLI yoksa hata kabul edilmiş imajları söyler. --discovery verilmezse şablon, türetildiği kabul edilmiş profillerin discovery modunu korur; --discovery disabled repo talimatlarını işçiden gizler.",
   "cli.help.action.codingTemplate": "Kodlama şablonunu önizle veya ekle",
   "cli.help.action.init.pool": "Yapılandırılan yürütme havuzunu kur",
   "cli.help.action.init.registry": "İlk admission registry kaydını oluştur",

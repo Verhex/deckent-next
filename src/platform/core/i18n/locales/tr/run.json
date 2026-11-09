@@ -474,5 +474,8 @@
   "docker.imageProbe.cause.deadline": "Docker komutu süre sınırına ulaştı",
   "docker.imageProbe.cause.exit": "Docker komutu hatayla çıktı",
   "docker.imageProbe.cause.signal": "Docker komutu durduruldu",
-  "docker.imageProbe.cause.parse": "Docker yanıtı okunamadı"
+  "docker.imageProbe.cause.parse": "Docker yanıtı okunamadı",
+  "approval.plan.workerMode.standart": "standart",
+  "approval.plan.workerMode.ask-edits": "dikkatli",
+  "approval.plan.workerMode.full-auto": "tam otomatik"
 }

@@ -49,12 +49,12 @@ describe('subscription prerequisite query', () => {
       expect(await inspectSubscriptionReadiness(query(), { read: async () => missing })).toEqual({ state: 'unknown', reason });
     }
     for (const locale of ['en', 'tr'] as const) for (const [reason, suffix] of Object.entries(reasonKeys)) {
-      const typedReason = reason as keyof typeof reasonKeys, text = t(`headless.agent.k13.unknown.${suffix}`, {}, locale);
+      const typedReason = reason as keyof typeof reasonKeys, text = t(`headless.agent.unknown.${suffix}`, {}, locale);
       if (suffix === 'sealed') expect(text).toBe(locale === 'en'
         ? 'Tools are not verified yet for this CLI version and profile. Your first message verifies them; text chat works meanwhile.'
         : 'Araçlar bu CLI sürümü ve profil için henüz doğrulanmadı. İlk mesajın onları doğrular; bu arada metin sohbeti çalışır.');
       expect(subscriptionReadinessText({ state: 'unknown', reason: typedReason }, locale))
-        .toBe(t('headless.agent.k13.readiness.unknown', { reason: text }, locale));
+        .toBe(t('headless.agent.readiness.unknown', { reason: text }, locale));
       expect(nativeChatReasonText(typedReason, locale, true)).toBe(text);
     }
   });
@@ -69,10 +69,10 @@ describe('subscription prerequisite query', () => {
     for (const locale of ['en', 'tr'] as const) for (const reason of Object.keys(reasonKeys)) {
       const typedReason = reason as keyof typeof reasonKeys, text = t(`headless.agent.reason.${reason}`, {}, locale);
       expect(subscriptionReadinessText({ state: 'unavailable', reason: typedReason }, locale))
-        .toBe(t('headless.agent.k13.readiness.unavailable', { reason: text }, locale));
+        .toBe(t('headless.agent.readiness.unavailable', { reason: text }, locale));
       expect(nativeChatReasonText(typedReason, locale)).toBe(text);
       for (const unknown of [false, true]) expect(nativeChatReasonText(typedReason, locale, unknown, true)).toBe(
-        reason === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' ? t('headless.agent.k13.surfaceStopped', {}, locale)
+        reason === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' ? t('headless.agent.surfaceStopped', {}, locale)
           : nativeChatReasonText(typedReason, locale, unknown));
     }
   });

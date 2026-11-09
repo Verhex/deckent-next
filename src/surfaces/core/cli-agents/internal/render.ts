@@ -4,9 +4,9 @@ import { cliTableStyle, formatAgo, renderCliTable, safeCell } from '#surfaces/co
 import type { AgentsCommandContext, AgentUsePreview } from './context.js';
 
 export function agentUseView(preview: AgentUsePreview, locale: Locale): string {
-  return [t('headless.agent.k13.agents.preview', { agent: safeCell(preview.agentId), revision: preview.revision, task: safeCell(preview.taskId) }, locale),
-    t('headless.agent.k13.agents.pins', { persona: safeCell(preview.personaDigest), skills: safeCell(preview.skillSetDigest) }, locale),
-    ...preview.skills.map(skill => safeCell(`${skill.skillId}@${skill.revision} · ${skill.digest}`)), t('headless.agent.k13.agents.notAdmitted', {}, locale)].join('\n');
+  return [t('headless.agent.agents.preview', { agent: safeCell(preview.agentId), revision: preview.revision, task: safeCell(preview.taskId) }, locale),
+    t('headless.agent.agents.pins', { persona: safeCell(preview.personaDigest), skills: safeCell(preview.skillSetDigest) }, locale),
+    ...preview.skills.map(skill => safeCell(`${skill.skillId}@${skill.revision} · ${skill.digest}`)), t('headless.agent.agents.notAdmitted', {}, locale)].join('\n');
 }
 
 const who = (author: { issuer: string; subject: string; ai: boolean }, locale: Locale) =>
@@ -69,9 +69,9 @@ export function agentView(item: AgentDefinition, history: readonly AgentDefiniti
   const noCarry = item.provenance.author.ai && item.revision > 1 && standings.some(row => row.basis.kind === 'definition') ? [t('agentsevo.view.aiNoCarry', {}, locale)] : [];
   return [...agentLines(item.agentId, item.content, locale), t('agents.view.identity', { revision: item.revision, skillSet: item.skillSetDigest.slice(0, 12) }, locale),
     t('agents.view.tier', {}, locale), standingLine(standings, item.provenance.author, locale), ...noCarry,
-    t('headless.agent.k13.agents.useHint', { agent: safeCell(item.agentId), revision: item.revision, scope: safeCell(item.scopeId) }, locale), ...revisions(history, locale, signers)].join('\n');
+    t('headless.agent.agents.useHint', { agent: safeCell(item.agentId), revision: item.revision, scope: safeCell(item.scopeId) }, locale), ...revisions(history, locale, signers)].join('\n');
 }
 export function skillView(item: ReadableSkillDefinition, history: readonly ReadableSkillDefinition[], locale: Locale, signers: Signers = {}): string {
   return [`${safeCell(item.skillId)} · ${safeCell(item.content.name)}`, safeCell(item.content.text), t('agents.skill.view.pin', { revision: item.revision, digest: item.contentDigest }, locale),
-    source(item, locale), t('headless.agent.k13.skills.viaAgent', {}, locale), ...revisions(history, locale, signers)].join('\n');
+    source(item, locale), t('headless.agent.skills.viaAgent', {}, locale), ...revisions(history, locale, signers)].join('\n');
 }

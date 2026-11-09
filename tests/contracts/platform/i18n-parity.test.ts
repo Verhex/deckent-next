@@ -7,6 +7,8 @@ interface UnchangedOracle { locales: Record<Locale, { groups: string[][]; count:
 const fixtures = new URL('../../fixtures/i18n/', import.meta.url);
 describe('K2 intentional reconciliation and unchanged-template evidence', () => {
   it('preserves all unaffected templates from the independently saved pre-reconciliation catalog', async () => {
+    const migration = JSON.parse(await readFile(new URL('key-renames.json', fixtures), 'utf8')) as { renames: Record<string, string>; removed: Record<Locale, Record<string, string>>; changed: Record<Locale, Record<string, { before: string; after: string }>> };
+    const renamed = (key: string) => migration.renames[key] ?? key;
     const oracle = JSON.parse(await readFile(new URL('unchanged-contract.json', fixtures), 'utf8')) as UnchangedOracle;
     for (const locale of ['en', 'tr'] as const) {
       const expected = oracle.locales[locale], keys = expected.groups.flat();
@@ -14,8 +16,13 @@ describe('K2 intentional reconciliation and unchanged-template evidence', () => 
       const changes = JSON.parse(await readFile(new URL('cli-text-changes.json', fixtures), 'utf8')) as Record<Locale, Record<string, { before: string; after: string | null }>>;
       const docsChanges = JSON.parse(await readFile(new URL('docs-guard-changes.json', fixtures), 'utf8')) as typeof changes;
       Object.assign(changes[locale], docsChanges[locale]);
-      for (const [key, change] of Object.entries(changes[locale])) expect(MESSAGE_REGISTRY.catalogs[locale][key]).toBe(change.after ?? undefined);
-      const actual = keys.map(key => [key, changes[locale][key]?.before ?? MESSAGE_REGISTRY.catalogs[locale][key]]);
+      for (const [key, change] of Object.entries(changes[locale])) {
+        const next = migration.changed[locale][renamed(key)], removed = Object.hasOwn(migration.removed[locale], key);
+        if (removed) expect(migration.removed[locale][key]).toBe(change.after);
+        if (next) expect(next.before).toBe(change.after);
+        expect(MESSAGE_REGISTRY.catalogs[locale][renamed(key)]).toBe(removed ? undefined : next?.after ?? change.after ?? undefined);
+      }
+      const actual = keys.map(key => [key, changes[locale][key]?.before ?? migration.removed[locale][key] ?? migration.changed[locale][renamed(key)]?.before ?? MESSAGE_REGISTRY.catalogs[locale][renamed(key)]]);
       expect(createHash('sha256').update(JSON.stringify(actual)).digest('hex')).toBe(expected.sha256);
     }
   });

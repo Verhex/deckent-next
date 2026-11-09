@@ -836,26 +836,26 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     state = undefined;
     // R2a: unknown stays selectable (the guarded first turn verifies it); only unavailable blocks.
     const unknown = await subscriptionModelView(plain, port, locale);
-    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
     expect(unknown.choices[0]!.detail).not.toContain('OLD TEXT READY'); expect(unknown.choices[1]).toEqual(plain.choices[1]);
     expect((await port.inspect()).notes.join('\n')).toContain(unknown.choices[0]!.detail);
     state = { state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
     const unchecked = await subscriptionModelView(plain, port, locale);
-    expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.cli', {}, locale));
+    expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.unknown.cli', {}, locale));
     expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale)); expect(unchecked.choices[0]!.blocked).toBeNull();
     state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
     state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
       profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
     const ready = await subscriptionModelView(plain, port, locale);
-    expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.k13.readiness.ready', {}, locale));
+    expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.readiness.ready', {}, locale));
     expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', references: [reference] });
     // A later missing observation cannot retain an earlier ready projection: every view build reads again (no cross-build cache).
     state = undefined; const builds = calls.length;
-    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
     expect(calls).toHaveLength(builds + 1);
     const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
-    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
   }
   // R3c: a login with several models gives one note (onboarding pushes notes to scrollback), not one per model.
   state = undefined; calls.length = 0;
@@ -880,7 +880,7 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     expect(await runConfiguredCli(['--lang', 'en'])).toBe(0);
     const sealedPort = providerPanelPort(f.project, 's', { ...cliHost!, providerConnect: { ...base, kinds: [{ ...native, id: f.reference.providerId, catalogProviderId: f.reference.providerId }] } },
       sealedOptions, 'en', errorText);
-    expect(subscriptionReadinessText(await sealedPort.subscriptionReadiness!.inspect('chat', f.reference), 'en')).toBe(t('headless.agent.k13.readiness.ready', {}, 'en'));
+    expect(subscriptionReadinessText(await sealedPort.subscriptionReadiness!.inspect('chat', f.reference), 'en')).toBe(t('headless.agent.readiness.ready', {}, 'en'));
     expect(observation).toHaveBeenCalled();
   } finally { entry.mockRestore(); cwd.mockRestore(); observation.mockRestore(); await f.close(); }
 });

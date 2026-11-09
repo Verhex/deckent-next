@@ -31,5 +31,11 @@ export const MESSAGE_REGISTRY = createMessageRegistry(families, {
   'desktop.error.node_not_found': { floor: NODE_ENGINE_FLOOR_TEXT },
 }, identicalMessages);
 export const MESSAGE_KEYS = MESSAGE_REGISTRY.keys;
-/** The one raw catalog read for a key held as data (registry labels, plan codes); unfilled, undefined when absent, other locales read English like `t`. */
-export const messageText = (key: string, locale: Locale): string | undefined => MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'][key];
+/** A key held as data; omitted params keep the raw template, missing keys return undefined. */
+export function messageText(key: string, locale: Locale, params?: Params): string | undefined {
+  const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
+  if (!Object.hasOwn(catalog, key)) return undefined;
+  if (params === undefined) return catalog[key];
+  const effective = { ...MESSAGE_REGISTRY.defaultParams[key], ...params };
+  return catalog[key]!.replace(/\{(\w+)\}/g, (_, name: string) => Object.hasOwn(effective, name) ? String(effective[name] ?? `{${name}}`) : `{${name}}`);
+}

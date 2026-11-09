@@ -26,7 +26,7 @@ function readFlags(argv: readonly string[], from: number, allowed: readonly stri
 }
 const sinksOf = (context: AdminCommandContext) => ({ ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 const shortImage = (image: string | null | undefined) => image ? image.replace(/^sha256:/u, '').slice(0, 12) : '-';
-const runtimeLabel = (subscription: boolean, locale: Locale) => subscription ? t('k29.coding.runtime.subscription', {}, locale) : t('k29.coding.runtime.docker', {}, locale);
+const runtimeLabel = (subscription: boolean, locale: Locale) => subscription ? t('coding.runtime.subscription', {}, locale) : t('coding.runtime.docker', {}, locale);
 type Pins = ReturnType<typeof affectedToolchainProfiles>;
 type Connection = ReturnType<typeof configuredInvocationProfiles>[number];
 /** R8b/R8c: a connection's CLI comes from the native agent registry through the host (the engine still checks it); people see CLI · model, the id stays in --json. */
@@ -43,7 +43,7 @@ export async function codingCommand(argv: readonly string[], context: AdminComma
   if (!help && argv[1] !== 'prepare') throw ErrorRegistry.createError('CLI_USAGE');
   const { values, flags } = help ? { values: new Map<string, string>(), flags: new Set<string>() } : readFlags(argv, 2, ['--json', '--input', '--lang']);
   const locale = commandLocale(context, values.get('--lang')), source = values.get('--input'), sinks = sinksOf(context);
-  if (help) { emit(t('k29.coding.help', {}, locale), sinks); return; }
+  if (help) { emit(t('coding.help', {}, locale), sinks); return; }
   if (!source || !context.prepareCodingProfile) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd();
   const config = await loadConfig(root, { env: context.env ?? process.env });
@@ -96,9 +96,9 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   const unused = configured !== null && profiles.some(row => row.runtime === 'container' && row.provider) && !profiles.some(row => row.imageId === configured);
   emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
     const label = (id: string | null) => connectionLabel(cliOf(context), all.find(row => row.id === id));
-    const available = t('k29.coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
+    const available = t('coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
     if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available].join('\n');
-    const columns = t('k29.coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
+    const columns = t('coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
     return [t('clisetup.coding.title', { count: data.profiles.length }, locale),
       renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ? label(row.connection) : '-']),
         cliTableStyle(context)),
@@ -191,7 +191,7 @@ function templateLines(value: ReturnType<typeof output>, locale: Locale, config:
   const worker = workerBinding(value.profile);
   const discovery = parameters.invocation?.discovery?.mode;
   const connection = configuredInvocationProfiles(config).find(row => row.id === value.connection || !!worker && modelInvocationProfileDigest(row) === worker.profileDigest);
-  return [t('k29.coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(cli, connection) : '-' }, locale),
+  return [t('coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(cli, connection) : '-' }, locale),
     t('clisetup.coding.result.profile', { profile: `${value.profile.id}@${value.profile.version}` }, locale),
     t('clisetup.coding.result.kind', { kind: String((value.kind as { kind?: unknown } | null)?.kind ?? '-') }, locale),
     t('clisetup.coding.result.toolchain', { provider: parameters.invocation?.provider ?? '-', cli: parameters.invocation?.cliVersion ?? '-',

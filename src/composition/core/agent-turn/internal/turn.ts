@@ -119,7 +119,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       }
       if (execution && readiness.state !== 'ready') {
         const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-        channel.emit({ kind: 'text', text: t('headless.agent.k20.verifying', {}, language) + '\n' });
+        channel.emit({ kind: 'text', text: t('headless.agent.readiness.verifying', {}, language) + '\n' });
         await channel.drained();
       }
       if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, loaded, peer, options,
@@ -359,7 +359,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
         ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
-        hostNote: () => cliNotices.size ? t('headless.agent.k13.cliNotices', { events: [...cliNotices].join(', ') }, language) : null,
+        hostNote: () => cliNotices.size ? t('headless.agent.cliNotices', { events: [...cliNotices].join(', ') }, language) : null,
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       // alpha.64: the proposal tools are decided by the AI actor's v20 rules; the turn's `policy-turn` record names them like every other call.

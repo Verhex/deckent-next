@@ -420,7 +420,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
-    labels: { ...worklineLabels(locale, t('terminal.status.chat', { target: chatName }, locale)), ...(chat?.toolsVerifiedAtMs !== undefined ? { toolsUnverified: t('headless.agent.k13.unknown.earlier', { time: clockText(chat.toolsVerifiedAtMs) }, locale) } : {}),
+    labels: { ...worklineLabels(locale, t('terminal.status.chat', { target: chatName }, locale)), ...(chat?.toolsVerifiedAtMs !== undefined ? { toolsUnverified: t('headless.agent.unknown.earlier', { time: clockText(chat.toolsVerifiedAtMs) }, locale) } : {}),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     // Owner 2026-10-30: in a person's terminal (setup cards at hand) the status row says a missing model is set up with /setup.

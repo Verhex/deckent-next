@@ -57,6 +57,11 @@ it.each(['en', 'tr'] as const)('every registered command has side-effect-free %s
     expect(output).not.toContain(String.fromCharCode(27));
     expect(output).toContain(MESSAGE_REGISTRY.catalogs[language][command.summary]);
     for (const line of output.split('\n')) expect(displayWidth(line), `${command.path.join(' ')}: ${line}`).toBeLessThanOrEqual(80);
+    if (command.path.join(' ') === 'coding prepare') {
+      expect(command.detail).toBe('coding.prepare.help');
+      expect(output).toContain('deckent coding prepare --input');
+      expect(output).not.toContain('deckent coding template');
+    }
     golden[command.path.join(' ')] = output;
   }
   await expect(JSON.stringify(golden, null, 2) + '\n').toMatchFileSnapshot(`../../fixtures/cli-help/commands-${language}.json`);

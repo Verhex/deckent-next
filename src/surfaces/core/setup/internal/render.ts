@@ -27,8 +27,7 @@ export function setupAuthority(plan: SetupPlan) {
 /** A message the plan names by key (stage titles, reasons, questions are message keys of the setup contract): read from the shared
  * catalog and filled the same way as every literal message; an unknown key stays visible as itself. */
 export function setupMessage(key: string, params: Readonly<Record<string, string | number>>, locale: Locale): string {
-  const text = messageText(key, locale);
-  return text === undefined ? key : text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? String(params[name]) : whole);
+  return messageText(key, locale, params) ?? key;
 }
 const STATE_LABELS: Readonly<Record<SetupStageState, (locale: Locale) => string>> = Object.freeze({ done: l => t('setup.state.done', {}, l),
   ready: l => t('setup.state.ready', {}, l), 'needs-answer': l => t('setup.state.needsAnswer', {}, l), blocked: l => t('setup.state.blocked', {}, l),

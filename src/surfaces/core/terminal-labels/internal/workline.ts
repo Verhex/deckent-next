@@ -49,7 +49,7 @@ export function worklineLabels(locale: Locale, statusLine: string): WorklineLabe
       copy: t('terminal.workline.uninstall.copy', {}, locale), close: t('terminal.workline.uninstall.close', {}, locale), summary: t('terminal.workline.uninstall.summary', {}, locale),
       copied: t('terminal.workline.uninstall.copied', {}, locale) },
     toolsNone: t('terminal.workline.toolsNone', {}, locale),
-    toolsUnverified: t('headless.agent.k13.unknown.sealed', {}, locale),
+    toolsUnverified: t('headless.agent.unknown.sealed', {}, locale),
     runUsage: t('terminal.slash.runUsage', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
     render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale), handoff: terminalHandoffLabels(locale),

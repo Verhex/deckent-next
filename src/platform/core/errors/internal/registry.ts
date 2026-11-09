@@ -411,7 +411,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   // or runner); the sentence is chosen by the diagnosis kind.
   MCP_SANDBOX_COMMAND_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: mcpSandboxUnreachable(p, l) }) },
 }, plainErrors('error.', {
-  MCP_TOOL_UNKNOWN: 'usage',
+  MCP_TOOL_UNKNOWN: 'usage', MCP_TOOL_SUMMARY_UNAVAILABLE: 'usage',
   // The Deckent MCP server's own refusals (Ek A: an MCP error carries its localized message).
   MCP_BUSY: 'error', MCP_INPUT_INVALID: 'usage', MCP_RESPONSE_LIMIT: 'error', MCP_TOOL_FAILED: 'error', MCP_REGISTRY_FILE_INVALID: 'config',
   MCP_SERVER_NOT_TRUSTED: 'usage', MCP_TRUST_STORE_UNAVAILABLE: 'error', EFFECT_TARGET_UNAVAILABLE: 'error', EFFECT_CORRUPT: 'error', ADOPTION_TARGET_DENIED: 'config',

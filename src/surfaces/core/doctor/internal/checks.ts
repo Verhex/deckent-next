@@ -242,8 +242,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
 
 /** The setup family's reason in the catalogs' words (the same `setup.execution.*` text `deckent init` shows); an unknown key stays visible as itself. */
 function setupReasonText(key: string, params: Readonly<Record<string, string | number>>, l: Locale): string {
-  const text = messageText(key, l);
-  return text === undefined ? key : text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? terminalSafeText(String(params[name])) : whole);
+  return messageText(key, l, Object.fromEntries(Object.entries(params).map(([name, value]) => [name, terminalSafeText(String(value))]))) ?? key;
 }
 /** PRE-34: Docker (the execution environment) through the same detection and decision `deckent init` uses: ready is ok; not reachable is an
  * error when work is configured to run in it, else a warning; no answer in time is "not tested". The reason text is the setup's own. */

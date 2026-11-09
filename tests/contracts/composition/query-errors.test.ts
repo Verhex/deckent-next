@@ -1,7 +1,7 @@
 import { OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js';
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
-import { SupervisorError, DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
+import { AgentCatalogStoreError, SupervisorError, DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
 import { ErrorRegistry, ManagedFileError, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
@@ -12,6 +12,13 @@ it('preserves registered errors and redacts unknown native/storage details throu
   const raw = new Error('SQL /private/customer/ledger secret=credential');
   const safe = queryFailure(raw); expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
   expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('RUN_STORE_CORRUPT');
+  for (const code of ['AGENT_USE_PIN_MISMATCH', 'AGENT_USE_TASK_UNAVAILABLE', 'AGENT_USE_WORK_CLASS_REQUIRED', 'AGENT_USE_CATALOG_UNAVAILABLE'] as const) {
+    const failure = queryFailure(new AgentCatalogStoreError(code));
+    expect(failure.code).toBe(code); expect(failure.category).toBe('error');
+    for (const locale of ['en', 'tr'] as const) expect(failure.localize?.(locale).message).toBe(ErrorRegistry.get(code, locale)?.message);
+    expect(failure.localize?.('tr').message).not.toBe(failure.localize?.('en').message);
+  }
+
 });
 it('preserves the registered unsupported execution-host failure with localized guidance', () => {
   const failure = ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');

@@ -1274,5 +1274,6 @@
   "error.PROJECT_ATTACHMENT_INCOMPLETE": "Proje bağlantısı tamamlanmamış. Özgün komut kimliği ve önizleme özetiyle aynı attach komutunu sürdürün.",
   "error.PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED": "Bu kuruluma kayıtlı proje referansları var. Yedekleme, geri yükleme, taşıma veya kaldırmadan önce bunları ayırıp uzlaştırın.",
   "error.PROJECT_ATTACHMENT_READ_LIMIT": "Kaynak ledger, kurulumun {limit} baytlık önizleme sınırını aşıyor. installation.packageMeasurement.maxTotalBytes ayarını kendi yapılandırmanızda artırıp yeniden önizleyin. Proje bağlanmadı.",
-  "error.PROJECT_ATTACHMENT_SOURCE_REGISTERED": "Kaynak kayıtlı veya bağlı projeleri var. Her bağlı projeyi `terminal attach --detach <projeKimliği> --apply` ile ayırın; kaynağı kaldırmadan önce kaynakta `terminal attach --unregister --apply` çalıştırın. Yedekleme ve kimliği koruyan taşıma kullanılabilir."
+  "error.PROJECT_ATTACHMENT_SOURCE_REGISTERED": "Kaynak kayıtlı veya bağlı projeleri var. Her bağlı projeyi `terminal attach --detach <projeKimliği> --apply` ile ayırın; kaynağı kaldırmadan önce kaynakta `terminal attach --unregister --apply` çalıştırın. Yedekleme ve kimliği koruyan taşıma kullanılabilir.",
+  "error.MCP_TOOL_SUMMARY_UNAVAILABLE": "Sunucu {name} aracını listeliyor ancak tanım özeti mevcut değil. Sabitlemeden önce araç listesini yenileyin; güven kararı kaydedilmedi."
 }

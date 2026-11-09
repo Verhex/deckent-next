@@ -139,7 +139,10 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     if (!state.ok) throw fail('MCP_SERVER_START_FAILED', state.detail ?? state.reason);
     const live = state.tools.filter(tool => tool.digest !== null);
     // `alwaysAsk` not given (a terminal or in-turn re-approval) keeps the owner's existing locks for the tools that still exist; only an explicit list replaces them.
-    for (const name of options.alwaysAsk ?? []) if (!live.some(tool => tool.name === name)) throw fail('MCP_TOOL_UNKNOWN', name);
+    for (const name of options.alwaysAsk ?? []) if (!live.some(tool => tool.name === name)) {
+      const code = state.tools.some(tool => tool.name === name) ? 'MCP_TOOL_SUMMARY_UNAVAILABLE' : 'MCP_TOOL_UNKNOWN';
+      throw ErrorRegistry.createError(code, { params: { name } });
+    }
     const locked = new Set(options.alwaysAsk ?? (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk).map(pin => pin.name));
     // F28: a server's tool description is one bounded line on every card renderer (the terminal window shows this field as given).
     const tools = live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ? modelTextPrefix(mcpCardLine(tool.description), 160) : null, annotations: tool.annotations ?? null,
