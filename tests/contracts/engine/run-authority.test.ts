@@ -5,6 +5,7 @@ import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, readMonitorLedger, type SqliteAttemptStore } from '#adapters/index.js';
 import { ApprovalApplication, approvalSubjectsHiddenFromProtocol, RunAdmissionApplication, sealApproval, type RunCreate } from '#engine/index.js';
 import { mcpPrincipalRef, type VerifiedPrincipal } from '#domain/index.js';
+import { MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { fixtureRunAuthority } from '../support/run-authority.js';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli-terminal/index.js';
@@ -163,8 +164,10 @@ it('an expired pending request is not reopened by command replay', async () => {
   await expect(f.app().create(command)).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' }); noEffects(f);
   expect(f.approvals.list('s', null, 10)).toHaveLength(1); expect(f.approvals.findRunCreate('s', 'create')!.status).toBe('expired');
 });
-it('approve-card-then-assert: an unused allow outside its admission window creates no Run', async () => {
-  const f = await fixture(); await pending(f); await f.decide(); f.state.now += 1001;
+it('approve-card-then-assert: an unused allow outside its admission window or decided further ahead than the skew bound creates no Run', async () => {
+  const f = await fixture(); f.state.now = 6000; await pending(f); await f.decide(); f.state.now = 6000 - MAX_WALL_SKEW_MS - 1;
+  await expect(f.app().create(command)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); noEffects(f);
+  f.state.now = 6000 + 1001;
   await expect(f.app().create(command)).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' }); noEffects(f);
 });
 it('MCP as a separate principal cannot decide either allow or deny', async () => {

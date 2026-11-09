@@ -8,7 +8,7 @@ import { createRun, holdRun, parkRunProgression, policySchema, evaluatePolicy, e
   POLICY_ADMINISTER_OPERATION, AUTHORITY_DOCUMENT_TARGET_KIND, verifiedSessionSchema, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
 import { RunLifecycleApplication, RunDecisionApprovalBroker, RunPolicyAuthorization, DispatchPolicyAuthorization, AuditApplication,
   OperationApprovalBroker, OperationPolicyAuthorization, requestAgentToolApproval, requestTaskApproval, ApprovalApplication, decideAgentToolCall } from '#engine/index.js';
-import { sha256, createHmacIntegrity } from '#platform/index.js';
+import { sha256, createHmacIntegrity, MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 const roots: string[] = [], closers: (() => void)[] = [];
@@ -186,6 +186,10 @@ it('script card waits for a witnessed decision, admits only its bound command an
   expect(decided.decision).toMatchObject({ deciderClass: 'human-tty', schemaVersion: 4 });
   f.witness(false);
   await expect(f.lifecycle.execute({ ...input, commandId: 'other-command' })).rejects.toMatchObject({ code: 'TASK_DECISION_APPROVAL_REQUIRED' });
+  // S1-e1: an unused allow outside its admission window, and one decided further ahead than the clock skew bound.
+  f.time(100 + 1001); await expect(f.lifecycle.execute(input)).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
+  f.time(100 - MAX_WALL_SKEW_MS - 1); await expect(f.lifecycle.execute(input)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); // owner B2-2
+  f.time(100);
   const result = await f.lifecycle.execute(input); expect(result.snapshot.progress[0]!.phase).toBe('failed');
   expect(f.audits[0]).toMatchObject({ subject: { deciderClass: 'human-tty', approvalId: record.request.approvalId } });
   f.time(10000); expect(await f.lifecycle.execute(input)).toEqual(result);

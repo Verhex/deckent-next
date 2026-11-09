@@ -86,7 +86,7 @@ describe.skipIf(process.platform !== 'linux')('task approval decided by another 
       { id: 'decide', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } },
     ] };
     const integrity = createHmacIntegrity('key', randomBytes(32));
-    const gate = new TaskApprovalAdmission(policy, principal, journal.store, integrity, 60_000); store.setRunAdmissionFilter(gate);
+    const gate = new TaskApprovalAdmission(policy, principal, journal.store, integrity, 60_000, 60_000); store.setRunAdmissionFilter(gate);
     const run = (await store.loadRun('scope', 'run'))!;
     await gate.prepare(run, principal, decidedAtWall);
     const pending = journal.store.list('scope', null, 10)[0]!;

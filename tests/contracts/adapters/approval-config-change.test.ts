@@ -9,7 +9,7 @@ import { CONFIG_CHANGE_APPROVAL_LEDGER_VERSION, CURRENT_LEDGER_VERSION, openSqli
 import { approvalSubject, type ApprovalRecord } from '#domain/index.js';
 import { approvalRequestDigest, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION, ConfigChangeApprovalBroker, configChangeApprovalActionDigest,
   requestTaskApproval, RUNTIME_SERVICE_SCHEMA_VERSION, sealApproval, verifyApproval, type ConfigChangeSubject } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { createHmacIntegrity, MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { DOWNGRADE_TO_V47_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject — ledger v48, the broker's pending/allow/deny/expiry/window, protocol hiding.
@@ -81,6 +81,8 @@ describe('ConfigChangeApprovalBroker', () => {
       expect(f.broker.admit(request())).toHaveProperty('pending');
       const allowed = decide(f.store, f.record(), 'allow', 12_000);
       expect(f.broker.admit(request())).toEqual({ approved: { approvalId: allowed.request.approvalId, actionDigest: allowed.request.actionDigest } });
+      f.clock.now = 12_000 - MAX_WALL_SKEW_MS - 1;
+      expect(() => f.broker.admit(request())).toThrow('APPROVAL_CONFLICT');
       f.clock.now = 12_000 + 30_001;
       expect(() => f.broker.admit(request())).toThrow('APPROVAL_EXPIRED');
       const other = subject({ commandId: 'cmd-bound' }); f.broker.admit(request(other));
