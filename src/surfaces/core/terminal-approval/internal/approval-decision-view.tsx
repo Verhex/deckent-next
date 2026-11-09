@@ -10,10 +10,10 @@ import type { AgentShellPosture, AgentToolCardCall, ApprovalPreviewCutFacts } fr
 import type { RunView } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { shortId } from '#platform/index.js';
-import type { WorkSurfaceLabels } from './workline-actions.js';
+import type { ApprovalSurfaceLabels, PanelWindowPresentation } from './labels.js';
 import { type WorklineApproval, fillTemplate, formatDuration, formatTaskPhases } from '#surfaces/core/terminal-ledger/index.js';
 import type { ApprovalRowPresentation } from './approval-decision-notice.js';
-import type { PanelWindowPresentation } from './workline-panel.js';
+
 import { approvalCallOf, approvalToolKind, approvalToolParts, approvalWindowHints, approvalWindowLines, approvalWindowTitle, countdownClock } from './approval-window.js';
 
 /** The countdown and expiry check tick once a second (a clock unit, not a tunable). */
@@ -32,7 +32,7 @@ export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPr
     displayAttempt: worker?.identity.attemptId ?? null, displayArgsDigest: worker?.argsDigest ?? null };
 };
 /** The list row's "what": the tool's sentence with its target (a task approval keeps its summary). */
-function rowWhat(item: WorklineApproval, work: WorkSurfaceLabels): string {
+function rowWhat(item: WorklineApproval, work: ApprovalSurfaceLabels): string {
   const call = approvalCallOf(item);
   if (!call) return item.summary;
   const kind = approvalToolKind(call.tool), parts = approvalToolParts(call.tool), target = call.target ?? '';
@@ -40,7 +40,7 @@ function rowWhat(item: WorklineApproval, work: WorkSurfaceLabels): string {
   // The shell sentence names no target of its own: the row adds the command so the list says what would run.
   return kind === 'shell' && target ? `${said}: ${target}` : said;
 }
-export const approvalRowPresentation = (item: WorklineApproval, rowNumber: number, now: number, work: WorkSurfaceLabels): Omit<ApprovalRowPresentation, 'kind'> => ({
+export const approvalRowPresentation = (item: WorklineApproval, rowNumber: number, now: number, work: ApprovalSurfaceLabels): Omit<ApprovalRowPresentation, 'kind'> => ({
   rowNumber, summary: item.summary, displayId: item.approvalId, displayRun: item.runId, displayTask: item.taskId, itemTemplate: work.approvalItem, durationText: formatDuration(item.expiresAt - now, work.workerLine),
   what: rowWhat(item, work), requester: item.requester === '-' ? work.approvalWindow.onBehalfSelf : item.requester,
   ageText: item.createdAt === undefined ? work.approvalWindow.ageUnknown : formatDuration(now - item.createdAt, work.workerLine) });
@@ -50,18 +50,17 @@ function projectRow(raw: Omit<ApprovalRowPresentation, 'kind'>, known?: KnownSec
   return { spans: approvalTemplateSpans(raw.itemTemplate, { n: raw.rowNumber, id: id.spans, run: run.spans, task: task.spans, summary: approvalSummarySpans(summary), duration: raw.durationText,
     what: approvalSummarySpans(what), requester: requester.spans, age: raw.ageText }), fields: [id, run, task, summary, what, requester] };
 }
-/** `/approvals` as a list window; choosing a row opens the same approval window. */
 export function ApprovalDecisionPicker({ rows, labels, work, clearSession, status, onSelect, onCancel }: { readonly rows: readonly Omit<ApprovalRowPresentation, 'kind'>[]; readonly labels: ApprovalDecisionLabels;
-  readonly work: WorkSurfaceLabels; readonly clearSession?: string | undefined; readonly status?: string | undefined; readonly onSelect: (index: number) => void; readonly onCancel: () => void }) {
+  readonly work: ApprovalSurfaceLabels; readonly clearSession?: string | undefined; readonly status?: string | undefined; readonly onSelect: (index: number) => void; readonly onCancel: () => void }) {
   const known = useHumanTextSecrets();
   return <Window title={[span(work.window.approvalsTitle)]} status={[span(status || String(rows.length))]} hints={work.window.pick} position={work.window.position} footerRows={ARROW_PICKER_ROWS + 2}
     footer={focused => <ApprovalProjectedPicker lines={[...rows.map(raw => projectRow(raw, known)), ...(clearSession ? [approvalTemplateLine('{text}', { text: projectApprovalDecisionText(clearSession, known) })] : [])]} labels={labels} active={focused} onSelect={onSelect} onCancel={onCancel} />} />;
 }
 /** The terminal's own context an approval window names: the project path and the session's permission mode (display only). */
 export type ApprovalWindowContext = Readonly<{ project?: string | undefined; home?: string | undefined; mode?: string | undefined }>;
-type Scoped = Readonly<{ scopes: readonly StandingScope[]; pattern: string; labels: NonNullable<WorkSurfaceLabels['approvalStanding']> }>;
+type Scoped = Readonly<{ scopes: readonly StandingScope[]; pattern: string; labels: NonNullable<ApprovalSurfaceLabels['approvalStanding']> }>;
 /** The approval window's rows at `now` (T-APPROVAL-WINDOW): nine labelled fields, assurance and scope sentences, the preview, the details. */
-export function approvalDecisionCardLines(approval: ApprovalCardPresentation, work: WorkSurfaceLabels, preview: string | undefined, standing: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null,
+export function approvalDecisionCardLines(approval: ApprovalCardPresentation, work: ApprovalSurfaceLabels, preview: string | undefined, standing: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null,
   known?: KnownSecretSnapshot, context: ApprovalWindowContext = {}, now = Date.now()) {
   const p = (text: string) => projectApprovalDecisionText(text, known), card = work.approvalCard, required = approval.requiredAssurance;
   const assurance = approval.displayAttempt !== null && required === 'turn-bound' ? approvalTemplateLine(t('terminal.approval.background.assurance', {}, work.jobs?.locale), {})
@@ -73,7 +72,6 @@ export function approvalDecisionCardLines(approval: ApprovalCardPresentation, wo
   return approval.displayAttempt === null ? lines : [...lines, { ...approvalTemplateLine(t('terminal.approval.background.call', {}, work.jobs?.locale),
     { attempt: p(approval.displayAttempt), digest: p(approval.displayArgsDigest ?? '') }), exact: true }];
 }
-/** The live clock of a window: re-renders once a second until `until`, then stops. */
 function useNow(until: number): number {
   const [now, setNow] = useState(() => Date.now());
   const expired = now >= until;
@@ -88,7 +86,7 @@ function useNow(until: number): number {
  * The approval window (T-APPROVAL-WINDOW): it outranks every other window, counts down live, and after expiry decides nothing (the
  * controller and the service refuse it as well). `y`/`s`/`a` only as offered; `n`, Enter and Esc deny; Tab writes a reason.
  */
-export function ApprovalDecisionCard({ presentation, work, labels, preview, scoped, pending, context, onDecide }: { readonly presentation: ApprovalCardPresentation; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly preview: string | undefined;
+export function ApprovalDecisionCard({ presentation, work, labels, preview, scoped, pending, context, onDecide }: { readonly presentation: ApprovalCardPresentation; readonly work: ApprovalSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly preview: string | undefined;
   readonly pending?: boolean; readonly scoped: Scoped | null; readonly context?: ApprovalWindowContext; readonly onDecide: (yes: boolean, standing?: StandingScope, reason?: string) => void }) {
   const known = useHumanTextSecrets(), now = useNow(presentation.expiresAt), win = work.approvalWindow, left = presentation.expiresAt - now;
   const decide = (yes: boolean, standing?: StandingScope, reason?: string) => { if (Date.now() < presentation.expiresAt) onDecide(yes, standing, reason); };
@@ -105,7 +103,7 @@ export function cancellationCardPresentation(run: RunView): CancellationCardPres
   return { displayRun: run.runId, displayScope: run.scopeId, displayRevision: run.revision, displayPhases: [...counts.entries()].map(([phase, count]) => `${phase}:${count}`).join(' ') || '—', cancellationRequested: run.cancellationRequested };
 }
 /** Cancellation shares the private Provider boundary; the public card receives no transported strings or Run DTO. */
-export function CancellationDecisionCard({ presentation: raw, work, labels, pending, onDecide }: { readonly presentation: CancellationCardPresentation; readonly pending?: boolean; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly onDecide: (yes: boolean) => void }) {
+export function CancellationDecisionCard({ presentation: raw, work, labels, pending, onDecide }: { readonly presentation: CancellationCardPresentation; readonly pending?: boolean; readonly work: ApprovalSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly onDecide: (yes: boolean) => void }) {
   const known = useHumanTextSecrets(), p = (text: string) => projectApprovalDecisionText(text, known);
   // T2 integration: the phases read as counts in words (L3 card words) and the title carries the short run id; the full id is a detail line.
   const card = work.workerLine.card, phases = card ? formatTaskPhases(raw.displayPhases, card) : raw.displayPhases;

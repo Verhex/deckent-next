@@ -1,3 +1,5 @@
+import type { PanelWindowPresentation } from '#surfaces/core/terminal-approval/index.js';
+export type { PanelWindowPresentation } from '#surfaces/core/terminal-approval/index.js';
 import { isCodedError } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -13,7 +15,6 @@ export type LocalExecution = PanelExecution<TerminalLocalContext>;
 export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
 type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>;
 /** A generic bounded window (TS-WINDOW): a titled body; `confirm` asks y/N (picker items `allow`/`deny`), otherwise it closes (`close`). */
-export type PanelWindowPresentation = Readonly<{ kind: 'window'; title: string; body: readonly string[]; hints: string; confirm: boolean }>;
 /** T3 L4: an open `/mode`, `/config` or `/mcp` window; it holds the command (queued lines wait) until it closes (item `close`). */
 export type SettingsPanelPresentation = Readonly<{ kind: 'settings'; panel: 'beuser' | 'hub' | 'mode' | 'config' | 'theme' | 'mcp' | 'model' | 'provider' | 'policy' }>;
 export type PanelPresentation = JobWindowPresentation | RunsWindowPresentation | RunControlPresentation | RunAnswerPresentation | Approval | Readonly<{ kind: 'cancel'; run: RunView }> | PanelWindowPresentation | SettingsPanelPresentation

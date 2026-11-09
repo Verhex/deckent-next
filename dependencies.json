@@ -257,6 +257,7 @@
         "src/surfaces/core/terminal",
         "src/surfaces/core/terminal-host",
         "src/surfaces/core/terminal-work",
+        "src/surfaces/core/terminal-approval",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-kit-ink",
         "src/surfaces/core/terminal-render-ink",
