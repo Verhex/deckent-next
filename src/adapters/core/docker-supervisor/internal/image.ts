@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { isAbsolute } from 'node:path';
 import { identitySchema } from '#domain/index.js';
 import { DockerCommandFailure, runNodeDockerCommand, type DockerCommandOutput, type DockerCommandRunner } from './command.js';
@@ -10,8 +11,8 @@ export type DockerImageProbeErrorCode = 'DOCKER_IMAGE_PROBE_INVALID' | 'DOCKER_I
 /** E1: the bounded kind of the failed step behind UNAVAILABLE — its own deadline, a non-zero exit, a caller's stop, or an answer that could
  * not be read as the exact expected value. Absent when the failure is unclassified (never a guess); Docker's own text never leaves. */
 export type DockerImageProbeCause = 'deadline' | 'exit' | 'signal' | 'parse';
-export class DockerImageProbeError extends Error {
-  constructor(readonly code: DockerImageProbeErrorCode, readonly probeCause?: DockerImageProbeCause) { super(code); this.name = 'DockerImageProbeError'; }
+export class DockerImageProbeError extends CodedError {
+  constructor(override readonly code: DockerImageProbeErrorCode, readonly probeCause?: DockerImageProbeCause) { super(code); this.name = 'DockerImageProbeError'; }
 }
 const commandCause = (error: unknown): DockerImageProbeCause | undefined =>
   error instanceof DockerCommandFailure ? error.stop ?? (typeof error.code === 'number' ? 'exit' : undefined) : undefined;

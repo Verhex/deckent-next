@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { layeredWorkerRecipeSchema } from './image-plan.js';
@@ -26,8 +27,8 @@ export const profileRevisionProposalSchema = z.strictObject({ schemaVersion: z.l
     changes: z.strictObject({ cliVersion: z.strictObject({ from: z.string(), to: z.string() }), imageId: z.strictObject({ from: z.string().nullable(), to: z.string() }) }) })).readonly(),
   application: z.literal('not-applied'), basis: z.string() }).readonly();
 export type ProfileRevisionProposal = z.infer<typeof profileRevisionProposalSchema>;
-export class ToolchainUpdateError extends Error {
-  constructor(readonly code: 'TOOLCHAIN_RECIPE_INVALID' | 'TOOLCHAIN_HISTORY_INVALID' | 'TOOLCHAIN_RECEIPT_INVALID' | 'TOOLCHAIN_PLAN_INVALID') { super(code); this.name = 'ToolchainUpdateError'; }
+export class ToolchainUpdateError extends CodedError {
+  constructor(override readonly code: 'TOOLCHAIN_RECIPE_INVALID' | 'TOOLCHAIN_HISTORY_INVALID' | 'TOOLCHAIN_RECEIPT_INVALID' | 'TOOLCHAIN_PLAN_INVALID') { super(code); this.name = 'ToolchainUpdateError'; }
 }
 const HISTORY_LINE = /^# version r[1-9][0-9]*-\d{8} \| /m;
 const counterOf = (version: string) => { const match = /^r([1-9][0-9]*)-\d{8}$/.exec(version); if (!match) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID'); return Number(match[1]); };

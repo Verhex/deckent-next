@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { executionProfileDefinitionSchema, identitySchema, persistedUuid, immutableJsonObjectSchema, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, type ExecutionProfileDefinition } from '#domain/index.js';
@@ -12,8 +13,8 @@ export const nativeCliWorkerBindingSchema = z.strictObject({ schemaVersion: z.li
   modelUsePin: immutableJsonObjectSchema.optional() }).readonly();
 export type NativeCliWorkerBinding = z.infer<typeof nativeCliWorkerBindingSchema>;
 const parametersSchema = nativeCliWorkerWrapperSchema.extend({ base: executionProfileDefinitionSchema, binding: nativeCliWorkerBindingSchema }).readonly();
-export class NativeCliWorkerError extends Error {
-  constructor(readonly code: 'NATIVE_CLI_WORKER_PROFILE_INVALID' | 'NATIVE_CLI_WORKER_UNAVAILABLE') { super(code); this.name = 'NativeCliWorkerError'; }
+export class NativeCliWorkerError extends CodedError {
+  constructor(override readonly code: 'NATIVE_CLI_WORKER_PROFILE_INVALID' | 'NATIVE_CLI_WORKER_UNAVAILABLE') { super(code); this.name = 'NativeCliWorkerError'; }
 }
 export const isNativeCliWorkerProfile = (profile: ExecutionProfileDefinition) => profile.adapter.id === NATIVE_CLI_WORKER_ADAPTER.id;
 /** The wrapper's typed parameters, or null when the profile is not a valid one (readers that stay conservative, e.g. billing). */

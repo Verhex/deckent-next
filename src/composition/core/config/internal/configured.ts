@@ -4,7 +4,7 @@ import { ConfigApplication, ConfigApplicationError, ConfigChangeApprovalBroker, 
 import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
 import { attestLocalInteractiveTerminal, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
   resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
-import { resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { isCodedError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { configuredMemoryRolloutPrecondition } from '#composition/core/memory-rollout/index.js';
 export async function resolveConfiguredConfigPrincipal(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<VerifiedPrincipal> {
@@ -62,7 +62,7 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
       const context = await load(inputs[0]!.scopeId);
       return inputs.map(input => {
         try { const decided = evaluateConfigWrite(context.document, context.principal, input); return { decision: decided.decision, ruleId: decided.ruleId }; }
-        catch (error) { if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: error instanceof ConfigApplicationError && typeof error.params?.['ruleId'] === 'string' ? error.params['ruleId'] : null }; throw error; }
+        catch (error) { if (isCodedError(error, 'POLICY_DENIED')) return { decision: 'deny' as const, ruleId: error instanceof ConfigApplicationError && typeof error.params?.['ruleId'] === 'string' ? error.params['ruleId'] : null }; throw error; }
       });
     },
     async admit(input, subject, authorization) {

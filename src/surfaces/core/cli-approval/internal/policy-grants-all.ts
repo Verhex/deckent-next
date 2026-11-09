@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, t, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, t, type Locale } from '#platform/index.js';
 import type { StandingGrantsPage } from '#engine/index.js';
 import { cliTableStyle, formatClock, renderCliTable, safeCell, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -18,7 +18,7 @@ export async function policyGrantsAll(context: ApprovalCommandContext, input: { 
   if (!context.listAllStandingGrants) throw refuse();
   let page: StandingGrantsPage;
   try { page = await context.listAllStandingGrants(input.root, { scopeId: input.scopeId, ...(input.after === undefined ? {} : { after: input.after }) }, { env: input.env }); }
-  catch (error) { if (isAuthorizationRefusal((error as { code?: unknown } | null)?.code, { include: GRANTS_ALL_REFUSALS })) throw refuse(); throw error; }
+  catch (error) { const code = (error as { code?: unknown } | null)?.code; if (typeof code === 'string' && isCodedError(error, code) && isAuthorizationRefusal(code, { include: GRANTS_ALL_REFUSALS })) throw refuse(); throw error; }
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   emit(page, { ...sinks, json: input.json, render: view => standingGrantsAllText(view, input.flagged, input.locale, cliTableStyle(context), input.after !== undefined) });
 }

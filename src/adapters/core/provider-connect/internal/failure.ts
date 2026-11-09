@@ -1,9 +1,10 @@
+import { CodedError } from '#platform/index.js';
 import { classifyProviderRejection } from '#engine/index.js';
 import { PROVIDER_CONNECT_LIMITS } from './registry.js';
 export type ProviderDiscoveryCause = 'no-credential' | 'credential-rejected' | 'access-denied' | 'rate-limit' | 'spend-limit'
   | 'limit-reached' | 'http-status' | 'redirect' | 'network' | 'timeout' | 'invalid-list' | 'not-listable';
-export class ProviderModelListError extends Error {
-  constructor(readonly code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' | 'MODEL_CONNECT_DISCOVERY_INVALID' | 'MODEL_CONNECT_DISCOVERY_LIMIT',
+export class ProviderModelListError extends CodedError {
+  constructor(override readonly code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' | 'MODEL_CONNECT_DISCOVERY_INVALID' | 'MODEL_CONNECT_DISCOVERY_LIMIT',
     /** `address`: what a network or timeout failure tried, as `displayAddress` projects it (never userinfo, query or fragment). */
     override readonly cause: ProviderDiscoveryCause = 'invalid-list', readonly status?: number, readonly address?: string) { super(code); this.name = 'ProviderModelListError'; }
 }

@@ -3,7 +3,7 @@ import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { runProposalBindingSchema } from './proposal.js';
 import { authorityAdmissionSchema, runSafetyHoldSourceSchema } from '#domain/core/audit/index.js';
-import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { recoveryEffectGateSchema, recoveryNoteCodeSchema } from '#domain/core/recovery/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
@@ -116,8 +116,8 @@ export const runSnapshotSchema = z.strictObject({ schemaVersion: z.literal(4), i
 }).readonly();
 export type RunIdentity = z.infer<typeof runIdentitySchema>;
 export type RunSnapshot = z.infer<typeof runSnapshotSchema>;
-export class RunError extends Error {
-  constructor(readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE' | 'RUN_PARKED' | 'RUN_TERMINAL' | 'RUN_NOT_PARKED' | 'RUN_DECISION_NOT_READY' | 'RUN_DECISION_EXPIRED' | 'RUN_QUOTA_WAIT_LIMIT' | 'RUN_QUOTA_PERSON_REQUIRED') { super(code); this.name = 'RunError'; }
+export class RunError extends CodedError {
+  constructor(override readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE' | 'RUN_PARKED' | 'RUN_TERMINAL' | 'RUN_NOT_PARKED' | 'RUN_DECISION_NOT_READY' | 'RUN_DECISION_EXPIRED' | 'RUN_QUOTA_WAIT_LIMIT' | 'RUN_QUOTA_PERSON_REQUIRED') { super(code); this.name = 'RunError'; }
 }
 const LOADED = new WeakSet<object>();
 const deepFreeze = (value: unknown): void => { if (value && typeof value === 'object') { for (const child of Object.values(value)) deepFreeze(child); Object.freeze(value); } };

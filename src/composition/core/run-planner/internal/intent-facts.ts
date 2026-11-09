@@ -1,4 +1,4 @@
-import { sha256, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, sha256, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { affectedToolchainProfiles, type SetupIntentFact } from '#engine/index.js';
 import { workerImagePresence, isNativeCliWorkerProfile, isNativeCodingTemplate, nativeCliWorkerBindingSchema } from '#adapters/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
@@ -16,7 +16,7 @@ export async function configuredWorkerSetupFact(root: string, scopeId: string, o
   const images = pins.filter(pin => !connected.has(key(pin.profile))), settings = config.execution?.docker;
   const present = settings ? await Promise.all(images.map(pin => pin.imageId ? workerImagePresence({ executable: settings.executable, imageId: pin.imageId,
     timeoutMs: settings.controlTimeoutMs, outputBytes: settings.outputBytes }) : Promise.resolve('unknown' as const))) : [];
-  const pool = config.admission ? await inspectConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId }, options).catch((error: unknown) => { if ((error as { code?: unknown })?.code === 'RUN_POOL_REQUIRED') return null; throw error; }) : null;
+  const pool = config.admission ? await inspectConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId }, options).catch((error: unknown) => { if (isCodedError(error, 'RUN_POOL_REQUIRED')) return null; throw error; }) : null;
   // Another provider's acquisition does not block an already admitted, ready profile.
   const ready = (images.length > 0 || connected.size > 0) && present.every(value => value === 'present') && pool !== null;
   const phase = ready ? 'ready' : state?.phase === 'ready' ? 'awaiting-confirmation' : state?.phase ?? 'waiting-docker';

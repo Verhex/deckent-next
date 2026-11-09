@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl } from '#platform/index.js';
+import { CodedError, persistedInteger, persistedUrl } from '#platform/index.js';
 import { request as httpRequest, type ClientRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
 import { isIPv4, isIPv6 } from 'node:net';
@@ -9,8 +9,8 @@ export type InferenceMetricsErrorCode = 'INFERENCE_METRICS_ENDPOINT_INVALID' | '
   | 'INFERENCE_METRICS_RESPONSE_TOO_LARGE' | 'INFERENCE_METRICS_UNAVAILABLE';
 
 /** Bounded failure evidence: never carries response bodies, headers or redirect targets. */
-export class InferenceMetricsError extends Error {
-  constructor(readonly code: InferenceMetricsErrorCode, readonly status?: number) { super(code); this.name = 'InferenceMetricsError'; }
+export class InferenceMetricsError extends CodedError {
+  constructor(override readonly code: InferenceMetricsErrorCode, readonly status?: number) { super(code); this.name = 'InferenceMetricsError'; }
 }
 
 const inputSchema = z.strictObject({

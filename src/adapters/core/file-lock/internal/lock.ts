@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLedgerLock, type LedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 
@@ -10,7 +11,7 @@ export async function withExclusiveFileLock(path: string, bounds: Readonly<{ wai
   for (;;) {
     bounds.signal?.throwIfAborted();
     try { return acquireLedgerLock(path); }
-    catch (error) { if ((error as { code?: unknown }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error; }
+    catch (error) { if (!isCodedError(error, 'LOCAL_RUNTIME_ALREADY_RUNNING')) throw error; }
     if (performance.now() >= deadline) return null;
     await delay(bounds.pollMs, undefined, bounds.signal ? { signal: bounds.signal } : undefined);
   }

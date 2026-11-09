@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, writeJsonAtomic } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, writeJsonAtomic } from '#platform/index.js';
 import { retainedWorkerHistory } from '../../../../../assets/worker-image/receipts.mjs';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 import { privateDirectory } from './build.js';
@@ -32,7 +32,7 @@ export async function withWorkerBuilder<T>(input: { root: string; packageRoot: s
     input.signal?.throwIfAborted();
     try { lock = acquireLedgerLock(join(directory, limits.custody.lock)); break; }
     catch (error) {
-      if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
+      if (!isCodedError(error, 'LOCAL_RUNTIME_ALREADY_RUNNING')) throw error;
       if (performance.now() >= deadline) refuse('WORKER_IMAGE_BUILDING');
       await wait(limits.custody.waitMs, undefined, input.signal ? { signal: input.signal } : undefined);
     }

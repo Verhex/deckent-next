@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
-import { persistedString, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, identitySchema } from '#domain/core/primitives/index.js';
 import { encodeCommandProjection } from '#domain/core/command/index.js';
 import { effectTargetRefSchema, operationRefSchema } from './contract.js';
 
@@ -22,8 +22,8 @@ export const candidateEvidenceSchema = z.strictObject({ schemaVersion: z.literal
   identity: attemptIdentitySchema, evidenceReceipt: digest,
   phase: z.enum(['accepted', 'failed', 'pending', 'cancelled', 'unknown']) }).readonly();
 export type CandidateEvidence = z.infer<typeof candidateEvidenceSchema>;
-export class CandidateBindingError extends Error {
-  constructor(readonly code: 'CANDIDATE_MISMATCH' | 'CANDIDATE_NOT_ACCEPTED') { super(code); this.name = 'CandidateBindingError'; }
+export class CandidateBindingError extends CodedError {
+  constructor(override readonly code: 'CANDIDATE_MISMATCH' | 'CANDIDATE_NOT_ACCEPTED') { super(code); this.name = 'CandidateBindingError'; }
 }
 /** A result on another source, Attempt, profile or criterion is never evidence for this candidate, even if accepted. */
 export function assertCandidateEvidence(input: CandidateBinding, proof: CandidateEvidence): void {

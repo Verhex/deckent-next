@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -69,8 +70,8 @@ export interface RunLifecycleStore extends Pick<RunStore, 'loadRun'> {
   commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: RunSnapshot) => void): Promise<RunReceipt>;
 }
 export type RunLifecycleAuditRecorder = (store: AuditStore) => { record(event: unknown): unknown };
-export class RunLifecycleError extends Error {
-  constructor(readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED' | 'RUN_HOLD_PERSON_REQUIRED' | 'RUN_QUOTA_PERSON_REQUIRED', readonly approvalId?: string) { super(code); this.name = 'RunLifecycleError'; }
+export class RunLifecycleError extends CodedError {
+  constructor(override readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED' | 'RUN_HOLD_PERSON_REQUIRED' | 'RUN_QUOTA_PERSON_REQUIRED', readonly approvalId?: string) { super(code); this.name = 'RunLifecycleError'; }
 }
 export type RunDecisionEvidence = NonNullable<RunLifecycleWrite['decision']>;
 export interface RunDecisionAuthorization {

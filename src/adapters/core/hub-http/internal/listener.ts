@@ -4,11 +4,11 @@ import { isIP, type AddressInfo } from 'node:net';
 import { once } from 'node:events';
 import { HUB_LIMITS } from '#domain/index.js';
 import type { HubServerPeer } from '#engine/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { CodedError, ErrorRegistry } from '#platform/index.js';
 
-export class HubNetworkError extends Error {
-  constructor(readonly code: 'HUB_TLS_REQUIRED' | 'HUB_NETWORK_INVALID' | 'HUB_NETWORK_FAILED' | 'HUB_FIRST_USE_REQUIRED') {
-    super(ErrorRegistry.get(code)!.message); this.name = 'HubNetworkError';
+export class HubNetworkError extends CodedError {
+  constructor(override readonly code: 'HUB_TLS_REQUIRED' | 'HUB_NETWORK_INVALID' | 'HUB_NETWORK_FAILED' | 'HUB_FIRST_USE_REQUIRED') {
+    super(code, { message: ErrorRegistry.get(code)!.message }); this.name = 'HubNetworkError';
   }
 }
 export interface HubListenerOptions {

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { link, lstat, mkdir, open, unlink } from 'node:fs/promises';
@@ -6,8 +7,8 @@ import { basename, dirname, parse, relative, resolve, sep } from 'node:path';
 export type InstallationFileErrorCode = 'INSTALLATION_FILE_CONFLICT' | 'INSTALLATION_FILE_UNSAFE'
   | 'INSTALLATION_FILE_INVALID' | 'INSTALLATION_FILE_UNAVAILABLE' | 'INSTALLATION_FILE_OUTCOME_UNKNOWN'
   | 'INSTALLATION_FILE_UNSUPPORTED';
-export class InstallationFileError extends Error {
-  constructor(readonly code: InstallationFileErrorCode, readonly params: Readonly<Record<string, string>> = {}) { super(code); this.name = 'InstallationFileError'; }
+export class InstallationFileError extends CodedError {
+  constructor(override readonly code: InstallationFileErrorCode, override readonly params: Readonly<Record<string, string>> = {}) { super(code); this.name = 'InstallationFileError'; }
 }
 export interface InstallationFileRequest { readonly root: string; readonly path: string; readonly maxBytes: number }
 export interface InstallationFilePublishRequest extends InstallationFileRequest { readonly transactionId: string }

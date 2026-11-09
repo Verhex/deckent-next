@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
-import { counterSchema, identitySchema, clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { CodedError, counterSchema, identitySchema, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { targetBindingSchema, candidateBindingSchema, candidateEvidenceSchema } from './candidate.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** A typed error code (never a message or an arbitrary error text). */
@@ -53,11 +53,11 @@ export const targetQueueRecordSchema = z.strictObject({ schemaVersion: z.literal
 export type TargetQueueRecord = z.infer<typeof targetQueueRecordSchema>;
 export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
 export type TargetQueueOutcome = z.infer<typeof targetQueueOutcomeSchema>;
-export class TargetQueueError extends Error {
-  constructor(readonly code: 'QUEUE_CONFLICT' | 'QUEUE_CAPACITY' | 'QUEUE_TARGET_BUSY' | 'QUEUE_CORRUPT' | 'QUEUE_AUTHORITY_REQUIRED'
+export class TargetQueueError extends CodedError {
+  constructor(override readonly code: 'QUEUE_CONFLICT' | 'QUEUE_CAPACITY' | 'QUEUE_TARGET_BUSY' | 'QUEUE_CORRUPT' | 'QUEUE_AUTHORITY_REQUIRED'
     | 'QUEUE_RECOVERY_REQUIRED' | 'QUEUE_CONFIRMATION_REQUIRED' | 'QUEUE_EXPIRED' | 'QUEUE_REQUEUE_EXHAUSTED',
     /** BeUser DR2-06: display facts of a target-branch refusal (`reason`, `ref`); never a decision input. */
-    readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'TargetQueueError'; }
+    override readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'TargetQueueError'; }
 }
 /** D2b: the typed cause under which the service may re-queue a delegated ticket: a stop before any effect started, never a refusal. */
 export function queueRequeueCause(record: Pick<TargetQueueRecord, 'state' | 'batchDigest'>): 'parked' | 'expired' | null {

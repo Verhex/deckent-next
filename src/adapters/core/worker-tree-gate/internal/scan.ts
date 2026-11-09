@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { lstat, open, readdir, readlink } from 'node:fs/promises';
 import { join, posix } from 'node:path';
-import { DECKENT_VERSION, EMPTY_KNOWN_SECRETS, pathsShareTree, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
+import { CodedError, DECKENT_VERSION, EMPTY_KNOWN_SECRETS, pathsShareTree, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
 import { classifyDependencyBinary, dependencyNativeRefusal, DependencyTreePatternCache, type DependencyHit, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
 import { archiveKind, contentRule, decodedTexts, withoutNul, WORKER_TREE_PATTERN_RULES } from './content.js';
 import { createGlobMatcher, createRegexRunner, CREDENTIAL_WORKSPACE_DENY, RegexCancelled } from '#adapters/core/workspace-read/index.js';
@@ -39,7 +39,7 @@ export function workerTreeViews(workspace: string, readOnlyMounts: readonly Read
     ...(argv.length ? [{ text: argv.join('\n'), label: 'argv' }] : [])]);
 }
 
-class Incomplete extends Error { constructor(readonly limit: WorkerTreeLimit, readonly observed: number, readonly bound: number) { super(limit); } }
+class Incomplete extends CodedError { constructor(readonly limit: WorkerTreeLimit, readonly observed: number, readonly bound: number) { super('WORKER_TREE_SCAN_INCOMPLETE', { message: limit }); } }
 
 /**
  * The pre-dispatch scan of exactly what the worker receives (every `WorkerTreeView`): the prepared checkout with its `.git` metadata (config,

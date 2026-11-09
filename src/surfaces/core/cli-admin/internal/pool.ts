@@ -1,6 +1,6 @@
 import { poolCapacityDrift, type PoolCapacity, type PoolDrift, type PoolWait } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, EXIT_CODES, emit, getSystemProfile, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, EXIT_CODES, emit, getSystemProfile, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import type { QuotaReleaseCommand, QuotaReleaseReceipt, PoolCapacityCommand, PoolCapacityReceipt, PoolCapacityView, PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldView } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { formatAgo, resolveCommandScope, scopeLister, scopeNotice, withFounderStep, type CliCardOption } from '#surfaces/core/cli-human/index.js';
@@ -171,7 +171,7 @@ export async function assessPoolReadiness(root: string, context: AdminCommandCon
     return { status: drift ? 'drift' as const : 'ready' as const, drift, pool: view };
   } catch (error) {
     // I-S7: the admission names a pool whose ledger row does not exist yet: not set up (`deckent init pool`), not unreadable.
-    if ((error as { code?: unknown } | null)?.code === 'RUN_POOL_REQUIRED') return { status: 'missing' as const, code: 'RUN_POOL_REQUIRED', drift: null };
+    if (isCodedError(error, 'RUN_POOL_REQUIRED')) return { status: 'missing' as const, code: 'RUN_POOL_REQUIRED', drift: null };
     return { status: 'unavailable' as const, code: 'INVENTORY_UNAVAILABLE', drift: null };
   }
 }

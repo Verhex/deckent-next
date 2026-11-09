@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { approvalPreviewCutSchema } from '#domain/core/agent-turn/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
@@ -140,8 +140,8 @@ export function approvalRenewalRefusal(previous: ApprovalRecord, next: ApprovalR
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
 export type ApprovalActor = z.infer<typeof approvalActorSchema>;
-export class ApprovalError extends Error {
-  constructor(readonly code: 'APPROVAL_INVALID' | 'APPROVAL_DENIED' | 'APPROVAL_MISSING' | 'APPROVAL_CONFLICT'
+export class ApprovalError extends CodedError {
+  constructor(override readonly code: 'APPROVAL_INVALID' | 'APPROVAL_DENIED' | 'APPROVAL_MISSING' | 'APPROVAL_CONFLICT'
     | 'APPROVAL_EXPIRED' | 'APPROVAL_INTEGRITY' | 'APPROVAL_STALE' | 'APPROVAL_REQUIRED' | 'APPROVAL_UNSETTLED' | 'APPROVAL_SURFACE_RESTRICTED'
     | 'AI_AUTHORITY_NON_DELEGABLE' | 'APPROVAL_ATTENDED_REQUIRED' | 'APPROVAL_ASSURANCE_INSUFFICIENT') { super(code); this.name = 'ApprovalError'; }
 }

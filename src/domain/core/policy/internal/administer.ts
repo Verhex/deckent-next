@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { isAiPrincipal, isMcpPrincipal } from '#domain/core/principal/index.js';
 import { z } from 'zod';
 import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, principalGrants, resolvePolicyBindings, type Policy,
@@ -37,8 +37,8 @@ const profilePolicyChangeSchema = z.strictObject({ schemaVersion: z.literal(2),
 export const policyChangeSchema = z.union([legacyPolicyChangeSchema, profilePolicyChangeSchema]);
 export type PolicyChange = z.infer<typeof policyChangeSchema>;
 
-export class PolicyChangeError extends Error {
-  constructor(readonly code: 'POLICY_CHANGE_INVALID' | 'POLICY_CHANGE_TOO_LARGE' | 'POLICY_ADMINISTER_UNSUPPORTED') { super(code); this.name = 'PolicyChangeError'; }
+export class PolicyChangeError extends CodedError {
+  constructor(override readonly code: 'POLICY_CHANGE_INVALID' | 'POLICY_CHANGE_TOO_LARGE' | 'POLICY_ADMINISTER_UNSUPPORTED') { super(code); this.name = 'PolicyChangeError'; }
 }
 
 type Selection = 'all' | readonly string[];

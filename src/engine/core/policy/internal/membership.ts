@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { companyIdSchema, policyDeclaredScopes, policyScopeGrants, policyScopeMembership } from '#domain/index.js';
 import { PolicyAuthorizationError } from './authorize.js';
 
@@ -58,6 +59,6 @@ export function installationOwnScopes(policy: unknown, configured: readonly stri
 /** H34 S3 Q1 (owner 2026-09-27 evening decision 6): one or more of the installation's own scopes (from `installationOwnScopes`) is
  * already pinned to another company at start. `scopeIds` names only this installation's own scope ids, never the other company
  * (Astra 2122/2123 non-disclosure extends to start). */
-export class ScopeRegistrationError extends Error {
-  constructor(readonly code: 'RUNTIME_SERVICE_SCOPE_FOREIGN', readonly scopeIds: readonly string[]) { super(code); this.name = 'ScopeRegistrationError'; }
+export class ScopeRegistrationError extends CodedError {
+  constructor(override readonly code: 'RUNTIME_SERVICE_SCOPE_FOREIGN', readonly scopeIds: readonly string[]) { super(code); this.name = 'ScopeRegistrationError'; }
 }

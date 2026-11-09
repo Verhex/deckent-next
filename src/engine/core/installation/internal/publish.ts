@@ -1,10 +1,10 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import type { PreparedInstallation } from './application.js';
 import type { InstallationEvidencePreview } from './evidence.js';
 import { createInstallationRecovery, validateInstallationRecovery, type InstallationConsent } from './recovery.js';
-
 export type InstallationResource = 'policy' | 'ledger' | 'config';
 export interface InstallationPublishTarget {
   readonly resource: InstallationResource; readonly path: string; readonly content: string; readonly digest: string;
@@ -21,8 +21,8 @@ export interface InstallationPublicationPorts {
   revalidateEvidence(): Promise<InstallationEvidencePreview>;
   now(): number;
 }
-export class InstallationPublicationError extends Error {
-  constructor(readonly code: 'INSTALLATION_PUBLICATION_INVALID' | 'INSTALLATION_PUBLICATION_CONFLICT'
+export class InstallationPublicationError extends CodedError {
+  constructor(override readonly code: 'INSTALLATION_PUBLICATION_INVALID' | 'INSTALLATION_PUBLICATION_CONFLICT'
     | 'INSTALLATION_PUBLICATION_CHANGED') { super(code); this.name = 'InstallationPublicationError'; }
 }
 function canonical(input: unknown): string {

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { persistedString, HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDigestSchema, hubPackageIdSchema, hubVersionSchema,
   type AuditEvent, type HubRevocationFeed, type HubRevocationCursor, type VerifiedPrincipal } from '#domain/index.js';
@@ -64,8 +65,8 @@ export interface HubClientDependencies {
   readonly fetchRevocations?: (source: HubSource, afterSequence: number, signal: AbortSignal, cursor?: HubRevocationCursor) => Promise<unknown>;
   readonly resolveTrust?: (source: HubSource, bundle: HubBundle, principal: VerifiedPrincipal, store: AgentCatalogStore, nowMs: number) => Promise<HubClientTrust>;
 }
-export class HubClientError extends Error {
-  constructor(readonly code: 'HUB_SOURCE_INVALID' | 'HUB_SOURCE_NOT_FOUND' | 'HUB_AUTHORITY_REFUSED' | 'HUB_INSTALL_CONFLICT' | 'HUB_DEPENDENCY_REFUSED'
+export class HubClientError extends CodedError {
+  constructor(override readonly code: 'HUB_SOURCE_INVALID' | 'HUB_SOURCE_NOT_FOUND' | 'HUB_AUTHORITY_REFUSED' | 'HUB_INSTALL_CONFLICT' | 'HUB_DEPENDENCY_REFUSED'
     | 'HUB_FILE_UNSUPPORTED' | 'HUB_DOWNGRADE_REFUSED' | 'HUB_PACKAGE_REVOKED' | 'HUB_STORE_CORRUPT' | 'HUB_STORE_UNAVAILABLE' | 'HUB_OUTCOME_UNKNOWN') { super(code); this.name = 'HubClientError'; }
 }
 export const hubClientCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema, hubId: hubDigestSchema });

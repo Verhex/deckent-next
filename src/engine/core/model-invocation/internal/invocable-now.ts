@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationCommand, ModelInvocationProfile, ModelReference } from '#domain/index.js';
 import { ModelInvocationStoreError } from './port.js';
 import type { ModelInvocationDelivery } from './delivery.js';
@@ -19,7 +20,7 @@ export interface ModelInvocableNowChecks {
   readonly surfaces: readonly (readonly [ModelInvocationDeliverySurface, ModelInvocationDelivery])[];
   credentialPresent(profile: ModelInvocationProfile): Promise<boolean>;
 }
-class InvocabilityRefusal extends Error {
+class InvocabilityRefusal extends CodedError {
   constructor(readonly reason: ModelInvocabilityReason) { super(reason.code); }
 }
 export function refuseInactiveModel(command: ModelInvocationCommand, activation: ModelActivationRecord | null): never {

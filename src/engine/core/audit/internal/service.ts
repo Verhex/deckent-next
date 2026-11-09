@@ -1,6 +1,7 @@
+import { CodedError } from '#platform/index.js';
 import type { AuditVerification } from '#domain/index.js';
 export interface AuditServiceStatus { readonly status: 'ready' | 'degraded'; readonly reason?: 'unavailable' | 'limit' | 'not-verified'; readonly verifications: readonly AuditVerification[] }
-export class AuditCheckpointCycleError extends Error {
+export class AuditCheckpointCycleError extends CodedError {
   constructor(readonly reason: 'unavailable' | 'limit') { super('AUDIT_CHECKPOINT_CYCLE'); this.name = 'AuditCheckpointCycleError'; }
 }
 /** Ready only when at least one scope was verified and every verification matched; nothing verified (not yet run, empty ledger) is never ready. */

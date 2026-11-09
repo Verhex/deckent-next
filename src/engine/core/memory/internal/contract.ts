@@ -1,5 +1,5 @@
 import { persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES, MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
-import { MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
+import { CodedError, MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 
@@ -221,6 +221,6 @@ export interface MemoryEvaluationPass { readonly schemaVersion: 1; readonly mode
 export type MemoryJournalErrorCode = MemoryHoldCode | 'MEMORY_COMMAND_CONFLICT' | 'MEMORY_REVISION_CONFLICT' | 'MEMORY_NOT_FOUND' | 'MEMORY_OUTCOME_UNKNOWN'
   | 'MEMORY_ENTRY_WITHHELD' | 'MEMORY_PURGED_CONTENT' | 'MEMORY_EXTRACTION_BOUND' | 'MEMORY_CANDIDATE_SECRET' | 'MEMORY_CANDIDATE_QUARANTINED' | 'MEMORY_DISTILLER_REQUIRED'
   | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PURGE_REPLAY_HELD' | 'MEMORY_CONTEST_RESOLVED' | 'MEMORY_PURGE_INVOCATION_REFUSED';
-export class MemoryJournalError extends Error {
-  constructor(readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
+export class MemoryJournalError extends CodedError {
+  constructor(override readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
 }

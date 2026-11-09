@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl } from '#platform/index.js';
+import { CodedError, persistedInteger, persistedUrl } from '#platform/index.js';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { z } from 'zod';
@@ -6,8 +6,8 @@ import { z } from 'zod';
 export type NpmRegistryErrorCode = 'NPM_REGISTRY_ENDPOINT_INVALID' | 'NPM_REGISTRY_PACKAGE_INVALID' | 'NPM_REGISTRY_UNAVAILABLE'
   | 'NPM_REGISTRY_TIMEOUT' | 'NPM_REGISTRY_STATUS' | 'NPM_REGISTRY_RESPONSE_TOO_LARGE' | 'NPM_REGISTRY_RESPONSE_INVALID';
 /** Bounded failure evidence: never carries response bodies or headers. */
-export class NpmRegistryError extends Error {
-  constructor(readonly code: NpmRegistryErrorCode, readonly status?: number) { super(code); this.name = 'NpmRegistryError'; }
+export class NpmRegistryError extends CodedError {
+  constructor(override readonly code: NpmRegistryErrorCode, readonly status?: number) { super(code); this.name = 'NpmRegistryError'; }
 }
 const inputSchema = z.strictObject({ endpoint: persistedUrl(), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/),
   timeoutMs: persistedInteger().positive().max(2_147_483_647), responseMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });

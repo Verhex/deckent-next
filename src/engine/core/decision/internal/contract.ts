@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedDateTime, persistedInteger, clientCommandIdSchema, createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema, modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -52,4 +53,4 @@ export interface DecisionDependencies {readonly verifier:PrincipalVerifier;
  readonly policy:()=>Promise<DecisionPolicy|null>;readonly openStore:(access:'read'|'write')=>Promise<DecisionStore>;
  readonly invoke:(command:ModelInvocationCommand,credential?:unknown,signal?:AbortSignal)=>Promise<ModelInvocationResult>;
  readonly now:()=>number;readonly eventId:()=>string;}
-export class DecisionApplicationError extends Error {constructor(readonly code:'DECISION_INVALID'|'DECISION_UNAVAILABLE'|'DECISION_COMMAND_CONFLICT'|'DECISION_CORRUPT'|'DECISION_RECORD_REQUIRED'|'DECISION_OUTCOME_UNKNOWN') {super(code);this.name='DecisionApplicationError';}}
+export class DecisionApplicationError extends CodedError {constructor(override readonly code:'DECISION_INVALID'|'DECISION_UNAVAILABLE'|'DECISION_COMMAND_CONFLICT'|'DECISION_CORRUPT'|'DECISION_RECORD_REQUIRED'|'DECISION_OUTCOME_UNKNOWN') {super(code);this.name='DecisionApplicationError';}}

@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
+import { CodedError, persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 // OS argv/environment cannot represent NUL or unpaired UTF-16 surrogates losslessly.
@@ -53,6 +53,6 @@ export function validateProcessEvidence(command: ProcessCommand, input: unknown)
   }
   return parsed.data;
 }
-export class ProcessRunnerError extends Error {
-  constructor(readonly code: 'PROCESS_RUNNER_INVALID' | 'PROCESS_RUNNER_UNSUPPORTED' | 'PROCESS_RUNNER_RESPONSE_INVALID') { super(code); this.name = 'ProcessRunnerError'; }
+export class ProcessRunnerError extends CodedError {
+  constructor(override readonly code: 'PROCESS_RUNNER_INVALID' | 'PROCESS_RUNNER_UNSUPPORTED' | 'PROCESS_RUNNER_RESPONSE_INVALID') { super(code); this.name = 'ProcessRunnerError'; }
 }

@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
-import { relativeInside } from '#platform/index.js';
+import { CodedError, relativeInside } from '#platform/index.js';
 import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout, ShellSandboxWriteView } from './realm.js';
 import { describeShellWritePosture, sandboxHardFloored, sandboxWriteView } from './realm.js';
@@ -24,7 +24,7 @@ const SYSTEM_EXEC = ['/usr', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/libx
 const SYSTEM_READ = ['/etc', '/proc'];
 const DEVICES = ['/dev/null', '/dev/zero', '/dev/full', '/dev/random', '/dev/urandom'];
 
-class BoundExceeded extends Error {}
+class BoundExceeded extends CodedError { constructor(message = '', options?: ErrorOptions) { super('BOUND_EXCEEDED', { message, ...options }); } }
 const exists = async (path: string, kind: 'dir' | 'any') => { try { const info = await stat(path); return kind === 'any' || info.isDirectory(); } catch { return false; } };
 
 /** A git worktree's `.git` file (at the project root only) opens its repository read-only, and only when it has the worktree shape:

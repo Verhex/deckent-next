@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeView, policyResources,
   resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
@@ -6,9 +7,9 @@ import { PolicyAuthorizationError } from './authorize.js';
 import { policyVerdictRefusal } from './verdict.js';
 import { AuthorityChangeError, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore } from './authority.js';
 
-export class PermissionModeError extends Error {
+export class PermissionModeError extends CodedError {
   /** `mode` names the refused target for `PERMISSION_MODE_DENIED` (the message says which grant is missing). */
-  constructor(readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID' | 'PERMISSION_MODE_DENIED', readonly mode?: string) {
+  constructor(override readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID' | 'PERMISSION_MODE_DENIED', readonly mode?: string) {
     super(code); this.name = 'PermissionModeError';
   }
 }

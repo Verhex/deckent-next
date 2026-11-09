@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cliMode, cliTableStyle, renderCliTable } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { RunCommandContext } from './context.js';
@@ -65,7 +65,7 @@ export async function inventoryCommand(argv: readonly string[], context: RunComm
     result = await context.inspectInventory(root, { schemaVersion: 1, scopeId: scope.scopeId, after: values.get('--after') ?? null, ...(rawLimit === undefined ? {} : { limit: Number(rawLimit) }) }, options);
   } catch (error) {
     // The runtime refused the page against its own configured bound: the same code, with the bound a person can use.
-    if ((error as { code?: unknown } | null)?.code === 'DISPATCH_INVENTORY_LIMIT') throw limitError();
+    if (isCodedError(error, 'DISPATCH_INVENTORY_LIMIT')) throw limitError();
     throw error;
   }
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderInventory(data, context, locale, verbose, scopeLine(scope, locale)) });

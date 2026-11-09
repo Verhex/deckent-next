@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness, excludeConflicting } from '#domain/index.js';
 import { z } from 'zod';
 import { resourceCapacityInputSchema, selectResourceCapacity, capacityResourceKeySchema, remainingCapacity } from './resource-capacity.js';
@@ -12,8 +13,8 @@ const schedulingInputSchema = z.strictObject({
   resourceCapacity: resourceCapacityInputSchema.optional(),
   snapshot: readinessInputSchema,
 });
-export class SchedulingError extends Error {
-  constructor(readonly code: 'SCHEDULING_INPUT_INVALID' | 'SCHEDULING_ORDER_INVALID') { super(code); this.name = 'SchedulingError'; }
+export class SchedulingError extends CodedError {
+  constructor(override readonly code: 'SCHEDULING_INPUT_INVALID' | 'SCHEDULING_ORDER_INVALID') { super(code); this.name = 'SchedulingError'; }
 }
 /** Deterministic planning only. A durable admission transaction must recheck this snapshot and
  * reserve capacity before dispatch; the plan itself is neither authorization nor a launch receipt.

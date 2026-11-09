@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger } from '#platform/index.js';
+import { CodedError, persistedString, persistedInteger } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open, realpath, rename, unlink } from 'node:fs/promises';
@@ -14,8 +14,8 @@ const optionsSchema = z.strictObject({ path: persistedString(z.string().min(1)),
   ownerUid: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type FilePolicyOptions = z.infer<typeof optionsSchema>;
 type PolicyFileResource = 'policy' | 'bindings' | 'archive';
-export class PolicyFileError extends Error {
-  constructor(readonly code: 'POLICY_FILE_INVALID' | 'POLICY_FILE_UNSAFE' | 'POLICY_FILE_TOO_LARGE' | 'POLICY_FILE_CHANGED' | 'POLICY_FILE_UNSUPPORTED'
+export class PolicyFileError extends CodedError {
+  constructor(override readonly code: 'POLICY_FILE_INVALID' | 'POLICY_FILE_UNSAFE' | 'POLICY_FILE_TOO_LARGE' | 'POLICY_FILE_CHANGED' | 'POLICY_FILE_UNSUPPORTED'
     | 'POLICY_FILE_MISSING', readonly resource: PolicyFileResource = 'policy') { super(code); this.name = 'PolicyFileError'; }
 }
 /** Authority writes of one installation (keyed by its policy path) are serialized in this process, and across processes by the lock below. */

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { PRIVATE_PERMISSION_MASK } from './tree.js';
@@ -7,7 +8,7 @@ import { PRIVATE_PERMISSION_MASK } from './tree.js';
  */
 export type PrivateFileMode = 'mask' | 'exact0600';
 /** `unsafe`: a link, a non-regular, shared or foreign file, or a wrong mode; `too-large`: over the bound; `changed`: it changed while read. */
-export class PrivateFileError extends Error { constructor(readonly reason: 'unsafe' | 'too-large' | 'changed') { super(reason); } }
+export class PrivateFileError extends CodedError { constructor(readonly reason: 'unsafe' | 'too-large' | 'changed') { super(reason); } }
 type FileInfo = { isFile(): boolean; readonly mode: number; readonly nlink: number; readonly uid: number };
 export const privateFile = (info: FileInfo, mode: PrivateFileMode = 'mask') => info.isFile() && info.nlink === 1 && info.uid === process.getuid?.()
   && (mode === 'mask' ? (info.mode & PRIVATE_PERMISSION_MASK) === 0 : (info.mode & 0o777) === 0o600);

@@ -1,4 +1,4 @@
-import { persistedString, persistedDateTime, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedDateTime, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 export const DECISION_SCHEMA_VERSION = 1;
@@ -53,6 +53,6 @@ export type DecisionAdvice = z.infer<typeof decisionAdviceSchema>;
 export type DecisionRecord = z.infer<typeof decisionRecordSchema>;
 export type DecisionErrorCode = 'DECISION_POLICY_INVALID' | 'DECISION_CASE_INVALID' | 'DECISION_EVIDENCE_FUTURE'
   | 'DECISION_EVIDENCE_REFERENCE_INVALID' | 'DECISION_LIMIT_EXCEEDED' | 'DECISION_ADVICE_INVALID' | 'DECISION_RECORD_INVALID';
-export class DecisionError extends Error {
-  constructor(readonly code: DecisionErrorCode) { super(code); this.name = 'DecisionError'; }
+export class DecisionError extends CodedError {
+  constructor(override readonly code: DecisionErrorCode) { super(code); this.name = 'DecisionError'; }
 }

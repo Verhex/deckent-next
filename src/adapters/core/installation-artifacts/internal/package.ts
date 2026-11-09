@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open, opendir } from 'node:fs/promises';
@@ -12,8 +13,8 @@ export interface InstalledPackageMeasurement {
 }
 export type InstallationArtifactErrorCode = 'INSTALLATION_ARTIFACT_INVALID' | 'INSTALLATION_ARTIFACT_UNSAFE'
   | 'INSTALLATION_ARTIFACT_LIMIT' | 'INSTALLATION_ARTIFACT_CHANGED' | 'INSTALLATION_ARTIFACT_UNAVAILABLE';
-export class InstallationArtifactError extends Error {
-  constructor(readonly code: InstallationArtifactErrorCode) { super(code); this.name = 'InstallationArtifactError'; }
+export class InstallationArtifactError extends CodedError {
+  constructor(override readonly code: InstallationArtifactErrorCode) { super(code); this.name = 'InstallationArtifactError'; }
 }
 
 interface Entry { readonly path: string; readonly absolute: string; readonly stat: BigIntStats }

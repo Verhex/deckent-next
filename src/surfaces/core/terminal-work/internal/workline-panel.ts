@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPanelController, type PanelExecution, type PanelApprovalView, type PanelSnapshot, type TerminalLocalContext,
@@ -8,7 +9,6 @@ import type { JobWindowPresentation } from './job-windows.js';
 import type { RunAnswerPresentation, RunControlPresentation, RunsWindowPresentation } from './run-control.js';
 import type { Span } from '#surfaces/core/terminal-render/index.js';
 import type { TurnApprovalRequest } from './work-surface.js';
-
 export type LocalExecution = PanelExecution<TerminalLocalContext>;
 export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
 type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>;
@@ -37,7 +37,7 @@ function createWorklinePanel(context: TerminalLocalContext, sessions: Conversati
         || card.view.context.sessionId !== view.context.sessionId) throw new TypeError();
       try { await decide(card.presentation.approval, 0, intent.decision === 'allow', card.standing, intent.reason || undefined); }
       catch (error) {
-        if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code))) card.unknown();
+        if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].some(code => isCodedError(error, code))) card.unknown();
         throw error;
       }
     },

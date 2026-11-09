@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ErrorRegistry, CONFIG_ENVIRONMENT_KEYS, serviceEnvironment, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, CONFIG_ENVIRONMENT_KEYS, serviceEnvironment, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
 import { launchDetachedRuntimeService, DOCKER_CLIENT_ENV_NAMES, mcpEnvironmentNames, nativeHomeOverrideNames, readTerminalShellConfig, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, readLocalOsIdentity, runtimeSocketHealable } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -17,7 +17,7 @@ async function lifecycleDeadline(projectRoot: string, options: ConfigLoadOptions
   return monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
 }
 const describeWithin = (client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline, startable?: RuntimeStartable) => describeRuntimeServiceWithin(signal => client.describeService(signal), deadline, startable);
-/** RESTART-HUNT (LAW-AUDIT-2): a describe's `parent-mode` refusal is a state the service start heals only when the read-only adapter predicate agrees. */ const startableFor = (projectRoot: string, options: ConfigLoadOptions): RuntimeStartable => async error => (error as { code?: unknown } | null)?.code === 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' && (error as { params?: Record<string, unknown> }).params?.['reason'] === 'parent-mode' && await runtimeSocketHealable((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout);
+/** RESTART-HUNT (LAW-AUDIT-2): a describe's `parent-mode` refusal is a state the service start heals only when the read-only adapter predicate agrees. */ const startableFor = (projectRoot: string, options: ConfigLoadOptions): RuntimeStartable => async error => isCodedError(error, 'LOCAL_RUNTIME_ENDPOINT_UNSAFE') && (error as { params?: Record<string, unknown> }).params?.['reason'] === 'parent-mode' && await runtimeSocketHealable((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout);
 /**
  * A6-3 (owner 2026-11-08, alpha.63.2): the service starts with an explicit environment, never the terminal's whole one: the service base, the
  * configured agent markers (a service started from an agent keeps that floor), the Docker client and native CLI home names, the names config fields

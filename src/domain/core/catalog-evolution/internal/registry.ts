@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import seed from '../../../../../assets/catalog-evolution/registry.json' with { type: 'json' };
 
@@ -32,8 +32,8 @@ export const catalogEvolutionOverlaySchema = z.strictObject({ revision: identity
   rules: z.array(ruleSchema).optional() }).readonly();
 export type CatalogEvolutionRegistry = z.infer<typeof registrySchema>;
 export type CatalogEvolutionRule = CatalogEvolutionRegistry['rules'][number];
-export class CatalogEvolutionError extends Error {
-  constructor(readonly code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' | 'CATALOG_EVOLUTION_CORRUPT' | 'CATALOG_EVOLUTION_POSITION_CONFLICT') { super(code); this.name = 'CatalogEvolutionError'; }
+export class CatalogEvolutionError extends CodedError {
+  constructor(override readonly code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' | 'CATALOG_EVOLUTION_CORRUPT' | 'CATALOG_EVOLUTION_POSITION_CONFLICT') { super(code); this.name = 'CatalogEvolutionError'; }
 }
 /** Resource bounds an overlay may only lower (it can never make a pass or a read bigger than the Core seed allows). */
 const NARROW_ONLY = new Set(['windowTasks', 'modelMixMax', 'readRowsMax', 'passPageRows', 'maxKeysPerPass', 'maxOpenSuggestions']);

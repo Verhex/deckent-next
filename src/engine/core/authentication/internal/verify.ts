@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
 
 /** Composition installs a trusted verifier appropriate to this transport. Credentials never enter receipts. */
@@ -6,8 +7,8 @@ export interface PrincipalVerifier { verify(credential: unknown): Promise<unknow
 export function verifiedPrincipal(principal: VerifiedPrincipal): PrincipalVerifier {
   return { async verify() { return principal; } };
 }
-export class AuthenticationError extends Error {
-  constructor(readonly code: 'AUTHENTICATION_REQUIRED' | 'AUTHENTICATION_SCOPE_DENIED') { super(code); this.name = 'AuthenticationError'; }
+export class AuthenticationError extends CodedError {
+  constructor(override readonly code: 'AUTHENTICATION_REQUIRED' | 'AUTHENTICATION_SCOPE_DENIED') { super(code); this.name = 'AuthenticationError'; }
 }
 export async function authenticate(verifier: PrincipalVerifier, credential: unknown, scopeId: string): Promise<VerifiedPrincipal> {
   let principal: VerifiedPrincipal;

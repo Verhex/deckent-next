@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition,
+import { isCodedError, isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition,
   type VerifiedPrincipal, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest, type TaskGraph } from '#domain/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 import type { QueueReattemptView, TargetQueueApplication } from '#engine/core/effect/index.js';
@@ -77,8 +77,8 @@ export async function stepDeliveryReattempt(ports: DeliveryReattemptPorts, recor
     catch (error) {
       // A Run-create card waits for a human; any other typed admission refusal (policy, pool, ceilings) is shown and retried after backoff.
       const code = (error as { code?: unknown }).code;
-      if (code === 'RUN_APPROVAL_REQUIRED') return view('awaiting-approval');
-      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(code)) return view('refused', { reason: code });
+      if (isCodedError(error, 'RUN_APPROVAL_REQUIRED')) return view('awaiting-approval');
+      if (typeof code === 'string' && isCodedError(error, code) && /^[A-Z][A-Z0-9_]{2,63}$/.test(code)) return view('refused', { reason: code });
       throw error;
     }
     return view('running');
@@ -115,7 +115,7 @@ export function stepWorkspaceQueueReattempt(c: WorkspaceReattemptContext, store:
     loadRun: (scopeId, runId) => store.loadRun(scopeId, runId), effects: profile => adapter.effects(profile), admit: command => adapter.admit(command),
     async baseAdvanced(ticket) {
       try { await integration.check(ticket.request.identity); return false; }
-      catch (error) { if ((error as { code?: unknown }).code === 'PATCH_BASE_ADVANCED') return true; throw error; }
+      catch (error) { if (isCodedError(error, 'PATCH_BASE_ADVANCED')) return true; throw error; }
     },
     async accepted(identity) { if (!(await store.loadBoundDispatch(identity))?.patch) await adapter.preparePatch(identity); return c.accepted(identity); },
     submit: request => c.app.submitReattempt(request, c.principal) }, record, act);

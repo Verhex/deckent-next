@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { createHash } from 'node:crypto';
 import { attachmentPreparationSchema } from '#domain/index.js';
@@ -11,7 +12,7 @@ export async function inspectModelUsePreparation(ports: ModelUseReadPorts, root:
   const source = await ports.context(root, scopeId), selected = [];
   for (const profile of configuredInvocationProfiles(source.config).filter(item => item.scopeId === scopeId)) {
     try { selected.push({ profile, binding: await assertModelUseSource(ports, source, profile) }); }
-    catch (error) { if (!['PROJECT_ATTACHMENT_DENIED', 'MODEL_USE_NOT_ACTIVE', 'MODEL_USE_BINDING_CHANGED', 'POLICY_DENIED'].includes(String((error as { code?: string }).code))) throw error; }
+    catch (error) { if (!['PROJECT_ATTACHMENT_DENIED', 'MODEL_USE_NOT_ACTIVE', 'MODEL_USE_BINDING_CHANGED', 'POLICY_DENIED'].some(code => isCodedError(error, code))) throw error; }
   }
   const selection = await ports.selection(source);
   const digest = createHash('sha256').update(JSON.stringify({ profiles: selected.map(({ profile, binding }) => ({ digest: modelInvocationProfileDigest(profile), binding })),

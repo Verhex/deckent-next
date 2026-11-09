@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
-import { PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
+import { isCodedError, PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { bridgeBody, bridgeResponse, refuseBridge } from './http.js';
 
 export interface NativeToolBridgeLimits {
@@ -131,8 +131,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
       await bridgeResponse(source, response, bridge.frameMaxBytes, count, safe);
       if (request.method === 'DELETE' && source.ok) await close();
     } catch (error) {
-      if (!response.destroyed) refuseBridge(response, error instanceof Error && error.message === 'NATIVE_BRIDGE_BODY_LIMIT' ? 413 : 400,
-        error instanceof Error && error.message === 'NATIVE_BRIDGE_BODY_LIMIT' ? 'NATIVE_BRIDGE_BODY_LIMIT' : 'NATIVE_BRIDGE_REQUEST_INVALID');
+      if (!response.destroyed) refuseBridge(response, isCodedError(error, 'NATIVE_BRIDGE_BODY_LIMIT') ? 413 : 400,
+        isCodedError(error, 'NATIVE_BRIDGE_BODY_LIMIT') ? 'NATIVE_BRIDGE_BODY_LIMIT' : 'NATIVE_BRIDGE_REQUEST_INVALID');
     }
     finally { active--; responses.delete(response); if (rpcKey !== undefined) inFlight.delete(rpcKey); }
   }

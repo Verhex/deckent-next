@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { workerEffortSchema } from '#domain/core/provider-catalog/index.js';
@@ -68,8 +68,8 @@ export type AttemptSnapshot = z.infer<typeof attemptSnapshotSchema>;
 export type AttemptPhase = 'reserved' | 'running' | 'unknown' | 'finished';
 export type AttemptErrorCode = 'ATTEMPT_INVALID' | 'ATTEMPT_IDENTITY_MISMATCH' | 'ATTEMPT_REVISION_CONFLICT'
   | 'ATTEMPT_OBSERVATION_STALE' | 'ATTEMPT_SEQUENCE_GAP' | 'ATTEMPT_OBSERVATION_CONFLICT' | 'ATTEMPT_TRANSITION_INVALID';
-export class AttemptError extends Error {
-  constructor(readonly code: AttemptErrorCode) { super(code); this.name = 'AttemptError'; }
+export class AttemptError extends CodedError {
+  constructor(override readonly code: AttemptErrorCode) { super(code); this.name = 'AttemptError'; }
 }
 
 export function sameAttemptIdentity(a: AttemptIdentity, b: AttemptIdentity): boolean {

@@ -2,7 +2,7 @@ import type { HubServiceTransaction } from './service-contract.js';
 import { z } from 'zod';
 import { identitySchema, type HubPackage, type HubEnvelope, type HubRevocationFeed } from '#domain/index.js';
 import { type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
-import { ErrorRegistry, type KnownSecretSnapshot, type Ed25519Signer } from '#platform/index.js';
+import { CodedError, ErrorRegistry, type KnownSecretSnapshot, type Ed25519Signer } from '#platform/index.js';
 import type { HubVerificationKey } from '#engine/core/hub/index.js';
 
 export const hubActorSchema = z.strictObject({ id: identitySchema, kind: z.enum(['person', 'ai', 'system']) }).readonly();
@@ -66,6 +66,6 @@ export interface HubServerPorts {
 }
 export const HUB_SERVER_ERROR_CODES = ['HUB_SERVER_DENIED', 'HUB_VERSION_CONFLICT', 'HUB_DEPENDENCY_INVALID', 'HUB_SECRET_REFUSED',
   'HUB_REVIEW_REFUSED', 'HUB_STORE_UNSAFE', 'HUB_STORE_CONFLICT', 'HUB_RESOURCE_UNKNOWN', 'HUB_STORE_UNSUPPORTED', 'HUB_STORE_OUTCOME_UNKNOWN', 'HUB_ACCOUNT_REFUSED', 'HUB_PROFILE_REFUSED', 'HUB_RATE_REFUSED'] as const;
-export class HubServerError extends Error {
-  constructor(readonly code: typeof HUB_SERVER_ERROR_CODES[number]) { super(ErrorRegistry.get(code)!.message); this.name = 'HubServerError'; }
+export class HubServerError extends CodedError {
+  constructor(override readonly code: typeof HUB_SERVER_ERROR_CODES[number]) { super(code, { message: ErrorRegistry.get(code)!.message }); this.name = 'HubServerError'; }
 }

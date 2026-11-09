@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { SIWC_INFERENCE } from '#adapters/core/provider-siwc/index.js';
 import { ProviderModelListError, readProviderPart, type ProviderDiscoveryCause } from './failure.js';
 import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js'; import { endpointMayCarryKey } from '#domain/index.js';
@@ -18,8 +19,8 @@ export type ProviderProbeResult = Readonly<{ outcome: ProviderProbeOutcome; http
 export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 export type ProviderProbeFetch = (url: string, init: { method: 'GET'; headers: Record<string, string>; redirect: 'manual'; signal: AbortSignal }) => Promise<Response>;
 export type ProviderProbeOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal; fetch?: ProviderProbeFetch }>;
-export class ProviderProbeError extends Error {
-  constructor(readonly code: 'PROVIDER_KIND_UNAVAILABLE' | 'PROVIDER_ENDPOINT_INVALID' | 'PROVIDER_KEY_REQUIRED' | 'PROVIDER_KEY_INSECURE', readonly reason?: string) { super(code); this.name = 'ProviderProbeError'; }
+export class ProviderProbeError extends CodedError {
+  constructor(override readonly code: 'PROVIDER_KIND_UNAVAILABLE' | 'PROVIDER_ENDPOINT_INVALID' | 'PROVIDER_KEY_REQUIRED' | 'PROVIDER_KEY_INSECURE', readonly reason?: string) { super(code); this.name = 'ProviderProbeError'; }
 }
 /** How much of a refusal's body is read to tell a spend limit from a rate limit; the text is matched, never kept or returned. */
 const BODY_PREFIX_BYTES = PROVIDER_CONNECT_LIMITS.bodyPrefixBytes;

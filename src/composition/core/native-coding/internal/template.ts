@@ -1,6 +1,6 @@
 import { createNativeCodingTemplate, detectNativeCliVersion, nativeCliAgent, openSqliteInventoryReader, headlessCapacityBinding, readHeadlessSealedVersion, nativeDockerCredential } from '#adapters/index.js';
 import { configureNativeTemplate, initializeNativeRegistry, addNativeProfile, resolveNativeTemplateConnection, type NativeTemplatePorts } from '#engine/index.js';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { configPersonWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { modelUseReadPorts } from '#composition/core/model-use/index.js';
 type Dependencies = { readonly beforeWrite?: () => void | Promise<void>; readonly detect?: NativeTemplatePorts['detect']; readonly witness?: { attest(): Promise<boolean> } };
@@ -19,7 +19,7 @@ const prohibited = (input: unknown) => { const request = input as { provider?: u
   try { return typeof request?.provider === 'string' && request.connection === undefined && nativeDockerCredential(request.provider as Parameters<typeof nativeDockerCredential>[0]) === 'prohibited'; } catch { return false; } };
 export function configureNativeCodingTemplate(root: string, input: unknown, options: ConfigLoadOptions = {}, dependencies: Omit<Dependencies, 'detect'> = {}) {
   return configureNativeTemplate(input, ports(root, options, dependencies)).catch((error: unknown) => {
-    throw (error as { code?: unknown } | null)?.code === 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED' && prohibited(input) ? ErrorRegistry.createError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') : error; });
+    throw isCodedError(error, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') && prohibited(input) ? ErrorRegistry.createError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') : error; });
 }
 export function initializeNativeCodingRegistry(root: string, input: unknown, options: ConfigLoadOptions = {}, dependencies: Dependencies = {}) {
   return initializeNativeRegistry(input, ports(root, options, dependencies));

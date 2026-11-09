@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { ModelBindingDefinition, ModelReference } from '#domain/index.js';
 import type { ModelActivationActor, ModelActivationAuthorization, ModelActivationCommand,
   ModelActivationReceipt, ModelActivationRecord } from '#domain/index.js';
@@ -24,8 +25,8 @@ export interface ModelActivationStore {
 export interface ModelActivationDeliveryFinding {
   readonly profileId: string; readonly surface: string; readonly requiredBytes: number; readonly availableBytes: number;
 }
-export class ModelActivationStoreError extends Error {
-  constructor(readonly code: 'MODEL_ACTIVATION_COMMAND_CONFLICT' | 'MODEL_ACTIVATION_CORRUPT'
+export class ModelActivationStoreError extends CodedError {
+  constructor(override readonly code: 'MODEL_ACTIVATION_COMMAND_CONFLICT' | 'MODEL_ACTIVATION_CORRUPT'
     | 'MODEL_ACTIVATION_UNAVAILABLE' | 'MODEL_ACTIVATION_OUTCOME_UNKNOWN' | 'MODEL_ACTIVATION_CATALOG_CONFLICT'
     | 'MODEL_ACTIVATION_DELIVERY_UNFIT', readonly deliveryFinding?: ModelActivationDeliveryFinding) {
     super(code); this.name = 'ModelActivationStoreError';

@@ -7,7 +7,11 @@ import {
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
   resolveLocale, getConfigValue, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent, t,
 } from '../../../src/platform/index.js';
-import { CodedError as DomainCodedError, isCodedError as isDomainCodedError } from '../../../src/domain/index.js';
+import { CodedError as DomainCodedError, isCodedError as isDomainCodedError, PolicyError } from '../../../src/domain/index.js';
+
+import { PolicyAuthorizationError } from '#engine/index.js';
+import { ScratchError } from '#adapters/index.js';
+import { ArtifactError } from '#capabilities/index.js';
 
 describe('errors, output and locale public contracts', () => {
   it('freezes registry authority, keeps no legacy numbered codes and returns defensive collections', () => {
@@ -57,6 +61,10 @@ describe('errors, output and locale public contracts', () => {
     expect([isCodedError(typed, 'PLATFORM_REFUSED'), isDomainCodedError(typed, 'PLATFORM_REFUSED'), isCodedError(twin, 'TWIN_REFUSED'), isCodedError(new EnterpriseCopy(), 'COPY_REFUSED')]).toEqual([true, true, true, true]);
     const wire = JSON.parse(JSON.stringify(typed)) as unknown, spoofed = Object.assign(new Error('PLATFORM_REFUSED'), { code: 'PLATFORM_REFUSED' });
     expect([isCodedError(typed, 'OTHER'), isCodedError(wire, 'PLATFORM_REFUSED'), isCodedError(spoofed, 'PLATFORM_REFUSED'), isCodedError(null, 'X'), isCodedError('PLATFORM_REFUSED', 'PLATFORM_REFUSED')]).toEqual([false, false, false, false, false]);
+    for (const error of [ErrorRegistry.createError('POLICY_DENIED'), new PolicyError('POLICY_INVALID'), new PolicyAuthorizationError('POLICY_DENIED'),
+      new ScratchError('SCRATCH_UNSAFE'), new ArtifactError('ARTIFACT_SCOPE_DENIED')]) {
+      expect(isCodedError(error, error.code)).toBe(true); expect(isDomainCodedError(error, error.code)).toBe(true);
+    }
     expect([errorCodeOf(wire), errorCodeOf(spoofed), errorCodeOf({ code: 7 }), errorCodeOf(undefined)]).toEqual(['PLATFORM_REFUSED', 'PLATFORM_REFUSED', null, null]);
     const errno = (code: string) => Object.assign(new Error(code), { code });
     expect([isAbsent(errno('ENOENT')), isAbsent(errno('ENOTDIR')), isAbsent(errno('ENOTDIR'), { notDir: true }), isAbsent(errno('EACCES'), { notDir: true }), isAbsent(null)]).toEqual([true, false, true, false, false]);

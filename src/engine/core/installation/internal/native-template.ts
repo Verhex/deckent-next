@@ -1,5 +1,5 @@
 import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
-import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
+import { isCodedError, ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
@@ -38,7 +38,7 @@ function limits(snapshot: ConfigSnapshot, worker: NativeCliWorkerBinding | undef
 }
 /** The adapter's typed refusals named instead of a generic template failure: a discovery mode the CLI cannot honour, a CLI without a Docker subscription path (owner 2026-11-08). */
 function discoveryRefusal(error: unknown, provider: string, fallback: string): never {
-  const typed = ({ NATIVE_CODING_DISCOVERY_UNSUPPORTED: 'CODING_DISCOVERY_UNSUPPORTED', NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' } as Record<string, string>)[String((error as { code?: unknown } | null)?.code)]; if (typed) throw ErrorRegistry.createError(typed, { params: { provider } });
+  const typed = ({ NATIVE_CODING_DISCOVERY_UNSUPPORTED: 'CODING_DISCOVERY_UNSUPPORTED', NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' } as Record<string, string>)[isCodedError(error, 'NATIVE_CODING_DISCOVERY_UNSUPPORTED') ? error.code : isCodedError(error, 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') ? error.code : '']; if (typed) throw ErrorRegistry.createError(typed, { params: { provider } });
   refuse(fallback);
 }
 
@@ -136,7 +136,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     try { return ports.template(limits(snapshot, worker, request.image, 'CODING_TEMPLATE_IMAGE_REQUIRED'), { provider: request.provider, cliVersion: cliVersion!,
       discovery: { schemaVersion: 1, mode: request.discovery ?? 'disabled' }, permissionMode: 'unattended' }, worker); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } };
   const planFor = (snapshot: ConfigSnapshot) => { try { return proposal(snapshot, request, ports.template, undefined, worker); } catch (error) {
-    if (!worker || (error as { code?: unknown }).code !== 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') throw error; return proposal(snapshot, request, ports.template, own(snapshot), worker); } };
+    if (!worker || !isCodedError(error, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED')) throw error; return proposal(snapshot, request, ports.template, own(snapshot), worker); } };
   const plan = planFor(read), result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null };
   if (!request.apply || !plan.changed) return { ...result, status: plan.changed ? 'preview' : 'unchanged', write: null };
   const config = read.effective;

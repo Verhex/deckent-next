@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, formatClock, formatDuration, formatKnown, formatUsd, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { renderWorkersView, sourceStatusText } from './workers-view.js';
@@ -108,7 +108,7 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
       const result = await context.inspectWorkers(root, query, options).catch(async (error: unknown) => {
         // The refusal keeps its code (SCOPE_UNKNOWN, company-aware authorization); a person also gets the scopes they can read (`--json`
         // keeps one typed error object on stderr).
-        if (!json && (error as { code?: unknown }).code === 'SCOPE_UNKNOWN') {
+        if (!json && isCodedError(error, 'SCOPE_UNKNOWN')) {
           const scopes = await scopeLister(context, root, options)().catch(() => []);
           emit(t('cli.workers.validScopes', { scope: terminalSafeText(scope.scopeId), scopes: scopes.map(item => terminalSafeText(item)).join(', ') || '-' }, locale),
             { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });

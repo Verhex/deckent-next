@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { t, type Locale } from '#platform/index.js';
+import { CodedError, t, type Locale } from '#platform/index.js';
 import { chatTurnSteerOutcomeSchema, type AgentToolCallStatus, type AgentToolDiagnostic, type AgentTurnFinish, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
-export class AgentTurnStoreError extends Error {
-  constructor(readonly code: AgentTurnStoreErrorCode) { super(code); this.name = 'AgentTurnStoreError'; }
+export class AgentTurnStoreError extends CodedError {
+  constructor(override readonly code: AgentTurnStoreErrorCode) { super(code); this.name = 'AgentTurnStoreError'; }
 }
 
 /** The stored shape of a finished turn's steered-line ids (v30): the wire shape, so a replay returns exactly what the first answer said. */

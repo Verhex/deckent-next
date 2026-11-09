@@ -7,7 +7,7 @@ import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { readLocalOsOwner } from '#adapters/core/local-principal/index.js';
-import { readPrivateFile } from '#platform/index.js';
+import { CodedError, readPrivateFile } from '#platform/index.js';
 
 const exactModelId = persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value && !value.startsWith('-')
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
@@ -35,8 +35,8 @@ export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
 export function nativeProjectionDispatch(binding: NativeSubscription | undefined, retired: boolean): 'legacy' | 'retired' {
   return retired && binding && nativeCliCommand(binding.provider).agent ? 'retired' : 'legacy';
 }
-export class NativeConnectionError extends Error {
-  constructor(readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE' | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' | 'NATIVE_SUBSCRIPTION_OTHER_PERSON') { super(code); this.name = 'NativeConnectionError'; }
+export class NativeConnectionError extends CodedError {
+  constructor(override readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE' | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' | 'NATIVE_SUBSCRIPTION_OTHER_PERSON') { super(code); this.name = 'NativeConnectionError'; }
 }
 /** A provider's local credential spec as shipped in `providers.json`; declared explicitly so the published `.d.ts` never references the JSON module. */
 export interface NativeProviderSpec { readonly homeOverride: string; readonly home: string; readonly file: string; readonly destinations: readonly string[];

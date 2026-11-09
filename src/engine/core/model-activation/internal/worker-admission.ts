@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { workerTaskParameters, persistedNumber, catalogModelRetired, workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { z } from 'zod';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
@@ -37,8 +38,8 @@ export interface MemoryContextWithheldWarning {
 }
 export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning | MemoryContextWithheldWarning;
 export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
-export class WorkerModelAdmissionError extends Error {
-  constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
+export class WorkerModelAdmissionError extends CodedError {
+  constructor(override readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
 }
 const pinned = z.strictObject({ channelId: z.string(), modelId: z.string(), auxiliaryModelIds: z.array(z.string()).readonly(), ...workerModelPinEvidenceShape });
 const subscriptionSchema = z.looseObject({ schemaVersion: persistedNumber(z.number()), provider: z.enum(['claude', 'codex', 'cursor']),

@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 
@@ -94,8 +94,8 @@ export const effectRecordSchema = z.strictObject({ intent: effectIntentSchema, g
   .refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));
 export type EffectRecord = z.infer<typeof effectRecordSchema>;
 
-export class EffectError extends Error {
-  constructor(readonly code: 'EFFECT_INVALID' | 'EFFECT_OPERATION_UNKNOWN' | 'EFFECT_APPROVAL_REQUIRED' | 'EFFECT_PRECONDITION_CHANGED'
+export class EffectError extends CodedError {
+  constructor(override readonly code: 'EFFECT_INVALID' | 'EFFECT_OPERATION_UNKNOWN' | 'EFFECT_APPROVAL_REQUIRED' | 'EFFECT_PRECONDITION_CHANGED'
     | 'EFFECT_TARGET_BUSY' | 'EFFECT_CONFLICT' | 'EFFECT_OUTCOME_UNKNOWN' | 'EFFECT_NOT_COMPENSABLE' | 'EFFECT_REJECTED' | 'EFFECT_CORRUPT' | 'EFFECT_TARGET_UNAVAILABLE'
     | 'EFFECT_TARGET_CHANGED' | 'OPERATION_SURFACE_RESTRICTED',
     options?: ErrorOptions) { super(code, options); this.name = 'EffectError'; }

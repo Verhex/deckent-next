@@ -1,5 +1,5 @@
 import { authorityDocuments, delegationWithin, mcpGrantRuleIds, mcpToolGrantChange, mcpToolGrantRevokeChange, planPolicyChange } from '#domain/index.js';
-import { isAuthorizationRefusal, sha256 } from '#platform/index.js';
+import { isCodedError, isAuthorizationRefusal, sha256 } from '#platform/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
 /** Why a trusted server's tools got no grant: the approver does not hold this authority in that scope (`delegation`), may not change policy
@@ -65,6 +65,6 @@ export class McpToolGrants {
 const refusal = (error: unknown) => {
   const code = (error as { code?: unknown } | null)?.code;
   // The governed chain itself refused this person: no `policy.administer` operation, or no right to decide its own card (`administer`).
-  if (isAuthorizationRefusal(code, { include: ['policy-denied', 'approval-denied'] })) return 'administer';
-  return code === 'POLICY_DELEGATION_EXCEEDS' ? 'delegation' : error instanceof Error && error.message === 'NOT_SETTLED' ? 'not-settled' : typeof code === 'string' ? code : 'failed';
+  if (typeof code === 'string' && isCodedError(error, code) && isAuthorizationRefusal(code, { include: ['policy-denied', 'approval-denied'] })) return 'administer';
+  return isCodedError(error, 'POLICY_DELEGATION_EXCEEDS') ? 'delegation' : isCodedError(error, 'NOT_SETTLED') ? 'not-settled' : typeof code === 'string' ? code : 'failed';
 };

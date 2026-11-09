@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, removeRunBase, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateExecutionSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { assertAuthorityWitness, workingTreeDeliveryAuthorization, workingTreeSource, deliveryDismissalEvent, deliveryRollbackEvent, workingTreeRollbackCommandSchema, WorkingTreeRollbackApplication, WorkspacePatchError, type WorkingTreeRollbackCommand, dismissedDeliveries, WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -58,7 +58,7 @@ async function releaseSettledRunBase(root: string, run: Readonly<{ scopeId: stri
 }
 /** The scope's dismissed tasks (none without an integrity key yet: recording one creates it); any other failure is the caller's to show. `limit` bounds the records read. */
 export const inspectConfiguredDismissedDeliveries = (root: string, scopeId: string, limit: number, options: ConfigLoadOptions) => loadConfiguredScopeContext(root, scopeId, options, 'read')
-  .then(c => withScopeAudit(c, audit => dismissedDeliveries(audit, scopeId, limit), false, 'read')).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'INTEGRITY_KEY_UNAVAILABLE') return [] as ReturnType<typeof dismissedDeliveries>; throw queryFailure(error); });
+  .then(c => withScopeAudit(c, audit => dismissedDeliveries(audit, scopeId, limit), false, 'read')).catch((error: unknown) => { if (isCodedError(error, 'INTEGRITY_KEY_UNAVAILABLE')) return [] as ReturnType<typeof dismissedDeliveries>; throw queryFailure(error); });
 /** Local SDK/CLI producer; paths, principal, session and Git options never come from the wire. */
 type DeliveryApplications = Readonly<{ deliver: () => WorkspaceDeliveryApplication; rollback: () => WorkingTreeRollbackApplication }>;
 async function withDelivery<T>(root: string, identity: AttemptIdentity, options: ConfigLoadOptions, confirmation: EffectConfirmation | undefined, use: (applications: DeliveryApplications) => Promise<T>) {

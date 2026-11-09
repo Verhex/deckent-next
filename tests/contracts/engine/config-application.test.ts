@@ -234,3 +234,19 @@ it('a masked global catalog write cannot stale another scope profile; identical 
   // A masking project catalog cannot be silently rebound through a global write.
   Object.assign(own, { layer: 'global', global: document, project: { provider_catalog: catalog } }); await refuse();
 });
+
+it('ERR-M: config permissions accepts branded refusals from either package and refuses a foreign code before any write', async () => {
+  const { CodedError, ErrorRegistry } = await import('#platform/index.js');
+  const { CodedError: DomainCodedError } = await import('#domain/index.js');
+  class EnterpriseCopy extends Error { readonly code = 'POLICY_DENIED'; }
+  Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+  let failure: unknown;
+  const app = new ConfigApplication({ snapshot: async () => { throw Error('unexpected read'); }, publish: async () => { throw Error('unexpected write'); } }, {
+    authorize: async () => { throw Error('unexpected authorize'); }, audit: async () => { throw Error('unexpected audit'); },
+    approvals: { evaluate: async () => { throw failure; }, admit: async () => { throw Error('unexpected approval'); } } });
+  const input = { principal, scopeId: 'test', keys: ['max_workers'], layers: ['project'] as const };
+  for (failure of [ErrorRegistry.createError('POLICY_DENIED'), new CodedError('POLICY_DENIED'), new DomainCodedError('POLICY_DENIED'), new EnterpriseCopy()])
+    await expect(app.permissions(input)).resolves.toEqual([{ keyPath: 'max_workers', layer: 'project', decision: 'deny', ruleId: null }]);
+  for (failure of [{ code: 'POLICY_DENIED' }, Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }), new Error('POLICY_DENIED')])
+    await expect(app.permissions(input)).rejects.toBe(failure);
+});

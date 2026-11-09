@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 /**
  * Deckent's JSON Schema validator for MCP tool schemas (MCP-SCHEMA-VALIDATOR, owner 2026-09-29: problematic dependencies are not accepted).
  *
@@ -15,10 +16,10 @@ import { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern,
 
 export type JsonSchemaRefusalReason = 'unsupported-dialect' | 'unsupported-keyword' | 'remote-ref' | 'unsupported-pattern' | 'invalid-schema' | 'limit';
 /** A schema this validator will not compile (fail closed); `at` is the JSON Pointer of the schema location. */
-export class JsonSchemaRefusal extends Error {
-  readonly code = 'JSON_SCHEMA_REFUSED';
+export class JsonSchemaRefusal extends CodedError {
+  override readonly code = 'JSON_SCHEMA_REFUSED';
   constructor(readonly reason: JsonSchemaRefusalReason, readonly at: string, detail: string) {
-    super(`${reason} at #${at}: ${detail}`);
+    super('JSON_SCHEMA_REFUSED', { message: `${reason} at #${at}: ${detail}` });
     this.name = 'JsonSchemaRefusal';
   }
 }
@@ -83,7 +84,7 @@ interface Evaluated { readonly props: Set<string>; readonly items: Set<number>; 
 interface Ctx { readonly budget: StepBudget; readonly path: (string | number)[]; depth: number; message: string }
 type Validate = (instance: Json, ctx: Ctx, ev: Evaluated | null) => boolean;
 
-class ValidationLimit extends Error {}
+class ValidationLimit extends CodedError { constructor(message = '', options?: ErrorOptions) { super('VALIDATION_LIMIT', { message, ...options }); } }
 const isObject = (value: Json): value is JsonObject => typeof value === 'object' && value !== null && !Array.isArray(value);
 const newEv = (): Evaluated => ({ props: new Set(), items: new Set(), all: false });
 const merge = (from: Evaluated, into: Evaluated) => {

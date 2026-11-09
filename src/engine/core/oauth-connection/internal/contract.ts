@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, persistedUrl, persistedUuid } from '#platform/index.js';
+import { CodedError, persistedString, persistedInteger, persistedUrl, persistedUuid } from '#platform/index.js';
 import type { PersonalCustodyRefusal } from '#engine/core/secret-store/index.js';
 import { z } from 'zod';
 import type { SecretChangeAudit, SecretChangeAuthorization, SecretCustody, SecretStore } from '#engine/core/secret-store/index.js';
@@ -8,8 +8,8 @@ export type OAuthConnectionCode = 'OAUTH_CONNECTION_INVALID' | 'OAUTH_CONNECTION
   | 'OAUTH_CONNECTION_STORE_REQUIRED' | 'OAUTH_CONNECTION_CHANGED' | 'OAUTH_CONNECTION_REAUTHORIZE'
   | 'SIWC_ACCOUNT_STILL_CONNECTED' | 'SIWC_STORE_NOT_PERSONAL' | 'OAUTH_CONNECTION_INTERACTIVE_REQUIRED' | 'OAUTH_CONNECTION_PLATFORM_UNSUPPORTED' | 'POLICY_APPROVAL_UNSUPPORTED';
 /** No vendor text, callback, token, URL or nested cause enters an error. */
-export class OAuthConnectionError extends Error {
-  constructor(readonly code: OAuthConnectionCode, readonly reason?: PersonalCustodyRefusal) { super(code); this.name = 'OAuthConnectionError'; }
+export class OAuthConnectionError extends CodedError {
+  constructor(override readonly code: OAuthConnectionCode, readonly reason?: PersonalCustodyRefusal) { super(code); this.name = 'OAuthConnectionError'; }
 }
 const text = persistedString(z.string().min(1).max(256)), time = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export const oauthConnectionOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,

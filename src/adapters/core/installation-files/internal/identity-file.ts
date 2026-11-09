@@ -1,6 +1,6 @@
 import { lstat, mkdir, stat, statfs } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
+import { CodedError, ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
   withConfigWriteLock, writeJsonAtomic, type ProductLayout } from '#platform/index.js';
 
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
@@ -22,7 +22,7 @@ async function maskedDirectory(directory: string): Promise<boolean> {
     return Number(fs.type) === TMPFS_MAGIC && own.dev !== parent.dev;
   } catch { return false; }
 }
-class IdentityFileError extends Error { constructor(readonly reason: Failure) { super(reason); } }
+class IdentityFileError extends CodedError { constructor(readonly reason: Failure) { super(reason); } }
 /** `prepare` runs under the writer lock before the record directory is created, so its refusal leaves no retained (lost-looking) directory. */
 interface IdentityCodec<T, P = undefined> { parse(value: unknown): T; prepare?(): Promise<P>; create(prepared: P | undefined): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
 

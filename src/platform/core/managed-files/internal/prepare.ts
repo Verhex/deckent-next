@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 import { constants, type Stats } from 'node:fs';
 import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import { dirname, join, parse, relative, resolve, sep } from 'node:path';
@@ -11,8 +12,8 @@ interface ManagedFileContext { readonly resource: ProductResource; readonly comp
 interface ManagedFileDiagnostic extends ManagedFileContext {
   readonly reason: 'file-type' | 'link-count' | 'owner' | 'mode'; readonly mode: number; readonly links: number;
 }
-export class ManagedFileError extends Error {
-  constructor(readonly code: 'MANAGED_FILE_UNSUPPORTED' | 'MANAGED_FILE_UNSAFE' | 'MANAGED_FILE_OUTSIDE_ROOT' | 'MANAGED_FILE_MISSING',
+export class ManagedFileError extends CodedError {
+  constructor(override readonly code: 'MANAGED_FILE_UNSUPPORTED' | 'MANAGED_FILE_UNSAFE' | 'MANAGED_FILE_OUTSIDE_ROOT' | 'MANAGED_FILE_MISSING',
     readonly diagnostic?: Readonly<ManagedFileDiagnostic>) {
     super(code); this.name = 'ManagedFileError';
   }

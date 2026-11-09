@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { affectedToolchainProfiles, configWriteOperation, configuredInvocationProfiles, modelInvocationProfileDigest } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -177,7 +177,7 @@ async function template(context: AdminCommandContext, root: string, env: NodeJS.
 /** Root cause of CODING_TEMPLATE_TOOLCHAIN_REQUIRED on a working installation (review §coding open question): without `--image` the template
  * looks for an admitted CLI on `execution.docker.imageId`, but the admitted profiles run on other images. Named with those images and a command. */
 function unadmittedImage(error: unknown, config: DeckentConfig, request: { provider: string; kind: string; image?: string }, locale: Locale) {
-  if ((error as { code?: unknown } | null)?.code !== 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') return null;
+  if (!isCodedError(error, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED')) return null;
   const used = request.image ?? config.execution?.docker?.imageId ?? null;
   const pins = affectedToolchainProfiles(config).filter(pin => pin.provider === request.provider && pin.imageId), images = [...new Set(pins.map(pin => pin.imageId!))];
   if (!images.length || (used && images.includes(used))) return null;

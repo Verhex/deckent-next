@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { clientCommandIdSchema, runProposalBindingSchema, authorityAdmissionSchema, branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import type { RunCapacityBinding } from './capacity-resource.js';
 import { z } from 'zod';
@@ -37,7 +38,7 @@ export interface RunStore {
    * snapshot contains only admitted attempts. Replay never expands the original admission. */
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;
 }
-export class RunStoreError extends Error {
-  constructor(readonly code: 'RUN_NOT_FOUND' | 'RUN_STORE_CONFLICT' | 'RUN_COMMAND_CONFLICT' | 'RUN_STORE_CORRUPT' | 'RUN_CAPACITY_OR_ORDER' | 'RUN_POOL_REQUIRED' | 'RUN_POOL_CONFLICT' | 'RUN_POOL_FULL' | 'RUN_POOL_HELD' | 'RUN_POOL_CAPACITY_OCCUPIED',
+export class RunStoreError extends CodedError {
+  constructor(override readonly code: 'RUN_NOT_FOUND' | 'RUN_STORE_CONFLICT' | 'RUN_COMMAND_CONFLICT' | 'RUN_STORE_CORRUPT' | 'RUN_CAPACITY_OR_ORDER' | 'RUN_POOL_REQUIRED' | 'RUN_POOL_CONFLICT' | 'RUN_POOL_FULL' | 'RUN_POOL_HELD' | 'RUN_POOL_CAPACITY_OCCUPIED',
     readonly diagnostic?: ReservationDiagnostic) { super(code); this.name = 'RunStoreError'; }
 }

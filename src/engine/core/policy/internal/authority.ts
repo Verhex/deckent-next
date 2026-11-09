@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, assertPolicyAdministrationPreserved, authorityDocuments, policyNamedPeople, type Policy, type ApprovalActor, resolvePolicyBindings, type AdministrationAssurance, type AuditEvent, type DelegationCell, type DelegationVerdict } from '#domain/index.js';
 import { auditPolicyDigest } from '#engine/core/audit/index.js';
@@ -34,8 +35,8 @@ export interface DelegationRefusalFacts {
   readonly cell: DelegationCell; readonly reason: Extract<DelegationVerdict, { ok: false }>['reason'];
   readonly sole: boolean; readonly people: readonly { readonly issuer: string; readonly subject: string }[];
 }
-export class AuthorityChangeError extends Error {
-  constructor(readonly code: 'POLICY_CONFLICT' | 'POLICY_DELEGATION_EXCEEDS', readonly detail: string | null = null, readonly refusal: DelegationRefusalFacts | null = null) {
+export class AuthorityChangeError extends CodedError {
+  constructor(override readonly code: 'POLICY_CONFLICT' | 'POLICY_DELEGATION_EXCEEDS', readonly detail: string | null = null, readonly refusal: DelegationRefusalFacts | null = null) {
     super(code); this.name = 'AuthorityChangeError';
   }
 }

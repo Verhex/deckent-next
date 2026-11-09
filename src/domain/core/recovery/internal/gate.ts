@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
 import { effectRecordSchema, effectStateSchema, effectTargetRefSchema, isEffectOpen, operationRefSchema, type EffectRecord } from '#domain/core/effect/index.js';
 import type { RunRecoveryPolicy } from './policy.js';
@@ -9,8 +9,8 @@ export const RECOVERY_ERROR_CODES = ['RECOVERY_INVALID', 'RECOVERY_OFF', 'RECOVE
   'RECOVERY_STALE', 'RECOVERY_CONFLICT', 'RECOVERY_PRINCIPAL_REQUIRED', 'RECOVERY_NOT_APPROVED', 'RECOVERY_CORRUPT', 'RECOVERY_UNAVAILABLE', 'RECOVERY_RISK_NOT_LOW',
   'RECOVERY_ISOLATION_UNPROVEN'] as const;
 export type RecoveryErrorCode = typeof RECOVERY_ERROR_CODES[number];
-export class RecoveryError extends Error {
-  constructor(readonly code: RecoveryErrorCode, options?: ErrorOptions) { super(code, options); this.name = 'RecoveryError'; }
+export class RecoveryError extends CodedError {
+  constructor(override readonly code: RecoveryErrorCode, options?: ErrorOptions) { super(code, options); this.name = 'RecoveryError'; }
 }
 /**
  * S6R-DESIGN §7 step 4/4b: what the mandatory effect gate saw. `intents`: the gate set — every intent the lost Attempt produced, plus (fail-closed

@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import type { Dir } from 'node:fs';
 import { constants } from 'node:fs';
 import { access, mkdtemp, open, opendir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -116,7 +117,7 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
       if (realm.configVisible.includes(entry.name) || entry.isSymbolicLink()) continue;
       (entry.isDirectory() ? directories : files).push(join(configDir, entry.name));
     }
-  } catch (error) { if ((error as { code?: unknown }).code === 'HEADLESS_PREFLIGHT_FAILED') throw error; refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' }); }
+  } catch (error) { if (isCodedError(error, 'HEADLESS_PREFLIGHT_FAILED')) throw error; refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' }); }
   finally { await dir?.close().catch(() => undefined); }
   return Object.freeze({ directories: directories.sort(), files: files.sort(), copies });
 }

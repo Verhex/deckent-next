@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { delegationWithin, evaluatePolicy, policyResources, type AttemptIdentity, type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
@@ -7,8 +8,8 @@ export interface PolicySource { load(): Promise<Policy> }
 /** Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
  * surfaces carry the code only, so a caller cannot tell a scope held by another company from an unknown one (no disclosure). */
 export type PolicyRefusalReason = 'COMPANY' | 'UNREGISTERED';
-export class PolicyAuthorizationError extends Error {
-  constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN' | 'POLICY_APPROVAL_UNSUPPORTED' | 'DELIVERY_WORKING_TREE_DENIED' | 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED',
+export class PolicyAuthorizationError extends CodedError {
+  constructor(override readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN' | 'POLICY_APPROVAL_UNSUPPORTED' | 'DELIVERY_WORKING_TREE_DENIED' | 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED',
     readonly reason: PolicyRefusalReason | null = null) { super(code); this.name = 'PolicyAuthorizationError'; }
 }
 export class DispatchPolicyAuthorization implements DispatchAuthorization, DispatchIdentityAuthorization {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ErrorRegistry } from '#platform/index.js';
+import { isCodedError, ErrorRegistry } from '#platform/index.js';
 import { queueRequeueCause, queueServiceActor, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type TargetBinding, type TargetQueueRecord,
   type TargetQueueRequest, type VerifiedPrincipal } from '#domain/index.js';
 import type { TargetQueueApplication } from '#engine/core/effect/index.js';
@@ -51,7 +51,7 @@ export async function stepRunDelivery(ports: RunDeliveryPorts, run: RunSnapshot)
     } catch (error) {
       // A typed refusal (intent, policy, target, bound) is shown and retried on a later scan; anything else is the service's failure.
       const code = (error as { code?: unknown }).code;
-      if (typeof code !== 'string' || !/^[A-Z][A-Z0-9_]{2,63}$/.test(code)) throw error;
+      if (typeof code !== 'string' || !isCodedError(error, code) || !/^[A-Z][A-Z0-9_]{2,63}$/.test(code)) throw error;
       steps.push({ taskId: task.taskId, state: code === 'QUEUE_REQUEUE_EXHAUSTED' ? 'exhausted' : 'refused', reason: code });
     }
   }

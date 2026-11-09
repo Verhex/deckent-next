@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { describeOperationInput, effectCommandSchema, effectIntentSchema, effectProducerSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
   evaluatePolicy, policyResources, type EffectCommand, type EffectIntentApproval, type EffectRecord, type EffectTargetRef, type OperationDescriptor, type OperationRef,
@@ -13,8 +14,8 @@ export const operationInputDescriber = (catalog: OperationCatalog, redact: (text
   async (command: EffectCommand, budget: number) => describeOperationInput(command.input, (await catalog.resolve(command.operation))?.inputLabels, redact, sensitive, budget, more);
 /** Failure classes a target reports: the precondition no longer holds (412-like), the request was refused before any effect,
  * or the outcome is unknown (transport/timeout/5xx after sending). */
-export class EffectTargetError extends Error {
-  constructor(readonly code: 'EFFECT_TARGET_PRECONDITION' | 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_UNKNOWN', options?: ErrorOptions) {
+export class EffectTargetError extends CodedError {
+  constructor(override readonly code: 'EFFECT_TARGET_PRECONDITION' | 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_UNKNOWN', options?: ErrorOptions) {
     super(code, options); this.name = 'EffectTargetError';
   }
 }

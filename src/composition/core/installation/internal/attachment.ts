@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import { relocateConfiguredProjectAttachment } from '#composition/core/attachment-lifecycle/index.js';
 import { applyConfiguredProviderSpendTemplate } from '#composition/core/provider-spend/index.js';
 import { inspectModelUsePreparation } from '#composition/core/model-use/index.js';
@@ -49,5 +50,5 @@ export async function registerFreshInstallation(root: string, scopeId: string, o
     const app = await configuredProjectAttachment(root, options), preview = await app.registrationPreview(root, scopeId);
     await app.register(root, scopeId, preview.planDigest);
     return { status: 'registered' as const };
-  } catch (error) { if ((error as { code?: unknown }).code === 'AUTHORITY_WITNESS_REQUIRED') return { status: 'witness-required' as const }; throw error; }
+  } catch (error) { if (isCodedError(error, 'AUTHORITY_WITNESS_REQUIRED')) return { status: 'witness-required' as const }; throw error; }
 }

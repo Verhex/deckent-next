@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -23,7 +24,7 @@ export interface DispatchInventoryEntry {
 export interface DispatchInventoryPage { readonly entries: readonly DispatchInventoryEntry[]; readonly nextAfter: string | null }
 export interface DispatchInventoryStore { listDispatches(query: DispatchInventoryQuery): Promise<DispatchInventoryPage> }
 export interface DispatchInventoryAuthorization { authorize(scopeId: string, principal: VerifiedPrincipal): Promise<void> }
-export class DispatchInventoryError extends Error { constructor() { super('DISPATCH_INVENTORY_LIMIT'); this.name = 'DispatchInventoryError'; } }
+export class DispatchInventoryError extends CodedError { constructor() { super('DISPATCH_INVENTORY_LIMIT'); this.name = 'DispatchInventoryError'; } }
 /** Moving keyset pagination, not a point-in-time snapshot. Refresh from null to discover earlier new keys. */
 export class DispatchInventoryApplication {
   constructor(private readonly store: DispatchInventoryStore, private readonly verifier: PrincipalVerifier,

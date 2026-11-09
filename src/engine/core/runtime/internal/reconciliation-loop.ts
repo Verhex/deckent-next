@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
 import type { ReconciliationRecoveryCommand, ReconciliationRecoveryPage } from './reconciliation-recovery.js';
@@ -11,8 +12,8 @@ export interface ReconciliationRuntimeLoopObserver {
   onPage(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
   onError(command: ReconciliationRecoveryCommand, error: unknown): void | Promise<void>;
 }
-export class ReconciliationRuntimeLoopError extends Error {
-  constructor(readonly code: 'RECONCILIATION_RUNTIME_LOOP_OPTIONS' | 'RECONCILIATION_RUNTIME_LOOP_RUNNING') {
+export class ReconciliationRuntimeLoopError extends CodedError {
+  constructor(override readonly code: 'RECONCILIATION_RUNTIME_LOOP_OPTIONS' | 'RECONCILIATION_RUNTIME_LOOP_RUNNING') {
     super(code); this.name = 'ReconciliationRuntimeLoopError';
   }
 }

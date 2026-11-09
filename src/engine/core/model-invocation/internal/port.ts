@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActor, ModelInvocationAuthorization,
   ModelInvocationClaim, ModelInvocationCommand, ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord, ModelInvocationNativeResponse, ModelInvocationProfile,
   ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt, ModelInvocationReceipt, ModelInvocationResponseContent,
@@ -51,6 +52,6 @@ export type ModelInvocationStoreErrorCode = 'MODEL_INVOCATION_COMMAND_CONFLICT' 
   | 'MODEL_INVOCATION_UNAVAILABLE' | 'MODEL_INVOCATION_OUTCOME_UNKNOWN' | 'MODEL_INVOCATION_ACTIVATION_CONFLICT' | 'MODEL_NOT_ACTIVATED' | 'MODEL_INVOCATION_REASONING_UNSUPPORTED'
   | 'MODEL_INVOCATION_ALLOCATION_CONFLICT' | 'MODEL_INVOCATION_QUOTA_EXHAUSTED' | 'MODEL_INVOCATION_CAPACITY_EXHAUSTED'
   | 'NATIVE_AGENT_RECONNECT_REQUIRED' | 'MODEL_INVOCATION_DELIVERY_UNAVAILABLE' | 'MODEL_INVOCATION_RESULT_LIMIT';
-export class ModelInvocationStoreError extends Error {
-  constructor(readonly code: ModelInvocationStoreErrorCode, readonly params?: Readonly<Record<string, string | number>>) { super(code); this.name = 'ModelInvocationStoreError'; }
+export class ModelInvocationStoreError extends CodedError {
+  constructor(override readonly code: ModelInvocationStoreErrorCode, override readonly params?: Readonly<Record<string, string | number>>) { super(code); this.name = 'ModelInvocationStoreError'; }
 }
