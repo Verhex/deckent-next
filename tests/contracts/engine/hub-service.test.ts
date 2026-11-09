@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, copyFileSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, copyFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it, type TestContext } from 'vitest';
+import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { HubModeratedApplication, HubServerError, hubKeyProofMessage, hubRosterMessage, hubModerationMessage, hubQueueId, verifyHubModerationEvidence,
   type HubModerationCommand, type HubServicePolicy, type HubServiceDependencies } from '#engine/core/hub-server/index.js';
 import { canonicalHubJson, type HubPackageSignature } from '#domain/core/hub/index.js';
@@ -237,16 +237,69 @@ it('rolls cancellation and policy loss back before publication or review can bec
   expect((await f.opened.store.get('@acme/invoice', '1.0.0'))?.envelope.signatures).toHaveLength(2);
 });
 
-it('backs up Hub v2 before service migration and refuses future versions or backup overwrite', async c => {
-  const f = await fixture(c); f.opened.close(); closers.splice(closers.indexOf(f.opened.close), 1);
-  const path = join(f.root, 'hub.sqlite'), db = new DatabaseSync(path);
-  db.exec('DROP TABLE hub_service_records; DROP TABLE hub_service_audit; PRAGMA user_version=2'); db.close();
-  const reopened = openHubStore(f.options); reopened.close(); const backup = `${path}.v2.bak`;
-  expect(statSync(backup).mode & 0o777).toBe(0o600);
-  const migrated = new DatabaseSync(path); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(HUB_STORE_SCHEMA_VERSION);
-  migrated.exec('PRAGMA user_version=99'); migrated.close(); expect(() => openHubStore(f.options)).toThrow(code('HUB_STORE_UNSAFE'));
-  copyFileSync(backup, path); const down = new DatabaseSync(path); expect(down.prepare('PRAGMA user_version').get()?.user_version).toBe(2); down.close();
-  expect(() => openHubStore(f.options)).toThrow(code('HUB_STORE_UNSAFE'));
+it('backs up Hub v2/v3 before additive v4 migration, preserves rows and indexed queries, and refuses unsafe opens', async c => {
+  const indexes = ['hub_package_latest', 'hub_package_page', 'hub_latest_feed', 'hub_public_audit'];
+  for (const version of [2, 3]) {
+    const f = await fixture(c); f.time(300);
+    await f.publish(); await f.publish('1.0.1'); await f.review(); await f.review('1.0.0', moderator2, f.mod2.context); await f.act('yank');
+    const read = () => f.opened.store.transaction(async tx => ({ latest: await tx.latest('@acme/invoice'), packages: await tx.packages('', 10),
+      feed: await tx.latestFeed(), audit: await tx.service!.publicAuditPage(0, 10) }));
+    const prepare = vi.spyOn(DatabaseSync.prototype, 'prepare');
+    let queries: string[];
+    let before: Awaited<ReturnType<typeof read>>;
+    try { before = await read(); queries = prepare.mock.calls.map(([sql]) => sql); } finally { prepare.mockRestore(); }
+    expect(before.latest?.manifest.version).toBe('1.0.1'); expect(before.packages).toHaveLength(2);
+    expect(before.feed?.entries).toHaveLength(1); expect(before.audit.length).toBeGreaterThan(0);
+    f.opened.close(); closers.splice(closers.indexOf(f.opened.close), 1);
+    const path = join(f.root, 'hub.sqlite'), db = new DatabaseSync(path), backup = `${path}.v${version}.bak`;
+    for (const index of indexes) db.exec(`DROP INDEX IF EXISTS ${index}`);
+    if (version === 2) db.exec('DROP TABLE hub_service_records; DROP TABLE hub_service_audit');
+    db.exec(`PRAGMA user_version=${version}`);
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(row => String(row.name));
+    const rows = (connection: DatabaseSync) => tables.map(table => connection.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
+    const original = rows(db); db.close();
+    expect(() => openHubStore({ ...f.options, scopeId: 'wrong' })).toThrow(code('HUB_STORE_UNSAFE'));
+    expect(existsSync(backup)).toBe(false);
+    const reopened = openHubStore(f.options); closers.push(reopened.close);
+    const migrated = new DatabaseSync(path);
+    try {
+      expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(4);
+      expect(HUB_STORE_SCHEMA_VERSION).toBe(4);
+      expect(migrated.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
+      expect(rows(migrated)).toEqual(original);
+      const plans = [
+        [queries.find(sql => sql.startsWith('SELECT version FROM hub_versions')), ['@acme/invoice'], indexes[0]],
+        [queries.find(sql => sql.startsWith('SELECT package_id,version,')), ['', 10], indexes[1]],
+        [queries.find(sql => sql.includes("json_type(record,'$.feed')")), [], indexes[2]],
+        [queries.find(sql => sql.startsWith('SELECT record,signer_key_id,signature')), [0, 10], indexes[3]],
+      ] as const;
+      for (const [sql, args, index] of plans) {
+        expect(sql).toBeDefined();
+        const detail = migrated.prepare(`EXPLAIN QUERY PLAN ${sql!}`).all(...args).map(row => String(row.detail)).join(' ');
+        expect(detail).toContain(`USING INDEX ${index}`); expect(detail).not.toContain('TEMP B-TREE');
+      }
+      const after = await reopened.store.transaction(async tx => ({ latest: await tx.latest('@acme/invoice'), packages: await tx.packages('', 10),
+        feed: await tx.latestFeed(), audit: await tx.service!.publicAuditPage(0, 10) }));
+      expect(after).toEqual({ ...before, ...(version === 2 ? { audit: [] } : {}) });
+      expect(statSync(backup).mode & 0o777).toBe(0o600);
+      const copy = new DatabaseSync(backup, { readOnly: true });
+      try {
+        expect(copy.prepare('PRAGMA user_version').get()?.user_version).toBe(version);
+        expect(copy.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
+        expect(rows(copy)).toEqual(original);
+        expect(copy.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name IN (?,?,?,?)").all(...indexes)).toEqual([]);
+      } finally { copy.close(); }
+      reopened.close(); closers.splice(closers.indexOf(reopened.close), 1);
+      const backupBytes = statSync(backup);
+      const again = openHubStore(f.options); again.close();
+      expect(statSync(backup)).toEqual(backupBytes);
+      expect(existsSync(`${path}.v4.bak`)).toBe(false);
+      migrated.exec('PRAGMA user_version=99');
+    } finally { migrated.close(); }
+    expect(() => openHubStore(f.options)).toThrow(code('HUB_STORE_UNSAFE'));
+    copyFileSync(backup, path);
+    expect(() => openHubStore(f.options)).toThrow(code('HUB_STORE_UNSAFE'));
+  }
 });
 
 it('recovers a proved replacement key only after a separate moderator approves and revokes the lost key', async c => {

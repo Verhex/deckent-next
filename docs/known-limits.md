@@ -787,8 +787,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
   before-upgrade instead of daily.
 - **Downgrading from alpha.56 requires the pre-switch backup.** Alpha.55.1 refuses the v73 installation ledger before
-  writing (`ATTEMPT_STORE_VERSION`); it cannot open the upgraded database. An existing Hub v1/v2 store is backed up when it
-  is upgraded to v3; a new v3 store has nothing to back up. A policy rollback removes only the content-equal v18 delta, leaving earlier v16/v17 grants and
+  writing (`ATTEMPT_STORE_VERSION`); it cannot open the upgraded database. An existing Hub v1/v2/v3 store keeps an exclusive private pre-switch backup when it
+  is upgraded to v4, which adds query indexes without rewriting records; a new v4 store has nothing to back up. Older Hub binaries refuse v4; restore the matching backup rather than lowering the schema version. A policy rollback removes only the content-equal v18 delta, leaving earlier v16/v17 grants and
   customized rows. *Workaround:* restore the matching pre-switch data and policy; switching a binary alone is insufficient.
 - **A lost worker can keep its slot until custody is resolved.** Nervous and recovery start `off`; seed rules stay
   provisional until a person promotes a measured rule and grants its recovery action. Alpha.56 supplies

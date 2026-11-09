@@ -780,7 +780,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
   da günlük yerine yükseltme öncesini seçin.
 - **Alpha.56'dan eski sürüme dönüş geçiş öncesi yedeği ister.** Alpha.55.1 v73 kurulum defterini yazmadan reddeder
-  (`ATTEMPT_STORE_VERSION`); yükseltilmiş veritabanını açamaz. Var olan Hub v1/v2 deposu v3'e yükseltilirken yedeklenir; yeni açılan v3 deposunda yedeklenecek bir şey yoktur.
+  (`ATTEMPT_STORE_VERSION`); yükseltilmiş veritabanını açamaz. Var olan Hub v1/v2/v3 deposu v4'e yükseltilirken üzerine yazılmayan özel geçiş öncesi yedek tutulur. v4, kayıtları yeniden yazmadan sorgu indeksleri ekler; yeni açılan v4 deposunda yedeklenecek bir şey yoktur. Eski Hub binary'leri v4'ü reddeder; şema sürümünü düşürmek yerine eşleşen yedeği geri yükleyin.
   Politika geri alma yalnız içeriği eşit v18 farkını kaldırır; önceki v16/v17 hakları ve özelleştirilmiş satırlar kalır.
   *Yol:* eşleşen geçiş öncesi veri/politikayı geri yükleyin; yalnız binary değiştirmek yetmez.
 - **Kaybolan işçi saklama çözülene kadar slotunu tutabilir.** Nervous ve kurtarma `off` başlar; başlangıç kuralları
