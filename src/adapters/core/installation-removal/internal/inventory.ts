@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
+import { persistedString, persistedInteger, productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin, ErrorRegistry, CodedError, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path';
@@ -83,7 +83,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   const walk = async (directory: string, depth: number): Promise<void> => {
     for (const entry of (await readdir(directory)).sort()) {
       const path = join(directory, entry);
-      if (++seen > bounds.maxFiles || depth > bounds.maxDepth) throw new Error('UNINSTALL_ARCHIVE_LIMIT');
+      if (++seen > bounds.maxFiles || depth > bounds.maxDepth) throw new CodedError('UNINSTALL_ARCHIVE_LIMIT');
       if (taken.has(path) || project.caches.some(cache => pathWithin(cache, path))) continue;
       const info = await lstat(path);
       if (info.isDirectory()) { await walk(path, depth + 1); continue; }

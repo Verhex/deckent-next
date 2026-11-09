@@ -86,6 +86,6 @@ export interface UninstallResult {
   readonly failureCode?: string;
 }
 export class UninstallError extends Error {
-  constructor(readonly code: 'UNINSTALL_INVALID' | 'UNINSTALL_PLAN_CHANGED' | 'UNINSTALL_UNSUPPORTED' | 'UNINSTALL_BACKUP_COVERAGE'
+  constructor(readonly code: 'UNINSTALL_INVALID' | 'UNINSTALL_PLAN_CHANGED' | 'UNINSTALL_UNSUPPORTED'
     | 'UNINSTALL_OWNERSHIP' | 'UNINSTALL_PATH_UNSAFE') { super(code); this.name = 'UninstallError'; }
 }

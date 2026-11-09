@@ -226,7 +226,10 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   const set = join(base, 'recovery/set'); await mkdir(dirname(set), { mode: 0o700 }); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
   const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
   const verified = await verifyBackupSet(set, phrase, limits);
-  const { members: bound } = await createUninstallArchive(verified, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits); verified.close();
+  const ids = { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) };
+  // B2-14: a cut line that is gone refuses with a registered code before anything is written.
+  await expect(createUninstallArchive(verified, [project], [{ ...members[0]!, line: 'ABSENT' }], ids, phrase, limits)).rejects.toMatchObject({ code: 'UNINSTALL_ARCHIVE_CHANGED' });
+  const { members: bound } = await createUninstallArchive(verified, [project], members, ids, phrase, limits); verified.close();
   expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
   // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
   const target = new InstallationDataRemovalTarget('fixture', members, []), ref = { kind: target.kind, id: 'conversation-data' };
@@ -238,4 +241,6 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   await rm(script);
   await expect(restoreUninstallArchive(set, [project], phrase, limits)).rejects.toMatchObject({ code: 'UNINSTALL_RESTORE_KEPT', params: { paths: history } });
   expect((await lstat(script)).mode & 0o777).toBe(0o755); expect(await readFile(history, 'utf8')).toBe('NEWER');
+  // B2-14: an archived path outside the restore roots stays the backup owner's coverage refusal, not an archive code.
+  await expect(restoreUninstallArchive(set, [join(base, 'elsewhere')], phrase, limits)).rejects.toMatchObject({ code: 'BACKUP_COVERAGE_INCOMPLETE' });
 });
