@@ -38,12 +38,19 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('negative 4 + producer→surface: releases container and clone only after the verified patch is retained; consumers keep the exact content', async () => {
     const f = await workspacePatchFixture({ roots, cleanup }); await policy(f, RELEASE);
     const worker = await f.run(); await chmod(join(worker, 'note.txt'), 0o755);
+    const { prepareNativeWorkerInputs } = await import('../../../src/composition/core/execution/internal/worker-inputs.js');
+    const receipt = await f.runtime.artifacts.put('s', Buffer.from('settlement-owned-input'));
+    const input = await f.runtime.artifacts.prepareReadOnlyFile('s', receipt);
+    const inputs = await prepareNativeWorkerInputs({ inputs: [{ name: 'settled', sourceAttemptId: 'producer', receipt, path: input.path }] }, 's', f.project, worker, f.runtime.layout,
+      { allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 8, maxFileBytes: 64, maxTotalBytes: 128, timeoutMs: 5000 }, 64, 4096);
+    const copy = inputs.views[0]!.source; expect(await readFile(copy, 'utf8')).toBe('settlement-owned-input');
     const record = (await f.runtime.store.loadBoundDispatch(f.identity))!;
     expect(await container(record.terminal!.handle)).toBe(true); expect(await present(dirname(worker))).toBe(true);
     const prepared = await f.prepare();
     expect(prepared.custody).toEqual(released('removed', 'removed'));
     expect(await container(record.terminal!.handle)).toBe(false);
     expect(await present(dirname(worker))).toBe(false);
+    expect(await present(copy)).toBe(false); expect(await readFile(input.path, 'utf8')).toBe('settlement-owned-input');
     expect(prepared.patch.changes.map(change => change.path)).toEqual(['added.txt', 'note.txt', 'removed.txt']);
     expect(prepared.patch.changes[1]).toMatchObject({ before: { mode: '100644', text: 'before\n' }, after: { mode: '100755', text: 'after\n' } });
     const { custody: _custody, ...patchView } = prepared; void _custody;
