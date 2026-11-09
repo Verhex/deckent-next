@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
-import { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, type DispatchInventoryInput, type DispatchInventoryStore } from '#engine/index.js';
+import { verifiedPrincipal, DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, type DispatchInventoryInput, type DispatchInventoryStore } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from '#composition/core/scoped-request/index.js';
 
@@ -32,7 +32,7 @@ async function inspect(projectRoot: string, input: unknown, options: ConfigLoadO
     },
   };
   const policy = new DispatchInventoryPolicyAuthorization({ async load() { return document; } });
-  const app = new DispatchInventoryApplication(store, { async verify() { return principal; } }, policy, config.inspection.maxPageSize);
+  const app = new DispatchInventoryApplication(store, verifiedPrincipal(principal), policy, config.inspection.maxPageSize);
   const page = await app.inspect(query);
   return Object.freeze({ schemaVersion: 1 as const, layout, page });
 }

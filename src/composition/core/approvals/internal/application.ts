@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
+import { verifiedPrincipal, ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
   resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities,
   EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type EffectTarget } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity } from '#adapters/index.js';
@@ -33,7 +33,7 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
         refused: (event: AuditEvent) => { new AuditApplication(audit!, integrity).record(event); } };
       const producers = action !== 'decide' ? [] : resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, decisions,
         { scopeId: parsed.scopeId, principal, policyRevision: document.revision, atMs: clock.sample().wallMs }, event => { new AuditApplication(audit!, integrity).record(event); });
-      const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
+      const app = new ApprovalApplication(journal.store, verifiedPrincipal(principal), sessions,
         contextPolicySource(context, async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
           : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document), integrity, clock,
         'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers, channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });

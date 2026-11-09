@@ -1,5 +1,5 @@
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
@@ -32,7 +32,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
         const producers = resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, undefined,
           { scopeId, principal, policyRevision: document.revision, atMs: clock.sample().wallMs }, event => { audit.record(event); });
         return new ApprovalApplication(journal.store,
-        { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
+        verifiedPrincipal(principal), sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
       return await use({ administration, approve, policy: source, effects, serviceIdentity: config.service.identity }, principal);

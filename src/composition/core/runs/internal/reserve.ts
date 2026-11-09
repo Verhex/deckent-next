@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteAttemptStore, selectWorkTarget } from '#adapters/index.js';
-import { assertApprovalPolicyCurrent, TaskApprovalAdmission, authenticate, policyGatesTaskAdmission, executionResourceAuthorization, RunPolicyAuthorization, RunReservationApplication, runReservationCommandSchema, type RunReservationCommand } from '#engine/index.js';
+import { verifiedPrincipal, assertApprovalPolicyCurrent, TaskApprovalAdmission, authenticate, policyGatesTaskAdmission, executionResourceAuthorization, RunPolicyAuthorization, RunReservationApplication, runReservationCommandSchema, type RunReservationCommand } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -9,7 +9,7 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
   try {
     const command = runReservationCommandSchema.parse(input);
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
-    const verifier = { async verify() { return principal; } };
+    const verifier = verifiedPrincipal(principal);
     const source = contextPolicySource({ layout, config });
     const pinnedSource = contextPolicySource({ layout, config }, async () => assertApprovalPolicyCurrent(document, await source.load()));
     const authorization = new RunPolicyAuthorization(pinnedSource);

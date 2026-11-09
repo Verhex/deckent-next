@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
-import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
+import { verifiedPrincipal, authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
 import { executeConfiguredTask, settleConfiguredEnvironmentProbes, withNativeCliWorkerOptions } from '#composition/core/execution/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -19,7 +19,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
     async function withRunStore<T>(request: RunQuery, work: (store: Awaited<ReturnType<typeof openSqliteAttemptStore>>) => Promise<T>) {
       const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
       await new RunPolicyAuthorization(contextPolicySource({ layout, config }))
-        .authorize('inspect', request, await authenticate({ async verify() { return principal; } }, undefined, request.scopeId));
+        .authorize('inspect', request, await authenticate(verifiedPrincipal(principal), undefined, request.scopeId));
       const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await work(store); } finally { store.close(); }
     }

@@ -1,5 +1,5 @@
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, RunPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema, localRunOffered, localRunFallbackClosed } from '#engine/index.js';
+import { verifiedPrincipal, AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, RunPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema, localRunOffered, localRunFallbackClosed } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAttemptStore, readIdentityProfileConfig } from '#adapters/index.js';
 import { SystemTrustedClock, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -24,7 +24,7 @@ async function poolControl<T>(root: string, input: unknown, options: ConfigLoadO
     const integrity = write ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null, clock = new SystemTrustedClock();
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
-      const args = [{ async verify() { return principal; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }),
+      const args = [verifiedPrincipal(principal), new PoolControlPolicyAuthorization({ async load() { return document; } }),
         store, (audit: import('#engine/index.js').AuditStore) => new AuditApplication(audit, integrity!), () => clock.sample().wallMs, config.admission?.poolId ?? null] as const;
       return await use(new ExecutionPoolHoldApplication(...args), new ExecutionPoolCapacityApplication(...args), parsed, new QuotaReleaseApplication(...args));
     } finally { store.close(); }

@@ -1,6 +1,6 @@
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
-import { TaskEvaluationApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserEvaluatorFor, assertBeuserAccess, type BeuserContext } from '#engine/index.js';
+import { verifiedPrincipal, TaskEvaluationApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserEvaluatorFor, assertBeuserAccess, type BeuserContext } from '#engine/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -17,7 +17,7 @@ export async function evaluateConfiguredBeuserTask(root: string, context: Beuser
   try {
     const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });
     const run = await store.loadRun(identity.scopeId, identity.runId);
-    const app = new TaskEvaluationApplication(store, { verify: async () => principal }, authorization, createInstalledTerminalEvaluator(store), artifacts,
+    const app = new TaskEvaluationApplication(store, verifiedPrincipal(principal), authorization, createInstalledTerminalEvaluator(store), artifacts,
       { maxEvidenceItems: 2, maxTotalBytes: c.config.artifacts.maxBytes }, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs });
     return await app.execute({ schemaVersion: 1, commandId, identity, expectedRevision: run!.revision });
   } finally { store.close(); }

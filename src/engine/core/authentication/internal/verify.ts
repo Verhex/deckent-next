@@ -2,6 +2,10 @@ import { verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.j
 
 /** Composition installs a trusted verifier appropriate to this transport. Credentials never enter receipts. */
 export interface PrincipalVerifier { verify(credential: unknown): Promise<unknown> }
+/** Carries a principal already verified by the trusted caller; authenticate still validates shape and scope. */
+export function verifiedPrincipal(principal: VerifiedPrincipal): PrincipalVerifier {
+  return { async verify() { return principal; } };
+}
 export class AuthenticationError extends Error {
   constructor(readonly code: 'AUTHENTICATION_REQUIRED' | 'AUTHENTICATION_SCOPE_DENIED') { super(code); this.name = 'AuthenticationError'; }
 }

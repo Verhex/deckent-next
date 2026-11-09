@@ -454,7 +454,8 @@
         "src/engine/core/policy",
         "src/platform/core/config",
         "src/platform/core/managed-files",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/engine/core/authentication"
       ],
       "plan": "EXECUTION"
     },
@@ -780,7 +781,8 @@
         "src/adapters/core/autonomy-shadow",
         "src/capabilities/core/native-agent-execution",
         "src/engine/core/proposal-upgrade",
-        "src/adapters/core/native-cli-worker"
+        "src/adapters/core/native-cli-worker",
+        "src/engine/core/authentication"
       ],
       "plan": "EXECUTION"
     },
@@ -1737,7 +1739,8 @@
         "src/composition/core/model-use",
         "src/adapters/core/sqlite-read-view",
         "src/adapters/core/file-lock",
-        "src/composition/core/backup"
+        "src/composition/core/backup",
+        "src/engine/core/authentication"
       ],
       "plan": "INSTALLATION"
     },
@@ -1922,7 +1925,8 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/provider-connect",
         "src/engine/core/model-use",
-        "src/composition/core/model-use"
+        "src/composition/core/model-use",
+        "src/engine/core/authentication"
       ],
       "plan": "PROVIDERS"
     },
@@ -2148,7 +2152,8 @@
         "src/platform/core/integrity",
         "src/platform/core/errors",
         "src/engine/core/oauth-connection",
-        "src/composition/core/model-use"
+        "src/composition/core/model-use",
+        "src/engine/core/authentication"
       ],
       "plan": "PROVIDERS"
     },
@@ -2549,7 +2554,8 @@
         "src/engine/core/dispatch",
         "src/engine/core/monitor",
         "src/adapters/core/native-cli-worker",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/authentication"
       ],
       "plan": "EXECUTION"
     },
@@ -2667,7 +2673,8 @@
         "src/adapters/core/git-workspace",
         "src/composition/core/operations",
         "src/engine/core/effect",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/engine/core/authentication"
       ],
       "plan": "SECURITY"
     },
@@ -3310,7 +3317,8 @@
         "src/composition/core/scoped-request",
         "src/engine/core/decision",
         "src/platform/core/clock",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/authentication"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -3671,7 +3679,8 @@
         "src/engine/core/runtime",
         "src/adapters/core/worker-image",
         "src/adapters/core/provider-siwc",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/engine/core/authentication"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -4277,7 +4286,8 @@
         "src/engine/core/audit",
         "src/engine/core/run-proposal",
         "src/adapters/core/audit-store",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/authentication"
       ],
       "plan": "MEMORY"
     },
@@ -4296,7 +4306,8 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/domain/core/principal",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/engine/core/authentication"
       ],
       "plan": "MEMORY"
     },
@@ -4399,7 +4410,8 @@
         "src/domain/core/principal",
         "src/domain/core/primitives",
         "src/domain/core/memory",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/authentication"
       ],
       "plan": "LEARNING"
     },
@@ -5064,7 +5076,8 @@
         "src/engine/core/model-activation",
         "src/platform/core/config-fields",
         "src/platform/core/errors",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/engine/core/authentication"
       ],
       "plan": "EXECUTION"
     },
@@ -5217,7 +5230,8 @@
         "src/domain/core/policy",
         "src/platform/core/config",
         "src/platform/core/host",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/engine/core/authentication"
       ],
       "plan": "INSTALLATION"
     },
@@ -5420,7 +5434,7 @@
       "engine": 60000,
       "adapters": 42233,
       "surfaces": 45000,
-      "composition": 13656
+      "composition": 13655
     },
     "totalSrcLines": 200000,
     "testCases": 8976,

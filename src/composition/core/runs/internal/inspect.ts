@@ -1,7 +1,7 @@
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, GIT_QUEUE_DISPLAY, SqliteTargetQueue, inventoryReadsPerCall, openSqliteLedgerReadOnly } from '#adapters/index.js';
-import { DispatchPolicyAuthorization, RunInspectionApplication, observeRunQueue, queueObservationReadLimit, runQuerySchema, RunPolicyAuthorization, type DispatchIdentityAuthorization, type RunQuery } from '#engine/index.js';
+import { verifiedPrincipal, DispatchPolicyAuthorization, RunInspectionApplication, observeRunQueue, queueObservationReadLimit, runQuerySchema, RunPolicyAuthorization, type DispatchIdentityAuthorization, type RunQuery } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { observeConfiguredRunResults } from './result-view.js';
@@ -18,7 +18,7 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const store = inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     const authorization = new DispatchPolicyAuthorization(contextPolicySource({ layout, config }));
-    const app = new RunInspectionApplication(store, { async verify() { return principal; } }, new RunPolicyAuthorization({ async load() { return document; } }), { store,
+    const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,
       artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
     const inspected = await app.inspectWithModels(query);

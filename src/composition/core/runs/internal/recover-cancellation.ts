@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { SystemTrustedClock, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
-import { authenticate, cancellationRecoveryCommandSchema, CancellationRecoveryApplication, DispatchInventoryPolicyAuthorization,
+import { verifiedPrincipal, authenticate, cancellationRecoveryCommandSchema, CancellationRecoveryApplication, DispatchInventoryPolicyAuthorization,
   RunPolicyAuthorization, type CancellationRecoveryCommand } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -14,7 +14,7 @@ export async function recoverConfiguredCancellations(projectRoot: string, input:
   try {
     const command = cancellationRecoveryCommandSchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
-    const verifier = { async verify() { return principal; } };
+    const verifier = verifiedPrincipal(principal);
     const source = contextPolicySource({ layout, config });
     const scope = new DispatchInventoryPolicyAuthorization(source);
     const actor = await authenticate(verifier, undefined, command.scopeId);

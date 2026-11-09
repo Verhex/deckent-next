@@ -3,7 +3,7 @@ import { withPlanningSpending } from './planning-spending.js';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation, withLocalPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
-import { agentSelectionSummary, assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
+import { verifiedPrincipal, agentSelectionSummary, assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { readConfiguredRunBudget, classifyConfiguredRunSpending } from './budget.js';
@@ -17,7 +17,7 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
     const result = await withConfiguredRunAdmission(projectRoot, context, options, async (runs, authority, _warnings, agents) => {
       const store = await openSqliteRunProposalStore(await context.path(), context.config.storage.sqlite);
       try {
-        return await new RunProposalApplication(store, { verify: async () => context.principal }, authority, runs, {
+        return await new RunProposalApplication(store, verifiedPrincipal(context.principal), authority, runs, {
           registry: configuredProposalRegistry(context.config.admission), clock: new SystemTrustedClock(),
           loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options), selectAgents: async value => agentSelectionSummary(await agents(value.graph, context.config.admission?.registry, value.scopeId)),
           classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options,
@@ -52,7 +52,7 @@ export async function inspectConfiguredRunProposal(projectRoot: string, input: R
     const result = await new RunProposalInspectionApplication({ async loadProposal(scopeId, commandId) {
       const reader = await openSqliteRunProposalReader(await context.path(), context.config.storage.sqlite);
       try { return await reader.loadProposal(scopeId, commandId); } finally { reader.close(); }
-    } }, { verify: async () => context.principal },
+    } }, verifiedPrincipal(context.principal),
     new RunPolicyAuthorization(contextPolicySource(context)), configuredProposalRegistry(context.config.admission)).inspect(query);
     return result ? await withPlanningSpending(projectRoot, result, options) : null;
   } catch (error) { throw queryFailure(error); }

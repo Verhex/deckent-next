@@ -1,11 +1,11 @@
 import { SystemTrustedClock, getConfigKnownSecrets } from '#platform/index.js';
 import { TargetQueueError } from '#domain/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, type LocalPeerIdentity } from '#adapters/index.js';
-import { WorkspacePatchApplication, WorkspaceIntegrationInspection, createWorkspaceQueueEffects, targetQueueKey, type TargetBatch } from '#engine/index.js';
+import { verifiedPrincipal, WorkspacePatchApplication, WorkspaceIntegrationInspection, createWorkspaceQueueEffects, targetQueueKey, type TargetBatch } from '#engine/index.js';
 import { queuePreparation } from './queue-prepare.js';
 import type { QueueContext } from './queue-context.js';
 export async function queueEffects(c: QueueContext, peer: LocalPeerIdentity | undefined, consent: (operation: TargetBatch['operation']) => Promise<void>) {
-  const store = await c.openAttempts(), verifier = { async verify() { return c.principal; } }, clock = new SystemTrustedClock();
+  const store = await c.openAttempts(), verifier = verifiedPrincipal(c.principal), clock = new SystemTrustedClock();
   return createWorkspaceQueueEffects({ ...c, maxBytes: c.config.artifacts.maxBytes, registry: c.config.admission?.registry ?? null,
     bar: c.config.execution!.adoption.verification, allowedTargets: c.config.execution!.adoption.targets }, {
     store, clock, consent, known: getConfigKnownSecrets(c.config), source: new GitRunWorkspaceProvider(new GitWorkspaceBroker(c.git)),

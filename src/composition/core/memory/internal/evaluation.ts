@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MemoryEvaluationApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryCatalogFacts, memoryCatalogKey, memoryEvaluationDue, memoryEvaluationResolver,
+import { verifiedPrincipal, MemoryEvaluationApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryCatalogFacts, memoryCatalogKey, memoryEvaluationDue, memoryEvaluationResolver,
   memoryEvaluationSpendOf, memoryEvaluatorFor, memoryEvaluatorReference, memoryEvaluatorRows, memoryEvaluatorView, type MemoryCatalogFact, type MemoryEvaluatorPorts, type MemoryEvaluatorRow,
   type RoleModelSources } from '#engine/index.js';
 import { extractOpenAiChatTextFromInvocation, memoryKeyedDigest, openLocalIntegrityAuthority, openMemoryEvaluationSourceReader, openSqliteMemoryJournalStore, openSqliteModelActivationReader,
@@ -67,7 +67,7 @@ export function prepareConfiguredMemoryEvaluation(projectRoot: string, options: 
         runId => view({ kind: 'run', id: runId }, 'inspect'));
       try {
         const openStore = async (access: 'read' | 'write') => openSqliteMemoryJournalStore(path, c.config.storage.sqlite, integrity, access);
-        const deps = { verifier: { verify: async () => evaluator }, authorize: (...args: Parameters<MemoryPolicyAuthorization['authorize']>) => policy.authorize(...args),
+        const deps = { verifier: verifiedPrincipal(evaluator), authorize: (...args: Parameters<MemoryPolicyAuthorization['authorize']>) => policy.authorize(...args),
           keyedDigest: memoryKeyedDigest(integrity), openStore, automation: c.config.memoryAutomation.overlay, now: Date.now, eventId: randomUUID, evaluationSources: sources,
           purgeJournal: memoryPurgeJournalOf(c.layout, async () => integrity) };
         const journal = new MemoryJournalApplication({ ...deps, resolveEvaluation: memoryEvaluationResolver(openStore) });

@@ -6,7 +6,7 @@ import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdent
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
-import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
+import { verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
@@ -38,7 +38,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, ownerUid, principal, path, document } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const language = resolveLocale(undefined, options.env ?? process.env, config.language); // D4: the person's report language for every worker path
-    const os = userInfo(); const verifier = { async verify() { return principal; } };
+    const os = userInfo(); const verifier = verifiedPrincipal(principal);
     const policy = contextPolicySource({ layout, config, ownerUid }), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const audit = async (event: unknown) => { const ledger = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(ledger, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { ledger.close(); } };
