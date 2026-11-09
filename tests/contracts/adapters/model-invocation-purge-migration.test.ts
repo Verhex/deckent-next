@@ -76,7 +76,7 @@ function inventory(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     return { version: db.prepare('PRAGMA user_version').get()?.user_version,
-      invocations: db.prepare('SELECT * FROM model_invocations ORDER BY invocation_id').all(),
+      invocations: db.prepare('SELECT scope_id,command_id,invocation_id,allocation_id,state,record FROM model_invocations ORDER BY invocation_id').all(),
       contents: db.prepare('SELECT * FROM model_invocation_contents ORDER BY invocation_id').all(),
       tables: db.prepare("SELECT name,sql FROM sqlite_schema WHERE type='table' AND name LIKE 'model_invocation_content%' ORDER BY name").all() };
   } finally { db.close(); }

@@ -1,4 +1,4 @@
-import { assertInvocationResourceCapacity } from './resource-capacity.js';
+import { assertInvocationResourceCapacity, invocationResourceKey } from './resource-capacity.js';
 import { recordInvocationPlanUsage } from './plan-usage.js';
 import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
@@ -81,8 +81,8 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
         writeModelAllocation(this.db, checkpoint, after);
         const receipt = createModelInvocationClaimReceipt(admission);
         const record = encoded(receipt);
-        this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record) VALUES(?,?,?,?,?,?)')
-          .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record);
+        this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record,resource_key) VALUES(?,?,?,?,?,?,?)')
+          .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record, invocationResourceKey(this.db, profile));
         const control = parseModelInvocationControlRecord({ schemaVersion: 1, claim: receipt.claim, reference: receipt.request.reference,
           send: { state: 'pending' }, cancellation: null });
         this.db.prepare(`INSERT INTO model_invocation_controls(scope_id,invocation_id,send_state,record) VALUES(?,?,?,?)`)
@@ -128,8 +128,8 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     writeModelAllocation(this.db, checkpoint, parseModelAllocation({ ...allocation, inFlight: allocation.inFlight - 1 }));
     if (next.content) this.db.prepare(`INSERT INTO model_invocation_contents(scope_id,invocation_id,record) VALUES(?,?,?)`)
       .run(current.receipt.claim.scopeId, current.receipt.claim.invocationId, encoded(next.content));
-    const updated = this.db.prepare(`UPDATE model_invocations SET state=?,record=? WHERE scope_id=? AND invocation_id=? AND state='claimed'`)
-      .run(outcome.state, encoded(next.receipt), current.receipt.claim.scopeId, current.receipt.claim.invocationId);
+    const updated = this.db.prepare(`UPDATE model_invocations SET state=?,record=?,resource_key=? WHERE scope_id=? AND invocation_id=? AND state='claimed'`)
+      .run(outcome.state, encoded(next.receipt), invocationResourceKey(this.db, next.receipt.profile), current.receipt.claim.scopeId, current.receipt.claim.invocationId);
     if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
   async loadControl(scopeId: string, invocationId: string) {
