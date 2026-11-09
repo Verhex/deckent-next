@@ -39,5 +39,5 @@ export function decideDispatchLaunch(input: LaunchRequest, state: DispatchLaunch
     : { ...dispatch, launch: 'granted', grant: { generation: identity.generation, grantedAt: now,
       principal: { id: principal.id, issuer: principal.issuer, subject: principal.subject } } });
   const decision = Object.freeze({ kind: cancelled ? 'prevented' as const : 'granted' as const, record });
-  return Object.freeze({ decision, projectedRun: cancelled ? preventRunAttempt(run, run.revision, attempt, timing) : null });
+  return Object.freeze({ decision, projectedRun: cancelled ? preventRunAttempt(run, run.revision, attempt, 'denied', timing) : null });
 }

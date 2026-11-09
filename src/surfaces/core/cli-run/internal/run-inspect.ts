@@ -2,6 +2,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
+import { hasLiveWork } from '#domain/index.js';
 import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderTaskAgentLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { runStateWord, runTitle, shownId } from './run-human.js';
@@ -86,7 +87,7 @@ function holdLines(run: RunView, locale: Locale): string[] {
 }
 function cancelledBeforeLaunch(run: RunView): boolean {
   const waiting = new Set((run.quotaWaits ?? []).map(wait => wait.taskId));
-  return run.tasks.some(task => task.phase === 'cancelled') && run.tasks.every(task => !task.unresolvedEffects && !['active', 'evaluating', 'reconciling'].includes(task.phase)
+  return run.tasks.some(task => task.phase === 'cancelled') && run.tasks.every(task => !hasLiveWork(task)
     && (task.phase !== 'cancelled' || (task.cancellation?.reason === 'prevented-before-launch' && !waiting.has(task.id))));
 }
 export function renderRunInspect(data: InspectData, locale: Locale, verbose: boolean, notice: readonly string[] = []): string {

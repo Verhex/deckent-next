@@ -16,7 +16,7 @@ const NOT_CONFIRMED = 'worker termination is not confirmed';
 
 it('a Run cancelled before its only attempt was dispatched says no worker was started (EN/TR), not "termination not confirmed"', () => {
   const cancelling = requestRunCancellation(reserved(), 1, timing);
-  const prevented = preventRunAttempt(cancelling, cancelling.revision, requestAttemptCancellation(createAttempt(attemptIdentity), 0), timing);
+  const prevented = preventRunAttempt(cancelling, cancelling.revision, requestAttemptCancellation(createAttempt(attemptIdentity), 0), 'none', timing);
   expect(prevented.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
   const en = inspect(prevented), tr = inspect(prevented, 'tr');
   expect(en).not.toContain(NOT_CONFIRMED); expect(en).toContain('Cancellation: request recorded; no worker was started');
@@ -29,7 +29,7 @@ it('negative: a worker in flight or one that ran under the cancellation keeps th
   expect(inspect(running)).toContain(NOT_CONFIRMED);
   // A worker that exited and was settled under the cancellation.
   const attempt = applyAttemptObservation(requestAttemptCancellation(createAttempt(attemptIdentity), 0), { protocolVersion: 1, identity: attemptIdentity, sequence: 1, eventId: 'x', result: { kind: 'exited', exitCode: 137 } }, 1);
-  const observed = observeRunAttempt(requestRunCancellation(reserved(), 1, timing), 2, attempt), settled = settleCancelledRunAttempt(observed, 3, attempt, timing);
+  const observed = observeRunAttempt(requestRunCancellation(reserved(), 1, timing), 2, attempt), settled = settleCancelledRunAttempt(observed, 3, attempt, 'exited', timing);
   expect(settled.progress[0]!.phase).toBe('cancelled'); expect(inspect(settled)).toContain(NOT_CONFIRMED);
   // No cancellation: unchanged.
   expect(inspect(reserved())).toContain('Cancellation: no request recorded.');

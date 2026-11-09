@@ -3,7 +3,7 @@ import { readQuotaHolds, readRunAcceptanceMetrics, readRunAcceptanceEvaluations,
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
+import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, RUN_OPEN_PHASES, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerIndex, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
@@ -17,7 +17,7 @@ export interface MonitorAttemptFiles {
   readonly failed: boolean; readonly open: boolean; readonly finished: boolean; readonly sealed: boolean;
 }
 
-const OPEN_PHASES = "('pending','active','evaluating','reconciling','awaiting-decision')";
+const OPEN_PHASES = `(${[...RUN_OPEN_PHASES].map(phase => `'${phase}'`).join(',')})`;
 const idsSchema = z.array(z.string()).max(100_000).readonly();
 /** M-VIS (PB-POOL-VIS): `scope` limits what is read. Runs, their receipts and approvals only of `scopeIds`; pool rows and pool occupancy only of
  * `poolIds` (occupancy still counts every Run in an admitted pool, since a pool is installation-wide). Absent: the whole ledger (single-Run reads). */

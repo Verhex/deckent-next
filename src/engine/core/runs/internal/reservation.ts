@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { clientCommandIdSchema, counterSchema, identitySchema, policyHasResourceRules, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { clientCommandIdSchema, counterSchema, identitySchema, policyHasResourceRules, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, parseRun, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { diagnoseReservationWave, planSchedulingWave, type ResourceCapacityInput } from '#engine/core/scheduling/index.js';
@@ -27,7 +27,7 @@ export interface ReservationRuntime { now(): number; attemptId(taskId: string): 
 export function policyGatesTaskAdmission(policy: unknown): boolean { return policyHasResourceRules(policy, 'task'); }
 const recordedReservation = runReservationSchema.extend({ action: z.literal('reserve-run-tasks') }).strict();
 function checkedSnapshot(input: unknown) {
-  try { const run = runSnapshotSchema.parse(input); assertRunExecution(run.graph, run.execution); return run; }
+  try { const run = parseRun(input); assertRunExecution(run.graph, run.execution); return run; }
   catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
 }
 

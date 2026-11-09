@@ -124,7 +124,7 @@ it('REVISE 2695: custody before the probe keeps the slot; cancel cannot settle, 
   const cancelling = requestRunCancellation(held, held.revision, timing);
   expect(cancelling.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: true }); expect(cancelling.state.kind).not.toBe('terminal');
   expect(measureTaskOccupancy(cancelling.progress).execution).toBe(1);
-  expect(() => preventRunAttempt(cancelling, cancelling.revision, requestAttemptCancellation(createAttempt(identity), 0), timing)).toThrow('RUN_ATTEMPT_CONFLICT');
+  expect(() => preventRunAttempt(cancelling, cancelling.revision, requestAttemptCancellation(createAttempt(identity), 0), 'none', timing)).toThrow('RUN_ATTEMPT_CONFLICT');
   expect(() => observeRunAttempt(held, held.revision, applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'started' }), 0))).toThrow('RUN_ATTEMPT_CONFLICT');
   expect(() => observeRunAttemptClosure(held, held.revision, refused(), timing.now, timing.timeoutMs)).toThrow('RUN_ATTEMPT_CONFLICT');
   expect(() => custody(held)).toThrow('RUN_ATTEMPT_CONFLICT');

@@ -5276,12 +5276,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42209,
+      "adapters": 42205,
       "surfaces": 45000,
       "composition": 13702
     },
     "totalSrcLines": 200000,
-    "testCases": 8198,
+    "testCases": 8200,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
