@@ -2,10 +2,10 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, symlink } from 'node:
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
-  createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
+  CORE_SCHEMA, CONFIG_FIELDS, getConfigFieldDefault, createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, resolveConfigSecrets, getConfigMetadata,
   getConfigValue, resolveGlobalConfigPaths, productResourcePath, t, ENVIRONMENT_KEYS, resolveLocale,
@@ -24,12 +24,17 @@ async function fixture() {
   await mkdir(dirname(globalPath), { recursive: true });
   return { root, home, project, env, globalPath, projectPath };
 }
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 describe('config public contract', () => {
   it('returns independent defaults and merges arrays/false/undefined without mutating either input', () => {
     const a = createDefaultConfig(), b = createDefaultConfig(); a.layout.resources['ledger'] = 'changed';
     expect(b.layout.resources).toEqual({}); expect(b.enforce_principal_assurance).toBe(false);
+    const coreParse = vi.spyOn(CORE_SCHEMA, 'parse');
+    createDefaultConfig(); expect(coreParse).not.toHaveBeenCalled(); coreParse.mockRestore();
+    const field = getConfigFieldDefault('layout'); field.resources['ledger'] = 'changed';
+    const fieldParse = vi.spyOn(CONFIG_FIELDS.layout.schema, 'parse');
+    expect(getConfigFieldDefault('layout').resources).toEqual({}); expect(fieldParse).not.toHaveBeenCalled(); fieldParse.mockRestore();
     const base = { nested: { enabled: true, rows: [1, 2] }, keep: 4 };
     expect(deepMerge(base, { nested: { enabled: false, rows: [3] }, keep: undefined })).toEqual({ nested: { enabled: false, rows: [3] }, keep: 4 });
     expect(base.nested.rows).toEqual([1, 2]);
@@ -94,7 +99,16 @@ describe('config public contract', () => {
   });
   it('registers strict package schemas and validates authored layers before merge', async () => {
     const seen: unknown[] = [];
+    const before = createDefaultConfig();
+    expect(before['contract_package']).toBeUndefined();
+    const coreParse = vi.spyOn(CORE_SCHEMA, 'parse');
     registerConfigSection('contract_package', z.object({ enabled: z.boolean().default(false) }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, validateLayers: (a, b) => { seen.push([a, b]); } });
+    const defaults = createDefaultConfig();
+    expect(defaults['contract_package']).toEqual({ enabled: false });
+    (defaults['contract_package'] as { enabled: boolean }).enabled = true;
+    expect(createDefaultConfig()['contract_package']).toEqual({ enabled: false });
+    expect(coreParse).toHaveBeenCalledTimes(1); coreParse.mockRestore();
+    expect(before['contract_package']).toBeUndefined();
     expect(() => registerConfigSection('contract_package', z.object({}).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow();
     expect(() => registerConfigSection('unstrict', z.object({}), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow();
     expect(() => registerConfigSection('language', z.object({}).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow();

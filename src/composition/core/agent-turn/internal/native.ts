@@ -1,12 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelUseProfiles, type ModelInvocationNativePort } from '#engine/index.js';
+import { modelInvocationProfileDigest, configuredInvocationProfiles, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliAgent, nativeAgentCorrelationKind, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import type { NativeAgentExecution, NativeAgentReadinessReason, ToolSessionPort } from '#capabilities/index.js';
 import { type KnownSecretSnapshot, type DeckentConfig } from '#platform/index.js';
 /** R8b/R3a: the scope's connected subscription CLIs that can run a worker (registry capability): profile id and its CLI id. */
-export const connectedWorkerClis = (config: DeckentConfig, scopeId: string | null | undefined) => modelUseProfiles(config).filter(row => row.scopeId === scopeId && row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)
+export const connectedWorkerClis = (config: DeckentConfig, scopeId: string | null | undefined) => configuredInvocationProfiles(config).filter(row => row.scopeId === scopeId && row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)
   .flatMap(row => { const agent = nativeCliAgent(row.protocol.family); return agent ? [{ id: row.id, provider: agent.id }] : []; });
 
 type Bridge = Awaited<ReturnType<typeof createNativeToolBridge>>;

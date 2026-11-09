@@ -3,7 +3,7 @@ import {
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
-import { configServiceState } from '#engine/index.js';
+import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
@@ -20,7 +20,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const providerSpending = context.inspectProviderSpendAccount && scopeId ? await context.inspectProviderSpendAccount(root,
     { schemaVersion: 1, scopeId, current: true }, options).catch(() => null) : null;
   // BeUser r-rest 3: "no API budget yet" is said only when the scope has a metered model connection; subscription and local work never need one.
-  const metered = scopeHasMeteredModel(((config as Record<string, unknown>)['provider_invocation_profiles'] as { profiles?: Parameters<typeof scopeHasMeteredModel>[0] } | undefined)?.profiles ?? [], scopeId);
+  const metered = scopeHasMeteredModel(configuredInvocationProfiles(config), scopeId);
   const budgetPeriodText = providerSpending ? providerSpending.checkpoint ? spendPeriodLines(providerSpending, locale).join(' ')
     : metered ? t('climodels.spending.none', { scope: scopeId! }, locale) : null : null;
   const identity = (config as Record<string, unknown>)['identity'] as { profile?: { id?: unknown } } | undefined;
@@ -42,7 +42,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   return {
     egress: await egressFacts(root, config, context, options),
     providerSpending, budgetPeriodText,
-    modelConnections: await Promise.all((((config as Record<string, unknown>)['provider_invocation_profiles'] as { profiles?: { id: string; scopeId: string; bindingDigest: string; reference: Parameters<NonNullable<KernelCommandContext['inspectModelBinding']>>[1]; protocol: { family: string; version: string } }[] } | undefined)?.profiles ?? [])
+    modelConnections: await Promise.all(configuredInvocationProfiles(config)
       .filter(profile => profile.scopeId === scopeId && profile.protocol.family === 'openai-chat-completions').map(async profile => {
         const binding = await context.inspectModelBinding?.(root, profile.reference, options).catch(() => null);
         const capability = binding?.status === 'declared' ? binding.definition.model.protocols.find(protocol => protocol.family === profile.protocol.family && protocol.version === profile.protocol.version)?.capabilities.find(row => row.id === 'tool-calls' && row.version === 1) : null;
@@ -62,14 +62,14 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.
     stuckRuns: context.inspectMonitor ? await context.inspectMonitor(root, options, { schemaVersion: 1, install: 'current' }).then(snapshot => snapshot.installs.flatMap(install => install.runs)
       .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []), () => null) : null,
-    headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
+    headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins({ profiles: configuredInvocationProfiles(config) }, scopeId, options).catch(() => null) : null,
   };
 }
 
 /** BeUser S-11: the outbound routes the configuration names (hosts and names only): model endpoints, chat web fetch, MCP servers, the toolchain check. */
 async function egressFacts(root: string, config: DoctorConfig, context: KernelCommandContext, options: ConfigLoadOptions): Promise<NonNullable<DoctorCheckFacts['egress']>> {
   const host = (value: unknown) => { try { return typeof value === 'string' ? new URL(value).hostname : null; } catch { return null; } };
-  const profiles = ((config as Record<string, unknown>)['provider_invocation_profiles'] as { profiles?: { id?: unknown; adapter?: { id?: unknown; definition?: { endpoint?: unknown } } }[] } | undefined)?.profiles ?? [];
+  const profiles = configuredInvocationProfiles(config);
   const models = profiles.map(profile => { const at = host(profile.adapter?.definition?.endpoint);
     return { name: terminalSafeText(String(profile.adapter?.id ?? profile.id ?? '-')), host: at === null ? null : terminalSafeText(at), local: at !== null && ['127.0.0.1', '[::1]', '::1', 'localhost'].includes(at) }; });
   const fetch = ((config as Record<string, unknown>)['terminal'] as { fetch?: { egress?: unknown; allowedHosts?: unknown } } | undefined)?.fetch;

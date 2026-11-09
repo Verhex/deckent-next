@@ -2,7 +2,7 @@ import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels
 import { randomUUID } from 'node:crypto';
 import { DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
-import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
+import { configuredInvocationProfiles, buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost, ProviderWindowPort } from './context.js';
 import { subscriptionPort } from './subscription-port.js';
@@ -39,7 +39,7 @@ function endpointWord(reason: string, locale: Locale): string {
   }
 }
 const credentialRefs = (config: Record<string, unknown>, scopeId: string): readonly string[] => {
-  const profiles = (config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [];
+  const profiles = configuredInvocationProfiles(config);
   return profiles.flatMap(profile => {
     const value = profile as { scopeId?: unknown; adapter?: { definition?: { authentication?: { credentialRef?: unknown } } } };
     const ref = value.adapter?.definition?.authentication?.credentialRef;

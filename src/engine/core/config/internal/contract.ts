@@ -74,5 +74,5 @@ export class ConfigApplicationError extends DeckentError {
     this.name = 'ConfigApplicationError';
   }
 }
-export interface ConfigDefinition { readonly schema: ConfigSchemaNode; readonly descriptionKey: string;
+export interface ConfigDefinition { readonly derivedFrom?: Readonly<Record<string, string>>; readonly schema: ConfigSchemaNode; readonly descriptionKey: string;
   readonly binding: ConfigFieldView['binding']; readonly apply: ConfigFieldView['apply'] }

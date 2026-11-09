@@ -1,9 +1,9 @@
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
 import { SIWC_INFERENCE } from '#adapters/index.js';
-import type { ModelInvocationProfile, ModelConnectResult } from '#domain/index.js';
+import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { assertAuthorityWitness, OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
+import { configuredInvocationProfiles, assertAuthorityWitness, OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
 import { localPrincipalChannel, localPrincipalPeer, PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -95,7 +95,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async write(change) {
         const input = { ...change, expect: change.layer === 'global' ? globalDigest : observed!.digest, principal: await principal(), scopeId: String(scopeId) };
         const kind = parsed.success ? kindOf(parsed.data.connection) : null;
-        const profiles = (observed?.[change.layer]['provider_invocation_profiles'] as { profiles?: ModelInvocationProfile[] } | undefined)?.profiles ?? [];
+        const profiles = configuredInvocationProfiles(observed?.[change.layer] ?? {});
         const selected = parsed.success && 'nativeId' in parsed.data.model ? parsed.data.model.nativeId : null;
         const profile = profiles.find(profile => profile.scopeId === scopeId && (parsed.success && 'reference' in parsed.data.model
           ? isDeepStrictEqual(profile.reference, parsed.data.model.reference)

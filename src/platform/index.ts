@@ -95,7 +95,7 @@ export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, relat
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
 export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 
-export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, configEntryAllowed, configStepper, stepConfigNumber, configNumberText } from '#platform/core/config-fields/index.js';
+export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, parseConfigEntry, configEntryAllowed, configStepper, stepConfigNumber, configNumberText } from '#platform/core/config-fields/index.js';
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit, ConfigStepper } from '#platform/core/config-fields/index.js';
 
 export { EMPTY_RECORD_STREAM, RECORD_STREAM_LOOKBACK, feedRecordStream, previewRecordStream, finishRecordStream } from '#platform/core/redaction/index.js';

@@ -1,3 +1,4 @@
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { admittedToolchains, compareToolchainVersions, extractToolchainVersion, type ToolchainAdmissionSource } from '#engine/core/toolchain-currency/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -132,7 +133,7 @@ export class ModelConnectApplication {
     const reference = references.length === 1 ? references[0] : undefined;
     const authored = [layers.global, layers.project].filter(layer => layer['provider_invocation_profiles'] !== undefined);
     await this.delegation(command, reference && authored.length ? authored.map(layer => {
-      const profiles = (layer['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] }).profiles ?? [];
+      const profiles = configuredInvocationProfiles(layer);
       const id = [command.connection, reference.providerId, reference.modelId, String(reference.modelVersion)].join('.');
       const known = profiles.find(item => item['scopeId'] === command.scopeId && item['id'] === id && isDeepStrictEqual(item['reference'], reference));
       return (known?.['adapter'] as { definition?: JsonObject } | undefined)?.definition ?? null;
@@ -146,7 +147,7 @@ export class ModelConnectApplication {
     const scopeId = command.scopeId;
     const profileId = (target: Target) => [command.connection, target.reference.providerId, target.reference.modelId, String(target.reference.modelVersion)].join('.');
     const mine = (target: Target, item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId(target) || isDeepStrictEqual(item['reference'], target.reference));
-    const profiles = (layer: ModelConnectLayer) => (layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles ?? [];
+    const profiles = (layer: ModelConnectLayer) => configuredInvocationProfiles(layers[layer]);
     // Check every authored layer and every pulled model before catalog registration or any configuration/activation write.
     await this.delegation(command, targets.flatMap(target => profileLayers.map(layer => {
       const known = profiles(layer).find(item => mine(target, item)) ?? profileLayers.map(other => profiles(other).find(item => mine(target, item))).find(Boolean);
@@ -261,7 +262,7 @@ export class ModelConnectApplication {
         } catch (error) { notCarried.push({ reference: item.reference, code: String((error as { code?: unknown })?.code ?? 'MODEL_ACTIVATION_FAILED') }); }
       }
     } else if (profiled && targets.some(target => target.declare)) steps.declaration = 'present';
-    const planned = new Map(profileLayers.map(layer => [layer, [...(((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [])]]));
+    const planned = new Map<ModelConnectLayer, Record<string, unknown>[]>(profileLayers.map(layer => [layer, [...configuredInvocationProfiles(layers[layer])]]));
     for (const [index, target] of (!profiled ? [] : targets).entries()) {
     if (reboundProfile && sameReference(target.reference, reboundProfile)) continue; // The atomic capability write preserved this profile's authored limits.
     const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}) };
@@ -300,7 +301,7 @@ export class ModelConnectApplication {
     }
     for (const layer of profileLayers) {
       const profiles = planned.get(layer)!;
-      if (isDeepStrictEqual(profiles, (layers[layer]['provider_invocation_profiles'] as { profiles?: unknown } | undefined)?.profiles ?? [])) continue;
+      if (isDeepStrictEqual(profiles, configuredInvocationProfiles(layers[layer]))) continue;
       const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles }, layer, step(command.commandId, 'profile', layer));
       if (stopped) return stopped;
       steps.profile = 'written';

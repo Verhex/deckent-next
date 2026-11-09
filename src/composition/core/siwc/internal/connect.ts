@@ -1,5 +1,5 @@
-import { modelInvocationProfileSchema, type ModelConnectCommand, type JsonObject } from '#domain/index.js';
-import { OAuthConnectionError, prepareSubscriptionConsent, modelInvocationProfileDigest, modelInvocationBillingAxis, type ConnectedAdapter } from '#engine/index.js';
+import { type ModelConnectCommand, type JsonObject } from '#domain/index.js';
+import { configuredInvocationProfiles, OAuthConnectionError, prepareSubscriptionConsent, modelInvocationProfileDigest, modelInvocationBillingAxis, type ConnectedAdapter } from '#engine/index.js';
 import { SIWC_INFERENCE, listSiwcModels, siwcResponsesDefinitionSchema,
   OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -37,8 +37,8 @@ export function configuredSiwcConnect(root: string, command: ModelConnectCommand
         if (reference === null) apiContinuation = null;
         else {
           const config = await loadComposedConfig(root, { ...options, heal: false });
-          const profiles = (config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [];
-          const target = profiles.map(value => modelInvocationProfileSchema.parse(value)).find(profile => profile.scopeId === command.scopeId
+          const profiles = configuredInvocationProfiles(config);
+          const target = profiles.find(profile => profile.scopeId === command.scopeId
             && JSON.stringify(profile.reference) === JSON.stringify(reference));
           if (!target || modelInvocationBillingAxis(target) !== 'metered') throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
           apiContinuation = { reference, profileDigest: modelInvocationProfileDigest(target) };

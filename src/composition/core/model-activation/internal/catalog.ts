@@ -15,15 +15,15 @@ export async function applyConfiguredModelCatalogOnly(projectRoot: string, input
   try {
     const parsed = modelCatalogCommandSchema.safeParse(input);
     if (!parsed.success) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
-    return await (await catalog(projectRoot, parsed.data.scopeId, options, 'write')).apply(parsed.data);
+    return await (await catalog(projectRoot, parsed.data.scopeId, options, 'write')).application.apply(parsed.data);
   } catch (error) { throw queryFailure(error); }
 }
 /** Read-only listing (WORKER-CURRENCY-2). `modelUse: false` (connect, KG6 F7): the authorized catalog facts only, without the chat state that reads model use. */
 export async function inspectConfiguredModelCatalog(projectRoot: string, query: ModelCatalogQuery, options: ConfigLoadOptions = {}, use: Readonly<{ modelUse?: false }> = {}) {
   try {
-    const result = await (await catalog(projectRoot, query.scopeId, options, 'read')).inspect(query);
+    const { application, config } = await catalog(projectRoot, query.scopeId, options, 'read');
+    const result = await application.inspect(query);
     if (use.modelUse === false) return result;
-    const { config } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     if (!config.provider_catalog) return result;
     const declared = (await inspectDeclaredModels(projectRoot, options)).catalog;
     if (!declared) return result;
@@ -43,8 +43,8 @@ export async function inspectConfiguredModelCatalog(projectRoot: string, query: 
 }
 async function catalog(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write') {
   const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, scopeId, options, access);
-  return new ModelCatalogApplication(verifiedPrincipal(principal), new ModelCatalogPolicyAuthorization({ async load() { return document; } }),
-    access === 'write' ? async () => openSqliteModelCatalogStore(await path(), config.storage.sqlite, 'forbid') : async () => { throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY'); }, Date.now, async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }));
+  return { config, application: new ModelCatalogApplication(verifiedPrincipal(principal), new ModelCatalogPolicyAuthorization({ async load() { return document; } }),
+    access === 'write' ? async () => openSqliteModelCatalogStore(await path(), config.storage.sqlite, 'forbid') : async () => { throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY'); }, Date.now, async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs })) };
 }
 
 /** Person-facing catalog activation also aligns declared chat rows; raw catalog and chat owners retain separate receipts. */

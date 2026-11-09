@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { MODEL_TIERS, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, type ModelReference, type ModelTier } from '#domain/index.js';
 import { brainPlannerConfigSchema } from '#capabilities/index.js';
-import { composeModelRolePolicy, modelUseProfiles } from '#engine/index.js';
+import { composeModelRolePolicy, configuredInvocationProfiles } from '#engine/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
@@ -122,7 +122,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       // R9b (owner D3, 2026-11-06): the models recommended for the Brain role (tier or a current exception) and the one chosen; every model may be
       // chosen, the /do gate decides (an installation's written model_roles policy binds there).
       const brainRows = await host.inspectBrainModels?.(root, scopeId, options).catch(() => null), brainConfig = configFact(config, value => brainPlannerConfigSchema.parse(value['brain_planner'] ?? {}), null), brainNow = brainConfig?.reference ?? null;
-      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal), axes = configFact(config, modelUseProfiles, []);
+      const writer = Boolean(host.configApplication && host.resolveConfigPrincipal), axes = configFact(config, configuredInvocationProfiles, []);
       // F2-14: each catalog model's tier from the tier/role registry (`model_roles`, the only tier owner), or none when the policy is unreadable.
       const tiers = configFact(config, value => composeModelRolePolicy(value['model_roles']).models, []);
       const natives = new Map<string, string>(declared.catalog.providers.flatMap(provider => provider.models.map(model => [`${provider.id}@${provider.version}/${model.id}@${model.version}`, model.nativeId] as const)));

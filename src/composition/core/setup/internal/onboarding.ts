@@ -2,8 +2,8 @@ import { previewFirstCommit, observeFirstCommitRecovery } from '#adapters/index.
 import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { onboardingNeedsBudget, type OnboardingBillingProfile } from './onboarding-budget.js';
-import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
+import { onboardingNeedsBudget } from './onboarding-budget.js';
+import { configuredInvocationProfiles, planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { loadModelsSurface } from '#surfaces/index.js';
@@ -54,9 +54,9 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options);
     // Connection is distinct from permission/budget: the normal turn still enforces every invocation gate.
     const modelUsable = chat?.status === 'ready' && chat.reference !== null;
-    const profiles = config['provider_invocation_profiles'] as { profiles?: readonly OnboardingBillingProfile[] } | undefined;
+    const profiles = configuredInvocationProfiles(config);
     const legacyMetered = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId)?.billing === 'metered';
-    const needsAccount = onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, null);
+    const needsAccount = onboardingNeedsBudget(profiles, scopeId, chat?.reference ?? null, legacyMetered, null);
     let budgetReason: string | undefined; const { SCOPE_BUDGET_CHOICES } = await loadModelsSurface();
     const account = needsAccount && terminal.inspectProviderSpendAccount ? await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options)
       .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; budgetReason = typeof code === 'string' && ErrorRegistry.has(code) ? code : 'INVENTORY_UNAVAILABLE'; return null; }) : null;
@@ -75,7 +75,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       modelUsable, localRun: await terminal.localRunOffer?.(root, scopeId, options).catch(() => false) ?? false, folder, folderFacts: { kind, entries: visible }, scopeId,
       connections: work?.connections ?? [], ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : work?.connection?.provider ?? null, connection: work?.connection?.id ?? null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: work?.providers ?? [],
-      hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
+      hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles, scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
         presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending, ...await rights() };
   };
   const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: ['mcp-delegable'], apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card

@@ -1,4 +1,4 @@
-import { createBeuserModelPort, BeuserCallBudget, BeuserContractError, providerSpendLocalZeroTariff, providerSpendLocalZeroTariffProfile, type BeuserContext, type BeuserModelComposition } from '#engine/index.js';
+import { configuredInvocationProfiles, createBeuserModelPort, BeuserCallBudget, BeuserContractError, providerSpendLocalZeroTariff, providerSpendLocalZeroTariffProfile, type BeuserContext, type BeuserModelComposition } from '#engine/index.js';
 import { openSqliteModelActivationReader } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { invokeConfiguredModelAs, prepareConfiguredModelAs } from '#composition/core/model-invocation/index.js';
@@ -24,7 +24,7 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       return { roles: { modelRoles: c.config['model_roles'], providerCatalog: c.config['provider_catalog'], async activation(scopeId, reference) {
         const reader = await openSqliteModelActivationReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
         try { return await reader.loadRecord(scopeId, reference); } finally { reader.close(); }
-      } }, profiles: c.config['provider_invocation_profiles'], catalog };
+      } }, profiles: { profiles: configuredInvocationProfiles(c.config) }, catalog };
     },
     async prepare(ctx, role, reference, input, remaining, catalogModel) {
       const messages = beuserModelMessages(role, input, role === 'beuser-evaluator' ? evaluatorInput() : undefined);

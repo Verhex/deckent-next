@@ -1,7 +1,6 @@
-import { modelInvocationProfileSchema } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { installationSecretRoot, listProjectVaults, mcpSecretUsers, openConfiguredSecretStore, openProjectVaultStore, openSecretGrantStore } from '#adapters/index.js';
-import { authorizeSecretInventoryAll, buildSecretInventory, type SecretInventory, type SecretInventoryProject } from '#engine/index.js';
+import { configuredInvocationProfiles, authorizeSecretInventoryAll, buildSecretInventory, type SecretInventory, type SecretInventoryProject } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { openProjectSecrets } from './project.js';
 
@@ -23,7 +22,7 @@ export async function inspectConfiguredSecretInventory(projectRoot: string, scop
   if (all) authorizeSecretInventoryAll(context.document, context.principal, scopeId);
   const main = openConfiguredSecretStore(context.config, env, platform);
   const mainNames = main.descriptor.enumerable ? await main.listNames().catch(() => null) : null;
-  const profiles = ((context.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+  const profiles = configuredInvocationProfiles(context.config);
   const references = [...profiles.flatMap(profile => { const name = credentialRef(profile.adapter.definition); return name ? [{ name, usedBy: `${profile.id}@${profile.version}` }] : []; }), ...(await mcpSecretUsers(projectRoot, env)).map(use => ({ name: use.name, usedBy: `mcp:${use.server}` }))]; // KER-17: personal-file MCP servers use their keys under the same grant
   const opened = await openProjectSecrets(context, options);
   const current: SecretInventoryProject[] = opened ? [{ project: opened.anchor.projectRoot, names: opened.store ? await opened.store.listNames().catch(() => null) : [],

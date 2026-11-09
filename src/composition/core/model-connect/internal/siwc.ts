@@ -1,7 +1,7 @@
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { randomUUID } from 'node:crypto';
-import { modelInvocationProfileSchema, type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
-import { subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
+import { type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
+import { configuredInvocationProfiles, subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, OPENAI_CHAT_COMPLETIONS_FAMILY, SIWC_INFERENCE, SIWC_USAGE_SUMMARY, siwcResponsesDefinitionSchema, readSqliteSubscriptionUsageSummary, attestLocalInteractiveTerminal, installationSecretRoot, unsafeStoreDirectory, localPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
@@ -34,9 +34,9 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
   const context = await loadConfiguredScopeContext(root, request.scopeId, options, request.operation === 'prepare' || request.operation === 'usage' ? 'read' : 'write');
   if (subscriptionActor(context.principal).principalClass !== 'person') throw ErrorRegistry.createError('HEADLESS_PERSON_REQUIRED');
   if (request.operation === 'prepare' || request.operation === 'usage') {
-    const section = context.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined, apiTargets = [], references = [];
-    for (const value of section?.profiles ?? []) { // An unauthorized row is skipped without disclosure.
-      const profile = modelInvocationProfileSchema.parse(value), metered = modelInvocationBillingAxis(profile) === 'metered' && profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY;
+    const profiles = configuredInvocationProfiles(context.config), apiTargets = [], references = [];
+    for (const profile of profiles) { // An unauthorized row is skipped without disclosure.
+      const metered = modelInvocationBillingAxis(profile) === 'metered' && profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY;
       const usage = request.operation === 'usage' && profile.adapter.id === SIWC_INFERENCE.adapter.id && profile.adapter.definition['connectionId'] === request.connectionId;
       if (profile.scopeId !== request.scopeId || !metered && !usage) continue;
       try { await new ModelInvocationPolicyAuthorization(contextPolicySource(context, context.document)).authorize('inspect', profile, context.principal); } catch { continue; }
@@ -68,8 +68,8 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
       apiContinuation: request.apiContinuation ?? null } }, options, { siwcPresentation: presentation });
   if (models.status !== 'connected') return { models, state: models.status };
   const latest = await loadConfiguredScopeContext(root, request.scopeId, options, 'read');
-  const profiles = (latest.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [];
-  const profile = profiles.map(value => modelInvocationProfileSchema.parse(value)).find(row => row.scopeId === request.scopeId && JSON.stringify(row.reference) === JSON.stringify(models.reference));
+  const profiles = configuredInvocationProfiles(latest.config);
+  const profile = profiles.find(row => row.scopeId === request.scopeId && JSON.stringify(row.reference) === JSON.stringify(models.reference));
   if (!profile) throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
   const view = await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.inspect(definition.connectionId));

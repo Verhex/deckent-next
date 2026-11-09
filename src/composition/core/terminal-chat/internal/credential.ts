@@ -1,4 +1,5 @@
-import { modelInvocationProfileSchema, type ModelReference } from '#domain/index.js';
+import { configuredInvocationProfiles } from '#engine/index.js';
+import { type ModelReference } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { assertProjectCredential } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -14,7 +15,7 @@ export async function assertConfiguredTerminalCredential(projectRoot: string, re
   const target = reference ?? (await describeTerminalChat(projectRoot, options)).reference;
   if (!target) return;
   const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read');
-  const profiles = ((context.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+  const profiles = configuredInvocationProfiles(context.config);
   const profile = profiles.find(candidate => candidate.scopeId === scopeId && same(candidate.reference, target));
   const definition = profile?.adapter.definition as { authentication?: { type?: string; credentialRef?: string }; transport?: { authentication?: { type?: string; credentialRef?: string } } } | undefined;
   const authentication = definition?.authentication ?? definition?.transport?.authentication;

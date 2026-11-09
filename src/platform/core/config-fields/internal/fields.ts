@@ -6,7 +6,7 @@ import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIM
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
 import { z } from 'zod';
-import { field, mergeConfigFields } from './field.js';
+import { field, mergeConfigFields, freezeConfigDefault } from './field.js';
 import { SETUP_FIELDS } from './fields-setup.js';
 import { MODEL_FIELDS } from './fields-models.js';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -197,7 +197,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** Failed build contexts kept as evidence (newest first); older ones are removed after each failure. At least one always stays. */
     failedContextsKept: persistedInteger().min(1).max(1000).prefault(3),
     intervalMs: persistedInteger().min(0).max(2_147_483_647).prefault(86_400_000),
-  }).prefault({}); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
+  }).prefault({}); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE, { 'toolchains.image.providers': 'toolchains.image.consents' }),
   projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', persistedString(z.string().min(1)).prefault('deckent-project')),
   max_workers: field('config.field.max_workers', { state: 'bound', consumers: ['src/composition/core/runs', 'src/composition/core/monitor'] }, 'restart', z.union([persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), z.literal('auto')]).prefault('auto')),
   company: field('config.field.company', { state: 'bound', consumers: ['src/composition/core/scoped-request'] }, 'restart', z.strictObject({ get id() { return z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).prefault('default'); } }).prefault({})),
@@ -212,6 +212,9 @@ export const CORE_SCHEMA = z.strictObject(Object.fromEntries(
 export const CONFIG_ENVIRONMENT_KEYS = Object.freeze([...new Set(Object.values(CONFIG_FIELDS)
   .flatMap(field => field.environment.flatMap(binding => binding.names)))]);
 
+const fieldDefaults = new Map<keyof typeof CONFIG_FIELDS, unknown>();
+export function clearConfigFieldDefaultCache(): void { fieldDefaults.clear(); }
 export function getConfigFieldDefault<K extends keyof typeof CONFIG_FIELDS>(key: K): z.output<typeof CONFIG_FIELDS[K]['schema']> {
-  return CONFIG_FIELDS[key].schema.parse(undefined) as z.output<typeof CONFIG_FIELDS[K]['schema']>;
+  if (!fieldDefaults.has(key)) fieldDefaults.set(key, freezeConfigDefault(structuredClone(CONFIG_FIELDS[key].schema.parse(undefined))));
+  return structuredClone(fieldDefaults.get(key)) as z.output<typeof CONFIG_FIELDS[K]['schema']>;
 }

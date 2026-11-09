@@ -356,3 +356,15 @@ export const CONFIG_SECRET_ENTRY_NAMES = Object.freeze(['password', 'token', 'ap
 export function configEntryAllowed(key: string, sensitive = false): boolean {
   return CONFIG_ALLOWED_ENTRY_FIELDS.includes(key) || sensitive && key.split('.').some(part => CONFIG_SECRET_ENTRY_NAMES.some(name => name.toLowerCase() === part.toLowerCase()));
 }
+
+export function parseConfigEntry(rule: ConfigChoiceDeclaration | undefined, text: string, current: unknown):
+  { ok: true; text: string } | { ok: false; reason: 'config.select.invalidHost' | 'config.select.invalidUrl' } {
+  if (rule?.kind !== 'entry') return { ok: true, text };
+  if (rule.format === 'host') {
+    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/iu.test(text.trim())) return { ok: false, reason: 'config.select.invalidHost' };
+    return { ok: true, text: rule.multiple ? JSON.stringify([...new Set([...(Array.isArray(current) ? current : []), text.trim().toLowerCase()])]) : text };
+  }
+  try { const url = new URL(text); if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error(); }
+  catch { return { ok: false, reason: 'config.select.invalidUrl' }; }
+  return { ok: true, text };
+}

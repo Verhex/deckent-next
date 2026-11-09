@@ -6,17 +6,26 @@ import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandPro
 import { digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigApprovalPort, type ConfigAuthorityPort, type ConfigChangeOutcome, type ConfigChangeSubject, type ConfigDocumentPort,
   type ConfigSnapshot, type ConfigWriteInput, type ConfigWritePermission } from './contract.js';
-import { allConfigKeys, atConfigPath, configDisplayText, configFieldView, configPath, definitionFor } from './registry.js';
+import { allConfigKeys, isDerivedConfigPath, atConfigPath, configDisplayText, configFieldView, configPath, definitionFor } from './registry.js';
 import { planConfigChange, validateConfigLayers } from './planner.js';
 /** One configuration application contract shared by every surface; no filesystem or policy document ownership here. */
 export class ConfigApplication {
   constructor(private readonly documents: ConfigDocumentPort, private readonly authority: ConfigAuthorityPort) {}
-  async inspect(input: { readonly keyPath?: string; readonly layer?: 'project' | 'global' } = {}) {
+  async inspect(input: { readonly keyPath?: string; readonly layer?: 'project' | 'global'; readonly include?: readonly string[] } = {}) {
     const snapshot = await this.documents.snapshot(input.layer ?? 'project');
     const keys = input.keyPath === undefined ? allConfigKeys(snapshot) : [input.keyPath];
-    return { schemaVersion: 1 as const, digest: snapshot.digest, layer: snapshot.layer, fields: keys.map(key => configFieldView(snapshot, key)) };
+    const fields = keys.map(key => configFieldView(snapshot, key));
+    for (const key of input.include ?? []) {
+      if (fields.some(field => field.key === key)) continue;
+      try { fields.push(configFieldView(snapshot, key)); } catch { /* Uninstalled optional section. */ }
+    }
+    return { schemaVersion: 1 as const, digest: snapshot.digest, layer: snapshot.layer, fields };
   }
-  async explain(input: { readonly keyPath: string }) { const snapshot = await this.documents.snapshot('project'); return configFieldView(snapshot, input.keyPath); }
+  async explain(input: { readonly keyPath: string }) { return (await this.explainMany({ keys: [input.keyPath] }))[0]!; }
+  async explainMany(input: { readonly keys: readonly string[] }) {
+    const snapshot = await this.documents.snapshot('project');
+    return input.keys.map(key => configFieldView(snapshot, key));
+  }
   /** Authored value and its CAS digest from one snapshot; used by record editors, never a write. */
   async inspectValue(input: { readonly keyPath: string; readonly layer: 'project' | 'global' }) {
     definitionFor(input.keyPath);
@@ -49,7 +58,7 @@ export class ConfigApplication {
     const approvals = this.authority.approvals;
     if (!approvals) return null;
     const pairs = input.keys.flatMap(keyPath => input.layers.map(layer => ({ keyPath, layer })));
-    const asked = pairs.filter(pair => configPath(pair.keyPath)[0] !== 'secrets' && !/^toolchains\.image\.providers(?:\.|$)/u.test(pair.keyPath));
+    const asked = pairs.filter(pair => configPath(pair.keyPath)[0] !== 'secrets' && !isDerivedConfigPath(pair.keyPath));
     const writes = asked.map(pair => ({ keyPath: pair.keyPath, layer: pair.layer, principal: input.principal, scopeId: input.scopeId, commandId: randomUUID() }));
     const decided = approvals.evaluateMany ? await approvals.evaluateMany(writes) : await Promise.all(writes.map(write => approvals.evaluate(write)
       .then(value => ({ decision: value.decision, ruleId: value.ruleId }), (error: unknown) => {

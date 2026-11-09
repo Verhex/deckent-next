@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { inspectConfiguredModelActivation } from './inspect.js';
 import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
-import { verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
+import { configuredInvocationProfiles, verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
   assessModelInvocationProfileDeliveries } from '#engine/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -25,7 +25,7 @@ export async function admitConfiguredChatActivation(projectRoot: string, input: 
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),
       new ModelBindingApplication({ async read() { return config['provider_catalog']; } }),
       async () => openSqliteModelActivationStore(await path(), config.storage.sqlite, 'forbid'), Date.now,
-      { profiles: config['provider_invocation_profiles'], surfaces: configuredModelInvocationDeliverySurfaces(config),
+      { profiles: { profiles: configuredInvocationProfiles(config) }, surfaces: configuredModelInvocationDeliverySurfaces(config),
         assess: assessModelInvocationProfileDeliveries });
     return await app.admit(command);
   } catch (error) { throw queryFailure(error); }

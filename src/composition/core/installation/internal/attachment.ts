@@ -1,7 +1,7 @@
 import { relocateConfiguredProjectAttachment } from '#composition/core/attachment-lifecycle/index.js';
 import { applyConfiguredProviderSpendTemplate } from '#composition/core/provider-spend/index.js';
-import { configuredModelProfiles, inspectModelUsePreparation } from '#composition/core/model-use/index.js';
-import { modelInvocationBillingAxis, ProjectAttachmentApplication } from '#engine/index.js';
+import { inspectModelUsePreparation } from '#composition/core/model-use/index.js';
+import { configuredInvocationProfiles, modelInvocationBillingAxis, ProjectAttachmentApplication } from '#engine/index.js';
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -23,7 +23,7 @@ export async function executeConfiguredProjectAttachment(root: string, input: un
   const complete = async (result: Awaited<ReturnType<typeof app.apply>>) => {
       const modelLease = await grantConfiguredModelUse(root, result.attachment.scopeId, options, result.preparation?.digest);
       const config = await loadComposedConfig(root, options), registration = await configuredAttachmentStore(config, options).registration();
-      const metered = configuredModelProfiles(config).some(profile => profile.scopeId === result.attachment.scopeId && modelInvocationBillingAxis(profile) === 'metered');
+      const metered = configuredInvocationProfiles(config).some(profile => profile.scopeId === result.attachment.scopeId && modelInvocationBillingAxis(profile) === 'metered');
       const budget = metered && registration ? await applyConfiguredProviderSpendTemplate(root, result.attachment.scopeId,
         { root: registration.source.projectRoot, scopeId: registration.source.scopeId }, options) : { status: 'not-metered' };
       return { ...result, modelLease, budget }; };
