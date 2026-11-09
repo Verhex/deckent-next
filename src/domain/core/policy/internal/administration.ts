@@ -2,7 +2,7 @@ import { APPROVAL_ASSURANCE } from '#domain/core/approval/index.js';
 import { isWorkloadPrincipalRef } from '#domain/core/principal/index.js';
 import { evaluatePolicy } from './evaluate.js';
 import { includes, principalGrants, type Policy, type PolicyRule } from './schema.js';
-
+import { CodedError } from '#domain/core/primitives/index.js';
 type Person = { readonly issuer: string; readonly subject: string };
 const REST = Symbol('remaining-scopes');
 type Scope = string | typeof REST;
@@ -10,8 +10,8 @@ const inScope = (scopes: 'all' | readonly string[], scope: Scope) => scopes === 
 /** Availability is supplied by the installation's decision producers. Unknown levels never imply reachable approval authority. */
 export type AdministrationAssurance = (minimum: string) => boolean;
 const coreAssurance: AdministrationAssurance = minimum => minimum === APPROVAL_ASSURANCE.peerSession;
-export class PolicyLastAdminError extends Error {
-  readonly code = 'POLICY_LAST_ADMIN';
+export class PolicyLastAdminError extends CodedError {
+  override readonly code = 'POLICY_LAST_ADMIN';
   constructor() { super('POLICY_LAST_ADMIN'); this.name = 'PolicyLastAdminError'; }
 }
 function people(policy: Policy): readonly Person[] {

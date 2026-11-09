@@ -1,7 +1,7 @@
 import { type Policy, AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, POLICY_RECOVERY_CHANGE_KIND, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
   planPolicyChange, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
   type DelegationOptions, type VerifiedPrincipal } from '#domain/index.js';
-import { hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
+import { CodedError, isCodedError, hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import type { AgentToolCallDecision, PolicySource } from '#engine/core/policy/index.js';
 import type { EffectOutcome } from '#engine/core/effect/index.js';
 
@@ -21,8 +21,8 @@ export function standingCallKey(call: { readonly tool: string; readonly cell: st
 export type StandingCellName = SessionCell;
 
 /** Typed refusals of the standing-approval application (never a silent no-op: the card tells the person what was not saved). */
-export class StandingApprovalError extends Error {
-  constructor(readonly code: 'STANDING_UNSUPPORTED' | 'STANDING_LIMIT' | 'STANDING_DELEGATION' | 'STANDING_NOT_FOUND' | 'STANDING_NOT_SETTLED', readonly detail: string | null = null) {
+export class StandingApprovalError extends CodedError {
+  constructor(override readonly code: 'STANDING_UNSUPPORTED' | 'STANDING_LIMIT' | 'STANDING_DELEGATION' | 'STANDING_NOT_FOUND' | 'STANDING_NOT_SETTLED', readonly detail: string | null = null) {
     super(code); this.name = 'StandingApprovalError';
   }
 }
@@ -184,8 +184,8 @@ export class PersistentStanding {
     try { await administerOwnPolicyChange(this.deps, { ...input, revision: (await this.snapshot()).revision, kind: 'standing-change' }); }
     catch (error) {
       // The decider's authority is the bound (I3): a person cannot persist what their own rules do not hold.
-      if ((error as { code?: unknown } | null)?.code === 'POLICY_DELEGATION_EXCEEDS') throw new StandingApprovalError('STANDING_DELEGATION', (error as { detail?: string | null }).detail ?? null);
-      if (error instanceof Error && error.message === 'NOT_SETTLED') throw new StandingApprovalError('STANDING_NOT_SETTLED');
+      if (isCodedError(error, 'POLICY_DELEGATION_EXCEEDS')) throw new StandingApprovalError('STANDING_DELEGATION', (error as { detail?: string | null }).detail ?? null);
+      if (isCodedError(error, 'NOT_SETTLED')) throw new StandingApprovalError('STANDING_NOT_SETTLED');
       throw error;
     }
   }
@@ -209,7 +209,7 @@ export async function administerOwnPolicyChange(deps: Pick<PersistentStandingDep
     await deps.approve({ approvalId: outcome.approval.approvalId, revision: outcome.approval.revision }, `${commandId}-approve`, input.reason);
     outcome = await deps.administration.submit(command, undefined, options);
   }
-  if (outcome.status !== 'settled') throw new Error('NOT_SETTLED');
+  if (outcome.status !== 'settled') throw new CodedError('NOT_SETTLED');
 }
 
 type AuditedStanding = { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null };

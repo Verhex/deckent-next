@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUuid } from '#platform/index.js';
+import { CodedError, persistedInteger, persistedUuid } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { lstat, open, realpath, readlink } from 'node:fs/promises';
@@ -19,7 +19,7 @@ export type BeuserRealmOptions = z.infer<typeof optionsSchema>;
 export interface BeuserRealmCommand {
   (args: readonly string[], context: BeuserContext): Promise<string>;
 }
-export class BeuserContainerMissing extends Error {
+export class BeuserContainerMissing extends CodedError {
   constructor(readonly containerId: string) { super('BEUSER_CONTAINER_MISSING'); }
 }
 export const refuseRealm = (): never => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); };

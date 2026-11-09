@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, processExitCauseShape, isValidExitCause, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
@@ -61,6 +62,6 @@ export interface DispatchStore {
   grantLaunch(input: LaunchRequest): Promise<LaunchDecision>;
   finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal): Promise<DispatchRecord>;
 }
-export class DispatchError extends Error {
-  constructor(readonly code: 'DISPATCH_FENCE_CONFLICT' | 'DISPATCH_FENCED' | 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
+export class DispatchError extends CodedError {
+  constructor(override readonly code: 'DISPATCH_FENCE_CONFLICT' | 'DISPATCH_FENCED' | 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
 }

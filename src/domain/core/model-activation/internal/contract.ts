@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { CodedError, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { verifiedPrincipalSchema } from '#domain/core/principal/index.js';
@@ -72,8 +72,8 @@ function copied(input: unknown): Readonly<Record<string, unknown>> {
 }
 export type ModelActivationErrorCode = 'MODEL_ACTIVATION_INVALID' | 'MODEL_ACTIVATION_REVISION_CONFLICT'
   | 'MODEL_ACTIVATION_NOT_FOUND' | 'MODEL_ACTIVATION_NOT_ACTIVE' | 'MODEL_ACTIVATION_BINDING_CONFLICT';
-export class ModelActivationError extends Error {
-  constructor(readonly code: ModelActivationErrorCode) { super(code); this.name = 'ModelActivationError'; }
+export class ModelActivationError extends CodedError {
+  constructor(override readonly code: ModelActivationErrorCode) { super(code); this.name = 'ModelActivationError'; }
 }
 export function parseModelActivationCommand(input: unknown): ModelActivationCommand {
   const parsed = modelActivationCommandSchema.safeParse(copied(input));

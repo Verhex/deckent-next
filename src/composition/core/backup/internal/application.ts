@@ -5,7 +5,7 @@ import { policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#
 import { BackupApplication, EffectTargetError, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority, type BackupStoragePort } from '#engine/index.js';
 import { PolicyFileError, FileBackupStorage, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup, verifySharedProjectRestore, BACKUP_AUDIT_LOCATIONS } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory, restoreUninstallArchive, uninstallArchiveRoots } from '#adapters/index.js';
-import { PRODUCT_LAYOUT_REGISTRY, ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, PRODUCT_LAYOUT_REGISTRY, ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 
@@ -88,7 +88,10 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     const rawStorage = new FileBackupStorage(source, limits), storage = sharedRestore ? rawStorage : attachmentGuardedBackupStorage(rawStorage, config, options);
     // C-PRIO J1: a recovery audit lives next to the set, so a set that does not exist is refused before that audit is written (no stray
     // audit folder, never AUDIT_UNAVAILABLE for a mistyped path). Any other refusal of an existing set (unsafe, modified) is audited as before.
-    if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'BACKUP_SET_NOT_FOUND') throw error; });
+    if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => {
+      const code = (error as { code?: unknown } | null)?.code;
+      if (typeof code !== 'string' || !isCodedError(error, code) || isCodedError(error, 'BACKUP_SET_NOT_FOUND')) throw error;
+    });
     const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority, Date.now, async () => {
       await FileInstallationIdentityStore.assertTransferAllowed(layout);
       // A completed purge may leave an identity directory containing foreign files. Restore owns that retained loss;

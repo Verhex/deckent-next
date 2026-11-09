@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger } from '#domain/index.js';
 import { AsyncResource } from 'node:async_hooks';
 
@@ -8,9 +9,9 @@ export interface RuntimeServiceDeadline { wait(milliseconds: number, signal: Abo
 export interface RuntimeServiceLifecycleOptions { readonly maxConcurrentRequests: number; readonly maxConcurrentExecutions: number; readonly admissionWaitMs?: number }
 export type RuntimeServiceWorkClass = 'execution' | 'control';
 export type RuntimeServiceDrainResult = Readonly<{ state: 'clean' | 'incomplete'; remainingRequests: number; recoveryPending: boolean }>;
-export class RuntimeServiceLifecycleError extends Error {
+export class RuntimeServiceLifecycleError extends CodedError {
   /** Set on a refusal after a bounded wait: when the caller may reasonably try again. */
-  constructor(readonly code: 'RUNTIME_SERVICE_OPTIONS' | 'RUNTIME_SERVICE_BUSY' | 'RUNTIME_SERVICE_STOPPING' | 'RUNTIME_SERVICE_RECOVERY_FAILED' | 'RUNTIME_SERVICE_NOT_STOPPING',
+  constructor(override readonly code: 'RUNTIME_SERVICE_OPTIONS' | 'RUNTIME_SERVICE_BUSY' | 'RUNTIME_SERVICE_STOPPING' | 'RUNTIME_SERVICE_RECOVERY_FAILED' | 'RUNTIME_SERVICE_NOT_STOPPING',
     readonly retryAfterMs?: number) { super(code); this.name = 'RuntimeServiceLifecycleError'; }
 }
 

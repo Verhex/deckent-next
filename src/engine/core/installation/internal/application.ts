@@ -1,9 +1,9 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema, type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ExecutionPool } from '#engine/core/runs/index.js';
 import { hashInstallationProfilePayload, installationProfileSchema, profilePayload, type InstallationProfile } from './profile.js';
-
 export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INSTALLATION_PROFILE_DIGEST'
   | 'INSTALLATION_PROFILE_CONFIG' | 'INSTALLATION_PROFILE_REGISTRY' | 'INSTALLATION_PROFILE_ADAPTER'
   | 'INSTALLATION_PROFILE_EVALUATOR' | 'INSTALLATION_PROFILE_POOL' | 'INSTALLATION_PROFILE_POLICY'
@@ -11,8 +11,8 @@ export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INS
   // C12 Q8 follow-up (owner 2026-09-27): installation's own typed require-approval refusal, config category, exit 78 —
   // no longer the shared cross-module 'POLICY_APPROVAL_UNSUPPORTED' code the other 9 authorization points use.
   | 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED';
-export class InstallationProfileError extends Error {
-  constructor(readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }
+export class InstallationProfileError extends CodedError {
+  constructor(override readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }
 }
 
 const choicesSchema = z.strictObject({ principal: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(),

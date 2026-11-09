@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import catalogData from './catalog.json' with { type: 'json' };
@@ -38,8 +39,8 @@ export const toolchainCurrencyReportSchema = z.strictObject({ get schemaVersion(
   get basis() { return z.string(); } }).readonly();
 export type ToolchainCurrencyReport = z.infer<typeof toolchainCurrencyReportSchema>;
 
-export class ToolchainCurrencyError extends Error {
-  constructor(readonly code: 'TOOLCHAIN_CATALOG_INVALID' | 'TOOLCHAIN_PROVIDER_UNKNOWN') { super(code); this.name = 'ToolchainCurrencyError'; }
+export class ToolchainCurrencyError extends CodedError {
+  constructor(override readonly code: 'TOOLCHAIN_CATALOG_INVALID' | 'TOOLCHAIN_PROVIDER_UNKNOWN') { super(code); this.name = 'ToolchainCurrencyError'; }
 }
 export function toolchainMechanism(provider: string): ToolchainMechanism {
   const mechanism = toolchainCatalog.providers[provider];

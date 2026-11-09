@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
 
 /**
@@ -63,6 +63,6 @@ export type AgentCatalogErrorCode = 'AGENT_DEFINITION_INVALID' | 'SKILL_DEFINITI
   | 'AGENT_STANDING_REFUSED' | 'AGENT_STANDING_CONFLICT' | 'AGENT_PROMPT_TOO_LARGE'
   | 'CATALOG_SIGNER_UNKNOWN' | 'CATALOG_SIGNER_REVOKED' | 'CATALOG_SIGNER_MISMATCH' | 'CATALOG_SIGNATURE_INVALID' | 'CATALOG_SIGNATURE_REQUIRED' | 'SKILL_SIGNER_REFUSED' | 'SKILL_SIGNER_INVALID'
   | 'CATALOG_SUGGESTION_STALE' | 'CATALOG_SUGGESTION_SHADOW';
-export class AgentCatalogError extends Error {
-  constructor(readonly code: AgentCatalogErrorCode) { super(code); this.name = 'AgentCatalogError'; }
+export class AgentCatalogError extends CodedError {
+  constructor(override readonly code: AgentCatalogErrorCode) { super(code); this.name = 'AgentCatalogError'; }
 }

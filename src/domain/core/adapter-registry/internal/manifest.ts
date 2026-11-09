@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { operationDescriptorSchema } from '#domain/core/effect/index.js';
 import { operationKey } from './catalog.js';
@@ -30,8 +30,8 @@ export const adapterModuleManifestSchema = z.strictObject({
 export type AdapterModuleManifest = z.infer<typeof adapterModuleManifestSchema>;
 export type ModuleTier = z.infer<typeof moduleTierSchema>;
 
-export class RegistryError extends Error {
-  constructor(readonly code: 'REGISTRY_MANIFEST_INVALID' | 'REGISTRY_SIGNATURE_UNSUPPORTED' | 'REGISTRY_CORE_API_UNSUPPORTED'
+export class RegistryError extends CodedError {
+  constructor(override readonly code: 'REGISTRY_MANIFEST_INVALID' | 'REGISTRY_SIGNATURE_UNSUPPORTED' | 'REGISTRY_CORE_API_UNSUPPORTED'
     | 'REGISTRY_NAMESPACE_RESERVED' | 'REGISTRY_MODULE_DUPLICATE' | 'REGISTRY_NAMESPACE_SHADOWED' | 'REGISTRY_ID_OUTSIDE_NAMESPACE'
     | 'REGISTRY_ADAPTER_DUPLICATE' | 'REGISTRY_ADAPTER_UNKNOWN' | 'REGISTRY_OPERATION_REDEFINED' | 'REGISTRY_FACTORY_MISMATCH' | 'REGISTRY_SEALED'
     | 'REGISTRY_OPTIONS_INVALID' | 'REGISTRY_OPTIONS_ASYNC', options?: ErrorOptions) {

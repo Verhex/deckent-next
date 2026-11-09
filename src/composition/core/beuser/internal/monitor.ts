@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import controller from '../../../../../assets/beuser/controller.json' with { type: 'json' };
 import { beuserPrivateRecord } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, beuserMonitorRecord } from '#engine/index.js';
-import { ErrorRegistry, globalStateRoot, loadConfig, inspectProductDirectory, sha256, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, globalStateRoot, loadConfig, inspectProductDirectory, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { readConfiguredBeuserReport } from './application.js';
@@ -16,7 +16,7 @@ export async function inspectConfiguredBeuserMonitor(options: ConfigLoadOptions 
   if (!scopeId) return null;
   const c = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'read');
   const crashes = await inspectProductDirectory(c.layout, 'crashes').catch(error => {
-    if ((error as { code?: string }).code === 'MANAGED_FILE_MISSING') return null; throw error;
+    if (isCodedError(error, 'MANAGED_FILE_MISSING')) return null; throw error;
   });
   if (!crashes) return null;
   const held = await beuserPrivateRecord(crashes, beuserMonitorName(scopeId, c.principal), c.config.artifacts.maxBytes).read();
@@ -25,7 +25,7 @@ export async function inspectConfiguredBeuserMonitor(options: ConfigLoadOptions 
   const record = beuserMonitorRecord.parse(held.value);
   const run = (await inspectConfiguredRun(root, { schemaVersion: 1, scopeId, runId: record.runId }, { ...options, heal: false })).run;
   const report = await readConfiguredBeuserReport(root, scopeId, record.runId, options).catch(error => {
-    if ((error as { code?: string }).code === 'BEUSER_REPORT_NOT_FOUND') return null; throw error;
+    if (isCodedError(error, 'BEUSER_REPORT_NOT_FOUND')) return null; throw error;
   });
   return { ...record, state: run?.state.kind ?? 'unknown', reason: run?.state.kind === 'parked' ? run.state.reason : null, elapsedMs: report?.elapsedMs ?? Math.max(0, Date.now() - record.startedAt), report,
     walkers: record.walkers.map(row => ({ ...row, phase: run?.tasks.find(task => task.id === row.id)?.phase ?? 'unknown',

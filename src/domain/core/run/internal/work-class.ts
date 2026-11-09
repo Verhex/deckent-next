@@ -1,4 +1,4 @@
-import { persistedInteger, persistedString, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, persistedString, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { exactModelIdSchema, MODEL_TIERS, REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import asset from '../../../../../assets/native-coding/work-classes.json' with { type: 'json' };
@@ -112,13 +112,13 @@ export type WorkClassRegistry = z.infer<typeof workClassRegistrySchema>;
 export type WorkClassAcceptanceProfile = z.infer<typeof workClassAcceptanceProfileSchema>;
 /** Compatibility seed until the lead admits canonical business-neutral Core identities. */
 export const CORE_WORK_CLASSES: WorkClassRegistry = workClassRegistrySchema.parse(asset);
-export class WorkerEffortError extends Error {
-  constructor(readonly code: 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED' = 'WORKER_EFFORT_UNSUPPORTED') {
+export class WorkerEffortError extends CodedError {
+  constructor(override readonly code: 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED' = 'WORKER_EFFORT_UNSUPPORTED') {
     super(code); this.name = 'WorkerEffortError';
   }
 }
-export class WorkClassRegistryError extends Error {
-  constructor(readonly code: 'WORK_CLASS_OVERRIDE_DENIED' | 'WORK_CLASS_PARENT_INVALID' | 'WORK_CLASS_REGISTRY_LIMIT'
+export class WorkClassRegistryError extends CodedError {
+  constructor(override readonly code: 'WORK_CLASS_OVERRIDE_DENIED' | 'WORK_CLASS_PARENT_INVALID' | 'WORK_CLASS_REGISTRY_LIMIT'
     | 'WORK_CLASS_REVISION_INVALID' | 'WORK_CLASS_EVIDENCE_NOT_REGISTERED' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'WORK_CLASS_CANDIDATES_NOT_REGISTERED') { super(code); this.name = 'WorkClassRegistryError'; }
 }
 export type WorkClassPolicy = Readonly<{ revision: string; classes: readonly WorkClassRegistry['classes'][number][];

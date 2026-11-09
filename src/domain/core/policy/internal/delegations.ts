@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, identitySchema } from '#domain/core/primitives/index.js';
 import { policyResources } from './vocabulary.js';
 
 /** Decision-step inventory, shared with operator surfaces and the floor report. Inclusion grants nothing. */
@@ -22,6 +22,6 @@ export interface DecisionDelegationView {
   readonly steps: readonly { readonly step: DecisionStep; readonly managed: 'none' | 'granted' | 'conflict'; readonly effective: 'allowed' | 'denied' }[];
 }
 
-export class DecisionDelegationError extends Error {
-  constructor(readonly code: 'AI_AUTHORITY_NON_DELEGABLE' | 'APPROVAL_INTERACTIVE_REQUIRED' | 'POLICY_DELEGATION_STEP_INVALID' | 'POLICY_DELEGATION_CONFLICT' | 'POLICY_DENIED') { super(code); }
+export class DecisionDelegationError extends CodedError {
+  constructor(override readonly code: 'AI_AUTHORITY_NON_DELEGABLE' | 'APPROVAL_INTERACTIVE_REQUIRED' | 'POLICY_DELEGATION_STEP_INVALID' | 'POLICY_DELEGATION_CONFLICT' | 'POLICY_DENIED') { super(code); }
 }

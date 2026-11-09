@@ -1,6 +1,6 @@
 import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
-import { DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { isCodedError, DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { configuredInvocationProfiles, buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
@@ -153,7 +153,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     try { result = await host.connectModel!(root, command, options); } catch (error) {
       pendingConnections.delete(pendingKey);
       // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
-      if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
+      if (isCodedError(error, 'SECRET_GRANT_REQUIRED')) throw error;
       return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error), error instanceof DeckentError ? error.params?.['connectPhase'] : undefined); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
     }
     if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
@@ -215,7 +215,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       let names: readonly string[] | null = null;
       if (host.listSecretNames) {
         try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
-        catch (error) { notes.push((error as { code?: unknown } | null)?.code === 'SECRET_STORE_UNSUPPORTED' ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
+        catch (error) { notes.push(isCodedError(error, 'SECRET_STORE_UNSUPPORTED') ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
       }
       let named: readonly string[] = [], served: string | null = null;
       try {
@@ -268,7 +268,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const detail = kind.terminalTextChat ? join(t('tui.provider.login.ownSubscriptionNote', {}, locale)) : stateDetail;
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
-          grantBlocked = errorText(error); grantRequired = (error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED';
+          grantBlocked = errorText(error); grantRequired = isCodedError(error, 'SECRET_GRANT_REQUIRED');
         } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;

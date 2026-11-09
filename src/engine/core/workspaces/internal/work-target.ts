@@ -1,12 +1,12 @@
-import { pathWithin } from '#platform/index.js';
+import { CodedError, pathWithin } from '#platform/index.js';
 /** WORK-TARGETS (owner 2026-09-30 K1 = W2): a work target is a named source repository that Deckent's coding work runs against
  * instead of the project root. Slice 1 implements the Git kind only; a future non-Git workspace kind is another adapter producing
  * the same observation for its realm. Business systems (ERP) are not work targets: their effects stay on the C11 operation catalog
  * and EffectTarget port. The decision below is the one owner of the typed refusals; adapters only observe. */
 export type WorkTargetErrorCode = 'WORK_TARGET_PATH_INVALID' | 'WORK_TARGET_UNSAFE' | 'WORK_TARGET_IN_DATA_ROOT' | 'WORK_TARGET_IS_PROJECT'
   | 'WORK_TARGET_NOT_WORKTREE' | 'WORK_TARGET_SHARES_PROJECT_REPOSITORY' | 'WORK_TARGET_ALTERNATES' | 'WORK_TARGET_BASE_MISSING';
-export class WorkTargetError extends Error {
-  constructor(readonly code: WorkTargetErrorCode) { super(code); this.name = 'WorkTargetError'; }
+export class WorkTargetError extends CodedError {
+  constructor(override readonly code: WorkTargetErrorCode) { super(code); this.name = 'WorkTargetError'; }
 }
 /** Facts an adapter observed about one configured target without trusting it. `null` = not observed (an earlier fact already refuses). */
 export interface WorkTargetObservation {

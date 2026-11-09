@@ -5,7 +5,7 @@ import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPo
 import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
 import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
-import { shortId, t } from '#platform/index.js';
+import { isCodedError, shortId, t } from '#platform/index.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
@@ -116,7 +116,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
         if (answer === null || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
         try { await decideApproval(target, pending.length - 1, answer === 'allow', undefined, pickedReason.current); return; }
         catch (error) {
-          if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code))) throw error;
+          if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].some(code => isCodedError(error, code))) throw error;
           await panel.pick(execution, { kind: 'window', title, body: [errorText(error)], hints: work.jobs!.hints, confirm: false }, ['close']);
         }
       }
@@ -144,7 +144,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     } catch (error) {
       if (standing === 'session' && work?.approvalStanding?.unconfirmedSession) result.push(fillTemplate(work.approvalStanding.unconfirmedSession, { id: shortId(approval.approvalId), reason: 'transport-unknown' }));
       result.push(errorText(error));
-      if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code))) result.push(identified(work!.approvalUnsettled, approval.approvalId));
+      if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].some(code => isCodedError(error, code))) result.push(identified(work!.approvalUnsettled, approval.approvalId));
       output(result.join(' · ')); throw error;
     }
   }, [errorText, identified, ledger, output, work]);

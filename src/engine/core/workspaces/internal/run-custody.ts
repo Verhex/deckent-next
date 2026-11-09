@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { persistedString, counterSchema, identitySchema } from '#domain/index.js';
 
@@ -18,8 +19,8 @@ export interface RunWorkspaceCustodyStore {
   /** Immutable first writer wins. A same-source base race returns the recorded winner. */
   resolveRunWorkspaceCustody(candidate: RunWorkspaceCustody): Promise<RunWorkspaceCustody>;
 }
-export class RunWorkspaceCustodyError extends Error {
-  constructor(readonly code: 'RUN_WORKSPACE_CUSTODY_CONFLICT' | 'RUN_WORKSPACE_CUSTODY_CORRUPT',
+export class RunWorkspaceCustodyError extends CodedError {
+  constructor(override readonly code: 'RUN_WORKSPACE_CUSTODY_CONFLICT' | 'RUN_WORKSPACE_CUSTODY_CORRUPT',
     readonly reason?: 'adapter-version-mismatch') { super(code); this.name = 'RunWorkspaceCustodyError'; }
 }
 

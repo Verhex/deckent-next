@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { lstat, realpath, rm, rmdir } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
@@ -6,8 +7,8 @@ export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_R
 /** Which custody check refused (alpha.56.1): a closed token for LOCAL_RUNTIME_ENDPOINT_UNSAFE, never a path or file content. */
 export type LocalRuntimeUnsafeReason = 'parent-create' | 'parent-stat' | 'parent-type' | 'parent-link' | 'parent-owner' | 'parent-mode' | 'parent-realpath'
   | 'parent-mode-kept' | 'socket-stat' | 'socket-type' | 'socket-link' | 'socket-owner' | 'socket-mode' | 'ledger-lock' | 'endpoint-remove';
-export class LocalRuntimeSocketError extends Error {
-  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
+export class LocalRuntimeSocketError extends CodedError {
+  constructor(override readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
 }
 /** An unsafe-endpoint refusal naming the check that refused. */
 export const unsafeEndpoint = (reason: LocalRuntimeUnsafeReason, cause?: unknown) => new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', cause === undefined ? undefined : { cause }, undefined, reason);

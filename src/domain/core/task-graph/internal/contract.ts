@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { persistedString, identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { criterionDefinitionSchema } from './criteria.js';
 import { workInputSchema } from './work-input.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
@@ -100,6 +100,6 @@ export type TaskGraphErrorCode = 'TASK_GRAPH_INVALID' | 'TASK_DUPLICATE' | 'TASK
   | 'TASK_DEPENDENCY_MISSING' | 'TASK_GRAPH_CYCLE' | 'TASK_ACCEPTANCE_DUPLICATE'
   | 'TASK_CRITERION_DEFINITION_MISSING' | 'TASK_CRITERION_DEFINITION_UNUSED' | 'TASK_CRITERION_DEFINITION_DUPLICATE'
   | 'TASK_PROGRESS_INVALID' | 'TASK_PROGRESS_DUPLICATE' | 'TASK_PROGRESS_INCOMPLETE' | 'TASK_GRAPH_REVISION_MISMATCH';
-export class TaskGraphError extends Error {
-  constructor(readonly code: TaskGraphErrorCode, readonly issues: readonly ValidationIssue[] = []) { super(code); this.name = 'TaskGraphError'; }
+export class TaskGraphError extends CodedError {
+  constructor(override readonly code: TaskGraphErrorCode, readonly issues: readonly ValidationIssue[] = []) { super(code); this.name = 'TaskGraphError'; }
 }

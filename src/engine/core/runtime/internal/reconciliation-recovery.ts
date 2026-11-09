@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Buffer } from 'node:buffer';
 import { attemptIdentitySchema, identitySchema } from '#domain/index.js';
-import { isAuthorizationRefusal } from '#platform/index.js';
+import { CodedError, isAuthorizationRefusal } from '#platform/index.js';
 import { dispatchTerminalSchema, type DispatchInventoryPage } from '#engine/core/dispatch/index.js';
 
 const inputSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable() }).readonly();
@@ -17,7 +17,7 @@ export interface ReconciliationRecoveryExecutor {
   recoverOutput(identity: z.infer<typeof attemptIdentitySchema>): Promise<Readonly<{ completeness: 'complete' | 'partial' | 'unavailable' }>>;
 }
 export interface ReconciliationRecoveryOptions { readonly maxPageSize: number; readonly maxConcurrentReconciliations: number }
-export class ReconciliationRecoveryError extends Error { constructor(readonly code: 'RECONCILIATION_RECOVERY_INVALID') { super(code); this.name = 'ReconciliationRecoveryError'; } }
+export class ReconciliationRecoveryError extends CodedError { constructor(override readonly code: 'RECONCILIATION_RECOVERY_INVALID') { super(code); this.name = 'ReconciliationRecoveryError'; } }
 export type ReconciliationRecoveryOutcome = Readonly<{ identity: z.infer<typeof attemptIdentitySchema>; status: 'terminal' | 'unresolved' | 'prevented' | 'output-recovered' | 'skipped' | 'failed'; completeness?: 'complete' | 'partial' | 'unavailable'; reason?: 'denied' | 'unavailable' }>;
 export type ReconciliationRecoveryPage = Readonly<{ nextAfter: string | null; outcomes: readonly ReconciliationRecoveryOutcome[] }>;
 

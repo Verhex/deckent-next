@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, counterSchema, identitySchema } from '#domain/index.js';
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
@@ -9,8 +10,8 @@ export type NativeJsonHttpErrorCode = 'NATIVE_JSON_HTTP_DEFINITION_INVALID' | 'N
   | 'NATIVE_JSON_HTTP_CREDENTIAL_UNAVAILABLE' | 'NATIVE_JSON_HTTP_CREDENTIAL_ECHO';
 
 /** Error details deliberately exclude provider bodies, prompts, headers, and credentials. */
-export class NativeJsonHttpError extends Error {
-  constructor(readonly code: NativeJsonHttpErrorCode, readonly status?: number) { super(code); this.name = 'NativeJsonHttpError'; }
+export class NativeJsonHttpError extends CodedError {
+  constructor(override readonly code: NativeJsonHttpErrorCode, readonly status?: number) { super(code); this.name = 'NativeJsonHttpError'; }
 }
 
 /** `header` carries the credential value verbatim in one named request header (for example `x-api-key`), never in an Authorization header. */

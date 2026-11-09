@@ -1,6 +1,6 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, attemptIdentitySchema, targetQueueStateSchema } from '#domain/index.js';
 import { z } from 'zod';
-
 const text = persistedString(z.string().min(1).max(4096)).refine(value => Array.from(value).every(char => char.charCodeAt(0) > 31 && char.charCodeAt(0) !== 127));
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 /** Owner 2026-10-27 (K1–K7): keep-data is the default; keep-work keeps work records; all deletes backed-up data after a verified backup. */
@@ -85,7 +85,7 @@ export interface UninstallResult {
   readonly unit?: { readonly unit: string; readonly previous: string; readonly undo: string; readonly links?: readonly string[] };
   readonly failureCode?: string;
 }
-export class UninstallError extends Error {
-  constructor(readonly code: 'UNINSTALL_INVALID' | 'UNINSTALL_PLAN_CHANGED' | 'UNINSTALL_UNSUPPORTED'
+export class UninstallError extends CodedError {
+  constructor(override readonly code: 'UNINSTALL_INVALID' | 'UNINSTALL_PLAN_CHANGED' | 'UNINSTALL_UNSUPPORTED'
     | 'UNINSTALL_OWNERSHIP' | 'UNINSTALL_PATH_UNSAFE') { super(code); this.name = 'UninstallError'; }
 }

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, decisionCaseSchema } from '#domain/index.js';
 import { NativeJsonHttpError, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits, type NativeJsonHttpDefinition, type NativeJsonHttpLimits } from '#adapters/core/provider-http-json/index.js';
@@ -9,8 +10,8 @@ const protocol: DecisionHttpProtocolData = protocolJson;
 
 export const decisionHttpAdapter = Object.freeze({ id: protocol.id, version: protocol.version, protocol: Object.freeze(protocol.protocol) });
 export const decisionHttpWireObjectSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
-export class DecisionHttpError extends Error {
-  constructor(readonly code: string, readonly status?: number) { super(code); this.name = 'DecisionHttpError'; }
+export class DecisionHttpError extends CodedError {
+  constructor(override readonly code: string, readonly status?: number) { super(code); this.name = 'DecisionHttpError'; }
 }
 export const decisionHttpTariffSchema = z.strictObject({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
   inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) });

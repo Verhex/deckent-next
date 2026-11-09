@@ -10,7 +10,7 @@ import { verifiedPrincipal, BeuserApplication, beuserWalkSandboxResult, correctB
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
-import { persistedString, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
+import { isCodedError, persistedString, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -227,7 +227,7 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
   try {
     const c = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'read');
     const crashes = await inspectProductDirectory(c.layout, 'crashes').catch((error: unknown) => {
-      if ((error as { code?: string }).code === 'MANAGED_FILE_MISSING') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
+      if (isCodedError(error, 'MANAGED_FILE_MISSING')) throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
       throw error;
     }), directory = (name: string) => beuserPrivateRecord(join(crashes, 'beuser-reports'), name, c.config.artifacts.maxBytes);
     if (runId === undefined) {

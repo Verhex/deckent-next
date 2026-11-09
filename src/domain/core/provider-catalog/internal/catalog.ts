@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import wireLimits from './catalog-wire-limits.json' with { type: 'json' };
-import { persistedString, counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues,
+import { CodedError, persistedString, counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues,
   type ValidationIssue } from '#domain/core/primitives/index.js';
 
 export const PROVIDER_CATALOG_SCHEMA_VERSION = 1;
@@ -43,8 +43,8 @@ export const providerCatalogObjectSchema = z.strictObject({
 
 export type ProviderCatalog = Readonly<z.infer<typeof providerCatalogObjectSchema>>;
 export type ProviderCatalogErrorCode = 'PROVIDER_CATALOG_INVALID' | 'PROVIDER_CATALOG_DUPLICATE';
-export class ProviderCatalogError extends Error {
-  constructor(readonly code: ProviderCatalogErrorCode, readonly issues: readonly ValidationIssue[] = []) {
+export class ProviderCatalogError extends CodedError {
+  constructor(override readonly code: ProviderCatalogErrorCode, readonly issues: readonly ValidationIssue[] = []) {
     super(code); this.name = 'ProviderCatalogError';
   }
 }

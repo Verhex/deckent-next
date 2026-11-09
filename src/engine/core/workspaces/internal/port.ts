@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/index.js';
 export const workspaceRequestSchema = z.strictObject({
@@ -14,8 +15,8 @@ export interface WorkspaceBroker {
   /** Caller must have stopped the worker and durably retained its artifacts before release. */
   release(request: WorkspaceRequest): Promise<'removed' | 'absent' | void>;
 }
-export class WorkspaceError extends Error {
-  constructor(readonly code: 'WORKSPACE_REQUEST_INVALID' | 'WORKSPACE_OPTIONS_INVALID' | 'WORKSPACE_UNSAFE'
+export class WorkspaceError extends CodedError {
+  constructor(override readonly code: 'WORKSPACE_REQUEST_INVALID' | 'WORKSPACE_OPTIONS_INVALID' | 'WORKSPACE_UNSAFE'
     | 'WORKSPACE_IDENTITY_CONFLICT' | 'WORKSPACE_ALLOCATION_INCOMPLETE' | 'WORKSPACE_CUSTODY_UNCONVERTIBLE' | 'WORKSPACE_GIT_FAILED' | 'WORKSPACE_RUN_BASE_REMOVED') {
     super(code); this.name = 'WorkspaceError';
   }

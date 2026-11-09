@@ -2,7 +2,7 @@
  * The shared `Symbol.for` brand, not the class identity, marks a coded error: either twin, a subclass and a separately distributed copy all pass. */
 const CODED = Symbol.for('deckent.coded-error');
 export class CodedError<C extends string = string> extends Error {
-  declare readonly params?: Readonly<Record<string, unknown>>;
+  declare readonly params?: Readonly<Record<string, unknown>> | undefined;
   constructor(readonly code: C, options: { readonly message?: string; readonly params?: Readonly<Record<string, unknown>>; readonly cause?: unknown } = {}) {
     super(options.message ?? code, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = new.target.name; if (options.params !== undefined) this.params = options.params;

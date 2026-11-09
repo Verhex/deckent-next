@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
 import type { CancellationRecoveryCommand } from '#engine/core/runs/index.js';
@@ -15,8 +16,8 @@ export interface CancellationRuntimeLoopObserver {
 }
 export type CancellationRuntimeWait = (milliseconds: number, signal: AbortSignal) => Promise<void>;
 export interface CancellationRuntimeClock { now(): number }
-export class CancellationRuntimeLoopError extends Error {
-  constructor(readonly code: 'CANCELLATION_RUNTIME_LOOP_OPTIONS' | 'CANCELLATION_RUNTIME_LOOP_RUNNING') { super(code); this.name = 'CancellationRuntimeLoopError'; }
+export class CancellationRuntimeLoopError extends CodedError {
+  constructor(override readonly code: 'CANCELLATION_RUNTIME_LOOP_OPTIONS' | 'CANCELLATION_RUNTIME_LOOP_RUNNING') { super(code); this.name = 'CancellationRuntimeLoopError'; }
 }
 
 /** Trusted host lifecycle helper: drains at most one recovery page per scope per cycle. */

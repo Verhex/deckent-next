@@ -2,7 +2,7 @@ import { constants, type Stats } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
-import { ErrorRegistry, writeTextAtomic } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, writeTextAtomic } from '#platform/index.js';
 import type { NativeWorkerEvidenceFile } from '#capabilities/index.js';
 const invalid = () => ErrorRegistry.createError('NATIVE_WORKER_F08_INVALID'); // owner B2-11: the registered F08 reason, never a bare Error
 
@@ -29,7 +29,7 @@ export function nativeWorkerEvidenceFile(directory: string, uid: number, bound: 
     async claim() {
       await parent();
       const held = await withExclusiveFileLock(lock, { waitMs: 0, pollMs: 0 }).catch((error: unknown) => {
-        throw (error as { code?: unknown }).code === 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' ? invalid() : error; });
+        throw isCodedError(error, 'LOCAL_RUNTIME_ENDPOINT_UNSAFE') ? invalid() : error; });
       if (!held) return null;
       const owned = await lstat(lock).catch((error: unknown) => { held.release(); throw error; });
       return { async release() { const current = await lstat(lock).finally(() => held.release());

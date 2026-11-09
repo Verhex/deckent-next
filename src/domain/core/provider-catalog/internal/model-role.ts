@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { exactModelIdSchema, daySchema } from './catalog-values.js';
 import asset from '../../../../../assets/model-roles/model-roles.json' with { type: 'json' };
@@ -53,8 +53,8 @@ export const CORE_MODEL_ROLES: ModelRoleRegistry = modelRoleRegistrySchema.parse
 export type ModelRoleErrorCode = 'MODEL_ROLE_OVERRIDE_DENIED' | 'MODEL_ROLE_NOT_REGISTERED' | 'MODEL_ROLE_TIER_INVALID' | 'MODEL_ROLE_REGISTRY_LIMIT' | 'MODEL_ROLE_REVISION_INVALID'
   /** M2 typed role admission: a model outside the scope's catalog, a malformed request or section, a card older than the registry. */
   | 'MODEL_ROLE_CATALOG_UNKNOWN' | 'MODEL_ROLE_COMMAND_INVALID' | 'MODEL_ROLE_STALE';
-export class ModelRoleError extends Error {
-  constructor(readonly code: ModelRoleErrorCode) { super(code); this.name = 'ModelRoleError'; }
+export class ModelRoleError extends CodedError {
+  constructor(override readonly code: ModelRoleErrorCode) { super(code); this.name = 'ModelRoleError'; }
 }
 export type ModelRolePolicy = Readonly<{ revision: string; roles: readonly ModelRoleRegistry['roles'][number][];
   models: readonly ModelRoleRegistry['models'][number][]; exceptions: readonly ModelRoleRegistry['exceptions'][number][] }>;

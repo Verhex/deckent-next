@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { persistedString, immutableJsonObjectSchema } from '#domain/index.js';
@@ -13,8 +14,8 @@ const ownershipSchema = z.strictObject({
 export type InstallationLedgerOwnership = z.infer<typeof ownershipSchema>;
 export type InstallationLedgerErrorCode = 'INSTALLATION_LEDGER_INVALID' | 'INSTALLATION_LEDGER_CONFLICT'
   | 'INSTALLATION_LEDGER_CORRUPT' | 'INSTALLATION_LEDGER_UNAVAILABLE' | 'INSTALLATION_LEDGER_OUTCOME_UNKNOWN';
-export class InstallationLedgerError extends Error {
-  constructor(readonly code: InstallationLedgerErrorCode) { super(code); this.name = 'InstallationLedgerError'; }
+export class InstallationLedgerError extends CodedError {
+  constructor(override readonly code: InstallationLedgerErrorCode) { super(code); this.name = 'InstallationLedgerError'; }
 }
 
 function record(ownership: InstallationLedgerOwnership, pool: ExecutionPool): string {

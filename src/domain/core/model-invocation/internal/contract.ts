@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { CodedError, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { modelInvocationResponseEvidenceSchema, modelInvocationResponseSummarySchema } from './response-evidence.js';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema,
@@ -154,8 +154,8 @@ export type { JsonObject, ModelBindingDefinition, ModelReference };
 
 export type ModelInvocationErrorCode = 'MODEL_INVOCATION_INVALID' | 'MODEL_INVOCATION_BINDING_CONFLICT'
   | 'MODEL_INVOCATION_PROFILE_CONFLICT';
-export class ModelInvocationError extends Error {
-  constructor(readonly code: ModelInvocationErrorCode) { super(code); this.name = 'ModelInvocationError'; }
+export class ModelInvocationError extends CodedError {
+  constructor(override readonly code: ModelInvocationErrorCode) { super(code); this.name = 'ModelInvocationError'; }
 }
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const copied = invocationEnvelopeSchema.safeParse(input), parsed = copied.success ? schema.safeParse(copied.data) : undefined;

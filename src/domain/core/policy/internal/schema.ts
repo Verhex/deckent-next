@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, identitySchema } from '#domain/core/primitives/index.js';
 
 const selection = z.union([z.literal('all'), z.array(identitySchema).min(1).readonly()]);
 const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
@@ -22,8 +22,8 @@ export const policyGrantSchema = markedGrant;
 export type PolicyRule = z.infer<typeof restriction>;
 export type PolicyGrant = z.infer<typeof grant> & { readonly modeEligible?: boolean | undefined };
 
-export class PolicyError extends Error {
-  constructor(readonly code: 'POLICY_INVALID' | 'POLICY_ROLE_UNKNOWN' = 'POLICY_INVALID') { super(code); this.name = 'PolicyError'; }
+export class PolicyError extends CodedError {
+  constructor(override readonly code: 'POLICY_INVALID' | 'POLICY_ROLE_UNKNOWN' = 'POLICY_INVALID') { super(code); this.name = 'PolicyError'; }
 }
 export function includes(values: 'all' | readonly string[], value: string) { return values === 'all' || values.includes(value); }
 function unique(context: z.RefinementCtx, ids: readonly string[], message: string) {

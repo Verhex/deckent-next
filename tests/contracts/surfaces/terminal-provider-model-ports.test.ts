@@ -564,15 +564,23 @@ describe('/model source', () => {
 
 it('U1 provider port blocks unknown/grantless keys and renders custody refusal or retained-key administrator action without the value', async () => {
   const { root, options } = await project({}), store = secrets(['DECKENT_ANTHROPIC_KEY']);
-  let ready = false;
-  const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connectHost('ok'),
+  let ready = false, grantFailure: unknown = ErrorRegistry.createError('SECRET_GRANT_REQUIRED');
+  const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connectHost('ok'), connectModel: async () => { throw grantFailure; },
     prepareMainSecret: async () => ready ? { state: 'ready', backend: 'core.secret-store.encrypted-file@1' }
       : { state: 'refused', backend: null, code: 'SECRET_STORE_UNSAFE', path: root },
     connectProviderSecret: async (_root, input) => ({ name: input.name, backend: 'core.secret-store.encrypted-file@1', custody: { state: 'ready' },
       key: { state: 'stored' }, grant: { state: 'admin', code: 'SECRET_GRANT_REQUIRED' } }),
   }, options, 'tr', errorText, { offer: async () => false, grant: async () => {}, question: () => ({ title: '', lines: [], prompt: '' }),
-    check: async () => { throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED'); } });
+    check: async () => { throw grantFailure; } });
   expect((await port.inspect()).kinds[0]).toMatchObject({ modelBlocked: 'ERR:SECRET_GRANT_REQUIRED', grantRequired: true });
+  class EnterpriseCopy extends Error { readonly code = 'SECRET_GRANT_REQUIRED'; }
+  Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+  grantFailure = new EnterpriseCopy();
+  await expect(port.connectModel!({ kind: 'anthropic-api', endpoint: null, model: 'seed:fixture' })).rejects.toBe(grantFailure);
+  expect((await port.inspect()).kinds[0]).toMatchObject({ grantRequired: true });
+  grantFailure = { code: 'SECRET_GRANT_REQUIRED' };
+  await expect(port.connectModel!({ kind: 'anthropic-api', endpoint: null, model: 'seed:fixture' })).resolves.toMatchObject({ connected: false });
+  expect((await port.inspect()).kinds[0]).toMatchObject({ grantRequired: false, modelBlocked: 'ERR:SECRET_GRANT_REQUIRED' });
   await expect(port.prepareKey!('anthropic-api', null)).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE', params: { path: root } });
   expect(store.sets).toEqual([]);
   ready = true;

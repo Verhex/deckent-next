@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 import { persistedString, persistedInteger } from '#platform/core/validate/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
@@ -46,8 +47,8 @@ export type BootstrapJournal = z.infer<typeof bootstrapJournalSchema>;
 export interface BootstrapObservation { readonly generation: string; readonly record: BootstrapJournal | null }
 export type BootstrapStateErrorCode = 'BOOTSTRAP_STATE_INVALID' | 'BOOTSTRAP_STATE_UNSAFE' | 'BOOTSTRAP_STATE_CHANGED'
   | 'BOOTSTRAP_INSTALLATION_INCOMPLETE' | 'BOOTSTRAP_STATE_UNAVAILABLE' | 'BOOTSTRAP_STATE_UNSUPPORTED';
-export class BootstrapStateError extends Error {
-  constructor(readonly code: BootstrapStateErrorCode) { super(code); this.name = 'BootstrapStateError'; }
+export class BootstrapStateError extends CodedError {
+  constructor(override readonly code: BootstrapStateErrorCode) { super(code); this.name = 'BootstrapStateError'; }
 }
 
 function canonical(input: unknown): string {

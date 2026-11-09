@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { parseInferenceServingConfig, resolveActiveInferenceProfile, type InferenceServingConfig, type InferenceServingProfile } from '#domain/index.js';
 
 export function readInferenceServingConfig(config: Record<string, unknown>): InferenceServingConfig | null {
@@ -10,8 +11,8 @@ export function readInferenceServingProfile(config: Record<string, unknown>): In
   return selectInferenceProfile(config);
 }
 
-export class InferenceServingError extends Error {
-  constructor(readonly code: 'INFERENCE_PROFILE_UNKNOWN', readonly profileId: string) { super(code); this.name = 'InferenceServingError'; }
+export class InferenceServingError extends CodedError {
+  constructor(override readonly code: 'INFERENCE_PROFILE_UNKNOWN', readonly profileId: string) { super(code); this.name = 'InferenceServingError'; }
 }
 
 /** The one profile selector for every surface: null only when inference_serving is absent;

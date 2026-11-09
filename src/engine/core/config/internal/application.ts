@@ -3,7 +3,7 @@ import { capabilityProfileChange, assertCatalogProfileBindings } from './model-p
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, protectedConfigKey, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
-import { digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
+import { isCodedError, digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigApprovalPort, type ConfigAuthorityPort, type ConfigChangeOutcome, type ConfigChangeSubject, type ConfigDocumentPort,
   type ConfigSnapshot, type ConfigWriteInput, type ConfigWritePermission } from './contract.js';
 import { allConfigKeys, isDerivedConfigPath, atConfigPath, configDisplayText, configFieldView, configPath, definitionFor } from './registry.js';
@@ -62,7 +62,7 @@ export class ConfigApplication {
     const writes = asked.map(pair => ({ keyPath: pair.keyPath, layer: pair.layer, principal: input.principal, scopeId: input.scopeId, commandId: randomUUID() }));
     const decided = approvals.evaluateMany ? await approvals.evaluateMany(writes) : await Promise.all(writes.map(write => approvals.evaluate(write)
       .then(value => ({ decision: value.decision, ruleId: value.ruleId }), (error: unknown) => {
-        if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: null };
+        if (isCodedError(error, 'POLICY_DENIED')) return { decision: 'deny' as const, ruleId: null };
         throw error;
       })));
     const byPair = new Map(asked.map((pair, index) => [`${pair.layer}:${pair.keyPath}`, decided[index]!]));

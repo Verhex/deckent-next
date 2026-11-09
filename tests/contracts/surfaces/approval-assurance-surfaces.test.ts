@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Readable } from 'node:stream';
@@ -197,7 +198,7 @@ describe('the single approval card after Sol 2234', () => {
   const mounted: Array<{ unmount(): void }> = [];
   afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
   const baseLedger = { scopeId: 'scope', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope', sources: [] } as never; }, async inspectRun() { return null; } };
-  const typed = (code: string) => Object.assign(new Error(code), { code });
+  const typed = (code: string) => new CodedError(code);
   const card = (id: string, patch: Partial<WorklineApproval> = {}) => ({ approvalId: id, runId: '-', taskId: '-', summary: `run_shell · ls · ${'c'.repeat(12)}`, requester: 'svc',
     revision: 0, status: 'pending', decision: null, expiresAt: Date.now() + 600_000, risk: 'shell-read-low', undo: null, ...patch }) as WorklineApproval;
   const open = (view: ReturnType<typeof mountWorkline>, id: string) => pickApproval(view, Number(id.slice(-1)) - 1, `card ${id}`);
@@ -269,6 +270,18 @@ describe('the single approval card after Sol 2234', () => {
     view.stdin.write('y');
     await until(() => view.stdout.text.includes('ERR:LOCAL_RUNTIME_TRANSPORT') && !view.stdout.frame.includes(DENY), 'uncertain result closes, not decided');
     expect(view.stdout.text).not.toContain('A-ALLOWED floor-2');
+  });
+
+  it('ERR-M: an unbranded assurance code leaves the result unknown and never keeps a trusted refusal card open', async () => {
+    const item = card('foreign-1', { requiredAssurance: 'turn-bound' }); let called = false;
+    const view = mountWorkline({ pollMs: 10_000, ledger: { ...baseLedger, async listApprovalPage() { return { items: [item], nextAfter: null }; },
+      async decideApproval() { called = true; throw Object.assign(new Error('APPROVAL_ASSURANCE_INSUFFICIENT'), { code: 'APPROVAL_ASSURANCE_INSUFFICIENT' }); }
+    } as never }, 220);
+    mounted.push(view.instance); await pickApproval(view, 0, 'foreign refusal'); view.stdin.write('y');
+    await until(() => called && view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'unbranded refusal shown');
+    await settle(60); view.stdin.write('\u001b'); await settle(60);
+    expect(view.stdout.frame).not.toContain(DENY);
+    expect(view.stdout.text).not.toContain('A-ALLOWED foreign-1');
   });
 
   it('R3: an old card\'s late assurance refusal never touches the next card of the turn', async () => {

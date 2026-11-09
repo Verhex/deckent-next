@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { attemptIdentitySchema, counterSchema, sameAttemptIdentity, type AttemptIdentity, type AuditEvent } from '#domain/index.js';
-import { DeckentError, ErrorRegistry } from '#platform/index.js';
+import { CodedError, DeckentError, ErrorRegistry } from '#platform/index.js';
 import { enforceWorkerTreeGate, type WorkerTreeGateContext, type WorkerTreeScan } from './secret-gate.js';
 
 /** What the gate needs of one adapter view (`WorkerTreeView`): a host path with an optional declared dependency tree, or delivered text. */
@@ -11,7 +11,7 @@ export type WorkerTreeScanView = Readonly<{ source: string; label: string; depen
  * load-dependent `time` refusals one Attempt retries before the refusal is final. */
 export type WorkerTreeScanAdmissionSettings = Readonly<{ maxConcurrentScans: number; admissionTimeoutMs: number; maxTimeRefusals: number }>;
 /** The wait for a scan slot ended at `admissionTimeoutMs`; nothing was scanned. */
-export class WorkerTreeScanAdmissionTimeout extends Error { constructor(readonly waited: number, readonly bound: number) { super('WORKER_TREE_SCAN_ADMISSION_TIMEOUT'); } }
+export class WorkerTreeScanAdmissionTimeout extends CodedError { constructor(readonly waited: number, readonly bound: number) { super('WORKER_TREE_SCAN_ADMISSION_TIMEOUT'); } }
 
 /**
  * Per-process admission of worker-tree scans. All async file reads share libuv's small thread pool, so N concurrent full scans slow each other

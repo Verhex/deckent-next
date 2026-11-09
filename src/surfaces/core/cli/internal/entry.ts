@@ -1,5 +1,5 @@
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
+import { isCodedError, PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -109,7 +109,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       const launch = async (selected = context) => (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...selected, onLocale: value => { locale = value; context.onLocale?.(value); } });
       // I-S5 (owner D8): bare `deckent` with no scope in a folder with no installation offers the guided setup to a person on a terminal.
       await launch().catch(async (error: unknown) => {
-        if (argv.length !== 0 || (error as { code?: unknown } | null)?.code !== 'TERMINAL_SCOPE_REQUIRED') throw error;
+        if (argv.length !== 0 || !isCodedError(error, 'TERMINAL_SCOPE_REQUIRED')) throw error;
         await (await import('./setup-offer.js')).offerSetup(error, context, locale, launch);
       });
       await shell?.host.close(); // the Workline did not take the shell (it closed or the launch returned early)

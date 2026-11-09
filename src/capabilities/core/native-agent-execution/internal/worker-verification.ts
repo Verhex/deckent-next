@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -20,8 +21,8 @@ export interface NativeWorkerEvidenceFile {
   claim(): Promise<null | { release(): Promise<void> }>;
   write(record: unknown): Promise<void>;
 }
-export class NativeWorkerVerificationError extends Error {
-  constructor(readonly code: NativeWorkerRefusal | 'NATIVE_WORKER_F08_INVALID') { super(code); }
+export class NativeWorkerVerificationError extends CodedError {
+  constructor(override readonly code: NativeWorkerRefusal | 'NATIVE_WORKER_F08_INVALID') { super(code); }
 }
 /** Unknown storage never becomes an unsealed first run. A known negative stays negative for this exact binding and seal. */
 export async function readNativeWorkerEvidence(file: NativeWorkerEvidenceFile, target: NativeWorkerEvidenceTarget): Promise<NativeAgentExecution | null> {

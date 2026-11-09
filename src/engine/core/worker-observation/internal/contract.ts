@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema, attemptIdentitySchema, type AttemptIdentity, type WorkerActivityPhase, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
 import { z } from 'zod';
 import { artifactReceiptSchema } from '#capabilities/index.js';
@@ -57,8 +58,8 @@ export interface WorkerObservationReport {
   readonly schemaVersion: 1; readonly observedAt: number; readonly scopeId: string;
   readonly sources: readonly WorkerObservationSource[]; readonly control: 'observe-only';
 }
-export class WorkerObservationError extends Error {
-  constructor(readonly code: 'WORKER_OBSERVATION_INVALID' | 'WORKER_OBSERVATION_UNAVAILABLE') { super(code); this.name = 'WorkerObservationError'; }
+export class WorkerObservationError extends CodedError {
+  constructor(override readonly code: 'WORKER_OBSERVATION_INVALID' | 'WORKER_OBSERVATION_UNAVAILABLE') { super(code); this.name = 'WorkerObservationError'; }
 }
 /** Sealed worker-reported events of one attempt: the redacted event log artifact; the summary is always recomputed from it. */
 export const workerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,

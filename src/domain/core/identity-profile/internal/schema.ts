@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import limits from './limits.json' with { type: 'json' };
 import { companyIdSchema, policyRoleSchema } from '#domain/core/policy/index.js';
@@ -45,8 +45,8 @@ export type IdentityPreviewInput = z.infer<typeof identityPreviewInputSchema>;
 export type IdentityProfileErrorCode = 'IDENTITY_PROFILE_INVALID' | 'IDENTITY_PROFILE_NAMESPACE_UNKNOWN' | 'IDENTITY_PROFILE_VERSION_UNKNOWN'
   | 'IDENTITY_PROFILE_UNKNOWN' | 'IDENTITY_PROFILE_SHADOW' | 'IDENTITY_PROFILE_DIGEST_MISMATCH' | 'IDENTITY_PREVIEW_INVALID'
   | 'IDENTITY_PREVIEW_SCOPE_DENIED' | 'IDENTITY_PREVIEW_CONFLICT' | 'IDENTITY_PREVIEW_LIMIT' | 'IDENTITY_PREVIEW_UNAVAILABLE';
-export class IdentityProfileError extends Error {
-  constructor(readonly code: IdentityProfileErrorCode) { super(code); this.name = 'IdentityProfileError'; }
+export class IdentityProfileError extends CodedError {
+  constructor(override readonly code: IdentityProfileErrorCode) { super(code); this.name = 'IdentityProfileError'; }
 }
 /** Reuses the descriptor-safe sorted-key JSON encoding; arrays retain authored order. */
 export function encodeIdentityProfile(value: unknown): string { return JSON.stringify(identityProfileJsonSchema.parse(value)); }

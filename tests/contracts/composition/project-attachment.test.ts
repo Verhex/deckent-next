@@ -165,6 +165,15 @@ it.skipIf(process.platform !== 'linux')('registers only a fresh witnessed first 
   vi.mocked(localPrincipal.attestLocalInteractiveTerminal).mockResolvedValue(false);
   await applyPolicyTemplateInstallationWithSecretDefault(headless, 'headless', headlessOptions);
   expect(await configuredAttachmentStore(await loadComposedConfig(headless, headlessOptions), headlessOptions).registration()).toBeNull();
+  const { registerFreshInstallation } = await import('../../../src/composition/core/installation/internal/attachment.js');
+  class EnterpriseCopy extends Error { readonly code = 'AUTHORITY_WITNESS_REQUIRED'; }
+  Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+  const preview = vi.spyOn(ProjectAttachmentApplication.prototype, 'registrationPreview');
+  const branded = new EnterpriseCopy(); preview.mockRejectedValue(branded);
+  await expect(registerFreshInstallation(headless, 'headless', headlessOptions)).resolves.toEqual({ status: 'witness-required' });
+  const spoof = { code: 'AUTHORITY_WITNESS_REQUIRED' }; preview.mockRejectedValue(spoof);
+  await expect(registerFreshInstallation(headless, 'headless', headlessOptions)).rejects.toBe(spoof);
+  preview.mockRestore();
 });
 
 describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { delegationOwner, installationRegistrationSchema, projectAttachmentSchema, type AttachmentPerson, type InstallationRegistration, type InstallationSource,
   type ProjectAttachment, type InstallationIdentity } from '#domain/index.js';
@@ -6,8 +7,8 @@ import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/i
 export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
   | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED'
   | 'PROJECT_ATTACHMENT_PERSON_MISMATCH' | 'MODEL_USE_NOT_ACTIVE' | 'MODEL_USE_BINDING_CHANGED';
-export class ProjectAttachmentError extends Error {
-  constructor(readonly code: ProjectAttachmentErrorCode) { super(code); this.name = 'ProjectAttachmentError'; }
+export class ProjectAttachmentError extends CodedError {
+  constructor(override readonly code: ProjectAttachmentErrorCode) { super(code); this.name = 'ProjectAttachmentError'; }
 }
 export const attachmentFailure = (code: ProjectAttachmentErrorCode): never => { throw new ProjectAttachmentError(code); };
 export const sameAttachmentPerson = (a: AttachmentPerson, b: AttachmentPerson) => a.issuer === b.issuer && a.subject === b.subject;

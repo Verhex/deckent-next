@@ -1,4 +1,4 @@
-import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
+import { isCodedError, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import type { SurfaceSnapshotAccess, SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorklineLedgerPorts, WorklineSurfaceSnapshot, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 
@@ -18,8 +18,8 @@ export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => P
         // The terminal-ledger and approval-presentation barrels reach the Ink/React UI; the CLI entry graph reaches them only when a snapshot reads.
         if (kind === 'run') data.runs = await (await import('#surfaces/core/terminal-ledger/index.js')).loadRunViewsForWatch(ports);
         if (kind === 'approval' && ports.listApprovalPage) data.approvals = (await (await import('#surfaces/core/approval-presentation/index.js')).scanPendingApprovals(ports.listApprovalPage, Date.now())).pending;
-      } catch (error) {
-        if (isAuthorizationRefusal((error as { code?: unknown })?.code, { include: PERSON_AUTHORIZATION_REFUSALS })) denied.add(kind);
+      } catch (error) { const code = (error as { code?: unknown } | null)?.code;
+        if (typeof code === 'string' && isCodedError(error, code) && isAuthorizationRefusal(code, { include: PERSON_AUTHORIZATION_REFUSALS })) denied.add(kind);
         else throw error;
       }
     }

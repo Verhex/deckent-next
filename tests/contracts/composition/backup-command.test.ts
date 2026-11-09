@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { FileBackupStorage } from '#adapters/index.js';
 import { readFileSync } from 'node:fs';
 import { executeBackup, clearConfigCache, configuredApproval, loadConfig, resolveProductLayout, productResourcePath, startConfiguredRuntimeService } from '../../../src/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
@@ -434,6 +435,12 @@ it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on
   expect(await readdir(locked)).toEqual([]);
   await expect(call(f,'restore','',{set:join(f.base,'typo-set')})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
   expect(await readdir(f.base)).not.toContain('.deckent-backup-audit');
+  const foreign = { code: 'BACKUP_SET_NOT_FOUND' };
+  const locate = vi.spyOn(FileBackupStorage.prototype, 'locate').mockRejectedValue(foreign);
+  try {
+    await expect(call(f, 'restore', phrase, { set: join(f.base, 'foreign-set') })).rejects.toBe(foreign);
+    expect(await readdir(f.base)).not.toContain('.deckent-backup-audit');
+  } finally { locate.mockRestore(); }
 });
 it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on Windows: backup needs the OS-user identity; root reads any mode] an unreadable set or member is BACKUP_SET_UNREADABLE; a removed member is a modified set',async()=>{
   const f=await fixture();await call(f,'create');

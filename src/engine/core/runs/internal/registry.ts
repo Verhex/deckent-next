@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { freezeTaskAcceptance, assertAcceptanceCriteria, readWorkerModelPin, resolveTaskWorkClass, type TaskStallPolicy, type FrozenWorkClassProfile, executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput, type WorkerAssignment, type TaskAgentSeal } from '#domain/index.js';
 export interface ExecutionRegistryValidation {
@@ -13,8 +14,8 @@ export interface ExecutionRegistryValidation {
   /** R3 (owner D4a): the installation silence policy and the deadline a profile's policy must stop before (null: no host liveness channel). */
   silence?: Readonly<{ policy: TaskStallPolicy; deadline(profile: ExecutionProfileDefinition): number | null }>;
 }
-export class ExecutionRegistryError extends Error {
-  constructor(readonly code: 'TASK_KIND_NOT_REGISTERED' | 'TASK_EVALUATOR_NOT_REGISTERED' | 'EXECUTION_REGISTRY_VALIDATOR_INVALID' | 'RUN_EXECUTION_INTEGRITY'
+export class ExecutionRegistryError extends CodedError {
+  constructor(override readonly code: 'TASK_KIND_NOT_REGISTERED' | 'TASK_EVALUATOR_NOT_REGISTERED' | 'EXECUTION_REGISTRY_VALIDATOR_INVALID' | 'RUN_EXECUTION_INTEGRITY'
     | 'WORK_INPUT_REQUIRED' | 'WORK_INPUT_TEMPLATE_REQUIRED' | 'WORKER_INACTIVITY_POLICY_INVALID') { super(code); this.name = 'ExecutionRegistryError'; }
 }
 

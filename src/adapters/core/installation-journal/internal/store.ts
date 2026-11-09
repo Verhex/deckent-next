@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { BootstrapStateError, DeckentError, encodeBootstrapJournal, observeBootstrapState, productResourcePath,
+import { CodedError, BootstrapStateError, DeckentError, encodeBootstrapJournal, observeBootstrapState, productResourcePath,
   resolveProductLayout, withConfigWriteLock, type BootstrapJournalPayload, type BootstrapObservation } from '#platform/index.js';
 
 export type InstallationJournalErrorCode = 'INSTALLATION_JOURNAL_INVALID' | 'INSTALLATION_JOURNAL_UNSAFE'
   | 'INSTALLATION_JOURNAL_CONFLICT' | 'INSTALLATION_JOURNAL_UNAVAILABLE' | 'INSTALLATION_JOURNAL_BUSY'
   | 'INSTALLATION_JOURNAL_OUTCOME_UNKNOWN' | 'INSTALLATION_JOURNAL_EXPIRED' | 'INSTALLATION_JOURNAL_UNSUPPORTED';
-export class InstallationJournalError extends Error {
-  constructor(readonly code: InstallationJournalErrorCode) { super(code); this.name = 'InstallationJournalError'; }
+export class InstallationJournalError extends CodedError {
+  constructor(override readonly code: InstallationJournalErrorCode) { super(code); this.name = 'InstallationJournalError'; }
 }
 class InstallationJournalCallbackFailure { constructor(readonly reason: unknown) {} }
 export interface InstallationJournalOptions { readonly timeoutMs: number }

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { approvalRequestSchema } from '#domain/index.js';
 import { ConfigApplication, configChangeApprovalFacts, parseConfigInput, sealApproval, type ConfigChangeOutcome, type ConfigWritePermission } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { CodedError, createHmacIntegrity } from '#platform/index.js';
 import { approvalCardLines } from '#surfaces/core/terminal-work/index.js';
 import { workSurfaceLabels } from '#surfaces/core/cli/index.js';
 import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
@@ -182,7 +182,7 @@ describe('ConfigApplication.permissions', () => {
       { keyPath: 'secrets.token', layer: 'project', decision: 'refused', ruleId: null }, { keyPath: 'secrets.token', layer: 'global', decision: 'refused', ruleId: null }]);
     expect(asked).toEqual([['project:language', 'global:language']]);
     const single = new ConfigApplication(documents as never, { authorize: async () => 'r', audit: async () => undefined, approvals: {
-      evaluate: async input => { if (input.layer === 'global') throw Object.assign(new Error('denied'), { code: 'POLICY_DENIED' }); return { decision: 'require-approval', revision: 'r', ruleId: 'rule-1' }; },
+      evaluate: async input => { if (input.layer === 'global') throw new CodedError('POLICY_DENIED'); return { decision: 'require-approval', revision: 'r', ruleId: 'rule-1' }; },
       admit: async () => { throw new Error('unused'); } } });
     expect(await single.permissions({ principal, scopeId: 'scope', keys: ['max_workers'], layers: ['project', 'global'] })).toEqual([
       { keyPath: 'max_workers', layer: 'project', decision: 'require-approval', ruleId: 'rule-1' }, { keyPath: 'max_workers', layer: 'global', decision: 'deny', ruleId: null }]);

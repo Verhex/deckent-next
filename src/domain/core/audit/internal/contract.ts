@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import limits from './limits.json' with { type: 'json' };
@@ -425,6 +425,6 @@ export type AuditEvent = z.infer<typeof auditEventSchema>;
 export type AuditSubject = z.infer<typeof auditSubjectSchema>;
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
 export type AuditCounter = z.infer<typeof auditCounterSchema>;
-export class AuditError extends Error {
-  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED' | 'AUDIT_REBASELINE_STALE') { super(code); this.name = 'AuditError'; }
+export class AuditError extends CodedError {
+  constructor(override readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED' | 'AUDIT_REBASELINE_STALE') { super(code); this.name = 'AuditError'; }
 }

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, executionProfileDefinitionSchema, INSTRUCTION_SURFACE_PATHS, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { z } from 'zod';
 import { validateDockerTaskProfile, resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
@@ -40,8 +41,8 @@ export function nativeDiscoverySupported(command: ReturnType<typeof nativeCliCom
     || (settings && (!command.capabilities.settings || mode !== 'repository'))
     || (hiddenPaths && (mode !== 'disabled' || !realisation?.checkout)));
 }
-export class NativeCodingProfileError extends Error {
-  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE'
+export class NativeCodingProfileError extends CodedError {
+  constructor(override readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE'
     | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'NATIVE_CODING_CONTEXT_OVERFLOW' | 'NATIVE_CODING_AGENT_OVERFLOW' | 'WORKER_MODEL_UNASSIGNED'
     | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') {
     super(code); this.name = 'NativeCodingProfileError';

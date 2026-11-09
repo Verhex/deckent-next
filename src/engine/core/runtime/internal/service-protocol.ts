@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseChatTurnSteer, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery, parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseProviderSpendManagementCommand, parseScratchQuery, parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema } from '#engine/core/effect/index.js';
 import { z } from 'zod';
@@ -166,8 +167,8 @@ export const runtimeServiceEventFrameSchema = z.strictObject({ get schemaVersion
   get events() { return z.array(agentTurnStreamEventSchema).min(1).max(RUNTIME_SERVICE_EVENT_FRAME_EVENTS); } }).readonly();
 export type RuntimeServiceEventFrame = z.infer<typeof runtimeServiceEventFrameSchema>;
 export function isRuntimeServiceTurnOperation(operation: RuntimeServiceOperation): boolean { return operation === 'chatTurn'; }
-export class RuntimeServiceProtocolError extends Error {
-  constructor(readonly code: 'RUNTIME_SERVICE_CORRELATION' | 'RUNTIME_SERVICE_RESPONSE_LIMIT' | 'RUNTIME_SERVICE_DELIVERY_INVALID') {
+export class RuntimeServiceProtocolError extends CodedError {
+  constructor(override readonly code: 'RUNTIME_SERVICE_CORRELATION' | 'RUNTIME_SERVICE_RESPONSE_LIMIT' | 'RUNTIME_SERVICE_DELIVERY_INVALID') {
     super(code);
     this.name = 'RuntimeServiceProtocolError';
   }

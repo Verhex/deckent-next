@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
 
 /**
@@ -83,6 +83,6 @@ export interface MemoryResolvedEvaluation { readonly record: MemoryEvaluationRef
 export type MemoryErrorCode = 'MEMORY_ENTRY_INVALID' | 'MEMORY_TRANSITION_INVALID' | 'MEMORY_VERIFIER_NOT_HUMAN' | 'MEMORY_SELF_VERIFICATION'
   | 'MEMORY_EVALUATION_UNAVAILABLE' | 'MEMORY_EVALUATION_NOT_PASSED' | 'MEMORY_EVALUATION_OTHER_CONTENT' | 'MEMORY_QUERY_INVALID' | 'MEMORY_AUTOMATION_INVALID'
   | 'MEMORY_EVALUATION_NOT_INDEPENDENT' | 'MEMORY_EVALUATION_MAKER_UNKNOWN' | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PERSON_REQUIRED';
-export class MemoryError extends Error {
-  constructor(readonly code: MemoryErrorCode) { super(code); this.name = 'MemoryError'; }
+export class MemoryError extends CodedError {
+  constructor(override readonly code: MemoryErrorCode) { super(code); this.name = 'MemoryError'; }
 }

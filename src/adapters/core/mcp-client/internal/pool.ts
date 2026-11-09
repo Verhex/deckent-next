@@ -49,9 +49,9 @@ export async function mcpServerHomeDirectory(homeRoot: string, server: Pick<McpC
   return join(homeRoot, `${server.id}-${identity}`);
 }
 /** One typed refusal for redirect policy failures; never includes a URL, header value or call body. */
-export class McpRedirectRefusedError extends Error {
-  readonly code = 'MCP_REDIRECT_REFUSED';
-  constructor(readonly reason: string) { super(`MCP_REDIRECT_REFUSED: ${reason}`); this.name = 'McpRedirectRefusedError'; }
+export class McpRedirectRefusedError extends CodedError {
+  override readonly code = 'MCP_REDIRECT_REFUSED';
+  constructor(readonly reason: string) { super('MCP_REDIRECT_REFUSED', { message: `MCP_REDIRECT_REFUSED: ${reason}` }); this.name = 'McpRedirectRefusedError'; }
 }
 /** Streamable HTTP redirects carry resolved `$DECK:` headers and the original call body (Astra 2444 R1): only method-preserving 307/308,
  * within the approved origin and endpoint rule, at most three hops. Every transport request stays manual, regardless of requestInit. */

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { nativeAgentInitReason } from './guards.js';
@@ -22,7 +23,7 @@ const objectJson = (value: string) => { try { return record(JSON.parse(value)); 
 const fact = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,48}$/u.test(value) ? value : '?';
 const facts = (parts: readonly string[]) => parts.join(' ').slice(0, 64);
 /** Only fixed diagnostic keys leave this adapter; CLI output and token-bearing I/O errors never become error messages. */
-export class ClaudeAgentError extends Error {
+export class ClaudeAgentError extends CodedError {
   constructor(readonly reason: NativeAgentReadinessReason, readonly field: string) { super(reason); this.name = 'ClaudeAgentError'; }
 }
 function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field); }

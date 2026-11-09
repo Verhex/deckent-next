@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readlink, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
@@ -13,8 +14,8 @@ export const fileContentVersion = (bytes: Buffer) => createHash('sha256').update
 
 export type WritablePath = { readonly ok: true; readonly rel: string; readonly parentRel: string; readonly name: string } | { readonly ok: false; readonly error: string };
 export type CurrentFile = { readonly ok: true; readonly version: string; readonly bytes: Buffer | null; readonly mode: number } | { readonly ok: false; readonly error: string };
-export class WorkspaceWriteError extends Error {
-  constructor(readonly code: 'precondition' | 'rejected' | 'changed', message: string) { super(message); this.name = 'WorkspaceWriteError'; }
+export class WorkspaceWriteError extends CodedError {
+  constructor(override readonly code: 'precondition' | 'rejected' | 'changed', message: string) { super(code, { message }); this.name = 'WorkspaceWriteError'; }
 }
 
 const proc = (handle: FileHandle, name: string) => `/proc/self/fd/${handle.fd}/${name}`;

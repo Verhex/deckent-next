@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { CodedError, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, catalogChannelSchema, catalogModelSchema, exactModelIdSchema,
@@ -16,8 +16,8 @@ export const MODEL_CATALOG_TARGET_PREFIX = 'deckent.model-catalog-target.v1\n';
 export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REVISION_CONFLICT' | 'MODEL_CATALOG_NOT_FOUND'
   | 'MODEL_CATALOG_NOT_ACTIVE' | 'MODEL_CATALOG_COMMAND_CONFLICT' | 'MODEL_CATALOG_CORRUPT' | 'MODEL_CATALOG_UNAVAILABLE'
   | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT' | 'MODEL_CATALOG_MODEL_RETIRED' | 'MODEL_CATALOG_READ_ONLY';
-export class ModelCatalogError extends Error {
-  constructor(readonly code: ModelCatalogErrorCode, readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
+export class ModelCatalogError extends CodedError {
+  constructor(override readonly code: ModelCatalogErrorCode, override readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
 }
 const catalogDocumentSchema = z.unknown().optional().transform((input, context): ProviderCatalogDocument => {
   try { return parseProviderCatalogDocument(input); }

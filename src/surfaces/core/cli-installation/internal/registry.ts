@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfigLanguage, resolveLocale, t } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfigLanguage, resolveLocale, t } from '#platform/index.js';
 import { configWriteOperation, type InitialRegistryRequest } from '#engine/index.js';
 import { cliMode } from '#surfaces/core/cli-human/index.js';
 import type { InstallationCommandContext } from './context.js';
@@ -26,7 +26,7 @@ export async function initRegistryCommand(argv: readonly string[], context: Inst
   let result;
   try { result = await context.initializeNativeCodingRegistry(root, input, { env, heal: false }); }
   catch (error) {
-    if (!input.apply && (error as { code?: string }).code === 'INITIAL_REGISTRY_EXISTS') {
+    if (!input.apply && isCodedError(error, 'INITIAL_REGISTRY_EXISTS')) {
       emit({ schemaVersion: 1, status: 'exists' }, { json: flags.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}),
         render: () => t('cli.init.registry.exists', {}, locale) }); return;
     }

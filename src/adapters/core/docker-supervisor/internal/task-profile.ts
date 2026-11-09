@@ -1,5 +1,5 @@
 import { persistedString, persistedUuid, environmentRequirementsSchema, executionProfileDefinitionSchema, frozenHiddenPaths, type ExecutionProfileDefinition } from '#domain/index.js';
-import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { CodedError, DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
@@ -26,8 +26,8 @@ const taskParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }
 const hostSandboxTaskParametersSchema = taskParametersSchema.extend({ imageId: taskParametersSchema.shape.imageId.optional() }).readonly();
 
 const DOCKER_TASK_ADAPTER = Object.freeze({ id: 'docker', version: 2 });
-export class DockerTaskProfileError extends Error {
-  constructor(readonly code = 'DOCKER_TASK_PROFILE_INVALID') { super(code); this.name = 'DockerTaskProfileError'; }
+export class DockerTaskProfileError extends CodedError {
+  constructor(override readonly code = 'DOCKER_TASK_PROFILE_INVALID') { super(code); this.name = 'DockerTaskProfileError'; }
 }
 
 /** Installed registry validator for task templates. Host executable, workspace and OS identity are

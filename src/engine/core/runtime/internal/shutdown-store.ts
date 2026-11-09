@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { ShutdownAdmission, ShutdownOutcome } from './shutdown-contract.js';
 
 export interface ServiceShutdownKey { readonly scopeId: string; readonly serviceId: string; readonly commandId: string }
@@ -12,8 +13,8 @@ export interface ServiceShutdownStore {
   close(): void;
 }
 
-export class ServiceShutdownError extends Error {
-  constructor(readonly code: 'SERVICE_SHUTDOWN_INVALID' | 'SERVICE_SHUTDOWN_CONFLICT' | 'SERVICE_SHUTDOWN_INSTANCE'
+export class ServiceShutdownError extends CodedError {
+  constructor(override readonly code: 'SERVICE_SHUTDOWN_INVALID' | 'SERVICE_SHUTDOWN_CONFLICT' | 'SERVICE_SHUTDOWN_INSTANCE'
     | 'SERVICE_SHUTDOWN_AUDIT_UNAVAILABLE' | 'SERVICE_SHUTDOWN_CORRUPT' | 'SERVICE_SHUTDOWN_NOT_ADMITTED'
     | 'SERVICE_SHUTDOWN_OUTCOME_CONFLICT') {
     super(code); this.name = 'ServiceShutdownError';

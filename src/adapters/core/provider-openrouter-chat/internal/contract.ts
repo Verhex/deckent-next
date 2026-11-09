@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { z } from 'zod';
 import { parseNativeJsonHttpDefinition } from '#adapters/core/provider-http-json/index.js';
@@ -5,8 +6,8 @@ import { parseNativeJsonHttpDefinition } from '#adapters/core/provider-http-json
 export const OPENROUTER_CHAT_HTTP_ADAPTER_ID = 'openrouter-chat-http' as const;
 export const OPENROUTER_CHAT_HTTP_ADAPTER_VERSION = 1 as const;
 export const OPENROUTER_CHAT_PROTOCOL = Object.freeze({ family: 'openrouter-chat-completions', version: 'v1' });
-export class OpenRouterChatError extends Error {
-  constructor(readonly code: 'INVALID_PROFILE' | 'INVALID_REQUEST' | 'REQUEST_TOO_LARGE' | 'TARIFF_CONFLICT') {
+export class OpenRouterChatError extends CodedError {
+  constructor(override readonly code: 'INVALID_PROFILE' | 'INVALID_REQUEST' | 'REQUEST_TOO_LARGE' | 'TARIFF_CONFLICT') {
     super(code); this.name = 'OpenRouterChatError';
   }
 }

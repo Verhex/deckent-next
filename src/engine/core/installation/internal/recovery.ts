@@ -1,16 +1,16 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { z } from 'zod';
 import type { PreparedInstallation } from './application.js';
 import { createInstallationEvidencePreview, type InstallationEvidencePreview } from './evidence.js';
-
 const consentSchema = z.strictObject({ schemaVersion: z.literal(1), mode: z.literal('operator-custom'),
   id: identitySchema, atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   proposalDigest: z.string().regex(/^[a-f0-9]{64}$/),
   principal: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(),
 }).readonly();
 export type InstallationConsent = z.infer<typeof consentSchema>;
-export class InstallationRecoveryError extends Error {
-  constructor(readonly code: 'INSTALLATION_RECOVERY_INVALID' | 'INSTALLATION_RECOVERY_CONSENT'
+export class InstallationRecoveryError extends CodedError {
+  constructor(override readonly code: 'INSTALLATION_RECOVERY_INVALID' | 'INSTALLATION_RECOVERY_CONSENT'
     | 'INSTALLATION_RECOVERY_CHANGED') { super(code); this.name = 'InstallationRecoveryError'; }
 }
 function canonical(value: unknown): string {

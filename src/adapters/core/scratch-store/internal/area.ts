@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, rm, utimes, type FileHandle } from 'node:fs/promises';
@@ -29,8 +30,8 @@ const DIR_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOL
 const fdPath = (handle: FileHandle) => `/proc/self/fd/${handle.fd}`;
 const digest32 = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 32);
 
-export class ScratchError extends Error {
-  constructor(readonly code: 'SCRATCH_KEY_INVALID' | 'SCRATCH_UNSAFE' | 'SCRATCH_QUOTA_EXCEEDED', message: string = code) { super(message); this.name = 'ScratchError'; }
+export class ScratchError extends CodedError {
+  constructor(override readonly code: 'SCRATCH_KEY_INVALID' | 'SCRATCH_UNSAFE' | 'SCRATCH_QUOTA_EXCEEDED', message: string = code) { super(code, { message }); this.name = 'ScratchError'; }
 }
 
 /**

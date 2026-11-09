@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
+import { isCodedError, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, type WorkLedgerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
@@ -89,8 +89,8 @@ export function useRunCompletion(input: { readonly limit: number | undefined; re
         const run = await input.ledger!.inspectRun(runId);
         if (current() && run) observe([run]);
       }
-    }, error => {
-      if (isAuthorizationRefusal((error as { code?: unknown })?.code, { include: PERSON_AUTHORIZATION_REFUSALS })) setDenied(true);
+    }, error => { const code = (error as { code?: unknown } | null)?.code;
+      if (typeof code === 'string' && isCodedError(error, code) && isAuthorizationRefusal(code, { include: PERSON_AUTHORIZATION_REFUSALS })) setDenied(true);
       input.push([systemSummaryEntry(input.errorText(error), 'error')]);
     });
   return { register, observe, generation, tracked, dismiss };

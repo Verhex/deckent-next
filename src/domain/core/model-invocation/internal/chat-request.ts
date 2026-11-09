@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { MODEL_INVOCATION_NATIVE_JSON_LIMITS } from './contract.js';
 export type OpenAiChatHttpErrorCode = 'OPENAI_CHAT_DEFINITION_INVALID' | 'OPENAI_CHAT_REQUEST_INVALID'
@@ -7,8 +7,8 @@ export type OpenAiChatHttpErrorCode = 'OPENAI_CHAT_DEFINITION_INVALID' | 'OPENAI
   | 'OPENAI_CHAT_MODEL_MISMATCH' | 'OPENAI_CHAT_CREDENTIAL_UNAVAILABLE' | 'OPENAI_CHAT_CREDENTIAL_ECHO' | 'OPENAI_CHAT_CACHE_SALT_UNAVAILABLE';
 
 /** Error details deliberately exclude provider bodies, prompts, headers, and credentials. */
-export class OpenAiChatHttpError extends Error {
-  constructor(readonly code: OpenAiChatHttpErrorCode, readonly status?: number) { super(code); this.name = 'OpenAiChatHttpError'; }
+export class OpenAiChatHttpError extends CodedError {
+  constructor(override readonly code: OpenAiChatHttpErrorCode, readonly status?: number) { super(code); this.name = 'OpenAiChatHttpError'; }
 }
 
 export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';

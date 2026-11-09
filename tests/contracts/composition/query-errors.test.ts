@@ -1,14 +1,25 @@
-import { OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js';
+import { OpenRouterChatError, OpenRouterPricingError, LocalRuntimeSocketError, ScratchError } from '#adapters/index.js';
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
 import { AgentCatalogStoreError, SupervisorError, DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
 import { ErrorRegistry, ManagedFileError, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
-import { TaskEvaluationError } from '#domain/index.js';
+import { EffectError, OperationCatalogError, TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 it('preserves registered errors and redacts unknown native/storage details through one shared mapper', () => {
   const known = ErrorRegistry.createError('POLICY_DENIED'); expect(queryFailure(known)).toBe(known);
   expect(queryFailure(new PolicyAuthorizationError('POLICY_DENIED')).code).toBe('POLICY_DENIED');
+  const cause = new Error('retained cause');
+  const effect = new EffectError('EFFECT_REJECTED', { cause });
+  expect([effect.code, effect.message, effect.name, effect.cause]).toEqual(['EFFECT_REJECTED', 'EFFECT_REJECTED', 'EffectError', cause]);
+  const socket = new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause });
+  expect([socket.code, socket.message, socket.name, socket.cause]).toEqual(['LOCAL_RUNTIME_TRANSPORT', 'LOCAL_RUNTIME_TRANSPORT', 'LocalRuntimeSocketError', cause]);
+  const catalog = new OperationCatalogError('OPERATION_CATALOG_CONFLICT', 'subject');
+  expect([catalog.message, catalog.subject]).toEqual(['OPERATION_CATALOG_CONFLICT: subject', 'subject']);
+  const scratch = new ScratchError('SCRATCH_UNSAFE', 'bounded detail');
+  expect([scratch.message, scratch.code]).toEqual(['bounded detail', 'SCRATCH_UNSAFE']);
+  expect(queryFailure(effect).code).toBe('EFFECT_REJECTED'); expect(queryFailure(socket).code).toBe('LOCAL_RUNTIME_TRANSPORT');
+  for (const unmapped of [catalog, scratch]) expect(queryFailure(unmapped).code).toBe('QUERY_UNEXPECTED_FAILURE');
   const raw = new Error('SQL /private/customer/ledger secret=credential');
   const safe = queryFailure(raw); expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
   expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('RUN_STORE_CORRUPT');

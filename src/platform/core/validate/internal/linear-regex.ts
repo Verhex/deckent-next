@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 /**
  * Linear-time matcher for JSON Schema `pattern` / `patternProperties` (MCP-SCHEMA-VALIDATOR, owner 2026-09-29).
  *
@@ -20,12 +21,12 @@
 
 /** Why a pattern cannot be used: invalid ECMA-262 u-mode syntax, a construct this engine does not run in linear time, or a size limit. */
 export type PatternRefusalReason = 'invalid-pattern' | 'unsupported-pattern' | 'limit';
-export class PatternRefusal extends Error {
-  constructor(readonly reason: PatternRefusalReason, message: string) { super(message); this.name = 'PatternRefusal'; }
+export class PatternRefusal extends CodedError {
+  constructor(readonly reason: PatternRefusalReason, message: string) { super('PATTERN_REFUSED', { message }); this.name = 'PatternRefusal'; }
 }
 /** Thrown when a match exhausts the step budget shared with the rest of a validation (the caller turns it into a fail-closed result). */
-export class StepBudgetExceeded extends Error {
-  constructor() { super('validation step budget exceeded'); this.name = 'StepBudgetExceeded'; }
+export class StepBudgetExceeded extends CodedError {
+  constructor() { super('VALIDATION_STEP_BUDGET_EXCEEDED', { message: 'validation step budget exceeded' }); this.name = 'StepBudgetExceeded'; }
 }
 export interface StepBudget { remaining: number }
 export interface PatternLimits { readonly sourceMax: number; readonly statesMax: number; readonly repeatMax: number }

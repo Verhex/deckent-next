@@ -1,5 +1,5 @@
 import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
-import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
+import { isCodedError, ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
@@ -38,7 +38,7 @@ function limits(snapshot: ConfigSnapshot, worker: NativeCliWorkerBinding | undef
 }
 /** The adapter's typed refusals named instead of a generic template failure: a discovery mode the CLI cannot honour, a CLI without a Docker subscription path (owner 2026-11-08). */
 function discoveryRefusal(error: unknown, provider: string, fallback: string): never {
-  const typed = ({ NATIVE_CODING_DISCOVERY_UNSUPPORTED: 'CODING_DISCOVERY_UNSUPPORTED', NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' } as Record<string, string>)[String((error as { code?: unknown } | null)?.code)]; if (typed) throw ErrorRegistry.createError(typed, { params: { provider } });
+  const typed = ({ NATIVE_CODING_DISCOVERY_UNSUPPORTED: 'CODING_DISCOVERY_UNSUPPORTED', NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' } as Record<string, string>)[isCodedError(error, 'NATIVE_CODING_DISCOVERY_UNSUPPORTED') ? error.code : isCodedError(error, 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') ? error.code : '']; if (typed) throw ErrorRegistry.createError(typed, { params: { provider } });
   refuse(fallback);
 }
 const connectionBasis = (snapshot: ConfigSnapshot, catalog = true) => JSON.stringify({ profiles: snapshot.effective['provider_invocation_profiles'], ...(catalog ? { catalog: snapshot.effective['provider_catalog'] } : {}) });

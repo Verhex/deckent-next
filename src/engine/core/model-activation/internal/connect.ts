@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { admittedToolchains, compareToolchainVersions, extractToolchainVersion, type ToolchainAdmissionSource } from '#engine/core/toolchain-currency/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
@@ -66,8 +67,8 @@ export type ConnectedAdapter = Readonly<{ adapter: Readonly<{ id: string; versio
   tariff: 'published' | 'unmetered'; billingAxis?: 'subscription'; cli?: ModelConnectResult['cli'];
   /** The adapter's own concurrency bound (a CLI kind with one run dir: 1); absent = the registry default. */
   maxInFlight?: number }>;
-export class ModelConnectError extends Error {
-  constructor(readonly code: 'MODEL_CONNECT_INVALID' | 'MODEL_CONNECT_NOT_CONNECTABLE' | 'MODEL_CONNECT_ENDPOINT_FIXED' | 'MODEL_CONNECT_ENDPOINT_INVALID'
+export class ModelConnectError extends CodedError {
+  constructor(override readonly code: 'MODEL_CONNECT_INVALID' | 'MODEL_CONNECT_NOT_CONNECTABLE' | 'MODEL_CONNECT_ENDPOINT_FIXED' | 'MODEL_CONNECT_ENDPOINT_INVALID'
     | 'MODEL_CONNECT_MODEL_UNKNOWN' | 'MODEL_CONNECT_DECLARATION_CONFLICT' | 'MODEL_CONNECT_KEY_NAME_UNAVAILABLE' | 'MODEL_CONNECT_PRICE_REQUIRED'
     | 'MODEL_CONNECT_NO_AVAILABLE' | 'HEADLESS_PERSON_REQUIRED' | 'AUTHORITY_WITNESS_REQUIRED', readonly models: ModelConnectResult['models'] = []) { super(code); this.name = 'ModelConnectError'; }
 }

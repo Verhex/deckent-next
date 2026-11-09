@@ -1,5 +1,5 @@
 import { renderAuditReason } from '#surfaces/core/doctor/index.js';
-import { assertRuntimeServiceStoppable, ErrorRegistry, EXIT_CODES, emit, formatDuration, loadConfig, readBuildIdentity, t, terminalSafeText, type DeckentError, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
+import { isCodedError, assertRuntimeServiceStoppable, ErrorRegistry, EXIT_CODES, emit, formatDuration, loadConfig, readBuildIdentity, t, terminalSafeText, type DeckentError, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
 import { configServiceState, shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand, type BackupScheduleObserver } from '#engine/index.js';
@@ -153,7 +153,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     catch (error) {
       // A stopped service is a successful status read for a person (exit 0). `--json` keeps the typed LOCAL_RUNTIME_UNAVAILABLE document and
       // its exit 1: release tooling reads a failing `describe --json` as "service absent", so that contract is unchanged.
-      if (json || (error as { code?: unknown } | null)?.code !== 'LOCAL_RUNTIME_UNAVAILABLE') throw error;
+      if (json || !isCodedError(error, 'LOCAL_RUNTIME_UNAVAILABLE')) throw error;
       const paths = context.inspectAdminPaths ? await context.inspectAdminPaths(root, options).catch(() => null) : null;
       emit([t('cli.runtime.status.stopped', {}, locale), ...(paths?.runtimeSocket ? [t('cli.runtime.status.socketAbsent', { path: terminalSafeText(paths.runtimeSocket) }, locale)] : [])].join('\n'), adminSinks(context));
       return;

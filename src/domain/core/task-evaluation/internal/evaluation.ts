@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './acceptance.js';
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
-import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { safeParseRun, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema, workerReportEvidenceSchema, workerReportRefusal } from '#domain/core/worker-event/index.js';
@@ -54,8 +54,8 @@ export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fa
   return model.evidenceCapability === 'session-events' && model.verdict !== 'verified' ? 'unknown' : null;
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
-export class TaskEvaluationError extends Error {
-  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_OTHER_RUN') {
+export class TaskEvaluationError extends CodedError {
+  constructor(override readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_OTHER_RUN') {
     super(code); this.name = 'TaskEvaluationError';
   }
 }

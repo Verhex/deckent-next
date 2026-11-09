@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
 
@@ -11,6 +12,6 @@ export interface ArtifactStore {
   put(scopeId: string, bytes: Uint8Array): Promise<ArtifactReceipt>;
   read(scopeId: string, receipt: ArtifactReceipt): Promise<Uint8Array>;
 }
-export class ArtifactError extends Error {
-  constructor(readonly code: 'ARTIFACT_INVALID' | 'ARTIFACT_TOO_LARGE' | 'ARTIFACT_SCOPE_DENIED' | 'ARTIFACT_UNSAFE' | 'ARTIFACT_CORRUPT' | 'ARTIFACT_UNSUPPORTED') { super(code); this.name = 'ArtifactError'; }
+export class ArtifactError extends CodedError {
+  constructor(override readonly code: 'ARTIFACT_INVALID' | 'ARTIFACT_TOO_LARGE' | 'ARTIFACT_SCOPE_DENIED' | 'ARTIFACT_UNSAFE' | 'ARTIFACT_CORRUPT' | 'ARTIFACT_UNSUPPORTED') { super(code); this.name = 'ArtifactError'; }
 }

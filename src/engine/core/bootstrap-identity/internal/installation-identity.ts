@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { InstallationIdentity, InstallationBinding, InstallationBindingCapture, InstallationBindingSourceKind, InstallationBindingStrength,
   InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
 
@@ -27,8 +28,8 @@ export interface InstallationBindingSource { capture(): Promise<InstallationBind
 export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE' | 'INSTALLATION_IDENTITY_MASKED'
   | 'INSTALLATION_IDENTITY_LOCKED' | 'INSTALLATION_IDENTITY_UNSUPPORTED' | 'INSTALLATION_IDENTITY_RELOCATED'
   | 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' | 'INSTALLATION_IDENTITY_SOURCE_INVALID' | 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED';
-export class InstallationIdentityError extends Error {
-  constructor(readonly code: InstallationIdentityErrorCode) { super(code); this.name = 'InstallationIdentityError'; }
+export class InstallationIdentityError extends CodedError {
+  constructor(override readonly code: InstallationIdentityErrorCode) { super(code); this.name = 'InstallationIdentityError'; }
 }
 
 /**
