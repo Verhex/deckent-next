@@ -2287,7 +2287,8 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry",
         "src/platform/core/common",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/utils"
       ],
       "plan": "PROVIDERS"
     },
@@ -2567,7 +2568,8 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/integrity",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/platform/core/utils"
       ],
       "plan": "SECURITY"
     },
@@ -4090,7 +4092,8 @@
         "src/platform/core/config",
         "src/platform/core/redaction",
         "src/platform/core/output",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/utils"
       ],
       "plan": "SECURITY"
     },
@@ -4733,7 +4736,8 @@
         "src/engine/core/effect",
         "src/platform/core/integrity",
         "src/adapters/core/local-runtime-socket",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/utils"
       ],
       "plan": "INSTALLATION"
     },
@@ -5276,7 +5280,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42209,
+      "adapters": 42180,
       "surfaces": 45000,
       "composition": 13702
     },

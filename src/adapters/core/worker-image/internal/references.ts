@@ -1,4 +1,4 @@
-import { persistedString, persistedDateTime } from '#platform/index.js';
+import { persistedString, persistedDateTime, PRIVATE_PERMISSION_MASK, readPrivateFile } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, opendir, realpath } from 'node:fs/promises';
@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { privateDirectory } from './build.js';
 import type { WorkerReferenceOwner } from './removal-driver.js';
 import limits from './limits.json' with { type: 'json' };
-const PRIVATE_PERMISSION_MASK = 0o077;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const leaseSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: persistedString(z.string().min(1)), imageId, kind: z.enum(['build', 'adopt']), at: persistedDateTime() });
@@ -32,12 +31,9 @@ export async function writeWorkerLeases(custody: string, installationId: string,
   }
 }
 async function readPrivate(path: string): Promise<unknown> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const info = await file.stat();
-    if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || info.mode & PRIVATE_PERMISSION_MASK || info.size > limits.receiptBytes) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
-    return JSON.parse(await file.readFile('utf8')) as unknown;
-  } finally { await file.close(); }
+  const bytes = await readPrivateFile(path, limits.receiptBytes, { mode: 'mask' }).catch(() => null);
+  if (!bytes) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
+  return JSON.parse(bytes.toString('utf8')) as unknown;
 }
 async function names(directory: string) {
   await privateDirectory(directory); const found: string[] = [];

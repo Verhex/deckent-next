@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { installationSecretRoot, openLocalIntegrityAuthority, openSqliteAuditStore, projectRepository, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
+import { installationSecretRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
@@ -141,6 +141,13 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     await writeFile(path, JSON.stringify(granted)); await chmod(path, 0o644); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE');
     await chmod(path, 0o600); await link(path, join(base, 'second')); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE'); await unlink(join(base, 'second'));
     await writeFile(path, ' '.repeat(PROJECT_VAULT.grantsMaxBytes + 1)); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE');
+    // Owner decision A23 (KG12 F1): without getuid the vault folder and its grants are never private (no skipped owner check).
+    await writeFile(path, JSON.stringify(granted)); const getuid = Object.getOwnPropertyDescriptor(process, 'getuid')!;
+    Object.defineProperty(process, 'getuid', { value: undefined, configurable: true });
+    try {
+      expect(await code(projectVaultDirectory(installationSecretRoot(env)!, anchor, false))).toBe('SECRET_STORE_UNSAFE');
+      expect(await code(openSecretGrantStore(installationSecretRoot(env)!, anchor, 1_000).read())).toBe('SECRET_GRANT_STORE_UNSAFE');
+    } finally { Object.defineProperty(process, 'getuid', getuid); }
   });
 
   it('a copied project (cp -r, then init identity --keep) cannot open the original vault; a move hands over only after the original is gone', async () => {

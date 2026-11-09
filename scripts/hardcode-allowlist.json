@@ -99,7 +99,6 @@
   {"file":"src/adapters/core/native-coding/internal/template.ts","fingerprint":"dd3c7143b7fa1ffdeeed7ef846e3483a815c43b646b533dc1682d4f393257cb2","rule":"G1"},
   {"file":"src/adapters/core/native-connection/internal/credential.ts","fingerprint":"19cdff39a70305a0db958995df7a196e9fb77683b7809febbfeff76321b4e35a","rule":"G1"},
   {"file":"src/adapters/core/native-connection/internal/credential.ts","fingerprint":"55fabd01edbdf5865ad6c0be477dd43630fd692ca5fe8fda579095732692cbc1","rule":"G1"},
-  {"file":"src/adapters/core/native-connection/internal/credential.ts","fingerprint":"c8b7012737a96d97bac1fa7409c02e4f678d6a7f656fd32f41ea86dfdde3e738","rule":"G2"},
   {"file":"src/adapters/core/native-connection/internal/gateway.ts","fingerprint":"30ea72b50571d5806bf9949901b4b48e580af0e85e6f2518861887fda581f8db","rule":"G2"},
   {"file":"src/adapters/core/native-connection/internal/gateway.ts","fingerprint":"b4faee9a6255aee14f7febe7c7bb895ad824b648595a1c9927aa6f8008461694","rule":"G2"},
   {"file":"src/adapters/core/native-connection/internal/gateway.ts","fingerprint":"d65514f5afc9647bbacb9558054bebd91f40e2e0eeac5b3831ce1c94a3d88bce","rule":"G2"},

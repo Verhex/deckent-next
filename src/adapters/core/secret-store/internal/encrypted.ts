@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { DeckentError, serializeJsonDocument } from '#platform/index.js';
+import { DeckentError, PrivateFileError, serializeJsonDocument } from '#platform/index.js';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, type SecretStore, type SecretStoreContext, type SecretStoreErrorCode, type SecretStoreFactory } from '#engine/index.js';
 import { withPrivateKeyFile } from '#adapters/core/local-keyring/index.js';
 import { FILE_SECRET_STORE_MAX_BYTES, createFileSecretStore, type FileSecretStoreOptions, type SecretDocumentCodec } from './file.js';
@@ -25,8 +25,8 @@ const MAX_FILE_BYTES = envelopeLength(FILE_SECRET_STORE_MAX_BYTES);
 
 /** Types a key-file failure: a custody breach is unsafe, an absent key beside an existing store is unreadable, anything else unavailable. */
 function keyFailure(error: unknown, fail: (code: SecretStoreErrorCode) => DeckentError): DeckentError {
-  const code = (error as NodeJS.ErrnoException | null)?.code, message = (error as Error | null)?.message;
-  if (code === 'ELOOP' || message === 'custody' || message === 'size') return fail('SECRET_STORE_UNSAFE');
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  if (code === 'ELOOP' || error instanceof PrivateFileError) return fail('SECRET_STORE_UNSAFE');
   if (code === 'ENOENT') return fail('SECRET_STORE_CORRUPT');
   return fail('SECRET_STORE_UNAVAILABLE');
 }

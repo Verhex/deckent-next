@@ -1,5 +1,4 @@
-import { constants } from 'node:fs';
-import { open, realpath } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { persistedString, workerEffortSchema, nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape, workspaceHiddenPathsSchema, delegationOwner, delegationPrincipalClass, DEFAULT_DELEGATED_CLASSES } from '#domain/index.js';
@@ -8,6 +7,7 @@ import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { readLocalOsOwner } from '#adapters/core/local-principal/index.js';
+import { readPrivateFile } from '#platform/index.js';
 
 const exactModelId = persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value && !value.startsWith('-')
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
@@ -101,15 +101,9 @@ export async function readLocalNativeCredential(provider: NativeSubscription['pr
   const path = resolve(root, spec.file);
   try {
     if (await realpath(path) !== path) throw new Error();
-    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    try {
-      const stat = await handle.stat();
-      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.() || (stat.mode & 0o077) || stat.size > catalog.limits.credentialBytes) throw new Error();
-      const bytes = Buffer.alloc(catalog.limits.credentialBytes + 1);
-      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
-      if (bytesRead > catalog.limits.credentialBytes) throw new Error();
-      try { return projectNativeCredential(provider, JSON.parse(bytes.subarray(0, bytesRead).toString('utf8'))); }
-      finally { bytes.fill(0); }
-    } finally { await handle.close(); }
+    const bytes = await readPrivateFile(path, catalog.limits.credentialBytes, { mode: 'mask' });
+    if (!bytes) throw new Error();
+    try { return projectNativeCredential(provider, JSON.parse(bytes.toString('utf8'))); }
+    finally { bytes.fill(0); }
   } catch { throw new NativeConnectionError('NATIVE_CREDENTIAL_UNAVAILABLE'); }
 }
