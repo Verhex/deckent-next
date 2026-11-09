@@ -14,14 +14,14 @@ const absent = (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') 
 function owner(roots: readonly string[], members: ReadonlyMap<string, BoundMember>, kept: string[] = []): BackupContributionOwner {
   const open = (resourceId: string, bytes: Uint8Array) => { const all = Buffer.from(bytes), at = all.indexOf(0), [mode = '', after = '', standard = '', ...rest] = all.subarray(0, at).toString('utf8').split(':');
     const path = rest.join(':'), content = all.subarray(at + 1);
-    if (at < 0 || sha256(path) !== resourceId || !isAbsolute(path) || !roots.some(root => pathWithin(root, path) && root !== path)) throw new Error('UNINSTALL_ARCHIVE_INVALID');
+    if (at < 0 || sha256(path) !== resourceId || !isAbsolute(path) || !roots.some(root => pathWithin(root, path) && root !== path)) throw ErrorRegistry.createError('UNINSTALL_ARCHIVE_INVALID');
     return { path, content, after, standard: !!standard, mode: Number.parseInt(mode, 8) & 0o755 }; };
   return { id: OWNER, transfer: () => 'portable',
     async export(resource) {
       const member = members.get(resource.resourceId)!, read = await readPinnedFile(member.path);
-      if (!read || read.identity.digest !== resource.version) throw new Error('UNINSTALL_ARCHIVE_CHANGED');
+      if (!read || read.identity.digest !== resource.version) throw ErrorRegistry.createError('UNINSTALL_ARCHIVE_CHANGED');
       return Buffer.concat([Buffer.from(`${read.mode.toString(8)}:${member.after ?? ''}:${member.standard ? 1 : ''}:${member.path}\0`), read.bytes]); },
-    async validateRestore(resource, bytes) { if (sha256(open(resource.resourceId, bytes).content) !== resource.version) throw new Error('UNINSTALL_ARCHIVE_INVALID'); },
+    async validateRestore(resource, bytes) { if (sha256(open(resource.resourceId, bytes).content) !== resource.version) throw ErrorRegistry.createError('UNINSTALL_ARCHIVE_INVALID'); },
     // Restore never writes over a file the person has, nor through a link: a missing file comes back, a file whose line uninstall cut gets its
     // earlier bytes back only while it still holds exactly uninstall's result; anything else (other bytes, unreadable, linked) is kept and reported.
     async restore(resource, bytes) {
@@ -39,7 +39,7 @@ export async function createUninstallArchive(base: VerifiedBackup, roots: readon
   for (const member of members) {
     const read = await memberStat(member.path, true) && await readPinnedFile(member.path); if (!read) continue;
     const cut = member.line ? lineCut(read.bytes, member.line, member.before) : null;
-    if (member.line && !cut) throw new Error('UNINSTALL_ARCHIVE_CHANGED');
+    if (member.line && !cut) throw ErrorRegistry.createError('UNINSTALL_ARCHIVE_CHANGED');
     byId.set(sha256(member.path), { path: member.path, ...read.identity, directory: member.directory, archived: true, ...(standard(member.path) ? { standard: true } : {}), ...(cut ? { cut: cut.cut, after: cut.after } : {}) });
     resources.push({ resourceId: sha256(member.path), owner: OWNER, version: read.identity.digest, transfer: 'portable' });
   }
@@ -54,7 +54,7 @@ export async function createUninstallArchive(base: VerifiedBackup, roots: readon
  * member's bytes and decrypts and verifies with the person's passphrase. */
 export async function verifyUninstallArchive(base: VerifiedBackup, archive: { readonly digest: string; readonly roots: readonly string[] }, members: readonly BoundMember[], passphrase: string, limits: BackupLimits) {
   const set = base.set, text = await readFile(set + manifestSuffix, 'utf8').catch(() => ''), manifest = sha256(text) === archive.digest ? JSON.parse(text) as BackupCoverageManifest : null;
-  if (!manifest || members.some(member => member.archived && !manifest.resources.some(item => item.resourceId === sha256(member.path) && item.version === member.digest))) throw new Error('UNINSTALL_ARCHIVE_INVALID');
+  if (!manifest || members.some(member => member.archived && !manifest.resources.some(item => item.resourceId === sha256(member.path) && item.version === member.digest))) throw ErrorRegistry.createError('UNINSTALL_ARCHIVE_INVALID');
   (await verifyBackupCoverage(base, { companion: set + companionSuffix, manifest, deletionRoots: archive.roots }, passphrase, limits, [owner(archive.roots, new Map())])).close();
 }
 /** `deckent backup restore <set>` brings back the archive written beside that set: only files that do not exist again are written. */
