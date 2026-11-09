@@ -1,7 +1,8 @@
 import { lstat, open, realpath, rm } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { toolSessionSchema, type ToolSession } from '#capabilities/index.js';
-import { nativeEffortArgs, type nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import type { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 
 type Entry = NonNullable<ReturnType<typeof nativeCliAgent>>;
 import { ClaudeAgentError } from '#capabilities/index.js';
@@ -10,7 +11,7 @@ function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGEN
 
 /** The caller owns the existing private run dir and removes these files after the isolated process exits. No subscription state is read. */
 export async function prepareClaudeAgentRun(entry: Entry, sessionInput: ToolSession, input: Readonly<{ runDir: string; model: string; system: string;
-  turnToken: string; effort?: string }>) {
+  turnToken: string; effortArgs: readonly string[]; maxTurns?: number }>) {
   const session = toolSessionSchema.parse(sessionInput), { agent, bridge, headless, command } = entry, { runDir, model, system, turnToken } = input;
   if (agent.transport.kind !== 'claude-mcp') invalid('transport');
   if (!isAbsolute(runDir) || await realpath(runDir).catch(() => null) !== resolve(runDir)) invalid('run-dir');
@@ -19,13 +20,13 @@ export async function prepareClaudeAgentRun(entry: Entry, sessionInput: ToolSess
   if (!model || model.startsWith('-') || model.includes('\0') || command.modelAliases.includes(model) || !turnToken || /[\r\n\0]/u.test(turnToken)) invalid('request');
   if (Buffer.byteLength(system) > headless.limits.stdinMaxBytes) invalid('size');
   const transport = agent.transport, configFile = join(runDir, transport.mcpConfig.fileName), promptFile = join(runDir, headless.systemPromptFile);
-  const slots: Record<string, string> = { '{mcpConfigFile}': configFile, '{toolList}': session.tools.map(tool => bridge.toolPrefix + tool.name).join(',') };
-  // The template carries an admission-policy slot; the current product has no total-turn budget. Do not invent one from the text profile's 1.
-  const args = agent.args.filter((arg, i) => arg !== '{maxTurns}' && agent.args[i + 1] !== '{maxTurns}').map(arg => slots[arg] ?? arg);
+  const slots: Record<string, string> = { '{mcpConfigFile}': configFile, '{toolList}': session.tools.map(tool => bridge.toolPrefix + tool.name).join(','),
+    ...(input.maxTurns === undefined ? {} : { '{maxTurns}': String(input.maxTurns) }) };
+  // The admission-policy slot carries the worker's turn limit; chat has no total-turn budget, so the slot and its flag are dropped, never invented.
+  const args = agent.args.filter((arg, i) => input.maxTurns !== undefined || arg !== '{maxTurns}' && agent.args[i + 1] !== '{maxTurns}').map(arg => slots[arg] ?? arg);
   const promptArgs = headless.systemPromptArgs?.map(arg => arg.replaceAll('{file}', promptFile)) ?? [headless.systemPromptFlag, promptFile];
-  const capability = command.capabilities.reasoningEffort;
-  if (input.effort !== undefined && !capability?.levels.includes(input.effort as never)) invalid('effort');
-  const effortArgs = input.effort === undefined ? [] : nativeEffortArgs(capability, { schemaVersion: 1, level: input.effort as never, source: 'explicit', status: 'selected' });
+  const capability = command.capabilities.reasoningEffort, effortArgs = input.effortArgs;
+  if (effortArgs.length && !capability?.levels.some(level => isDeepStrictEqual(effortArgs, capability.args.map(arg => arg.replaceAll('{effort}', level))))) invalid('effort');
   args.push(command.modelFlag, model, ...effortArgs, ...promptArgs);
   if (args.some(arg => /\{(?:mcpConfigFile|toolList|maxTurns)\}/u.test(arg) || arg.includes('\0')
     || agent.forbiddenFlags.some(flag => arg === flag || arg.startsWith(flag + '='))) || args.some(arg => arg.includes(turnToken))) invalid('argv');

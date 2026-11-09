@@ -24,3 +24,4 @@ export { runHeadlessIsolated, headlessIsolationSeal } from './internal/realm.js'
 export type { HeadlessSpawn, HeadlessIsolation } from './internal/realm.js';
 export { preflightNativeAgent, readNativeAgentObservation } from './internal/agent-observation.js';
 export { createNativeAgentDriver } from './internal/agent-driver.js';
+export { nativeAgentLaunch, nativeAgentCorrelationKind } from './internal/launch.js';

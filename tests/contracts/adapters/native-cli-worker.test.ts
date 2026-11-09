@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
@@ -304,15 +304,13 @@ async function transportFixture(family: string) {
     preflight: vi.fn(async () => ({ execution: seal, preflight: { executable: seal.executable, version: seal.cliVersion, flagSetDigest: seal.flagSetDigest,
       runDir: stateDir, env: {}, isolation: { launcher: '/synthetic/bwrap', version: 'synthetic' } } })),
     claudeDriver: vi.fn(options => ({ ...options.port, signal: new AbortController().signal, line() {}, finish: () => ({ kind: 'completed', text: 'answer' }) })),
-    claudeRun: vi.fn(async (_entry, _session, input) => {
-      const promptFile = join(input.runDir, 'system'), configFile = join(input.runDir, 'mcp.json');
-      await writeFile(promptFile, input.system, { flag: 'wx', mode: 0o600 }); await writeFile(configFile, input.turnToken, { flag: 'wx', mode: 0o600 });
-      return { args: [cli.command.modelFlag, input.model], promptFile, configFile, dispose: async () => undefined };
-    }), runIsolated: isolated };
+    runIsolated: isolated };
   const bridge = { turnToken: 'synthetic-turn-token', tokenEnvName: cli.bridge.tokenEnvName,
     url: `http://${cli.bridge.sentinelHost}${cli.bridge.path}` } as Parameters<NativeCliWorkerDriver['run']>[0];
   return { stateDir, input, transport, bridge, isolated };
 }
+const launchBounds = (outputBytes: number, family: string) => { const limits = nativeCliAgent(family)!.headless.limits;
+  return { outputBytes: 2 * outputBytes + limits.responseFramingBytes, stderrBytes: limits.stderrMaxBytes, maxLineBytes: limits.maxLineBytes, interruptGraceMs: limits.killGraceMs }; };
 it('K17: Claude worker transport preserves task limits and private files through the shared isolated seam', async () => {
   const f = await transportFixture('claude-code-stream-json');
   try {
@@ -323,6 +321,9 @@ it('K17: Claude worker transport preserves task limits and private files through
     expect(spawn.args).toEqual(expect.arrayContaining(['--max-turns', '3', f.input.model]));
     expect(spawn.args).not.toContain(f.bridge.turnToken); expect(spawn).not.toHaveProperty('workspace'); expect(spawn).not.toHaveProperty('inputs');
     expect(spawn.mcpConfigFile).toContain('worker-run-'); expect(bounds.timeoutMs).toBe(f.input.deadlineMs);
+    // [floor] The turn token reaches Claude through the private MCP config only; the bounds are the chat formula (KG7 F1).
+    expect(spawn.env).not.toHaveProperty(f.bridge.tokenEnvName); expect(await readFile(spawn.mcpConfigFile!, 'utf8')).toContain(f.bridge.turnToken);
+    expect(bounds).toMatchObject(launchBounds(f.input.outputBytes, 'claude-code-stream-json'));
     expect(Buffer.from(bounds.stdinBase64!, 'base64').toString()).toBe(f.input.user); expect(events.some(row => row.kind === 'session.ended')).toBe(true);
     await driver.close(); expect(await readdir(f.stateDir)).toEqual([]);
     await expect(driver.run(f.bridge, new AbortController().signal)).rejects.toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
@@ -333,9 +334,10 @@ it('K17: Codex worker uses the real K3 stream guard, token env and no invented t
   try {
     const driver = createNativeCliWorkerDriver(f.input, f.transport, new AbortController().signal);
     expect(await driver.run(f.bridge, new AbortController().signal)).toMatchObject({ termination: 'confirmed', status: 'completed', text: 'answer' });
-    const [, spawn] = f.isolated.mock.calls[0]!;
+    const [, spawn, bounds] = f.isolated.mock.calls[0]!;
     expect(spawn.env[f.bridge.tokenEnvName]).toBe(f.bridge.turnToken); expect(spawn.args.join(' ')).not.toContain(f.bridge.turnToken);
-    expect(f.transport.claudeDriver).not.toHaveBeenCalled(); expect(f.transport.claudeRun).not.toHaveBeenCalled();
+    expect(spawn.args).not.toContain('--max-turns'); expect(spawn).not.toHaveProperty('mcpConfigFile'); expect(bounds).toMatchObject(launchBounds(f.input.outputBytes, 'codex-jsonl'));
+    expect(f.transport.claudeDriver).not.toHaveBeenCalled(); expect(spawn.promptFile).toContain('worker-run-');
     await driver.close(); expect(await readdir(f.stateDir)).toEqual([]);
     expect(() => createNativeCliWorkerDriver({ ...f.input, maxTurns: 3 }, f.transport, new AbortController().signal)).toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }

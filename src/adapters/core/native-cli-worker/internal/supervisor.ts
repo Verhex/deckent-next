@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot, type JsonRecordFile } from '#platform/index.js';
+import type { KnownSecretSnapshot, JsonRecordFile } from '#platform/index.js';
 import { nativeWorkerGuardRefusal, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition, type WorkerEvent } from '#domain/index.js';
 import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError,
   type ExecutionSupervisor, type SandboxRequest, type SandboxResult, type SupervisorProfileSource } from '#engine/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
+import { nativeAgentCorrelationKind } from '#adapters/core/native-cli-headless/index.js';
 import { finalReportTextInstruction, readFinalReportText } from '#adapters/core/native-connection/index.js';
 import { collectDockerOutputFiles } from '#adapters/core/docker-supervisor/index.js';
 import { resolveNativeCliWorkerProfile } from './profile.js';
@@ -102,16 +103,16 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
         ...(binding.reasoningEffort ? { effort: binding.reasoningEffort } : {}),
         ...(this.input.onEvents ? { onEvents: batch => {
           if (!this.bridge) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
-          const known = snapshotKnownSecrets([{ name: this.bridge.tokenEnvName, value: this.bridge.turnToken }]);
-          const redact = (value: unknown): unknown => typeof value === 'string' ? redactForRecord(this.input.knownSecrets ? redactForRecord(value, this.input.knownSecrets) : value, known)
-            : Array.isArray(value) ? value.map(redact) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, child]) => [key, redact(child)])) : value;
+          // KG8 P13: the bridge's one projection (configured secrets and the turn token), keys included.
+          const project = this.bridge.project, redact = (value: unknown): unknown => typeof value === 'string' ? project(value) : Array.isArray(value) ? value.map(redact)
+            : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, child]) => [project(key), redact(child)])) : value;
           this.input.onEvents!(redact(batch) as readonly WorkerEvent[]);
         } } : {}),
         ...(this.resolved.entry.command.capabilities.maxTurns && this.resolved.argv.includes(this.resolved.entry.command.capabilities.maxTurns.flag)
           ? { maxTurns: Number(this.resolved.argv[this.resolved.argv.indexOf(this.resolved.entry.command.capabilities.maxTurns.flag) + 1]) } : {}) }, combined);
       if (!isDeepStrictEqual(this.driver.tools.session, session)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
       this.bridge = await createNativeToolBridge({ port: this.driver.tools, bridge: this.resolved.entry.bridge, limits: this.input.ports.bridgeLimits,
-        correlationKind: this.resolved.entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp', signal: combined,
+        correlationKind: nativeAgentCorrelationKind(this.resolved.entry), signal: combined,
         ...(this.input.knownSecrets ? { knownSecrets: this.input.knownSecrets } : {}) });
       // The last fence and lease check is immediately before the sole CLI spawn; the runtime receives no workspace path.
       await guard(); this.started = true;
@@ -123,8 +124,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
         outcome = { handle: this.handle, result: { kind: 'exited', exitCode: 1 }, stdout: '', stderr: reason, outputCompleteness: 'complete', interrupted: false }; break work;
       }
       if (result.status === 'completed' && !combined.aborted) this.verdict = { state: 'verified' };
-      const known = snapshotKnownSecrets([{ name: this.bridge.tokenEnvName, value: this.bridge.turnToken }]);
-      const text = redactForRecord(this.input.knownSecrets ? redactForRecord(result.text, this.input.knownSecrets) : result.text, known);
+      const text = this.bridge.project(result.text);
       if (Buffer.byteLength(text) > this.resolved.options.outputBytes) { outcome = this.unknown('NATIVE_WORKER_OUTPUT_LIMIT'); break work; }
       const report = binding.finalReport ? readFinalReportText(text, []) : null;
       const stdout = report ? `${JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', ...report })}\n` : text;

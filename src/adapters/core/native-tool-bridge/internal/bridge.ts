@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CallToolResult, Tool, RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
-import { nativeAgentBridgeSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
+import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
 import { PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { bridgeBody, bridgeResponse, refuseBridge } from './http.js';
@@ -57,9 +57,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   server.setRequestHandler('tools/list', async () => ({ tools }));
   server.setRequestHandler('tools/call', async (request, context) => {
     const meta = request.params._meta ?? {}, deckentCallId = randomUUID();
-    const correlation = nativeAgentCorrelationSchema.safeParse(input.correlationKind === 'claude-tool-use'
-      ? { kind: input.correlationKind, toolUseId: meta['claudecode/toolUseId'], deckentCallId }
-      : { kind: input.correlationKind, callId: meta['callId'], itemId: meta['itemId'], deckentCallId });
+    const correlation = nativeAgentCorrelationSchema.safeParse(nativeAgentCorrelationMeta(input.correlationKind, meta, deckentCallId));
     if (!correlation.success) return failure(deckentCallId, 'NATIVE_BRIDGE_CORRELATION_INVALID');
     const call = agentToolCallSchema.safeParse({ id: deckentCallId, name: request.params.name, argumentsJson: JSON.stringify(request.params.arguments ?? {}) });
     if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN');
