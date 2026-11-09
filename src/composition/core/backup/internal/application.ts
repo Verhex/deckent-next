@@ -2,8 +2,8 @@ import { relocateConfiguredProjectAttachment } from '#composition/core/attachmen
 import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
-import { BackupApplication, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority } from '#engine/index.js';
-import { PolicyFileError, FileBackupStorage, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup, verifySharedProjectRestore } from '#adapters/index.js';
+import { BackupApplication, EffectTargetError, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority, type BackupStoragePort } from '#engine/index.js';
+import { PolicyFileError, FileBackupStorage, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup, verifySharedProjectRestore, BACKUP_AUDIT_LOCATIONS } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory, restoreUninstallArchive, uninstallArchiveRoots } from '#adapters/index.js';
 import { PRODUCT_LAYOUT_REGISTRY, ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -82,7 +82,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
         installationId: backup.state.installationId, integrity: backup.integrity() };
     }
     const auditNextToSet = command.action === 'restore' || !existingPolicy;
-    const auditDirectory = auditNextToSet ? join(dirname(resolve(command.set)), '.deckent-backup-audit') : join(productResourcePath(layout, 'audit'), 'backup-operations');
+    const auditDirectory = auditNextToSet ? join(dirname(resolve(command.set)), BACKUP_AUDIT_LOCATIONS.recovery) : join(productResourcePath(layout, 'audit'), BACKUP_AUDIT_LOCATIONS.installation);
     const globalConfigPath = await resolveGlobalConfigReadPath(options.env, options.platform);
     const configDocument = command.action === 'create' ? async () => readBackupConfig(layout.bootstrapConfigPath, globalConfigPath, limits) : undefined;
     const source = { layout, projectRoot: resolve(projectRoot), installationId: authority.installationId, keyFile: config.approvals.keyFile, globalConfigPath, ...(configDocument ? { configDocument } : {}) };
@@ -106,4 +106,26 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     if (sharedRestore && command.action === 'restore') await relocateConfiguredProjectAttachment(command.target, command.scopeId, options, true);
     await release?.(); return result;
   } finally { recovered?.close(); }
+}
+
+/** KG11 F3: an uninstall set through the governed backup application (policy, audit beside the sets): created, then verified once with audit,
+ * and that verify's handle is what `work` gets (R2: the set is not verified again). The handle is closed after `work`. */
+export async function withVerifiedUninstallSet<T>(config: ResolvedConfig, request: { readonly set: string; readonly scopeId: string; readonly policy: unknown;
+  readonly authority: BackupAuthority; readonly passphrase: string; readonly globalPath: string }, work: (verified: VerifiedBackup) => Promise<T>): Promise<T> {
+  const { set, scopeId, authority, passphrase } = request, limits = config.installation.packageMeasurement, layout = config.productLayout;
+  const unbound = (): never => { throw new EffectTargetError('EFFECT_TARGET_PRECONDITION'); };
+  const storage = new FileBackupStorage({ layout, projectRoot: config.projectRoot, installationId: authority.installationId, keyFile: config.approvals.keyFile,
+    configDocument: () => readBackupConfig(layout.bootstrapConfigPath, request.globalPath, limits) }, limits);
+  let held: VerifiedBackup | undefined;
+  const retaining: BackupStoragePort = { locate: path => storage.locate(path),
+    execute: async (command, phrase) => command.action === 'verify' ? (held = await storage.open(command.set, phrase)).result('verify') : storage.execute(command, phrase) };
+  const app = new BackupApplication(retaining, policyBackupAuthorization(request.policy),
+    (event, integrity) => recordBackupAudit(join(dirname(set), BACKUP_AUDIT_LOCATIONS.uninstall), event, integrity), authority);
+  try {
+    await app.execute({ schemaVersion: 1, action: 'create', scopeId, set }, passphrase);
+    await app.execute({ schemaVersion: 1, action: 'verify', scopeId, set }, passphrase);
+    const verified = held ?? unbound();
+    verified.assertInstallation(authority.installationId, unbound);
+    return await work(verified);
+  } finally { held?.close(); }
 }

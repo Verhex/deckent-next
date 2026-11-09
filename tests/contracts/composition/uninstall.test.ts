@@ -196,6 +196,8 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
     const finalSet = result.backup.destination!, verified = await verifyBackupSet(finalSet, phrase, getConfigFieldDefault('installation').packageMeasurement);
     expect(verified.state.installationId).toBe(plan.installation.id); verified.close();
+    // M14: both uninstall sets' audited create and verify (intent + succeeded each) stay in the persisted folder beside the sets (no rename).
+    expect(await readdir(join(finalSet, '..', 'backup-audit'))).toHaveLength(8);
     const replay = await previewConfiguredUninstall(project, ALL, options);
     expect(replay.items.every(item => item.action === 'keep')).toBe(true);
     expect((await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'replay', planDigest: replay.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { UninstallApplication, approvedUninstallEffects, authorizeUninstall, authorizeUninstallSteps, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
-  EffectTargetError, type UninstallAdmission, type UninstallApplicationPorts, type UninstallInventory, type UninstallPlan, type UninstallResult } from '#engine/index.js';
+  EffectTargetError, policyBackupAuthorization, type UninstallAdmission, type UninstallApplicationPorts, type UninstallInventory, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
 import { createHmacIntegrity, ErrorRegistry, SystemTrustedClock } from '#platform/index.js';
@@ -166,14 +166,23 @@ it('refuses purge under a company legal hold before backup/effect admission even
   expect(() => authorizeUninstall(document, principal, 'installation', ['company'], 'purge')).toThrow(/company-retention-owner/u);
 });
 
-it('admits an installation-wide administrator role while keeping a managed install closed to its ordinary member', () => {
+it('admits an installation-wide administrator role while keeping a managed install closed to its ordinary member', async () => {
   const principal: VerifiedPrincipal = { id: 'admin', issuer: 'idp', subject: 'admin', assurance: 'os-user', scopeIds: ['company'] };
   const document = { schemaVersion: 2, revision: 'p1+b1', policyRevision: 'p1', grants: [], restrictions: [], separationOfDuties: [],
-    roles: [{ id: 'installation-admin', permissions: [{ id: 'uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], resource: { kind: 'installation', ids: 'all' } }] }],
+    roles: [{ id: 'installation-admin', permissions: [{ id: 'uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], resource: { kind: 'installation', ids: 'all' } },
+      { id: 'backup', effect: 'allow', actions: ['create', 'verify'], resource: { kind: 'backup', ids: 'all' } }] }],
     bindings: { revision: 'b1', entries: [{ id: 'admins', principals: [{ issuer: 'idp', subject: 'admin' }], roles: ['installation-admin'], scopes: 'all' }] } };
   expect(authorizeUninstall(document, principal, 'installation', ['company'], 'uninstall')).toBe('p1+b1');
   expect(() => authorizeUninstall(document, { ...principal, subject: 'member' }, 'installation', ['company'], 'uninstall'))
     .toThrow(expect.objectContaining({ code: 'POLICY_DENIED' }));
+  // Owner B3 (a), M14: the purge preflight and the backup it then runs decide the role-bound installation-wide grant by one rule.
+  expect(authorizeUninstall(document, principal, 'installation', ['company'], 'purge')).toBe('p1+b1');
+  const backup = (policy: unknown, actor: VerifiedPrincipal) => policyBackupAuthorization(policy)({ schemaVersion: 1, action: 'create', scopeId: 'company', set: '/fixture/set' },
+    { principal: actor, installationId: 'installation', integrity: createHmacIntegrity('k', Buffer.alloc(32, 7)) }).then(decision => decision.effect);
+  expect(await backup(document, principal)).toBe('allow');
+  const scoped = { ...document, bindings: { ...document.bindings, entries: [{ ...document.bindings.entries[0]!, scopes: ['company'] }] } };
+  expect(() => authorizeUninstall(scoped, principal, 'installation', ['company'], 'purge')).toThrow(expect.objectContaining({ code: 'UNINSTALL_PURGE_DENIED' }));
+  expect(await backup(scoped, principal)).toBe('deny'); expect(await backup(document, { ...principal, subject: 'member' })).toBe('deny');
 });
 
 it('asks nothing when nothing would change, stops the service before custody in the K4 order, and never closes an unknown result under force', async () => {

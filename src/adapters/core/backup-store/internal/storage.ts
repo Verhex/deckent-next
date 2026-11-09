@@ -2,7 +2,8 @@ import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
-import { acquireLedgerLock, runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
+import { runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
+import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { PRODUCT_LAYOUT_REGISTRY, ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
@@ -98,9 +99,8 @@ export class FileBackupStorage implements BackupStoragePort {
     if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
     if (!exists) { await privateDirectory(dirname(target)); await mkdir(target, { mode: 0o700 }); }
     await privateDirectory(dirname(productResourcePath(layout, 'ledger')));
-    let lock;
-    try { lock = acquireLedgerLock(productResourcePath(layout, 'ledger') + '-lock'); }
-    catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'LOCAL_RUNTIME_ALREADY_RUNNING') return refuse('BACKUP_SERVICE_RUNNING'); return refuse('BACKUP_CUSTODY_UNAVAILABLE'); }
+    const lock = await withExclusiveFileLock(productResourcePath(layout, 'ledger') + '-lock', { waitMs: 0, pollMs: 0 }).catch(() => undefined);
+    if (!lock) return refuse(lock === null ? 'BACKUP_SERVICE_RUNNING' : 'BACKUP_CUSTODY_UNAVAILABLE');
     let published = false, holdCreated = false;
     let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalPlan: Awaited<ReturnType<typeof planGlobalLayer>> | null = null, globalConfig: BackupResult['globalConfig'] = null;
     const token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
