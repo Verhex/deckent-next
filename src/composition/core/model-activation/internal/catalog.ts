@@ -3,7 +3,7 @@ import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced } from '#adapters
 import { admitConfiguredChatActivation } from './admit.js';
 import { inspectModelBinding, inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { ModelCatalogError, modelCatalogCommandSchema, type ModelCatalogQuery } from '#domain/index.js';
-import { planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization } from '#engine/index.js';
+import { verifiedPrincipal, planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization } from '#engine/index.js';
 import { openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -43,7 +43,7 @@ export async function inspectConfiguredModelCatalog(projectRoot: string, query: 
 }
 async function catalog(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write') {
   const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, scopeId, options, access);
-  return new ModelCatalogApplication({ async verify() { return principal; } }, new ModelCatalogPolicyAuthorization({ async load() { return document; } }),
+  return new ModelCatalogApplication(verifiedPrincipal(principal), new ModelCatalogPolicyAuthorization({ async load() { return document; } }),
     access === 'write' ? async () => openSqliteModelCatalogStore(await path(), config.storage.sqlite, 'forbid') : async () => { throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY'); }, Date.now, async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }));
 }
 

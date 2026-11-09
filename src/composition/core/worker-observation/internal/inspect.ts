@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, mapBounded, HOST_LIMITS_REGISTRY, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, inspectRecordedTaskActivity, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
-import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, readThrough,
+import { verifiedPrincipal, workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, readThrough,
   type DispatchInventoryEntry, type MonitorRecall, type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
@@ -33,7 +33,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
           const target = await context(source.path); assertRequestCompany(target.config.company.id, c.config.company.id);
           const reader = await openSqliteInventoryReader(await inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs });
           try {
-            const inventory = new DispatchInventoryApplication(reader, { async verify() { return target.principal; } }, new DispatchInventoryPolicyAuthorization({ async load() { return target.document; } }), target.config.inspection.maxPageSize);
+            const inventory = new DispatchInventoryApplication(reader, verifiedPrincipal(target.principal), new DispatchInventoryPolicyAuthorization({ async load() { return target.document; } }), target.config.inspection.maxPageSize);
             const entries: DispatchInventoryEntry[] = [], authorization = contextDispatchAuthorization(target, target.document); let after = query.after, failed = false;
             do { const page = await inventory.inspect({ schemaVersion: 1, scopeId: query.scopeId, after, limit: Math.min(remaining - entries.length, target.config.inspection.maxPageSize) }); entries.push(...page.entries); after = page.nextAfter; }
             while (after && entries.length < remaining);

@@ -1,6 +1,6 @@
 import { resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
-import { RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
+import { verifiedPrincipal, RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, false);
@@ -12,7 +12,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
   try {
     const command = maintain === 'park' ? runProgressionParkCommandSchema.parse(input) : maintain === 'nervous' ? runSafetyHoldOnceSchema.parse(input) : maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
-    const source = { async load() { return (await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write')).document; } }, verifier = { async verify() { return principal; } }, authorization = new RunPolicyAuthorization(source);
+    const source = { async load() { return (await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write')).document; } }, verifier = verifiedPrincipal(principal), authorization = new RunPolicyAuthorization(source);
     const store = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }); try {
       const integrity = maintain === true ? null : await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
       const approvals = maintain ? null : openSqliteApprovalStore(await path(), config.storage.sqlite);

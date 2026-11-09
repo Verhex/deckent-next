@@ -1,5 +1,5 @@
 import { ModelInvocationError, modelInvocationQueryInputSchema, modelInvocationCommandQueryInputSchema, type ModelInvocationQuery, type ModelInvocationCommandQuery } from '#domain/index.js';
-import { ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization, type ModelInvocationDelivery } from '#engine/index.js';
+import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationReader, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -30,5 +30,5 @@ async function inspect(input: ModelInvocationQuery, loadContext: (scopeId: strin
     return await inspectionApplication(await loadContext(query.scopeId)).inspect(query, undefined, delivery);
   } catch (error) { throw queryFailure(error); }
 }
-export const inspectionApplication = (context: Awaited<ReturnType<typeof loadInvocationContext>>) => new ModelInvocationInspectionApplication({ async verify() { return context.principal; } }, new ModelInvocationPolicyAuthorization(context.policy),
+export const inspectionApplication = (context: Awaited<ReturnType<typeof loadInvocationContext>>) => new ModelInvocationInspectionApplication(verifiedPrincipal(context.principal), new ModelInvocationPolicyAuthorization(context.policy),
     async () => openSqliteModelInvocationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));

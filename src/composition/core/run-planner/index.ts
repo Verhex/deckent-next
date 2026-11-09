@@ -1,6 +1,6 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { verifiedPrincipal, listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { SIWC_INFERENCE, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -57,7 +57,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
     await loadComposedConfig(root, options);
     const context = scoped = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
     const readBudget = (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
-    return await new BrainPlanApplication({ verify: async () => context.principal }, {
+    return await new BrainPlanApplication(verifiedPrincipal(context.principal), {
       subscriptionAdapterIds: new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID, SIWC_INFERENCE.adapter.id]),
       knownSecrets: getConfigKnownSecrets(context.config), remainingBudget: scopeId => readBudget(scopeId).catch(() => null),
       continueBilling: (command, result, notice, signal) => prepareConfiguredFeatureContinuation(root, command, result, options, notice,

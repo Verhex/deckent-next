@@ -1,6 +1,6 @@
 import { type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
-import { RunApplication, runCommandSchema, projectRunView, RunPolicyAuthorization, type RunCommand, type RunCancellation } from '#engine/index.js';
+import { verifiedPrincipal, RunApplication, runCommandSchema, projectRunView, RunPolicyAuthorization, type RunCommand, type RunCancellation } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** Durable cancellation intent only. Delivery to supervisors and proof of termination are separate;
@@ -21,7 +21,7 @@ export async function requestConfiguredRunCancellation(projectRoot: string, inpu
         try { return await writer.cancelRun(request); } finally { writer.close(); }
       },
     };
-    const app = new RunApplication(store, { async verify() { return principal; } }, new RunPolicyAuthorization({ async load() { return document; } }));
+    const app = new RunApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }));
     const receipt = await app.execute(command);
     return Object.freeze({ schemaVersion: 1 as const, layout,
       cancellation: Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) }) });

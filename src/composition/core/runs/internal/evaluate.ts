@@ -2,7 +2,7 @@ import { prepareConfiguredEvaluationPatch } from '#composition/core/workspace-pa
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore, inventoryReadsPerCall, classifyDockerTaskEffects } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
-import { authenticate, describeTaskEvaluationReceipt, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, RunPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
+import { verifiedPrincipal, authenticate, describeTaskEvaluationReceipt, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, RunPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -12,7 +12,7 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
   try {
     const command = taskEvaluationCommandSchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.identity.scopeId, options, 'write');
-    const verifier = { async verify() { return principal; } };
+    const verifier = verifiedPrincipal(principal);
     const policy = new DispatchPolicyAuthorization(contextPolicySource({ layout, config }));
     const authorization = { authorize: (identity: typeof command.identity, actor: typeof principal) => policy.authorizeIdentity('evaluate', identity, actor) };
     await authorization.authorize(command.identity, await authenticate(verifier, undefined, command.identity.scopeId));

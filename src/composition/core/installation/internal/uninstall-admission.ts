@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { UninstallRecovery, FileEffectStore, withExclusiveFileLock, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore,
   localPrincipalPeer, attestLocalInteractiveTerminal, type LedgerLock } from '#adapters/index.js';
-import { ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
+import { verifiedPrincipal, ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
   UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, resolveGlobalConfigReadPath, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
@@ -46,7 +46,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
       const app = new EffectApplication(catalog, { resolve: kind => [current.target, ...current.targets].find(target => target.kind === kind) ?? null }, store, broker,
         sessions, new OperationPolicyAuthorization(policy), clock, { surface: 'authority', producer: PRINCIPAL_EFFECT_PRODUCER });
-      const decider = new ApprovalApplication(approvals.store, { verify: async () => principal }, sessions, policy, integrity, clock,
+      const decider = new ApprovalApplication(approvals.store, verifiedPrincipal(principal), sessions, policy, integrity, clock,
         'local-terminal-card', config.approvals.pageSize, undefined, { catalog, surface: 'authority' },
         { producers: resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, undefined,
           { scopeId, principal, policyRevision: plan.policyRevision, atMs: clock.sample().wallMs }, event => { auditApplication.record(event); }),

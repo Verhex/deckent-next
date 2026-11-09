@@ -1,5 +1,5 @@
 import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
-import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
+import { verifiedPrincipal, AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
   recoveryGrantState, recoveryModeState, recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModeState, type RecoveryModelPorts,
   type RoleModelSources } from '#engine/index.js';
 import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader, openSqliteModelActivationReader, openSqliteModelCatalogReader,
@@ -73,7 +73,7 @@ export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLo
   return Object.freeze({ async run(scopeId: string): Promise<readonly RecoveryDecisionOutcome[]> { try {
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), path = await c.path();
     const integrity = await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, true), principal = recoveryDecisionPrincipal(c.principal, scopeId);
-    const verifier = { async verify() { return principal; } }, owner = { issuer: c.principal.issuer, subject: c.principal.subject };
+    const verifier = verifiedPrincipal(principal), owner = { issuer: c.principal.issuer, subject: c.principal.subject };
     const audit = await openSqliteAuditStore(path, c.config.storage.sqlite), cases = openSqliteRecoveryStore(path, c.config.storage.sqlite);
     try {
       const ledger = new AuditApplication(audit, integrity), approval = async (id: string) => recoveryContinuationApproval(c.document, c.principal, id, Date.now());

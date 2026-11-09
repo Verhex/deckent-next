@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MemoryJournalApplication, MemoryPolicyAuthorization, MemoryJournalError, type MemoryEvaluatorInvocations } from '#engine/index.js';
+import { verifiedPrincipal, MemoryJournalApplication, MemoryPolicyAuthorization, MemoryJournalError, type MemoryEvaluatorInvocations } from '#engine/index.js';
 import { FileMemoryPurgeJournal, memoryKeyedDigest, openLocalIntegrityAuthority, openSqliteMemoryJournalStore, openSqliteModelInvocationReader,
   openSqliteModelInvocationStore } from '#adapters/index.js';
 import { SystemTrustedClock, productResourcePath, type IntegrityAuthority, type ProductLayout } from '#platform/index.js';
@@ -15,7 +15,7 @@ export async function memoryJournalFor(context: Context, mode: 'read' | 'write',
   // A write opens (or creates) the key first; a read opens it inside the store, so a missing key is a typed hold, never an empty answer.
   const integrity = key ?? (mode === 'write' ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null);
   const readKey = () => integrity ? Promise.resolve(integrity) : openLocalIntegrityAuthority(layout, config.approvals.keyFile, false);
-  return new MemoryJournalApplication({ verifier: { verify: async () => context.principal }, authorize: (...args) => policy.authorize(...args), readFilter: (...args) => policy.readFilter(...args),
+  return new MemoryJournalApplication({ verifier: verifiedPrincipal(context.principal), authorize: (...args) => policy.authorize(...args), readFilter: (...args) => policy.readFilter(...args),
     openStore: async access => openSqliteMemoryJournalStore(await context.path(), config.storage.sqlite, await readKey(), access),
     keyedDigest: integrity ? memoryKeyedDigest(integrity) : () => { throw new MemoryJournalError('MEMORY_UNAVAILABLE'); },
     purgeJournal: memoryPurgeJournalOf(layout, readKey), ...(mode === 'write' ? { evaluatorInvocations: memoryEvaluatorInvocations(context) } : {}),

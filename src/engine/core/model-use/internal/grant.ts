@@ -1,3 +1,4 @@
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { installationRegistrationSchema, modelInvocationProfileSchema, type ModelUseLease } from '#domain/index.js';
@@ -50,7 +51,7 @@ export async function grantModelUse(ports: ModelUseWritePorts, root: string, sco
       if (selection && selected.some(({ profile }) => isDeepStrictEqual(profile.reference, selection))) await set('terminal.chat.reference', selection);
       await set('provider_invocation_profiles', { schemaVersion: 1, profiles: [...own, ...targetProfiles] });
       const current = await ports.context(root, scopeId);
-      const app = new ModelActivationApplication({ verify: async () => current.principal },
+      const app = new ModelActivationApplication(verifiedPrincipal(current.principal),
         new ModelActivationPolicyAuthorization({ load: async () => current.document }), new ModelBindingApplication({ read: async () => current.config['provider_catalog'] }),
         () => ports.activationStore(current), Date.now);
       await carryModelUseCatalog(ports, source, current, targetProfiles, leaseId);

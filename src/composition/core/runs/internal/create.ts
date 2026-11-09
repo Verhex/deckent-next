@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
-import { runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
+import { verifiedPrincipal, runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -27,7 +27,7 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
     writer: async () => openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid') });
   return withRunCreationAuthority(context, async (authority, sealing) => {
   const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity, agentUses); // S4B-5 memory, K8 exact work selection
-  const app = new RunAdmissionApplication(store, { async verify() { return principal; } }, authority,
+  const app = new RunAdmissionApplication(store, verifiedPrincipal(principal), authority,
     executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null),
     { ...memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
       refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: executionTaskSilenceDeadline, agents,

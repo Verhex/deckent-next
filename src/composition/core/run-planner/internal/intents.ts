@@ -1,5 +1,5 @@
 import type { BrainPlanCommand } from '#domain/index.js';
-import { RunIntentApplication, RunPolicyAuthorization, isRunIntentResult, type RunIntentRecord } from '#engine/index.js';
+import { verifiedPrincipal, RunIntentApplication, RunPolicyAuthorization, isRunIntentResult, type RunIntentRecord } from '#engine/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, openSqliteRunProposalStore } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -11,7 +11,7 @@ async function withIntentOwner<T>(root: string, command: BrainPlanCommand, optio
   run: (owner: RunIntentApplication) => Promise<T>) {
   const context = await loadConfiguredScopeContext(root, command.scopeId, options, 'write');
   const store = await openSqliteRunProposalStore(await context.path(), context.config.storage.sqlite);
-  try { return await run(new RunIntentApplication(store, { verify: async () => context.principal },
+  try { return await run(new RunIntentApplication(store, verifiedPrincipal(context.principal),
     new RunPolicyAuthorization(contextPolicySource(context)), new SystemTrustedClock(),
     () => configuredWorkerSetupFact(root, command.scopeId, options), action => assertAuthorityWitness(`runIntent.${action}`, localPrincipalChannel(), { attest: () => attestLocalInteractiveTerminal() }))); }
   finally { store.close(); }

@@ -1,5 +1,5 @@
 import { openSqliteModelInvocationCancellationInventory, openSqliteModelInvocationStore, openSqliteProviderSpendRecoveryStore } from '#adapters/index.js';
-import { ModelInvocationCancellationRecoveryApplication, ModelInvocationPolicyAuthorization, endedRuntimeServiceModelOwner,
+import { verifiedPrincipal, ModelInvocationCancellationRecoveryApplication, ModelInvocationPolicyAuthorization, endedRuntimeServiceModelOwner,
   ModelInvocationStoreError, modelInvocationCancellationRecoveryCommandSchema,
   type ModelInvocationControllers } from '#engine/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -17,7 +17,7 @@ export async function recoverConfiguredModelCancellations(projectRoot: string, i
       || JSON.stringify(config.productLayout) !== expectedLayoutIdentity) {
       throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     }
-    return await new ModelInvocationCancellationRecoveryApplication({ async verify() { return context.principal; } },
+    return await new ModelInvocationCancellationRecoveryApplication(verifiedPrincipal(context.principal),
       new ModelInvocationPolicyAuthorization(context.policy),
       async () => openSqliteModelInvocationCancellationInventory(await context.path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
       controllers, { maxPageSize: config.cancellation.recoveryPageSize }).recover(command);

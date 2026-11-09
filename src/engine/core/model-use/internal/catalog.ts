@@ -1,3 +1,4 @@
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { ModelCatalogApplication } from '#engine/core/model-activation/index.js';
 import { ModelCatalogPolicyAuthorization } from '#engine/core/policy/index.js';
@@ -5,7 +6,7 @@ import type { ModelUseContext, ModelUseWritePorts } from './ports.js';
 /** Copy public catalog facts through their owner, never credentials or source balances. */
 export async function carryModelUseCatalog(ports: ModelUseWritePorts, source: ModelUseContext, target: ModelUseContext, profiles: readonly ModelInvocationProfile[], leaseId: string) {
   const reader = await ports.catalogReader(source), scopeId = target.principal.scopeIds[0]!;
-  const app = new ModelCatalogApplication({ verify: async () => target.principal }, new ModelCatalogPolicyAuthorization({ load: async () => target.document }),
+  const app = new ModelCatalogApplication(verifiedPrincipal(target.principal), new ModelCatalogPolicyAuthorization({ load: async () => target.document }),
     () => ports.catalogStore(target), Date.now, () => ports.catalogReader(target));
   try {
     for (const profile of profiles) {

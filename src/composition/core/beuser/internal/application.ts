@@ -6,7 +6,7 @@ import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
 import { FileArtifactStore, loadBeuserTerminal, beuserTerminalFixture, BeuserSurfaceError, openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord,
   readBeuserInstallationSummary, createBeuserArrange, type BeuserSurface, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
-import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
+import { verifiedPrincipal, BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
@@ -206,7 +206,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
       return [{ name: 'beuser-evidence', status: 'collected', bytes: Buffer.from(JSON.stringify(evidence)) }]; },
     refusal: harness.refusal,
   });
-  const dispatch = new BeuserDispatch(new DispatchApplication(store, supervisor, { verify: async () => c.principal }, policy, owner, artifacts), harness.refusal, async () => request);
+  const dispatch = new BeuserDispatch(new DispatchApplication(store, supervisor, verifiedPrincipal(c.principal), policy, owner, artifacts), harness.refusal, async () => request);
   try {
     let outcome;
     try { outcome = await dispatch.execute(context, request, undefined); }

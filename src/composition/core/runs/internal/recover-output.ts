@@ -2,7 +2,7 @@ import { recordedExecutionSupervisor } from '#composition/core/supervisors/index
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
-import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, parseRetainedOutputEnvelope,
+import { verifiedPrincipal, authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, parseRetainedOutputEnvelope,
   type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchStore, type RunBoundDispatchStore } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -16,7 +16,7 @@ export async function recoverConfiguredAttemptOutput(projectRoot: string, input:
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
-    const verifier = { async verify() { return principal; } };
+    const verifier = verifiedPrincipal(principal);
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(
       contextPolicySource({ layout, config }));
     const actor = await authenticate(verifier, undefined, identity.scopeId);
