@@ -80,7 +80,6 @@
   {"file":"src/adapters/core/mcp-client/internal/pin.ts","fingerprint":"9efd1c68156d5eb84cdaa0d78b25f81abb5287ad047ec91214a41a7a27fcd965","rule":"G2"},
   {"file":"src/adapters/core/mcp-client/internal/pin.ts","fingerprint":"cbb511a6b3a857e006e1fdeff9a52acb139aca50b635b5a6c16c15390ff40a41","rule":"G2"},
   {"file":"src/adapters/core/mcp-client/internal/pin.ts","fingerprint":"d4d9fefd8dc83d53ea047fb85c07edcf054ab64bca330df880d1529758b36e37","rule":"G2"},
-  {"file":"src/adapters/core/mcp-client/internal/pool.ts","fingerprint":"540299b1d338f054d9151205e725e076e8eb4a873cc35e01f429f7c0f9ccfd0e","rule":"G2"},
   {"file":"src/adapters/core/mcp-client/internal/pool.ts","fingerprint":"96a9f5a05c6b6edade404da995a0c83df8be662597be2e790395aaea8781ecaa","rule":"G2"},
   {"file":"src/adapters/core/mcp-client/internal/pool.ts","fingerprint":"aa522a53610faeeee01aade2827018ac15cf8649187582d20eb90c5428488096","rule":"G2"},
   {"file":"src/adapters/core/mcp-client/internal/registry.ts","fingerprint":"0dc8bc0dd2e80b8d2a77b4e37733a54c084d44a034c3488e144f84520c89d17b","rule":"G2"},

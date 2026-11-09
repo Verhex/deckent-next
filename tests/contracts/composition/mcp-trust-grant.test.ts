@@ -65,7 +65,7 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
 }
 
 describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s tool grant (K1)', () => {
-  it('approve → the server\'s mcp-server grant (require-approval, mode-eligible; this scope, this person), audited; revoke takes trust and grant together', async () => {
+  it('approve → the server\'s mcp-server grant (require-approval, mode-eligible; this scope, this person), audited; revoke (and reset) takes trust and grant together', async () => {
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', pinnedTools: 1, grant: { status: 'granted' } });
     const grants = f.mcpGrants();
@@ -81,6 +81,10 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(f.mcpGrants()).toEqual([]);
     expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
+    // Decision 14 (b): `reset` forgets the decision and takes the grant exactly as `revoke` does (keeping it would be a separate product decision).
+    expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, grant: { status: 'granted' } });
+    expect(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
+    expect(f.mcpGrants()).toEqual([]);
   }, 90_000);
 
   it('pin drift: a changed tool list offers nothing new until re-approval, which replaces the grant (never a second one); remove takes it away; a re-added name has none until approved', async () => {

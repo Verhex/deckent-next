@@ -11,6 +11,7 @@ import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
 import { mcpEndpointRefusal } from './registry.js';
+import { MCP_TRUST_TOOLS_MAX } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 import { boundedMcpTransport } from './input.js';
 
@@ -20,8 +21,7 @@ export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2
 export const MCP_CLIENT_IDENTITY = createHash('sha256').update(JSON.stringify([PACKAGE_VERSION, readBuildIdentity()?.sourceTreeSha256 ?? null, MCP_CLIENT_PROTOCOL_VERSIONS])).digest('hex');
 /** K4: the directory (under the data root's `integrations`) that holds each `sandbox-net` server's private HOME. */
 export const MCP_SERVER_HOMES_DIR = 'mcp-home';
-/** Bounds of what one server may declare and of the stderr tail kept for `inspect`. */
-export const MCP_CLIENT_TOOLS_MAX = 512;
+export const MCP_CLIENT_TOOLS_MAX = MCP_TRUST_TOOLS_MAX;
 /** Pages of one `tools/list` (SDK ≥ 2.2 follows `nextCursor` itself; `listMaxPages` is its hard cap, so a server that never stops paging ends here). */
 export const MCP_CLIENT_LIST_PAGES_MAX = 16;
 export const MCP_CLIENT_STDERR_TAIL_BYTES = 4_096;
@@ -167,8 +167,9 @@ export interface McpAnsweredError { readonly code: number; readonly message: str
  * (`trust-revoked`), its definition or scope is not the one the call was offered under (`definition-changed`), the tool's pin is gone or
  * different (`pin-revoked`), or the trust record cannot be read or locked (`trust-unavailable`, fail closed). */
 export type McpSendRefusal = 'trust-revoked' | 'definition-changed' | 'pin-revoked' | 'trust-unavailable';
-/** The send authority of one call: asked right before the request is handed to the SDK, after every local pre-send check; null admits. */
-export type McpSendAdmission = () => Promise<McpSendRefusal | null>;
+/** The send authority of one call: asked right before the request is handed to the SDK, after every local pre-send check; null admits.
+ * Required (A6-11): a caller with no trust layer names `probe-only`, so a call can never skip MCP-REVOKE by leaving it out. */
+export type McpSendAdmission = (() => Promise<McpSendRefusal | null>) | 'probe-only';
 export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: CallToolResult } | { readonly outcome: 'answered'; readonly error: McpAnsweredError }
   | { readonly outcome: 'refused'; readonly reason: 'not-connected' | 'pin-mismatch' | 'cancelled' | 'invalid-output-schema' | McpSendRefusal }
   | { readonly outcome: 'unknown'; readonly reason: 'timed-out' | 'connection-closed' | 'cancelled' | 'failed' };
@@ -197,7 +198,7 @@ interface ServerState {
 export interface McpPoolView {
   open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen>;
   call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
-    readonly admit?: McpSendAdmission }): Promise<McpCallOutcome>;
+    readonly admit: McpSendAdmission }): Promise<McpCallOutcome>;
   stderr(serverId: string): string;
   retire(serverId: string): Promise<void>;
   retain(trusted: ReadonlySet<string>): void;
@@ -208,7 +209,6 @@ export interface McpPoolView {
  * override can reach) nor by its @cfworker/json-schema provider. */
 let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio')]> | undefined;
 const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio')]);
-/** Every page of the server's tool list (one deadline for the whole walk, each page also bounded); the pin then covers every page. */
 const listAllTools = async (client: Client, timeoutMs: number, signal: AbortSignal) =>
   (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs * 2)]) })).tools as McpLiveTool[];
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
@@ -227,7 +227,7 @@ function pinnedTools(tools: readonly McpLiveTool[]): ReadonlyMap<string, PinnedT
 }
 /** SEP-2243 HeaderMismatch (Streamable HTTP; the SDK does not export its constant). */
 const HEADER_MISMATCH = -32020;
-/** The SDK's own post-send structured-result checks (client 2.3.1 `callTool`): missing (-32600), nonconforming or unvalidatable (-32602). */
+/** The SDK's own post-send structured-result checks (client 2.4.0 `callTool`): missing (-32600), nonconforming or unvalidatable (-32602). */
 const OUTPUT_SCHEMA_FAILURE = /^(?:Tool .+ has an output schema but did not return structured content|Structured content does not match the tool's output schema|Failed to validate structured content)/su;
 
 /**
@@ -256,7 +256,7 @@ export class McpClientPool implements McpPoolView {
       stderr: id => this.stderrIn(namespace, id), retire: id => this.retireIn(namespace, id), retain: trusted => this.retainIn(namespace, trusted) };
   }
   open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> { return this.openIn('', server, settings, context); }
-  call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal; readonly admit?: McpSendAdmission }) {
+  call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal; readonly admit: McpSendAdmission }) {
     return this.callIn('', serverId, tool, digest, args, options);
   }
   stderr(serverId: string): string { return this.stderrIn('', serverId); }
@@ -282,7 +282,6 @@ export class McpClientPool implements McpPoolView {
     current.lock = run.catch(() => undefined);
     return run;
   }
-  /** Room for one more server: under the bound, or the idle one longest unused is closed (in flight: never). */
   private makeRoom(): boolean {
     const bound = this.options.maxServers ?? getConfigFieldDefault('mcp').maxServers;
     if (this.states.size < bound) return true;
@@ -314,7 +313,7 @@ export class McpClientPool implements McpPoolView {
     const info = client.getServerVersion();
     state.last = { ok: true, era: client.getProtocolEra() === 'modern' ? 'modern' : 'legacy', protocolVersion: client.getNegotiatedProtocolVersion() ?? null,
       serverInfo: info ? { name: String(info.name), version: String(info.version) } : null, sandboxed: state.last?.sandboxed ?? false,
-      projectReadOnly: state.last?.projectReadOnly ?? false, posture: state.last?.posture ?? '', tools: verifyMcpTools(server, tools) };
+      projectReadOnly: state.last?.projectReadOnly ?? false, posture: state.last?.posture ?? '', tools: verifyMcpTools(server, tools, state.listing.tools) };
     return state.last;
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
@@ -326,7 +325,7 @@ export class McpClientPool implements McpPoolView {
     // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.
     const transport = bound(server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'manual' }, fetch: createMcpRedirectFetch(server.url!, fetch, maxBytes) })
       : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: maxBytes }));
-    // SDK 2.3.1 clones the exact base transport through its constructor for disposable discovery. Guard that sibling too, preserving its reaper.
+    // SDK 2.4.0 clones the exact base transport through its constructor for disposable discovery. Guard that sibling too, preserving its reaper.
     if (transport instanceof StdioClientTransport) Object.defineProperty(transport, 'constructor', { value: function(params: StdioServerParameters) { return bound(new StdioClientTransport(params)); } });
     if (transport instanceof StdioClientTransport) transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
@@ -376,14 +375,14 @@ export class McpClientPool implements McpPoolView {
    * `admit` (MCP-REVOKE) is the caller's send authority, asked last, right before the request is handed to the SDK: a refusal sends nothing.
    */
   private async callIn(namespace: string, serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
-    readonly admit?: McpSendAdmission }): Promise<McpCallOutcome> {
+    readonly admit: McpSendAdmission }): Promise<McpCallOutcome> {
     const state = this.states.get(`${namespace}\0${serverId}`);
     if (!state) return { outcome: 'refused', reason: 'not-connected' };
     state.inFlight++; state.usedAtMs = this.now();
     try { return await this.callLocked(state, tool, digest, args, options); } finally { state.inFlight--; state.usedAtMs = this.now(); }
   }
   private async callLocked(state: ServerState, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
-    readonly admit?: McpSendAdmission }): Promise<McpCallOutcome> {
+    readonly admit: McpSendAdmission }): Promise<McpCallOutcome> {
     const client = state.client;
     if (!client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
@@ -401,7 +400,7 @@ export class McpClientPool implements McpPoolView {
     }
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
     // The current trust decides last (after the approval wait and every local check): only local SDK steps separate it from the write.
-    const refusal = options.admit ? await options.admit() : null;
+    const refusal = options.admit === 'probe-only' ? null : await options.admit();
     if (refusal) return { outcome: 'refused', reason: refusal };
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
     if (state.client !== client) return { outcome: 'refused', reason: 'not-connected' };
@@ -439,7 +438,6 @@ export class McpClientPool implements McpPoolView {
     state.lock = run.catch(() => undefined);
     return run.catch(() => undefined);
   }
-  /** Stops every server process of this view whose id is not in `trusted` (a turn's current registry view); other views are untouched. */
   private retainIn(namespace: string, trusted: ReadonlySet<string>): void {
     for (const state of [...this.states.values()]) if (state.namespace === namespace && !trusted.has(state.id)) void this.retireIn(namespace, state.id);
   }

@@ -37,7 +37,6 @@
     "tests/contracts/adapters/approval-keyring.test.ts": 71,
     "tests/contracts/adapters/approval-operation-keyed.test.ts": 1058,
     "tests/contracts/adapters/assignment-ledger-v62.test.ts": 451,
-    "tests/contracts/adapters/astra-2177-new-floor.test.ts": 8886,
     "tests/contracts/adapters/astra-2180-dynamic-ref.test.ts": 1172,
     "tests/contracts/adapters/audit-checkpoint.test.ts": 1307,
     "tests/contracts/adapters/audit-store.test.ts": 669,

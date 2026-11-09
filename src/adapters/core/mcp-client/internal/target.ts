@@ -51,7 +51,6 @@ export class McpToolTarget implements EffectTarget {
   async lookup() { return null; }
 }
 
-/** Text of a UTF-8 prefix of at most `bytes`, never splitting a character. */
 function cut(text: string, bytes: number): { readonly text: string; readonly cut: boolean } {
   const body = Buffer.from(text, 'utf8');
   if (body.length <= bytes) return { text, cut: false };
@@ -59,7 +58,6 @@ function cut(text: string, bytes: number): { readonly text: string; readonly cut
   while (end > 0 && (body[end]! & 0xc0) === 0x80) end--;
   return { text: body.subarray(0, end).toString('utf8'), cut: true };
 }
-/** One content item as text for the model: text as is; binary content is named, never shown. */
 function contentText(item: Record<string, unknown>): string {
   const type = item['type'];
   if (type === 'text') return String(item['text'] ?? '');
