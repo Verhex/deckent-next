@@ -243,6 +243,12 @@
       ],
       "plan": "EXECUTION"
     },
+    "src/adapters/core/file-lock": {
+      "dependencies": [
+        "src/adapters/core/local-runtime-socket"
+      ],
+      "plan": "EXECUTION"
+    },
     "src/adapters/core/process-runner": {
       "dependencies": [
         "src/adapters/core/docker-supervisor",
@@ -4365,8 +4371,9 @@
         "src/engine/core/toolchain-currency",
         "src/platform/core/errors",
         "src/platform/core/redaction",
-        "src/adapters/core/local-runtime-socket",
-        "src/platform/core/utils"
+        "src/adapters/core/file-lock",
+        "src/platform/core/utils",
+        "src/platform/core/host"
       ],
       "plan": "PROVIDERS"
     },
@@ -5155,7 +5162,8 @@
         "src/adapters/core/process-runner",
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/adapters/core/file-lock"
       ],
       "plan": "PROVIDERS"
     },
@@ -5206,12 +5214,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42359,
+      "adapters": 42379,
       "surfaces": 45000,
       "composition": 13558
     },
     "totalSrcLines": 200000,
-    "testCases": 8218,
+    "testCases": 8217,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

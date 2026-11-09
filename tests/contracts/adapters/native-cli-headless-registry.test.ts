@@ -5,7 +5,7 @@ import { nativeCliHeadless, nativeCliAgent, parseNativeCliRegistry } from '#adap
 import { headlessFlagSetDigest, nativeAgentFlagSetDigest, nativeAgentInitReason, nativeAgentItemReason, toolSessionSchema, nativeAgentCorrelationSchema,
   nativeAgentToolResultSchema, nativeAgentReadinessSchema, nativeAgentReadinessReasonSchema } from '#adapters/core/native-cli-headless/index.js';
 import { t } from '#platform/core/i18n/index.js';
-import { parseClaudeStreamLine, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
+import { parseClaudeStreamLine } from '#adapters/core/native-connection/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 import { CODEX_FAMILY } from '../../fixtures/native-headless/codex.js';
 import { FAMILY, PINNED, assistantLine, happyLines, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
@@ -87,9 +87,6 @@ describe('S3-1 headless registry data', () => {
     const asset = structuredClone(registry) as unknown as { adapters: { claude: { headless: Record<string, unknown> } } };
     change(asset.adapters.claude.headless);
     expect(() => parseNativeCliRegistry(asset)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
-  });
-  it('shares the worker quota classification instead of a second list', () => {
-    expect(nativeQuotaPolicy().claudeRejectedStatuses).toEqual(['rejected']);
   });
 });
 

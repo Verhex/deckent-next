@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { expect, it } from 'vitest';
-import { HOST_LIMITS_REGISTRY, recordedProcessState } from '#platform/index.js';
+import { expect, it, vi } from 'vitest';
+import { HOST_LIMITS_REGISTRY, processExists, recordedProcessState } from '#platform/index.js';
 
 // S6R-3 N7 (lead on s6 Q: pid liveness hardened against PID reuse): a launcher recorded (pid, startedAt) is gone on ESRCH, and also when the
 // process now holding that pid started clearly after the recorded start (Linux /proc start time). Every doubt reads `alive`: fencing a
@@ -12,8 +12,15 @@ const proc = (startTicks: number, state = 'S') => (path: string) => {
 };
 const startedAtFor = (ticks: number) => btime * 1000 + (ticks * 1000) / hz;
 
-it('an ended process is gone', () => {
+it('an ended process is gone; only ESRCH proves it, EPERM or any other probe error reads alive', () => {
   expect(recordedProcessState(spawnSync(process.execPath, ['-e', '']).pid!, Date.now())).toBe('gone');
+  const kill = vi.spyOn(process, 'kill');
+  try {
+    for (const [code, state] of [['ESRCH', 'gone'], ['EPERM', 'alive'], ['EINVAL', 'alive']] as const) {
+      kill.mockImplementation(() => { throw Object.assign(new Error(code), { code }); });
+      expect(recordedProcessState(1, Date.now(), () => { throw new Error('unread'); })).toBe(state); expect(processExists(1)).toBe(state === 'alive');
+    }
+  } finally { kill.mockRestore(); }
 });
 
 it.skipIf(process.platform !== 'linux')('this process, recorded with its own start, is alive (real /proc)', () => {

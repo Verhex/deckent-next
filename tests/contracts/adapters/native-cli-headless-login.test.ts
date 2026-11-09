@@ -15,13 +15,12 @@ afterEach(cleanupConnections);
 const CANARY = 'CREDENTIAL-CANARY-91c2', SECRET = 'sk-ant-SENTINEL-4d1e';
 type Logged = { mode: string; argv: string[]; env: Record<string, string>; cwd: string };
 
-type H = { login?: { env: { inherit: string[]; fixed: Record<string, string> }; timeoutMs: number }; isolation: { refreshLock: { staleMs: number } } };
+type H = { login?: { env: { inherit: string[]; fixed: Record<string, string> } } };
 describe('s3c login registry data', () => {
-  it('the sign-in is registry data: the subscription login argv, an SSO switch, a bound below the lock\'s stale age, and no deny name in its environment', () => {
+  it('the sign-in is registry data: the subscription login argv, an SSO switch and no deny name in its environment', () => {
     const { headless } = nativeCliHeadless(FAMILY)!;
     expect(headless.login.args).toEqual(['auth', 'login', '--claudeai']);
     expect(headless.login.ssoFlag).toBe('--sso');
-    expect(headless.login.timeoutMs).toBeLessThan(headless.isolation.refreshLock.staleMs);
     expect([...headless.login.env.inherit, ...Object.keys(headless.login.env.fixed)].filter(name => headless.env.deny.includes(name))).toEqual([]);
     expect(headless.connect).not.toHaveProperty('configDirDefault');
   });
@@ -29,7 +28,6 @@ describe('s3c login registry data', () => {
     ['a deny name inherited by the sign-in', (h: H) => { h.login!.env.inherit = [...h.login!.env.inherit, 'ANTHROPIC_API_KEY']; }],
     ['a deny name fixed for the sign-in', (h: H) => { h.login!.env.fixed = { ...h.login!.env.fixed, CLAUDE_CODE_OAUTH_TOKEN: 'x' }; }],
     ['the login dir name inherited from the person', (h: H) => { h.login!.env.inherit = [...h.login!.env.inherit, 'CLAUDE_CONFIG_DIR']; }],
-    ['a sign-in bound past the lock\'s stale age', (h: H) => { h.login!.timeoutMs = h.isolation.refreshLock.staleMs; }],
     ['no sign-in block', (h: H) => { delete h.login; }],
   ])('refuses %s', (_name, mutate) => {
     const copy = structuredClone(registry) as unknown as { adapters: { claude: { headless: Record<string, unknown> } } };

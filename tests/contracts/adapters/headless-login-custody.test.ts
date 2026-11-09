@@ -1,12 +1,11 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { resolve } from 'node:path';
-import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { nativeCliHeadless, withHeadlessLoginLock } from '#adapters/core/native-cli-headless/index.js';
+import { headlessLoginLockPath, nativeCliHeadless, withHeadlessLoginLock } from '#adapters/core/native-cli-headless/index.js';
 import { FAMILY } from '../../fixtures/native-headless/stream.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -15,8 +14,8 @@ async function fixture() {
   const configDir = join(root, 'login'), stateDir = join(root, 'connection'), locks = join(root, 'login-locks');
   await mkdir(configDir, { mode: 0o700 }); await mkdir(locks, { mode: 0o700 });
   const base = nativeCliHeadless(FAMILY)!;
-  const entry = { ...base, headless: { ...base.headless, isolation: { ...base.headless.isolation, refreshLock: { ...base.headless.isolation.refreshLock, waitMs: 30, pollMs: 2, staleMs: 1 } } } };
-  return { configDir, stateDir, entry, marker: join(locks, createHash('sha256').update(configDir).digest('hex').slice(0, 32) + '.lock') };
+  const entry = { ...base, headless: { ...base.headless, isolation: { ...base.headless.isolation, refreshLock: { ...base.headless.isolation.refreshLock, waitMs: 30, pollMs: 2 } } } };
+  return { configDir, stateDir, entry, marker: headlessLoginLockPath(configDir, stateDir) };
 }
 it.skipIf(process.platform !== 'linux')('does not reclaim an old live holder and never runs its callback', async () => {
   const f = await fixture(); await writeFile(f.marker, JSON.stringify({ pid: process.pid, atMs: 0, token: 'legacy' }), { mode: 0o600 });
