@@ -26,54 +26,58 @@ interface WorkCommandContext {
  * <args>` without window words is left to the text command (returns false). Line/CLI producers keep their typed arguments.
  */
 export async function dispatchWorkCommand(slash: { readonly command: string; readonly args: string }, context: WorkCommandContext): Promise<boolean> {
-  const { execution, panel, labels, ledger, push, errorText, pushMode, live, monitor, watchRef, setWatch, setWatchStatus, runDecision } = context;
-  if (slash.command === 'monitor') {
-    if (slash.args) return false;
-    if (live.canOpenMonitor) await live.openMonitor();
-    else {
-      const title = labels.work?.live?.monitorTitle ?? '/monitor';
-      let lines: readonly string[];
-      const unwired = context.commandUnavailable ? fillTemplate(context.commandUnavailable, { part: 'monitor' }) : labels.work?.unavailable ?? labels.ledgerUnavailable;
-      try { lines = monitor ? await monitor('') : [unwired]; }
-      catch (error) { lines = [errorText(error)]; }
-      await panel.pick(execution, { kind: 'window', title, body: lines, hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
-      push([systemSummaryEntry(labels.work?.live?.closedMonitor ?? title)]);
-    }
-    return true;
+  if (slash.command === 'monitor') return monitorCommand(slash.args, context);
+  const entry = Object.hasOwn(WORK_WINDOWS, slash.command) ? WORK_WINDOWS[slash.command] : undefined;
+  return entry ? workWindow(slash.command, entry, context) : false;
+}
+async function monitorCommand(args: string, { execution, panel, labels, push, errorText, monitor, live, commandUnavailable }: WorkCommandContext): Promise<boolean> {
+  if (args) return false;
+  if (live.canOpenMonitor) await live.openMonitor();
+  else {
+    const title = labels.work?.live?.monitorTitle ?? '/monitor';
+    let lines: readonly string[];
+    const unwired = commandUnavailable ? fillTemplate(commandUnavailable, { part: 'monitor' }) : labels.work?.unavailable ?? labels.ledgerUnavailable;
+    try { lines = monitor ? await monitor('') : [unwired]; }
+    catch (error) { lines = [errorText(error)]; }
+    await panel.pick(execution, { kind: 'window', title, body: lines, hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
+    push([systemSummaryEntry(labels.work?.live?.closedMonitor ?? title)]);
   }
-  if (['workers', 'runs', 'run', 'transcript', 'cancel', 'approvals', 'tasks'].includes(slash.command)) {
-    const workLabels = labels.work;
-    try {
-      const unavailable = !ledger || !workLabels?.jobs || !workLabels.live || (['runs', 'run', 'cancel'].includes(slash.command) && !ledger.listRunIds)
-        || (slash.command === 'transcript' && !ledger.inspectTranscript) || (slash.command === 'cancel' && !ledger.cancelRun)
-        || (slash.command === 'approvals' && (!ledger.listApprovalPage || !ledger.decideApproval));
-      if (unavailable) {
-        const title = `/${slash.command}`, text = workLabels?.unavailable ?? labels.ledgerUnavailable;
-        await panel.pick(execution, { kind: 'window', title, body: [text], hints: workLabels?.jobs?.hints ?? '', confirm: false }, ['close']);
-        push([systemSummaryEntry(text)]); return true;
-      }
-      // Y1: `/runs` carries the hold/resume/close keys when the terminal has the lifecycle port and the words; otherwise the read-only list.
-      if (slash.command === 'approvals' || slash.command === 'cancel' || (slash.command === 'runs' && ledger!.controlRun && workLabels!.runControl)) {
-        await runDecision(slash.command as 'approvals' | 'cancel' | 'runs', '', execution);
-        if (slash.command === 'runs' && !execution.signal.aborted) context.onRunsSeen?.();
-      }
-      else if (slash.command === 'tasks') {
-        const action = immediateSlashAction('tasks', { ledger, labels, watch: watchRef.current })!;
-        if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
-        const feed = ledger!.followEvents || ledger!.followWorkers;
-        // A refused or uninitialized feed delivers nothing, so the window names no delivery mode then (the refusal is its status line).
-        const refused = pushMode === 'denied' || pushMode === 'not-initialized';
-        setWatchStatus(refused ? '' : fillTemplate(workLabels!.jobs!.watchStatus, { mode: feed && pushMode !== 'poll' ? workLabels!.jobs!.push : workLabels!.jobs!.poll }));
-        if (action.window) live.show(action.window);
-      } else {
-        const summary = await runJobWindow(slash.command as 'workers' | 'runs' | 'run' | 'transcript', panel, execution, ledger!, workLabels!, context.onRunsSeen);
-        if (!execution.signal.aborted) push([systemSummaryEntry(summary)]);
-      }
-    } catch (error) {
-      await panel.pick(execution, { kind: 'window', title: `/${slash.command}`, body: [errorText(error)], hints: workLabels?.jobs?.hints ?? '', confirm: false }, ['close']);
-      if (!execution.signal.aborted) push([systemSummaryEntry(errorText(error))]);
+  return true;
+}
+/** Per window command: the ledger ports it needs and how it opens (`decision` card, live `tasks` feed, read-only `window`); `/runs` is a card only with the lifecycle port and words (Y1). */
+const WORK_WINDOWS: Readonly<Record<string, Readonly<{ wired: (ledger: WorklineLedgerPorts) => boolean; opens: 'decision' | 'tasks' | 'window' }> | undefined>> = Object.freeze({
+  workers: { wired: () => true, opens: 'window' }, tasks: { wired: () => true, opens: 'tasks' }, transcript: { wired: ledger => Boolean(ledger.inspectTranscript), opens: 'window' },
+  runs: { wired: ledger => Boolean(ledger.listRunIds), opens: 'window' }, run: { wired: ledger => Boolean(ledger.listRunIds), opens: 'window' },
+  cancel: { wired: ledger => Boolean(ledger.listRunIds && ledger.cancelRun), opens: 'decision' }, approvals: { wired: ledger => Boolean(ledger.listApprovalPage && ledger.decideApproval), opens: 'decision' },
+});
+async function workWindow(command: string, entry: NonNullable<typeof WORK_WINDOWS[string]>, context: WorkCommandContext): Promise<boolean> {
+  const { execution, panel, labels, ledger, push, errorText, pushMode, live, watchRef, setWatch, setWatchStatus, runDecision } = context;
+  const workLabels = labels.work;
+  try {
+    if (!ledger || !workLabels?.jobs || !workLabels.live || !entry.wired(ledger)) {
+      const text = workLabels?.unavailable ?? labels.ledgerUnavailable;
+      await panel.pick(execution, { kind: 'window', title: `/${command}`, body: [text], hints: workLabels?.jobs?.hints ?? '', confirm: false }, ['close']);
+      push([systemSummaryEntry(text)]); return true;
     }
-    return true;
+    const opens = command === 'runs' && ledger.controlRun && workLabels.runControl ? 'decision' : entry.opens;
+    if (opens === 'decision') {
+      await runDecision(command as 'approvals' | 'cancel' | 'runs', '', execution);
+      if (command === 'runs' && !execution.signal.aborted) context.onRunsSeen?.();
+    } else if (opens === 'tasks') {
+      const action = immediateSlashAction('tasks', { ledger, labels, watch: watchRef.current })!;
+      if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
+      const feed = ledger.followEvents || ledger.followWorkers;
+      // A refused or uninitialized feed delivers nothing, so the window names no delivery mode then (the refusal is its status line).
+      const refused = pushMode === 'denied' || pushMode === 'not-initialized';
+      setWatchStatus(refused ? '' : fillTemplate(workLabels.jobs.watchStatus, { mode: feed && pushMode !== 'poll' ? workLabels.jobs.push : workLabels.jobs.poll }));
+      if (action.window) live.show(action.window);
+    } else {
+      const summary = await runJobWindow(command as 'workers' | 'runs' | 'run' | 'transcript', panel, execution, ledger, workLabels, context.onRunsSeen);
+      if (!execution.signal.aborted) push([systemSummaryEntry(summary)]);
+    }
+  } catch (error) {
+    await panel.pick(execution, { kind: 'window', title: `/${command}`, body: [errorText(error)], hints: workLabels?.jobs?.hints ?? '', confirm: false }, ['close']);
+    if (!execution.signal.aborted) push([systemSummaryEntry(errorText(error))]);
   }
-  return false;
+  return true;
 }

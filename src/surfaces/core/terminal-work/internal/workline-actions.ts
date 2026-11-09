@@ -107,13 +107,6 @@ export interface WorkSurfaceLabels {
   readonly cancelIdentity?: string;
 }
 
-/** Commands owned by the work surface; they need its labels and their port. */
-export const WORK_SURFACE_COMMANDS = Object.freeze(['transcript', 'approvals', 'cancel'] as const);
-export type WorkSurfaceCommand = typeof WORK_SURFACE_COMMANDS[number];
-export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCommand {
-  return (WORK_SURFACE_COMMANDS as readonly string[]).includes(command);
-}
-
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
 
 export interface WorklineActionContext {
@@ -130,31 +123,32 @@ export interface WorklineActionContext {
 /** `window`: the live window the command opens. */
 export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
 
-/** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
-export function immediateSlashAction(command: string, context: WorklineActionContext, args = ''): WorklineActionResult | null {
-  const { labels, watch, ledger } = context;
-  if (command === 'beuser') return { entries: [notice('error', fillTemplate(labels.commandUnavailable ?? labels.ledgerUnavailable, { part: command }))] };
-  if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
-  if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS, args))] };
-  if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'tasks') {
-    if (!ledger || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
+type ImmediateAction = (context: WorklineActionContext, args: string, command: string) => WorklineActionResult | null;
+const failed = (text: string): WorklineActionResult => ({ entries: [notice('error', text)] });
+const statusLine: ImmediateAction = ({ labels }) => ({ entries: [notice('info', labels.statusLine)] });
+const needsLedger: ImmediateAction = ({ ledger, labels }) => ledger ? null : failed(labels.ledgerUnavailable);
+const workSurface = (wired: (ledger: WorklineLedgerPorts | undefined) => unknown): ImmediateAction => ({ ledger, labels }) =>
+  labels.work && wired(ledger) ? null : failed(labels.work?.unavailable ?? labels.ledgerUnavailable);
+const IMMEDIATE: Readonly<Record<string, ImmediateAction | undefined>> = {
+  beuser: ({ labels }, _args, command) => failed(fillTemplate(labels.commandUnavailable ?? labels.ledgerUnavailable, { part: command })),
+  exit: () => ({ entries: [], exit: true }), quit: () => ({ entries: [], exit: true }), status: statusLine, 'chat-backend': statusLine,
+  help: ({ labels }, args) => ({ entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS, args))] }),
+  tasks: ({ ledger, labels, watch }) => {
+    if (!ledger || !labels.work?.live) return failed(labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable));
     // `/tasks` follows both feeds (runs only where the ledger can list them); a feed already on is not announced again, its window just opens.
     const next: WatchState = { workers: true, runs: watch.runs || Boolean(ledger.listRunIds) };
     if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: 'tasks' };
     return { entries: [], watch: next, window: 'tasks' };
-  }
-  if (command === 'runs') {
-    if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return null;
-  }
-  if (command === 'workers' || command === 'run') return ledger ? null : { entries: [notice('error', labels.ledgerUnavailable)] };
-  if (command === 'service-restart') return context.canRestartService ? null : { entries: [notice('error', labels.serviceRestartUnavailable)] };
-  if (isWorkSurfaceCommand(command)) {
-    const wired = command === 'transcript' ? ledger?.inspectTranscript : command === 'approvals' ? ledger?.listApprovalPage && ledger.decideApproval : ledger?.cancelRun;
-    return labels.work && wired ? null : { entries: [notice('error', labels.work?.unavailable ?? labels.ledgerUnavailable)] };
-  }
-  return { entries: [notice('error', `${labels.unknownCommand}: /${command}`)] };
+  },
+  runs: ({ ledger, labels }) => ledger?.listRunIds ? null : failed(labels.ledgerUnavailable),
+  workers: needsLedger, run: needsLedger,
+  'service-restart': ({ canRestartService, labels }) => canRestartService ? null : failed(labels.serviceRestartUnavailable),
+  transcript: workSurface(ledger => ledger?.inspectTranscript), approvals: workSurface(ledger => ledger?.listApprovalPage && ledger.decideApproval), cancel: workSurface(ledger => ledger?.cancelRun),
+};
+/** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
+export function immediateSlashAction(command: string, context: WorklineActionContext, args = ''): WorklineActionResult | null {
+  const action = Object.hasOwn(IMMEDIATE, command) ? IMMEDIATE[command] : undefined;
+  return action ? action(context, args, command) : failed(`${context.labels.unknownCommand}: /${command}`);
 }
 
 /** `n` is the worker number shown by `/workers` and the live panel; anything else is an attempt id. */

@@ -144,6 +144,14 @@ it('A62: host permission is rechecked before local execution; a model-less norma
   expect(opened).toEqual([]); expect(view.stdout.text).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(asked).toHaveLength(1);
   await until(() => /> ?Hello model/u.test(view.stdout.frame), 'draft retained');
 });
+it('H3-R: a turn refused because the service is absent starts it once and sends the line again; a second refusal is shown, not retried', async () => {
+  let starts = 0; const asked: string[] = [];
+  const view = mountWorkline({ ...windowLabels, startService: async () => { starts++; return 'SERVICE STARTED'; },
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); throw new DeckentError('LOCAL_RUNTIME_UNAVAILABLE', 'SERVICE ABSENT'); } }); mounted.push(view);
+  await settle(40); view.stdin.write('Hello there\r'); await until(() => view.stdout.text.includes('SERVICE STARTED'), 'service started');
+  await until(() => asked.length === 2, 'line sent again'); await until(() => view.stdout.text.includes('SERVICE ABSENT'), 'second refusal shown');
+  expect(starts).toBe(1); expect(asked).toEqual(['Hello there', 'Hello there']);
+});
 // alpha.60 B, owner 2026-10-31 rule (b): setup is prepared after the frame; its waiting card opens by itself only while the person has typed nothing.
 // Typed-ahead keys never answer it: one line names the waiting steps and the keys stay the draft.
 // Astra 2858 B-R2: the condition holds across the input hand-over — a key that arrives after the opening resolved (the hand-over gap), input
