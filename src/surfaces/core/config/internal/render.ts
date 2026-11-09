@@ -1,4 +1,4 @@
-import { t, terminalSafeText, MESSAGE_REGISTRY, type Locale } from '#platform/index.js';
+import { messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cells, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import type { ConfigApplication, ConfigFieldView } from '#engine/index.js';
 
@@ -40,11 +40,13 @@ export function renderConfigInspection(view: ConfigInspection, locale: Locale, w
   }
   return lines.flatMap(line => wrapCells(terminalSafeText(line), bounded)).join('\n');
 }
+/** A key's catalog description; a key without catalog text keeps the engine's description. */
+export const fieldDescription = (field: ConfigFieldView, locale: Locale): string => messageText(field.descriptionKey, locale) ?? field.description;
 /** `verbose` adds the internal consumers of a bound key (source paths); a person sees only whether it is bound (C-SETUP, review §config). */
 export function renderConfigExplanation(field: ConfigFieldView, locale: Locale, width = 80, verbose = true): string {
   const binding = field.binding.state === 'bound' ? (verbose ? `${bindingWord(field, locale)}: ${field.binding.consumers.join(', ')}` : bindingWord(field, locale))
     : `${bindingWord(field, locale)}: ${field.binding.reason}`;
-  return t('config.surface.explain', { key: field.key, description: (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description,
+  return t('config.surface.explain', { key: field.key, description: fieldDescription(field, locale),
     value: configValueWord(field.value, field.redacted, locale), defaultValue: configValueWord(field.defaultValue, field.redacted, locale),
     source: sourceWord(field.source, locale), binding, apply: applyWord(field.apply, locale), schema: schemaWord(field.schema, locale) }, locale)
     .split('\n').flatMap(line => wrapCells(terminalSafeText(line), Math.max(40, Math.min(80, width)))).join('\n');

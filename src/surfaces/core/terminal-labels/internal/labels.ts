@@ -1,4 +1,4 @@
-import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
+import { messageText, t, type Locale } from '#platform/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ConversationSessionLabels, WorklineLabels } from '#surfaces/core/terminal/index.js';
@@ -44,14 +44,13 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
 
 /** Catalog strings of the composer (terminal.composer.*) and the slash popup (terminal.slash.*). */
 export function terminalComposerLabels(locale: Locale): ComposerLabels {
-  // Registry descriptions/hints contain no interpolation, matching the CLI help catalog lookup.
-  const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
+  // Registry descriptions/hints contain no interpolation, so they are read unfilled, like the CLI help.
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: composerShortcuts(locale),
     placeholder: t('terminal.workline.placeholder', {}, locale), stashed: t('terminal.composer.stashed', {}, locale),
     steerPlaceholder: { kitty: t('tuiqueue.steerPlaceholder.kitty', {}, locale), other: t('tuiqueue.steerPlaceholder.other', {}, locale) },
-    slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : []), ...(catalog[slashSearchKey(command.name)] ? [slashSearchKey(command.name)] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
-      .map(key => [key, catalog[key] ?? key])) };
+    slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : []), ...(messageText(slashSearchKey(command.name), locale) ? [slashSearchKey(command.name)] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
+      .map(key => [key, messageText(key, locale) ?? key])) };
 }
 
 /** The keyboard help panel: the composer's lines with T3 (Alt+Up) and T4 (Ctrl+G) from their own families placed before the closing `?` line. */

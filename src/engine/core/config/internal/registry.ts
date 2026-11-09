@@ -1,6 +1,6 @@
 import { configSchemaNode, ProjectedConfigNode, projectConfigSchema, type ConfigSchemaNode } from './schema-node.js';
 import { z } from 'zod';
-import { CONFIG_FIELDS, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, MESSAGE_REGISTRY } from '#platform/index.js';
+import { CONFIG_FIELDS, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
@@ -122,7 +122,7 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const value = redact(derived, path, secretPaths), defaultValue = redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
   const descriptionKey = schema.description ?? definition.descriptionKey;
   return { key: keyPath, value, defaultValue, source, descriptionKey,
-    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[descriptionKey] ?? descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
+    description: messageText(descriptionKey, resolveLocale(undefined, snapshot.env, snapshot.effective.language)) ?? descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
     binding: definition.binding, apply: path.length > 1 && (RESTART_EXEMPT as Readonly<Record<string, readonly string[]>>)[path[0]!]?.includes(path[1]!) ? 'live' : definition.apply,
     redacted: value === '[REDACTED]' };
 }

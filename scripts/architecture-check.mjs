@@ -772,6 +772,9 @@ if (arch.guards) {
   // A6-3 (owner 2026-11-08): no child process inherits the whole service environment; the listed sites are a shrink-only allowlist.
   if (guards.childEnv) wordRatchet('child-env', 'childEnv', guards.childEnv, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p)),
     (word, count) => `"${word}" passes a whole environment (${count} hit(s)); use inheritedEnvironment(env, names), serviceEnvironment or an explicit env`);
+  // KG9 F5: catalog text is read through t or messageText; only the i18n unit reads .catalogs[ directly.
+  if (guards.catalogRead) wordRatchet('catalog-read', 'catalogRead', guards.catalogRead, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p) && !rel(p).startsWith('src/platform/core/i18n/')),
+    (word, count) => `"${word}" reads a message catalog directly (${count} hit(s)); use messageText(key, locale) or t from #platform`);
   // KG12 F2: containment goes through pathWithin or relativeInside; off (enforce false) until LINT-R opens it after the migrations.
   if (guards.parentPrefix?.enforce) wordRatchet('parent-prefix', 'parentPrefix', guards.parentPrefix, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p)),
     (word, count) => `"${word}" decides containment by a bare prefix (${count} hit(s)); a child named ..x is not a parent: use pathWithin or relativeInside`);

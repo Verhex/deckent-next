@@ -52,8 +52,8 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
     arch.units[from]!.dependencies = [...dependencies].sort();
   }
   // Shrink-only repository debt (allowlists, caps, frozen lists) describes the real tree, not a fixture: start every fixture from zero.
-  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; childEnv: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
-  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.childEnv.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
+  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; childEnv: { allow: unknown[] }; catalogRead: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
+  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.childEnv.allow = []; guards.catalogRead.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
   delete (guards as { publicExtensions?: unknown }).publicExtensions; // names the real tree's entry, registrations and overlay fixture
   (arch as unknown as { literals: { allowUnits: unknown[] } }).literals.allowUnits = [];
   patch?.(arch);
@@ -171,9 +171,12 @@ describe('lint-arch tier contract', () => {
       expect(result.out).toContain(i === 2 ? '[i18n-placeholder]' : '[i18n-duplicate]');
     }
   });
-  it('rejects concatenated translation keys outside the registry', async () => {
-    const result = await lint(await fixture({ 'src/platform/core/example/index.ts': "export const label = t('prefix.' + suffix);\n" }));
+  it('rejects concatenated translation keys and direct catalog reads outside the registry', async () => {
+    const result = await lint(await fixture({ 'src/platform/core/example/index.ts': "export const label = t('prefix.' + suffix);\nexport const raw = MESSAGE_REGISTRY.catalogs['en'];\n",
+      'src/platform/core/i18n/index.ts': "export const own = MESSAGE_REGISTRY.catalogs['en'];\n" }));
     expect(result.out).toContain('[i18n-dynamic]');
+    expect(result.out).toContain('[catalog-read] src/platform/core/example/index.ts:2');
+    expect(result.out).not.toContain('[catalog-read] src/platform/core/i18n/');
   });
 
   it('enforces native aliases and rejects missing targets, private imports and mapping drift', async () => {

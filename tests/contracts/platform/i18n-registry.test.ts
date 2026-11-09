@@ -24,9 +24,8 @@ describe('K2 catalog registry contract', () => {
     }
     expect(keys.sort()).toEqual(MESSAGE_KEYS); expect(new Set(keys).size).toBe(keys.length);
   });
-  it('allows identical text only for the reviewed catalog inventory and the existing machine version format', async () => {
+  it('allows identical text only for the reviewed catalog inventory (the machine version format included)', async () => {
     const allowed = new Set(JSON.parse(await readFile(new URL('internal/identical-messages.json', unit), 'utf8')) as string[]);
-    allowed.add('cli.version');
     for (const key of MESSAGE_KEYS) if (MESSAGE_REGISTRY.catalogs.en[key] === MESSAGE_REGISTRY.catalogs.tr[key]) expect(allowed.has(key)).toBe(true);
     expect(() => createMessageRegistry([{ en: { new: 'unchanged' }, tr: { new: 'unchanged' } }])).toThrow('I18N_TRANSLATION_REQUIRED');
   });

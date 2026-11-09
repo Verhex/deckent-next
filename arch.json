@@ -6472,6 +6472,17 @@
         }
       ]
     },
+    "catalogRead": {
+      "note": "KG9 F5 (alpha.64 I18N-2): a catalog text is read through t or messageText (#platform); a .catalogs[ read outside src/platform/core/i18n copies the lookup and its fallback. Shrink-only.",
+      "patterns": ["\\.catalogs\\["],
+      "allow": [
+        {
+          "file": "src/composition/core/agent-turn/internal/turn.ts",
+          "count": 1,
+          "reason": "The provider label of a start diagnosis; TURN moves it to messageText and removes this entry."
+        }
+      ]
+    },
     "parentPrefix": {
       "note": "KG12 F2 (alpha.64 PRIV-E): containment is decided by pathWithin or relativeInside (#platform); a bare startsWith('..') takes a child named ..x for a parent. Written now and off: PRIV-M1 migrated the fail-open rows; LINT-R sets enforce. Shrink-only once enforced.",
       "enforce": false,

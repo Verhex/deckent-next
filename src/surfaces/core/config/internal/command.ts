@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, PACKAGE_NAME } from '#platform/index.js';
 import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
-import { isSensitiveConfigKey, MESSAGE_REGISTRY, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
+import { isSensitiveConfigKey, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { configServiceState, configWriteOperation, isProtectedConfigWrite, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
 import { applyOperationsBaseline, operationsBaselineOffer, registersOperations, type OwnerBaselineOpener } from './operations-baseline.js';
-import { applyWord, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
+import { applyWord, fieldDescription, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
 import { configValueModel } from './choices.js';
 import { configChoiceWords, narrowConfigPanel, renderConfigKeyList, renderConfigLeaves, renderConfigOverrides, type ConfigPanelOpener } from './cli-view.js';
 
@@ -97,8 +97,8 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   if (action === 'explain' && parsed.global) throw ErrorRegistry.createError('CLI_USAGE');
   if (action === 'explain' && parsed.args.length === 1) {
     const view = await app.inspect({});
-    emit(view.fields.map(field => ({ key: field.key, description: describe(field, locale) })), { ...sinks,
-      render: () => renderConfigKeyList(view.fields, field => describe(field, locale), locale, style()) }); return;
+    emit(view.fields.map(field => ({ key: field.key, description: fieldDescription(field, locale) })), { ...sinks,
+      render: () => renderConfigKeyList(view.fields, field => fieldDescription(field, locale), locale, style()) }); return;
   }
   if (action === 'explain' && keyPath && parsed.args.length === 2) {
     emit(await app.explain({ keyPath }), { ...sinks, render: value => renderConfigExplanation(value, locale, 80, parsed.verbose) }); return;
@@ -147,7 +147,6 @@ async function offerOperationsBaseline(context: ConfigCommandContext, root: stri
 function assertConfigPerson(context: ConfigCommandContext, action: 'set' | 'unset', keyPath: string, json = false) {
   if (isProtectedConfigWrite(keyPath) && cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: configWriteOperation(action, keyPath) } });
 }
-const describe = (field: ConfigFieldView, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
 /**
  * Whether a chosen value may be printed back: never when the config views redact it — the key's field view is redacted (secret provenance),
  * a path segment names a credential, or the value is a `$DECK:`/`$ENV:` reference or carries a credential pattern (the engine's field-view rule).

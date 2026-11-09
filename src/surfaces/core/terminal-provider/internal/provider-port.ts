@@ -1,6 +1,6 @@
 import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
-import { DeckentError, ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
@@ -224,12 +224,11 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         // The installation's own inference server (inference_serving), when configured: the first address offered (owner 2026-10-08, D3).
         try { const profile = readInferenceServingProfile(config); served = profile ? buildInferenceServingPlan(profile).openaiBaseUrl : null; } catch { served = null; }
       } catch (error) { notes.push(t('tui.provider.note.profilesUnread', { reason: errorText(error) }, locale)); }
-      const catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
       /** The kind's address list: the configured server, the kind's known addresses (adapter data), the provider's default; one row per base. */
       const choicesOf = (kind: ProviderConnectKindView) => {
         if (!kind.endpointEditable) return [];
         const rows = [...(served ? [{ id: 'configured', label: t('tui.provider.endpoint.choice.configured', {}, locale), url: served }] : []),
-          ...kind.endpointChoices.map(choice => ({ id: choice.id, label: catalog[choice.labelKey] ?? choice.id, url: choice.url })),
+          ...kind.endpointChoices.map(choice => ({ id: choice.id, label: messageText(choice.labelKey, locale) ?? choice.id, url: choice.url })),
           ...(kind.endpointDefault ? [{ id: 'default', label: t('tui.provider.endpoint.choice.default', {}, locale), url: kind.endpointDefault }] : [])];
         const seen = new Set<string>();
         return rows.flatMap(row => {

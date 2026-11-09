@@ -29,7 +29,7 @@ export function createMessageRegistry(input: readonly MessageFamily[], defaults:
 export const MESSAGE_REGISTRY = createMessageRegistry(families, {
   'error.node_version_low': { floor: NODE_ENGINE_FLOOR_TEXT },
   'desktop.error.node_not_found': { floor: NODE_ENGINE_FLOOR_TEXT },
-}, [...identicalMessages, 'cli.version']); // Existing K0 machine identity format is intentionally identical.
+}, identicalMessages);
 export const MESSAGE_KEYS = MESSAGE_REGISTRY.keys;
 /** The one raw catalog read for a key held as data (registry labels, plan codes); unfilled, undefined when absent, other locales read English like `t`. */
 export const messageText = (key: string, locale: Locale): string | undefined => MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'][key];
