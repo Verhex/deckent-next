@@ -24,10 +24,10 @@ export { PROVIDER_SPEND_PERIOD_LEDGER_VERSION } from './internal/schema.js';
 export { RUN_INTENT_LEDGER_VERSION } from './internal/schema.js';
 
 export { CAPACITY_RESOURCE_LEDGER_VERSION } from './internal/schema.js';
-export { bindCapacityResource, findCapacityResource, readCapacityResource, type CapacityResourceBinding } from './internal/capacity-resources.js';
+export { bindCapacityResource, findCapacityResource, readCapacityResource, readCapacityOccupancy, type CapacityResourceBinding } from './internal/capacity-resources.js';
 export { migrateCapacityResources, revertCapacityResources } from '#adapters/core/sqlite-ledger-migrations/index.js';
 
-export { withRunCapacityBindings } from './internal/run-capacity-bindings.js';
+export { withRunCapacityBindings, readRunCapacityBindings, readRunResourceCapacity } from './internal/run-capacity-bindings.js';
 
 export { decodeLedgerRunSnapshot } from './internal/run-snapshot.js';
 export { EFFECT_OPEN_STATE_SQL } from './internal/schema.js';

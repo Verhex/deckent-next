@@ -45,4 +45,6 @@ export async function openSqliteProviderSpendRecoveryStore(path: string, options
 }
 export { readSqliteSubscriptionUsageSummary } from './internal/subscription-usage.js';
 
-export { headlessCapacityBinding, invocationCapacityResource, readCapacityResourceOccupancy, readRunCapacityBindings, readRunResourceCapacity } from './internal/resource-capacity.js';
+export { invocationCapacityResource, readCapacityResourceOccupancy, readRunResourceCapacity } from './internal/resource-capacity.js';
+export { headlessCapacityBinding } from '#adapters/core/native-cli-registry/index.js';
+export { readRunCapacityBindings } from '#adapters/core/sqlite-ledger/index.js';

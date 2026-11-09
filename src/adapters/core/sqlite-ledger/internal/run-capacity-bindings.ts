@@ -1,6 +1,16 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { RunSnapshot } from '#domain/index.js';
 import { runCapacityBindingsSchema, RunStoreError, type RunCreate, type RunReceipt, type RunCapacityBinding } from '#engine/index.js';
-import { readCapacityResource } from './capacity-resources.js';
+import { readCapacityOccupancy, readCapacityResource } from './capacity-resources.js';
+export const readRunCapacityBindings = (db: DatabaseSync, run: Readonly<{ identity: Readonly<{ scopeId: string; runId: string }> }>) =>
+  db.prepare('SELECT task_id,resource_key FROM run_capacity_resources WHERE scope_id=? AND run_id=? ORDER BY task_id')
+    .all(run.identity.scopeId, run.identity.runId).map(row => ({ taskId: String(row.task_id), resourceKey: String(row.resource_key) }));
+/** A Run's bound resources, each with its all-scope occupancy (`readCapacityOccupancy`). */
+export function readRunResourceCapacity(db: DatabaseSync, run: RunSnapshot, heldLogin: Parameters<typeof readCapacityOccupancy>[2]) {
+  const bindings = readRunCapacityBindings(db, run);
+  const resources = [...new Set(bindings.map(row => row.resourceKey))].map(key => ({ ...readCapacityResource(db, key), occupancy: readCapacityOccupancy(db, key, heldLogin) }));
+  return { bindings, resources };
+}
 /** Called inside the Run writer's transaction; replay cannot change or omit its original resource metadata. */
 export function withRunCapacityBindings(db: DatabaseSync, input: RunCreate, resources: readonly RunCapacityBinding[], create: () => RunReceipt): RunReceipt {
   const bindings = runCapacityBindingsSchema.parse(resources), { scopeId, runId } = input.identity;
@@ -8,8 +18,7 @@ export function withRunCapacityBindings(db: DatabaseSync, input: RunCreate, reso
   const replay = db.prepare('SELECT 1 FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, input.commandId);
   const receipt = create();
   if (replay) {
-    const stored = db.prepare('SELECT task_id,resource_key FROM run_capacity_resources WHERE scope_id=? AND run_id=? ORDER BY task_id')
-      .all(scopeId, runId).map(row => ({ taskId: String(row.task_id), resourceKey: String(row.resource_key) }));
+    const stored = readRunCapacityBindings(db, input);
     const ordered = [...bindings].sort((a, b) => a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0);
     if (JSON.stringify(stored) !== JSON.stringify(ordered)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
   } else for (const binding of bindings) {
