@@ -6,7 +6,7 @@ import { expect, it } from 'vitest';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { DockerSupervisor, identifyDockerRequest, runNodeDockerCommand } from '#adapters/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';
 

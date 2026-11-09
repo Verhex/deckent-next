@@ -5,7 +5,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, createRun, inspectRun } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { runCommand } from '#surfaces/core/cli/index.js';
 import { assertNativeWorkerBinding } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';

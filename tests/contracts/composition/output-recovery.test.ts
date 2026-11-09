@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, reserveRunTasks } from '../../../src/index.js';
 import { recoverConfiguredAttemptOutput } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';

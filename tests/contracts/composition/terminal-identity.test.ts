@@ -10,7 +10,7 @@ import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, l
 import { main } from '#surfaces/index.js';
 import { until } from '../support/workline-harness.js';
 import { followLedgerSurface } from '#composition/core/monitor/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
 const bindingNotRun = await installationBindingNotRunReason();
 

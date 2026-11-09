@@ -9,7 +9,7 @@ import { readLocalOsIdentity, openSqliteModelActivationStore } from '#adapters/i
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { applyModelCatalog } from '../../../src/index.js';

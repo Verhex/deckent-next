@@ -69,13 +69,18 @@ catch (error) { console.log(JSON.stringify({ code: error.code ?? error.message }
     const result = await run(driver, [method, JSON.stringify(input)], cwd);
     try { return JSON.parse(result.stdout); } catch { throw new Error(`SDK_BRIDGE_FAILED:${JSON.stringify(result)}`); }
   };
-  // Fixture provisioning only: seed an installed ledger using the existing storage composition helper (no Docker/worker needed).
+  // Fixture provisioning only: seed an installed ledger with the same open the tests use (no Docker/worker needed).
   // The overlay, distribution entries and every tested request use public exports exclusively; this is not a customer installer test.
   const seed = join(distribution, 'seed.mjs');
   writeFileSync(seed, `import './overlay.mjs';
 import { composeCore } from ${JSON.stringify(pathToFileURL(join(root, 'dist/composition/core/root/index.js')).href)};
-import { openConfiguredAttemptStore } from ${JSON.stringify(pathToFileURL(join(root, 'dist/composition/core/storage/index.js')).href)};
-composeCore(); (await openConfiguredAttemptStore(process.cwd())).store.close();`);
+import { loadConfig, prepareProductFile } from ${JSON.stringify(pathToFileURL(join(root, 'dist/platform/index.js')).href)};
+import { openSqliteAttemptStore } from ${JSON.stringify(pathToFileURL(join(root, 'dist/adapters/core/attempt-store/index.js')).href)};
+import { validateExecutionSupervisorProfile } from ${JSON.stringify(pathToFileURL(join(root, 'dist/adapters/core/native-cli-worker/index.js')).href)};
+composeCore();
+const config = await loadConfig(process.cwd(), { heal: false });
+const path = await prepareProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
+(await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'allow', { validate: validateExecutionSupervisorProfile })).close();`);
   const provision = async cwd => { const result = await run(seed, [], cwd); if (result.status !== 0) throw new Error(`FIXTURE_SEED_FAILED:${JSON.stringify(result)}`); };
   const children = [], detached = new Set(); let stderr = '';
   function child(entry, args, cwd = project) {

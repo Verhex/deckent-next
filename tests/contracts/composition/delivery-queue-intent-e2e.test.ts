@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { proposeRun } from '../../../src/index.js';
 import { configuredTargetQueueTerminal, startConfiguredRuntimeService } from '../../../src/composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { DockerSupervisor, readLocalOsIdentity } from '#adapters/index.js';
 import { createProviderSpendAccount, createProviderSpendCheckpoint, queueCommandIds } from '#engine/index.js';
 import { queueServiceActor, type RunProposal } from '#domain/index.js';

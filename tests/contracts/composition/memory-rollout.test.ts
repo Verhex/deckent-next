@@ -4,7 +4,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, createRun } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '../../../src/composition/core/config/index.js';
 import { proposeConfiguredMemory, verifyConfiguredMemory } from '#composition/core/memory/index.js';
 import { inspectConfiguredMemoryRollout } from '#composition/core/memory-rollout/index.js';

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, createConfiguredRuntimeClient, createRun, inspectRun, reserveRunTasks, startConfiguredRuntimeService } from '../../../src/index.js';
 import { inspectMonitor } from '#composition/index.js';
 import { runCommand } from '../../../src/surfaces/core/cli/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { changeConfiguredWorkerInstructionTrust, classifyConfiguredRunSpending, inspectConfiguredWorkerInstructions } from '../../../src/composition/core/runs/index.js';
 import { admittedToolchains } from '../../../src/engine/core/toolchain-currency/index.js';
 import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, FileArtifactStore, gitRefFileSource, nativeCodingTemplateBase, openHostProjectInstructionReader, openSqliteAttemptStore,

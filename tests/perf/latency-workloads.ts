@@ -11,7 +11,7 @@ import { createHmacIntegrity } from '../../src/platform/core/integrity/index.js'
 import { SQLITE_STORAGE_OPTIONS } from '../../src/platform/core/config-fields/index.js';
 import { followLedgerSurface } from '../../src/composition/core/monitor/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../contracts/support/configured-open.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { acceptSurfaceEvent, openSurfacePush, releaseSurfacePush, type SurfacePushEvent } from '#surfaces/core/terminal-kit/index.js';
 import { fixtureDockerRegistry } from '../contracts/support/execution-registry.js';

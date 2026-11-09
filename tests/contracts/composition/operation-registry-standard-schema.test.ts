@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { executeConfiguredOperation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { operationsConfigSchema, registerOperationAdapterModule, registerProviderConfig } from '#adapters/index.js';
 import { AdapterRegistry, type EffectTarget, type EffectApplyRequest, type AdapterModuleRegistration } from '#engine/index.js';
 import { CORE_API_VERSION, type AdapterModuleManifest, type EffectTargetRef } from '#domain/index.js';

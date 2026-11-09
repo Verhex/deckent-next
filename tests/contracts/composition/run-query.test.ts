@@ -3,7 +3,7 @@ import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { inspectRun } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache } from '#platform/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 const roots: string[] = [];

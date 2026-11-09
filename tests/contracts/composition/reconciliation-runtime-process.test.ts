@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { createRun, inspectRun, reserveRunTasks } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { FileArtifactStore, identifyDockerRequest } from '#adapters/index.js';
 import { parseRetainedOutputEnvelope } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';

@@ -2,11 +2,10 @@ import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels
 import { randomUUID } from 'node:crypto';
 import { isCodedError, DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
-import { configuredInvocationProfiles, buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
+import { configuredInvocationProfiles, buildInferenceServingPlan, modelInvocabilityText, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost, ProviderWindowPort } from './context.js';
 import { subscriptionPort } from './subscription-port.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { providerDisplayName, providerKindLabel } from './provider-label.js';
 import { subscriptionReadinessPort, subscriptionReadinessText } from './readiness.js';
 import presentation from './presentation.json' with { type: 'json' };

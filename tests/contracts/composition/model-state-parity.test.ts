@@ -9,7 +9,7 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { modelPanelSource, providerPanelPort, type ProviderConnectHost } from '#surfaces/core/cli-terminal/index.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import { modelInvocabilityText } from '#engine/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { configPanelTree } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';

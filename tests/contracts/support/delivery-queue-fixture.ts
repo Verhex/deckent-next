@@ -4,7 +4,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { expect } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from './execution-registry.js';
 import { DRIVER, type Step } from './pty-steps.js';

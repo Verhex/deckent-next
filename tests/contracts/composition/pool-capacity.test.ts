@@ -7,7 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it, type TestContext } from 'vitest';
 import { applyPoolCapacity, inspectPoolCapacity, applyPoolHold, inspectPoolHold, inspectRun } from '../../../src/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, resolveGlobalScopePaths } from '#platform/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';

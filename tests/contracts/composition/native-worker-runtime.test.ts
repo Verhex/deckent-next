@@ -99,7 +99,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
   const { mkdtemp, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir, hostname, userInfo } = await import('node:os');
   const { execFileSync } = await import('node:child_process');
-  const { openConfiguredAttemptStore } = await import('#composition/core/storage/index.js');
+  const { openConfiguredAttemptStore } = await import('../support/configured-open.js');
   const { executeConfiguredTask } = await import('#composition/core/execution/index.js');
   const nativeConnection = await import('#adapters/core/native-connection/index.js');
   const { recordedNativeCliWorkerSupervisor } = await import('#adapters/core/native-cli-worker/index.js');

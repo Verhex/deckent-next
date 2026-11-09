@@ -4,7 +4,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, POLICY_ADMINISTER_OPERATION } from '#domain/index.js';

@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { clearConfigCache, formatHumanError, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
 import { createFileSecretStore, encodeServiceFrame, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';

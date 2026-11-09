@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation, configuredApproval } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { HttpConditionalEffectTarget, registerProviderConfig } from '#adapters/index.js';
 import { SystemTrustedClock, clearConfigCache, productResourcePath } from '#platform/index.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';

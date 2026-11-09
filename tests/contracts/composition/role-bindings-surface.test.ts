@@ -7,7 +7,7 @@ import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { requestTaskApproval } from '#engine/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';

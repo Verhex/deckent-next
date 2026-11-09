@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { configuredApproval } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { z } from 'zod';
 import { approvalRecordSchema, approvalRequestSchema } from '#domain/index.js';

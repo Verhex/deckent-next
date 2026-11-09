@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { proposeRun, inspectRunProposal, inspectRun, configuredApproval } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { createProviderSpendAccount, createProviderSpendCheckpoint } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';

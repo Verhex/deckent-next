@@ -10,7 +10,7 @@ import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import * as adapters from '#adapters/index.js';
 import * as inventory from '#composition/core/inventory/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { SupervisorError, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { clearConfigCache, ErrorRegistry, getConfigKnownSecrets, loadConfig, reportQueryError, writeDiagnosticRecord, resolveGlobalConfigPaths, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
 import { homeEnv } from '../support/host-platform.js';

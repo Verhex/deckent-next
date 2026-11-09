@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRun, evaluateTask, inspectRun } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../../contracts/support/configured-open.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { prepareProductDirectory } from '#platform/index.js';
 import { type AttemptIdentity, type EffectCommand } from '#domain/index.js';

@@ -10,7 +10,7 @@ import { inspectMonitor, type MonitorQuery } from '../../../src/index.js';
 import { main } from '#surfaces/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, uninstallHoldPath } from '#platform/index.js';
 
 // CARD admission -> assert access boundary; all projects/ledgers are temporary fixtures.

@@ -3,7 +3,7 @@ import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { configuredApproval, executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../../contracts/support/configured-open.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { approvalRecordSchema, type EffectCommand, type EffectRecord } from '#domain/index.js';

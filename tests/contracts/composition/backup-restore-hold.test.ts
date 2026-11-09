@@ -13,7 +13,7 @@ import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { firstRunPolicyTemplate } from '#domain/index.js';
 import { restoreHoldPath } from '#platform/index.js';
-import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
+import { openConfiguredArtifactStore } from '../support/configured-open.js';
 import { inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 

@@ -9,7 +9,7 @@ import { applyInstallation, createRun, inspectInstallation, inspectRun, requestR
 import { hashInstallationProfilePayload, parseRetainedOutputEnvelope } from '#engine/index.js';
 import { DockerSupervisor, FileArtifactStore, identifyDockerRequest } from '#adapters/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { installationProfile } from '../support/installation-profile.js';
 import { waitForRecoveredOutput } from '../support/recovered-output-event.js';
 import { describeStoreFailure } from '../support/store-failure.js';

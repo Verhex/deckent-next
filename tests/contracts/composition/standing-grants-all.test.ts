@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { listConfiguredAllStandingGrants } from '#composition/core/approvals/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';

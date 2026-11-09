@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { inspectMonitor } from '#composition/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { MonitorSourceMemo, type MonitorRecall } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, resolveGlobalConfigReadPath } from '#platform/index.js';

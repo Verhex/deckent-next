@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { ErrorRegistry, clearConfigCache, productResourcePath } from '#platform/index.js';
 import { startConfiguredRuntimeService, createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import * as execution from '#composition/core/execution/index.js';
 import { RuntimeServiceLifecycle } from '#engine/index.js';

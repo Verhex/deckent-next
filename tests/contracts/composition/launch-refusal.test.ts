@@ -12,7 +12,7 @@ import { mcpPrincipalRef } from '#domain/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { seedCatalog } from '../support/model-catalog.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { advanceConfiguredRun, prepareConfiguredRunRuntime } from '#composition/core/run-progression/index.js';

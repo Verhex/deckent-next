@@ -7,7 +7,7 @@ import { expect, it } from 'vitest';
 import { DockerSupervisor, openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { DispatchPreparationGuard } from '#engine/index.js';
 import { prepareConfiguredReconciliationRuntime } from '../../../src/composition/core/runtime/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, jsonRecordDirectory, prepareProductDirectory } from '#platform/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
 import { restartConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, configServiceState } from '#engine/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
 import { encodeServiceFrame, prepareRuntimeSocket, runtimeSocketLocation, ServiceFrameDecoder } from '#adapters/index.js';

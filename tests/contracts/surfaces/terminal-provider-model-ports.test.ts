@@ -11,8 +11,7 @@ import { modelInvocationProfileSchema, type ModelConnectCommand, type ModelConne
 import { providerModelTree, providerPanelTree, subscriptionModelView, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import type { NativeAgentReadiness } from '#capabilities/index.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
-import { ModelInvocableNowApplication, modelInvocationProfileDigest, type ModelInvocability, type InvocableModels } from '#engine/index.js';
+import { ModelInvocableNowApplication, modelInvocationProfileDigest, modelInvocabilityText, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { main as runConfiguredCli } from '#composition/core/cli/index.js';
 import * as cliSurface from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';

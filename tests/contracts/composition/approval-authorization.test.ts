@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 
 // C12 Q8: `authorizeApproval` (engine/core/approval/internal/application.ts:18) is one of the catalog-outside

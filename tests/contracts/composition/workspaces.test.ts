@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredWorkspaceBroker } from '../../../src/composition/core/workspaces/index.js';
+import { openConfiguredWorkspaceBroker } from '../support/configured-open.js';
 import { clearConfigCache } from '#platform/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 const exec = promisify(execFile); const roots: string[] = [];

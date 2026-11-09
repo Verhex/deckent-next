@@ -7,7 +7,7 @@ import * as adapters from '#adapters/index.js';
 import * as inventory from '#composition/core/inventory/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 

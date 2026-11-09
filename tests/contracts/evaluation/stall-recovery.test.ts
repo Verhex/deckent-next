@@ -344,7 +344,7 @@ describe.skipIf(process.platform === 'win32')('composed evaluation (evaluateConf
   it.each([['an installed docker profile is retried', true], ['an unclassified profile keeps the hold', false]] as const)('%s', async (_name, docker) => {
     const { writeFile } = await import('node:fs/promises'); const { hostname, userInfo } = await import('node:os');
     const { prepareProductDirectory } = await import('#platform/index.js');
-    const { openConfiguredAttemptStore } = await import('../../../src/composition/core/storage/index.js');
+    const { openConfiguredAttemptStore } = await import('../support/configured-open.js');
     const { evaluateConfiguredTask } = await import('../../../src/composition/core/runs/index.js');
     const root = await mkdtemp(join(tmpdir(), 'stall-compose-')); roots.push(root);
     const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true });

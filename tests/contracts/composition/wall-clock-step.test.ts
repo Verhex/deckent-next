@@ -11,7 +11,7 @@ import { openSqliteAttemptStore, openSqliteApprovalStore, LocalOsSessionAuthorit
 import { ApprovalApplication, RunReservationApplication, TaskApprovalAdmission } from '#engine/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { fixtureDockerRegistry, fixtureExecution } from '../support/execution-registry.js';
 
 // I40 time contract. A host wall clock steps backwards (measured 2.0-2.2 s on WSL2). Inside one process the platform

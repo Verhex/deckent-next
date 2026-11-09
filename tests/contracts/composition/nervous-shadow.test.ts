@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { clearConfigCache, inspectProductFile, jsonRecordDirectory, loadConfig, prepareProductDirectory } from '#platform/index.js';
 import { DockerCommandFailure, DockerSupervisor, identifyDockerRequest, type DockerCommandRunner } from '#adapters/index.js';
 import { DispatchPreparationGuard, type ReconciliationRecoveryPage } from '#engine/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { prepareConfiguredReconciliationRuntime } from '../../../src/composition/core/runtime/index.js';
 import { registerConfiguredScopesAtStart } from '../../../src/composition/core/scoped-request/index.js';
 import { admitRunAttempts } from '../support/admission.js';

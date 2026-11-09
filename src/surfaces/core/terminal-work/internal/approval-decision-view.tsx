@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import { ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans, approvalTemplateLine, type ApprovalDecisionLabels, type ApprovalDecisionLine, ApprovalProjectedNotice, ApprovalProjectedPicker, DecisionCard, decisionWindowLines } from '#surfaces/core/approval-presentation-ink/index.js';
+import { projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans, approvalTemplateLine, type ApprovalDecisionLabels, type ApprovalDecisionLine, ApprovalProjectedPicker, DecisionCard, decisionWindowLines } from '#surfaces/core/approval-presentation-ink/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { AgentShellPosture, AgentToolCardCall, ApprovalPreviewCutFacts } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
@@ -12,7 +12,7 @@ import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { shortId } from '#platform/index.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
 import { type WorklineApproval, fillTemplate, formatDuration, formatTaskPhases } from '#surfaces/core/terminal-ledger/index.js';
-import type { ApprovalDecisionNoticePresentation, ApprovalRowPresentation } from './approval-decision-notice.js';
+import type { ApprovalRowPresentation } from './approval-decision-notice.js';
 import type { PanelWindowPresentation } from './workline-panel.js';
 import { approvalCallOf, approvalToolKind, approvalToolParts, approvalWindowHints, approvalWindowLines, approvalWindowTitle, countdownClock } from './approval-window.js';
 
@@ -49,11 +49,6 @@ function projectRow(raw: Omit<ApprovalRowPresentation, 'kind'>, known?: KnownSec
   const summary = p(raw.summary), id = p(shortId(raw.displayId)), run = p(shortId(raw.displayRun)), task = p(shortId(raw.displayTask)), what = p(raw.what), requester = p(raw.requester);
   return { spans: approvalTemplateSpans(raw.itemTemplate, { n: raw.rowNumber, id: id.spans, run: run.spans, task: task.spans, summary: approvalSummarySpans(summary), duration: raw.durationText,
     what: approvalSummarySpans(what), requester: requester.spans, age: raw.ageText }), fields: [id, run, task, summary, what, requester] };
-}
-/** These private adapters read context below the real Workline Provider, then pass completed projections only. */
-export function ApprovalDecisionNoticeRow({ raw, labels, error }: { readonly raw: ApprovalDecisionNoticePresentation; readonly labels: ApprovalDecisionLabels; readonly error: boolean }) {
-  const known = useHumanTextSecrets(), line = raw.kind === 'approval-row' ? projectRow(raw, known) : approvalTemplateLine(raw.notFoundTemplate, { ref: projectApprovalDecisionText(raw.ref, known) });
-  return <ApprovalProjectedNotice line={line} labels={labels} error={error} />;
 }
 /** `/approvals` as a list window; choosing a row opens the same approval window. */
 export function ApprovalDecisionPicker({ rows, labels, work, clearSession, status, onSelect, onCancel }: { readonly rows: readonly Omit<ApprovalRowPresentation, 'kind'>[]; readonly labels: ApprovalDecisionLabels;

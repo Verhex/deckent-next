@@ -16,7 +16,7 @@ import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-reque
 import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveGlobalConfigReadPath, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 
 /**
  * Real runtime service (in process) for the permission-mode matrix (T-L4 slice 4a): a local OpenAI-chat fixture answers each round

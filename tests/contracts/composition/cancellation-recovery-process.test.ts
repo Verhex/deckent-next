@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 import { createRun, requestRunCancellation, reserveRunTasks } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache } from '#platform/index.js';
 import { identifyDockerRequest } from '#adapters/index.js';
 import { cliChildEnv } from '../support/child-env.js';
