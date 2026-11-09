@@ -128,4 +128,11 @@ it('an overlay changes a Core row or exception only by compare-and-set; it never
   expect(modelRoleRegistrySchema.safeParse({ ...overlay({}), models: [sonnet, sonnet] }).success).toBe(false);
   expect(modelRoleConfigSchema.safeParse({}).success).toBe(false);
   expect(modelRoleConfigSchema.parse({ schemaVersion: 1, overlays: [] })).toEqual({ schemaVersion: 1, overlays: [] });
+  for (const origin of ['person-assignment', 'policy'] as const) {
+    const typed = overlay({ origin });
+    expect(typed.origin).toBe(origin);
+    expect(() => mergeModelRoleRegistries(CORE_MODEL_ROLES, [typed])).not.toThrow();
+  }
+  expect(modelRoleRegistrySchema.safeParse({ ...overlay({}), origin: 'unknown' }).success).toBe(false);
+  expect(modelRoleRegistrySchema.safeParse({ ...overlay({}), origin: null }).success).toBe(false);
 });

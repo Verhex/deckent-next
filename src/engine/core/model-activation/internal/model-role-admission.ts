@@ -66,16 +66,16 @@ export function modelRoleCoverage(policy: ModelRolePolicy, catalog: readonly Mod
   }));
 }
 
-/** The owned overlay's write counter (`<prefix><n>`), or null for an overlay this command does not own. */
+/** Legacy write counter; alpha.64 still emits this revision shape for alpha.63.3 rollback. */
 const counter = (overlay: Readonly<{ revision: string }>) => {
   const rest = overlay.revision.startsWith(settings.ownedOverlayRevisionPrefix) ? overlay.revision.slice(settings.ownedOverlayRevisionPrefix.length) : '';
   return /^[1-9]\d*$/.test(rest) && Number.isSafeInteger(Number(rest)) ? Number(rest) : null;
 };
 /** Whether an overlay is the one a person's own role assignment (`models roles assign`, `/roles`) writes; the Brain gate never treats it as binding policy. */
-export const isOwnedRoleOverlay = (overlay: Readonly<{ revision: string }>) => counter(overlay) !== null;
+export const isOwnedRoleOverlay = (overlay: Pick<ModelRoleRegistry, 'revision' | 'origin'>) =>
+  overlay.origin === undefined ? counter(overlay) !== null : overlay.origin === 'person-assignment';
 const fail = (code: ModelRoleErrorCode): never => { throw new ModelRoleError(code); };
 const sameRoles = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
-/** The Core seed with these overlays; a refusal is the merge's own typed code. */
 const merged = (overlays: readonly unknown[]): ModelRolePolicy => mergeModelRoleRegistries(CORE_MODEL_ROLES, overlays);
 /**
  * One row for one exact (channel, model) in the owned overlay — created last when absent. The row's compare-and-set names the version of the
@@ -87,7 +87,7 @@ export function planModelRoleAssignment(section: unknown, request: Readonly<Role
   try { config = section === undefined ? { schemaVersion: 1, overlays: [] } : modelRoleConfigSchema.parse(section); }
   catch { return fail('MODEL_ROLE_COMMAND_INVALID'); }
   const overlays: ModelRoleRegistry[] = [...config.overlays], key = roleModelKey(request);
-  const index = overlays.map(overlay => counter(overlay) !== null).lastIndexOf(true), mine = index < 0 ? null : overlays[index]!;
+  const index = overlays.map(isOwnedRoleOverlay).lastIndexOf(true), mine = index < 0 ? null : overlays[index]!;
   const effective = merged(overlays).models.find(row => roleModelKey(row) === key);
   const previous = merged(index < 0 ? overlays : overlays.slice(0, index)).models.find(row => roleModelKey(row) === key);
   const existing = mine?.models.find(row => roleModelKey(row) === key);
@@ -96,7 +96,7 @@ export function planModelRoleAssignment(section: unknown, request: Readonly<Role
     ...(effective?.measured ? { measured: effective.measured } : {}), ...(previous ? { override: Object.freeze({ previousVersion: previous.version }) } : {}) });
   if (effective && effective.tier === request.tier && sameRoles(effective.roles, request.roles)) return { changed: false as const, row: effective, section: config };
   const body = { roles: mine?.roles ?? [], models: [...(mine?.models ?? []).filter(entry => roleModelKey(entry) !== key), row], exceptions: mine?.exceptions ?? [] };
-  const revision = `${settings.ownedOverlayRevisionPrefix}${(mine ? counter(mine)! : 0) + 1}`;
+  const revision = `${settings.ownedOverlayRevisionPrefix}${(mine ? counter(mine) ?? 0 : 0) + 1}`;
   const overlay = { schemaVersion: 1 as const, revision, ...body };
   if (index < 0) overlays.push(overlay); else overlays[index] = overlay;
   if (overlays.length > limits.overlays) fail('MODEL_ROLE_REGISTRY_LIMIT');
@@ -121,7 +121,6 @@ export class ModelRoleAdmissionApplication {
   }
   async assign(input: unknown): Promise<ModelRoleAssignResult> {
     const command = parse(modelRoleAssignCommandSchema, input), current = await this.ports.section();
-    // The card's compare-and-set, checked before the catalog read; the config write checks it again under the layer lock.
     if (current.digest !== command.expect) fail('MODEL_ROLE_STALE');
     const key = roleModelKey(command);
     if (!catalogRoleFacts(await this.ports.catalog(command.scopeId)).some(row => roleModelKey(row) === key)) fail('MODEL_ROLE_CATALOG_UNKNOWN');
