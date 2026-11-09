@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { fillTemplate, span, useTerminalHandover } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, span, useTerminalHandover } from '#surfaces/core/terminal-render-ink/index.js';
 import { PICKER_INITIAL } from '#surfaces/core/terminal-picker/index.js';
 import { EntryWindow, LinesWindow, PickerWindow, QuestionWindow, type PanelLabels, type PanelLine, type ProviderModelOutcome, type ProviderPanelKind } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderDelegateClass, ProviderSubscriptionOutcome, ProviderSubscriptionPort } from './context.js';

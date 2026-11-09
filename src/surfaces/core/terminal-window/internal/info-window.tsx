@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { projectHumanPickerText, span, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { projectHumanPickerText, span, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window } from './window.js';
 import { INFO_GLYPHS_ASCII, INFO_GLYPHS_UNICODE, infoChoices, infoWindowLines, projectInfoModel, type InfoWindowLabelsShape, type InfoWindowModel } from './info-model.js';
 

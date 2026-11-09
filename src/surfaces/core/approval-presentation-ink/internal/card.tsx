@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import { Box, Text, type Key } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
-import { HiddenTextNotice, fillTemplate, span, useRenderGlyphs, type Span } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, span, type Span, HiddenTextNotice, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { QuestionRows, Window, WINDOW_PRIORITY, questionStep, type QuestionOption, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import type { ApprovalDecisionProjection, ApprovalDecisionLabels, ApprovalDecisionLine } from './types.js';
+import type { ApprovalDecisionProjection, ApprovalDecisionLabels, ApprovalDecisionLine } from '#surfaces/core/approval-presentation/index.js';
 
 export const approvalRawPatternCount = (field: ApprovalDecisionProjection) => field.patternMatches.reduce((count, match) => count + match.count, 0);
 

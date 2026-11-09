@@ -1,5 +1,5 @@
 import { messageText, t, type Locale } from '#platform/index.js';
-import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import type { AssistantRenderLabels } from '#surfaces/core/terminal-render-ink/index.js';
 import type { ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ConversationSessionLabels, WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS, slashSearchKey, slashHelpText, searchSlashCommands } from '#surfaces/core/terminal-kit/index.js';

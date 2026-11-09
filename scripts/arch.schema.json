@@ -207,6 +207,10 @@
           "plan"
         ],
         "properties": {
+          "ink": {
+            "type": "boolean",
+            "description": "True for renderer units; false forbids static runtime reachability to Ink, React or TSX. Type-only and lazy edges remain allowed."
+          },
           "dependencies": {
             "type": "array",
             "uniqueItems": true,

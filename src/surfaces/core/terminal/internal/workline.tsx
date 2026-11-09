@@ -6,12 +6,11 @@ import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } f
 import { cardCopy, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, type TerminalThemeRequest, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
-  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
+import { parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, surfaceFollowLine, type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion, WorklinePaletteProvider, useWorklinePalette, useWorklineWatch, useSurfacePushFeed } from '#surfaces/core/terminal-kit-ink/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
-import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render/index.js';
-import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, AssistantLive, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render-ink/index.js';
+import { humanRecordText, projectHumanPickerText, HumanTextContext, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';

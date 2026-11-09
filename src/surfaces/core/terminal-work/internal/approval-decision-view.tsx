@@ -1,11 +1,10 @@
 import { readWorkerToolCard } from '#capabilities/index.js';
 import { t } from '#platform/index.js';
 import { useEffect, useState } from 'react';
-import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
+import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import { ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { ApprovalProjectedNotice, ApprovalProjectedPicker, DecisionCard, decisionWindowLines, projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans, approvalTemplateLine,
-  type ApprovalDecisionLabels, type ApprovalDecisionLine } from '#surfaces/core/approval-presentation/index.js';
+import { projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans, approvalTemplateLine, type ApprovalDecisionLabels, type ApprovalDecisionLine, ApprovalProjectedNotice, ApprovalProjectedPicker, DecisionCard, decisionWindowLines } from '#surfaces/core/approval-presentation-ink/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { AgentShellPosture, AgentToolCardCall, ApprovalPreviewCutFacts } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';

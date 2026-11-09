@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { openSurfacePush, surfaceWait, pollWait, createSurfaceFollowSession, type SurfaceDeliveryMode, type SurfaceFollowEvent, type SurfacePushStep, type SurfaceRefresh } from './surface-push.js';
+import { openSurfacePush, surfaceWait, pollWait, createSurfaceFollowSession, type SurfaceDeliveryMode, type SurfaceFollowEvent, type SurfacePushStep, type SurfaceRefresh } from '#surfaces/core/terminal-kit/index.js';
 
 /**
  * Observe-only polling: one poll in flight at a time (the next is scheduled after the previous settles), results

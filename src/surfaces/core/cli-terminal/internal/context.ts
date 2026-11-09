@@ -5,7 +5,7 @@ import type { PermissionMode } from '#domain/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand, BrainPlanObserver } from '#domain/index.js';
 import type { RunPlanningResult } from '#engine/index.js';
-import type { McpPanelRun } from './mcp-panel.js';
+import type { McpPanelRun } from '#surfaces/core/mcp-presentation/index.js';
 import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
 import type { DeliveryPortHost } from '#surfaces/core/delivery-port/index.js';

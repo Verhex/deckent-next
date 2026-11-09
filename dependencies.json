@@ -108,7 +108,7 @@
           "note": "Server framework layered on the official SDK; not an independent client implementation."
         }
       ],
-      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface — 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
+      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface \u2014 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
       "watch": [
         "FASTURI-OUT (owner 2026-09-29): the published package does not contain the embedded ajv/ajv-formats/fast-uri/json-schema-traverse; scripts/build-dist.mjs loads _shims and validators/ajv with their ajvProvider import replaced by a stub that throws DeckentRemovedValidatorError (MCP_DEFAULT_VALIDATOR_REMOVED), and fails the build if the metafile, shipped packages or sourcemap-embedded components name them. They remain in the installed dev/test tree (embedded[] below mirrors the installed sourcemaps).",
         "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.",
@@ -206,12 +206,12 @@
         "src/surfaces/core/terminal-host",
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-composer",
-        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-render-ink",
         "src/surfaces/core/terminal-picker",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/monitor",
-        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/approval-presentation-ink",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-onboarding",
@@ -258,13 +258,13 @@
         "src/surfaces/core/terminal-host",
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-composer",
-        "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-kit-ink",
+        "src/surfaces/core/terminal-render-ink",
         "src/surfaces/core/terminal-picker",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/monitor",
-        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/approval-presentation-ink",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/terminal-delivery",
         "src/surfaces/core/cli-human",
@@ -457,7 +457,7 @@
         "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)",
         "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)",
         "plugin onResolve + build.resolve + onLoad replacing the MCP SDK's ajvProvider import in _shims/validators/ajv with a throwing stub (FASTURI-OUT)",
-        "package.json imports (#…) resolution inside dependencies"
+        "package.json imports (#\u2026) resolution inside dependencies"
       ],
       "criticality": "P1",
       "alternatives": [
@@ -466,7 +466,7 @@
           "package": "rolldown",
           "version": "1.2.11",
           "date": "2026-09-24",
-          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) — matters for build identity and provenance."
+          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) \u2014 matters for build identity and provenance."
         },
         {
           "name": "tsdown",

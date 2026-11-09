@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Text, type Key } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
+import { useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useCardCopyOptions } from './card-copy.js';
 import { Window } from './window.js';
 import { WINDOW_PRIORITY } from './window-stack.js';

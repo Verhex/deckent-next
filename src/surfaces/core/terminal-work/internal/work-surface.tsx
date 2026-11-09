@@ -13,7 +13,7 @@ import { JobWindow, pickRun, runTitle } from './job-windows.js';
 import { RunAnswerDecisionCard, RunControlDecisionCard, RunsControlWindow, runRunsControl } from './run-control.js';
 import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
-import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
+import { useSingleFlightPoll } from '#surfaces/core/terminal-kit-ink/index.js';
 export interface WorkSurfaceInput {
   readonly panel: WorklinePanel;
   readonly state: PanelSnapshot<TerminalLocalContext>;

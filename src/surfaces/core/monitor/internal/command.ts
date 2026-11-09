@@ -3,7 +3,7 @@ import { createElement, type ComponentProps } from 'react';
 import { useApp, useInput } from 'ink';
 import { ErrorRegistry, colorCapability, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { MonitorQuery, MonitorSnapshot, MonitorSourceMemo } from '#engine/index.js';
-import { terminalPalette, useWorklinePalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
+import { terminalPalette, TERMINAL_THEME_SETTINGS, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
 import { prefersAsciiGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { MonitorCommandContext } from './context.js';

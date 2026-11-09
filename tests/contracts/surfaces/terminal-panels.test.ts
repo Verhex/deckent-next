@@ -8,8 +8,8 @@ import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PermissionModeView } from '#domain/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
+import { cells, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
 import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { configPanelTree, editEntry, maskEntry, mcpPanelTree, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
   type McpServerDraft, type McpTrustQuestion, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, formatDuration, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { SpanText, cells, projectHumanPickerText, span, truncateEnd, useHumanTextSecrets, useRenderGlyphs, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
+import { cells, projectHumanPickerText, span, truncateEnd, type Span, type SpanRole, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
 import { runStatusKey } from '#surfaces/core/cli-human/index.js';
 import { displayId, parkReasonText, runStateText, runTitle, type JobWindowLabels } from './job-windows.js';

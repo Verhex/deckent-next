@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';
+import { WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerState } from '#surfaces/core/terminal-picker/index.js';
 import { PickerWindow } from './picker-window.js';

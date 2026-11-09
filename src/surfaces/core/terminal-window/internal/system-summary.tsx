@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { modelProviderSpans, spanStyle, type ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
+import { useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
+import { modelProviderSpans, type ModelProviderLabel, spanStyle } from '#surfaces/core/terminal-render-ink/index.js';
 
 /**
  * The scrollback entry id of a system summary line (a `notice` entry with this id). SW-2's placeholder `systemSummaryLine(text)` uses the

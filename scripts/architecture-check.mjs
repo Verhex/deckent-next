@@ -341,6 +341,48 @@ for (const [unit, declaration] of Object.entries(declaredUnits)) {
   }
   for (const dependency of declared) if (!observed.has(dependency)) fail('unit-dependency', unit, `stale dependency ${dependency}`);
 }
+// Runtime imports define the Ink boundary; erased types and explicit lazy edges do not load a renderer.
+const runtimeEdges = new Map();
+function staticRuntimeEdges(file) {
+  if (runtimeEdges.has(file)) return runtimeEdges.get(file);
+  const edges = [], source = program.getSourceFile(file);
+  for (const statement of source?.statements ?? []) {
+    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+    const specifier = statement.moduleSpecifier;
+    if (!specifier || !ts.isStringLiteral(specifier)) continue;
+    if (ts.isImportDeclaration(statement)) {
+      const clause = statement.importClause, bindings = clause?.namedBindings;
+      if (clause?.isTypeOnly || clause && !clause.name && bindings && ts.isNamedImports(bindings)
+        && bindings.elements.length > 0 && bindings.elements.every(element => element.isTypeOnly)) continue;
+    } else if (statement.isTypeOnly || statement.exportClause && ts.isNamedExports(statement.exportClause)
+      && statement.exportClause.elements.length > 0 && statement.exportClause.elements.every(element => element.isTypeOnly)) continue;
+    const spec = specifier.text;
+    if (/^(ink|react)(\/|$)/u.test(spec)) edges.push(spec);
+    else if (spec.startsWith('#') || spec.startsWith('.')) {
+      const base = dependencyTarget(file, spec);
+      const target = existsSync(base) ? base : base.replace(/\.ts$/u, '.tsx');
+      if (existsSync(target) && /\.tsx?$/u.test(target)) edges.push(target);
+    }
+  }
+  runtimeEdges.set(file, edges);
+  return edges;
+}
+function reachesInk(entry) {
+  const seen = new Set(), stack = [entry];
+  while (stack.length) {
+    const file = stack.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (/^(ink|react)(\/|$)/u.test(file) || file.endsWith('.tsx')) return true;
+    stack.push(...staticRuntimeEdges(file));
+  }
+  return false;
+}
+for (const unit of discoveredUnits) {
+  const ink = declaredUnits[unit]?.ink;
+  if (reachesInk(join(ROOT, unit, 'index.ts')) && ink !== true) fail('ink-boundary', unit, 'an index that statically loads Ink/React or TSX must declare ink: true; pure units use an Ink unit or a lazy edge');
+}
+
 const visitState = new Map(), visitStack = [];
 function visitUnit(unit) {
   visitState.set(unit, 1); visitStack.push(unit);

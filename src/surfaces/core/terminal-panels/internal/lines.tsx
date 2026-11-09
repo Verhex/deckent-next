@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { projectApprovalDecisionText } from '#surfaces/core/approval-presentation/index.js';
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
-import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
+import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, useWindowReserve, WINDOW_RESERVED_ROWS, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { LIST_PICKER_MIN_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { useWindowSize } from 'ink';

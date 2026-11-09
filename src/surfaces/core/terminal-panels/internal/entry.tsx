@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { Text, type Key } from 'ink';
 import { graphemes, nextBoundary, previousBoundary } from '#surfaces/core/terminal-composer/index.js';
-import { span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { span, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 
 /** One edit of a single-line entry (cluster-safe, on the composer's own text primitives): the next text and caret, or null for a key it ignores. */
 export type EntryState = Readonly<{ text: string; caret: number }>;
