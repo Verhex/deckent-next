@@ -31,7 +31,7 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
     try {
       await git.run(['read-tree', baseCommit], '', index, deadline);
       for (const change of patch.changes) {
-        const oid = change.after ? await git.run(['hash-object', '-w', '--stdin'], change.after.text, index, deadline) : '0'.repeat(patch.baseCommit.length);
+        const oid = change.after ? await git.run(['hash-object', '-w', '--no-filters', '--stdin'], change.after.text, index, deadline) : '0'.repeat(patch.baseCommit.length);
         if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid)) throw new WorkspacePatchError('PATCH_CORRUPT');
         await git.run(['update-index', '-z', '--index-info'], `${change.after?.mode ?? '0'} ${oid}\t${change.path}\0`, index, deadline);
       }

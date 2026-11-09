@@ -21,7 +21,7 @@ export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionM
 export { getConfigKnownSecrets } from '#platform/core/config/index.js';
 export { formatHumanError, buildCrashArtifact, writeCrashArtifact, writeDiagnosticRecord, reportFatal } from '#platform/core/crash-reporting/index.js';
 export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
-export { ENVIRONMENT_KEYS, envValue, automationMarker, adoptProductionReact, callerEnvironment, inheritedEnvironment, CHILD_BASE_ENVIRONMENT, serviceEnvironment, personProcessEnvironment } from '#platform/core/host/index.js';
+export { ENVIRONMENT_KEYS, envValue, automationMarker, adoptProductionReact, callerEnvironment, inheritedEnvironment, CHILD_BASE_ENVIRONMENT, serviceEnvironment, personProcessEnvironment, FIXED_TOOL_PATH, userBusEnvironment } from '#platform/core/host/index.js';
 export { isMainModule, packageRemovalCommand, handMadeLaunchers } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';

@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readdir, rm, readFile, stat, truncate, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rm, readFile, stat, truncate, utimes, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -167,6 +167,14 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false, owned: async () => false } })).toMatchObject({ changes: 'unknown' });
     for (const key of ['core.fsmonitor', 'filter.evil.clean', 'filter.evil.process', 'filter.evil.required', 'diff.external']) git(plain, 'config', '--unset', key);
     await rm(join(plain, '.gitattributes')); git(plain, 'checkout', '--', 'a.txt');
+    // KG1 P1.4 (the A6-1 fixture's shape): a racily clean tracked file makes Git compare content, so a clean or process driver from an
+    // included config file would run; the blanked drivers stay silent and the file reads unchanged.
+    const included = join(plain, '..', `included-${Date.now()}.cfg`), attributes = join(plain, '.git', 'info', 'attributes');
+    await writeFile(included, `[filter "inc"]\n\tclean = ${hook}\n\tprocess = ${hook}\n`); git(plain, 'config', 'include.path', included);
+    await writeFile(attributes, '* filter=inc\n');
+    const file = await stat(join(plain, 'a.txt')); await utimes(join(plain, '.git', 'index'), file.atime, file.mtime);
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'none' });
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' }); git(plain, 'config', '--unset', 'include.path'); await rm(attributes);
     expect(coding(full, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.repository', params: { targets: 1 } } });
     const self = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => true } });
     expect(coding(self, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.productSource' } });

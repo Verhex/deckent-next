@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { access, constants, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
+import { FIXED_TOOL_PATH } from '#platform/index.js';
 
 /**
  * Why a server did not start inside its sandbox view (MCP-SANDBOX-PATHS, 2026-09-29): a path the server needs exists on this machine but the
@@ -36,7 +37,7 @@ async function resolveCommand(command: string, pathVariable: string | undefined,
 function hiddenInView(launcher: { readonly file: string; readonly prefix: readonly string[] }, paths: readonly string[], cwd: string): Promise<ReadonlySet<string> | null> {
   return new Promise(done => {
     execFile(launcher.file, [...launcher.prefix, '--', '/bin/sh', '-c', PROBE_SCRIPT, 'sh', ...paths],
-      { cwd, env: { PATH: '/usr/bin:/bin' }, timeout: PROBE_TIMEOUT_MS, maxBuffer: 65_536, encoding: 'utf8' },
+      { cwd, env: { PATH: FIXED_TOOL_PATH }, timeout: PROBE_TIMEOUT_MS, maxBuffer: 65_536, encoding: 'utf8' },
       (error, stdout) => done(error ? null : new Set(stdout.split('\0').filter(Boolean))));
   });
 }

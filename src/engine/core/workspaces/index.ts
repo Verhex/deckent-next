@@ -19,7 +19,7 @@ export type { DependencyBinarySource, DependencyHit, DependencyTextChecks, Depen
 
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from './internal/git-source-base.js';
 export type { GitSourcePreimage, GitSourceBase } from './internal/git-source-base.js';
-export { GIT_LOCAL_ENV, localGitArgs } from './internal/git-local-git.js';
+export { GIT_LOCAL_ENV, localGitArgs, checkAttrSet } from './internal/git-local-git.js';
 export { gitWorkspaceOptionsSchema, gitWorkspaceRecordSchema, gitWorkspaceFingerprint, validGitSourceBase } from './internal/git-source-base.js';
 export type { GitWorkspaceOptions } from './internal/git-source-base.js';
 export { gitWorkspaceIdentityTarget, gitWorkspaceRequestTarget } from './internal/git-source-base.js';

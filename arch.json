@@ -1009,7 +1009,8 @@
         "src/domain/core/audit",
         "src/platform/core/errors",
         "src/engine/core/attempts",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -2378,7 +2379,8 @@
         "src/domain/core/agent-turn",
         "src/platform/core/i18n",
         "src/platform/core/clock",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/engine/core/workspaces"
       ],
       "plan": "SURFACES"
     },
@@ -2623,7 +2625,8 @@
     "src/adapters/core/runtime-launcher": {
       "dependencies": [
         "src/platform/core/common",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/host"
       ],
       "plan": "SURFACES"
     },
@@ -4948,7 +4951,8 @@
         "src/platform/core/config",
         "src/adapters/core/mcp-trust",
         "src/domain/core/agent-tool",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/host"
       ],
       "plan": "SURFACES"
     },
@@ -5206,12 +5210,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42359,
+      "adapters": 42350,
       "surfaces": 45000,
       "composition": 13558
     },
     "totalSrcLines": 200000,
-    "testCases": 8218,
+    "testCases": 8217,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

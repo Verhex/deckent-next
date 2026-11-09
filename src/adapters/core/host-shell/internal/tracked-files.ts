@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
+import { GIT_LOCAL_ENV, localGitArgs } from '#engine/index.js';
 
 /**
  * FA-TRACKED-WARN (owner 2026-09-30, option A): what a full-access shell call measurably did to the project's git-tracked files — warn and
@@ -30,12 +31,9 @@ export const LISTING_MAX_BYTES = 64 * 1024 * 1024;
 export const LISTING_TIMEOUT_MS = 5_000;
 const YIELD_EVERY = 4_096;
 const GITLINK_MODE = '160000';
-/** The same fixed environment as the git-patch adapter's `GIT_LOCAL_ENV` (`git-patch/internal/local-git.ts`; host-shell may not depend on it,
- * arch.json): no system/global configuration, no prompt, no transport, no optional lock; `LC_ALL=C` so the "not a repository" answer is stable. */
-const GIT_ENV: Readonly<Record<string, string>> = Object.freeze({ PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
-  GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' });
+/** The shared local-Git environment (`GIT_LOCAL_ENV`); `LC_ALL=C` so the "not a repository" answer is stable. */
+const GIT_ENV: Readonly<Record<string, string>> = Object.freeze({ ...GIT_LOCAL_ENV, LC_ALL: 'C' });
 
-/** What was known before the call: the measured tracked files, nothing to measure (not a git project), too many files, or git could not answer. */
 export type TrackedFilesUnavailableReason = 'GIT_LIST_TIMEOUT' | 'GIT_LIST_MAX_BUFFER' | 'GIT_LIST_EXECUTION_FAILED' | 'GIT_LISTING_FAILED';
 export type TrackedFilesBaseline =
   | { readonly kind: 'measured'; readonly root: string; readonly paths: readonly string[]; readonly stats: readonly (string | null)[] }
@@ -64,7 +62,7 @@ async function identities(root: string, paths: readonly string[]): Promise<(stri
 }
 function listTracked(root: string): Promise<{ readonly ok: true; readonly stdout: Buffer } | { readonly ok: false; readonly repository: boolean; readonly reason: TrackedFilesUnavailableReason }> {
   return new Promise(resolve => {
-    execFile('git', ['--no-replace-objects', '-C', root, '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', 'ls-files', '-z', '-s'],
+    execFile('git', localGitArgs(root, ['ls-files', '-z', '-s']),
       { env: GIT_ENV, encoding: 'buffer', maxBuffer: LISTING_MAX_BYTES, timeout: LISTING_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
         if (!error) { resolve({ ok: true, stdout }); return; }
         // Exit 128 with "not a git repository": no repository holds the project — nothing to measure. Anything else: git could not answer.
@@ -111,7 +109,6 @@ export async function compareTrackedFiles(baseline: Extract<TrackedFilesBaseline
 /** A path as one line shows it: control characters (a newline in a file name) become `?`, so a name can never forge another line. */
 // eslint-disable-next-line no-control-regex
 const oneLine = (path: string) => path.replace(/[\u0000-\u001f\u007f]/gu, '?');
-/** `a, b, … +N more`: at most `max` names of a list, then how many more. */
 function names(list: TrackedFilesList, max: number): string {
   const shown = list.paths.slice(0, max).map(oneLine).join(', ');
   return list.count > max ? `${shown}, … +${list.count - max} more` : shown;
@@ -122,7 +119,6 @@ export function describeTrackedFilesChange(change: TrackedFilesChange, audited =
   return `[deckent] tracked files changed: ${part('deleted', change.deleted)}, ${part('overwritten', change.overwritten)} — during this full-access call; nothing was blocked`
     + (audited ? '.' : '; the audit record of this could not be written.');
 }
-/** The line for a call whose tracked files were not measured (null when there was nothing to measure). */
 export function describeTrackedFilesUnchecked(baseline: TrackedFilesBaseline): string | null {
   if (baseline.kind === 'over-bound') return `[deckent] tracked files: not checked for this call (${baseline.count} tracked files exceed the bound of ${baseline.bound}).`;
   return baseline.kind === 'unavailable' ? '[deckent] tracked files: not checked for this call (git could not list them).' : null;

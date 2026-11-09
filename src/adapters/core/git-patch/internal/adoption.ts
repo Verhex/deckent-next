@@ -29,7 +29,7 @@ export class GitIntegrationAdoption implements IntegrationAdoptionTarget {
   }
   private async fenceObject(target: string, fence: AdoptionFence) {
     if (!fenceSchema.safeParse(JSON.parse(fenceText(target, fence))).success) throw new WorkspaceAdoptionError('ADOPTION_CORRUPT');
-    const value = await this.git.run(['hash-object', '-w', '--stdin'], fenceText(target, fence));
+    const value = await this.git.run(['hash-object', '-w', '--no-filters', '--stdin'], fenceText(target, fence));
     if (!oid.test(value)) throw new WorkspaceAdoptionError('ADOPTION_CORRUPT');
     return value;
   }

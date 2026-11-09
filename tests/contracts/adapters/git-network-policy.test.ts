@@ -12,13 +12,20 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 const limits = { maxBytes: 64 * 1024 * 1024, maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 };
 
 describe('local Git invocation construction (lane GIT-NET 2026-09-29)', () => {
-  it('denies every Git protocol transport and carries no ambient environment', () => {
+  it('denies every Git protocol transport and carries no ambient environment', async () => {
     const args = localGitArgs('/repo', ['rev-parse', 'HEAD']);
-    expect(args).toEqual(['--no-replace-objects', '-C', '/repo', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', 'rev-parse', 'HEAD']);
+    expect(args).toEqual(['--no-replace-objects', '-C', '/repo', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never',
+      '-c', 'advice.graftFileDeprecated=false', 'rev-parse', 'HEAD']);
     expect(GIT_LOCAL_ENV).toEqual({
       PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
-      GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
+      GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', GIT_GRAFT_FILE: '/dev/null',
     });
+    // KG1 P1.2: a repository's own `info/grafts` cannot cut its history, and the emptied graft file prints no hint into the output bound.
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-git-grafts-'))); roots.push(root);
+    const setup = (...more: string[]) => exec('/usr/bin/git', ['-C', root, '-c', 'user.name=T', '-c', 'user.email=t@example.invalid', ...more]);
+    await setup('init', '-q'); await setup('commit', '-q', '--allow-empty', '-m', 'one'); await setup('commit', '-q', '--allow-empty', '-m', 'two');
+    await mkdir(join(root, '.git', 'info'), { recursive: true }); await writeFile(join(root, '.git', 'info', 'grafts'), `${(await setup('rev-parse', 'HEAD')).stdout.trim()}\n`);
+    expect(await exec('/usr/bin/git', localGitArgs(root, ['rev-list', 'HEAD']), { env: GIT_LOCAL_ENV })).toMatchObject({ stderr: '', stdout: expect.stringMatching(/^(?:[0-9a-f]+\n){2}$/u) });
   });
 });
 
