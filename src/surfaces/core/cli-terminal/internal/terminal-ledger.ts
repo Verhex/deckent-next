@@ -1,3 +1,4 @@
+import { readWorkerToolCard } from '#capabilities/index.js';
 import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -24,10 +25,9 @@ function approvalDeciderLabel(record: ApprovalRecord, locale?: Locale): string {
   return t('approval.decider.unknown', {}, locale);
 }
 function approvalView(record: ApprovalRecord, locale?: Locale): WorklineApproval {
-  const { request } = record, subject = approvalSubject(request), facts = approvalFacts(request);
-  // A tool-call approval (C12) has no run or task: its summary names the tool, resource and argument digest.
+  const { request } = record, subject = approvalSubject(request), facts = approvalFacts(request), worker = readWorkerToolCard(request);
   return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : '-', taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
-    requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt,
+    ...(worker ? { worker: { ...worker, resource: readWorkerToolCard(request.summary)?.resource ?? request.summary } } : {}), requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt,
     risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
     ...(record.decision ? { deciderLabel: approvalDeciderLabel(record, locale) } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),

@@ -45,6 +45,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
         const raw = edits.preview(input.tool.name, input.args) ?? shell.previewText(input.tool.name, input.args) ?? chatTurnApprovalPreview(input.tool.name, input.args);
         const preview = await prepareApprovalPreview(redactForRecord(raw, known), async text => kept = await keepFullPreview(context.layout, sha256(`${turnId}\0${input.round}\0${input.index}`), text));
         const record = requestAgentToolApproval(journal.store, integrity, { scopeId, requester: { id, issuer, subject: actor },
+          origin: { kind: 'worker-tool-call', identity: request.identity, turnId, resourceDigest: sha256(input.target ?? '(no target)'), argsDigest: input.argsDigest },
           preview: { schemaVersion: 1, argsDigest: input.argsDigest, text: projectModelIngressField(preview.text).modelText, cut: preview.cut },
           subject: approvals.subject(input, input.tool, input.target, input.argsDigest), facts: agentToolApprovalFacts(policy, scopeId, decisions.cell(input.tool, input.args)),
           policyRevision: policy.revision, summary: workerToolCardSummary({ identity: request.identity, turnId, tool: input.tool.name, resource: redactForRecord(input.target ?? '(no target)', known), resourceDigest: sha256(input.target ?? '(no target)'), argsDigest: input.argsDigest }),

@@ -77,8 +77,7 @@ const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { re
 /** Versioned display expansion: sealed with the request and bound to the exact tool arguments. Older v3 records retain their bytes. */
 export const approvalPreviewSchema = z.strictObject({ schemaVersion: z.literal(1), argsDigest: digest,
   text: persistedString(z.string().max(16_384)), cut: approvalPreviewCutSchema.nullable() }).readonly();
-/** KG4 F3 expand: the worker fact as a sealed, typed field instead of the display summary. Nothing writes it yet: an earlier build's strict schema
- * refuses a record carrying it, so the writer lands one release after this reader (APPR-4, with its rollback proof). */
+/** KG4 F3: sealed worker origin; alpha.64 writes it (owner 2026-11-09: no alpha.63.3 rollback). Older v3 records keep their bytes. */
 const workerOriginSchema = z.strictObject({ kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema, turnId: identitySchema, resourceDigest: digest, argsDigest: digest }).readonly();
 const factualApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(3); }, ...requestShape, facts: approvalFactsSchema,
   preview: approvalPreviewSchema.optional(), origin: workerOriginSchema.optional() }).refine(r => r.expiresAt > r.createdAt).readonly();

@@ -1,7 +1,7 @@
 import { hexDigest } from './schema-parts.js';
 import { z } from 'zod';
 import { sha256 } from '#platform/index.js';
-import { ApprovalError, approvalSubject, approvalSummarySchema, isAiPrincipal, attemptIdentitySchema, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
+import { ApprovalError, approvalSubject, approvalSummarySchema, isAiPrincipal, attemptIdentitySchema, type ApprovalRequest, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
 
 /** Producer-owned metadata inside the sealed request. No arguments, login material or caller-supplied approval authority. */
 const workerCardSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema,
@@ -19,9 +19,13 @@ export const workerToolCardSummary = (input: Omit<WorkerToolCard, 'schemaVersion
   while (low < high) { const mid = Math.ceil((low + high) / 2); if (fits(shown(mid))) low = mid; else high = mid - 1; }
   return shown(low);
 };
-/** Sealed producer metadata also used by authority checks: verify the record and bind these fields to its subject before trusting them. */
-export function readWorkerToolCard(summary: string): WorkerToolCard | null {
-  try { const parsed = workerCardSchema.safeParse(JSON.parse(summary)); return parsed.success ? parsed.data : null; } catch { return null; }
+/** Prefer the sealed origin; summary parsing remains only for records written before alpha.64. Verify the record before trusting either. */
+export function readWorkerToolCard(input: string | ApprovalRequest): WorkerToolCard | null {
+  if (typeof input !== 'string' && input.schemaVersion === 3 && input.origin) {
+    const subject = approvalSubject(input);
+    return { schemaVersion: 1, ...input.origin, tool: subject.kind === 'agent-tool-call' ? subject.tool : '', resource: subject.kind === 'agent-tool-call' ? subject.resource : '' };
+  }
+  try { const parsed = workerCardSchema.safeParse(JSON.parse(typeof input === 'string' ? input : input.summary)); return parsed.success ? parsed.data : null; } catch { return null; }
 }
 
 type DecisionMinter = { mint(binding: { scopeId: string; approvalId: string; principal: Pick<VerifiedPrincipal, 'issuer' | 'subject'>;
@@ -35,7 +39,7 @@ export function workerToolPreviewComplete(record: ApprovalRecord): boolean {
 export function mintAttendedWorkerDecision(record: ApprovalRecord | null, principal: VerifiedPrincipal, peerPid: number,
   interactive: boolean, decisions: DecisionMinter, nowMs: number): string | null {
   if (!record || !interactive || isAiPrincipal(principal) || record.status !== 'pending' || nowMs >= record.request.expiresAt) return null;
-  const worker = readWorkerToolCard(record.request.summary), subject = approvalSubject(record.request);
+  const worker = readWorkerToolCard(record.request), subject = approvalSubject(record.request);
   if (!worker || subject.kind !== 'agent-tool-call' || worker.identity.scopeId !== record.request.scopeId || worker.turnId !== subject.turnId
     || worker.tool !== subject.tool || worker.resourceDigest !== sha256(subject.resource) || worker.argsDigest !== subject.argsDigest
     || !workerToolPreviewComplete(record)) return null;

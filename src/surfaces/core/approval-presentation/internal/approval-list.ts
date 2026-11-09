@@ -1,4 +1,4 @@
-import type { AgentShellPosture, AgentToolCardCall, ApprovalPreviewCutFacts } from '#domain/index.js';
+import type { AttemptIdentity, AgentShellPosture, AgentToolCardCall, ApprovalPreviewCutFacts } from '#domain/index.js';
 import type { SessionStandingResult } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 
@@ -8,6 +8,8 @@ export interface WorklineApproval {
   readonly runId: string;
   readonly taskId: string;
   readonly summary: string;
+  /** Display copy of the sealed worker origin and subject; legacy cards retain summary decoding. */
+  readonly worker?: Readonly<{ identity: AttemptIdentity; tool: string; resource: string; argsDigest: string }>;
   readonly requester: string;
   readonly revision: number;
   readonly status: 'pending' | 'decided' | 'expired';

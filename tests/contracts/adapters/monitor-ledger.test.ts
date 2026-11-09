@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteAttemptStore, readMonitorLedger, type SqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { AuditApplication, ExecutionPoolHoldApplication, PoolControlPolicyAuthorization } from '#engine/index.js';
+import { AuditApplication, ExecutionPoolHoldApplication, PoolControlPolicyAuthorization, projectResultBrief, resultBriefSchema } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
@@ -59,6 +59,21 @@ const files = async (path: string) => Promise.all(['', '-wal'].map(async suffix 
   catch { return { suffix, missing: true }; }
 }));
 const read = (path: string, maxRuns = 10) => readMonitorLedger(path, { busyTimeoutMs: 100, maxRuns });
+
+async function assertDeliveryModes(path: string, commit: string) {
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles); stores.push(store);
+  for (const [scopeId, version] of [['s', 2], ['s2', 1]] as const) await store.resolveRunWorkspaceCustody({ schemaVersion: 1, scopeId, runId: 'r1',
+    source: { schemaVersion: 1, adapter: { id: 'git', version }, sourceFingerprint: 'a'.repeat(64) }, baseRevision: commit });
+  const current = await readMonitorLedger(path, { busyTimeoutMs: 100, maxRuns: 10 });
+  for (const [scopeId, application] of [['s', 'working-tree'], ['s2', 'reference-only']] as const) {
+    const delivery = current.runs.find(run => run.snapshot.identity.scopeId === scopeId && run.snapshot.identity.runId === 'r1')!.delivery!;
+    expect(delivery).toMatchObject({ schemaVersion: 2, application });
+    expect(delivery.receipts!.every(receipt => 'schemaVersion' in receipt && receipt.schemaVersion === 2 && receipt.application === application)).toBe(true);
+    const brief = projectResultBrief(null, { verdict: null }, null, delivery);
+    expect(resultBriefSchema.parse(JSON.parse(JSON.stringify(brief)))).toEqual(brief);
+  }
+  expect(current.runs.find(run => run.snapshot.identity.runId === 'r3')!.delivery).not.toHaveProperty('application');
+}
 
 describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   it('reads every scope, never-dispatched Runs, attempts, evaluations, pools and holds with ledger-proven times, without changing the ledger', async () => {
@@ -161,6 +176,8 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     expect(Reflect.set(result, 'state', 'adopted')).toBe(false);
     expect(() => Array.prototype.push.call(result.receipts, {})).toThrow(TypeError);
     expect(find('s2', 'r1').receipts).not.toBe(result.receipts); expect(find('s', 'r3').receipts).not.toBe(result.receipts);
+    await assertDeliveryModes(f.path, commit);
+    expect(result).not.toHaveProperty('application');
   });
   it('retains a large single-Run receipt history and isolates earlier readings from later ledger receipts', async () => {
     const f = await fixture(); f.store.close(); const writer = new DatabaseSync(f.path), count = 4096, commit = 'd'.repeat(40);

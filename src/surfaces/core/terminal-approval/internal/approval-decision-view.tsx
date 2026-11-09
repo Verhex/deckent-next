@@ -24,7 +24,7 @@ export type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun:
   tool: string | undefined; target: string | null | undefined; posture: AgentShellPosture | undefined;
   call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; preview: string | undefined; config: WorklineApproval['config']; displayAttempt: string | null; displayArgsDigest: string | null }>;
 export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPresentation => {
-  const worker = readWorkerToolCard(item.summary);
+  const worker = item.worker ?? readWorkerToolCard(item.summary);
   return { displayId: item.approvalId, displayRun: worker?.identity.runId ?? item.runId, displayTask: worker?.identity.taskId ?? item.taskId,
     displayRequester: item.requester, summary: worker ? `${worker.tool} · ${worker.resource} · ${worker.argsDigest.slice(0, 12)}` : item.summary,
     risk: item.risk, undo: item.undo, requiredAssurance: item.requiredAssurance, expiresAt: item.expiresAt, hasDecisionCapability: Boolean(item.decisionCapability),

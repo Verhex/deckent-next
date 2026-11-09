@@ -161,7 +161,7 @@ export async function workerApprovalWaitLines(ledger: WorklineLedgerPorts, runId
   if (!ledger.listApprovalPage) return [];
   const { pending, truncated } = await scanPendingApprovals(ledger.listApprovalPage, Date.now());
   const lines = pending.flatMap(card => {
-    const worker = readWorkerToolCard(card.summary);
+    const worker = card.worker ?? readWorkerToolCard(card.summary);
     return worker?.identity.runId !== runId ? [] : [{ spans: [span(t('terminal.approval.background.wait', {
       run: runId, task: worker.identity.taskId, attempt: worker.identity.attemptId, tool: worker.tool, target: worker.resource,
       reason: card.risk ?? card.requiredAssurance ?? '', seconds: Math.max(0, Math.ceil((card.expiresAt - Date.now()) / 1000)),

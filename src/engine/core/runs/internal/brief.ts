@@ -17,7 +17,7 @@ export const briefEvaluationSchema = z.strictObject({ verdict: z.enum(['accepted
   reason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional() }).readonly();
 const deliveryReceiptFields = { state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
   commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional() };
-const deliveryModes = { schemaVersion: z.literal(2), application: z.enum(['working-tree', 'reference-only']) }; // Expand only; writers keep alpha.63.3's shape.
+const deliveryModes = { schemaVersion: z.literal(2), application: z.enum(['working-tree', 'reference-only']) }; // Alpha.64 writes v2 when the Run's retained source proves its mode.
 const deliveryReceipts = [z.strictObject(deliveryReceiptFields), z.strictObject({ ...deliveryReceiptFields, ...deliveryModes })] as const;
 const history = { receipts: z.array(z.union(deliveryReceipts).readonly()).readonly().optional() };
 export const briefDeliverySchema = z.union([deliveryReceipts[0].extend(history), deliveryReceipts[1].extend(history)]).readonly();

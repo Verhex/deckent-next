@@ -627,6 +627,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   rebase ya da merge yapmaz. *Yol:* güncel tabanda yeniden teslim edin.
 - **Bayat bir checkout'ta üretilen yama uygulanmayabilir.** Teslim kontrolü, bir şey yazılmadan önce durdurur.
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.
+- **alpha.64’ten alpha.63.3’e geri dönüş yoktur.** alpha.64 işçi onay kökenini veya sürüm 2 teslim özetini yazdıktan sonra alpha.63.3 bu kayıtları okuyamaz. Kurtarma ileri sürümde düzeltme gerektirir.
 - **Dosya özetleri olmayan eski teslim onayı yeniden evet ister (alpha.64).** Onay kartı değişiklik özetlerini taşıyor,
   bekleyen onay taşımıyorsa sürüm yükseltmesinden sonra terminal aynı kartı yeniden onaylamanızı ister.
 - **Saklanan yama okunamıyorsa teslim edilmiş sonucun önizlemesi durur (alpha.64).** Terminal okuma hatasını gösterir;

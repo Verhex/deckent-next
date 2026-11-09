@@ -1593,7 +1593,8 @@
         "src/surfaces/core/delivery-port",
         "src/surfaces/core/mcp-presentation",
         "src/engine/core/provider-catalog",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -3440,7 +3441,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/engine/core/approval",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/domain/core/attempt"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -5633,9 +5635,9 @@
       "domain": 11300,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42150,
+      "adapters": 42157,
       "surfaces": 45000,
-      "composition": 13683
+      "composition": 13684
     },
     "totalSrcLines": 200000,
     "testCases": 8983,
