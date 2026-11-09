@@ -77,6 +77,7 @@
   "units": {
     "src/capabilities/core/native-agent-execution": {
       "dependencies": [
+        "src/platform/core/i18n",
         "src/domain/core/agent-tool",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
@@ -5282,13 +5283,13 @@
     "packageLines": {
       "platform": 25000,
       "domain": 11250,
-      "capabilities": 25000,
+      "capabilities": 1638,
       "engine": 60000,
       "adapters": 42187,
-      "surfaces": 45000,
-      "composition": 13704
+      "surfaces": 37878,
+      "composition": 13682
     },
-    "totalSrcLines": 200000,
+    "totalSrcLines": 156294,
     "testCases": 8201,
     "designTargetLines": 800,
     "fileRoots": [
