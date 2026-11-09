@@ -29,7 +29,7 @@ export const runLifecycleCommandSchema = z.discriminatedUnion('action', [
 ]);
 export const runProgressionParkCommandSchema = base.extend({ failureCode: identitySchema }).strict();
 /** S5b: a safety hold's input; its source is bound by composition to the producer (Nervous pause, Auditor park), never by a caller. */
-export const runSafetyHoldCommandSchema = base.extend({ holdReason }).strict();
+const runSafetyHoldCommandSchema = base.extend({ holdReason }).strict();
 /** S6R-3: the broker's hold input; the revision is read at write time (`holdOnce`). */
 export const runSafetyHoldOnceSchema = runSafetyHoldCommandSchema.omit({ expectedRevision: true });
 export type RunLifecycleCommand = z.infer<typeof runLifecycleCommandSchema>;
@@ -69,7 +69,7 @@ export interface RunLifecycleStore extends Pick<RunStore, 'loadRun'> {
   hasTaskEvaluation?(identity: AttemptIdentity, revision: number): Promise<boolean>;
   commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: RunSnapshot) => void): Promise<RunReceipt>;
 }
-export type RunLifecycleAuditRecorder = (store: AuditStore) => { record(event: unknown): unknown };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunLifecycleAuditRecorder = (store: AuditStore) => { record(event: unknown): unknown };
 export class RunLifecycleError extends CodedError {
   constructor(override readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED' | 'RUN_HOLD_PERSON_REQUIRED' | 'RUN_QUOTA_PERSON_REQUIRED', readonly approvalId?: string) { super(code); this.name = 'RunLifecycleError'; }
 }

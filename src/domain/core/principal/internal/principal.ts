@@ -14,7 +14,7 @@ export const mcpPrincipalRef = (owner: { readonly issuer: string; readonly subje
   Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/mcp`), subject: identitySchema.parse(owner.subject) });
 export const isMcpPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/mcp');
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S5 (AUDITOR-MODEL, owner 2026-10-17 Q4): the read-only auditor, a workload identity only the composition root issues (no client channel
  * names it; a new principal kind waits for OG5). Its issuer suffix is the identity: a forged `os-user` auditor is still the auditor.
  */

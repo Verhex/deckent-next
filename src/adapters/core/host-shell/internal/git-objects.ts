@@ -70,7 +70,7 @@ export async function isVerifiedGitObject(path: string, ops: FsOps = fsOpsFor(pa
   return result;
 }
 
-/** One directory of Git metadata under the inode floor: which entries are suspect (another name of something: multi-linked and not
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One directory of Git metadata under the inode floor: which entries are suspect (another name of something: multi-linked and not
  * a verified object; or a file whose link count could not be read), which are clean regular files, which are directories. */
 export interface GitDirectoryScan {
   readonly readable: boolean;

@@ -10,11 +10,11 @@ export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mod
   /** SANDBOX-SPAWN (2026-10-18): one real command through the selected sandbox with a turn's own layout (absent from an older service). */
   readonly selfTest?: { readonly status: 'ok' | 'failed' | 'not-run'; readonly detail: string | null; readonly durationMs: number | null } }
 /** The worker image refresh status as doctor shows it (WORKER-AUTO-REFRESH). */
-export interface ImageRefreshDoctorView { readonly status: string; readonly reason: string | null; readonly imageVersion: string | null }
+interface ImageRefreshDoctorView { readonly status: string; readonly reason: string | null; readonly imageVersion: string | null }
 /** Doctor's installation binding view: strength and source kind only, never a machine value, digest or configured path. */
 export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean }
 /** The installation's secret store as doctor shows it (SECRET-K1): backend id, status and typed code only; never a value. */
-export interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
+interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
   readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
   readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] };
   readonly globalRoot?: { readonly path: string; readonly mode: string } | null;

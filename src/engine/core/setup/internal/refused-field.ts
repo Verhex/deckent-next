@@ -2,7 +2,7 @@ import { z } from 'zod';
 import limits from './limits.json' with { type: 'json' };
 
 /** Placeholders for path parts that come from the refused input, not from the schema: a key the schema does not own, a record entry. */
-export const REFUSED_UNKNOWN_KEY = '<unknown-key>', REFUSED_ENTRY = '<entry>';
+const REFUSED_UNKNOWN_KEY = '<unknown-key>', REFUSED_ENTRY = '<entry>';
 const MAX_DEPTH = limits.refusedFieldSchemaDepth; // schema wrappers and union branches walked per path segment
 
 function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny | undefined {

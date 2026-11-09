@@ -11,7 +11,7 @@ export interface InstalledPackageMeasurement {
   readonly files: readonly MeasuredPackageFile[]; readonly declaredMissing: readonly string[];
   readonly dependencyCoverage: 'excluded'; readonly origin: 'installed-bytes'; readonly measurementDigest: string;
 }
-export type InstallationArtifactErrorCode = 'INSTALLATION_ARTIFACT_INVALID' | 'INSTALLATION_ARTIFACT_UNSAFE'
+type InstallationArtifactErrorCode = 'INSTALLATION_ARTIFACT_INVALID' | 'INSTALLATION_ARTIFACT_UNSAFE'
   | 'INSTALLATION_ARTIFACT_LIMIT' | 'INSTALLATION_ARTIFACT_CHANGED' | 'INSTALLATION_ARTIFACT_UNAVAILABLE';
 export class InstallationArtifactError extends CodedError {
   constructor(override readonly code: InstallationArtifactErrorCode) { super(code); this.name = 'InstallationArtifactError'; }

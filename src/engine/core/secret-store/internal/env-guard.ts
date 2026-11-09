@@ -1,6 +1,6 @@
 import type { SecretStore } from './port.js';
 
-export type SecretEnvironmentGuard = Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SecretEnvironmentGuard = Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
 /** Presence is tested through name metadata only. Unlistable/unsafe targets refuse, never appear empty. */
 export async function missingSecretReferenceNames(names: readonly string[], target: SecretStore): Promise<readonly string[]> {
   if (!names.length) return names;

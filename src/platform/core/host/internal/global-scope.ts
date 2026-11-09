@@ -6,8 +6,8 @@ import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { envValue, type Environment } from './env.js';
 import { detectWslLinux, type KernelIdentityReader } from './wsl-detect.js';
 
-export type GlobalScopePlatform = 'linux' | 'wsl' | 'darwin' | 'win32';
-export interface GlobalScopePaths {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type GlobalScopePlatform = 'linux' | 'wsl' | 'darwin' | 'win32';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface GlobalScopePaths {
   readonly platform: GlobalScopePlatform;
   readonly source: 'env-override' | 'platform-convention';
   readonly home: string | null;

@@ -12,7 +12,7 @@ const UNIT_FRAGMENT_UNTRUSTED_WRITE_MASK: number = 0o022;
 /** Absolute executable, no shell, bounded output and duration; manager queries share the same user bus. */
 export type UserUnitExec = (args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 /** GetUnitFileLinks(unit, runtime=false): systemd's own disable dry-run, never a caller-env scan. */
-export type UserUnitLinkQuery = ((unit: string) => Promise<readonly string[]>) & { processes?(unit: string): Promise<readonly number[]> };
+type UserUnitLinkQuery = ((unit: string) => Promise<readonly string[]>) & { processes?(unit: string): Promise<readonly number[]> };
 const validUnit = (unit: string) => /^[a-zA-Z0-9_.:-]+\.service$/u.test(unit) && !unit.includes('@');
 const values = async (exec: UserUnitExec, unit: string | null, properties: readonly string[]) => Object.fromEntries((await exec(['show',
   ...properties.flatMap(name => ['--property', name]), ...(unit ? ['--', unit] : [])])).stdout.trim().split('\n').map(line => {
@@ -83,7 +83,7 @@ export async function observeUserUnit(found: { readonly scope: 'user' | 'system'
   } catch { return refused; }
 }
 /** The caller holds the service owner's exclusive ledger custody until uninstall completes; a mere inactive observation is insufficient. */
-export interface UserUnitFence { assert(): Promise<void> }
+interface UserUnitFence { assert(): Promise<void> }
 const quoted = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 /** K4: pinned receipts, fresh manager resolution and absence under custody; exact changed links determine undo, never `enable --now`. */
 export async function disableUserUnit(expected: { readonly unit: string | null; readonly links?: readonly string[] | undefined; readonly unitFile?: string | null | undefined },

@@ -3,14 +3,14 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { callerEnvironment } from '#platform/index.js';
 
-/** Environment variables copied from the service into the command (Jev 52f9b6f9); everything else is left out. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Environment variables copied from the service into the command (Jev 52f9b6f9); everything else is left out. */
 export const HOST_SHELL_ENV_ALLOWLIST: readonly string[] = Object.freeze(['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE',
   'LC_MESSAGES', 'TZ', 'TMPDIR', 'SHELL']);
 /** Fixed non-interactive settings: nothing waits for a terminal, a pager or a credential prompt. */
 const NON_INTERACTIVE: Readonly<Record<string, string>> = Object.freeze({ TERM: 'dumb', NO_COLOR: '1', PAGER: 'cat', GIT_PAGER: 'cat',
   GIT_TERMINAL_PROMPT: '0' });
-export const HOST_SHELL_DEFAULT_TIMEOUT_MS = 300_000;
-/** Output kept for the call's result: the head and the tail (errors usually end a run), with what was left out counted. The same
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const HOST_SHELL_DEFAULT_TIMEOUT_MS = 300_000;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Output kept for the call's result: the head and the tail (errors usually end a run), with what was left out counted. The same
  * 16 KiB as a read tool's result: it enters the model's context and travels as one event frame. */
 export const HOST_SHELL_RESULT_MAX_BYTES = 16_384;
 /** Largest streamed chunk (one `tool.output` event). */
@@ -26,14 +26,14 @@ const GROUP_PROBES_AFTER_KILL = 80;
  * a holder that is not in the group (setsid, a daemon) cannot be seen or ended, and must not hold the call. */
 const PIPE_DRAIN_GRACE_MS = 1_000;
 
-/** The call's clock port (I40): a sampler whose monotonic reading measures elapsed time; the platform `TrustedClock` fits it
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The call's clock port (I40): a sampler whose monotonic reading measures elapsed time; the platform `TrustedClock` fits it
  * (composition may inject it), the default reads `performance.now()`. Wall time is never used for durations. */
 export interface HostShellClock { sample(): { readonly monotonicMs: number } }
 const MONOTONIC_CLOCK: HostShellClock = Object.freeze({ sample: () => ({ monotonicMs: performance.now() }) });
 
-export type { ShellRealmRequest as HostShellRequest, ShellRealmResult as HostShellResult } from '#domain/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ShellRealmRequest as HostShellRequest, ShellRealmResult as HostShellResult } from '#domain/index.js';
 
-export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = [], fixed: Readonly<Record<string, string>> = {}): Record<string, string> {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = [], fixed: Readonly<Record<string, string>> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   const from = callerEnvironment(source);
   for (const name of [...HOST_SHELL_ENV_ALLOWLIST, ...extra]) { const value = from[name]; if (typeof value === 'string') env[name] = value; }
@@ -80,7 +80,7 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   return runShellProcess(BASH_LAUNCH, request, clock);
 }
 
-/** What is spawned for a command: the host shell itself, or a sandbox launcher (S9 bubblewrap, S11 Landlock helper) whose argv ends
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What is spawned for a command: the host shell itself, or a sandbox launcher (S9 bubblewrap, S11 Landlock helper) whose argv ends
  * with the same shell line and which execs bash in its own process (the process-group contract below is unchanged). A launcher with
  * `statusChannel` reports a setup failure as text on fd 3 before anything runs (the call is then `spawn-failed` with that text as its
  * output); fd 3 closed with nothing written means the command started — the command itself never holds fd 3, so it cannot forge a

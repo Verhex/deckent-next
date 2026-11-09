@@ -3,7 +3,7 @@ export { builtinAgentToolClass, cancelPeerConfiguredChatTurn, chatTurnApprovalPr
   runPeerConfiguredChatTurn, steerPeerConfiguredChatTurn } from './internal/turn.js';
 export type { PlanServiceRun, RuntimeChatTurnHost } from './internal/turn.js';
 export type { AgentProposalViews } from './internal/proposals.js';
-export { createAgentCallDecisions, permissionModeEventId, SILENT_DECISION_COUNTERS, SHELL_CELLS } from './internal/mode.js';
+export { createAgentCallDecisions, SHELL_CELLS } from './internal/mode.js';
 export { attachPeerWorkspaceFile, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';
 export { renderMcpStartNotice, runConfiguredMcpCommand } from './internal/mcp.js';

@@ -12,7 +12,7 @@ export const ANTHROPIC_MESSAGES_PROTOCOL_VERSION = '2023-06-01' as const;
 export const ANTHROPIC_MESSAGES_PRICING_ID = 'anthropic-published-tariff' as const;
 export const ANTHROPIC_MESSAGES_METER_ID = 'anthropic-messages-reservation' as const;
 export const anthropicMessagesProtocol = Object.freeze({ family: ANTHROPIC_MESSAGES_FAMILY, version: ANTHROPIC_MESSAGES_PROTOCOL_VERSION });
-export const ANTHROPIC_MESSAGES_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMITS;
+const ANTHROPIC_MESSAGES_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMITS;
 /** Versioned local reservation allowance added to the byte-based prompt bound (not an exact vendor count). */
 export const ANTHROPIC_PROMPT_OVERHEAD_TOKENS = ANTHROPIC_METERING.promptOverheadTokens;
 const rate = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d{1,4})?$/);

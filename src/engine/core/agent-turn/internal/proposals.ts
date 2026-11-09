@@ -7,16 +7,16 @@ import { projectModelIngressField } from './model-ingress-project.js';
  * `modeEligible`), and only the person's yes has an effect. Arguments are checked here, before any configuration or policy read.
  */
 const tools = AI_PROPOSAL_REGISTRY.tools;
-export const PROPOSE_WORK_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.work, version: 1, toolClass: 'read' as const,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const PROPOSE_WORK_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.work, version: 1, toolClass: 'read' as const,
   description: 'Propose background work for a request that needs changes (files, tests, several steps). Deckent plans it and shows the person the '
     + 'same plan card as /do; nothing runs without their approval. Do not use it for questions or explanations; ask first when the request is unclear.',
   inputSchema: { type: 'object' as const, additionalProperties: false, required: ['request'], properties: {
     request: { type: 'string', description: 'The work request in the person\'s words, complete enough to plan from.' } } } });
-export const LIST_SETTING_CHOICES_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.choices, version: 1, toolClass: 'read' as const,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const LIST_SETTING_CHOICES_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.choices, version: 1, toolClass: 'read' as const,
   description: `List the values a setting can take and its current value. Only these settings can be proposed: ${AI_PROPOSAL_REGISTRY.settingKeys.join(', ')}.`,
   inputSchema: { type: 'object' as const, additionalProperties: false, required: ['keyPath'], properties: {
     keyPath: { type: 'string', enum: [...AI_PROPOSAL_REGISTRY.settingKeys] } } } });
-export const PROPOSE_SETTING_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.setting, version: 1, toolClass: 'read' as const,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const PROPOSE_SETTING_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.setting, version: 1, toolClass: 'read' as const,
   description: 'Propose changing one setting to a value from list_setting_choices. The person sees a before/after card and decides; nothing changes '
     + 'without their approval. Models and the Brain model are chosen by the person in /model; every other setting in its own window (/config, /policy, /provider).',
   inputSchema: { type: 'object' as const, additionalProperties: false, required: ['keyPath', 'choice'], properties: {
@@ -26,7 +26,7 @@ export const AI_PROPOSAL_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze([P
 
 /** Where a key that is not proposable is set: model references in /model, everything else in /config (the person picks the value). */
 const windowOf = (keyPath: string) => /(^|\.)(reference|defaultModel|models?)(\.|$)/u.test(keyPath) || keyPath.startsWith('brain_planner') ? '/model' : '/config';
-export type AiProposalArgs = { readonly ok: true; readonly tool: 'work'; readonly request: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AiProposalArgs = { readonly ok: true; readonly tool: 'work'; readonly request: string }
   | { readonly ok: true; readonly tool: 'choices'; readonly keyPath: AiSettingKey }
   | { readonly ok: true; readonly tool: 'setting'; readonly keyPath: AiSettingKey; readonly choice: unknown; readonly layer: 'project' | 'global' }
   | { readonly ok: false; readonly text: string };

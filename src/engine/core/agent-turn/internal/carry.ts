@@ -5,13 +5,13 @@ import { modelTextPrefix, type AgentToolCall, type AgentToolCallStatus, type Age
 export const AGENT_CONTEXT_CARRY_VERSION = 1;
 export const AGENT_CONTEXT_RENDER_VERSION = 1;
 
-export interface AgentContextUserRecord {
+interface AgentContextUserRecord {
   readonly source: 'request';
   readonly messageIndex: number;
   /** Opaque legacy input; never parse attachment labels or previous summaries into provenance. */
   readonly content: string;
 }
-export interface AgentContextCallRecord {
+interface AgentContextCallRecord {
   readonly source: 'request' | 'execution';
   /** Request message position, or model round; provider ids alone are not unique. */
   readonly position: number;

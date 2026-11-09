@@ -5,11 +5,11 @@ import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/in
 import type { PreparedInstallation } from './application.js';
 import type { InstallationEvidencePreview } from './evidence.js';
 import { createInstallationRecovery, validateInstallationRecovery, type InstallationConsent } from './recovery.js';
-export type InstallationResource = 'policy' | 'ledger' | 'config';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationResource = 'policy' | 'ledger' | 'config';
 export interface InstallationPublishTarget {
   readonly resource: InstallationResource; readonly path: string; readonly content: string; readonly digest: string;
 }
-export interface InstallationPublicationPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstallationPublicationPorts {
   /** Caller owns the fixed config lock for this whole application invocation. */
   readonly journal: {
     observe(): Promise<BootstrapObservation>;

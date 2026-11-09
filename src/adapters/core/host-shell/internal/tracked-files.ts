@@ -3,7 +3,7 @@ import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { GIT_LOCAL_ENV, localGitArgs } from '#engine/index.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * FA-TRACKED-WARN (owner 2026-09-30, option A): what a full-access shell call measurably did to the project's git-tracked files — warn and
  * audit, never block. The command's text is never parsed (shell words are not a boundary); the effect is measured on the file system.
  *
@@ -25,7 +25,7 @@ import { GIT_LOCAL_ENV, localGitArgs } from '#engine/index.js';
  * already deleted) are not measured.
  */
 export const TRACKED_FILES_MAX = 100_000;
-/** Paths one visible line names per list (its count is always the full number). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Paths one visible line names per list (its count is always the full number). */
 export const TRACKED_FILES_LINE_PATHS = 8;
 export const LISTING_MAX_BYTES = 64 * 1024 * 1024;
 export const LISTING_TIMEOUT_MS = 5_000;
@@ -34,11 +34,11 @@ const GITLINK_MODE = '160000';
 /** The shared local-Git environment (`GIT_LOCAL_ENV`); `LC_ALL=C` so the "not a repository" answer is stable. */
 const GIT_ENV: Readonly<Record<string, string>> = Object.freeze({ ...GIT_LOCAL_ENV, LC_ALL: 'C' });
 
-export type TrackedFilesUnavailableReason = 'GIT_LIST_TIMEOUT' | 'GIT_LIST_MAX_BUFFER' | 'GIT_LIST_EXECUTION_FAILED' | 'GIT_LISTING_FAILED';
+type TrackedFilesUnavailableReason = 'GIT_LIST_TIMEOUT' | 'GIT_LIST_MAX_BUFFER' | 'GIT_LIST_EXECUTION_FAILED' | 'GIT_LISTING_FAILED';
 export type TrackedFilesBaseline =
   | { readonly kind: 'measured'; readonly root: string; readonly paths: readonly string[]; readonly stats: readonly (string | null)[] }
   | { readonly kind: 'none' } | { readonly kind: 'over-bound'; readonly count: number; readonly bound: number } | { readonly kind: 'unavailable'; readonly reason?: TrackedFilesUnavailableReason };
-export interface TrackedFilesList { readonly count: number; readonly paths: readonly string[] }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TrackedFilesList { readonly count: number; readonly paths: readonly string[] }
 export interface TrackedFilesChange { readonly deleted: TrackedFilesList; readonly overwritten: TrackedFilesList }
 
 const pause = () => new Promise<void>(resolve => setImmediate(resolve));

@@ -17,7 +17,7 @@ export const handoffStartRecordSchema = z.strictObject({ schemaVersion: z.litera
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Inconsistent patch start digests' });
 }).readonly();
 export type HandoffStartRecord = z.infer<typeof handoffStartRecordSchema>;
-export type HandoffStartEvent = z.infer<typeof eventSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HandoffStartEvent = z.infer<typeof eventSchema>;
 /** The adapter's order is not authority; every receipt binds to the full source Attempt. */
 export function bindPatchStartEvents(events: readonly HandoffStartEvent[], applied: {
   receipts: readonly { source: AttemptIdentity; digest: string }[]; bindingDigest?: string | undefined; snapshotDigest?: string | undefined;

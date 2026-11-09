@@ -35,4 +35,4 @@ export const modelInvocationResponseSummarySchema = z.strictObject(modelInvocati
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_EVIDENCE_INVALID' });
     }
   }).readonly();
-export type ModelInvocationResponseSummary = z.infer<typeof modelInvocationResponseSummarySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationResponseSummary = z.infer<typeof modelInvocationResponseSummarySchema>;

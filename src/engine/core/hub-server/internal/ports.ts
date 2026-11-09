@@ -6,11 +6,11 @@ import { CodedError, ErrorRegistry, type KnownSecretSnapshot, type Ed25519Signer
 import type { HubVerificationKey } from '#engine/core/hub/index.js';
 
 export const hubActorSchema = z.strictObject({ id: identitySchema, kind: z.enum(['person', 'ai', 'system']) }).readonly();
-export type HubActor = z.infer<typeof hubActorSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubActor = z.infer<typeof hubActorSchema>;
 export interface HubServerPeer { readonly address: string }
 export interface HubServerContext { readonly scopeId: string; readonly principal: HubActor; readonly sessionId?: string }
 export type HubServerAction = 'publish' | 'review' | 'read' | 'register' | 'yank' | 'revoke' | 'operate' | 'feed';
-/** Trusted transport supplies identity; the installation's existing policy owner checks scope/action/resource/digest. No default grant. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Trusted transport supplies identity; the installation's existing policy owner checks scope/action/resource/digest. No default grant. */
 export interface HubServerAuthority {
   require(context: HubServerContext, action: HubServerAction, resource: string, digest: string): HubAwaitable<void>;
 }
@@ -23,7 +23,7 @@ export interface HubStoredVersion {
   readonly files: readonly { readonly path: string; readonly artifact: ArtifactReceipt }[];
 }
 export interface HubSkillRef { readonly key: string; readonly packageId: string; readonly version: string; readonly skillId: string }
-export interface HubServerReceipt {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface HubServerReceipt {
   readonly sequence: number; readonly previous: string | null; readonly digest: string; readonly keyId: string; readonly signature: string;
 }
 export interface HubReceiptEvent {
@@ -64,7 +64,7 @@ export interface HubServerPorts {
   /** H9 custody: the root-signed `hub-key-delegation:1` of an online key, kept after rotation for what that key signed (public data; null = none). */
   readonly delegation?: (keyId: string) => HubAwaitable<unknown>;
 }
-export const HUB_SERVER_ERROR_CODES = ['HUB_SERVER_DENIED', 'HUB_VERSION_CONFLICT', 'HUB_DEPENDENCY_INVALID', 'HUB_SECRET_REFUSED',
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const HUB_SERVER_ERROR_CODES = ['HUB_SERVER_DENIED', 'HUB_VERSION_CONFLICT', 'HUB_DEPENDENCY_INVALID', 'HUB_SECRET_REFUSED',
   'HUB_REVIEW_REFUSED', 'HUB_STORE_UNSAFE', 'HUB_STORE_CONFLICT', 'HUB_RESOURCE_UNKNOWN', 'HUB_STORE_UNSUPPORTED', 'HUB_STORE_OUTCOME_UNKNOWN', 'HUB_ACCOUNT_REFUSED', 'HUB_PROFILE_REFUSED', 'HUB_RATE_REFUSED'] as const;
 export class HubServerError extends CodedError {
   constructor(override readonly code: typeof HUB_SERVER_ERROR_CODES[number]) { super(code, { message: ErrorRegistry.get(code)!.message }); this.name = 'HubServerError'; }

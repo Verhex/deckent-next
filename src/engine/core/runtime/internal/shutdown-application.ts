@@ -5,7 +5,7 @@ import { serviceInstanceSchema, serviceActorSchema, shutdownCommandSchema, shutd
 import { ServiceShutdownError, type ServiceShutdownStore, type ServiceShutdownAdmissionResult } from './shutdown-store.js';
 
 export interface ServiceShutdownAuthentication { verify(credential: unknown): Promise<ServiceActor> }
-export interface ServiceShutdownAuthorization {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ServiceShutdownAuthorization {
   authorize(target: ServicePolicyTarget, principal: ServiceActor['principal']): Promise<ServicePolicyGrant>;
 }
 

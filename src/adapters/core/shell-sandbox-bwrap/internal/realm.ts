@@ -6,7 +6,7 @@ import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { DECKENT_DIR, pathWithin, privateIpcRoot, relativeInside, resolveLocale, t } from '#platform/index.js';
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
-export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, bubblewrapArgumentsOverBound, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
@@ -19,13 +19,13 @@ export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.o
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** A long-lived server's line on its MCP cards (MCP-CLIENT, C5): the write part from the view its launch enforces, the rest as that view
  * is (a scratch area only when the layout binds one; the process ends with the service, not with a call). */
-export const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
+const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
   + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; ${profile ? 'its own private HOME (a persistent cache) is writable and the network is on; '
     + 'your HOME, project secrets and Deckent state are hidden' : 'HOME and everything else hidden, no network'}; it ends with the service)`;
 /** K4: the targets of the system resolver files that lie outside the bound system prefixes (a symbolic link the view would otherwise leave
  * dangling, e.g. WSL's `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`): regular files only, each bound alone and read-only. */
 const RESOLVER_FILES = ['/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf'];
-export function resolverFiles(): string[] {
+function resolverFiles(): string[] {
   const out: string[] = [];
   for (const file of RESOLVER_FILES) {
     try {
@@ -35,11 +35,11 @@ export function resolverFiles(): string[] {
   }
   return out;
 }
-/** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
-/** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
 export const BUBBLEWRAP_GIT_WALK_MAX_ENTRIES = 200_000;
-export const BUBBLEWRAP_MASK_MAX = 4_096;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const BUBBLEWRAP_MASK_MAX = 4_096;
 const MAX_DEPTH = 32;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
 const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys', '/var'];
@@ -48,7 +48,7 @@ const under = (path: string, prefix: string) => path === prefix || path.startsWi
  * only the outermost is bound; deny masks inside stay. Before, a floored tree cost a mount per file (13 430 on the owner's checkout, over ARG_MAX). */
 const outermost = (paths: ReadonlySet<string>): string[] => [...paths].filter(path => { for (let up = dirname(path); up !== dirname(up); up = dirname(up)) if (paths.has(up)) return false; return true; });
 
-export interface BubblewrapOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BubblewrapOptions {
   readonly maxEntries?: number;
   readonly maxArgumentBytes?: number; // default BUBBLEWRAP_ARGUMENT_MAX_BYTES; tests lower it
   /** The reads used per directory (default: synchronous on a local file system, asynchronous otherwise — `fsOpsFor`); tests inject one. */

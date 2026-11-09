@@ -19,7 +19,7 @@ const stats = z.object({ id: z.string().optional(), read: z.string(), cpu_stats:
   memory_stats: z.object({ usage: counter.optional(), limit: counter.optional(), max_usage: counter.optional() }) });
 class ResourceReadError extends CodedError { constructor(readonly reason: ResourceSample['gap']) { super('RESOURCE_READ'); } }
 /** Fixed local socket; no credentials, redirects, arbitrary paths or unbounded body. */
-export function readDockerResourceJson(endpoint: string, path: string, settings: ResourceObservationSettings, signal: AbortSignal): Promise<unknown> {
+function readDockerResourceJson(endpoint: string, path: string, settings: ResourceObservationSettings, signal: AbortSignal): Promise<unknown> {
   const socketPath = dockerEndpointSchema.parse(endpoint).slice('unix://'.length);
   return new Promise((resolveValue, reject) => {
     const req = httpRequest({ socketPath, path, method: 'GET', signal, agent: false }, res => {

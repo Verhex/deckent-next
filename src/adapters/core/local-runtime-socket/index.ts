@@ -1,7 +1,7 @@
 export { ServiceFrameDecoder, ServiceFrameError, ServiceFrameStreamDecoder, encodeServiceFrame } from './internal/framing.js';
-export type { ServiceFrameErrorCode } from './internal/framing.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ServiceFrameErrorCode } from './internal/framing.js';
 export { LocalRuntimeSocketError } from './internal/endpoint.js';
-export type { LocalRuntimeSocketErrorCode, LocalRuntimeSocketOptions } from './internal/endpoint.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ LocalRuntimeSocketErrorCode, LocalRuntimeSocketOptions } from './internal/endpoint.js';
 export { acquireLocalRuntimeSocketGuard, startLocalRuntimeSocketServer } from './internal/server.js';
 export type { LocalRuntimeSocketGuard, LocalRuntimeSocketServer, RuntimeServiceHandler } from './internal/server.js';
 export type { RuntimeServiceStreamChannel } from './internal/stream-channel.js';
@@ -13,6 +13,6 @@ export { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity } from './inte
 export { createLocalPeerSession } from './internal/authentication.js';
 export { acquireLedgerLock, type LedgerLock } from './internal/ledger-lock.js';
 export { listenForContainerPeer, localPeerNativePath } from './internal/container-peer.js';
-export type { ContainerPeer } from './internal/container-peer.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ContainerPeer } from './internal/container-peer.js';
 
 export { runtimeSocketLocation, prepareRuntimeSocket, runtimeSocketHealable, observeRuntimeSocket } from './internal/location.js';

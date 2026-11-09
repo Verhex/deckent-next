@@ -7,7 +7,7 @@ import { createProviderSpendAccount, parseProviderSpendAccount, parseProviderSpe
 import { canonicalProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits, addProviderSpendExactMinorUnits, subtractProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits } from './exact.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from './checkpoint.js';
 import { ProviderSpendError } from './error.js';
-export interface ProviderSpendManagementAuthorization {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ProviderSpendManagementAuthorization {
   authorize(action: 'reconcile' | 'budget-revision', target: { scopeId: string; budgetId: string; budgetRevision: number },
     principal: VerifiedPrincipal): Promise<ModelInvocationAuthorization>;
 }

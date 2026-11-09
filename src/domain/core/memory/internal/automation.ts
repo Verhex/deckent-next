@@ -28,10 +28,10 @@ const automationSchema = z.strictObject({ get schemaVersion() { return z.literal
   get context() { return contextSchema.readonly(); }, get evaluation() { return evaluationSchema.readonly(); },
   /** The evaluator's answer vocabulary (versioned Core data; no overlay changes it). */ get reasonCodes() { return z.array(identitySchema).min(1).max(32).readonly(); },
   get workClasses() { return z.array(workClassRowSchema).max(256).readonly(); } }).readonly();
-export const memoryAutomationOverlaySchema = z.strictObject({ get bounds() { return boundsSchema.partial().optional(); }, get context() { return contextSchema.partial().optional(); },
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryAutomationOverlaySchema = z.strictObject({ get bounds() { return boundsSchema.partial().optional(); }, get context() { return contextSchema.partial().optional(); },
   get evaluation() { return evaluationSchema.partial().optional(); }, get workClasses() { return z.array(workClassRowSchema).max(256).readonly().optional(); } }).readonly();
 export type MemoryAutomation = z.infer<typeof automationSchema>;
-export type MemoryWorkClassRow = z.infer<typeof workClassRowSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryWorkClassRow = z.infer<typeof workClassRowSchema>;
 const invalid = () => new MemoryError('MEMORY_AUTOMATION_INVALID');
 const narrower = <T extends Readonly<Record<string, number>>>(seed: T, overlay: { readonly [K in keyof T]?: number | undefined } | undefined): T => {
   const out: Record<string, number> = { ...seed };
@@ -81,10 +81,10 @@ export function memoryWorkClassIn(byId: ReadonlyMap<string, WorkClassRow>, class
 }
 const extractorSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get rules() { return z.array(z.strictObject({ id: z.enum(['E1', 'E2', 'E3']), version: positive,
   kind: z.enum(['human-answer', 'failure-fix', 'worker-claim']), enabled: z.boolean() }).readonly()).min(1).max(16).readonly(); } }).readonly();
-export const MEMORY_EXTRACTORS = Object.freeze(extractorSchema.parse(extractorsSeed));
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MEMORY_EXTRACTORS = Object.freeze(extractorSchema.parse(extractorsSeed));
 const templatesSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get templates() { return z.array(z.strictObject({ id: identitySchema, version: positive,
   text: persistedString(z.string().min(1).max(MEMORY_LIMITS.bodyMaxBytes)) }).readonly()).min(1).max(32).readonly(); } }).readonly();
-/** Model-facing texts (worker report sentence, context header, evaluator prompt): versioned data, never literals in code; `id@version` is sealed. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Model-facing texts (worker report sentence, context header, evaluator prompt): versioned data, never literals in code; `id@version` is sealed. */
 export const MEMORY_TEMPLATES = Object.freeze(templatesSchema.parse(templatesSeed));
 export function memoryTemplate(id: string, version: number): string {
   const row = MEMORY_TEMPLATES.templates.find(template => template.id === id && template.version === version);
@@ -103,7 +103,7 @@ export const memoryExtractionSourceSchema = z.strictObject({ get schemaVersion()
   get earlierFailure() { return z.strictObject({ reasonCode: identitySchema, checkIds: z.array(identitySchema).max(16).readonly() }).readonly().nullable(); },
   get lessons() { return z.array(z.unknown().optional()).max(64).readonly().nullable(); }, get reportDigest() { return z.string().regex(/^[a-f0-9]{64}$/).nullable(); } }).readonly();
 export type MemoryExtractionSource = z.infer<typeof memoryExtractionSourceSchema>;
-export interface MemoryCandidate { readonly ruleId: 'E1' | 'E2' | 'E3'; readonly ruleVersion: number; readonly claimIndex: number; readonly producer: 'rule' | 'worker-claim';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface MemoryCandidate { readonly ruleId: 'E1' | 'E2' | 'E3'; readonly ruleVersion: number; readonly claimIndex: number; readonly producer: 'rule' | 'worker-claim';
   readonly content: unknown }
 
 const bytes = (value: string) => new TextEncoder().encode(value).length;

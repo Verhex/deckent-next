@@ -4,7 +4,7 @@ import { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REA
 import { channelMetadataSchema, modelMetadataSchema, reportedModelNameSchema, channelReportedNamesSchema } from './catalog-metadata.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, providerProtocolSchema } from './catalog.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Provider catalog document, schemaVersion 2/3 (WORKER-CURRENCY-1, owner 2026-09-30): the v1 declaration plus what a model catalog entry needs to be
  * selectable — a provider is a *channel* (how the model is reached: API key, CLI subscription, local server …) and each model carries
  * its exact API model id (`nativeId`), lifecycle, CLI minimum and supported reasoning efforts. The ledger catalog (v43) stores one row
@@ -12,8 +12,8 @@ import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, providerProtocolSch
  * so the chat binding digests of v1 declarations never change. V3 metadata is additive, explicit and strictly validated.
  */
 export const PROVIDER_CATALOG_DOCUMENT_SCHEMA_VERSION = 3;
-export { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, EXACT_MODEL_ID_MAX_LENGTH, exactModelIdSchema } from './catalog-values.js';
-export const modelLifecycleSchema = z.strictObject({ state: z.enum(MODEL_LIFECYCLE_STATES), deprecatedOn: daySchema.nullable(),
+export { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EXACT_MODEL_ID_MAX_LENGTH, exactModelIdSchema } from './catalog-values.js';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelLifecycleSchema = z.strictObject({ state: z.enum(MODEL_LIFECYCLE_STATES), deprecatedOn: daySchema.nullable(),
   retireNotBefore: daySchema.nullable(), retiredOn: daySchema.nullable(), replacementModelId: exactModelIdSchema.optional(),
   source: z.strictObject({ url: persistedString(persistedUrl().max(512)).startsWith('https://'), observedOn: daySchema }).readonly().nullable(),
 }).readonly();
@@ -36,7 +36,7 @@ export const catalogChannelSchema = z.union([channelV3, channelV2]).readonly();
 export const catalogModelSchema = z.union([modelV3, modelV2]).readonly();
 const provider = { id: identitySchema, version: counterSchema.positive() };
 const document = { revision: identitySchema };
-export const providerCatalogDocumentSchema = z.discriminatedUnion('schemaVersion', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const providerCatalogDocumentSchema = z.discriminatedUnion('schemaVersion', [
   z.strictObject({ ...document, schemaVersion: z.literal(2), providers: z.array(z.strictObject({ ...provider,
     channel: channelV2.readonly(), models: z.array(modelV2.readonly()).readonly() }).readonly()).readonly() }),
   z.strictObject({ ...document, schemaVersion: z.literal(3), providers: z.array(z.strictObject({ ...provider,
@@ -48,7 +48,7 @@ export const providerCatalogDocumentSchema = z.discriminatedUnion('schemaVersion
 export type ProviderCatalogDocument = Readonly<z.infer<typeof providerCatalogDocumentSchema>>;
 export type CatalogChannel = z.infer<typeof catalogChannelSchema>;
 export type CatalogModel = z.infer<typeof catalogModelSchema>;
-export type ModelLifecycle = z.infer<typeof modelLifecycleSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelLifecycle = z.infer<typeof modelLifecycleSchema>;
 
 /** Session-start reported names (owner K1 2026-10-22) of a channel's FINAL model set: only on a native CLI channel, no name repeats within
  * a model or is claimed by two models — one reported name maps to exactly one exact id — and the channel total stays within its bound.

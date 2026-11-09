@@ -1,7 +1,7 @@
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, parseAnthropicMessagesDefinition } from '#adapters/core/provider-anthropic-messages/index.js';
 import { PROVIDER_CONNECT_KINDS } from './registry.js';
 
-/** What enabling the prompt cache on one existing profile would write, with its own tariff's ratios to the base input price (display only). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What enabling the prompt cache on one existing profile would write, with its own tariff's ratios to the base input price (display only). */
 export type ProviderProfileCacheOffer = Readonly<{ ttl: '5m'; modelId: string; writeRatio: number; readRatio: number; next: Record<string, unknown> }>;
 
 /**

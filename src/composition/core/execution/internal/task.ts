@@ -20,7 +20,7 @@ import { NATIVE_CLI_WORKER_ADAPTER, isNativeCliWorkerProfile, resolveNativeCliWo
 import { createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from './native-runtime.js';
 import { startConfiguredWorkerObservation } from './observation.js';
 /** Lead fan-in supplies trusted transport/capacity/lease owners and enables retirement at the alpha.63 switch. Never task-authored flags. */
-export type NativeCliWorkerOptions = ConfigLoadOptions & { nativeCliWorker?: Readonly<{ ports?: NativeCliWorkerPorts; runtime?: NativeCliWorkerRuntime; projectionRetired: boolean }> };
+type NativeCliWorkerOptions = ConfigLoadOptions & { nativeCliWorker?: Readonly<{ ports?: NativeCliWorkerPorts; runtime?: NativeCliWorkerRuntime; projectionRetired: boolean }> };
 /** E1: park refusals meaning another transition already holds, ended or changed the Run (the timed-out refusal then stays the error). */
 const HELD_PARK_SUPERSEDED: ReadonlySet<string> = new Set(['RUN_PARKED', 'RUN_TERMINAL', 'RUN_STORE_CONFLICT']);
 async function nativeWorkerWaiting(projectRoot: string, identity: AttemptIdentity, layout: ProductLayout, store: Pick<SqliteAttemptStore, 'loadRun'>,

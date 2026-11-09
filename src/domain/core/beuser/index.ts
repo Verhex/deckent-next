@@ -1,3 +1,3 @@
-export { BEUSER_CONTRACT_VERSION, beuserCandidateManifestSchema, acceptanceSubjectSchema, beuserWalkerSummarySchema, beuserSealedRubricSchema,
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BEUSER_CONTRACT_VERSION, beuserCandidateManifestSchema, acceptanceSubjectSchema, beuserWalkerSummarySchema, beuserSealedRubricSchema,
   beuserBindingSchema, beuserTranscriptEntrySchema, beuserVerdictSchema } from './internal/contract.js';
-export type { BeuserCandidateManifest, AcceptanceSubject, BeuserWalkerSummary, BeuserSealedRubric, BeuserBinding, BeuserTranscriptEntry, BeuserVerdict } from './internal/contract.js';
+export type { BeuserCandidateManifest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AcceptanceSubject, BeuserWalkerSummary, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BeuserSealedRubric, BeuserBinding, BeuserTranscriptEntry, BeuserVerdict } from './internal/contract.js';

@@ -11,7 +11,7 @@ const coverageLimits = z.strictObject({ schemaVersion: z.literal(1), encryptedJs
 const payloadSchema = z.strictObject({ schemaVersion: z.literal(1), manifest: backupCoverageManifestSchema,
   ledgerDigest: z.string().regex(/^[a-f0-9]{64}$/u), setDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   entries: z.array(z.strictObject({ resourceId: z.string(), content: z.string(), digest: z.string() })) });
-export interface BackupCoverageRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BackupCoverageRequest {
   readonly companion: string; readonly manifest: BackupCoverageManifest;
   readonly deletionRoots: readonly string[];
 }

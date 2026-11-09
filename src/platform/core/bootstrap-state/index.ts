@@ -1,3 +1,3 @@
-export { BOOTSTRAP_JOURNAL_MAX_BYTES, BootstrapStateError, assertBootstrapUnchanged,
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BOOTSTRAP_JOURNAL_MAX_BYTES, BootstrapStateError, assertBootstrapUnchanged,
   assertBootstrapUsable, bootstrapPublishesConfig, type BootstrapPendingAdmission, bootstrapJournalSchema, encodeBootstrapJournal, hashBootstrapJournal, observeBootstrapState } from './internal/observer.js';
-export type { BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, BootstrapStateErrorCode } from './internal/observer.js';
+export type { BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BootstrapStateErrorCode } from './internal/observer.js';

@@ -20,9 +20,9 @@ import { withConfiguredBeuserWalkCustody } from './custody.js';
 
 /** This package's own build: the default candidate of `deckent beuser walk` (owner S9). A source checkout has no staged manifest and is refused. */
 export const BEUSER_PACKAGE_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
-export interface BeuserSetupInput { readonly scopeId: string; readonly profile: string; readonly apply: boolean; readonly expect?: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserSetupInput { readonly scopeId: string; readonly profile: string; readonly apply: boolean; readonly expect?: string }
 /** One-command walk (owner S9): the controller is a private Deckent installation at `<global state root>/beuser-controller`; its person connects models there. */
-export interface BeuserWalkSetupInput { readonly journey: string; readonly candidate?: string | undefined; readonly scopeId?: string | undefined;
+interface BeuserWalkSetupInput { readonly journey: string; readonly candidate?: string | undefined; readonly scopeId?: string | undefined;
   readonly walkers?: readonly { readonly channelId: string; readonly modelId: string }[] | undefined;
   readonly evaluator?: { readonly channelId: string; readonly modelId: string } | undefined; readonly apply: boolean; readonly expect?: string | undefined }
 /** Person-selected, bounded execution data. ConfigApplication remains the only config writer; no model or policy grants are created here. */

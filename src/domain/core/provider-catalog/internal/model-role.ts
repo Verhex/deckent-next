@@ -87,7 +87,7 @@ export function mergeModelRoleRegistries(coreInput: unknown, overlayInputs: read
   return Object.freeze({ revision, roles: Object.freeze([...roles.values()]), models: Object.freeze([...models.values()]), exceptions: Object.freeze([...exceptions.values()]) });
 }
 export type RoleModelTarget = Readonly<{ channelId: string; modelId: string }>;
-/** `today` is the UTC day the caller observed; `active` holds the `roleModelKey` of every target the scope has active (permission); `catalog`
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `today` is the UTC day the caller observed; `active` holds the `roleModelKey` of every target the scope has active (permission); `catalog`
  * names the scope's declared catalog targets, read only by a `connected` role (absent: none). */
 export type RoleModelFacts = Readonly<{ today: string; active: ReadonlySet<string>; catalog?: readonly RoleModelTarget[] }>;
 export type RoleModelRefusal = 'role-unknown' | 'model-unknown' | 'tier' | 'role-not-held' | 'exception-not-current' | 'exception-dropped' | 'not-active';

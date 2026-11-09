@@ -22,7 +22,7 @@ export type DecisionQuery=z.infer<typeof decisionQuerySchema>;
 export type DecisionListQuery=z.infer<typeof decisionListQuerySchema>;
 export type DecisionRecordCommand=z.infer<typeof decisionRecordCommandSchema>;
 export type DecisionOutcomeCommand=z.infer<typeof decisionOutcomeCommandSchema>;
-export type DecisionStatus='advised'|'below-threshold'|'unknown'|'cancelled'|'unavailable';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DecisionStatus='advised'|'below-threshold'|'unknown'|'cancelled'|'unavailable';
 export const decisionSnapshotSchema=z.strictObject({schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema,
   command:decisionAskCommandSchema,requestDigest:digest,caseDigest:digest,policy:decisionPolicySchema,principal:verifiedPrincipalSchema,
   policyRevision:identitySchema,claimedAtMs:persistedInteger().nonnegative(),status:z.enum(['pending','advised','below-threshold','unknown','cancelled','unavailable']),

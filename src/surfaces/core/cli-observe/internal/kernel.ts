@@ -5,7 +5,7 @@ import { doctorCommand } from './doctor.js';
 import { pathsCommand } from './paths.js';
 import { policyVocabularyCommand } from './policy-vocabulary.js';
 
-export interface KernelArgs { positionals: string[]; json: boolean; global: boolean; dryRun: boolean; toolchains: boolean; verbose: boolean; language?: string }
+interface KernelArgs { positionals: string[]; json: boolean; global: boolean; dryRun: boolean; toolchains: boolean; verbose: boolean; language?: string }
 /** The shared state of one kernel command call: parsed arguments, the locale and output mode (doctor narrows both from config), one output writer. */
 export interface KernelCall {
   readonly args: KernelArgs; readonly root: string; readonly env: NodeJS.ProcessEnv; readonly options: ConfigLoadOptions;

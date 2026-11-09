@@ -7,7 +7,7 @@ import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port
 // WORST_CASE_IDENTITY (delivery.ts) is a conservative stand-in for any real actor/authorization/claim identity this
 // profile could ever be invoked under.
 
-export interface ModelInvocationProfileDeliveryAssessment {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationProfileDeliveryAssessment {
   readonly fits: boolean;
   readonly requiredBytes: number;
   readonly availableBytes: number;
@@ -26,7 +26,7 @@ export interface ModelInvocationDeliveryFinding {
   readonly availableBytes: number;
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Predicts whether ANY future invocation of a declared profile could ever pass `assertInvocationDeliveryFit` for a
  * given surface capacity — before any claim, spend or send (SESSION-RESULT-LIMIT-2026-09-28). Builds a synthetic
  * worst-case-identity admission and reuses `createModelInvocationClaimReceipt`, the exact function the real

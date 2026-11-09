@@ -57,7 +57,7 @@ export interface WorkSurfaceLabels extends ApprovalSurfaceLabels {
 
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
 
-export interface WorklineActionContext {
+interface WorklineActionContext {
   readonly followDelivery?: SurfaceDeliveryMode;
   readonly ledger: WorklineLedgerPorts | undefined;
   readonly labels: WorklineActionLabels;
@@ -69,7 +69,7 @@ export interface WorklineActionContext {
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
 /** `window`: the live window the command opens. */
-export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
+type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
 
 type ImmediateAction = (context: WorklineActionContext, args: string, command: string) => WorklineActionResult | null;
 const failed = (text: string): WorklineActionResult => ({ entries: [notice('error', text)] });

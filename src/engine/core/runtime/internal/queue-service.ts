@@ -15,8 +15,8 @@ export interface QueueServiceContext {
   accepted(identity: AttemptIdentity): Promise<{ acceptedRevision: number; outputDigest: string }>;
   describeCandidate(record: TargetQueueRecord): Promise<{ readonly changes: readonly string[] }>;
 }
-export interface QueueServicePeer { readonly pid: number; readonly uid: number }
-export interface QueueServicePorts<C extends QueueServiceContext, Peer extends QueueServicePeer> {
+interface QueueServicePeer { readonly pid: number; readonly uid: number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface QueueServicePorts<C extends QueueServiceContext, Peer extends QueueServicePeer> {
   readonly instanceId: string; readonly config: { readonly targetQueue: { readonly capacity: number; readonly candidateSlots: number; readonly batchWindowMs: number; readonly leaseMs?: number } };
   withScope<T>(scopeId: string, peer: Peer | undefined, readOnly: boolean, work: (context: C) => Promise<T>): Promise<T>;
   snapshot(): Promise<readonly TargetQueueRecord[]>;

@@ -14,16 +14,16 @@ const installationProfilePayloadObjectSchema = z.strictObject({
   pool: executionPoolSchema,
   shutdown: z.strictObject({ enabled: z.boolean() }).readonly(),
 });
-export const installationProfilePayloadSchema = installationProfilePayloadObjectSchema.readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const installationProfilePayloadSchema = installationProfilePayloadObjectSchema.readonly();
 
 export const installationProfileSchema = installationProfilePayloadObjectSchema.extend({
   profile: z.strictObject({ id: identitySchema, version: counterSchema.positive(), digest: digestSchema }).readonly(),
 }).strict().readonly();
 
-export type InstallationProfilePayload = z.infer<typeof installationProfilePayloadSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationProfilePayload = z.infer<typeof installationProfilePayloadSchema>;
 export type InstallationProfile = z.infer<typeof installationProfileSchema>;
 
-/** Freeze caller data before any asynchronous host observation; integrity is checked by preview. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Freeze caller data before any asynchronous host observation; integrity is checked by preview. */
 export function snapshotInstallationProfile(input: unknown): InstallationProfile {
   return installationProfileSchema.parse(immutableJsonObjectSchema.parse(input));
 }

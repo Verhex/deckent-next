@@ -7,7 +7,7 @@ import { HubClientError, type HubBundle, type HubClientDependencies, type HubCli
 import { decodeHubBundle, encodeHubBundle } from './bundle.js';
 import { acceptClientFeed, higherHubVersion, requirePackageNotRevoked, verifyClientBundle } from './verification.js';
 type Command = { scopeId: string; commandId: string; hubId: string; workClassMapping: Readonly<Record<string, string>>; feeds: Readonly<Record<string, HubRevocationFeed>> };
-export const hubItemCommandId = (commandId: string, kind: string, id: string) => sha256(canonicalHubJson({ commandId, kind, id }));
+const hubItemCommandId = (commandId: string, kind: string, id: string) => sha256(canonicalHubJson({ commandId, kind, id }));
 /** Exact dependency closure, children first. Cached dependencies are verified identically; no fetch port exists. */
 export async function installClientBundles(deps: HubClientDependencies, store: HubClientStore, source: HubSource, bundles: readonly HubBundle[], feed: HubRevocationFeed,
   command: Command, principal: VerifiedPrincipal, update: boolean): Promise<readonly HubInstall[]> {

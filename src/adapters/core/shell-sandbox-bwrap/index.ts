@@ -1,8 +1,8 @@
-export { ancestorPins, BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS, BUBBLEWRAP_TMPFS_BYTES, bubblewrapArguments, type BubblewrapView } from './internal/arguments.js';
-export { BUBBLEWRAP_GIT_WALK_MAX_ENTRIES, BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, BUBBLEWRAP_MASK_MAX, BUBBLEWRAP_WALK_MAX_ENTRIES, bubblewrapPosture, bubblewrapShellSandbox,
-  recheckRuntimeSocketMasks, resolveBubblewrapView, type BubblewrapOptions } from './internal/realm.js';
+export { ancestorPins, BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_TMPFS_BYTES, bubblewrapArguments, type BubblewrapView } from './internal/arguments.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_GIT_WALK_MAX_ENTRIES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_MASK_MAX, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_WALK_MAX_ENTRIES, bubblewrapPosture, bubblewrapShellSandbox,
+  recheckRuntimeSocketMasks, resolveBubblewrapView, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type BubblewrapOptions } from './internal/realm.js';
 export { BUBBLEWRAP_BUNDLED_MAX_BYTES, BUBBLEWRAP_KNOWN_PATHS, BUBBLEWRAP_MINIMUM_SYSTEM_VERSION, BUBBLEWRAP_OVERLAY_VERSION, selectBubblewrapLauncher, shellSandboxCapabilities, verifyBubblewrapLauncher,
   type BubblewrapSelectOptions } from './internal/launcher.js';
 export { BUBBLEWRAP_BUNDLED } from './internal/bundled.js';
-export { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport, type ShellRealmSelectionView } from './internal/select.js';
-export { isolatedProcessArguments, isolatedProcessCommand, type IsolatedProcessView } from './internal/process.js';
+export { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type ShellRealmSelectionView } from './internal/select.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ isolatedProcessArguments, isolatedProcessCommand, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type IsolatedProcessView } from './internal/process.js';

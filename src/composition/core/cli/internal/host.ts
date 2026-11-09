@@ -52,7 +52,7 @@ const typed = <T>(work: Promise<T>): Promise<T> => work.catch((error: unknown) =
 const installationProfile = (path: string) => readInstallationProfileFile(path, getConfigFieldDefault('installation').profileMaxBytes);
 
 /** The call's settings the light entry resolved before any host module loaded. */
-export type CliHostBase = { readonly root: string; readonly locale: Locale; readonly signal: AbortSignal } & Pick<NonNullable<Parameters<typeof runCli>[1]>, 'agentEnvironment'>;
+type CliHostBase = { readonly root: string; readonly locale: Locale; readonly signal: AbortSignal } & Pick<NonNullable<Parameters<typeof runCli>[1]>, 'agentEnvironment'>;
 
 /**
  * COLDSTART: every host operation of the CLI, bound to its composition unit. The entry loads this module only when a command or the terminal

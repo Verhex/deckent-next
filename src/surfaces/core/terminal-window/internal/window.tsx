@@ -17,7 +17,7 @@ import { highlightCells } from './selection.js';
 export type WindowLine = Readonly<{ label?: readonly Span[]; spans: readonly Span[]; exact?: boolean; link?: string }>;
 
 /** Breaks spans at exactly `width` cells, keeping every character (whitespace included) in order. */
-export function hardWrapSpans(spans: readonly Span[], width: number): Span[][] {
+function hardWrapSpans(spans: readonly Span[], width: number): Span[][] {
   const limit = Math.max(1, width), rows: Span[][] = [];
   let start = 0, offset = 0, used = 0;
   for (const cluster of graphemes(plainText(spans))) {
@@ -54,7 +54,7 @@ export function layoutWindowLines(lines: readonly WindowLine[], width: number): 
 }
 
 /** `layoutWindowLines` plus `starts[i]`: the first display row of body line `i` (a window keeps a revealed line in view). */
-export function layoutWindowRows(lines: readonly WindowLine[], width: number): Readonly<{ rows: Span[][]; starts: readonly number[] }> {
+function layoutWindowRows(lines: readonly WindowLine[], width: number): Readonly<{ rows: Span[][]; starts: readonly number[] }> {
   const labels = lines.filter(line => line.label && line.label.length).map(line => spanCells(line.label!));
   const column = labels.length ? Math.max(...labels) + 1 : 0;
   const inline = width >= LABEL_COLUMN_MIN_WIDTH && column <= Math.floor(width / 3);
@@ -74,7 +74,7 @@ export function layoutWindowRows(lines: readonly WindowLine[], width: number): R
   return { rows, starts };
 }
 
-export interface WindowProps {
+interface WindowProps {
   /** A settings window may bound its width even on a wide terminal. */
   readonly maxColumns?: number;
   /** Observation frames register no input owner; the composer keeps the keyboard. */

@@ -1,1 +1,1 @@
-export { assertDockerResourceCeiling, assertTaskGraphLimits, taskGraphLimitFields, type TaskGraphLimits } from './internal/resource-ceilings.js';
+export { assertDockerResourceCeiling, assertTaskGraphLimits, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ taskGraphLimitFields, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TaskGraphLimits } from './internal/resource-ceilings.js';

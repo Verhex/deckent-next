@@ -25,7 +25,7 @@ export const workspaceAttachmentRequestSchema = z.strictObject({ schemaVersion: 
   path: persistedString(z.string().min(1).max(PATH_MAX_CHARS)), maxBytes: persistedInteger().min(1).max(WORKSPACE_ATTACHMENT_MAX_BYTES) }).readonly();
 export type WorkspaceAttachmentRequest = z.infer<typeof workspaceAttachmentRequestSchema>;
 export const parseWorkspaceAttachmentRequest = (value: unknown): WorkspaceAttachmentRequest => workspaceAttachmentRequestSchema.parse(value);
-export const WORKSPACE_ATTACHMENT_REFUSALS = Object.freeze(['path-invalid', 'path-outside-workspace', 'path-denied', 'not-found', 'path-changed',
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORKSPACE_ATTACHMENT_REFUSALS = Object.freeze(['path-invalid', 'path-outside-workspace', 'path-denied', 'not-found', 'path-changed',
   'not-a-file', 'not-a-directory', 'hardlink-refused', 'platform-unsupported', 'binary', 'read-error', 'cancelled'] as const);
 /** A refusal is a typed result, not a failure: the turn goes on without that file and the surface says why. */
 export const workspaceAttachmentSchema = z.discriminatedUnion('status', [
@@ -34,4 +34,4 @@ export const workspaceAttachmentSchema = z.discriminatedUnion('status', [
   z.strictObject({ schemaVersion: z.literal(1), path: persistedString(z.string().min(1).max(PATH_MAX_CHARS)), status: z.literal('refused'), reason: z.enum(WORKSPACE_ATTACHMENT_REFUSALS) }),
 ]).readonly();
 export type WorkspaceAttachment = z.infer<typeof workspaceAttachmentSchema>;
-export type WorkspaceAttachmentRefusal = typeof WORKSPACE_ATTACHMENT_REFUSALS[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkspaceAttachmentRefusal = typeof WORKSPACE_ATTACHMENT_REFUSALS[number];

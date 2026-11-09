@@ -8,7 +8,7 @@ import { assertWorkTarget, type WorkTargetObservation } from '#engine/index.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 const exec = promisify(execFile);
 type GitSettings = z.infer<typeof GIT_EXECUTION_SETTINGS>;
-export type WorkTargetSettings = z.infer<typeof WORK_TARGET_SETTINGS>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkTargetSettings = z.infer<typeof WORK_TARGET_SETTINGS>;
 export type WorkTargetDeclaration = WorkTargetSettings['targets'][number];
 /** The configured execution section as far as work-target resolution reads it. */
 export interface WorkTargetExecution { readonly git: Pick<GitSettings, 'gitExecutable' | 'timeoutMs' | 'outputBytes'>; readonly workTargets?: WorkTargetSettings | undefined; readonly deliveryMode?: 'reference' | 'working-tree' | undefined; readonly adoption?: { readonly targets: readonly string[] } | undefined }

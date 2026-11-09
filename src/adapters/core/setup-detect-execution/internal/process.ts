@@ -5,7 +5,7 @@ import { delimiter, isAbsolute, join } from 'node:path';
 
 export type DetectEnvironment = Readonly<Record<string, string | undefined>>;
 /** One bounded read-only command: `code` is null when it did not run to an exit (absent, timed out, output over the bound, aborted). */
-export type DetectProcessResult = Readonly<{ code: number | null; stdout: string; stderr: string }>;
+type DetectProcessResult = Readonly<{ code: number | null; stdout: string; stderr: string }>;
 export type DetectRunner = (executable: string, args: readonly string[], options: Readonly<{ env: DetectEnvironment; cwd?: string; timeoutMs: number;
   outputBytes: number; signal: AbortSignal }>) => Promise<DetectProcessResult>;
 /** The detection process boundary: no shell, its own deadline and output bound, never throws (setup reports a probe; it does not fail on one). */

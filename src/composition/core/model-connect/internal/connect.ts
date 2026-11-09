@@ -169,7 +169,7 @@ export async function planConfiguredProfileCache(projectRoot: string, scopeId: s
   const snapshot = await snapshotConfiguredConfig(projectRoot, options);
   return planProfileCache({ global: snapshot.global as Record<string, unknown>, project: snapshot.project as Record<string, unknown> }, scopeId, providerProfileCacheOffer);
 }
-export type ProfileProtocolPlan = Omit<ProfileChangePlan<ProviderProfileProtocolDetail>, 'writes'> & Readonly<{ writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
+type ProfileProtocolPlan = Omit<ProfileChangePlan<ProviderProfileProtocolDetail>, 'writes'> & Readonly<{ writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
 export async function planConfiguredProfileProtocol(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileProtocolPlan> {
   const snapshots = await Promise.allSettled(['global', 'project'].map(layer => snapshotConfiguredConfig(projectRoot, options, layer as 'global' | 'project')));
   for (const snapshot of snapshots) if (snapshot.status === 'rejected') throw snapshot.reason;

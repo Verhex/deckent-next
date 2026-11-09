@@ -9,7 +9,7 @@ export async function indexMonitorLedger(path: string, options: { busyTimeoutMs:
   const { indexMonitorLedger: index } = await import('./internal/reader.js');
   return index(path, options);
 }
-/** Metadata-only monitor capture. Use prepareMonitorInstall.readShown for selected, policy-gated content. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Metadata-only monitor capture. Use prepareMonitorInstall.readShown for selected, policy-gated content. */
 export async function readMonitorInstall(config: import('#platform/index.js').ResolvedConfig, env: import('#platform/index.js').Environment | undefined,
   readOutput: (identity: import('#domain/index.js').AttemptIdentity) => Promise<boolean>) {
   const { readMonitorInstall: read } = await import('./internal/install.js');
@@ -34,5 +34,5 @@ export async function stampMonitorInstall(config: import('#platform/index.js').R
 }
 
 export { readMonitorRunResults } from './internal/run-brief.js';
-export { listSurfaceRunIds, followLedgerSurface, type RuntimeSurfaceEvent } from './internal/surface-follow.js';
+export { listSurfaceRunIds, followLedgerSurface } from './internal/surface-follow.js';
 export { readMonitorWorkerContent } from './internal/worker-content.js';

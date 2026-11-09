@@ -6,7 +6,7 @@ import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, approvalPreviewCutSchema, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo,
   type ApprovalPreviewCutFacts } from './card-facts.js';
 
-/** v30 steer line id: identifier-shaped and short (a UUID fits), so every accepted id fits the turn's bounded result whole (Astra 2882). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). v30 steer line id: identifier-shaped and short (a UUID fits), so every accepted id fits the turn's bounded result whole (Astra 2882). */
 export const chatTurnSteerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 /**
@@ -112,7 +112,7 @@ export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
  * `sessionId` (protocol v16, SCR-A) names the client's conversation: its scratch area lives across turns; absent, the area is the turn's.
  */
 /** Protocol vocabulary of `chatTurn.reasoning` (v16), not a configuration value. */
-export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
+const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
 export const chatTurnCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, turnId: identitySchema,
   get messages() { return z.array(agentTurnMessageSchema).min(1); }, get reasoning() { return z.enum(CHAT_TURN_REASONING).optional(); }, get sessionId() { return identitySchema.optional(); },
   /** v17 (MODES-3): the turn runs in full access — only when the person launched the terminal so and a company grant allows it; never implied. */

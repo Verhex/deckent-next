@@ -14,7 +14,7 @@ export const nervousAttemptSignalSchema = z.strictObject({ identity: attemptIden
   launcher: z.strictObject({ basis: z.enum(NERVOUS_LAUNCHER_BASES), phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable() }),
   containerRecorded: z.boolean(), workerRecorded: z.boolean(), fenced: z.boolean().optional() }).readonly();
 export type NervousAttemptSignal = z.infer<typeof nervousAttemptSignalSchema>;
-export type NervousEvidence = z.infer<typeof recoveryEvidenceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NervousEvidence = z.infer<typeof recoveryEvidenceSchema>;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** One typed proposal: the rule that fired, the one K-B action it names and what it names it for (an Attempt, a task's Attempt from an audit event, or the scope). */
 export const nervousProposalSchema = z.strictObject({ schemaVersion: z.literal(1), caseId: digest, scopeId: identitySchema,
@@ -23,7 +23,7 @@ export const nervousProposalSchema = z.strictObject({ schemaVersion: z.literal(1
     z.strictObject({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }), z.strictObject({ kind: z.literal('scope') })]),
   evidence: recoveryEvidenceSchema, evidenceDigest: digest }).readonly();
 export type NervousProposal = z.infer<typeof nervousProposalSchema>;
-export type NervousTarget = NervousProposal['target'];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NervousTarget = NervousProposal['target'];
 /** Per-process series of absent samples of one Attempt (memory only: a restart starts it again, which only delays a fire). */
 export type NervousAbsence = Readonly<{ count: number; sinceMs: number }>;
 
@@ -33,7 +33,7 @@ const EMPTY: NervousEvidence = Object.freeze({ activity: null, launcher: null, l
 export function nervousCaseId(scopeId: string, ruleId: string, target: NervousTarget, distinct: string | number | null = null): string {
   return sha256(encodeCommandProjection('recovery-case:1', { scopeId, ruleId, target, distinct }));
 }
-export function nervousProposal(scopeId: string, rules: NervousRules, rule: NervousRule, target: NervousTarget, evidence: Partial<NervousEvidence>,
+function nervousProposal(scopeId: string, rules: NervousRules, rule: NervousRule, target: NervousTarget, evidence: Partial<NervousEvidence>,
   distinct: string | number | null = null): NervousProposal {
   const full = { ...EMPTY, ...evidence };
   return nervousProposalSchema.parse({ schemaVersion: 1, caseId: nervousCaseId(scopeId, rule.id, target, distinct), scopeId,

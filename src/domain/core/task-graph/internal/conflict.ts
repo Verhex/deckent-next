@@ -1,7 +1,7 @@
 import { validateTaskGraph } from './graph.js';
 import { TASK_GRAPH_RESOURCE_SCHEMA_VERSION, isConflictEdge, taskDependencyIds, type TaskDefinition, type TaskGraph, type TaskProgress } from './contract.js';
 
-/** R4 (owner D7a, alpha.47): a resource a task declares it changes. Family `path` is a hierarchical resource path (work-input scope; for a
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). R4 (owner D7a, alpha.47): a resource a task declares it changes. Family `path` is a hierarchical resource path (work-input scope; for a
  * file-tree target a repository path, for a document store a folder path); family `record` is one business record (ERP/CRM `kind` + `id`).
  * Keys only order work. They grant nothing and are not enforced at execution here; the target adapter still refuses a stale write. */
 export type ResourceKey = Readonly<{ family: 'path'; path: string }> | Readonly<{ family: 'record'; kind: string; id: string }>;

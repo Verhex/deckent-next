@@ -27,7 +27,7 @@ export const identityProfilePackageSchema = identityProfileJsonSchema.pipe(z.str
   source: identitySchema, get digest() { return z.string().regex(/^[a-f0-9]{64}$/); }, definition: identityProfileDefinitionSchema,
   get labels() { return z.strictObject({ en: persistedString(z.string().min(1).max(256)), tr: persistedString(z.string().min(1).max(256)) }).readonly(); },
 }).readonly());
-export type IdentityProfilePackage = z.infer<typeof identityProfilePackageSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type IdentityProfilePackage = z.infer<typeof identityProfilePackageSchema>;
 const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 const member = z.strictObject({ id: slug, principal: principalRef, get label() { return persistedString(z.string().min(1).max(256)); },
   get kind() { return z.enum(['human', 'machine', 'agent']); }, get organizationNodeId() { return slug.optional(); } }).readonly();
@@ -42,7 +42,7 @@ export const identityPreviewInputSchema = identityProfileJsonSchema.pipe(preview
 export const identityPreviewRequestSchema = identityProfileJsonSchema.pipe(previewShape.extend({ profile: identityProfileRefSchema.optional() }).readonly());
 export const identityProfileConfigSchema = z.strictObject({ profile: identityProfileRefSchema, get packages() { return z.array(identityProfilePackageSchema).max(64).optional(); } });
 export type IdentityPreviewInput = z.infer<typeof identityPreviewInputSchema>;
-export type IdentityProfileErrorCode = 'IDENTITY_PROFILE_INVALID' | 'IDENTITY_PROFILE_NAMESPACE_UNKNOWN' | 'IDENTITY_PROFILE_VERSION_UNKNOWN'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type IdentityProfileErrorCode = 'IDENTITY_PROFILE_INVALID' | 'IDENTITY_PROFILE_NAMESPACE_UNKNOWN' | 'IDENTITY_PROFILE_VERSION_UNKNOWN'
   | 'IDENTITY_PROFILE_UNKNOWN' | 'IDENTITY_PROFILE_SHADOW' | 'IDENTITY_PROFILE_DIGEST_MISMATCH' | 'IDENTITY_PREVIEW_INVALID'
   | 'IDENTITY_PREVIEW_SCOPE_DENIED' | 'IDENTITY_PREVIEW_CONFLICT' | 'IDENTITY_PREVIEW_LIMIT' | 'IDENTITY_PREVIEW_UNAVAILABLE';
 export class IdentityProfileError extends CodedError {

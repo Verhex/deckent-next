@@ -9,7 +9,7 @@ import { BeuserContainerMissing, BEUSER_REALM_RECIPE as recipe, canonicalRealmPa
   NANOSECONDS_PER_SECOND, pinRealmOptions, privateControllerRoot, realmFileIdentity, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 import { inspectBeuserRealm, type BeuserEvidenceRetention } from './admission.js';
 
-export interface BeuserRealmDependencies {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserRealmDependencies {
   /** Durable, redacted evidence storage; failure must prevent admission. Hashes alone are not retained proof. */
   readonly retainEvidence: BeuserEvidenceRetention;
   /** Existing package/build custody, including absence of secrets, host state and embedded symlinks/volumes. */

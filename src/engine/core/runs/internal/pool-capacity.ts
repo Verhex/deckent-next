@@ -8,7 +8,7 @@ import { RunStoreError } from './store.js';
 import { poolHoldQuerySchema, poolOccupancySchema, type PoolHoldAuditRecorder, type PoolHoldStore } from './pool-hold.js';
 
 // The pool's existing counter bound is Number.MAX_SAFE_INTEGER; no new product ceiling.
-export const poolCapacitySchema = z.strictObject({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const poolCapacitySchema = z.strictObject({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }).readonly();
 export const poolCapacityCommandSchema = poolHoldQuerySchema.extend({ commandId: clientCommandIdSchema, capacity: poolCapacitySchema }).strict();
 export const poolCapacityReceiptSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema, poolId: identitySchema,
   actor: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(), atMs: counterSchema, changed: z.boolean(),

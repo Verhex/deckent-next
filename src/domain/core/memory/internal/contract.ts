@@ -11,13 +11,13 @@ export const MEMORY_SCHEMA_VERSION = 2;
 /** Bounds are protocol data (`limits.json`), never configurable policy and never literals in code. */
 export const MEMORY_LIMITS = Object.freeze({ ...limits });
 export const MEMORY_STATES = Object.freeze(['candidate', 'verified', 'retired'] as const);
-export const MEMORY_KINDS = Object.freeze(['fact', 'lesson'] as const);
-export const MEMORY_ORIGINS = Object.freeze(['human', 'run', 'model', 'import'] as const);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MEMORY_KINDS = Object.freeze(['fact', 'lesson'] as const);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MEMORY_ORIGINS = Object.freeze(['human', 'run', 'model', 'import'] as const);
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 const text = (max: number) => persistedString(z.string().min(1)).refine(value => value.trim() === value && bytes(value) <= max);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
-export const memoryLessonSchema = z.strictObject({ source: text(limits.lessonFieldMaxBytes), cause: text(limits.lessonFieldMaxBytes),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryLessonSchema = z.strictObject({ source: text(limits.lessonFieldMaxBytes), cause: text(limits.lessonFieldMaxBytes),
   correction: text(limits.lessonFieldMaxBytes), evidence: text(limits.lessonFieldMaxBytes) }).readonly();
 export const memoryContentSchema = z.strictObject({ kind: z.enum(MEMORY_KINDS), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes),
   tags: z.array(text(limits.tagMaxBytes)).max(limits.tagsMax).readonly(), lesson: memoryLessonSchema.nullable() })
@@ -36,7 +36,7 @@ export const memoryLessonClaimSchema = z.discriminatedUnion('kind', [
 export const memoryTombstoneSchema = z.strictObject({ purged: z.literal(true), contentDigest: digest, digestKind: z.literal('keyed'), purgeRecordId: identitySchema,
   reasonCode: identitySchema }).readonly();
 export const memoryOriginSchema = z.strictObject({ kind: z.enum(MEMORY_ORIGINS), ref: text(limits.originRefMaxBytes).nullable() }).readonly();
-/** A reference to an evaluation record the engine resolves through its port (task evaluation, auditor verdict, ...): kind + id + digest. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A reference to an evaluation record the engine resolves through its port (task evaluation, auditor verdict, ...): kind + id + digest. */
 export const memoryEvaluationRefSchema = z.strictObject({ kind: identitySchema, id: identitySchema, digest }).readonly();
 export const memoryVerificationBasisSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('human-review'), note: text(limits.noteMaxBytes) }),
@@ -67,11 +67,11 @@ export type MemoryContent = z.infer<typeof memoryContentSchema>;
 export type MemoryTombstone = z.infer<typeof memoryTombstoneSchema>;
 /** Whether an entry's content was purged (only the tombstone is left). */
 export const isMemoryTombstone = (content: MemoryContent | MemoryTombstone): content is MemoryTombstone => 'purged' in content;
-export type MemoryAudience = z.infer<typeof memoryAudienceSchema>;
-export type MemoryLessonClaim = z.infer<typeof memoryLessonClaimSchema>;
-export type MemoryOrigin = z.infer<typeof memoryOriginSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryAudience = z.infer<typeof memoryAudienceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryLessonClaim = z.infer<typeof memoryLessonClaimSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryOrigin = z.infer<typeof memoryOriginSchema>;
 export type MemoryEvaluationRef = z.infer<typeof memoryEvaluationRefSchema>;
-export type MemoryVerificationBasis = z.infer<typeof memoryVerificationBasisSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryVerificationBasis = z.infer<typeof memoryVerificationBasisSchema>;
 export type MemoryEntry = z.infer<typeof memoryEntrySchema>;
 export type MemoryState = MemoryEntry['state'];
 /** An evaluation the engine resolved for an `independent-evaluation` basis: who evaluated, the verdict and the content digest it judged; S4B-3:
@@ -80,7 +80,7 @@ export interface MemoryResolvedEvaluation { readonly record: MemoryEvaluationRef
   readonly verdict: 'pass' | 'fail' | 'unknown'; readonly subjectDigest: string; readonly mode: 'shadow' | 'live';
   readonly evaluatorModel: { readonly channelId: string; readonly modelId: string; readonly maker: string | null };
   readonly sourceModels: readonly { readonly channelId: string; readonly modelId: string; readonly maker: string | null }[] }
-export type MemoryErrorCode = 'MEMORY_ENTRY_INVALID' | 'MEMORY_TRANSITION_INVALID' | 'MEMORY_VERIFIER_NOT_HUMAN' | 'MEMORY_SELF_VERIFICATION'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryErrorCode = 'MEMORY_ENTRY_INVALID' | 'MEMORY_TRANSITION_INVALID' | 'MEMORY_VERIFIER_NOT_HUMAN' | 'MEMORY_SELF_VERIFICATION'
   | 'MEMORY_EVALUATION_UNAVAILABLE' | 'MEMORY_EVALUATION_NOT_PASSED' | 'MEMORY_EVALUATION_OTHER_CONTENT' | 'MEMORY_QUERY_INVALID' | 'MEMORY_AUTOMATION_INVALID'
   | 'MEMORY_EVALUATION_NOT_INDEPENDENT' | 'MEMORY_EVALUATION_MAKER_UNKNOWN' | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PERSON_REQUIRED';
 export class MemoryError extends CodedError {

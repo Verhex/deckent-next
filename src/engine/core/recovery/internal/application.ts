@@ -18,7 +18,7 @@ export function recoveryDecisionCommandId(caseId: string, evidenceDigest: string
 }
 /** What a case would be if sealed now (S6R-5 `prepare`): the gated draft, the gate or bound refusal it carries (null: it may be decided) and its Run. */
 export type RecoveryPrepared = Readonly<{ draft: RecoveryCase; refused: RecoveryEscalationCode | null; run: RunSnapshot }>;
-/** The one audit loader (Nervous detections), the recorder of the continuation event, the owner's standing grant read fresh per call, and the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The one audit loader (Nervous detections), the recorder of the continuation event, the owner's standing grant read fresh per call, and the
  * s5b safety hold that hands a Run to a person. Nothing here reaches a model, a worker, a supervisor or an effect target. */
 export interface RecoveryPorts {
   readonly store: RecoveryStore;
@@ -32,7 +32,7 @@ export interface RecoveryPorts {
   readonly now: () => number;
   readonly timeoutMs: number;
 }
-export type RecoveryOutcome = Readonly<{ kind: 'continued'; case: RecoveryCase; run: RunSnapshot }> | Readonly<{ kind: 'escalated'; case: RecoveryCase }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryOutcome = Readonly<{ kind: 'continued'; case: RecoveryCase; run: RunSnapshot }> | Readonly<{ kind: 'escalated'; case: RecoveryCase }>;
 const NOTHING_WRITTEN = new Set(['RECOVERY_OFF', 'RECOVERY_NOT_READY', 'RECOVERY_INVALID']);
 
 /**

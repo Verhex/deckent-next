@@ -151,7 +151,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
 }
 
 /** Only an exact read-only mount can mark a real init as sealed; a writable file or caller environment cannot. */
-export async function readBeuserGenesis(): Promise<BeuserRealmSeal | undefined> {
+async function readBeuserGenesis(): Promise<BeuserRealmSeal | undefined> {
   let file;
   try { file = await open(BEUSER_GENESIS_PATH, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID'); }

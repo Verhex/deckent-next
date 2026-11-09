@@ -4,7 +4,7 @@ export interface AuditServiceStatus { readonly status: 'ready' | 'degraded'; rea
 export class AuditCheckpointCycleError extends CodedError {
   constructor(readonly reason: 'unavailable' | 'limit') { super('AUDIT_CHECKPOINT_CYCLE'); this.name = 'AuditCheckpointCycleError'; }
 }
-/** Ready only when at least one scope was verified and every verification matched; nothing verified (not yet run, empty ledger) is never ready. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Ready only when at least one scope was verified and every verification matched; nothing verified (not yet run, empty ledger) is never ready. */
 export const auditServiceStatus = (verifications: readonly AuditVerification[]): AuditServiceStatus => Object.freeze(!verifications.length
   ? { status: 'degraded' as const, reason: 'not-verified' as const, verifications: Object.freeze([]) }
   : { status: verifications.some(value => value.status !== 'match') ? 'degraded' as const : 'ready' as const, verifications: Object.freeze([...verifications]) });

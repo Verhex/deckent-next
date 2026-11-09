@@ -11,7 +11,7 @@ import { fillTemplate, span, sliceSpans, plainText, shortenHomePath, type Span, 
  * mode). Every transported value goes through the decision projection (redaction, hidden code points) before it is shown; catalog
  * templates only arrange projected spans. Raw identifiers, digests and policy cells appear only in the details section.
  */
-export type ApprovalToolKind = 'shell' | 'edit' | 'write' | 'fetch' | 'mcp' | 'other';
+type ApprovalToolKind = 'shell' | 'edit' | 'write' | 'fetch' | 'mcp' | 'other';
 type Fields = 'what' | 'command' | 'file' | 'address' | 'target' | 'where' | 'onBehalf' | 'scope' | 'why' | 'risk' | 'undo' | 'time' | 'preview' | 'detail';
 type Details = 'id' | 'binding' | 'digest' | 'kept' | 'notKept' | 'classifier' | 'run' | 'cell' | 'compensation' | 'assurance' | 'requester' | 'engine';
 export interface ApprovalWindowLabels {
@@ -61,7 +61,7 @@ export interface ApprovalWindowLabels {
 }
 
 /** What the window knows of one approval (display copies only; no capability, revision or authority DTO). */
-export type ApprovalWindowInput = Readonly<{
+type ApprovalWindowInput = Readonly<{
   approvalId: string; summary: string; requester: string; runId: string; taskId: string; expiresAt: number;
   tool?: string | undefined; target?: string | null | undefined; preview?: string | undefined; risk?: string | null | undefined; undo?: string | null | undefined;
   requiredAssurance?: string | undefined; assuranceLine?: ApprovalDecisionLine | null;

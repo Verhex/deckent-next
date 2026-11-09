@@ -3,7 +3,7 @@ import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js
 import { inspectRoleModelsInScope, roleModelInvocationReference, type ModelCatalogReader, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import type { MemoryEvaluatorRow } from './contract.js';
 
-/** The S2 role a memory evaluator model must hold (registry data; the role registry restricts V5 to its rows). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The S2 role a memory evaluator model must hold (registry data; the role registry restricts V5 to its rows). */
 export const MEMORY_EVALUATOR_ROLE = 'memory-evaluator';
 const BILLING: Readonly<Record<string, MemoryEvaluatorRow['billing']>> = Object.freeze({ subscription: 'subscription', 'per-token': 'metered', 'self-hosted': 'local' });
 export type MemoryCatalogFact = { readonly maker: string | null; readonly billing: MemoryEvaluatorRow['billing']; readonly pricing: unknown; readonly active?: boolean };
@@ -47,7 +47,7 @@ function perMillion(value: string, factor: number): string {
   return out === '' ? '0' : out;
 }
 const DECIMAL = /^(0|[1-9]\d*)(\.\d+)?$/u;
-export type MemoryEvaluatorPrice = { readonly kind: 'per-token'; readonly inputPerMTok: string; readonly outputPerMTok: string; readonly asOf: string; readonly answersPerDayCeiling: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryEvaluatorPrice = { readonly kind: 'per-token'; readonly inputPerMTok: string; readonly outputPerMTok: string; readonly asOf: string; readonly answersPerDayCeiling: string }
   | { readonly kind: 'subscription' } | { readonly kind: 'not-verified' };
 /**
  * S4B-3 read-only view (owner S-M5: cost computed from catalog data, never a number in code): which evaluator rows would serve the scope, each

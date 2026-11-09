@@ -7,7 +7,7 @@ import registry from './human.json' with { type: 'json' };
  * becomes `header: value` lines. A pipe gets natural widths (nothing cut, so `grep` sees whole values). No colour or escape sequence is
  * ever written, so NO_COLOR, `TERM=dumb` and pipes need no special case; ASCII terminals get ASCII rules and ellipses.
  */
-export type CliTableColumn = Readonly<{ header: string; align?: 'left' | 'right'; shrink?: boolean }>;
+type CliTableColumn = Readonly<{ header: string; align?: 'left' | 'right'; shrink?: boolean }>;
 export type CliTableStyle = Readonly<{ width: number; ascii: boolean }>;
 const GAP = 2, MIN_CELL = 4;
 const SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' });

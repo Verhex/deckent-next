@@ -8,9 +8,9 @@ export function assertDockerResourceCeiling(requested: DockerLimits, ceiling: Do
       params: { resource, requested: requested[resource], ceiling: ceiling[resource] } });
   }
 }
-/** Admission graph limits; values come from installation config (`admission.graph`), never from code. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Admission graph limits; values come from installation config (`admission.graph`), never from code. */
 export type TaskGraphLimits = { readonly maxTasks: number; readonly maxEdges: number; readonly maxDepth: number };
-/** The config key a refusal names, so the operator knows exactly what to raise. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The config key a refusal names, so the operator knows exactly what to raise. */
 export const taskGraphLimitFields = Object.freeze({ tasks: 'admission.graph.maxTasks', edges: 'admission.graph.maxEdges', depth: 'admission.graph.maxDepth' });
 const LIMIT_OF = Object.freeze({ tasks: 'maxTasks', edges: 'maxEdges', depth: 'maxDepth' } as const);
 /** PARALLEL-S3: refuse a graph above the configured tasks/edges/depth before any admission write (typed TASK_GRAPH_LIMIT); never trims the graph. */

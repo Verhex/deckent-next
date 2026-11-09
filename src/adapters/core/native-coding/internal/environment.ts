@@ -6,5 +6,5 @@ const nativeCodingToolBounds = (family: string) => nativeWorkerToolBounds(native
 /** Default requirements follow the enforcing realm; explicit declarations are preserved. */
 export const nativeCodingTemplateEnvironment = (settings: Readonly<{ memoryBytes?: unknown; readOnlyMounts?: unknown }>, family?: string) =>
   nativeWorkerTemplateEnvironment(registry.templateDefaults, settings, family ? nativeCodingToolBounds(family).heapBytes : typeof settings.memoryBytes === 'number' ? dockerNodeHeapCeilingBytes(settings.memoryBytes) : null);
-export type ContainerProbeRunner = NativeWorkerProbeRunner;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ContainerProbeRunner = NativeWorkerProbeRunner;
 export const nativeCodingEnvironmentProbes = (run: ContainerProbeRunner) => nativeWorkerEnvironmentProbes(registry, run);

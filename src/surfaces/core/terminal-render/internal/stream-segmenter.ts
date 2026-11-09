@@ -8,7 +8,7 @@ import { markdownBlock, markdownSpaceBefore, type MarkdownBlock } from './markdo
  * closes is shown live in the tail, chunked into scrollback past `FENCE_CHUNK_LINES` (staying in code mode so the real
  * closing fence still closes it — legacy REPL-575 K7) and flushed on `done`; it never freezes the answer (b676d3090).
  */
-export type SegmentKind = 'text' | 'code' | 'table';
+type SegmentKind = 'text' | 'code' | 'table';
 export type Segment = Readonly<{ kind: SegmentKind; markdown: string; spaceBefore?: true }>;
 export type SegmenterState = Readonly<{
   partial: string;
@@ -19,7 +19,7 @@ export type SegmenterState = Readonly<{
   previous: MarkdownBlock | null;
   fenceChunk: boolean;
 }>;
-export type SegmenterStep = Readonly<{ state: SegmenterState; segments: readonly Segment[] }>;
+type SegmenterStep = Readonly<{ state: SegmenterState; segments: readonly Segment[] }>;
 export type LiveTail = Readonly<{ markdown: string; open: 'code' | 'table' | null; spaceBefore?: true }>;
 
 export const FENCE_CHUNK_LINES = 200;

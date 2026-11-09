@@ -27,7 +27,7 @@ export type PickerNode = Readonly<{
   children?: readonly PickerNode[];
 }>;
 
-export type PickerScope = Readonly<{ id: string; label: string; blocked?: Readonly<{ reason: string }> }>;
+type PickerScope = Readonly<{ id: string; label: string; blocked?: Readonly<{ reason: string }> }>;
 
 export type PickerTree = Readonly<{
   title: string;
@@ -85,8 +85,8 @@ export type PickerOutcome =
   | Readonly<{ kind: 'invalid' }>
   | Readonly<{ kind: 'done'; result: PickerResult }>;
 
-export type PickerStep = Readonly<{ state: PickerState; outcome: PickerOutcome }>;
-export type PickerOptions = Readonly<{ pageSize: number }>;
+type PickerStep = Readonly<{ state: PickerState; outcome: PickerOutcome }>;
+type PickerOptions = Readonly<{ pageSize: number }>;
 
 export const PICKER_INITIAL: PickerState = Object.freeze({ stage: 'list', trail: [], filter: '', pos: 0, pending: null, scopePos: 0 });
 
@@ -110,7 +110,7 @@ export function pickerFirstRow(index: number, count: number, size: number): numb
 }
 
 /** The level the trail points at (the root when empty). A trail id that no longer exists falls back to the last level that does. */
-export function pickerLevel(tree: PickerTree, trail: PickerState['trail']): Readonly<{ title: string; nodes: readonly PickerNode[]; titles: readonly string[] }> {
+function pickerLevel(tree: PickerTree, trail: PickerState['trail']): Readonly<{ title: string; nodes: readonly PickerNode[]; titles: readonly string[] }> {
   let nodes = tree.items, title = tree.title;
   const titles = [tree.title];
   for (const step of trail) {
@@ -216,7 +216,7 @@ export function pickerReduce(tree: PickerTree, state: PickerState, action: Picke
 }
 
 /** The subset of an Ink key event the picker reads. */
-export type PickerKeyEvent = Readonly<{ upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean; pageUp?: boolean; pageDown?: boolean;
+type PickerKeyEvent = Readonly<{ upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean; pageUp?: boolean; pageDown?: boolean;
   home?: boolean; end?: boolean; return?: boolean; escape?: boolean; tab?: boolean; backspace?: boolean; delete?: boolean; ctrl?: boolean; meta?: boolean; shift?: boolean }>;
 
 /** Maps one key event to an action, or null when the picker ignores it. Printable text filters; there are no letter shortcuts to steal it. */

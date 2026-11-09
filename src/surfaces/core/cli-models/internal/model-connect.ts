@@ -63,7 +63,7 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale, r
 const word = (value: string) => /^[A-Za-z0-9_@%+=:,./-]+$/u.test(value) ? value : `'${value.replace(/'/gu, `'\\''`)}'`;
 /** Astra R3: the exact command that resumes this connection after its approval (same command id, so the same approval applies).
  * F4: argv from fixed tokens; the catalog's `climodels.budget.command` is in-sentence prose ("… komutu" in Turkish), never a runnable command. */
-export function resumeCommand(command: ModelConnectCommand): string {
+function resumeCommand(command: ModelConnectCommand): string {
   const model = 'nativeId' in command.model ? ['--model', command.model.nativeId] : 'reference' in command.model
     ? ['--reference', `${command.model.reference.providerId}@${command.model.reference.providerVersion}/${command.model.reference.modelId}@${command.model.reference.modelVersion}`] : [];
   return ['deckent', 'models', 'connect', '--scope', command.scopeId, '--connection', command.connection, ...(command.endpoint ? ['--endpoint', command.endpoint] : []), ...model,

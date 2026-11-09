@@ -16,10 +16,10 @@ export const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell
   'narrow-mutating': 'shell-narrow-mutating', destructive: 'shell-destructive', 'always-ask': 'shell-always-ask', 'other-modify': 'shell-other-modify',
   // Lead 2026-10-21 (PRE-8): the product's authority commands from an agent shell are the configuration-authority cell: a person's card in every mode.
   authority: 'edit-authority' };
-export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' }); // Silent without any mode (owner q5): counted, not recorded.
+const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' }); // Silent without any mode (owner q5): counted, not recorded.
 /** Audit event identity of a mode relaxation (or, tag `full-access-call`, a full-access call): one per call position of a turn (the effect
  * gate may be asked several times). */
-export const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string, tag = 'permission-mode') =>
+const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string, tag = 'permission-mode') =>
   sha256(`${tag}:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 
 type Shell = AgentToolCallRequest['shell']; type CallRef = { readonly round: number; readonly index: number; readonly callId: string }; type Stored = { readonly cell: AgentToolCallCell; readonly shell: Shell; readonly decision: AgentToolCallDecision } | { readonly planError: string };

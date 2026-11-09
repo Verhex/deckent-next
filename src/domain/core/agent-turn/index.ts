@@ -1,13 +1,13 @@
 export { agentTurnMessageSchema, agentTurnStreamEventSchema, chatTurnCommandSchema, chatTurnResultSchema, parseChatTurnCommand,
   chatTurnCancellationSchema, chatTurnCancellationResultSchema, parseChatTurnCancellation, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES, mcpStartNoticeSchema,
-  chatTurnSteerSchema, chatTurnSteerResultSchema, parseChatTurnSteer, chatTurnSteerIdSchema, chatTurnSteerOutcomeSchema } from './internal/contract.js';
+  chatTurnSteerSchema, chatTurnSteerResultSchema, parseChatTurnSteer, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ chatTurnSteerIdSchema, chatTurnSteerOutcomeSchema } from './internal/contract.js';
 export type { AgentContextQuality, AgentToolApprovalSettlement, AgentTurnMessage, AgentTurnEvent, AgentTurnStreamEvent, AgentToolCallStatus, AgentTurnFinish, ChatTurnCommand, ChatTurnResult,
   ChatTurnCancellation, ChatTurnCancellationResult, ChatTurnNotice, ChatTurnSteer, ChatTurnSteerResult, ChatTurnSteerOutcome } from './internal/contract.js';
 export { AGENT_TOOL_UNDO, agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, approvalPreviewCutSchema } from './internal/card-facts.js';
 export type { AgentShellPosture, AgentToolCardCall, AgentToolUndo, ApprovalPreviewCutFacts, AgentToolUndoKind, McpToolChangeHints } from './internal/card-facts.js';
-export { WORKSPACE_ATTACHMENT_MAX_BYTES, WORKSPACE_ATTACHMENT_REFUSALS, WORKSPACE_FILE_FIND_MAX_RESULTS, WORKSPACE_FILE_QUERY_MAX_CHARS, parseWorkspaceAttachmentRequest,
+export { WORKSPACE_ATTACHMENT_MAX_BYTES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WORKSPACE_ATTACHMENT_REFUSALS, WORKSPACE_FILE_FIND_MAX_RESULTS, WORKSPACE_FILE_QUERY_MAX_CHARS, parseWorkspaceAttachmentRequest,
   parseWorkspaceFileQuery, workspaceAttachmentRequestSchema, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema } from './internal/workspace-files.js';
-export type { WorkspaceAttachment, WorkspaceAttachmentRefusal, WorkspaceAttachmentRequest, WorkspaceFileMatches, WorkspaceFileQuery } from './internal/workspace-files.js';
+export type { WorkspaceAttachment, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkspaceAttachmentRefusal, WorkspaceAttachmentRequest, WorkspaceFileMatches, WorkspaceFileQuery } from './internal/workspace-files.js';
 export { parseScratchQuery, SCRATCH_VIEW_MAX_FILES, scratchClearanceSchema, scratchQuerySchema, scratchViewSchema } from './internal/scratch.js';
 export type { ScratchClearance, ScratchQuery, ScratchView } from './internal/scratch.js';
 

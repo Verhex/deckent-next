@@ -4,11 +4,11 @@ import { persistedString, identitySchema } from '#domain/core/primitives/index.j
 import { HUB_LIMITS } from './registry.js';
 import { hubDigestSchema, hubFilesSchema, hubPackageIdSchema, hubSkillDescriptionSchema, hubSkillNameSchema, hubText, hubTimeSchema, hubVersionSchema } from './fields.js';
 
-export const hubDependencySchema = z.strictObject({ hubId: hubDigestSchema.optional(), packageId: hubPackageIdSchema, version: hubVersionSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubDependencySchema = z.strictObject({ hubId: hubDigestSchema.optional(), packageId: hubPackageIdSchema, version: hubVersionSchema,
   manifestDigest: hubDigestSchema }).readonly();
-export const hubSkillItemSchema = z.strictObject({ kind: z.literal('skill'), skillId: catalogIdSchema, name: hubSkillNameSchema, description: hubSkillDescriptionSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubSkillItemSchema = z.strictObject({ kind: z.literal('skill'), skillId: catalogIdSchema, name: hubSkillNameSchema, description: hubSkillDescriptionSchema,
   entry: z.literal('SKILL.md'), files: hubFilesSchema, signature: skillSignatureSchema }).readonly();
-export const hubAgentItemSchema = z.strictObject({ kind: z.literal('agent'), agentId: catalogIdSchema, name: hubText(AGENT_CATALOG_LIMITS.nameMaxBytes),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubAgentItemSchema = z.strictObject({ kind: z.literal('agent'), agentId: catalogIdSchema, name: hubText(AGENT_CATALOG_LIMITS.nameMaxBytes),
   persona: hubText(AGENT_CATALOG_LIMITS.personaMaxBytes), workClassHints: z.array(identitySchema).min(1).max(AGENT_CATALOG_LIMITS.workClassesPerAgentMax)
     .refine(ids => new Set(ids).size === ids.length).readonly(),
   skills: z.array(z.strictObject({ packageId: hubPackageIdSchema, version: hubVersionSchema, skillId: catalogIdSchema, digest: hubDigestSchema }).readonly())
@@ -33,5 +33,5 @@ export const hubPackageSchema = z.strictObject({ schemaVersion: z.literal(1), pa
   }).readonly();
 export type HubPackage = z.infer<typeof hubPackageSchema>;
 export type HubSkillItem = z.infer<typeof hubSkillItemSchema>;
-export type HubAgentItem = z.infer<typeof hubAgentItemSchema>;
-export type HubDependency = z.infer<typeof hubDependencySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubAgentItem = z.infer<typeof hubAgentItemSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubDependency = z.infer<typeof hubDependencySchema>;

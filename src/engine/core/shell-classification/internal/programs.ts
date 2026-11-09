@@ -11,7 +11,7 @@ export type ShellReadRisk = 'none' | 'low';
  */
 export type ValueKind = 'any' | 'path' | 'number' | 'script';
 
-export interface OptionGrammar {
+interface OptionGrammar {
   /** Bundlable single-char switches. */
   readonly shortSwitches?: string;
   /** Single-char options that consume a value (attached or next token). */
@@ -29,7 +29,7 @@ export interface OptionGrammar {
   readonly permissiveLong?: boolean;
 }
 
-export type PositionalKind =
+type PositionalKind =
   | 'paths'
   | 'first-script-then-paths'
   | 'first-pattern-then-paths'
@@ -213,7 +213,7 @@ export const XARGS_PROGRAMS = new Set(['xargs', 'parallel', 'foreach-object', 'f
 export const TEE_PROGRAMS = new Set(['tee', 'tee-object', 'out-file', 'set-content', 'add-content', 'sc', 'ac']);
 /** PRE-8 v2 (law audit MAJOR 2): the product's own key-authority commands. A host-realm agent shell that names one always asks the person's card
  * (a pty wrapper such as `script` asks too, so a forged terminal witness never runs unasked); the command itself still requires the terminal witness. */
-export type ProductAuthorityCommand = Readonly<{ actions: readonly string[]; requiredFlags?: readonly string[]; bound?: boolean }>;
+type ProductAuthorityCommand = Readonly<{ actions: readonly string[]; requiredFlags?: readonly string[]; bound?: boolean }>;
 export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record<string, ProductAuthorityCommand>>>> = Object.freeze({
   deckent: Object.freeze({ secret: { actions: ['grant', 'revoke', 'set', 'delete', 'handover', 'store'] }, approval: { actions: ['decide'] },
     'init policy': { actions: [''], requiredFlags: ['--apply', '--modes', '--owner-baseline'] },

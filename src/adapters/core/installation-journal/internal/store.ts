@@ -5,14 +5,14 @@ import { dirname, resolve } from 'node:path';
 import { CodedError, BootstrapStateError, DeckentError, encodeBootstrapJournal, observeBootstrapState, productResourcePath,
   resolveProductLayout, withConfigWriteLock, type BootstrapJournalPayload, type BootstrapObservation } from '#platform/index.js';
 
-export type InstallationJournalErrorCode = 'INSTALLATION_JOURNAL_INVALID' | 'INSTALLATION_JOURNAL_UNSAFE'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationJournalErrorCode = 'INSTALLATION_JOURNAL_INVALID' | 'INSTALLATION_JOURNAL_UNSAFE'
   | 'INSTALLATION_JOURNAL_CONFLICT' | 'INSTALLATION_JOURNAL_UNAVAILABLE' | 'INSTALLATION_JOURNAL_BUSY'
   | 'INSTALLATION_JOURNAL_OUTCOME_UNKNOWN' | 'INSTALLATION_JOURNAL_EXPIRED' | 'INSTALLATION_JOURNAL_UNSUPPORTED';
 export class InstallationJournalError extends CodedError {
   constructor(override readonly code: InstallationJournalErrorCode) { super(code); this.name = 'InstallationJournalError'; }
 }
 class InstallationJournalCallbackFailure { constructor(readonly reason: unknown) {} }
-export interface InstallationJournalOptions { readonly timeoutMs: number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstallationJournalOptions { readonly timeoutMs: number }
 export interface InstallationJournalSession {
   observe(): Promise<BootstrapObservation>;
   /** Every started operation participates in the enclosing transaction result. Catching a

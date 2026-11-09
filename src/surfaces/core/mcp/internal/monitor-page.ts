@@ -21,7 +21,7 @@ export const mcpMonitorQuerySchema = monitorQuerySchema.extend({
   page: counterSchema.optional(),
   pageSize: persistedInteger().positive().max(100).optional(),
 }).strict();
-export type McpMonitorQuery = z.infer<typeof mcpMonitorQuerySchema>;
+type McpMonitorQuery = z.infer<typeof mcpMonitorQuerySchema>;
 export const monitorCollectionQuery = (query: McpMonitorQuery): MonitorQuery => ({ schemaVersion: 1, ...(query.install ? { install: query.install } : {}) });
 
 const itemsOf = (install: MonitorInstall, section: ListSection): readonly unknown[] => section === 'map' ? (install.map ? [install.map] : [])

@@ -78,7 +78,7 @@ export interface SurfacePort {
 export type BeuserModelRole = 'beuser-walker' | 'beuser-evaluator';
 export type BeuserModelResult = Readonly<{ state: 'invoked'; receipt: BeuserModelReceipt }>
   | Readonly<{ state: 'unavailable'; code: 'BEUSER_MODEL_UNAVAILABLE'; reason: RoleModelRefusal | 'maker-unknown' | 'independence' }>;
-export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
 /** The walker's own last actions, oldest first, whether its last action left the screen unchanged (walk17 S2), and (walk18) the persona's
  * model decisions left including this one and wait patience left. */
 export type BeuserWalkerHistory = Readonly<{ recentActions: readonly unknown[]; screenUnchanged: boolean; remainingSteps: number; remainingWaitMs: number }>;
@@ -105,10 +105,10 @@ export interface EvidencePort {
 export interface EvaluationPort {
   evaluate(context: BeuserContext, command: TaskEvaluationCommand): ReturnType<TaskEvaluationApplication['execute']>;
 }
-export interface BeuserTargetRefusal {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserTargetRefusal {
   readonly code: 'BEUSER_TARGET_NOT_SANDBOX'; readonly binding: BeuserBinding;
 }
-export interface BeuserObservationPort {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserObservationPort {
   audit(event: AuditEvent & { readonly subject: Extract<AuditEvent['subject'], { kind: 'beuser-target-refusal' }> }): Promise<void>;
   nervous(refusal: BeuserTargetRefusal): Promise<void>;
 }

@@ -6,7 +6,7 @@ import { posix, win32 } from 'node:path';
 import { PRODUCT_LAYOUT_REGISTRY as registry, hasGlobWildcard } from '#platform/core/common/index.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
-export type GlobalStateRoot = { readonly ok: true; readonly root: string; readonly home: string | null; readonly override: string | undefined }
+type GlobalStateRoot = { readonly ok: true; readonly root: string; readonly home: string | null; readonly override: string | undefined }
   | { readonly ok: false; readonly code: 'UNSUPPORTED_PLATFORM' | 'HOME_NOT_RESOLVED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_PATH_UNEXPRESSIBLE' };
 const value = (env: Env, name: string) => env[name] === '' ? undefined : env[name];
 const hasControl = (text: string) => [...text].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);

@@ -1,7 +1,7 @@
 import { CodedError, persistedString, persistedDateTime, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
-export const DECISION_SCHEMA_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const DECISION_SCHEMA_VERSION = 1;
 export const DECISION_ABSTENTIONS = Object.freeze(['none_of_the_above', 'insufficient_information'] as const);
 export const DECISION_CASE_PREFIX = 'deckent.decision-case.v1\n';
 export const DECISION_ADVICE_PREFIX = 'deckent.decision-advice.v1\n';

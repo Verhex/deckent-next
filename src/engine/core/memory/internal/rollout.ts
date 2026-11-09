@@ -7,7 +7,7 @@ import { MemoryJournalError, type MemoryJournalDependencies, type MemoryJournalS
 import { screenMemoryCandidate } from './distil.js';
 import { rederiveMemorySourceModels } from './evaluate.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S4B-7 (S4B-DESIGN rev 4 §10, §11, §13; owner S-M14 2026-10-23): the memory rollout. The phases are the `memoryAutomation` switches in order
  * (versioned Core data, `assets/memory/rollout.json`, provisional until measured on a real installation); the two live switches (phase 3: verified entries reach
  * the models; phase 4: the independent evaluator verifies) carry exit criteria measured only from sealed records. Meeting them only allows a
@@ -16,8 +16,8 @@ import { rederiveMemorySourceModels } from './evaluate.js';
 export const MEMORY_ROLLOUT_METRICS = Object.freeze(['agreement', 'decided-since-false-pass', 'corpus', 'independence-violations', 'contest-rate', 'context-shadow-runs',
   'context-overflow', 'context-integrity-violations', 'candidate-secret-findings', 'purge-replay-pending'] as const);
 export type MemoryRolloutMetric = typeof MEMORY_ROLLOUT_METRICS[number];
-export const MEMORY_ROLLOUT_SECTIONS = Object.freeze(['extraction', 'verification', 'context'] as const);
-export type MemoryRolloutSection = typeof MEMORY_ROLLOUT_SECTIONS[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MEMORY_ROLLOUT_SECTIONS = Object.freeze(['extraction', 'verification', 'context'] as const);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryRolloutSection = typeof MEMORY_ROLLOUT_SECTIONS[number];
 export type MemoryRolloutModes = Readonly<Record<MemoryRolloutSection, typeof MEMORY_AUTOMATION_MODES[number]>>;
 const PER_MILLE = 1000;
 const count = counterSchema, perMille = persistedInteger().min(0).max(PER_MILLE);
@@ -32,8 +32,8 @@ const registrySchema = z.strictObject({ get schemaVersion() { return z.literal(1
   .refine(registry => registry.phases.every((phase, index) => index === 0 || phase.phase > registry.phases[index - 1]!.phase)
     && new Set(registry.criteria.map(row => row.id)).size === registry.criteria.length
     && registry.phases.every(phase => phase.criteria.every(id => registry.criteria.some(row => row.id === id)))).readonly();
-export type MemoryRolloutRegistry = z.infer<typeof registrySchema>;
-export type MemoryRolloutCriterion = MemoryRolloutRegistry['criteria'][number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryRolloutRegistry = z.infer<typeof registrySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryRolloutCriterion = MemoryRolloutRegistry['criteria'][number];
 export const MEMORY_ROLLOUT: MemoryRolloutRegistry = Object.freeze(registrySchema.parse(rolloutSeed));
 const corpusSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get note() { return z.string(); }, get items() { return z.array(z.strictObject({ id: identitySchema, kind: identitySchema,
   title: persistedString(z.string().min(1)), body: persistedString(z.string().min(1)) }).readonly()).min(1).max(256).readonly(); } }).readonly();
@@ -42,16 +42,16 @@ export const MEMORY_INJECTION_CORPUS = Object.freeze(corpusSchema.parse(corpusSe
 /** One corpus item as the distiller writes a worker `fact` claim (rule E3): the content whose keyed digest a shadow record names. */
 export const memoryCorpusContent = (item: { readonly title: string; readonly body: string }) => ({ kind: 'fact' as const, title: item.title, body: item.body, tags: [], lesson: null });
 
-/** One measured value: `count` of `sample` (and of `of` when the whole of a known set is required); `complete` false when the scan bound was hit. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One measured value: `count` of `sample` (and of `of` when the whole of a known set is required); `complete` false when the scan bound was hit. */
 export interface MemoryRolloutMeasure { readonly count: number; readonly sample: number; readonly of: number | null; readonly complete: boolean }
 /** null: the source could not be read (the criterion is then unmet — never assumed). */
 export type MemoryRolloutMeasures = Readonly<Partial<Record<MemoryRolloutMetric, MemoryRolloutMeasure | null>>>;
 const measure = (value: number, sample: number, complete: boolean, of: number | null = null): MemoryRolloutMeasure => Object.freeze({ count: value, sample, of, complete });
-export const memoryRolloutCriterionMet: (criterion: MemoryRolloutCriterion, value: MemoryRolloutMeasure | null | undefined) => boolean = rolloutCriterionMet;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryRolloutCriterionMet: (criterion: MemoryRolloutCriterion, value: MemoryRolloutMeasure | null | undefined) => boolean = rolloutCriterionMet;
 export interface MemoryRolloutCriterionView { readonly criterion: MemoryRolloutCriterion; readonly measure: MemoryRolloutMeasure | null; readonly met: boolean }
 export interface MemoryRolloutPhaseView { readonly phase: number; readonly section: MemoryRolloutSection; readonly set: typeof MEMORY_AUTOMATION_MODES[number]; readonly reached: boolean; readonly met: boolean;
   readonly criteria: readonly MemoryRolloutCriterionView[] }
-/** `phase`: the highest consecutive phase whose switch is set (null: the first is missing); `next`: the first phase not yet set; `liveUnmet`: phases set whose criteria do not hold now. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `phase`: the highest consecutive phase whose switch is set (null: the first is missing); `next`: the first phase not yet set; `liveUnmet`: phases set whose criteria do not hold now. */
 export interface MemoryRolloutView { readonly phase: number | null; readonly next: MemoryRolloutPhaseView | null; readonly phases: readonly MemoryRolloutPhaseView[]; readonly liveUnmet: readonly number[] }
 const reachedIn = (phase: MemoryRolloutRegistry['phases'][number], modes: MemoryRolloutModes) => phase.reached.includes(modes[phase.section]);
 export function memoryRolloutView(modes: MemoryRolloutModes, measures: MemoryRolloutMeasures, registry: MemoryRolloutRegistry = MEMORY_ROLLOUT): MemoryRolloutView {
@@ -72,7 +72,7 @@ export const memoryRolloutGated = (before: MemoryRolloutModes, after: MemoryRoll
 export interface MemoryRolloutPorts {
   contextEvents(scopeId: string, kind: 'memory-context' | 'brain-memory-context', limit: number): Promise<readonly AuditEvent['subject'][]>;
 }
-/** §6.5 retention as the rollout shows it: the provisional registry rows and what the scope's verified entries measure against them. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). §6.5 retention as the rollout shows it: the provisional registry rows and what the scope's verified entries measure against them. */
 export interface MemoryRolloutRetention { readonly revision: string; readonly status: 'provisional' | 'measured';
   readonly rows: readonly { readonly workClassId: string; readonly profileId: string; readonly entryMaxAgeMs: number }[];
   readonly verified: number; readonly stale: number; readonly oldestSupportAgeMs: number | null; readonly complete: boolean }

@@ -70,12 +70,12 @@ export function mcpToolWireName(serverId: string, toolName: string): string | nu
   const tool = toolName.toLowerCase().replace(/[^a-z0-9_]/gu, '_'), wire = `mcp__${serverId.replace(/-/gu, '_')}__${tool}`;
   return tool.length > 0 && /^[a-z][a-z0-9_]{1,63}$/u.test(wire) ? wire : null;
 }
-/** How the owner and the audit name a tool: `mcp:<server>/<tool>`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). How the owner and the audit name a tool: `mcp:<server>/<tool>`. */
 export const mcpToolDisplay = (serverId: string, toolName: string) => `mcp:${serverId}/${toolName}`;
 
 /** `mcp-call`: asks by default, a company-eligible rule may be lowered in full-auto; `mcp-floor`: asks in every mode. */
 export type McpToolCell = 'mcp-call' | 'mcp-floor';
-export type McpToolStatus = 'pinned' | 'drifted' | 'unpinned' | 'missing' | 'unmappable';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpToolStatus = 'pinned' | 'drifted' | 'unpinned' | 'missing' | 'unmappable';
 export interface McpToolVerdict {
   readonly name: string;
   readonly display: string;

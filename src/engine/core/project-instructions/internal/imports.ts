@@ -10,7 +10,7 @@ export function instructionImports(text: string): readonly string[] {
   });
 }
 const instructionDepthSchema = persistedInteger().min(0).max(5);
-export interface InstructionImportFile { readonly path: string; readonly text: string; readonly bytes: number; readonly binding: string; readonly external: boolean }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstructionImportFile { readonly path: string; readonly text: string; readonly bytes: number; readonly binding: string; readonly external: boolean }
 /** Port-driven, deterministic graph expansion. No filesystem or trust authority; the caller masks the completed snapshot. */
 export async function expandInstructionImports(first: InstructionImportFile, limits: Readonly<{ maxDepth: number; maxBytes: number }>,
   read: (from: string, relative: string, remaining: number) => Promise<InstructionImportFile | null>) {

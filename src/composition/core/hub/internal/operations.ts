@@ -8,7 +8,7 @@ import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredHubClient } from './application.js';
 
-/** H9 may bind its first-use/trust/governed network ports here. No caller wire field can supply these trusted services. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). H9 may bind its first-use/trust/governed network ports here. No caller wire field can supply these trusted services. */
 export interface ConfiguredHubPorts {
   readonly witness?: AuthorityWitness;
   readonly resolveTrust?: HubClientDependencies['resolveTrust'];

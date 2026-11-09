@@ -1,12 +1,12 @@
 import { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_TIMED_OUT_CODE, ENVIRONMENT_UNCERTAIN_CODE, RegistryError, environmentRequirementsSchema, identitySchema, type EnvironmentRequirement } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-/** One environment probe kind, registered by an adapter (an open registry: coding kinds in the native-coding adapter, business-process
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One environment probe kind, registered by an adapter (an open registry: coding kinds in the native-coding adapter, business-process
  * kinds such as a connector or a credential reference in their own adapters, Law 10). It answers met/unmet, or `timed-out` when its own bound
  * stopped it before an answer (E1: no answer is not unmet), or uncertain when its end is unproven: it never calls a model,
  * never receives task text, and a credential kind may only ask the existing secret port whether a reference resolves, never read it out. */
 export type EnvironmentProbe = (requirement: EnvironmentRequirement, signal?: AbortSignal) => Promise<'met' | 'unmet' | 'timed-out' | Readonly<{ uncertain: string }>>;
-export type EnvironmentProbes = ReadonlyMap<string, EnvironmentProbe>;
-/** Add-only probe kinds of other packages (Enterprise, ERP, custom), registered through `deckent/extensions` before composeCore seals.
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type EnvironmentProbes = ReadonlyMap<string, EnvironmentProbe>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Add-only probe kinds of other packages (Enterprise, ERP, custom), registered through `deckent/extensions` before composeCore seals.
  * Their kinds are dotted (own namespace); Core adapters' kinds are undotted, so a registration never replaces a Core kind. Grants nothing. */
 export class EnvironmentProbeRegistry {
   private readonly kinds = new Map<string, EnvironmentProbe>(); private sealed = false;

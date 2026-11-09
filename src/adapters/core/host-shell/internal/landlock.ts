@@ -12,12 +12,12 @@ import { BASH_LAUNCH, runShellProcess } from './run.js';
 import { scanGitDirectory } from './git-objects.js';
 import { fsOpsFor, type FsOps } from './fs-ops.js';
 
-/** Rule classes the native helper maps to Landlock rights: `x` read + execute, `r` read, `w` read-write (no device nodes),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Rule classes the native helper maps to Landlock rights: `x` read + execute, `r` read, `w` read-write (no device nodes),
  * `l` list the directory only, `d` a device file (read/write). */
 export type LandlockRuleClass = 'x' | 'r' | 'w' | 'l' | 'd';
-export type LandlockRule = readonly [LandlockRuleClass, string];
-export const LANDLOCK_RULE_BOUNDS = Object.freeze({ maxEntries: 20_000, maxGitEntries: 200_000, maxDepth: 32, maxRules: 8_192, maxBytes: 1_048_576 });
-export type LandlockRuleSet = { readonly ok: true; readonly rules: readonly LandlockRule[] } | { readonly ok: false; readonly reason: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type LandlockRule = readonly [LandlockRuleClass, string];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const LANDLOCK_RULE_BOUNDS = Object.freeze({ maxEntries: 20_000, maxGitEntries: 200_000, maxDepth: 32, maxRules: 8_192, maxBytes: 1_048_576 });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type LandlockRuleSet = { readonly ok: true; readonly rules: readonly LandlockRule[] } | { readonly ok: false; readonly reason: string };
 
 const HELPER = fileURLToPath(new URL('../native/build/Release/shell-sandbox', import.meta.url));
 const SYSTEM_EXEC = ['/usr', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/libx32', '/opt'];
@@ -182,7 +182,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
 /** The Landlock realm (S11): each call builds its rule set, then runs `bash` through the native helper, which applies it with
  * no_new_privs and the seccomp socket filter and execs bash in the same process (the host runner's process-group, timeout,
  * cancellation, output and cleanup contract is unchanged). `HOME` is the scratch area (the real one is unreachable). */
-export function landlockShellRealm(input: ShellSandboxLayout, abi: number): ShellRealm {
+function landlockShellRealm(input: ShellSandboxLayout, abi: number): ShellRealm {
   const refuse = (reason: string): ShellRealmResult => Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null,
     output: `[deckent] sandbox: ${reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0, durationMs: 0, cleanup: 'clean' });
   return Object.freeze({

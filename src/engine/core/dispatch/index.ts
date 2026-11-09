@@ -1,11 +1,11 @@
-export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, DISPATCH_INTERRUPT_CAUSES, dispatchRecordSchema, DispatchError } from './internal/port.js';
+export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError } from './internal/port.js';
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from './internal/port.js';
 export { decideDispatchLaunch, validateLaunchRequest } from './internal/launch.js';
-export type { DispatchLaunchState, DispatchLaunchTransition } from './internal/launch.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchLaunchState, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchLaunchTransition } from './internal/launch.js';
 export { DispatchApplication, dispatchNeedsObservation } from './internal/application.js';
 export { inactivityVerdict, inactivityWatch } from './internal/inactivity.js';
-export type { InactivityVerdict, GatewayActivityCounters } from './internal/inactivity.js';
-export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from './internal/application.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InactivityVerdict, GatewayActivityCounters } from './internal/inactivity.js';
+export type { DispatchAuthorization, DispatchIdentityAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchOutcome } from './internal/application.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from './internal/settle.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from './internal/inventory.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from './internal/inventory.js';
@@ -17,6 +17,6 @@ export type { LostDispatchRelease, LostDispatchWrite, LostDispatchStore, LostDis
 export { LostDispatchApplication } from './internal/fence-application.js';
 export type { LostDispatchObserver } from './internal/fence-application.js';
 export { DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, readDispatchPreparationRecord, removeDispatchLaunchRecord } from './internal/preparation.js';
-export type { DispatchLauncherEvidence, DispatchPreparationContext, DispatchPreparationInstance, DispatchPreparationPark, DispatchPreparationPhase, DispatchPreparationRecord } from './internal/preparation.js';
-export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, EnvironmentProbeRegistry } from './internal/environment.js';
-export type { EnvironmentProbe, EnvironmentProbes } from './internal/environment.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchLauncherEvidence, DispatchPreparationContext, DispatchPreparationInstance, DispatchPreparationPark, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchPreparationPhase, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchPreparationRecord } from './internal/preparation.js';
+export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EnvironmentProbeRegistry } from './internal/environment.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EnvironmentProbe, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EnvironmentProbes } from './internal/environment.js';

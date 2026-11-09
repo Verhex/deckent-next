@@ -14,7 +14,7 @@ const recordSchema = z.strictObject({ schemaVersion: z.literal(1), commit: z.str
   excluded: z.array(z.strictObject({ path: z.string().min(1), rule: z.string().min(1) }).readonly()).readonly(),
   /** L1c: the Run the repository belongs to (the start sweep reads it; a record without it is never removed by the sweep). */
   run: z.strictObject({ scopeId: z.string().min(1), runId: z.string().min(1) }).readonly().optional() }).readonly();
-export type WorkingTreeBase = z.infer<typeof recordSchema> & Readonly<{ options: GitWorkspaceOptions }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkingTreeBase = z.infer<typeof recordSchema> & Readonly<{ options: GitWorkspaceOptions }>;
 const code = (error: unknown) => (error as { code?: unknown } | null)?.code;
 /** F3 (A6-5): a Run base's record, custody first: null when absent, PATCH_UNSAFE unless a private directory of this user, then schema-checked (PATCH_CORRUPT). */
 async function baseRecord(repository: string) {

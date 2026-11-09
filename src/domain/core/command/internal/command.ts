@@ -8,7 +8,7 @@ export const commandEnvelopeSchema = z.strictObject({
   sessionRef: identitySchema.optional(), expectedRevision: counterSchema.optional(),
   idempotencyKeyHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).readonly();
-export type CommandEnvelope = z.infer<typeof commandEnvelopeSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CommandEnvelope = z.infer<typeof commandEnvelopeSchema>;
 /** Exact versioned source projection; callers select the fields, readers cannot extend its MAC scope.
  * Object order is canonical; text stays byte-exact so different filesystem names are never conflated.
  */

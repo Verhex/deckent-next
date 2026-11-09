@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { DispatchError } from './port.js';
 
-export type DispatchPreparationPhase = (typeof DISPATCH_PREPARATION_PHASES)[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchPreparationPhase = (typeof DISPATCH_PREPARATION_PHASES)[number];
 const phaseSchema = z.enum(DISPATCH_PREPARATION_PHASES), instanceSchema = z.strictObject({ id: persistedUuid(), pid: counterSchema, startedAt: counterSchema });
 /** v1 per-Attempt dispatch preparation record: one product-directory file written atomically before workspace acquisition (no ledger table,
  * no migration). Present without `park` = a preparation began in `instance` and was not settled. `park` holds this Attempt at the bound until
@@ -15,7 +15,7 @@ export const dispatchPreparationRecordSchema = z.strictObject({ schemaVersion: z
   lastAbort: z.strictObject({ phase: phaseSchema.nullable(), instanceId: persistedUuid().nullable(), at: counterSchema }).nullable(),
   park: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('own'), commandId: identitySchema, at: counterSchema }),
     z.strictObject({ kind: z.literal('joined'), revision: counterSchema, at: counterSchema })]).nullable() });
-export type DispatchPreparationRecord = z.infer<typeof dispatchPreparationRecordSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchPreparationRecord = z.infer<typeof dispatchPreparationRecordSchema>;
 /** S6R-1 (design §2 F6) v1 launcher evidence: what a claimed settle found before clearing the preparation record — the launcher instance and
  * phase a process left while its worker ran (`record`), or an unreadable/foreign record (`unreadable`). Written once per Attempt in its own
  * product-directory record (no ledger); evidence only: it never decides liveness, fencing or release (the S6R-2 detector does). */
@@ -23,7 +23,7 @@ export const dispatchLauncherEvidenceSchema = z.strictObject({ schemaVersion: z.
   launcher: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('record'), instance: instanceSchema, phase: phaseSchema, at: counterSchema,
     starts: counterSchema, aborts: counterSchema }), z.strictObject({ kind: z.literal('unreadable') })]),
   capturedBy: instanceSchema, capturedAt: counterSchema });
-export type DispatchLauncherEvidence = z.infer<typeof dispatchLauncherEvidenceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchLauncherEvidence = z.infer<typeof dispatchLauncherEvidenceSchema>;
 const recordName = (identity: AttemptIdentity) => createHash('sha256').update(JSON.stringify(attemptIdentitySchema.parse(identity))).digest('hex');
 /** The captured launcher evidence of one Attempt, or null when none was captured. An unparsable or foreign record is refused, never empty. */
 export async function readDispatchLauncherEvidence(records: (name: string) => JsonRecordFile, identity: AttemptIdentity): Promise<DispatchLauncherEvidence | null> {

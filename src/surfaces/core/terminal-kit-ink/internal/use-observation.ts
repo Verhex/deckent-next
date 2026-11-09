@@ -35,7 +35,7 @@ export function useSingleFlightPoll(enabled: boolean, intervalMs: number, task: 
 }
 
 /** One subscription lifecycle; a late batch/failure from a stopped view cannot update its replacement. */
-export function useWorklineFollow<T>(enabled: boolean, follow: ((signal: AbortSignal) => AsyncIterable<T>) | undefined,
+function useWorklineFollow<T>(enabled: boolean, follow: ((signal: AbortSignal) => AsyncIterable<T>) | undefined,
   observe: (batch: T) => void, onFailure: (error: unknown) => void) {
   const handlers = useRef({ observe, onFailure }); handlers.current = { observe, onFailure };
   useEffect(() => {

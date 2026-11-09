@@ -10,7 +10,7 @@ const entry = z.strictObject({ principal: persistedString(z.string().min(1).max(
   deferredAt: counterSchema, planDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
 const document = z.strictObject({ schemaVersion: z.literal(2), entries: z.array(entry).max(limits.maxEntries) });
 const MAX_DEFERRAL_BYTES = limits.maxFileBytes;
-export type OnboardingDeferral = z.infer<typeof entry>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OnboardingDeferral = z.infer<typeof entry>;
 /** Presentation only. Legacy v1 folder-less entries belong to the root folder, never every folder. */
 export function openOnboardingDeferrals(path: string) {
   if (process.platform === 'win32' || !constants.O_NOFOLLOW || !constants.O_NONBLOCK) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');

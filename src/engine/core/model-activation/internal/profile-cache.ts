@@ -2,7 +2,7 @@ import { planProfileChanges } from './profile-changes.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelConnectLayer } from './connect.js';
 
-/** One existing profile's cache migration as the adapter offers it (engine never reads a vendor definition itself). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One existing profile's cache migration as the adapter offers it (engine never reads a vendor definition itself). */
 export type ProfileCacheOffer = Readonly<{ ttl: string; modelId: string; writeRatio: number; readRatio: number; next: Record<string, unknown> }>;
 export type ProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
   writes: readonly Readonly<{ layer: ModelConnectLayer; value: Record<string, unknown> }>[];

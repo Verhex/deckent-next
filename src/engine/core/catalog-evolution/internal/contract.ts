@@ -35,7 +35,7 @@ export const catalogEvolutionWindowSchema = z.strictObject({ schemaVersion: z.li
   position: count, tasks: z.array(entry), events: z.array(event) }).readonly();
 export type CatalogEvolutionWindow = z.infer<typeof catalogEvolutionWindowSchema>;
 export type CatalogEvolutionPass = z.infer<typeof catalogEvolutionPassSchema>;
-export type CatalogEvolutionKeyRecord = CatalogEvolutionPass['keys'][number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CatalogEvolutionKeyRecord = CatalogEvolutionPass['keys'][number];
 /** DB-neutral store of the pass (Core SQLite; Enterprise may store it elsewhere). Rows are scope-filtered and digest-checked by the adapter. */
 export interface CatalogEvolutionStore {
   /** The scope's current task, quota-park and run rows, newest first, at most `limit`; with `upTo`, only rows at or before that position. */

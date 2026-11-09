@@ -4,7 +4,7 @@ import { isPendingApproval, type WorklineApproval, type WorklineApprovalPage } f
 export { APPROVAL_SCAN_MAX_PAGES, isPendingApproval, scanPendingApprovals } from '#surfaces/core/approval-presentation/index.js';
 export type { WorklineApproval, WorklineApprovalPage, ListApprovalPage } from '#surfaces/core/approval-presentation/index.js';
 
-export type ApprovalWatchState = Readonly<{ cursor: string | null; notified: ReadonlySet<string> }>;
+type ApprovalWatchState = Readonly<{ cursor: string | null; notified: ReadonlySet<string> }>;
 export const EMPTY_APPROVAL_WATCH: ApprovalWatchState = Object.freeze({ cursor: null, notified: new Set<string>() });
 
 /**

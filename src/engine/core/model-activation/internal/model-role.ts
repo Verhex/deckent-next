@@ -1,7 +1,7 @@
 import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelInvocationProfileSchema, modelRoleConfigSchema, parseProviderCatalog, roleModelKey, type ModelActivationRecord,
   type ModelReference, type ModelRolePolicy, type RoleModelDecision, type RoleModelRow, type RoleModelTarget } from '#domain/index.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Permission of a role target (S2, owner A2): the scope's activation of a declared catalog reference serving that exact model (provider id =
  * channel id, native id = model id) — the activation model invocation itself enforces. Tier never stands in for it.
  */

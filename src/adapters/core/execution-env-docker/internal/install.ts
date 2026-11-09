@@ -5,7 +5,7 @@ import { DOCKER_APT, type DockerAptData } from './registry.js';
 import { dockerSourcesFile, type DockerInstallPlan } from './plan.js';
 
 export type DockerStepRun = Readonly<{ code: number | null; signal: string | null }>;
-/** This process's terminal input as far as the run needs it: whether it is a terminal and read in flowing mode, and pausing/resuming it. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). This process's terminal input as far as the run needs it: whether it is a terminal and read in flowing mode, and pausing/resuming it. */
 export type DockerTerminalInput = Readonly<{ isTTY?: boolean; readableFlowing: boolean | null; pause: () => unknown; resume: () => unknown }>;
 /** The host effect ports: `spawn` runs one foreground command on the person's terminal (stdio inherited, so sudo asks on it directly);
  * `input` is this process's own terminal input (default `process.stdin`). */

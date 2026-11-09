@@ -39,7 +39,7 @@ const bytes = (text: string) => Buffer.byteLength(text, 'utf8');
 const ATTACHED = '\n\n--- attached file ';
 
 interface Item { readonly name: string; readonly size: number }
-export interface ContextBreakdown {
+interface ContextBreakdown {
   readonly system: number; readonly user: number; readonly assistant: number; readonly tools: number; readonly attachments: number;
   readonly total: number; readonly largest: readonly Item[];
 }

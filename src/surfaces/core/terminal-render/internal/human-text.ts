@@ -8,7 +8,7 @@ import { fillTemplate } from './status-row.js';
 import { span, type Span, type SpanStyle } from './spans.js';
 
 export type HumanTextProjector = (text: string, context: HiddenTextContext, style?: SpanStyle) => Span[];
-export type HumanTextProjection = Readonly<{ spans: readonly Span[]; hiddenCount: number }>;
+type HumanTextProjection = Readonly<{ spans: readonly Span[]; hiddenCount: number }>;
 
 /** Always redact the complete transported field before callers make a display-only cut or parse it. */
 export function humanRecordText(text: string, known?: KnownSecretSnapshot): string {

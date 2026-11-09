@@ -29,7 +29,7 @@ const holdPageSchema = z.strictObject({ entries: z.array(z.strictObject({ invoca
 export type ProviderSpendHoldPage = z.infer<typeof holdPageSchema>;
 const periodViewSchema = z.strictObject({ schemaVersion: z.literal(1), asOfMs: counterSchema,
   state: providerSpendPeriodStateSchema, localTimeZone: persistedString(z.string().min(1).max(128)), usedExactMinorUnits: z.string(), remainingMinorUnits: counterSchema }).readonly();
-export function providerSpendPeriodView(checkpoint: ProviderSpendCheckpoint, asOfMs: number, localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+function providerSpendPeriodView(checkpoint: ProviderSpendCheckpoint, asOfMs: number, localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   const account = advanceProviderSpendPeriod(checkpoint.account, asOfMs);
   if (!account.period) return undefined;
   const used = providerSpendPeriodUsedExact(account);

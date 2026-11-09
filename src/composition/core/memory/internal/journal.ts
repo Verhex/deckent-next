@@ -29,7 +29,7 @@ export const memoryPurgeJournalOf = (layout: ProductLayout, integrity: () => Pro
  * model-invocation store's own purge write under the purge record's `memory`/`purge` decision (no model-invocation grant, no policy read); the
  * engine has already bound each invocation to the entry's sealed evaluation records and the memory evaluator.
  */
-export function memoryEvaluatorInvocations(context: Context): MemoryEvaluatorInvocations {
+function memoryEvaluatorInvocations(context: Context): MemoryEvaluatorInvocations {
   const sqlite = context.config.storage.sqlite;
   return {
     async load(scopeId, invocationId) {

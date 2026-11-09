@@ -89,10 +89,10 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly toolsUnverified?: string;
 }
 /** What a quota wait shows (/do's Brain progress and a chat turn's `work` event, v31): until when, and the next attempt of how many. */
-export type QuotaWaitView = Pick<Extract<BrainPlanProgress, { kind: 'quota-wait' }>, 'attempt' | 'maxAttempts' | 'untilMs'>;
+type QuotaWaitView = Pick<Extract<BrainPlanProgress, { kind: 'quota-wait' }>, 'attempt' | 'maxAttempts' | 'untilMs'>;
 type AdmittedRun = NonNullable<Awaited<ReturnType<WorklineLedgerPorts['inspectRun']>>>;
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
-export type WorklineErrorText = (error: unknown) => string;
+type WorklineErrorText = (error: unknown) => string;
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;

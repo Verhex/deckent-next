@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { modelInvocationProfileSchema, parseModelInvocationProfile } from '#domain/index.js';
 import { ConfigValidationError, registerConfigSection, CONFIG_CONTRACT_SINCE } from '#platform/index.js';
 
-export const invocationProfilesSchema = z.strictObject({
+const invocationProfilesSchema = z.strictObject({
   schemaVersion: z.literal(1),
   profiles: z.array(modelInvocationProfileSchema).readonly(),
 });
@@ -29,7 +29,7 @@ function validate(input: unknown) {
   return parsed.data;
 }
 /** An authored parent is authority: project snapshots can select a subset, not replace its grants or ceilings. */
-export function validateInvocationProfileLayers(global: unknown, project: unknown): void {
+function validateInvocationProfileLayers(global: unknown, project: unknown): void {
   const parent = global === undefined ? undefined : validate(global);
   if (project === undefined) return;
   const child = validate(project);

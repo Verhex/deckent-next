@@ -1,7 +1,7 @@
 import type { TaskReadiness } from '#domain/index.js';
 
-export type ReservationDiagnosticSite = 'application-empty' | 'transaction-wave-mismatch';
-export type ReservationDiagnosticReason = 'no-ready-task' | 'delayed' | 'capacity-exhausted' | 'resource-capacity-exhausted' | 'store-wave-mismatch';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ReservationDiagnosticSite = 'application-empty' | 'transaction-wave-mismatch';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ReservationDiagnosticReason = 'no-ready-task' | 'delayed' | 'capacity-exhausted' | 'resource-capacity-exhausted' | 'store-wave-mismatch';
 export interface ReservationDiagnostic {
   readonly site: ReservationDiagnosticSite;
   readonly reason: ReservationDiagnosticReason;

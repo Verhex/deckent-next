@@ -18,7 +18,7 @@ interface AuthoritySubmission { requester?: VerifiedPrincipal; decider?: Approva
 /** The bound's actor: the decider, with the requester's assurance only when the requester is that same person (else none: never a person raise).
  * `changeKind` (DelegationOptions) is engine input only, never part of the wire change: no raw submission declares `policy-recovery`. */
 const boundActor = (decider: ApprovalActor, requester?: VerifiedPrincipal) => requester?.issuer === decider.issuer && requester.subject === decider.subject ? { ...decider, assurance: requester.assurance } : decider;
-export interface AuthorityTargetHooks {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AuthorityTargetHooks {
   /** Throws when the touched rules exceed the bounding principal's authority on exactly this snapshot. */
   bound(snapshot: Policy, touched: readonly DelegatedRule[]): void;
   /** Records the applied change before any file changes (no record, no change). */
@@ -71,7 +71,7 @@ export class AuthorityDocumentTarget implements EffectTarget {
   async lookup(_ref: EffectTargetRef, idempotencyKey: string) { return this.store.lookupAuthority(idempotencyKey); }
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * I3 — the bound is carried by whoever decided (POLICY-ADMIN P3). Wraps the operation approval broker: when an admission carries the
  * approval (fresh, or the one the claimed intent consumed), the sealed record is loaded and its decider taken. Before the first claim the
  * bound is checked on the current policy and a decider without the authority is refused (`POLICY_DELEGATION_EXCEEDS`, nothing claimed);
@@ -99,7 +99,7 @@ export class DelegationBoundGate implements EffectApprovalGate {
   }
 }
 
-export interface PolicyAdministrationDependencies {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyAdministrationDependencies {
   readonly authority: AuthorityDocumentStore & PolicySource; readonly policy: PolicySource; readonly effects: EffectStore; readonly approvals: ApprovalStore;
   readonly integrity: IntegrityAuthority; readonly sessions: SessionVerifier & SessionAuthority; readonly clock: TrustedClock; readonly requestTtlMs: number;
   readonly audit: PermissionModeAudit;

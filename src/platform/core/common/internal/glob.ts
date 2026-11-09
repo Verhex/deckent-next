@@ -1,4 +1,4 @@
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The one glob grammar of the workspace deny language (Astra 2164/2166): `*` and `?` are the only wildcards; `[`, `]`, `{`, `}` and
  * every other character are literal. The deny matcher's fast path, the sandbox anchor derivation and the product layout admission all
  * take this definition from here — a physical product path that holds a wildcard cannot be named literally in that language, so the

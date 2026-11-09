@@ -11,7 +11,7 @@ const person = z.strictObject({ issuer: persistedString(z.string().min(1).max(25
 /** U9-7 (v1): the worker's model traffic goes through the person's own Sign in with ChatGPT connection via the private host relay, never through a
  * credential in the worker. Nonsecret only: the connection and the person whose plan it is. Instruction discovery is the compiled native profile's
  * own (U9F: no relay-specific hidden set; one resolver, `frozenHiddenPaths`). */
-export const siwcWorkerProfileSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(), owner: person }).readonly();
+const siwcWorkerProfileSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(), owner: person }).readonly();
 
 const taskParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
   nativeSubscription: nativeSubscriptionSchema.optional(), billingAxis: z.literal('local').optional(), siwcWorker: siwcWorkerProfileSchema.optional(),
@@ -26,7 +26,7 @@ const taskParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }
 const hostSandboxTaskParametersSchema = taskParametersSchema.extend({ imageId: taskParametersSchema.shape.imageId.optional() }).readonly();
 
 const DOCKER_TASK_ADAPTER = Object.freeze({ id: 'docker', version: 2 });
-export class DockerTaskProfileError extends CodedError {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class DockerTaskProfileError extends CodedError {
   constructor(override readonly code = 'DOCKER_TASK_PROFILE_INVALID') { super(code); this.name = 'DockerTaskProfileError'; }
 }
 

@@ -5,7 +5,7 @@ export type DockerHostFacts = Readonly<{ platform: 'linux' | 'wsl' | 'other'; os
   desktop: boolean; conflicts: readonly string[]; existingSource: string | null; network: boolean; user: string;
   /** Astra 2672 R1: a read-only probe that did not give a clean answer (missing tool, no exit, timeout, abort, unreadable file); never read as "absent". */
   unknown: readonly string[] }>;
-export type DockerInstallStep = Readonly<{ id: 'directory' | 'key' | 'sources' | 'update' | 'install' | 'group'; argv: readonly string[]; timeoutMs: number }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DockerInstallStep = Readonly<{ id: 'directory' | 'key' | 'sources' | 'update' | 'install' | 'group'; argv: readonly string[]; timeoutMs: number }>;
 export type DockerPrintReason = 'platform' | 'desktop' | 'probe' | 'distribution' | 'conflicts' | 'repository' | 'network';
 export type DockerSource = Readonly<{ distribution: string; codename: string; architecture: string; url: string }>;
 /** `install`: the exact sudo steps the card shows and the executor runs; `print`: why Deckent only prints, with the steps when they are known. */
@@ -22,7 +22,7 @@ export function dockerSource(osRelease: DockerHostFacts['osRelease'], architectu
 /** The deb822 source file Docker documents (one stable suite, signed by the shipped key only). */
 export const dockerSourcesFile = (source: DockerSource, data: DockerAptData = DOCKER_APT) =>
   `Types: deb\nURIs: ${source.url}\nSuites: ${source.codename}\nComponents: stable\nArchitectures: ${source.architecture}\nSigned-By: ${data.keyring}\n`;
-export const dockerSteps = (staging: string, user: string, data: DockerAptData = DOCKER_APT): readonly DockerInstallStep[] => Object.freeze([
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const dockerSteps = (staging: string, user: string, data: DockerAptData = DOCKER_APT): readonly DockerInstallStep[] => Object.freeze([
   { id: 'directory', argv: ['install', '-m', '0755', '-d', data.keyring.slice(0, data.keyring.lastIndexOf('/'))], timeoutMs: data.timeoutsMs.directory },
   { id: 'key', argv: ['install', '-m', '0644', `${staging}/docker.asc`, data.keyring], timeoutMs: data.timeoutsMs.key },
   { id: 'sources', argv: ['install', '-m', '0644', `${staging}/docker.sources`, data.sourcesFile], timeoutMs: data.timeoutsMs.sources },

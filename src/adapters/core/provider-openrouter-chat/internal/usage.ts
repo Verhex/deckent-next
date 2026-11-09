@@ -3,7 +3,7 @@ import type { JsonObject, ModelInvocationNativeResponse } from '#domain/index.js
 import { parseOpenRouterReportedCharge } from '#adapters/core/provider-openrouter-pricing/index.js';
 import { OpenRouterChatError, openRouterChatJsonSchema } from './contract.js';
 
-export interface OpenRouterUsageContext {
+interface OpenRouterUsageContext {
   readonly profileDigest: string; readonly tariffDigest: string; readonly requestBodyDigest: string;
   /** Requested route, not evidence that the response identifies a particular provider region. */
   readonly selectedEndpointTag: string;

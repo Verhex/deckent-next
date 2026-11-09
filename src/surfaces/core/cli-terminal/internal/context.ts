@@ -1,5 +1,5 @@
 import type { ProviderPanelHost } from '#surfaces/core/terminal-provider/index.js';
-export type { ProviderConnectHost, ProviderConnectKindView, ProviderConnectProbeView, TerminalSecretNamesHandler, TerminalSecretChange, TerminalSecretSetHandler, TerminalSecretDeleteHandler, ProviderSecretStepView, ProviderCustodyView } from '#surfaces/core/terminal-provider/index.js';
+export type { ProviderConnectHost, ProviderConnectKindView, ProviderConnectProbeView } from '#surfaces/core/terminal-provider/index.js';
 import type { HubCommandContext } from '#surfaces/core/cli-hub/index.js';
 import type { PermissionMode } from '#domain/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
@@ -28,7 +28,7 @@ export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoa
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   lifecycle: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }> | null>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
-export interface RuntimeServiceReadinessView {
+interface RuntimeServiceReadinessView {
   readonly mode: 'connected' | 'started'; readonly instanceId: string; readonly pid: number | null; readonly logPath: string | null;
   readonly shutdownAvailable: boolean; readonly build: { readonly sourceTreeSha256: string; readonly sourceCommit: string | null } | null;
   /** Restart-apply configuration fingerprint the service started with (undefined from an older service) and its idle stop period (null: never). */
@@ -37,7 +37,7 @@ export interface RuntimeServiceReadinessView {
 /** What the config surface and the read-only management commands both read from a service describe. */
 type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnType<NonNullable<TerminalAdminContext['describeRuntimeService']>>>;
 /** The engine's `ProfileCachePlan` as this unit reads it (no engine model-activation import here). */
-export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
+type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown> }>[]; shared: readonly ModelReference[] }>;
 export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
   detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];

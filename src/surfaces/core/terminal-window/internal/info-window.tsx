@@ -3,7 +3,7 @@ import { projectHumanPickerText, span, useHumanTextSecrets, useRenderGlyphs } fr
 import { Window } from './window.js';
 import { INFO_GLYPHS_ASCII, INFO_GLYPHS_UNICODE, infoChoices, infoWindowLines, projectInfoModel, type InfoWindowLabelsShape, type InfoWindowModel } from './info-model.js';
 
-export type InfoWindowLabels = InfoWindowLabelsShape;
+type InfoWindowLabels = InfoWindowLabelsShape;
 
 /**
  * A legible information window (SW-1): the typed model drawn on the shared `Window` — title, chips, sections of aligned key/value rows with

@@ -4,7 +4,7 @@ import { inspectTaskReadiness, blockingDependencyIds, type TaskProgress } from '
 import { checkedRun, hasLiveWork, parseRun, runSnapshotSchema, RunError, RUN_PARKS, type RunHoldSource, type RunSnapshot } from './contract.js';
 import { heldRunState, readRunHold, runHoldOverlay } from './hold.js';
 export type RunLifecycleTiming = Readonly<{ now: number; timeoutMs: number }>;
-export type TaskDecisionReason = 'evaluation-unknown' | 'evaluation-not-ready';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TaskDecisionReason = 'evaluation-unknown' | 'evaluation-not-ready';
 function deadlineAt(now: number, timeoutMs: number) {
   counterSchema.parse(now); counterSchema.positive().parse(timeoutMs);
   return counterSchema.parse(now + timeoutMs);

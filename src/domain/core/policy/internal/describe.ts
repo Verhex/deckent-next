@@ -1,7 +1,7 @@
 import { policyChangeSchema, type PolicyChange } from './administer.js';
 import { bindingsFileSchema, policyFileSchema, type PolicyBinding, type PolicyGrant } from './schema.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The human-readable, bounded, redacted diff of a `policy.administer@1` change set — what an approval card shows the decider instead of
  * a hex digest (POLICY-HARDEN, owner M3 "full diff"). Pure. One line per change (`+` added, `-` removed with the rule as it is now,
  * `~` replaced: old → new), rules in a fixed notation; free text never comes from the input (every field is a typed identifier or

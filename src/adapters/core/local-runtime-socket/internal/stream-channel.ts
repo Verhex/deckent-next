@@ -5,7 +5,7 @@ import { encodeServiceFrame } from './framing.js';
 
 /** Presentation channel of one streamed request. Emitting never blocks or throws; the final response is separate. */
 export interface RuntimeServiceStreamChannel { emit(delta: ModelInvocationDelta): void }
-export interface ServerStreamChannel extends RuntimeServiceStreamChannel { finish(): void }
+interface ServerStreamChannel extends RuntimeServiceStreamChannel { finish(): void }
 
 /**
  * Coalesces deltas per event-loop turn into ordered delta frames, each at most `maxFrameBytes`. All delta frames of

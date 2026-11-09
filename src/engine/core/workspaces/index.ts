@@ -5,20 +5,20 @@ export type { WorkspaceSource, RunWorkspaceCustody, RunWorkspaceCustodyStore } f
 export { RunWorkspaceAcquisitionApplication } from './internal/acquire.js';
 export type { RunWorkspaceProvider } from './internal/acquire.js';
 export { WorkTargetError, assertWorkTarget } from './internal/work-target.js';
-export type { WorkTargetErrorCode, WorkTargetObservation, WorkTargetContext } from './internal/work-target.js';
-export { createWorkspaceFileIndexCache, rankWorkspacePaths, workspacePathRank } from './internal/file-index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkTargetErrorCode, WorkTargetObservation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkTargetContext } from './internal/work-target.js';
+export { createWorkspaceFileIndexCache, rankWorkspacePaths, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ workspacePathRank } from './internal/file-index.js';
 export type { RuntimeWorkspaceFileHost, WorkspaceFileIndex } from './internal/file-index.js';
 export { enforceWorkerTreeGate, withheldBaseEvent, workerTreeDenyForms, WORKER_TREE_SHOWN_PATHS } from './internal/secret-gate.js';
 export type { WorkerTreeFinding, WorkerTreeGateContext, WorkerTreeLimit, WorkerTreeScan } from './internal/secret-gate.js';
-export { enforceAdmittedWorkerTreeGate, mergeWorkerTreeScans, WorkerTreeScanAdmission, WorkerTreeScanAdmissionTimeout, WORKER_TREE_SCAN_ADMISSION } from './internal/scan-admission.js';
-export type { AdmittedWorkerTreeGateInput, WorkerTreeScanAdmissionSettings, WorkerTreeScanView, WorkerTreeTimeRefusalFile } from './internal/scan-admission.js';
+export { enforceAdmittedWorkerTreeGate, mergeWorkerTreeScans, WorkerTreeScanAdmission, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerTreeScanAdmissionTimeout, WORKER_TREE_SCAN_ADMISSION } from './internal/scan-admission.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AdmittedWorkerTreeGateInput, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerTreeScanAdmissionSettings, WorkerTreeScanView, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerTreeTimeRefusalFile } from './internal/scan-admission.js';
 export { readWorkerTreeExclusions, recordWorkerTreeExclusions, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, workerTreeExclusionSchema } from './internal/exclusion-receipt.js';
 export type { WorkerTreeExclusion, WorkerTreeExclusionRecord } from './internal/exclusion-receipt.js';
-export { DependencyTreePatternCache, classifyDependencyBinary, dependencyNativeRefusal, dependencyTreeLifting, nativeBinaryKind } from './internal/dependency-tree.js';
-export type { DependencyBinarySource, DependencyHit, DependencyTextChecks, DependencyValueSnapshot, DependencyTreeCacheStore, DependencyTreeStatistics } from './internal/dependency-tree.js';
+export { DependencyTreePatternCache, classifyDependencyBinary, dependencyNativeRefusal, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ dependencyTreeLifting, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nativeBinaryKind } from './internal/dependency-tree.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DependencyBinarySource, DependencyHit, DependencyTextChecks, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DependencyValueSnapshot, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DependencyTreeCacheStore, DependencyTreeStatistics } from './internal/dependency-tree.js';
 
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from './internal/git-source-base.js';
-export type { GitSourcePreimage, GitSourceBase } from './internal/git-source-base.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GitSourcePreimage, GitSourceBase } from './internal/git-source-base.js';
 export { GIT_LOCAL_ENV, localGitArgs, checkAttrSet } from './internal/git-local-git.js';
 export { gitWorkspaceOptionsSchema, gitWorkspaceRecordSchema, gitWorkspaceFingerprint, validGitSourceBase } from './internal/git-source-base.js';
 export type { GitWorkspaceOptions } from './internal/git-source-base.js';

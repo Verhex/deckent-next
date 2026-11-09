@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { userBusEnvironment } from '#platform/index.js';
 import { removalRegistry } from './inventory.js';
-export type NativeServiceExec = (args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+type NativeServiceExec = (args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 /** No shell, elevation or inherited credentials; systemctl by absolute path from the registry (K4). Commands and output share the caller's limits. */
 export function nativeServiceExec(bounds: { timeoutMs: number; outputBytes: number }, env: Readonly<Record<string, string | undefined>>): NativeServiceExec {
   const bus = { LC_ALL: 'C', ...userBusEnvironment(env, ['PATH', 'HOME']) };

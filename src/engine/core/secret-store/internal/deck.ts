@@ -8,7 +8,7 @@ export type SecretVault = 'main' | 'project';
 export type DeckDeclaration = SecretVault | 'undeclared';
 /** The parsed `.deck`: name → vault. References only; a value can never be expressed (no aliasing, no other right-hand side). */
 export type DeckDeclarations = ReadonlyMap<string, SecretVault>;
-/** Why a `.deck` was refused as a whole; never its content (a pasted value must not reach an error, a log or an audit record). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Why a `.deck` was refused as a whole; never its content (a pasted value must not reach an error, a log or an audit record). */
 export type DeckInvalidReason = 'too-large' | 'too-many-entries' | 'header' | 'entry' | 'reserved-name' | 'duplicate';
 
 /** `.deck` v1 limits and names, versioned registry data (law 6). */

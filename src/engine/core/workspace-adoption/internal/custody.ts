@@ -7,23 +7,23 @@ import { gitWorkspaceIdentityTarget, gitWorkspaceRecordSchema, validGitSourceBas
 import { workspacePatchSchema, type WorkspacePatch } from '#engine/core/workspace-patch-contract/index.js';
 type SupervisorProfile = DispatchRecord['profile']; type Supervisor = ConstructorParameters<typeof DispatchApplication>[1];
 
-/** EXEC-RELEASE (owner D8 A): why an attempt's stopped container and Git clone stay held. Never thrown: release is a step after the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). EXEC-RELEASE (owner D8 A): why an attempt's stopped container and Git clone stay held. Never thrown: release is a step after the
  * retained patch and never changes an execution, evaluation or preparation outcome. `code` is the underlying typed error code. */
 export type AttemptCustodyHoldReason = 'retention-keep' | 'release-denied' | 'record-unreadable' | 'not-terminal' | 'patch-missing' | 'patch-mismatch' | 'patch-corrupt'
   | 'events-unsealed' | 'container-release-failed' | 'workspace-release-failed'
   /** C2: a task without workspace delivery that has not settled yet / whose Run binding or workspace custody cannot be proven. */
   | 'delivery-pending' | 'delivery-unknown';
 type Removal = 'removed' | 'absent' | 'unknown';
-/** `delivery`: what the ledger proved before release — a verified retained patch, or (C2) a settled task that delivers nothing from its clone. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `delivery`: what the ledger proved before release — a verified retained patch, or (C2) a settled task that delivers nothing from its clone. */
 export type AttemptCustodyOutcome = Readonly<{ schemaVersion: 1; status: 'released'; container: Removal; workspace: Removal; delivery: 'retained-patch' | 'not-required' }
   | { schemaVersion: 1; status: 'held'; reason: AttemptCustodyHoldReason; code: string | null }>;
-export type AttemptCustodyRetention = Readonly<{ release: 'after-retained-patch' | 'keep'; sweepLimit: number }>;
-export type AttemptCustodySweepEntry = Readonly<{ identity: AttemptIdentity; outcome: AttemptCustodyOutcome }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AttemptCustodyRetention = Readonly<{ release: 'after-retained-patch' | 'keep'; sweepLimit: number }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AttemptCustodySweepEntry = Readonly<{ identity: AttemptIdentity; outcome: AttemptCustodyOutcome }>;
 /** `detachedKept`: detached (interrupted) removals left in the shared root, counted only; each is completed solely by its own attempt's
  * authorized release, never by a scope-wide sweep (Sol ER-R2). */
-/** `sourceBases` (C3): crash remnants of source-base probes in the shared root; only owned, exact-footprint, stale ones are removed. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `sourceBases` (C3): crash remnants of source-base probes in the shared root; only owned, exact-footprint, stale ones are removed. */
 export type SourceBaseSweep = Readonly<{ removed: number; kept: number }>;
-export type AttemptCustodySweep = Readonly<{ schemaVersion: 1; scopeId: string; released: number; detachedKept: number; sourceBases: SourceBaseSweep;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AttemptCustodySweep = Readonly<{ schemaVersion: 1; scopeId: string; released: number; detachedKept: number; sourceBases: SourceBaseSweep;
   entries: readonly AttemptCustodySweepEntry[]; error: string | null }>;
 /** Trusted adapter for the recorded clone: exact request + path checks. `releaseAttempt` also completes this attempt's own interrupted
  * detach (verified lease inside it). `holds` (directory or own detached removal present) is a work filter only, never eligibility. */
@@ -34,7 +34,7 @@ export interface AttemptWorkspaceCustody {
   /** C3: remove at most `limit` stale source-base probe directories this adapter provably created; anything else is kept and counted. */
   sweepSourceBases(limit: number): Promise<SourceBaseSweep>;
 }
-export interface AttemptCustodyPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AttemptCustodyPorts {
   /** `loadSealedWorkerEvents`: the attempt's sealed worker event stream verified against its exact identity, receipt digest and event
    * schema; null when none was sealed, a thrown typed error when it does not verify. */
   readonly store: DispatchStore & RunBoundDispatchStore & DispatchInventoryStore & Pick<RunWorkspaceCustodyStore, 'loadRunWorkspaceCustody'>

@@ -352,8 +352,8 @@ export function configChoiceDeclaration(key: string): ConfigChoiceDeclaration | 
   if (['execution.adoption.targets', 'execution.adoption.protectedTargets', 'cancellationRuntime.scopeIds', 'reconciliationRuntime.scopeIds', 'terminal.shell.environment', 'terminal.fetch.allowedHosts'].some(parent => key.startsWith(parent + '.'))) return { kind: 'hidden' };
   return undefined;
 }
-export const CONFIG_ALLOWED_ENTRY_FIELDS = Object.freeze(['terminal.fetch.allowedHosts', 'toolchains.currency.registryEndpoint']);
-export const CONFIG_SECRET_ENTRY_NAMES = Object.freeze(['password', 'token', 'apiKey', 'secret', 'credential']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CONFIG_ALLOWED_ENTRY_FIELDS = Object.freeze(['terminal.fetch.allowedHosts', 'toolchains.currency.registryEndpoint']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CONFIG_SECRET_ENTRY_NAMES = Object.freeze(['password', 'token', 'apiKey', 'secret', 'credential']);
 export function configEntryAllowed(key: string, sensitive = false): boolean {
   return CONFIG_ALLOWED_ENTRY_FIELDS.includes(key) || sensitive && key.split('.').some(part => CONFIG_SECRET_ENTRY_NAMES.some(name => name.toLowerCase() === part.toLowerCase()));
 }

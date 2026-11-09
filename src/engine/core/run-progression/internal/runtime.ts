@@ -4,14 +4,14 @@ import type { ProgressionCursor } from './journal.js';
 import { RunProgressionFailure, type RunProgressionTurn } from './turn.js';
 type Page = Readonly<{ items: readonly ProgressionCursor[]; next: ProgressionCursor | null }>;
 /** A scope the discovery left out because it is not this installation's own (pinned to another company, or not registered). */
-export type SkippedProgressionScope = Readonly<{ scopeId: string; reason: 'foreign' | 'unregistered' }>;
-export interface RunLifecycleRuntimeOperations {
+type SkippedProgressionScope = Readonly<{ scopeId: string; reason: 'foreign' | 'unregistered' }>;
+interface RunLifecycleRuntimeOperations {
   discover(after: ProgressionCursor | null, dueAfter: ProgressionCursor | null, now: number): Promise<{ page: Page; due: Page; skipped?: readonly SkippedProgressionScope[] }>;
   advance(query: ProgressionCursor, signal: AbortSignal): ReturnType<RunProgressionTurn['advance']>;
   expire(query: ProgressionCursor): Promise<void>;
   park?(query: ProgressionCursor, error: unknown): Promise<'parked' | 'changed'>;
 }
-export interface RunLifecycleRuntimeObserver {
+interface RunLifecycleRuntimeObserver {
   onRun?(query: ProgressionCursor, result: Awaited<ReturnType<RunProgressionTurn['advance']>>): void | Promise<void>;
   onError?(query: ProgressionCursor | null, error: unknown): void | Promise<void>;
   /** Typed note, once per scope while the loop lives: the scope is skipped by discovery and never advanced here. */

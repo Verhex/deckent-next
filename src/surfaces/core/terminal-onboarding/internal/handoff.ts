@@ -6,7 +6,7 @@ const DECLINED = Symbol('declined');
 /** alpha.60 B: the opening's setup, prepared after the first frame. `total`: the steps waiting (0: none); `notice`: the line said when no card opens
  * (a deferral, an unreadable observation); `unavailable`: setup could not be read at all (the view then has no setup, as before the frame-first
  * opening); `show` runs the prepared cards and gives the chosen first task and the line said after them. */
-export type OnboardingOpening = Readonly<{ total: number; welcome?: boolean; notice: OpeningNotice | null; unavailable?: true;
+type OnboardingOpening = Readonly<{ total: number; welcome?: boolean; notice: OpeningNotice | null; unavailable?: true;
   show(signal: AbortSignal): Promise<Readonly<{ intent: FirstTaskIntent | null; notice: OpeningNotice | null }>> }>;
 export type OnboardingHandoff = Readonly<{ initial?: FirstTaskIntent | null; opening?: Promise<OnboardingOpening | null>; open(signal: AbortSignal, focus?: OnboardingFocus): Promise<FirstTaskIntent | null>;
   /** Said when a message waits as a draft for a model (catalog text; the raw TERMINAL_CHAT_NOT_CONFIGURED is not shown to the person). */

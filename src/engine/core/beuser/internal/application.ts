@@ -20,7 +20,7 @@ export interface BeuserWalkPorts extends WalkerPorts {
 }
 /** Early stops that keep their transcript and reach the judge; the stop stays the walk's reason whatever the judge does. */
 const RETAINED_STOPS: readonly string[] = ['patience', 'loop', 'observing', 'bound'];
-export interface BeuserWalkResult {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserWalkResult {
   readonly binding: BeuserContext['binding']; readonly verdict: BeuserVerdict | null;
   readonly state: 'completed' | 'unknown' | 'invalid'; readonly reason: string | null;
   /** The judge readback's failure after a retained early stop (its own unknown row); null when it succeeded, did not run or `reason` carries it. */

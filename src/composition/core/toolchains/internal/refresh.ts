@@ -31,7 +31,7 @@ export async function isToolchainRefreshInProgress(projectRoot: string, options:
   return refreshInProgress(await readToolchainRefreshState(projectRoot, options), Date.now());
 }
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
-export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
 export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies {
   /** Test seam: runs after the registry was read and the revision derived, immediately before the compare-and-set write. */
   readonly beforeRegistryWrite?: (attempt: number) => void | Promise<void>;
@@ -112,7 +112,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   const event = await emit(phase, { imageVersion, imageId, appliedProfiles: applied, code: code ?? unverified });
   return Object.freeze({ outcome: phase, event });
 }
-export interface ToolchainRefreshHandle { readonly done: Promise<void> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ToolchainRefreshHandle { readonly done: Promise<void> }
 /**
  * The service's refresh schedule: one start refresh and, when `intervalMs` is positive, one per interval. Never awaited by readiness,
  * single-flight (a trigger that arrives while a refresh runs joins it), and the interval timer is cancelled by `signal`. Failures reach the

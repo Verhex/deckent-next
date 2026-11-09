@@ -2,7 +2,7 @@ import type { Transport } from '@modelcontextprotocol/client';
 import { CodedError, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 
 /** A rejected message may follow an effect: close without forwarding it or replaying the request. */
-export class McpInputLimitError extends CodedError {
+class McpInputLimitError extends CodedError {
   override readonly code = 'MCP_INPUT_LIMIT';
   constructor() { super('MCP_INPUT_LIMIT'); this.name = 'McpInputLimitError'; }
 }

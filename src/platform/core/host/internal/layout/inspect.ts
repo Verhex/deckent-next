@@ -7,4 +7,4 @@ export function inspectProductLayout(layout: ProductLayout) {
   return Object.freeze({ schemaVersion: layout.schemaVersion, layoutRevision: layout.revision,
     root: layout.root, bootstrapConfigPath: layout.bootstrapConfigPath, resources: Object.freeze(resources) });
 }
-export type ProductPathInspection = ReturnType<typeof inspectProductLayout>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProductPathInspection = ReturnType<typeof inspectProductLayout>;

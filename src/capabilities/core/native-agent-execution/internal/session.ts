@@ -24,11 +24,11 @@ export const nativeAgentToolResultSchema = z.strictObject({ schemaVersion: z.lit
   deckentCallId: callId, outcome: agentToolOutcomeSchema,
 }).readonly();
 export type NativeAgentToolResult = z.infer<typeof nativeAgentToolResultSchema>;
-/** Session closure fences new calls. Process termination and external effect settlement are separate facts. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Session closure fences new calls. Process termination and external effect settlement are separate facts. */
 export type ToolSessionClosure = Readonly<{ turnId: string; generation: number; pendingCallIds: readonly string[];
   termination: 'confirmed' | 'unverified'; effects: 'settled' | 'unknown' }>;
-export type ToolSessionCancellation = ToolSessionClosure & Readonly<{ kind: 'cancelled' }>;
-export type ToolSessionRevocation = ToolSessionClosure & Readonly<{ kind: 'revoked' }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolSessionCancellation = ToolSessionClosure & Readonly<{ kind: 'cancelled' }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolSessionRevocation = ToolSessionClosure & Readonly<{ kind: 'revoked' }>;
 /** K1 owns call authorization/execution/settlement. K2/K3 and K4 only transport proposals and these results. */
 export interface ToolSessionPort {
   readonly session: ToolSession;

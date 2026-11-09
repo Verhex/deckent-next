@@ -2,7 +2,7 @@ import { targetQueueKey } from './queue-key.js';
 import { TargetQueueError, targetQueueRecordSchema, assertCandidateEvidence, type TargetQueueRecord, type TargetQueueOutcome, type TargetBinding } from '#domain/index.js';
 import type { TargetQueueApplication, TargetQueueStore } from './target-queue.js';
 import { targetBatchDigest, type TargetBatch, type TargetBatchItem } from './target-batch.js';
-/** `not-applied`: observed under the current generation that the move did not happen (lookup only; nothing written). `refused` with
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `not-applied`: observed under the current generation that the move did not happen (lookup only; nothing written). `refused` with
  * evidence: the journal intent was released as not applied and the receipt names that observation. */
 export type QueueEffectResult = Readonly<{ state: 'settled'; evidenceRefs: readonly string[] } | { state: 'unknown' } | { state: 'not-applied' }
   | { state: 'refused'; evidenceRefs?: readonly string[] }>;
@@ -23,7 +23,7 @@ export interface TargetBatchEffects {
   /** Re-observes under `fence` and, only if the move still provably did not happen, releases the journal intent: `refused` + receipt. */
   release?(record: TargetQueueRecord, fence: string): Promise<QueueEffectResult>;
 }
-export interface TargetBatchConsents {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TargetBatchConsents {
   /** Checks a service-issued, operation-bound capability; this is not a client boolean or a general EffectConfirmation bypass. */
   assert(batch: TargetBatch): Promise<void>;
 }

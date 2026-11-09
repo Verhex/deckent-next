@@ -1,7 +1,7 @@
 import type { MessageKey } from '#platform/index.js';
 
 export const HELP_GROUPS = ['start', 'observe', 'work', 'models', 'approvals', 'setup', 'developer'] as const;
-export type HelpGroup = typeof HELP_GROUPS[number];
+type HelpGroup = typeof HELP_GROUPS[number];
 /**
  * How a command relates to the dispatcher's installation identity preflight (ID-1C relocation stop). Absent: the dispatcher reads the
  * installation identity before the command runs. `owned`: the command loads, heals or recovers the installation and checks its identity
@@ -15,7 +15,7 @@ export type CliInstallationContract = 'owned' | 'independent';
  * Otherwise the dispatcher lists the actions and names the missing argument (`requires`, else `<action>`) and exits 2. A default never
  * mutates state: only an action that reads may be named here.
  */
-export type CliBareBehaviour = 'handler' | { readonly read?: string; readonly requires?: readonly string[] };
+type CliBareBehaviour = 'handler' | { readonly read?: string; readonly requires?: readonly string[] };
 export interface CliCommandSpec { readonly name: string; readonly group: HelpGroup; readonly summary: MessageKey; readonly detail: MessageKey;
   readonly installation?: CliInstallationContract; readonly children?: readonly CliCommandSpec[];
   /** Family synopsis for the main help, CLI syntax only: flags verbatim, `<placeholder>` words localized through `cli.help.placeholder.*`. */

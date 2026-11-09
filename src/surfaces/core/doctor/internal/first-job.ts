@@ -3,7 +3,7 @@ import { messageText, t, type Locale } from '#platform/index.js';
 
 /** Configuration and pool-ledger facts; the work family's own evaluators interpret them. Never run a registry preview here. */
 export type FirstJobFacts = Readonly<{ execution: boolean; registry: boolean; pool: boolean }>;
-export type FirstJobStep = Pick<SetupStage, 'id' | 'phase' | 'title' | 'state'>;
+type FirstJobStep = Pick<SetupStage, 'id' | 'phase' | 'title' | 'state'>;
 export const poolProvisioned = (status: string) => status === 'ready' || status === 'drift';
 
 /** Doctor already observes these facts without a setup verdict (which itself calls doctor). Reuse the registered work evaluators;

@@ -11,7 +11,7 @@ export function agentUseView(preview: AgentUsePreview, locale: Locale): string {
 
 const who = (author: { issuer: string; subject: string; ai: boolean }, locale: Locale) =>
   `${safeCell(`${author.issuer}:${author.subject}`)} (${author.ai ? t('agents.view.author.ai', {}, locale) : t('agents.view.author.person', {}, locale)})`;
-export const skillRefs = (content: AgentContent) => content.skills.map(ref => safeCell(`${ref.skillId}@${ref.revision} ${ref.digest.slice(0, 12)}`)).join(', ');
+const skillRefs = (content: AgentContent) => content.skills.map(ref => safeCell(`${ref.skillId}@${ref.revision} ${ref.digest.slice(0, 12)}`)).join(', ');
 const source = (skill: ReadableSkillDefinition, locale: Locale) => skill.source.kind === 'local' ? t('agents.skill.source.local', {}, locale)
   : t('agents.skill.source.import', { ref: safeCell(skill.source.ref), key: safeCell(skill.signature.status === 'verified' ? skill.signature.keyId : '-') }, locale);
 /** The requirement lines of one agent definition, shared by the card and the inspect view. */

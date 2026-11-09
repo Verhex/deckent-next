@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { approvalRecordSchema, identitySchema } from '#domain/index.js';
 
-/** Runtime v20. Memory confirmation is separate from the sealed once decision and from its effect. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Runtime v20. Memory confirmation is separate from the sealed once decision and from its effect. */
 export const sessionStandingResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ scope: z.literal('session'), status: z.literal('saved') }),
   z.strictObject({ scope: z.literal('session'), status: z.literal('not-saved'), reason: z.enum([
@@ -18,7 +18,7 @@ export function parseApprovalAnswer(session: boolean, value: unknown) {
 export const clearSessionStandingSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, sessionId: identitySchema });
 export const sessionStandingClearanceSchema = clearSessionStandingSchema.extend({ cleared: z.literal(true) }).strict();
 export type ClearSessionStanding = z.infer<typeof clearSessionStandingSchema>;
-export type SessionStandingClearance = z.infer<typeof sessionStandingClearanceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SessionStandingClearance = z.infer<typeof sessionStandingClearanceSchema>;
 export function acceptSessionStandingClearance(input: ClearSessionStanding, value: unknown): SessionStandingClearance {
   const result = sessionStandingClearanceSchema.parse(value);
   if (input.scopeId !== result.scopeId || input.sessionId !== result.sessionId) throw new Error('RUNTIME_SERVICE_CORRELATION');

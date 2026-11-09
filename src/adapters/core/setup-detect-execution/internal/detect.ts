@@ -15,7 +15,7 @@ const runtimeEntry = z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31
   userSocketPrefix: z.string().startsWith('/').optional(), rootless: z.strictObject({ securityOptions: z.array(z.string()).max(8) }).optional(),
   desktop: z.strictObject({ operatingSystem: z.array(z.string()).max(8), cliPrefixes: z.array(z.string().startsWith('/')).max(8) }).optional() })
   .refine(entry => entry.support === 'unsupported' || (entry.versionArgs && entry.endpointArgs && entry.infoArgs));
-export type ExecutionRuntimeEntry = z.infer<typeof runtimeEntry>;
+type ExecutionRuntimeEntry = z.infer<typeof runtimeEntry>;
 /** The versioned execution-environment registry (data, not code): Docker is the only supported entry today; later runtimes are entries here. */
 export const parseExecutionRuntimes = (input: unknown): readonly ExecutionRuntimeEntry[] =>
   z.strictObject({ $comment: z.string().optional(), schemaVersion: z.literal(1), runtimes: z.array(runtimeEntry).min(1).max(limits.runtimes) }).parse(input).runtimes;

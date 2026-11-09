@@ -2,7 +2,7 @@ import { CodedError } from '#platform/core/errors/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { PRIVATE_PERMISSION_MASK } from './tree.js';
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * KG12 F1: the one private-file custody rule. `mask`: no group or other bits (owner decision A28, the default); `exact0600`: key material.
  * The owner is `process.getuid()`; where it is missing nothing is private (owner decision A23: refuse, never skip the check).
  */

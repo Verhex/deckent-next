@@ -9,7 +9,7 @@ import type { NervousProposal } from './detect.js';
 export const nervousStandingApprovalSchema = z.strictObject({ schemaVersion: z.literal(1), decisionRef: identitySchema,
   approvedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema, assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }),
   approvedAtMs: counterSchema, scopeIds: z.array(identitySchema).min(1).max(1024), actions: z.array(recoveryActionSchema).min(1).max(RECOVERY_ACTIONS.length) }).readonly();
-export type NervousStandingApproval = z.infer<typeof nervousStandingApprovalSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NervousStandingApproval = z.infer<typeof nervousStandingApprovalSchema>;
 /** One executor per standing-list action, each an existing application (S6R-3 wires them); a proposal never reaches the raw adapter. */
 export type NervousExecutors = Readonly<Partial<Record<(typeof RECOVERY_ACTIONS)[number], (proposal: NervousProposal, options?: Readonly<{ last: boolean }>) => Promise<unknown>>>>;
 export type NervousDisposition = Extract<AuditEvent['subject'], { kind: 'recovery-detection' }>['disposition'];

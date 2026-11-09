@@ -10,10 +10,10 @@ export const STANDING_GRANTS_LIST = Object.freeze({ ...bounds });
 const markOf = (key: string) => Buffer.from(key, 'utf8').toString('base64url');
 /** A page mark (`after`) is the last row's sort key (principal, then id), so a grant removed between pages never shifts the next page. */
 const markKey = (mark: string) => { const key = Buffer.from(mark, 'base64url').toString('utf8'); return markOf(key) === mark && key.split('\0').length === 3 ? key : null; };
-export const standingGrantsQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const standingGrantsQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
   after: persistedString(z.string().min(1).max(2048)).refine(mark => markKey(mark) !== null, 'STANDING_PAGE_MARK_INVALID').optional(),
   limit: persistedInteger().min(1).max(bounds.pageMax).optional() });
-export interface StandingGrantEntry { readonly id: string; readonly principals: readonly { readonly issuer: string; readonly subject: string }[]; readonly tool: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface StandingGrantEntry { readonly id: string; readonly principals: readonly { readonly issuer: string; readonly subject: string }[]; readonly tool: string;
   readonly kind: 'command' | 'directory' | 'unknown'; readonly pattern: string; readonly scopes: 'all' | readonly string[]; readonly sinceMs: number | null }
 /** `since`: `complete` = every audited change of the scope was read; `partial` = the scan bound was reached; `unavailable` = no readable audit. */
 export interface StandingGrantsPage { readonly schemaVersion: 1; readonly scopeId: string; readonly revision: string; readonly rows: readonly StandingGrantEntry[];

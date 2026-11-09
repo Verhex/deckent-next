@@ -15,13 +15,13 @@ import settings from './model-role-admission.json' with { type: 'json' };
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const modelRoleQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, channelId: identitySchema.optional(), modelId: exactModelIdSchema.optional() }).readonly();
 export type ModelRoleQuery = z.infer<typeof modelRoleQuerySchema>;
-export const modelRoleAssignCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, channelId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelRoleAssignCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, channelId: identitySchema,
   modelId: exactModelIdSchema, tier: z.enum(MODEL_TIERS), roles: z.array(identitySchema).max(limits.rolesPerModel).refine(roles => new Set(roles).size === roles.length).readonly(),
   /** The global layer digest the card showed (null: no global configuration file yet). */
   expect: digestSchema.nullable() }).readonly();
 export type ModelRoleAssignCommand = z.infer<typeof modelRoleAssignCommandSchema>;
 
-/** What the catalog row says of a model: its name, canonical maker and price evidence (never a tier or role). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the catalog row says of a model: its name, canonical maker and price evidence (never a tier or role). */
 export type ModelRoleCatalogFacts = Readonly<{ channelId: string; modelId: string; displayName: string | null; maker: string | null;
   pricing: Readonly<{ kind: string; asOf: string | null; inputPerMTok: string | null; outputPerMTok: string | null }> | null }>;
 export type ModelRoleEntry = Readonly<{ channelId: string; modelId: string; catalog: ModelRoleCatalogFacts | null;
@@ -30,11 +30,11 @@ export type ModelRoleEntry = Readonly<{ channelId: string; modelId: string; cata
   exceptions: readonly string[] }>;
 export type ModelRoleInspection = Readonly<{ schemaVersion: 1; scopeId: string; revision: string; digest: string | null;
   roles: readonly ModelRolePolicy['roles'][number][]; models: readonly ModelRoleEntry[]; pending: number }>;
-export type ModelRoleRow = ModelRoleRegistry['models'][number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelRoleRow = ModelRoleRegistry['models'][number];
 export type ModelRoleAssignResult = Readonly<{ status: 'applied'; row: ModelRoleRow; revision: string; approvalId: string | null }>
   | Readonly<{ status: 'approval-pending'; row: ModelRoleRow; approvalId: string; expiresAt: number; summary: string; commandId: string }>
   | Readonly<{ status: 'unchanged'; row: ModelRoleRow }>;
-export type ModelRoleWriteOutcome = Readonly<{ status: 'applied'; approvalId: string | null }>
+type ModelRoleWriteOutcome = Readonly<{ status: 'applied'; approvalId: string | null }>
   | Readonly<{ status: 'approval-pending'; commandId: string; approval: Readonly<{ approvalId: string; expiresAt: number; summary: string }> }>;
 export interface ModelRoleAdmissionPorts {
   /** The global layer's authored `model_roles` section and that layer's digest, from one read. */

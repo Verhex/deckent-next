@@ -51,7 +51,7 @@ export function runStateWord(run: RunView, locale: Locale): string {
 }
 
 /** A Run waits for someone when it is parked (a decision, an answer, a hold, a quota) — such Runs are listed first. */
-export const runWaits = (run: RunView): boolean => run.state.kind === 'parked';
+const runWaits = (run: RunView): boolean => run.state.kind === 'parked';
 
 /**
  * A typed Run id as the person meant it (git-like, over the same id query as `/runs`): a unique prefix becomes the full id; several candidates
@@ -67,7 +67,7 @@ export async function resolveRunId(context: RunCommandContext, scopeId: string, 
 }
 
 /** The configured default scope of this installation (`terminal.scopeId`, the one `/config` sets); reads only may use it. */
-export async function configuredScope(root: string, options: ConfigLoadOptions): Promise<string | undefined> {
+async function configuredScope(root: string, options: ConfigLoadOptions): Promise<string | undefined> {
   return ((await loadConfig(root, options)).terminal as { scopeId?: string } | undefined)?.scopeId;
 }
 

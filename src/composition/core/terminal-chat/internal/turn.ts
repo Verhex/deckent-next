@@ -11,8 +11,8 @@ import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTer
   OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
-export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-export type TerminalChatPlan = Readonly<{
+type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+type TerminalChatPlan = Readonly<{
   schemaVersion: 1;
   status: 'ready' | 'not-configured' | 'model-not-declared';
   reference: ModelReference | null;
@@ -39,7 +39,7 @@ export interface TerminalChatInvocationPorts {
   invoke(projectRoot: string, command: ModelInvocationCommand, options: ConfigLoadOptions, signal?: AbortSignal): Promise<ModelInvocationResult>;
   cancel(projectRoot: string, command: ModelInvocationCancellationCommand, options: ConfigLoadOptions): Promise<unknown>;
 }
-export interface TerminalChatTurnInput {
+interface TerminalChatTurnInput {
   readonly projectRoot: string;
   readonly scopeId: string;
   readonly messages: readonly TerminalChatMessage[];
@@ -105,7 +105,7 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
     nativeRequest: cliStep ? textOnlyModelInvocationRequest(nativeRequest) : nativeRequest };
   return { chat, command };
 }
-export function terminalChatCancellation(command: ModelInvocationCommand): ModelInvocationCancellationCommand {
+function terminalChatCancellation(command: ModelInvocationCommand): ModelInvocationCancellationCommand {
   return { schemaVersion: 1, commandId: randomUUID(), scopeId: command.scopeId, targetCommandId: command.commandId,
     reference: command.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
 }

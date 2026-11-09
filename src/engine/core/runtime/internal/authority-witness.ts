@@ -4,7 +4,7 @@ import type { RuntimeServiceOperation } from './service-protocol.js';
 /** SEC-1 (owner A48-D5, F32): the runtime-service authority writes. Each needs a service-held witness on every surface (CLI, terminal, MCP, SDK);
  * policy administration, identity distribution and approval decisions already require the same witness through their approval path. */
 export const RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS: readonly RuntimeServiceOperation[] = Object.freeze(['setPermissionMode', 'setSecret', 'deleteSecret', 'switchSecretStore']);
-export const isRuntimeServiceAuthorityWriteOperation = (operation: RuntimeServiceOperation): boolean => RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS.includes(operation);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const isRuntimeServiceAuthorityWriteOperation = (operation: RuntimeServiceOperation): boolean => RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS.includes(operation);
 /** S-05 (owner GO 2026-10-27, law audit K1/K2): creating, changing or unfreezing the API budget and reconciling held spend need the person's
  * witness from every non-MCP caller (CLI, terminal, SDK); the MCP actor stays decided by its policy grant here (no MCP hard floor). */
 export const RUNTIME_SERVICE_PERSON_WRITE_OPERATIONS: readonly RuntimeServiceOperation[] = Object.freeze(['manageProviderSpend']);

@@ -14,7 +14,7 @@ function checkedBytes(receipt: ArtifactReceipt, bytes: Uint8Array) {
 }
 export interface TaskHandoffEvidenceStore { loadTaskHandoffEvaluation(identity: AttemptIdentity): Promise<TaskEvaluation | null> }
 type Store = Partial<TaskHandoffEvidenceStore> & Pick<RunStore, 'loadRun'> & Pick<AttemptStore, 'load'> & RunBoundDispatchStore;
-export interface HandoffDeliveryLimits { readonly maxBytes: number; readonly maxSharedNotes: number; readonly promptBytes: number; readonly maxSourceBytes?: number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface HandoffDeliveryLimits { readonly maxBytes: number; readonly maxSharedNotes: number; readonly promptBytes: number; readonly maxSourceBytes?: number }
 /** Accepted Run attempts only; read-output authority remains independent for every source. */
 export class TaskHandoffApplication {
   constructor(private readonly store: Store, private readonly verifier: PrincipalVerifier,

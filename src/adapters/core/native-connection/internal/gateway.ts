@@ -19,7 +19,7 @@ export function nativeWorkerEventRetentionBytes(): number { return catalog.limit
 export function nativeQuotaPolicy(): QuotaPolicy { return catalog.quotaPolicy; }
 export { isPublicNativeAddress } from './egress.js';
 /** Receives validated worker events (untrusted, worker-reported evidence) for live observation and retention. */
-export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
+type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
 /** One per-attempt capability. No TCP listener, TLS interception, redirects, refresh or host writeback. */
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
   onEvents?: WorkerEventSink; dependencyContext?: Readonly<{ text: string; sha256: string }>; /** D4: the person's report language (ISO 639-1). */ language?: string;

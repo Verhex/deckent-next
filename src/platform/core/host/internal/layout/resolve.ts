@@ -4,7 +4,7 @@ import { posix, win32 } from 'node:path';
 import { hasGlobWildcard, PRODUCT_LAYOUT_REGISTRY as registry } from '#platform/core/common/index.js';
 
 export type ProductResource = keyof typeof registry.resources;
-export interface ProductLayoutInput {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ProductLayoutInput {
   readonly projectRoot: string;
   readonly bootstrapConfigPath?: string;
   readonly root?: string;

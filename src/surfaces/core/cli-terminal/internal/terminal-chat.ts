@@ -4,7 +4,7 @@ import type { ModelReference, PermissionModeChange, PermissionModeCommand, Permi
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { AgentChatMessage, TurnDelta, WorklineMentionAttachment } from '#surfaces/core/terminal/index.js';
 
-export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 export type TerminalChatPlanView = Readonly<{
   schemaVersion: 1;
   status: 'ready' | 'not-configured' | 'model-not-declared';

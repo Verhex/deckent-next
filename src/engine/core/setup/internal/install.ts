@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
-/** Where an approved install comes from (audited; never a command line, path or password). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where an approved install comes from (audited; never a command line, path or password). */
 export type ExecutionInstallSource = Readonly<{ distribution: string; codename: string; fingerprint: string }>;
 export type ExecutionInstallOutcome = Readonly<{ status: 'succeeded' | 'failed' | 'uncertain'; step: number | null; exitCode: number | null; version: string | null }>;
-export type ExecutionInstallDecision = Readonly<{ effect: 'allow' | 'deny' | 'require-approval'; ruleId: string | null; revision: string }>;
-export type ExecutionInstallRequest = Readonly<{ environment: string; scopeId: string; principal: Readonly<{ id: string; issuer: string; subject: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ExecutionInstallDecision = Readonly<{ effect: 'allow' | 'deny' | 'require-approval'; ruleId: string | null; revision: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ExecutionInstallRequest = Readonly<{ environment: string; scopeId: string; principal: Readonly<{ id: string; issuer: string; subject: string;
   assurance: 'os-user' | 'token-verified' | 'workload-verified' }>; source: ExecutionInstallSource }>;
 
 /** `execution-environment` / `install` (policy v13): installation-wide like backup, so only a grant over all scopes allows it; the AI floor

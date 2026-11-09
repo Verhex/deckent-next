@@ -14,7 +14,7 @@ import type { NativeCliWorkerPorts, NativeCliWorkerDriver, NativeCliWorkerToolCo
 import { nativeCliWorkerHandle, retainActiveNativeWorker, retainNativeWorkerResult } from './recorded.js';
 
 /** Only the recorded adapter identity selects native management; its version is checked by its own validator, never by Docker's. */
-export const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) => profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id;
+const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) => profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id;
 export function validateNativeCliWorkerSupervisorProfile(input: unknown): undefined {
   const profile = supervisorProfileSchema.parse(input);
   if (!isNativeCliWorkerSupervisorProfile(profile) || profile.adapterVersion !== NATIVE_CLI_WORKER_ADAPTER.version) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');

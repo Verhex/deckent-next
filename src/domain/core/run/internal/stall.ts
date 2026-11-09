@@ -3,7 +3,7 @@ import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/
 import { checkedRun, RunError, type STALL_CAUSES } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
 import { taskAttemptCeilingReached } from './lost.js';
-export type StallCause = typeof STALL_CAUSES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type StallCause = typeof STALL_CAUSES[number];
 /**
  * R3 (owner D4a/D5a): the one owner of the bounded stall retry, modelled on the quota park/reset pair. A worker stopped for host-observed
  * silence (`inactivity`) or a clean exit without a valid report goes back to `pending` for a NEW Attempt (next generation, new lease) after

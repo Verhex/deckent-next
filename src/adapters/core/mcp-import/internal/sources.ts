@@ -10,8 +10,8 @@ import { MCP_REGISTRY_MAX_BYTES, mcpServerEntrySchema, type McpServerEntry } fro
  * has no Claude Desktop. Nothing here writes or trusts anything: the caller adds each server through the registry's own `add`, untrusted.
  */
 export type McpImportFrom = 'claude-code' | 'claude-desktop' | { readonly file: string };
-export interface McpImportSource { readonly file: string; readonly scope: 'local' | 'project' | 'user'; readonly servers: Readonly<Record<string, unknown>> }
-export interface McpImportSourceProblem { readonly file: string; readonly reason: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpImportSource { readonly file: string; readonly scope: 'local' | 'project' | 'user'; readonly servers: Readonly<Record<string, unknown>> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpImportSourceProblem { readonly file: string; readonly reason: string }
 const DESKTOP_FILE = 'claude_desktop_config.json';
 const WINDOWS_SYSTEM_PROFILES = new Set(['All Users', 'Default', 'Default User', 'Public']);
 

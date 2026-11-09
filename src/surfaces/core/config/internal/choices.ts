@@ -7,7 +7,7 @@ import { configValueWord } from './render.js';
 
 export type ConfigValueChoice = Readonly<{ id: string; label: string; value: unknown; detail?: string; blocked?: string }>;
 /** What cut a source's discovery short: its time limit, or a size bound with entries left unread. */
-export type ConfigChoiceCut = 'time' | 'size';
+type ConfigChoiceCut = 'time' | 'size';
 /** A source's choices; `partial` names the cut when one ended the discovery early (the ones found are still offered). Still an array for list readers. */
 export interface ConfigChoiceList extends ReadonlyArray<ConfigValueChoice> { readonly partial?: ConfigChoiceCut | false }
 /** Read-only, principal-scoped reference discovery. Implementations belong to trusted composition. */

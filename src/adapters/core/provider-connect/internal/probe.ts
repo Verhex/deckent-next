@@ -10,13 +10,13 @@ import { listKindProviderWorkspaces } from './workspaces.js';
  * and a server error; `unexpected` any other answer (a redirect is never followed: the key would travel to another host).
  */
 export const PROVIDER_PROBE_OUTCOMES = ['ok', 'credential-rejected', 'access-denied', 'spend-limit', 'rate-limit', 'limit-reached', 'unreachable', 'unexpected'] as const;
-export type ProviderProbeOutcome = typeof PROVIDER_PROBE_OUTCOMES[number];
-/** The secret lane's `ProviderRejectionKind` (one vocabulary for a refused turn and a refused check). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderProbeOutcome = typeof PROVIDER_PROBE_OUTCOMES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The secret lane's `ProviderRejectionKind` (one vocabulary for a refused turn and a refused check). */
 export type ProviderProbeRejection = ProviderRejectionKind;
-/** `key`: `verified` — the endpoint answered a request that needs the key; `none` — no key was sent; `unverified` — a local server answered,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `key`: `verified` — the endpoint answered a request that needs the key; `none` — no key was sent; `unverified` — a local server answered,
  * but it may not check keys at all. Nothing of the answer body is ever returned. */
 export type ProviderProbeResult = Readonly<{ outcome: ProviderProbeOutcome; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: ProviderDiscoveryCause }>;
-export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 export type ProviderProbeFetch = (url: string, init: { method: 'GET'; headers: Record<string, string>; redirect: 'manual'; signal: AbortSignal }) => Promise<Response>;
 export type ProviderProbeOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal; fetch?: ProviderProbeFetch }>;
 export class ProviderProbeError extends CodedError {

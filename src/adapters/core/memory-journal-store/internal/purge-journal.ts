@@ -9,10 +9,10 @@ import { MemoryJournalError, type MemoryPurgeJournal } from '#engine/index.js';
 import limits from './purge-limits.json' with { type: 'json' };
 
 const SEAL = 'memory-purge-journal:1';
-export const memoryPurgeJournalLimitsSchema = z.strictObject({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryPurgeJournalLimitsSchema = z.strictObject({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), lockTimeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
-export type MemoryPurgeJournalLimits = z.infer<typeof memoryPurgeJournalLimitsSchema>;
-export const MEMORY_PURGE_JOURNAL_LIMITS: MemoryPurgeJournalLimits = memoryPurgeJournalLimitsSchema.parse(limits);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryPurgeJournalLimits = z.infer<typeof memoryPurgeJournalLimitsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MEMORY_PURGE_JOURNAL_LIMITS: MemoryPurgeJournalLimits = memoryPurgeJournalLimitsSchema.parse(limits);
 const lineSchema = z.strictObject({ record: z.unknown().optional(), keyId: persistedString(z.string().min(1)), mac: z.string().regex(/^[a-f0-9]{64}$/u) });
 const unreadable = () => new MemoryJournalError('MEMORY_PURGE_REPLAY_HELD');
 

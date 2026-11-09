@@ -4,7 +4,7 @@ import { configuredInvocationProfiles, authorizeSecretInventoryAll, buildSecretI
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { openProjectSecrets } from './project.js';
 
-export interface SecretInventoryView extends SecretInventory {
+interface SecretInventoryView extends SecretInventory {
   readonly schemaVersion: 1; readonly project: string | null; readonly mainStore: string; readonly all: boolean;
 }
 const credentialRef = (definition: Record<string, unknown>) => {

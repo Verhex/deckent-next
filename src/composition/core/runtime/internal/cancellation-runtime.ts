@@ -9,7 +9,7 @@ export interface ConfiguredCancellationRuntimeObserver {
   /** Errors are mapped through queryFailure before this observer sees them. */
   onError(command: CancellationRecoveryCommand, error: DeckentError): void | Promise<void>;
 }
-export interface ConfiguredCancellationRuntimeInput { readonly signal: AbortSignal; readonly observer: ConfiguredCancellationRuntimeObserver }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfiguredCancellationRuntimeInput { readonly signal: AbortSignal; readonly observer: ConfiguredCancellationRuntimeObserver }
 /** Runs recovery only for trusted configured scopes. It owns no detached timer or transport lifecycle. */
 export async function prepareConfiguredCancellationRuntime(projectRoot: string, observer: ConfiguredCancellationRuntimeObserver,
   options: ConfigLoadOptions = {}) {

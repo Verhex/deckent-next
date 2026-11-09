@@ -10,8 +10,8 @@ import seed from './policy.json' with { type: 'json' };
  */
 const bounds = { maxLostContinuationsPerTask: counterSchema, maxRecoveryActionsPerRun: counterSchema, maxAttemptsPerTask: counterSchema.positive(),
   maxGateIntents: counterSchema.positive(), settledFacts: z.strictObject({ maxCount: counterSchema, maxBytes: counterSchema.positive() }) };
-export const recoveryPolicyRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), ...bounds }).readonly();
-export type RecoveryPolicyRegistry = z.infer<typeof recoveryPolicyRegistrySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const recoveryPolicyRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), ...bounds }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryPolicyRegistry = z.infer<typeof recoveryPolicyRegistrySchema>;
 /** S6R-5 (lead on s6r4 Q1): the protected `runRuntime.recovery.mode` a Run froze at admission. `shadow` seals what a decision would do and changes
  * nothing; `live` may continue. `off` freezes no recovery section at all. The stricter of the frozen and the current mode applies. */
 export const RECOVERY_RUN_MODES = Object.freeze(['shadow', 'live'] as const);

@@ -8,7 +8,7 @@ import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadl
 import { headlessPreflight } from './preflight.js';
 import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
-export type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
+type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
   executable?: string | undefined; configDir?: string | undefined; ownedConfigDir: string; env: Readonly<Record<string, string | undefined>>; now: () => number;
   isolation: HeadlessIsolation; signal?: AbortSignal }>;
 /** The absolute executable the person gave, else the first of the registry's CLI name in the person's PATH (bounded search). S7 (owner 2026-10-31): that

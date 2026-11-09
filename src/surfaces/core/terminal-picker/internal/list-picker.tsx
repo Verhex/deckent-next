@@ -32,7 +32,7 @@ export const LIST_PICKER_EMBEDDED_CHROME_ROWS = 2;
 /** Border and inner padding columns of the hosting window (terminal-window's frame): an embedded list measures its rows in the window's width. */
 const EMBEDDED_FRAME_COLUMNS = 4;
 
-export function listPickerPageSize(terminalRows: number, reserved: number): number {
+function listPickerPageSize(terminalRows: number, reserved: number): number {
   return Math.max(LIST_PICKER_MIN_ROWS, Math.min(ARROW_PICKER_ROWS, terminalRows - reserved - CHROME_ROWS));
 }
 

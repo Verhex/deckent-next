@@ -9,17 +9,17 @@ import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, delegatedUseCon
   type CatalogModel, type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
 export type ModelConnectLayer = 'project' | 'global';
-/** What `models.connect` needs of one registry kind (the adapter's data, read through the port: engine never imports an adapter). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What `models.connect` needs of one registry kind (the adapter's data, read through the port: engine never imports an adapter). */
 export type ModelConnectKind = Readonly<{ id: string; available: boolean; endpoint: Readonly<{ default: string | null; editable: boolean }>;
   keyRequired: boolean; connect: Readonly<{ chatPath: string | null; seed: string | null; priceRequired?: boolean; personOnly?: boolean; preview?: boolean; catalogOnly?: boolean; headless?: boolean; pull?: 'available' | 'pick' }> | null }>;
-/** `deliveryHeadroomBytes`: result-frame bytes a seeded profile keeps unused on its tightest surface, so later governed growth of the same profile
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `deliveryHeadroomBytes`: result-frame bytes a seeded profile keeps unused on its tightest surface, so later governed growth of the same profile
  * (cache TTL, a TLS CA, a longer catalog revision, version digits) still delivers (P1 DELIVERY-FIT 2026-10-09: an exact fit failed after `cache: '5m'`). */
 export type ModelConnectDefaults = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number; maxInFlight: number; maxOutputTokens: number; currency: string;
   deliveryHeadroomBytes: number }>;
 /** A registered ledger catalog row (M4): the channel's provider version, the row's revision and its v3 entry (its `connect` terms price a model
  * the adapter's shipped tables do not list). */
-export type ModelConnectCatalogRow = Readonly<{ providerVersion: number; modelRevision: number; model: CatalogModel }>;
-export type ModelConnectBinding = Readonly<{ status: 'declared'; catalogRevision: string; definition: ModelBindingDefinition;
+type ModelConnectCatalogRow = Readonly<{ providerVersion: number; modelRevision: number; model: CatalogModel }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelConnectBinding = Readonly<{ status: 'declared'; catalogRevision: string; definition: ModelBindingDefinition;
   binding: Readonly<{ encodingVersion: 1; algorithm: 'sha256'; digest: string }> }> | Readonly<{ status: 'not-configured' | 'not-declared' }>;
 /** Every effect of the operation goes through an existing governed owner behind one of these ports (composition binds them). */
 export interface ModelConnectPorts {

@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { z } from 'zod';
 
-export type NpmRegistryErrorCode = 'NPM_REGISTRY_ENDPOINT_INVALID' | 'NPM_REGISTRY_PACKAGE_INVALID' | 'NPM_REGISTRY_UNAVAILABLE'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NpmRegistryErrorCode = 'NPM_REGISTRY_ENDPOINT_INVALID' | 'NPM_REGISTRY_PACKAGE_INVALID' | 'NPM_REGISTRY_UNAVAILABLE'
   | 'NPM_REGISTRY_TIMEOUT' | 'NPM_REGISTRY_STATUS' | 'NPM_REGISTRY_RESPONSE_TOO_LARGE' | 'NPM_REGISTRY_RESPONSE_INVALID';
 /** Bounded failure evidence: never carries response bodies or headers. */
 export class NpmRegistryError extends CodedError {

@@ -14,7 +14,7 @@ const localTime = (ms: number, locale: Locale) => new Intl.DateTimeFormat(locale
 type TaskView = RunView['tasks'][number];
 type InspectData = Pick<Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>, 'run' | 'models'>;
 
-export function phaseText(phase: TaskView['phase'], locale: Locale): string {
+function phaseText(phase: TaskView['phase'], locale: Locale): string {
   const phases: Readonly<Record<TaskView['phase'], () => string>> = {
     skipped: () => t('cli.run.inspect.states.skipped', {}, locale), 'awaiting-decision': () => t('cli.run.inspect.states.awaitingDecision', {}, locale),
     pending: () => t('cli.run.inspect.states.pending', {}, locale), active: () => t('cli.run.inspect.states.active', {}, locale),
@@ -25,7 +25,7 @@ export function phaseText(phase: TaskView['phase'], locale: Locale): string {
 }
 
 /** What an accepted task's acceptance rests on (law 1), one line per distinct evaluator of its criteria; a person's accept says so instead. */
-export function acceptanceEvidenceLines(run: RunView, task: TaskView, locale: Locale): string[] {
+function acceptanceEvidenceLines(run: RunView, task: TaskView, locale: Locale): string[] {
   if (task.phase !== 'accepted') return [];
   if (task.acceptedEvidence === 'model-unverified') return [t('cli.task.decision.acceptedUnverified', {}, locale)];
   const evaluators = [...new Map(run.criteria.filter(criterion => task.acceptanceCriteria.includes(criterion.id))

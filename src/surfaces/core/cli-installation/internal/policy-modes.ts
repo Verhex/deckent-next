@@ -6,7 +6,7 @@ type Person = { readonly issuer: string; readonly subject: string };
 type ModeState = { readonly mode: string; readonly wanted: boolean; readonly before: string; readonly after: string; readonly managed: string; readonly others: readonly string[];
   readonly blockedBy: string | null };
 /** The installer's permission-mode result as the surface words it (the engine's `InstallerPermissionModesResult`; the surface owns no rule). */
-export interface PolicyModesView {
+interface PolicyModesView {
   readonly status: string; readonly reason?: string | null; readonly revision?: string | null; readonly basis?: string | null;
   readonly principal?: Person; readonly person?: Person | null; readonly people?: readonly Person[];
   readonly modes?: readonly ModeState[]; readonly added?: readonly { readonly id: string }[]; readonly removed?: readonly string[]; readonly conflicts?: readonly string[];
@@ -66,7 +66,7 @@ function modeLines(view: PolicyModesView, locale: Locale): string[] {
 /** The result in the person's words: what happened, the exact next command, each mode's effective state, the rules that still allow a mode. */
 /** alpha.56.1: the hand-built refusal repeats the mode the person typed (`--apply [--expect <rev>]` stays, never turned into `--preview`). */
 export const typedMode = (apply: boolean, expect?: string): string => (apply ? `--apply${expect === undefined ? '' : ` --expect ${terminalSafeText(expect)}`}` : '--preview');
-export function policyModesText(view: PolicyModesView, scope: string, modes: string, locale: Locale, typed = '--preview'): string {
+function policyModesText(view: PolicyModesView, scope: string, modes: string, locale: Locale, typed = '--preview'): string {
   const named = view.person ? `${view.person.issuer}/${view.person.subject}` : '';
   const people = (view.people ?? []).map(item => `${item.issuer}/${item.subject}`).join(', ') || '-';
   const blocked = (view.modes ?? []).find(item => item.wanted && item.after !== 'allow');

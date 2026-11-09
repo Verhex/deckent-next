@@ -60,7 +60,7 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
       unit: measurement ? 'tokens' : 'estimated-tokens' } });
   }
 }
-export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
   /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote;
   /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy;
   /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;

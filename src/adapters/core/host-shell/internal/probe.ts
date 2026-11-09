@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export type ShellCapabilityStatus = 'available' | 'unavailable' | 'unknown' | 'unsupported';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ShellCapabilityStatus = 'available' | 'unavailable' | 'unknown' | 'unsupported';
 /** v2 (BWRAP-SELECT, owner S7 2026-09-29): `bubblewrap` is the selected launcher and its own sandbox run, no longer a PATH scan (v1). */
 export const SHELL_CAPABILITIES_VERSION = 2;
 /** The bubblewrap launcher the probe selected (the adapter's rules: `shell-sandbox-bwrap` launcher selection). `path` is what runs: a
@@ -40,7 +40,7 @@ export interface ShellCapabilities {
 /** An observation without a launcher (not probed, failed, timed out, unsupported). */
 export const bubblewrapObservation = (status: BubblewrapCapability['status'], detail: string | null = null,
   rejected: BubblewrapCapability['rejected'] = []): BubblewrapCapability => Object.freeze({ status, launcher: null, rejected, restriction: null, detail });
-/** Probe seam: inputs are observations, not assertions that a sandbox runner is implemented. `bubblewrap` selects and runs the launcher
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Probe seam: inputs are observations, not assertions that a sandbox runner is implemented. `bubblewrap` selects and runs the launcher
  * (the bubblewrap adapter composes it: this unit cannot know its rules); `kernel` is the native helper. */
 export interface ShellProbeEnvironment {
   readonly platform: string;

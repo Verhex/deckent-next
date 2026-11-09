@@ -16,8 +16,6 @@ import type { McpCommandHandler } from './mcp.js';
 import { lazyFunction } from '#surfaces/core/cli-kit/index.js';
 /** doctor, paths and policy (COLDSTART: loaded on the first call; they reach the engine barrel). */
 export const runKernelCommand = lazyFunction(() => import('#surfaces/core/cli-observe/index.js'), 'runKernelCommand');
-
-export type { RuntimeServiceReadinessView } from '#surfaces/core/cli-terminal/index.js';
 export type { InstallationBindingReport, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 

@@ -11,9 +11,9 @@ import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recov
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
-export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools' | 'data';
+type DoctorGroup = 'setup' | 'security' | 'work' | 'tools' | 'data';
 /** A row's verdict as a word, never colour alone: tamam / uyarı / hata / sınanmadı. */
-export type DoctorCheckState = 'ok' | 'warning' | 'error' | 'untested';
+type DoctorCheckState = 'ok' | 'warning' | 'error' | 'untested';
 /** One row: what was measured in plain words, and for a warning or error the one next command (or step) that resolves it. `fix` names a
  * registry fix the interactive doctor may offer on a terminal; it is offered only when its port is wired and it is not a hard-floor item. */
 export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: DoctorCheckState; text: string; next?: string; fix?: string }>;
@@ -67,9 +67,9 @@ export interface DoctorCheckFacts {
   /** BeUser S-11: where data can leave this machine, read from configuration (hosts and names only, never a path, key or value). */
   readonly egress?: DoctorEgress | null;
 }
-export type DoctorEgress = Readonly<{ models: readonly Readonly<{ name: string; host: string | null; local: boolean }>[]; fetch: Readonly<{ mode: string; hosts: readonly string[] }>;
+type DoctorEgress = Readonly<{ models: readonly Readonly<{ name: string; host: string | null; local: boolean }>[]; fetch: Readonly<{ mode: string; hosts: readonly string[] }>;
   toolchainCheck: string | null; mcp: readonly Readonly<{ name: string; host: string | null; realm: string | null }>[] | null }>;
-export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
+type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 

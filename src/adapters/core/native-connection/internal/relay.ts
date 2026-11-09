@@ -18,7 +18,7 @@ export function secretScrubber(values: readonly string[]) {
 export type NativeRelayUpstream = (input: Readonly<{ method: string; url: string; headers: Readonly<Record<string, string>>; body: Buffer; signal: AbortSignal }>) =>
   Promise<Readonly<{ status: number; headers: Readonly<Record<string, string>>; body: AsyncIterable<Buffer> }>>;
 /** Fresh TLS to the registry origin only (certificate + host name validated by Node), resolved to public addresses only; no redirect is followed. */
-export const httpsRelayUpstream: NativeRelayUpstream = input => new Promise((resolve, reject) => {
+const httpsRelayUpstream: NativeRelayUpstream = input => new Promise((resolve, reject) => {
   const url = new URL(input.url);
   const call = httpsRequest({ host: url.hostname, servername: url.hostname, port: 443, path: url.pathname + url.search, method: input.method, headers: input.headers, signal: input.signal,
     lookup: (host, options, done) => lookup(host, { ...options, all: true }, (error, addresses) => {
@@ -33,8 +33,8 @@ export const httpsRelayUpstream: NativeRelayUpstream = input => new Promise((res
 const DROPPED = new Set(['host', 'authorization', 'cookie', 'connection', 'keep-alive', 'proxy-authorization', 'proxy-connection', 'te', 'trailer', 'transfer-encoding',
   'upgrade', 'content-length', 'accept-encoding', 'x-deckent-sequence']);
 const RESPONSE_DROPPED = new Set(['set-cookie', 'connection', 'keep-alive', 'transfer-encoding', 'content-length', 'content-encoding']);
-export type NativeRelayCredential = Readonly<{ accessToken: string; accountId: string | null }>;
-export type NativeRelayStatistics = { relayed: number; refused: number };
+type NativeRelayCredential = Readonly<{ accessToken: string; accountId: string | null }>;
+type NativeRelayStatistics = { relayed: number; refused: number };
 
 /**
  * Owner 2026-11-08 (alpha.64 card): one host relay per Attempt gateway. Only the registry routes are forwarded, only with this gateway's capability

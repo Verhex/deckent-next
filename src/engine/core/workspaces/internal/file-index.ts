@@ -10,7 +10,7 @@ function subsequence(query: string, text: string): boolean {
   for (const char of query) { at = text.indexOf(char, at); if (at < 0) return false; at += char.length; }
   return true;
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Rank of one path for a query (lower is better; null: no match). Case-insensitive. A file-name match beats a path match; within
  * each, exact (with or without extension) > prefix > substring > subsequence. A query with `/` is matched against the path (segments), never the name alone.
  */

@@ -6,7 +6,7 @@ export type ConfigMonitorInspection = Awaited<ReturnType<ConfigApplication['insp
 type Field = ConfigMonitorInspection['fields'][number];
 type Section = 'general' | 'work' | 'service' | 'security' | 'storage' | 'interface';
 const SECTIONS: readonly Section[] = ['general', 'work', 'service', 'security', 'storage', 'interface'];
-export interface ConfigViewOptions { readonly all: boolean; readonly warn: string }
+interface ConfigViewOptions { readonly all: boolean; readonly warn: string }
 
 /** Reading order and short human name of every top-level config field (PB-MON-UX); a field added later sorts last under its own key. */
 function fieldWords(locale: Locale): Readonly<Record<string, readonly [Section, string]>> {

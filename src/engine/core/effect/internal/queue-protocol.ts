@@ -15,8 +15,8 @@ const queueForwardExecuteSchema = queueQuerySchema.unwrap().extend({ publishDige
 export const queueExecuteSchema = z.union([queueForwardExecuteSchema,
   queueQuerySchema.unwrap().extend({ rollbackDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()]);
 export const queueRollbackSchema = queueQuerySchema.unwrap().extend({ sourceCommandId: identitySchema }).strict().readonly();
-export type QueueRollback = z.infer<typeof queueRollbackSchema>;
-export type QueueEnqueue = z.infer<typeof queueEnqueueSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type QueueRollback = z.infer<typeof queueRollbackSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type QueueEnqueue = z.infer<typeof queueEnqueueSchema>;
 export type QueueQuery = z.infer<typeof queueQuerySchema>;
 export type QueueList = z.infer<typeof queueListSchema>;
 export type QueueChallenge = z.infer<typeof queueChallengeSchema>;

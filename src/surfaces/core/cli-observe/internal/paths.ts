@@ -6,7 +6,7 @@ import type { KernelCall } from './kernel.js';
 import registry from './paths.json' with { type: 'json' };
 
 /** The host operation `paths` uses beyond the layout: the real socket, MCP definition files and secret-store files (composition). */
-export interface PathsCommandContext { readonly inspectAdminPaths?: (root: string, options: ConfigLoadOptions) => Promise<AdminPathsView>;
+interface PathsCommandContext { readonly inspectAdminPaths?: (root: string, options: ConfigLoadOptions) => Promise<AdminPathsView>;
   readonly stdout?: unknown; readonly env?: NodeJS.ProcessEnv }
 type Inspection = Awaited<ReturnType<typeof inspectProductPaths>>;
 type Row = readonly [description: string, path: string, state: string];

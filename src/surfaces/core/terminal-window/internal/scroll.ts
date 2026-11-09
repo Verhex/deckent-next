@@ -1,8 +1,8 @@
 /** Pure scroll model of a window body: which rows show, and how a key moves the first visible row. */
-export type ScrollKey = 'up' | 'down' | 'pageUp' | 'pageDown' | 'home' | 'end';
+type ScrollKey = 'up' | 'down' | 'pageUp' | 'pageDown' | 'home' | 'end';
 
 /** The largest first row that still fills the view; never negative. */
-export function maxScrollOffset(total: number, visible: number): number {
+function maxScrollOffset(total: number, visible: number): number {
   return Math.max(0, total - Math.max(1, visible));
 }
 

@@ -7,7 +7,7 @@ import { familyScope, readScopeRuns, runHumanIo, runStateWord, runTitle, scopeLi
 import REGISTRY from './run.json' with { type: 'json' };
 
 /** A table of Runs as a person reads it: short id (git-like), state in the `/runs` words, accepted tasks, title. Cells are made safe by the table. */
-export function renderRunTable(runs: readonly RunView[], context: RunCommandContext, locale: Locale): string {
+function renderRunTable(runs: readonly RunView[], context: RunCommandContext, locale: Locale): string {
   const ids = runs.map(run => run.runId);
   return renderCliTable([{ header: t('cli.run.list.col.id', {}, locale), shrink: false }, { header: t('cli.run.list.col.state', {}, locale) },
     { header: t('cli.run.list.col.tasks', {}, locale), align: 'right', shrink: false }, { header: t('cli.run.list.col.title', {}, locale) }],

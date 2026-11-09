@@ -8,7 +8,7 @@ import { BACKUP_SCHEDULE_SECRET } from './schedule.js';
 
 /** Doctor's recovery-file view: files an interrupted restore left behind (S1 D4: stage, pending hold, decrypted key not yet in place) and
  * the project's installation directory mode (S1 D2: a mode open to group/other is shown, never changed). */
-export interface RecoveryFilesView { readonly leftovers: readonly string[]; readonly installationDirectory: { readonly path: string; readonly mode: string } | null }
+interface RecoveryFilesView { readonly leftovers: readonly string[]; readonly installationDirectory: { readonly path: string; readonly mode: string } | null }
 /** Read-only; the configuration is read without resolving any secret reference. */
 export async function inspectConfiguredRecoveryFiles(projectRoot: string, options: ConfigLoadOptions = {}): Promise<RecoveryFilesView> {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {} });

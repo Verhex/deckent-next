@@ -3,9 +3,9 @@ import { boundLine, sliceUtf8, splitLines } from './bounded.js';
 // read_file views ported from the legacy terminal (7111): outline for big files, numbered line ranges with long-line elision,
 // grep-style search. The leading meta line says what was returned, what was not and where to resume.
 
-export type ReadFileMode = 'content' | 'outline' | 'search';
-export interface ReadFileBudget { readonly maxTotalBytes: number; readonly maxBytesPerLine: number }
-export interface ReadFileViewRequest {
+type ReadFileMode = 'content' | 'outline' | 'search';
+interface ReadFileBudget { readonly maxTotalBytes: number; readonly maxBytesPerLine: number }
+interface ReadFileViewRequest {
   readonly mode: ReadFileMode; readonly startLine: number; readonly endLine: number | null; readonly lineByteOffset: number;
   readonly maxBytesPerLine: number | undefined; readonly outlineOffset: number; readonly pattern: string | null;
   readonly literal: boolean; readonly ignoreCase: boolean; readonly context: number; readonly maxMatches: number;
@@ -42,7 +42,7 @@ export function resolveReadFileViewRequest(args: Record<string, unknown>): ReadF
 }
 
 /** Numbered, byte-bounded range; the first line that does not fit ends the slice and becomes `nextStartLine`. */
-export function renderRangeView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget): string {
+function renderRangeView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget): string {
   const lines = splitLines(text), totalLines = lines.length;
   const start = Math.min(req.startLine - 1, totalLines), end = req.endLine === null ? totalLines : Math.min(req.endLine, totalLines);
   const bodyBudget = Math.max(0, budget.maxTotalBytes - META_RESERVE_BYTES);
@@ -67,7 +67,7 @@ export function renderRangeView(text: string, req: ReadFileViewRequest, budget: 
 }
 
 /** Markdown ATX headings outside fenced code blocks. */
-export function extractMarkdownHeadings(lines: readonly string[]): { line: number; level: number; title: string }[] {
+function extractMarkdownHeadings(lines: readonly string[]): { line: number; level: number; title: string }[] {
   const headings: { line: number; level: number; title: string }[] = [];
   let fence: string | null = null;
   for (let i = 0; i < lines.length; i++) {
@@ -81,7 +81,7 @@ export function extractMarkdownHeadings(lines: readonly string[]): { line: numbe
 }
 
 /** Headings with line numbers plus size and longest-line statistics: the first view to take of a big file. */
-export function renderOutlineView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget): string {
+function renderOutlineView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget): string {
   const lines = splitLines(text), headings = extractMarkdownHeadings(lines);
   let longest: { line: number; bytes: number } | null = null, over = 0;
   for (let i = 0; i < lines.length; i++) {
@@ -117,7 +117,7 @@ export const metaPattern = (pattern: string) => JSON.stringify(sliceUtf8(Buffer.
  * grep -n style search with bounded context; `nextStartLine` resumes right after the last shown match. The matching line indexes
  * come from the cancellable regex runner, never from a regular expression evaluated on this thread.
  */
-export function renderSearchView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget, matchingLines: ReadonlySet<number> | null): string {
+function renderSearchView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget, matchingLines: ReadonlySet<number> | null): string {
   const lines = splitLines(text), totalLines = lines.length, patternText = req.pattern ?? '';
   if (matchingLines === null) return `[deckent] read_file: mode=search pattern=${metaPattern(patternText)} error=invalid-pattern totalLines=${totalLines} matches=0 shown=0 hasMore=false`;
   const bodyBudget = Math.max(0, budget.maxTotalBytes - META_RESERVE_BYTES), body: string[] = [];

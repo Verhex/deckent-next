@@ -32,7 +32,7 @@ export interface SecretDocumentCodec {
   /** Document text → file text; called under the store's write lock after the document passed its bound. */
   encode(documentText: string): Promise<string>;
 }
-export interface PrivateSecretDocumentSpec {
+interface PrivateSecretDocumentSpec {
   readonly id: string;
   readonly fileName: string;
   readonly encryptedAtRest?: true;

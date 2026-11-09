@@ -1,8 +1,8 @@
 import { automationMarker, envValue, getConfigFieldDefault } from '#platform/index.js';
 
 /** How a CLI call talks to its caller: typed JSON, an interactive person on a terminal, or plain lines (pipe, CI, agent, dumb terminal). */
-export type CliMode = 'json' | 'interactive' | 'plain';
-export type CliModeReason = 'json' | 'agent' | 'ci' | 'dumb' | 'pipe' | 'tty';
+type CliMode = 'json' | 'interactive' | 'plain';
+type CliModeReason = 'json' | 'agent' | 'ci' | 'dumb' | 'pipe' | 'tty';
 type Stream = { readonly isTTY?: boolean } | undefined;
 
 /** INIT-D7: the config registry's default list of exact agent-marker variable names (`cli.agentEnvironment`, no prefix match); the host

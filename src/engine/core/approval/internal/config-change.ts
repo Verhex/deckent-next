@@ -6,7 +6,7 @@ import type { ApprovalStore } from './store.js';
 import { admitDecided, expireDue, sealApproval, verifyApproval } from './integrity.js';
 import { minimumApprovalAssurance } from './assurance.js';
 
-export type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
+type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
 /**
  * The action a config-change approval authorizes (T3 L2): this scope, this requester and exactly this command — layer, key, set/unset, the
  * exact value (its digest) and the layer digest it was previewed against. Display copies and the asking rule are not bound: they describe.
@@ -21,13 +21,13 @@ export function configChangeApprovalFacts(policy: unknown, scopeId: string): App
   return Object.freeze({ risk, reversibility: null, onExpiry: 'nothing-runs' as const, requiredAssurance: minimumApprovalAssurance(policy, scopeId, 'config-change', risk) });
 }
 
-export interface ConfigChangeApprovalRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfigChangeApprovalRequest {
   readonly scopeId: string; readonly requester: ApprovalActor; readonly subject: ConfigChangeSubject;
   readonly policy: unknown; readonly policyRevision: string;
   /** The card's bounded, human-readable sentence (the producer's words in the requester's language). */
   readonly summary: string;
 }
-export type ConfigChangeApprovalAdmission =
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConfigChangeApprovalAdmission =
   | { readonly pending: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } }
   | { readonly approved: { readonly approvalId: string; readonly actionDigest: string } };
 

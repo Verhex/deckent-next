@@ -1,5 +1,5 @@
 import type { BrainPlanCommand } from '#domain/index.js';
-import { verifiedPrincipal, RunIntentApplication, RunPolicyAuthorization, isRunIntentResult, type RunIntentRecord } from '#engine/index.js';
+import { verifiedPrincipal, RunIntentApplication, RunPolicyAuthorization, type RunIntentRecord } from '#engine/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, openSqliteRunProposalStore } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -20,4 +20,3 @@ export const preflightConfiguredRunIntent = (root: string, command: BrainPlanCom
   withIntentOwner(root, command, options, owner => owner.preflight(command));
 export const transitionConfiguredRunIntent = (root: string, intent: RunIntentRecord, action: 'release' | 'cancel' | 'start' | 'fact', commandId: string, options: ConfigLoadOptions) =>
   withIntentOwner(root, intent.command, options, owner => owner.transition({ command: intent.command, expectedRevision: intent.revision, action, commandId }));
-export { isRunIntentResult };

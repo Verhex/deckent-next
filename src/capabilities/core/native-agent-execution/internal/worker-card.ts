@@ -6,7 +6,7 @@ import { ApprovalError, approvalSubject, approvalSummarySchema, isAiPrincipal, a
 /** Producer-owned metadata inside the sealed request. No arguments, login material or caller-supplied approval authority. */
 const workerCardSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema,
   tool: z.string().min(1), resource: z.string(), resourceDigest: hexDigest, argsDigest: hexDigest, turnId: z.string().min(1) });
-export type WorkerToolCard = z.infer<typeof workerCardSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerToolCard = z.infer<typeof workerCardSchema>;
 export const workerToolCardSummary = (input: Omit<WorkerToolCard, 'schemaVersion' | 'kind' | 'resourceDigest'> & { resourceDigest?: string }): string => {
   const card = workerCardSchema.parse({ schemaVersion: 1, kind: 'worker-tool-call', ...input, resourceDigest: input.resourceDigest ?? sha256(input.resource) });
   // A6-2 (owner 2026-11-08, alpha.63.2): a summary over the contract bound was cut when stored, and a cut card no longer parsed, so its

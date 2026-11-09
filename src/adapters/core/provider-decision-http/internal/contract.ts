@@ -4,7 +4,7 @@ import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, d
 import { NativeJsonHttpError, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits, type NativeJsonHttpDefinition, type NativeJsonHttpLimits } from '#adapters/core/provider-http-json/index.js';
 import protocolJson from '../assets/protocol.json' with { type: 'json' };
 /** Explicit shape so published declarations never reference the JSON asset module (self-contained .d.ts). */
-export type DecisionHttpProtocolData = Readonly<{ schemaVersion: number; id: string; version: number; protocol: Readonly<{ family: string; version: string }>;
+type DecisionHttpProtocolData = Readonly<{ schemaVersion: number; id: string; version: number; protocol: Readonly<{ family: string; version: string }>;
   meterId: string; selectionInstructions: string; sufficiencyInstructions: string; abstentions: Readonly<Record<string, string>> }>;
 const protocol: DecisionHttpProtocolData = protocolJson;
 
@@ -13,12 +13,12 @@ export const decisionHttpWireObjectSchema = createImmutableJsonObjectSchema(MODE
 export class DecisionHttpError extends CodedError {
   constructor(override readonly code: string, readonly status?: number) { super(code); this.name = 'DecisionHttpError'; }
 }
-export const decisionHttpTariffSchema = z.strictObject({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
+const decisionHttpTariffSchema = z.strictObject({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
   inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) });
 export type DecisionHttpDefinition = NativeJsonHttpDefinition & Readonly<{ tariff: z.infer<typeof decisionHttpTariffSchema> }>;
 export type DecisionHttpLimits = NativeJsonHttpLimits;
 const definitionSchema = z.strictObject({ endpoint: z.string(), authentication: z.unknown().optional(), tls: z.unknown().optional(), tariff: decisionHttpTariffSchema });
-export const decisionHttpRequestSchema = z.strictObject({ schemaVersion: z.literal(1), case: decisionCaseSchema });
+const decisionHttpRequestSchema = z.strictObject({ schemaVersion: z.literal(1), case: decisionCaseSchema });
 
 export function parseDecisionHttpDefinition(input: unknown): DecisionHttpDefinition {
   const copied = decisionHttpWireObjectSchema.safeParse(input), parsed = copied.success && definitionSchema.safeParse(copied.data);

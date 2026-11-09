@@ -61,7 +61,7 @@ export async function loadConfiguredInstallationIdentity(projectRoot: string, op
   return readBootstrapIdentity(async () => (await configuredInstallationProjectContext(config, options)).identity);
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
-export type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
+type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
   readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean };
 export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<InstallationBindingInspection | null> {
   let config;

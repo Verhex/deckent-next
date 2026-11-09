@@ -20,7 +20,7 @@ export interface BackupResult {
   readonly globalConfig: { readonly path: string; readonly added: readonly string[]; readonly kept: readonly string[] } | null;
   readonly preserved: readonly string[];
 }
-export interface BackupDecision { readonly policyRevision: string; readonly effect: 'allow' | 'deny' | 'require-approval'; readonly ruleId: string | null }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BackupDecision { readonly policyRevision: string; readonly effect: 'allow' | 'deny' | 'require-approval'; readonly ruleId: string | null }
 /** One installation-wide recovery authority, verified by the composition before use; never accepted from a request body. */
 export interface BackupAuthority { readonly principal: VerifiedPrincipal; readonly installationId: string; readonly integrity: IntegrityAuthority }
 export interface BackupStoragePort {

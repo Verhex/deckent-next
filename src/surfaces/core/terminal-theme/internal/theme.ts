@@ -6,11 +6,11 @@ import { resolveWorklinePalette, type ColorTier, type WorklineInkPalette } from 
 export const TERMINAL_THEME_SETTINGS = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi', 'dark-high-contrast',
   'light-high-contrast', 'ansi'] as const;
 export type TerminalThemeSetting = typeof TERMINAL_THEME_SETTINGS[number];
-export type TerminalBackground = 'dark' | 'light' | 'unknown';
-export interface TerminalThemeChoice { readonly theme: PaletteTheme; readonly tier: ColorTier; readonly background: TerminalBackground }
+type TerminalBackground = 'dark' | 'light' | 'unknown';
+interface TerminalThemeChoice { readonly theme: PaletteTheme; readonly tier: ColorTier; readonly background: TerminalBackground }
 
 /** `COLORFGBG` (rxvt/Konsole/iTerm convention `fg;bg`): background index 0–6 or 8 is dark, 7 or 9–15 light; anything else is unknown. */
-export function terminalBackground(colorfgbg: string | undefined): TerminalBackground {
+function terminalBackground(colorfgbg: string | undefined): TerminalBackground {
   const value = colorfgbg?.split(';').at(-1)?.trim() ?? '';
   if (!/^\d{1,2}$/u.test(value)) return 'unknown';
   const index = Number(value);

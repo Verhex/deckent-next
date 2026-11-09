@@ -55,7 +55,7 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
   finally { store?.close(); }
 }
 /** What the re-baseline card shows and the write is bound to: the verified state plus the policy and producer digests it was computed over. */
-export type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
+type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
 /** The explicit operator re-baseline: approval-decide authority on `audit-rebaseline` (on the AI floor), a witnessed human terminal and one y/N bound to the shown state. The policy is read again after the answer; the engine re-checks state, head and digests inside the write, and a change in between asks again (bounded), never writes over what the person did not see. */
 export async function rebaselineConfiguredAudit(root: string, input: unknown, options: ConfigLoadOptions,
   confirm: (current: AuditRebaselineView) => Promise<boolean>, attempts = 3): Promise<AuditVerification | null> {

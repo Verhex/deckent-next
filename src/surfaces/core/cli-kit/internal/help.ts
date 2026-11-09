@@ -11,7 +11,7 @@ export interface RegisteredCliCommand<C> extends CliHelpSpec {
   readonly run: (argv: readonly string[], context: C) => Promise<void | ExitCode>;
 }
 /** The context fields catalog dispatch reads: the language of a refusal (an already resolved host locale wins over the environment). */
-export interface CliDispatchContext { readonly env?: NodeJS.ProcessEnv; readonly locale?: Locale; readonly onLocale?: (locale: Locale) => void }
+interface CliDispatchContext { readonly env?: NodeJS.ProcessEnv; readonly locale?: Locale; readonly onLocale?: (locale: Locale) => void }
 
 /** Children a family dispatches and shows now; a `planned` name is reserved only. */
 const live = (spec: CliCommandSpec) => (spec.children ?? []).filter(child => !child.planned);

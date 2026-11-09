@@ -1,5 +1,5 @@
 /** What the terminal does next after a turn or `/do` fails; the one place that maps a typed refusal code to its recovery step (F-H3c). */
-export type TurnNext = 'draft' | 'start-service' | 'show-spending' | 'cancelled' | 'error';
+type TurnNext = 'draft' | 'start-service' | 'show-spending' | 'cancelled' | 'error';
 
 const NEXT: Readonly<Record<string, TurnNext | undefined>> = Object.freeze({
   TERMINAL_CHAT_NOT_CONFIGURED: 'draft', LOCAL_RUNTIME_UNAVAILABLE: 'start-service',

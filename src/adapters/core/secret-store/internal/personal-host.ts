@@ -11,7 +11,7 @@ export const custodyDigest = (input: unknown) => createHash('sha256').update(JSO
 const unsafe = () => new PersonalCustodyError('unsafe-root');
 const identity = (info: Stats) => [info.dev, info.ino, info.uid, info.mode, info.nlink];
 /** Reads only bounded host metadata; never a key or envelope's bytes. */
-export async function custodyHostText(path: string, maxBytes = registry.hostMaxBytes): Promise<string> {
+async function custodyHostText(path: string, maxBytes = registry.hostMaxBytes): Promise<string> {
   const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const bytes = Buffer.alloc(maxBytes + 1); let offset = 0;

@@ -23,7 +23,7 @@ export class JsonSchemaRefusal extends CodedError {
     this.name = 'JsonSchemaRefusal';
   }
 }
-export interface JsonSchemaLimits {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface JsonSchemaLimits {
   /** Schema object nesting (JSON Pointer depth) and compile recursion including `$ref` hops. */
   readonly schemaDepth: number;
   readonly schemaNodes: number;
@@ -44,15 +44,15 @@ export const JSON_SCHEMA_LIMITS: JsonSchemaLimits = Object.freeze({
   schemaDepth: 64, schemaNodes: 10_000, schemaKeywords: 50_000, patternSource: 4_096, patternStates: 2_000, patternRepeat: 1_000,
   schemaPatternStates: 20_000, instanceDepth: 128, evaluationDepth: 512, validationSteps: 5_000_000,
 });
-/** Keywords that never change a validation result and are accepted in both dialects (policy: extend per provider, not by editing code paths).
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Keywords that never change a validation result and are accepted in both dialects (policy: extend per provider, not by editing code paths).
  * Also accepted: `x-`-prefixed extensions. `discriminator` (OpenAPI, emitted by pydantic) and `nullable` are hints; ignoring them never
  * loosens a result. `$defs` / `definitions` are containers: their members compile only when a `$ref` reaches them. */
 export const JSON_SCHEMA_ANNOTATIONS: readonly string[] = Object.freeze(['$schema', '$id', '$comment', 'title', 'description', 'default',
   'examples', 'deprecated', 'readOnly', 'writeOnly', 'format', 'contentMediaType', 'contentEncoding', 'contentSchema', 'discriminator',
   'nullable', '$defs', 'definitions']);
-export type JsonSchemaResult<T> = { valid: true; data: T; errorMessage: undefined } | { valid: false; data: undefined; errorMessage: string };
-export type JsonSchemaCheck<T> = (input: unknown) => JsonSchemaResult<T>;
-export interface JsonSchemaValidatorOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type JsonSchemaResult<T> = { valid: true; data: T; errorMessage: undefined } | { valid: false; data: undefined; errorMessage: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type JsonSchemaCheck<T> = (input: unknown) => JsonSchemaResult<T>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface JsonSchemaValidatorOptions {
   readonly limits?: Partial<JsonSchemaLimits>;
   /** Format checkers by name (asserted only for strings); an unregistered format is an annotation (2020-12 default). */
   readonly formats?: Readonly<Record<string, (value: string) => boolean>>;

@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { describeSandboxWriteSet, sandboxWriteClockVerdict, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteRefusal,
   type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
 export { applySandboxWriteSet, describeSandboxWriteSet, type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteDecider,
-  type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
 import { normalizeGlobalScopePlatform, pathWithin, prepareProductDirectory, processExists, processWallLagMs, t, type Locale, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, type ProductLayout } from '#platform/index.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * SHELL-OVERLAY bounds of one sandbox write set (fail closed: over any of them the whole set is refused, never partly applied): entries
  * listed in the upper directory plus the lower files a deleted or replaced directory removes, the bytes of all written files, one file.
  */
@@ -19,7 +19,7 @@ const HELPER = fileURLToPath(new URL('../native/build/Release/shell-overlay-scan
 const HELPER_TIMEOUT_MS = 10_000;
 const CLOCK_WATCH = fileURLToPath(new URL('../native/build/Release/shell-clock-watch', import.meta.url));
 
-/** A running realtime clock watch (`shell-clock-watch`): `result` ends it and reads its answer; `stop` ends it unread. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A running realtime clock watch (`shell-clock-watch`): `result` ends it and reads its answer; `stop` ends it unread. */
 export interface SandboxWriteClockWatcher { result(): Promise<SandboxWriteClockWatch>; stop(): void }
 /** Starts the clock watch and resolves once the kernel timer is armed; null when it cannot be armed (the call's set is then never applied). */
 export function startSandboxWriteClockWatch(): Promise<SandboxWriteClockWatcher | null> {
@@ -236,7 +236,7 @@ export async function scanSandboxWriteSetCall(directory: SandboxWriteSetDirector
  * scan is detected, `sandboxWriteClockVerdict`). */
 export interface SandboxWriteSetDirectory { readonly dir: string; readonly upper: string; readonly work: string; readonly mark: bigint;
   readonly clock: SandboxWriteClockReading; readonly clockStepToleranceMs: number }
-/** The process's clocks now: the wall clock (Date.now — the realtime clock ctime uses), the monotonic clock and the wall clock's lag behind the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The process's clocks now: the wall clock (Date.now — the realtime clock ctime uses), the monotonic clock and the wall clock's lag behind the
  * highest wall time the process already handed out. */
 export const readSandboxWriteClock = (): SandboxWriteClockReading => ({ wallMs: Date.now(), monotonicMs: performance.now(), lagMs: processWallLagMs() });
 /** Removes a call directory (the kernel may leave `work/work` without permissions) and ends its clock watch if no scan did. */

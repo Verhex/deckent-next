@@ -50,7 +50,7 @@ const relaxableFor = (request: AgentToolCallRequest, askEdits: boolean): Relaxab
   ?? (SANDBOX_RELAXABLE.has(request.cell) && request.shell?.realm === 'sandbox' && request.shell.contained ? SANDBOX_RELAXATION : undefined);
 /** R9: the mode a background worker may use for this person now — full access never passes to a worker, its ceiling is full-auto under the
  * company's full-auto grant (PRE-9), else standart; `askEdits` and the entry id are kept. The plan card records it for a person's Run. */
-export function workerPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string) {
+function workerPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string) {
   const person = principalPermissionMode(policy, principal, scopeId);
   return Object.freeze({ ...person, mode: person.mode !== 'standart' && fullAutoGrant(policy, principal, scopeId).decision === 'allow' ? 'full-auto' as const : 'standart' as const });
 }
@@ -59,7 +59,7 @@ export const runWorkerMode = (policy: unknown, principal: VerifiedPrincipal, sco
   if (isAiPrincipal(principal)) return undefined;
   const { mode, askEdits } = workerPermissionMode(policy, principal, scopeId); return Object.freeze({ mode, askEdits });
 };
-export type WorkerPlanMode = { readonly mode: 'standart' | 'full-auto'; readonly askEdits: boolean };
+type WorkerPlanMode = { readonly mode: 'standart' | 'full-auto'; readonly askEdits: boolean };
 
 // Card presentation reads the same policy-owned mode; composition never evaluates bindings itself.
 export function agentCallPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string): PermissionMode {
@@ -89,16 +89,16 @@ export interface AgentToolCallRequest {
    * ceiling the mode is the lower of the two (askEdits if either), the current one recomputed now with full access capped at full-auto. */
   readonly origin?: { readonly kind: 'run'; readonly ceiling: WorkerPlanMode | null };
 }
-/** A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
 export interface StandingApproval { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null }
-export interface PermissionModeRelaxation {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PermissionModeRelaxation {
   readonly mode: Exclude<PermissionMode, 'full-access'>;
   readonly cell: 'edit-non-floor' | 'shell-modify' | 'shell-read' | 'mcp-call';
   /** The lowered company `require-approval` rule ids (sorted, `+`-joined) and the person's mode entry id (null: the default standart). */
   readonly company: string;
   readonly person: string | null;
 }
-/** A call decided in a full-access turn (MODES-3): what the policy said before the floor raise, whether the floor raised it, the lowered
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A call decided in a full-access turn (MODES-3): what the policy said before the floor raise, whether the floor raised it, the lowered
  * company rule ids (null: none) and the grant rule that allows full access. Every such allowed call is audited before its effect. */
 export interface FullAccessDecision {
   readonly cell: Exclude<AgentToolCallCell, 'read' | 'mcp-floor' | 'edit-authority'>;
@@ -220,7 +220,7 @@ export function standingWouldLower(policy: unknown, request: AgentToolCallReques
 }
 
 type AuditSummary = Extract<AuditEvent['subject'], { kind: 'full-access-call' }>['summary'];
-/** One call's audit identity and what it touched (the shared part of the permission-mode and full-access call events). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One call's audit identity and what it touched (the shared part of the permission-mode and full-access call events). */
 export interface AgentCallAuditInput {
   readonly eventId: string; readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly atMs: number;
   readonly tool: { readonly name: string; readonly version: number };

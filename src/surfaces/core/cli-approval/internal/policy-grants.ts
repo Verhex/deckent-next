@@ -10,7 +10,7 @@ import { policyGrantsAll } from './policy-grants-all.js';
 import { policyRecoveryCommand } from './recovery.js';
 
 /** A persisted standing approval as the CLI shows it (the engine's view; the surface owns no rule of its own). */
-export interface StandingGrantRow { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
+interface StandingGrantRow { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
 export type StandingGrantsHandler = (root: string, scopeId: string, options: { readonly env: NodeJS.ProcessEnv }) => Promise<readonly StandingGrantRow[]>;
 export type StandingRevokeHandler = (root: string, input: { readonly scopeId: string; readonly id: string; readonly reason: string; readonly confirm: (grant: StandingGrantRow) => Promise<boolean> },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<{ readonly revoked: boolean; readonly grant: StandingGrantRow | null }>;

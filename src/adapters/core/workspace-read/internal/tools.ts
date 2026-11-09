@@ -6,7 +6,7 @@ import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, d
   type WorkspacePathDiagnostic, type WorkspacePathError, type WorkspaceScope } from './scope.js';
 import { createRegexRunner, RegexCancelled } from './regex-runner.js';
 
-/** Read/search tools of the terminal tool loop (T-L1), ported from the legacy native tools minus their defects. Every result, on
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Read/search tools of the terminal tool loop (T-L1), ported from the legacy native tools minus their defects. Every result, on
  * every branch, is cut to the byte cap with a stated marker; grep never answers "no matches" when content was skipped; long lines
  * are elided with an exact continuation; regular expressions run off the service thread and stop on cancel. Byte caps only:
  * fitting results into the model context is the loop's job in one token unit. The adapter is not an authorized execution
@@ -127,7 +127,7 @@ async function literalGlobNote(scope: WorkspaceScope, prefix: string, pattern: s
   return `${named} filter=none open=${opened.error}${d ? ` step=${d.step}${d.errno ? ` errno=${d.errno}` : ''}` : ''}`;
 }
 
-export interface WorkspaceReadTools {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspaceReadTools {
   readonly specs: readonly AgentToolSpec[];
   readonly scope: WorkspaceScope;
   execute(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome>;

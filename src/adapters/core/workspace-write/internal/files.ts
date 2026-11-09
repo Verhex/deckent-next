@@ -13,7 +13,7 @@ export const ABSENT_FILE_VERSION = 'absent';
 export const fileContentVersion = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 export type WritablePath = { readonly ok: true; readonly rel: string; readonly parentRel: string; readonly name: string } | { readonly ok: false; readonly error: string };
-export type CurrentFile = { readonly ok: true; readonly version: string; readonly bytes: Buffer | null; readonly mode: number } | { readonly ok: false; readonly error: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CurrentFile = { readonly ok: true; readonly version: string; readonly bytes: Buffer | null; readonly mode: number } | { readonly ok: false; readonly error: string };
 export class WorkspaceWriteError extends CodedError {
   constructor(override readonly code: 'precondition' | 'rejected' | 'changed', message: string) { super(code, { message }); this.name = 'WorkspaceWriteError'; }
 }
@@ -83,7 +83,7 @@ export async function readWritableFile(scope: WorkspaceScope, target: Extract<Wr
 /** Phases of one write attempt, reported to its effect journal in order (T-L4, Astra 2094 R1/R2). `escaped`: the rename happened but
  * the parent was no longer under the workspace root afterwards (moved by another process); `where` is its path then. */
 export type WritePhase = { readonly state: 'prepared' | 'committed' | 'aborted' } | { readonly state: 'escaped'; readonly where: string | null };
-export interface WriteAttempt {
+interface WriteAttempt {
   /** Unique temporary file name of this attempt (its presence is evidence that the rename did not happen). */
   readonly temporary: string;
   /** A temporary file an earlier attempt of the same effect may have left; removed before this attempt starts. */
@@ -229,7 +229,7 @@ export async function ensureWorkspaceParents(scope: WorkspaceScope, rel: string,
 
 /** SHELL-OVERLAY record versions of a directory (a write set's directory removal is conditional on the directory being empty). */
 export const EMPTY_DIRECTORY_VERSION = 'empty-directory';
-export const NON_EMPTY_DIRECTORY_VERSION = 'non-empty-directory';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const NON_EMPTY_DIRECTORY_VERSION = 'non-empty-directory';
 /** The version of `target` when it is a real directory (opened from its parent with no link followed): empty or not; null when it is not a
  * directory (absent, a file, a link — the file rules apply). A denied directory is refused like a denied file. */
 export async function readWritableDirectory(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>): Promise<string | null> {

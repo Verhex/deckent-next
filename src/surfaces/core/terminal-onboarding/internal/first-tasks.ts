@@ -2,9 +2,9 @@ import { ErrorRegistry } from '#platform/index.js';
 import data from './first-tasks.json' with { type: 'json' };
 import type { FirstTaskIntent, FolderFacts } from './contract.js';
 /** A folder fact is registry data: true when a visible top-level name matches its pattern (`content`: any name at all). */
-export type FolderFact = keyof typeof data.facts;
+type FolderFact = keyof typeof data.facts;
 const FACTS = new Map(Object.entries(data.facts).map(([fact, pattern]) => [fact, new RegExp(pattern, 'iu')]));
-export type FirstTaskSuggestion = Readonly<{ id: string; order: number; kinds: readonly FolderFacts['kind'][]; requires: readonly FolderFact[]; absent?: readonly FolderFact[];
+type FirstTaskSuggestion = Readonly<{ id: string; order: number; kinds: readonly FolderFacts['kind'][]; requires: readonly FolderFact[]; absent?: readonly FolderFact[];
   labelKey: string; intentKey: string; effectKey: string }>;
 /** Register-before-seal, portable to Desktop. Registry entries are data, never hooks/argv/operation grants. */
 export class FirstTaskRegistry {

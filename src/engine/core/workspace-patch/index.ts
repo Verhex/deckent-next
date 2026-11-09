@@ -50,7 +50,7 @@ export { readQueueCandidate, queueCommitMetadata, planQueueCommit, describeWorks
 
 export { SnapshotBudget, parseBaseListing, baseIdentical, gitBlobOid, hashAlgorithmOf, diffAgainstBase, snapshotDigest } from './internal/snapshot.js';
 export type { Snapshot, BaseEntry, BaseListing } from './internal/snapshot.js';
-export { patchPathsIntersect, changedHistoryPaths, assertDisjointHistory } from './internal/path-history.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ patchPathsIntersect, changedHistoryPaths, assertDisjointHistory } from './internal/path-history.js';
 export { gitFailure } from './internal/snapshot.js';
 export { parseIntegrationDiffStats } from './internal/snapshot.js';
 export { assertIntegrationSnapshot } from './internal/snapshot.js';
@@ -61,13 +61,13 @@ export { prepareIntegrationSnapshot } from './internal/snapshot.js';
 
 export { createWorkspaceQueuePreparation } from './internal/queue-preparation.js';
 export { workspaceQueueShadow } from './internal/queue-shadow.js';
-export type { WorkspaceQueueShadowPorts } from './internal/queue-shadow.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkspaceQueueShadowPorts } from './internal/queue-shadow.js';
 export { assertIntegrationBase } from './internal/git-integration-base.js';
-export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY, QUEUE_PROTECTED_BASE_REFS, queueTargetConfigRefusal } from './internal/git-queue-target.js';
+export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ QUEUE_PROTECTED_BASE_REFS, queueTargetConfigRefusal } from './internal/git-queue-target.js';
 export { createWorkspaceQueueEffects } from './internal/queue-effects.js';
 export { createWorkspaceQueueAdmission } from './internal/queue-admission.js';
 export { reattemptCommandIds, reattemptEligibility, reattemptGraph, stepDeliveryReattempt, stepWorkspaceQueueReattempt } from './internal/reattempt.js';
-export type { DeliveryReattemptPorts, ReattemptEffects, WorkspaceReattemptContext } from './internal/reattempt.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DeliveryReattemptPorts, ReattemptEffects, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkspaceReattemptContext } from './internal/reattempt.js';
 export { assertRunDeliveryIntent, stepRunDelivery, stepWorkspaceRunDelivery } from './internal/run-intent.js';
 export type { RunDeliveryPorts, RunDeliveryStep, WorkspaceRunDeliveryContext } from './internal/run-intent.js';
 /** @deprecated Import from workspace-patch-contract; retained for one release. */

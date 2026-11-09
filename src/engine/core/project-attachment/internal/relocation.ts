@@ -2,7 +2,7 @@ import { installationRegistrationSchema, type InstallationSource, type ProjectAt
 import type { ResolvedConfig } from '#platform/index.js';
 import type { AttachmentRegistryPort } from './application.js';
 import { attachmentFailure, sameAttachmentPerson, sameProjectAttachmentAuthority } from './context.js';
-export interface AttachmentRelocationPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AttachmentRelocationPorts {
   readonly config: ResolvedConfig; readonly store: AttachmentRegistryPort & { attachment(): Promise<ProjectAttachment | null> }; readonly actor: AttachmentPerson;
   authorize(): Promise<void>; location(): Promise<AttachmentLocation>; projectId(): Promise<string | null>; exists(root: string): Promise<boolean>;
   keepIdentity(): Promise<string>; source(root: string, scopeId: string, actor: AttachmentPerson): Promise<{ source: InstallationSource }>;

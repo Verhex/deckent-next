@@ -50,9 +50,9 @@ export function beuserProfileLimits(data: LimitProfile): BeuserLimits {
   if (!limits) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
   return limits;
 }
-/** Pin budget data at setup/new Attempt admission; recorded recovery uses beuserProfileLimits directly. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Pin budget data at setup/new Attempt admission; recorded recovery uses beuserProfileLimits directly. */
 export type BeuserLimitOverrides = { readonly [K in 'maxWallMs' | 'maxReruns' | 'maxSteps' | 'maxCost']?: number | undefined };
-export function narrowBeuserLimits(data: LimitProfile, overrides: BeuserLimitOverrides): BeuserLimits {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function narrowBeuserLimits(data: LimitProfile, overrides: BeuserLimitOverrides): BeuserLimits {
   const base = beuserProfileLimits(data), keys = ['maxWallMs', 'maxReruns', 'maxSteps', 'maxCost'] as const;
   const budgets = Object.fromEntries(keys.map(key => [key, Math.min(base[key], overrides[key] ?? base[key])]));
   const maxWallMs = budgets['maxWallMs']!;

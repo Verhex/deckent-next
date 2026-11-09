@@ -60,7 +60,7 @@ export function createInstallationEvidencePreview(preview: InstallationPreview,
 }
 export type InstallationEvidencePreview = ReturnType<typeof createInstallationEvidencePreview>;
 
-export interface InstallationEvidencePorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstallationEvidencePorts {
   preview(): Promise<InstallationPreview>;
   measurePackage(): Promise<InstallationPackageEvidence>;
   inspectImage(imageId: string): Promise<InstallationImageEvidence>;

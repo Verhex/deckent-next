@@ -1,9 +1,9 @@
 import REDACTION_TABLE from './patterns.json' with { type: 'json' };
 
-export interface NamedKnownSecret { readonly name: string | null; readonly value: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface NamedKnownSecret { readonly name: string | null; readonly value: string }
 export interface RedactionMatch { readonly kind: string; readonly count: number }
-export interface RedactionResult { readonly text: string; readonly knownMatches: number; readonly patternMatches: readonly RedactionMatch[] }
-/** Opaque, per-operation snapshot of values already resolved by an authorized producer. JSON never exposes the values. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RedactionResult { readonly text: string; readonly knownMatches: number; readonly patternMatches: readonly RedactionMatch[] }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Opaque, per-operation snapshot of values already resolved by an authorized producer. JSON never exposes the values. */
 export interface KnownSecretSpan { readonly start: number; readonly end: number; readonly label: string }
 export interface KnownSecretSnapshot {
   readonly spans: (text: string) => readonly KnownSecretSpan[];

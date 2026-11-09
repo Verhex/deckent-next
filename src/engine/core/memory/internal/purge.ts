@@ -47,7 +47,7 @@ async function boundInvocations(deps: MemoryJournalDependencies, record: MemoryP
   return out;
 }
 /** The bound invocations' stored content, removed under the purge record's own `memory`/`purge` decision (idempotent per purge and invocation). */
-export async function purgeMemoryInvocations(deps: MemoryJournalDependencies, record: MemoryPurgeRecord, actor: VerifiedPrincipal, ids: readonly string[] = record.invocationIds) {
+async function purgeMemoryInvocations(deps: MemoryJournalDependencies, record: MemoryPurgeRecord, actor: VerifiedPrincipal, ids: readonly string[] = record.invocationIds) {
   let purged = 0, absent = ids.length;
   for (const { invocationId, held } of await boundInvocations(deps, record, ids)) {
     if (held.contentDigest === null) continue;

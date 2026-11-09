@@ -40,7 +40,7 @@ export function uninstallStatusMessage(status: UninstallResult['status'], locale
     unknown: t('cli.uninstall.status.unknown', {}, locale) }[status];
 }
 /** A resource's card group from the registry; null for a file the card names by its path (unlisted, VCS-tracked, other owners' entries). */
-export function uninstallGroup(item: Pick<UninstallItem, 'resourceId'>): string | null {
+function uninstallGroup(item: Pick<UninstallItem, 'resourceId'>): string | null {
   const exact = Object.entries(registry.groups).find(([, ids]) => ids.includes(item.resourceId))?.[0];
   return exact ?? Object.entries(registry.prefixes).find(([prefix]) => item.resourceId.startsWith(prefix))?.[1] ?? null;
 }

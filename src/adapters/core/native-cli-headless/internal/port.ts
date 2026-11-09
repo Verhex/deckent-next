@@ -119,7 +119,7 @@ function stderrSummary(base64: string, rules: HeadlessEntry['headless']['stderrA
   }
   return [...kept, ...(lines.length > kept.length ? [withheldLine(lines.length - kept.length)] : [])].join('\n');
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The headless native port (S3-2). `prepare` is pure; `preflight` (the registry's pre-claim acquisition step) spawns no model call; `send`
  * runs one bounded turn: built env, 0600 system prompt file, user message on stdin, line guards that stop the process group, typed rejected
  * evidence for every refusal (body = adapter JSON, never raw CLI output). Timeout and cancel are thrown: `unknown`. 1b: a CLI that ended by itself before a

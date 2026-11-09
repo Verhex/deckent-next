@@ -6,7 +6,7 @@ export interface TokenReservationRequest {
   readonly estimatedTokens: number;
 }
 
-export interface TokenBudgetState {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TokenBudgetState {
   readonly capacity: number;
   readonly reserved: number;
   readonly available: number;

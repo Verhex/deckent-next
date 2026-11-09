@@ -10,7 +10,7 @@ import { inheritedEnvironment, CHILD_BASE_ENVIRONMENT } from '#platform/index.js
 const exec = promisify(execFile);
 export interface ConfigDiscoveryLimits { readonly timeoutMs: number; readonly outputBytes: number; readonly maxEntries: number }
 /** A discovery's answer; `partial` names what cut it short: its time limit, or a size bound with entries left unread. The values found are kept as before. */
-export type ConfigDiscovery = Readonly<{ values: readonly string[]; partial: false | 'time' | 'size' }>;
+type ConfigDiscovery = Readonly<{ values: readonly string[]; partial: false | 'time' | 'size' }>;
 /**
  * Scan bounds beside the caller's limits (Astra 2456): at most this many PATH directories are probed, and a directory listing reads at most
  * `maxEntries × CONFIG_DISCOVERY_SCAN_FACTOR` entries (every entry seen counts, not only matches); both stop at the limits' `timeoutMs`.

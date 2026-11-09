@@ -8,7 +8,7 @@ import { EFFECT_OPEN_STATE_SQL, decodeLedgerRunSnapshot, decodeStored, ledgerTra
 
 const corrupt = () => new RecoveryError('RECOVERY_CORRUPT');
 const parse = <T>(work: () => T): T => { try { return work(); } catch { throw corrupt(); } };
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S6R-4 Core SQLite adapter of the recovery-case port on the shared ledger (v66). A case row is cross-checked against its columns on read; it moves
  * forward only by compare-and-swap on its exact stored record (the v66 trigger also refuses a skipped revision, a changed identity or a rewrite of a
  * closed case). The continuation is one writer transaction over the Run, the case, the gate set and the audit event.

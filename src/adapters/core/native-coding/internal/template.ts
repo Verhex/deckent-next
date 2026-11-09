@@ -15,7 +15,7 @@ function dockerSubscription(provider: Parameters<typeof assertNativeDockerSubscr
   try { assertNativeDockerSubscription(provider); } catch { throw new NativeCodingProfileError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE'); }
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * K3 = A (owner 2026-09-30): a reusable native coding TEMPLATE is an ordinary registry profile of this adapter identity. It holds
  * everything of a prepared profile except the per-task input: the Docker task parameters (no argv, no binding) and the invocation
  * without model, prompt or task text. The Docker resolver refuses this adapter identity, so a template can never run by itself;
@@ -76,7 +76,7 @@ export function createNativeCodingTemplate(limits: unknown, invocation: unknown,
 }
 
 /** Deterministic scope text: one repository path per line, in the author's order. A hand-prepared profile with this text is identical. */
-export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
+const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
 
 /** Pure admission compilation of template + typed work input: invocation v4 with the exact pinned model, the work input's turn limit
  * (else the template's) and the template's prompt parts plus task/scope/acceptance. Keeps the template id/version as provenance.

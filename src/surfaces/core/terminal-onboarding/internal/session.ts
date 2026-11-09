@@ -41,7 +41,7 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
 /** Historical first-task marker, also records that the separate post-setup welcome was seen. */
 export const FIRST_TASK_DONE = 'onboarding:first-task:done';
 /** R18: a deferral whose step is no longer open (settled through /setup, /model or /mode) is not a deferral any more. */
-export const openDeferrals = (snapshot: OnboardingSnapshot): readonly string[] => {
+const openDeferrals = (snapshot: OnboardingSnapshot): readonly string[] => {
   const steps = onboardingSteps({ ...snapshot, deferred: [] }), open = new Set(steps.map(row => row.id));
   // A deferred image card whose work choice is open again (that answer lives in the session) is still owed, not settled.
   return snapshot.deferred.filter(id => open.has(id) || id === FIRST_TASK_DONE || id === 'execution:worker' && awaitedImage(snapshot, steps) === 1);

@@ -116,7 +116,7 @@ function outcomeState(state: string, language: Locale = LOCALES[0]): string {
   return name && labels[name] ? labels[name] + state.slice(name.length) : state;
 }
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * What the model is told about a call of a round that reached its output limit (TRUNCATED-TOOLCALL, live 2026-09-30: large write_file / run_shell
  * arguments cut at exactly 8192 completion tokens, streamed by vLLM v0.30.0 as finish_reason "tool_calls"). Protocol text like every `[deckent]`
  * result: English, in code; the call is labelled `invalid-arguments` (its arguments are incomplete; Jev 6192a348, safest reversible option).
@@ -134,7 +134,7 @@ export function agentTurnTruncatedCallsNote(count: number, limitTokens: number |
 }
 
 /** A tool call's position in its turn: the model round and its index in that round's response. */
-export interface AgentToolExecution { readonly round: number; readonly index: number }
+interface AgentToolExecution { readonly round: number; readonly index: number }
 
 export interface AgentTurnInput {
   /** Explicit push mode; pinned by admission, never inferred from a provider identity. */

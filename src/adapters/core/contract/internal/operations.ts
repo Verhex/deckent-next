@@ -35,7 +35,7 @@ export const operationsConfigSchema = operationsSectionSchema.superRefine((value
   try { registry.catalog(value.catalog, [...kinds]); }
   catch (error) { if (!(error instanceof OperationCatalogError)) throw error; context.addIssue({ code: 'custom', message: error.code }); }
 });
-export type OperationsConfig = z.infer<typeof operationsConfigSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OperationsConfig = z.infer<typeof operationsConfigSchema>;
 export function readOperationsConfig(config: Record<string, unknown>): OperationsConfig {
   return operationsConfigSchema.parse(config['operations'] ?? {});
 }

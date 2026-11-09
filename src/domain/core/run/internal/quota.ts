@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
 import { heldRunState, readRunHold } from './hold.js';
-export type RunQuotaWait = NonNullable<RunSnapshot['quotaWaits']>[number];
-/** The ask has no expiry: its stored deadline is the largest safe counter, so no deadline-driven rule can ever cancel it (owner L-A: never auto-cancel). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunQuotaWait = NonNullable<RunSnapshot['quotaWaits']>[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The ask has no expiry: its stored deadline is the largest safe counter, so no deadline-driven rule can ever cancel it (owner L-A: never auto-cancel). */
 export const QUOTA_ASK_OPEN = Number.MAX_SAFE_INTEGER;
 /** Host-proven exit classification, not a worker grant. Application verifies artifacts and model evidence first. */
 export function parkRunQuota(input: unknown, expectedRevision: number, attempt: AttemptSnapshot, wait: RunQuotaWait) {
@@ -60,7 +60,7 @@ export function askRunQuota(run: RunSnapshot, now: number): RunSnapshot | null {
   if (!run.bindings.some(row => row.observedKind === 'quota-exhausted')) return null;
   return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state: { kind: 'parked', reason: 'quota-ask', since: run.state.since, deadline: QUOTA_ASK_OPEN } });
 }
-export type RunQuotaChoice = 'wait' | 'next-candidate';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunQuotaChoice = 'wait' | 'next-candidate';
 export type RunQuotaAskPolicy = Readonly<{ maxWaitMs: number; maxRewaits: number }>;
 /** S9: the person's answer. `wait` re-arms the wait (until the known reset, else a fresh bounded wait) up to `maxRewaits` times; `next-candidate`
  * releases the held attempts so the task is reserved again. Neither cancels; closing the Run stays the separate explicit control. */

@@ -6,7 +6,7 @@ import type { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js
 
 type Entry = NonNullable<ReturnType<typeof nativeCliAgent>>;
 import { ClaudeAgentError } from '#capabilities/index.js';
-export { createClaudeAgentDriver, ClaudeAgentError, type ClaudeAgentDriver, type ClaudeAgentResult } from '#capabilities/index.js';
+export { createClaudeAgentDriver, ClaudeAgentError, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type ClaudeAgentDriver, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type ClaudeAgentResult } from '#capabilities/index.js';
 function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field); }
 
 /** The caller owns the existing private run dir and removes these files after the isolated process exits. No subscription state is read. */

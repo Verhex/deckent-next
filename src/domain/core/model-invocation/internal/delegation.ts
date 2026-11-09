@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { isAiPrincipal, isMcpPrincipal, isWorkloadPrincipalRef } from '#domain/core/principal/index.js';
 
-/** The principal classes that may spend a connection (S3-DESIGN §10, owner Q-H3 2026-10-23): the person who connected it, an AI/MCP actor, a system workload. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The principal classes that may spend a connection (S3-DESIGN §10, owner Q-H3 2026-10-23): the person who connected it, an AI/MCP actor, a system workload. */
 export const DELEGATION_PRINCIPAL_CLASSES = Object.freeze(['person', 'ai', 'system'] as const);
-export type DelegationPrincipalClass = typeof DELEGATION_PRINCIPAL_CLASSES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DelegationPrincipalClass = typeof DELEGATION_PRINCIPAL_CLASSES[number];
 /**
  * The connection's delegated-use consent (S3-DESIGN §10, SIWC3): explicit, recorded and revocable, written only by the person through the connect
  * path (S3-3), on the invocation profile's adapter definition as `delegatedUse`. `classes` names who besides the person may spend it.
  */
 export const delegatedUseConsentSchema = z.strictObject({ consentedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(), atMs: counterSchema,
   classes: z.array(z.enum(['ai', 'system'])).min(1).max(2).readonly() }).readonly();
-export type DelegatedUseConsent = z.infer<typeof delegatedUseConsentSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DelegatedUseConsent = z.infer<typeof delegatedUseConsentSchema>;
 /** Owner 2026-11-08 ("sen + sohbetteki AI"): a new subscription connection, connected without a consent choice, lets the person's AI actor use it
  * (R4a: the chat's agent and connected MCP clients share it); `system` stays opt-in and the person may narrow it to only themselves. */
 export const DEFAULT_DELEGATED_CLASSES: readonly ('ai' | 'system')[] = Object.freeze(['ai']);

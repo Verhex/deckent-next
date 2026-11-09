@@ -7,7 +7,7 @@ import { fitStatusRow, worklineStatusSegments, type StatusSegment, type Workline
 import type { PermissionMode } from '#domain/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 
-export interface StatusStripProps {
+interface StatusStripProps {
   /** Scope (or the pre-joined `scope · model` target); shrinks from the start before anything wraps. */
   readonly target: string;
   readonly model?: string | undefined;

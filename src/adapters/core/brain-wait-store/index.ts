@@ -1,1 +1,1 @@
-export { FileBrainQuotaWaitStore, BRAIN_QUOTA_WAIT_STORE_LIMITS, brainQuotaWaitStoreLimitsSchema, type BrainQuotaWaitListing } from './internal/store.js';
+export { FileBrainQuotaWaitStore, BRAIN_QUOTA_WAIT_STORE_LIMITS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ brainQuotaWaitStoreLimitsSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type BrainQuotaWaitListing } from './internal/store.js';

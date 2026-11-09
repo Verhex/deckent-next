@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-/** Effect class of a catalog operation. `read` never changes the target; `write` is a conditional, compensable-or-not change;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Effect class of a catalog operation. `read` never changes the target; `write` is a conditional, compensable-or-not change;
  * `irreversible` cannot be undone even by compensation (it must be approval-gated by catalog data). */
 export const effectClassSchema = z.enum(['read', 'write', 'irreversible']);
 export const operationRefSchema = z.strictObject({ id: identitySchema, get version() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }).readonly();
@@ -62,11 +62,11 @@ export const PRINCIPAL_EFFECT_PRODUCER: EffectProducer = Object.freeze({ kind: '
 /** claimed: intent recorded, effect may be pending; settled: target evidence of the effect; unknown: outcome cannot be
  * established from the target (never retried blindly); refused: the target refused before any effect (terminal, no effect). */
 export const effectStateSchema = z.enum(['claimed', 'settled', 'unknown', 'refused']);
-/** The one open-state set: an effect that may still exist or happen. Stores and every `effect_intents` reader take it from here (KG10 F1). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The one open-state set: an effect that may still exist or happen. Stores and every `effect_intents` reader take it from here (KG10 F1). */
 export const EFFECT_OPEN_STATES = Object.freeze(['claimed', 'unknown'] as const);
 export const isEffectOpen = (state: string | null | undefined) => (EFFECT_OPEN_STATES as readonly unknown[]).includes(state);
-export const effectRefusalSchema = z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']);
-export type EffectState = z.infer<typeof effectStateSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const effectRefusalSchema = z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type EffectState = z.infer<typeof effectStateSchema>;
 /** Durable intent recorded before any effect; `inputDigest` binds the canonical payload and `idempotencyKeyHash` the scoped key. */
 export const effectIntentSchema = z.strictObject({
   get schemaVersion() { return z.literal(1); }, command: effectCommandSchema, descriptor: operationDescriptorSchema, actor: actorSchema,
@@ -85,10 +85,10 @@ export const effectIntentSchema = z.strictObject({
 }).readonly();
 export type EffectIntent = z.infer<typeof effectIntentSchema>;
 export type EffectIntentApproval = NonNullable<EffectIntent['approval']>;
-/** Target evidence that this intent's effect happened (idempotency record, fence). `version` is the record version after it. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Target evidence that this intent's effect happened (idempotency record, fence). `version` is the record version after it. */
 export const effectEvidenceSchema = z.strictObject({ get kind() { return z.enum(['idempotency-record', 'fence']); }, get version() { return persistedString(z.string().min(1).max(256)).nullable(); },
   observedAt: counterSchema }).readonly();
-export type EffectEvidence = z.infer<typeof effectEvidenceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type EffectEvidence = z.infer<typeof effectEvidenceSchema>;
 export const effectRecordSchema = z.strictObject({ intent: effectIntentSchema, get sequence() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, state: effectStateSchema,
   get evidence() { return effectEvidenceSchema.nullable(); }, get refusal() { return effectRefusalSchema.nullable(); } }).readonly()
   .refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));

@@ -50,7 +50,7 @@ export interface AdoptionVerificationPolicy {
   /** The adoption's own Git source: the delivered commit captured there names the source the verification Run must have used. */
   readonly source: Pick<RunWorkspaceProvider, 'captureSource'>;
 }
-export interface AdoptionVerificationRequest { readonly scopeId: string; readonly runId: string; readonly kind: string; readonly commit: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AdoptionVerificationRequest { readonly scopeId: string; readonly runId: string; readonly kind: string; readonly commit: string }
 
 /** Every required criterion is met by one of the task's acceptance criteria of the same evaluator that is not weaker under the Run's
  * pinned evaluator implementation. Extra task criteria only add conditions (all must pass), so they never weaken the bar. */
@@ -77,7 +77,7 @@ export async function verifyAdoption(store: AdoptionVerificationStore, policy: A
   return verifyDeliveredCommit(store, policy, principal, { ...request, runId, kind });
 }
 
-/** Evidence identity first (same scope, one Task of the kind, custody on this commit from this source, current profile), then the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Evidence identity first (same scope, one Task of the kind, custody on this commit from this source, current profile), then the
  * phase: a failed Run on another commit is a mismatch, not a failed verification of this commit. */
 export async function verifyDeliveredCommit(store: AdoptionVerificationStore, policy: AdoptionVerificationPolicy, principal: VerifiedPrincipal,
   request: AdoptionVerificationRequest): Promise<AdoptionVerification> {

@@ -43,7 +43,7 @@ export function expandChips(text: string, pastes: readonly PasteChip[]): string 
 }
 
 /** True when every character of `query` occurs in `text` in order (case already folded by the caller). */
-export function isSubsequence(query: string, text: string): boolean {
+function isSubsequence(query: string, text: string): boolean {
   let at = 0;
   for (const char of query) {
     at = text.indexOf(char, at);
@@ -72,7 +72,7 @@ export function pendingArgument(text: string, commands: readonly SlashCommand[] 
   return commands.find(command => command.name === match?.[1]?.toLowerCase() && command.argumentKey !== undefined) ?? null;
 }
 
-export interface MentionToken {
+interface MentionToken {
   /** Offset of the `@`. */
   readonly start: number;
   readonly query: string;

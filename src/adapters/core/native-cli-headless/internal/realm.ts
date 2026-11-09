@@ -22,7 +22,7 @@ const REALM_FAILURE = /^(?:bwrap|deckent-relay|prlimit): /u, LIMITS_FAILURE = /^
 /** `/proc/<pid>/stat` CPU fields count USER_HZ ticks, fixed at 100 in the Linux ABI (proc(5)). */
 const USER_HZ = 100;
 /** f5: which realm bound stopped the CLI (its reserved relay exit code), or null. */
-export type HeadlessLimit = 'cpu-time' | 'processes' | 'memory';
+type HeadlessLimit = 'cpu-time' | 'processes' | 'memory';
 
 /**
  * The relay inside the realm (`node -e`): it listens on the registry proxy address of the realm's own loopback and pipes each connection to the

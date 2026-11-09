@@ -66,7 +66,7 @@ export type AttemptIdentity = z.infer<typeof attemptIdentitySchema>;
 export type AttemptObservation = z.infer<typeof attemptObservationSchema>;
 export type AttemptSnapshot = z.infer<typeof attemptSnapshotSchema>;
 export type AttemptPhase = 'reserved' | 'running' | 'unknown' | 'finished';
-export type AttemptErrorCode = 'ATTEMPT_INVALID' | 'ATTEMPT_IDENTITY_MISMATCH' | 'ATTEMPT_REVISION_CONFLICT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AttemptErrorCode = 'ATTEMPT_INVALID' | 'ATTEMPT_IDENTITY_MISMATCH' | 'ATTEMPT_REVISION_CONFLICT'
   | 'ATTEMPT_OBSERVATION_STALE' | 'ATTEMPT_SEQUENCE_GAP' | 'ATTEMPT_OBSERVATION_CONFLICT' | 'ATTEMPT_TRANSITION_INVALID';
 export class AttemptError extends CodedError {
   constructor(override readonly code: AttemptErrorCode) { super(code); this.name = 'AttemptError'; }

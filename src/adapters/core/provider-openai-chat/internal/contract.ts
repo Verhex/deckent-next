@@ -8,7 +8,7 @@ export const openAiChatWireObjectSchema = protocolWireObjectSchema;
 export { openAiChatUsageSchema, parseOpenAiChatHttpLimits, type OpenAiChatHttpLimits } from '#domain/index.js';
 export const OpenAiChatHttpError = ProtocolHttpError;
 export type OpenAiChatHttpError = InstanceType<typeof ProtocolHttpError>;
-export { OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOLS, OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatHttpErrorCode, type OpenAiReasoningEffort, type OpenAiChatToolCall, type OpenAiChatTextMessage, type OpenAiChatToolDefinition } from '#domain/index.js';
+export { OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatHttpErrorCode, type OpenAiChatTextMessage, type OpenAiChatToolDefinition } from '#domain/index.js';
 import { openAiCompatiblePublishedTariffSchema, type OpenAiCompatiblePublishedTariff } from './pricing-catalog.js';
 import { z } from 'zod';
 
@@ -31,7 +31,7 @@ export type OpenAiChatHttpAuthentication = Readonly<{ type: 'none' } | { type: '
  * non-zero USD cents/MTok, fractional cents as exact decimal strings. */
 export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1 | 2; currency: string;
   inputMinorUnitsPerMillionTokens: number | string; outputMinorUnitsPerMillionTokens: number | string; cachedInputMinorUnitsPerMillionTokens?: number | string }>;
-export const openRouterEndpointTariffSchema = z.strictObject({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
+const openRouterEndpointTariffSchema = z.strictObject({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
   metadataEndpoint: persistedUrl(), endpointTag: persistedString(z.string().min(1).max(1024)),
   metadataLimits: z.strictObject({ maxAgeMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxResponseBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
     timeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });

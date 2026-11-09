@@ -5,9 +5,9 @@ import { setupProfileRefSchema, type CoreSetupStageId, type SetupDecision, type 
 
 /** Inputs every Core evaluator reads; `states` holds the states decided so far (stage order); `phases` the phase of every stage; `unattendedProfile`
  * the stage table's default profile. */
-export type CoreStageInput = Readonly<{ facts: SetupObservationFacts; answers: Readonly<Record<string, unknown>>; scopeId: string | null;
+type CoreStageInput = Readonly<{ facts: SetupObservationFacts; answers: Readonly<Record<string, unknown>>; scopeId: string | null;
   states: ReadonlyMap<string, SetupStageState>; phases: ReadonlyMap<string, SetupPhase>; unattendedProfile: string }>;
-export type CoreStageResult = Readonly<{ decision: SetupDecision; autoEligible: boolean }>;
+type CoreStageResult = Readonly<{ decision: SetupDecision; autoEligible: boolean }>;
 type Reason = Extract<MessageKey, `setup.reason.${string}`>;
 type Question = Extract<MessageKey, `setup.question.${string}`>;
 export const CORE_STAGE_TITLES: Readonly<Record<CoreSetupStageId, Extract<MessageKey, `setup.stage.${string}`>>> = Object.freeze({

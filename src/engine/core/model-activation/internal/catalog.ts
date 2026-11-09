@@ -82,7 +82,7 @@ export type ModelCatalogChannelView = Readonly<{ channelId: string; access: 'den
   models: readonly Readonly<{ modelId: string; revision: number; model: ModelCatalogModelRecord['model'];
     activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null; chatState?: 'active' | 'inactive' | null; activationConflict?: boolean }>[] }>;
 export interface ModelCatalogInspection { readonly schemaVersion: 1; readonly scopeId: string; readonly channels: readonly ModelCatalogChannelView[] }
-/** Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
 export class ModelCatalogInspectionApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorizer: ModelCatalogAuthorizer,
     private readonly openReader: () => Promise<ModelCatalogReader>) {}

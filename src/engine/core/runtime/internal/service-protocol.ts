@@ -6,8 +6,8 @@ import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 31 as const;
-export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
-export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
+const RUNTIME_SERVICE_ERROR_PARAMS = 8;
+const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
 export function runtimeServiceErrorParams(params: Readonly<Record<string, unknown>> | undefined): Record<string, string | number> | undefined {
   if (!params) return undefined;
@@ -27,7 +27,7 @@ export function isRuntimeServiceQueueOperation(operation: RuntimeServiceOperatio
   return ['enqueueTargetQueueRollback', 'enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue', 'challengeTargetQueue', 'answerTargetQueue', 'executeTargetQueue'].includes(operation);
 }
 export const runtimeServiceDescriptionInputSchema = z.strictObject({}).readonly();
-export const runtimeServiceDeliverySchema = z.strictObject({ get maxResultBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const runtimeServiceDeliverySchema = z.strictObject({ get maxResultBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }).readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
 /** Operations whose request carries a `delivery` result bound (the server requires it; the client always sends one). */
@@ -36,7 +36,7 @@ export const isRuntimeServiceBoundedResultOperation = (operation: RuntimeService
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'manageProviderSpend' || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'steerChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
   || isRuntimeServiceQueueOperation(operation) || operation === 'clearSessionStanding' || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
-/** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
 export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
   return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
 }

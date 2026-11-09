@@ -14,12 +14,12 @@ export function budgetEntry(view: BudgetPanelView | null, words: BudgetPanelLabe
   return view.action === 'create' ? { label: words.create, detail: view.note ?? '' } : { label: words.change, detail: fillTemplate(words.changeDetail, { current: view.current ?? '-' }) };
 }
 /** The amount list: the presets, then the bounded arrow-key step (no free entry anywhere). */
-export function budgetAmountTree(view: BudgetPanelView, words: BudgetPanelLabels): PickerTree {
+function budgetAmountTree(view: BudgetPanelView, words: BudgetPanelLabels): PickerTree {
   return { title: view.action === 'change' ? fillTemplate(words.changeDetail, { current: view.current ?? '-' }) : words.create,
     items: [...view.presets.map(usd => ({ id: `usd:${usd}`, label: fillTemplate(words.preset, { usd }) })), { id: OTHER, label: words.other }] };
 }
 /** The confirm list: send (and, for a frozen account, send and lift the freeze), or cancel. */
-export function budgetConfirmTree(view: BudgetPanelView, usd: number, words: BudgetPanelLabels): PickerTree {
+function budgetConfirmTree(view: BudgetPanelView, usd: number, words: BudgetPanelLabels): PickerTree {
   return { title: fillTemplate(words.confirmTitle, { usd }), items: [{ id: CONFIRM, label: words.confirm },
     ...(view.action === 'change' && view.frozen ? [{ id: UNFREEZE, label: words.confirmUnfreeze }] : []), { id: 'cancel', label: words.cancel }] };
 }

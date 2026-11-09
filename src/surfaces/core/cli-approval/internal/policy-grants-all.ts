@@ -24,7 +24,7 @@ export async function policyGrantsAll(context: ApprovalCommandContext, input: { 
 }
 
 /** The readable page: scope line, count (of this page when paged), table, and the since / next-page notes. Every cell goes through the table's redaction. */
-export function standingGrantsAllText(view: StandingGrantsPage, flagged: boolean, locale: Locale, style: ReturnType<typeof cliTableStyle>, later = false): string {
+function standingGrantsAllText(view: StandingGrantsPage, flagged: boolean, locale: Locale, style: ReturnType<typeof cliTableStyle>, later = false): string {
   const head = scopeNotice({ scopeId: view.scopeId, source: flagged ? 'flag' : 'default' }, locale);
   if (view.rows.length === 0) return [head, t('cli.policy.grantsAll.none', {}, locale)].join('\n');
   const scopes = (value: 'all' | readonly string[]) => value === 'all' ? t('cli.policy.grantsAll.allScopes', {}, locale) : value.join(', ');

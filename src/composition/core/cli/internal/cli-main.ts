@@ -20,7 +20,7 @@ export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.f
 export const hostAgentEnvironment = (root: string, env: NodeJS.ProcessEnv = process.env) => loadConfigAgentEnvironment(root, { env }).catch(() => undefined);
 /** U7-1: the project this call belongs to, walked up from the launch folder; `init --here` keeps the exact folder (a nested installation).
  * Git is asked (lazily, read-only) only when an installation above the folder lies in a work tree. A refusal is printed in the caller's language. */
-export async function hostProjectRoot(argv: readonly string[], start: string, env: NodeJS.ProcessEnv = process.env): Promise<ProjectRootResolution> {
+async function hostProjectRoot(argv: readonly string[], start: string, env: NodeJS.ProcessEnv = process.env): Promise<ProjectRootResolution> {
   return resolveProjectRoot(start, env, { exact: argv[0] === 'init' && argv.includes('--here'),
     ports: { tracked: async (directory, paths) => (await import('./git-tracked.js')).gitTracksPaths(directory, paths, env) } });
 }
@@ -46,7 +46,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
       return (await import('./host.js')).createCliHost(base, serviceEntry); } }); }
   finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
-export const CLOSED_PIPE_EXIT = 141; // A reader that closed the pipe (`deckent … | head`) is a SIGPIPE: 128 + 13, the code a shell reports for `cat`, `git`, `yes`.
+const CLOSED_PIPE_EXIT = 141; // A reader that closed the pipe (`deckent … | head`) is a SIGPIPE: 128 + 13, the code a shell reports for `cat`, `git`, `yes`.
 export function startCli(): void { // The bootstrap (entry.ts, P5a) runs this process as the `deckent` executable.
   // KUR-55: Node ignores SIGPIPE, so a closed reader surfaces as an unhandled EPIPE stack trace. The call stops quietly instead, before another
   // write; `runtime serve` keeps running (its output is a log, never the reason to stop a service). Any other stream error still surfaces.

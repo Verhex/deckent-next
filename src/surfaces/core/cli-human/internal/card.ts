@@ -26,7 +26,6 @@ export function cliCardGate(request: CliCardRequest, io: CliCardIo): Readonly<{ 
   return { stdin, stdout, env };
 }
 
-export type StandingAnswer = 'once' | 'session' | 'always' | 'no';
 /** The words of a card's Ctrl+Y copy (`tuicopy.card.*`) for a card drawn on its own stream (a CLI card, an onboarding step). */
 export function cardCopyLabels(locale: Locale): CardCopyLabels {
   return { hint: t('tuicopy.card.hint', {}, locale), sent: t('tuicopy.card.sent', {}, locale), tooLarge: t('tuicopy.card.tooLarge', {}, locale), unavailable: t('tuicopy.card.unavailable', {}, locale) };

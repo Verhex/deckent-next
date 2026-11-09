@@ -18,7 +18,7 @@ export type MonitorQuery = z.infer<typeof monitorQuerySchema>;
  * render this same value; the blocker is derived once (engine) and never re-derived by a surface.
  */
 export type MonitorInstallStatus = 'available' | 'unavailable' | 'denied';
-export interface MonitorBuild { readonly sourceCommit: string | null; readonly sourceTreeSha256: string | null; readonly builtAt: string | null }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface MonitorBuild { readonly sourceCommit: string | null; readonly sourceTreeSha256: string | null; readonly builtAt: string | null }
 export interface MonitorService {
   readonly state: 'running' | 'stopped' | 'unknown'; readonly instanceId: string | null; readonly processId: number | null;
   readonly build: MonitorBuild | null;
@@ -111,7 +111,7 @@ export interface MonitorPool {
    * uncertain); these are execution slots/occupancy (active, uncertain). A reservation needs both, so either can cause `waiting-pool-slot`. */
   readonly executionCapacity?: number | null; readonly executing?: number;
 }
-/** H1: bounded read-output evidence of this exact worker, never a claim of acceptance. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). H1: bounded read-output evidence of this exact worker, never a claim of acceptance. */
 export interface MonitorWorkerHuman {
   readonly taskBrief?: TaskBrief; readonly resultBrief?: ResultBrief;
   readonly title: string | null; readonly titleEvidence: 'title' | 'task' | 'acceptance' | 'missing';
@@ -126,7 +126,7 @@ export interface MonitorWorkerHuman {
   readonly startedAtMs: number | null; readonly endedAtMs: number | null;
   readonly endedAtSource: 'sealed' | 'observed' | null;
 }
-export interface MonitorEventExcerpt { readonly kind: string; readonly summary: string }
+interface MonitorEventExcerpt { readonly kind: string; readonly summary: string }
 export interface MonitorWorker extends WorkerObservation { readonly human?: MonitorWorkerHuman }
 export type MonitorWorkerContent = Pick<MonitorWorkerHuman, 'transcript' | 'patch' | 'finalReport' | 'tokenUsageRecorded'> & {
   readonly usage?: WorkerEventSummary; readonly usageEvidence?: 'sealed' | 'unavailable';

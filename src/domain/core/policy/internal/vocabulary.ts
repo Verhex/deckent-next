@@ -70,7 +70,7 @@ export const policyResources = Object.freeze({
   // exact rule and version as `live`. A person's grant only: the AI floor refuses it for every AI principal; the shipped seed never changes.
   nervousRule: Object.freeze({ kind: 'nervous-rule' as const, actions: Object.freeze(['promote'] as const) }),
 });
-export type CorePolicyResource = keyof typeof policyResources;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];
 const vocabulary = Object.freeze({ schemaVersion: 1 as const, resources: Object.freeze(Object.values(policyResources)) });
 /** Public metadata only. Catalog inclusion never grants an action or authenticates a principal. */

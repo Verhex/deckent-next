@@ -7,17 +7,17 @@ import { counterSchema, agentTurnMessageSchema, type AgentTurnMessage } from '#d
 import titleLimits from './session-title-limits.json' with { type: 'json' };
 import { sessionOriginMatches, writeSessionOrigin, type TerminalSessionFilter, type TerminalSessionOrigin } from './session-origin.js';
 
-export const TERMINAL_SESSION_LIMITS = Object.freeze({ maxSessions: 50, maxFileBytes: 16 * 1024 * 1024, previewChars: 120 });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const TERMINAL_SESSION_LIMITS = Object.freeze({ maxSessions: 50, maxFileBytes: 16 * 1024 * 1024, previewChars: 120 });
 const sessionIdSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 const snapshotSchema = z.strictObject({ schemaVersion: z.literal(1), sessionId: sessionIdSchema, scopeId: persistedString(z.string().min(1).max(256)),
   updatedAtMs: counterSchema, messages: z.array(agentTurnMessageSchema).max(100_000) });
-export type TerminalSessionSnapshot = z.infer<typeof snapshotSchema>;
-export interface TerminalSessionSummary {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TerminalSessionSnapshot = z.infer<typeof snapshotSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TerminalSessionSummary {
   readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string;
   /** The name the person gave with `/rename` (T5); absent: the picker shows the first message. */
   readonly title?: string;
 }
-export interface TerminalSessionStore {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TerminalSessionStore {
   save(snapshot: TerminalSessionSnapshot, origin?: TerminalSessionOrigin): Promise<void>;
   /** Newest first, only this scope's sessions. */
   list(scopeId: string, filter?: TerminalSessionFilter): Promise<readonly TerminalSessionSummary[]>;

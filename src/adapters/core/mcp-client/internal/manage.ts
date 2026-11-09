@@ -19,7 +19,7 @@ import { modelTextPrefix } from '#domain/index.js';
 import type { AgentToolApprovalFacts } from '#engine/index.js';
 import noticeLimits from './notice-limits.json' with { type: 'json' };
 
-/** What the registry needs from its host: the project, its layout (the alpha.47 trust location, start failures and server homes are in its data
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the registry needs from its host: the project, its layout (the alpha.47 trust location, start failures and server homes are in its data
  * root), the environment and secret resolver of the launch, and the company policy (none in Core yet). */
 export interface McpRegistryContext {
   readonly projectRoot: string;
@@ -43,11 +43,11 @@ export async function mcpSecretUsers(projectRoot: string, environment: Readonly<
 /** A6-3 (alpha.63.2) follow-up: the `${VAR}` names the personal file's user servers and this project's local servers read; the runtime service
  * starts with them, as it does with referenced secret names. A project file reads only its allowlist, so it adds none. Nothing is expanded here. */
 export const mcpEnvironmentNames = async (projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly string[]> => [...new Set([...JSON.stringify(await personalServers(projectRoot, environment)).matchAll(MCP_VARIABLE_NAME)].map(match => match[1]!))];
-/** `trusted`: approved definition, launchable; `pending-approval`: never decided (reason `trust-moved`: a record in the alpha.47 place, the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `trusted`: approved definition, launchable; `pending-approval`: never decided (reason `trust-moved`: a record in the alpha.47 place, the
  * project's data root, waits for its one re-approval by card, owner A48-D6); `changed`: the entry changed since it was decided; `declined`: the
  * owner said no to this definition; `invalid-launch`: its values cannot be expanded; `trust-store-unavailable`: a trust record cannot be read. */
 export type McpServerStatus = 'trusted' | 'pending-approval' | 'changed' | 'declined' | 'invalid-launch' | 'trust-store-unavailable';
-/** Where the trust record of a scope lives (SEC-2, F29): user trust beside the personal registry (every project); project and local trust in
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where the trust record of a scope lives (SEC-2, F29): user trust beside the personal registry (every project); project and local trust in
  * the global root's directory of this project, never in the project tree. `prepare`: created for a writer. Unsafe or in-project: typed refusal. */
 export async function mcpTrustDirectory(scope: McpScope, context: Pick<McpRegistryContext, 'projectRoot' | 'environment'>, prepare = false): Promise<string> {
   const root = mcpGlobalRoot(context.environment);
@@ -60,13 +60,13 @@ const movedTrustDirectory = (layout: ProductLayout) => productResourcePath(layou
 const storeTextOf = (directory: Promise<string>) => directory.then(readMcpTrustText, (error: unknown) =>
   ({ ok: false as const, reason: String((error as { params?: { reason?: unknown } })?.params?.reason ?? 'trust-store-unreadable') }));
 const storeOf = async (directory: Promise<string>) => parseMcpTrust(await storeTextOf(directory));
-export interface McpServerView {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpServerView {
   readonly name: string; readonly scope: McpScope; readonly file: string; readonly shadows: readonly McpScope[]; readonly definitionDigest: string;
   readonly entry: McpServerEntry; readonly status: McpServerStatus; readonly reason?: string; readonly refusal?: McpSecretRefusal; readonly trust: McpTrustRecord | null;
   /** The launch values, for a server that may start (trusted, expandable); never for a pending one. */
   readonly launch: McpClientServerSettings | null;
 }
-export interface McpRegistryView { readonly projectKey: string; readonly paths: { readonly project: string; readonly personal: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpRegistryView { readonly projectKey: string; readonly paths: { readonly project: string; readonly personal: string };
   readonly servers: readonly McpServerView[]; readonly problems: readonly McpRegistryProblem[] }
 
 /** Reads both registry files and the trust record and decides each effective server's status. Starts nothing. */
@@ -162,8 +162,8 @@ export interface McpCommandContext extends McpRegistryContext {
   readonly scopeId?: string;
 }
 /** K4: where the `sandbox-net` servers' own HOMEs live (the data root's `integrations/mcp-home`, never the user's HOME or the project). */
-export const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layout, 'integrations'), MCP_SERVER_HOMES_DIR);
-export function mcpTrustContext(context: McpRegistryContext & { readonly sandboxes: McpLaunchContext['sandboxes']; readonly principal: McpTrustContext['principal'];
+const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layout, 'integrations'), MCP_SERVER_HOMES_DIR);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function mcpTrustContext(context: McpRegistryContext & { readonly sandboxes: McpLaunchContext['sandboxes']; readonly principal: McpTrustContext['principal'];
   readonly audit: McpTrustAudit; readonly inputMaxBytes?: number; readonly now?: () => number; readonly scopeId?: string }, cwd: string): McpTrustContext {
   return { environment: context.environment, secret: context.secret, cwd, sandboxes: context.sandboxes, principal: context.principal, audit: context.audit, ...(context.grants ? { grants: context.grants } : {}),
     ...(context.knownSecrets ? { knownSecrets: context.knownSecrets } : {}),

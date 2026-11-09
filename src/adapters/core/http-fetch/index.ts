@@ -1,4 +1,4 @@
-export { FETCH_USER_AGENT, fetchHttps, SYSTEM_FETCH_TRANSPORT, type HttpFetchResult, type HttpFetchTransport } from './internal/request.js';
-export { agentFetchEffectCommandId, describeFetchApproval, describeFetchRefusal, describeFetchResult, FETCH_HEAD_BYTES, FETCH_URL_MAX_CHARS, FETCH_URL_TOOL_SPEC,
-  NETWORK_FETCH_OPERATION, NETWORK_FETCH_TARGET_KIND, NetworkFetchTarget, planFetchCall, type FetchDeposit, type FetchPlan, type FetchRun,
-  type FetchSettings } from './internal/target.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FETCH_USER_AGENT, fetchHttps, SYSTEM_FETCH_TRANSPORT, type HttpFetchResult, type HttpFetchTransport } from './internal/request.js';
+export { agentFetchEffectCommandId, describeFetchApproval, describeFetchRefusal, describeFetchResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FETCH_HEAD_BYTES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FETCH_URL_MAX_CHARS, FETCH_URL_TOOL_SPEC,
+  NETWORK_FETCH_OPERATION, NETWORK_FETCH_TARGET_KIND, NetworkFetchTarget, planFetchCall, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type FetchDeposit, type FetchPlan, type FetchRun,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type FetchSettings } from './internal/target.js';

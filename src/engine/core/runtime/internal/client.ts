@@ -9,7 +9,7 @@ import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, isRuntimeServiceBoundedResultOperat
   type RuntimeServiceOperation, type RuntimeServiceDelivery, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest, type RuntimeServiceResponse } from './service-protocol.js';
 import { runtimeServiceDescriptorSchema, shutdownAdmissionSchema, shutdownCommandSchema, type ShutdownCommand } from './shutdown-contract.js';
 import type { ServiceShutdownAdmissionResult } from './shutdown-store.js';
-/** Configuration and waiting are ports; the protocol client owns retries and result validation. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Configuration and waiting are ports; the protocol client owns retries and result validation. */
 export interface RuntimeClientPorts {
   readonly attempt: RuntimeStreamingCall;
   readonly readPolicy: () => Promise<{ readonly busyRetryLimit: number; readonly admissionWaitMs: number } | null>;

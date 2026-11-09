@@ -1,12 +1,12 @@
 import { cpus, totalmem, freemem } from 'node:os';
 import { readFileSync } from 'node:fs';
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
-export interface SystemProfile { cpuCores: number; totalMemMB: number; freeMemMB: number; recommendedMaxWorkers: number }
+interface SystemProfile { cpuCores: number; totalMemMB: number; freeMemMB: number; recommendedMaxWorkers: number }
 export function suggestMaxWorkers(totalGB: number, workerMemGB = 2): number {
   if (!Number.isFinite(totalGB) || !Number.isFinite(workerMemGB) || totalGB <= 0 || workerMemGB <= 0) return 1;
   return Math.max(1, Math.min(16, Math.floor(totalGB / workerMemGB) - 1));
 }
-/** Both limits behind the recommended worker count: one core is left to the host, and each worker is estimated at the registry's memory. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Both limits behind the recommended worker count: one core is left to the host, and each worker is estimated at the registry's memory. */
 export interface WorkerRecommendation { readonly cpuBased: number; readonly memoryBased: number; readonly workerMemoryEstimateMB: number; readonly cap: number; readonly recommended: number }
 export function describeWorkerRecommendation(freeMemMB: number, cpuCores: number, workerMemoryEstimateMB: number = HOST_LIMITS_REGISTRY.workerMemoryEstimateMB): WorkerRecommendation {
   const cap = HOST_LIMITS_REGISTRY.workerCountCap;

@@ -3,16 +3,16 @@ import { nativeCliIds } from '#domain/index.js';
 import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engine/core/setup/index.js';
 import defaults from './work.json' with { type: 'json' };
 
-/** The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
 export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), pendingProvider: z.string().optional(),
   providers: z.array(z.string()).max(16).optional(), kinds: z.array(z.string()).max(256).optional(),
   images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional(),
   /** R8b/R3a: the scope's connected subscription CLIs (a worker without Docker) and the one the person chose for the first work kind. */
   connections: z.array(z.strictObject({ id: z.string(), provider: z.string() })).max(16).optional(), connection: z.strictObject({ id: z.string(), provider: z.string() }).optional() });
-export const WORK_KIND_STAGE_ID = 'work:kind', WORK_POOL_STAGE_ID = 'work:pool';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORK_KIND_STAGE_ID = 'work:kind', WORK_POOL_STAGE_ID = 'work:pool';
 /** The coding CLIs a first work kind may run on: the native CLI registry, in its order (the window's choices). */
 export const WORK_PROVIDERS: readonly string[] = nativeCliIds;
-export const WORK_DEFAULTS = Object.freeze({ kind: defaults.kind, poolId: defaults.pool, executionSlots: defaults.executionSlots, inFlightSlots: defaults.inFlightSlots });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORK_DEFAULTS = Object.freeze({ kind: defaults.kind, poolId: defaults.pool, executionSlots: defaults.executionSlots, inFlightSlots: defaults.inFlightSlots });
 const reason = (code: string, params: Record<string, string | number> = {}) => ({ code: `setup.work.${code}`, params });
 const registryCli = (scopeId: string, provider: string, connection?: string) => ['deckent', 'init', 'registry', '--scope', scopeId, '--provider', provider, '--kind', WORK_DEFAULTS.kind,
   '--pool', WORK_DEFAULTS.poolId, '--execution-slots', String(WORK_DEFAULTS.executionSlots), '--in-flight-slots', String(WORK_DEFAULTS.inFlightSlots), ...(connection ? ['--connection', connection] : []), '--preview'];

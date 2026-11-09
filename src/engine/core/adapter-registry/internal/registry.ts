@@ -2,10 +2,10 @@ import { admitModuleManifest, unifyOperationCatalog, RegistryError, type Adapter
 import { isStandardSchemaV1, validateStandardSchemaSync, type StandardSchemaV1, type StandardSyncValidation } from '#platform/index.js';
 import type { EffectTarget, EffectTargets, OperationCatalog } from '#engine/core/effect/index.js';
 
-/** Output every target options schema must produce: the target `kind`, so configuration can check kind uniqueness without
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Output every target options schema must produce: the target `kind`, so configuration can check kind uniqueness without
  * constructing targets. The registry checks it at runtime too — a foreign schema's declared output type is a claim, not a proof. */
 export interface TargetAdapterOptions { readonly kind: string }
-/** Code side of one provided target adapter: a strict options schema and a factory that builds the target from the registry-validated
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Code side of one provided target adapter: a strict options schema and a factory that builds the target from the registry-validated
  * options. The schema is any Standard Schema v1 implementation (spec 1.1.0, https://standardschema.dev) — zod 3.25+, Valibot,
  * ArkType or hand-written — so an Enterprise/ERP module is not bound to Deckent's schema library. Validation must be synchronous:
  * a Promise result is refused (`REGISTRY_OPTIONS_ASYNC`), because configuration validation is synchronous. */
@@ -13,14 +13,14 @@ export interface TargetAdapterFactory {
   readonly optionsSchema: StandardSchemaV1<unknown, TargetAdapterOptions>;
   create(options: unknown): EffectTarget;
 }
-/** Result of validating one configured target's options through its adapter's registered schema. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Result of validating one configured target's options through its adapter's registered schema. */
 export type TargetOptionsValidation = StandardSyncValidation<TargetAdapterOptions> | { readonly status: 'unknown' };
 export interface AdapterModuleRegistration { readonly manifest: AdapterModuleManifest; readonly factories: Readonly<Record<string, TargetAdapterFactory>> }
 /** The one operation catalog every producer resolves from (A04-2): Core code operations, registered module operations and the
  * installation's config catalog, unified without conflict. `entries()` carries provenance for inspection; it grants nothing. */
 export interface UnifiedOperationCatalog extends OperationCatalog { entries(): readonly CatalogOperation[] }
-export interface ResolvedTargetAdapter { readonly manifest: AdapterModuleManifest; readonly adapterId: string; readonly version: number; readonly factory: TargetAdapterFactory }
-export interface ConfiguredTarget { readonly adapter: string; readonly options?: unknown }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ResolvedTargetAdapter { readonly manifest: AdapterModuleManifest; readonly adapterId: string; readonly version: number; readonly factory: TargetAdapterFactory }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfiguredTarget { readonly adapter: string; readonly options?: unknown }
 
 /** Admission-time snapshot of a factory: the `create` function and the schema's `~standard` props (version, vendor, validate) are read
  * once, so reassigning the registrant's factory fields or its schema's `validate` after admission changes nothing (Astra 2126 R2). */

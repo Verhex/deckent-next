@@ -6,7 +6,7 @@ import { administeredSince, policyTemplateUpgradeKeyVersion, type AuthorityRevis
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 /** The upgrade's approval card id (`approval`/`decide`, an AI-floored authority card) and its change kind (the command id's tag). */
 const UPGRADE = 'policy-template-upgrade';
-/** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;

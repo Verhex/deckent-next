@@ -67,7 +67,7 @@ export type AssistantRenderLabels = Readonly<{
   cancelHint?: string;
 }>;
 
-export type ToolGroupLabels = Readonly<Record<'running' | 'files' | 'filesOne' | 'dirs' | 'dirsOne' | 'searches' | 'searchesOne' | 'reads' | 'readsOne' | 'expand' | 'collapse', string>>;
+type ToolGroupLabels = Readonly<Record<'running' | 'files' | 'filesOne' | 'dirs' | 'dirsOne' | 'searches' | 'searchesOne' | 'reads' | 'readsOne' | 'expand' | 'collapse', string>>;
 /** How a settled read group shows (alpha.59 L6): `collapsed`/`expanded` where a click toggles it (the full window's mouse), `open` (no pointer: the
  * summary and every call, so nothing is ever only behind a click). */
 export type ToolGroupView = 'collapsed' | 'expanded' | 'open';
@@ -111,7 +111,7 @@ function toolSummaryText(summary: ToolResultSummary, labels: AssistantRenderLabe
 
 /** The read group's counts by kind (alpha.59 L6): a call's kind is the shape of its own result (file lines or headings, directory entries, matches);
  * a read whose result has no known shape counts as another read. Kinds with no call are left out. */
-export function toolGroupSummary(steps: readonly ToolGroupStep[], labels: AssistantRenderLabels): string {
+function toolGroupSummary(steps: readonly ToolGroupStep[], labels: AssistantRenderLabels): string {
   const words = labels.toolGroup ?? NEUTRAL_TOOL_GROUP, counts = { files: 0, dirs: 0, searches: 0, reads: 0 };
   for (const step of steps) {
     if (step.kind !== 'tool') continue;
@@ -138,7 +138,7 @@ export function footerText(unit: FooterUnit, labels: AssistantRenderLabels, sepa
   return parts.join(` ${separator} `);
 }
 
-export function toolText(unit: Pick<ToolUnit, 'name' | 'target'>, labels: AssistantRenderLabels): string {
+function toolText(unit: Pick<ToolUnit, 'name' | 'target'>, labels: AssistantRenderLabels): string {
   return fillTemplate(labels.tool, { name: unit.name, target: unit.target ?? '' }).trimEnd();
 }
 
@@ -217,7 +217,7 @@ function UnitBody({ unit, labels, groupView, width }: { readonly unit: Assistant
 
 /** Dim single-line reasoning narration; it only exists while reasoning streams and collapses when the answer starts. Under it, the
  * last lines of the reasoning itself (TL-A D6), dim and already sanitized; empty when the owner turned the preview off. */
-export function ReasoningNarration({ narration, labels, clock, preview = [] }: { readonly narration: Narration; readonly labels: AssistantRenderLabels;
+function ReasoningNarration({ narration, labels, clock, preview = [] }: { readonly narration: Narration; readonly labels: AssistantRenderLabels;
   readonly clock: TrustedClock; readonly preview?: readonly string[] }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { frame } = useAnimation({ interval: TIMING.spinnerIntervalMs });

@@ -56,7 +56,7 @@ export class OperationPolicyAuthorization {
     return decision.decision;
   }
 }
-/** The open approval request a pending outcome reports: enough for a surface to decide it and resubmit the same command. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The open approval request a pending outcome reports: enough for a surface to decide it and resubmit the same command. */
 export type EffectApprovalPendingRequest = Readonly<{ approvalId: string; revision: number; expiresAt: number; summary: string }>;
 /** What the gate asks against (C12 G2): the command's stored record (null before the first claim), the descriptor + endpoint binding the
  * intent pins, and the canonical input digest the intent records. A terminal record is replayed, never re-approved. */
@@ -74,10 +74,10 @@ export interface EffectApprovalGate {
 export const refuseRequiredApproval: EffectApprovalGate = {
   async admit(descriptor, decision) { if (descriptor.approval === 'required' || decision === 'require-approval') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); },
 };
-/** Settled outcome (contract v1, unchanged byte for byte on every surface). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Settled outcome (contract v1, unchanged byte for byte on every surface). */
 export type EffectResult = Readonly<{ schemaVersion: 1; status: 'settled'; commandId: string; scopeId: string; operation: OperationRef; target: EffectTargetRef;
   sequence: number; version: string | null; compensates: string | null; evidence: 'idempotency-record' | 'fence' }>;
-/** Pending outcome (contract v2, C12 G2): the command needs a decision on `approval`; nothing was sent and no intent exists for it. The
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Pending outcome (contract v2, C12 G2): the command needs a decision on `approval`; nothing was sent and no intent exists for it. The
  * same command (same `commandId`, same input) is resubmitted after an `allow`; a deny or an unused allow is a typed refusal. */
 export type EffectApprovalPending = Readonly<{ schemaVersion: 2; status: 'approval-pending'; commandId: string; scopeId: string; operation: OperationRef;
   target: EffectTargetRef; approval: EffectApprovalPendingRequest }>;

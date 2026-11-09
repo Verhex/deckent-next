@@ -19,7 +19,7 @@ async function privateRead(path: string, max: number) {
     return await handle.readFile('utf8');
   } finally { await handle.close(); }
 }
-export type FirstCommitRecovery = Readonly<{ state: 'none' | 'settled' | 'prepared' }> | Readonly<{ state: 'pending'; commit: string; paths: readonly string[];
+type FirstCommitRecovery = Readonly<{ state: 'none' | 'settled' | 'prepared' }> | Readonly<{ state: 'pending'; commit: string; paths: readonly string[];
   pathsFile: string; locked: boolean; overlap: readonly string[]; command: string | null }>;
 /** No mutation. Same-path staged blobs are never erased by an offered recovery command. */
 export async function inspectFirstCommitRecovery(git: FirstCommitGit, maxFiles: number, pathBytes: number): Promise<FirstCommitRecovery> {

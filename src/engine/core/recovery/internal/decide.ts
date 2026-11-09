@@ -21,7 +21,7 @@ export interface RecoveryModelPorts {
   rows(scopeId: string): Promise<readonly RecoveryModelRow[]>;
   invoke(request: RecoveryModelRequest): Promise<RecoveryModelResult>;
 }
-export interface RecoveryDecisionPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RecoveryDecisionPorts {
   readonly recovery: Pick<RecoveryApplication, 'prepare' | 'assess' | 'continueLostTask' | 'escalate'>;
   readonly store: Pick<RecoveryStore, 'loadCase' | 'loadRun'>;
   /** The audit writer of the decision seal (the recovery principal's only other record), its reader, and (S6R-6) the bounded recent window of one

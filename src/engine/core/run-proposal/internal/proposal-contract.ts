@@ -16,7 +16,7 @@ export const setupIntentFactSchema = z.strictObject({ id: identitySchema, revisi
   ready: z.boolean(), reason: z.enum(['WORKER_SETUP_PENDING', 'WORKER_IMAGE_BUILD_FAILED', 'WORKER_IMAGE_BUILD_INTERRUPTED', 'WORKER_IMAGE_DECLINED']),
   params: z.record(z.string(), z.union([persistedString(z.string().max(512)), z.number().finite()])) }).readonly();
 export type SetupIntentFact = z.infer<typeof setupIntentFactSchema>;
-export const runIntentRecordSchema = z.strictObject({ schemaVersion: z.literal(2), kind: z.literal('intent'),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const runIntentRecordSchema = z.strictObject({ schemaVersion: z.literal(2), kind: z.literal('intent'),
   command: brainPlanCommandSchema, proposer: runProposalSchema.unwrap().shape.proposer, proposalId: identitySchema, runId: identitySchema,
   digest: z.string().regex(/^[a-f0-9]{64}$/), revision: counterSchema, recordedAt: counterSchema,
   status: z.enum(['parked', 'released', 'starting', 'cancelled']), fact: setupIntentFactSchema,
@@ -24,7 +24,7 @@ export const runIntentRecordSchema = z.strictObject({ schemaVersion: z.literal(2
     revision: counterSchema, digest: z.string().regex(/^[a-f0-9]{64}$/) })).max(256) }).readonly();
 export type RunIntentRecord = z.infer<typeof runIntentRecordSchema>;
 const plannedV2 = plannedV1.unwrap().extend({ schemaVersion: z.literal(2), kind: z.literal('planned'), origin: runIntentRecordSchema.nullable() }).strict().readonly();
-export const runProposalRecordSchema = z.union([plannedV1, plannedV2]);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const runProposalRecordSchema = z.union([plannedV1, plannedV2]);
 export type RunProposalRecord = z.infer<typeof runProposalRecordSchema>;
 export type RunProposalEnvelope = RunProposalRecord | RunIntentRecord;
 export const isRunIntent = (record: RunProposalEnvelope): record is RunIntentRecord => 'kind' in record && record.kind === 'intent';

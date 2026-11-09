@@ -7,7 +7,7 @@ export const modelInvocationCancellationRecoveryCommandSchema = z.strictObject({
 export const modelInvocationCancellationInventoryQuerySchema = modelInvocationCancellationRecoveryCommandSchema.unwrap()
   .extend({ limit: persistedInteger().positive().max(2_147_483_646) }).strict().readonly();
 export type ModelInvocationCancellationRecoveryCommand = z.infer<typeof modelInvocationCancellationRecoveryCommandSchema>;
-export type ModelInvocationCancellationInventoryQuery = z.infer<typeof modelInvocationCancellationInventoryQuerySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationCancellationInventoryQuery = z.infer<typeof modelInvocationCancellationInventoryQuerySchema>;
 /** Metadata only: retained provider response content is never needed to deliver cancellation. */
 export interface ModelInvocationCancellationInventoryEntry {
   readonly receipt: ModelInvocationReceipt;

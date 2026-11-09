@@ -13,17 +13,17 @@ import registry from './coding.json' with { type: 'json' };
 import { inspectFirstCommitRecovery, recoveryNames } from './first-commit-recovery.js';
 
 /** The typed operation id a setup stage or card names (U3U4U7 §3.8); the stage itself and its card belong to U3-1/U4-1. */
-export const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;
-export type FirstCommitFlag = 'secret-name' | 'secret-content' | 'size' | 'nested-repository';
-export type FirstCommitRow = Readonly<{ path: string; bytes: number; flag: FirstCommitFlag | null }>;
+const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;
+type FirstCommitFlag = 'secret-name' | 'secret-content' | 'size' | 'nested-repository';
+type FirstCommitRow = Readonly<{ path: string; bytes: number; flag: FirstCommitFlag | null }>;
 /** `offered`: HEAD unborn and nothing staged. Flagged rows come first and are excluded unless named in `include`; `digest` binds the selection,
  * each selected file's mode and the digest of the form Git stores (after its own clean conversion) and the message, so the apply commits exactly
  * the bytes the card showed and scanned. Hooks never run (plumbing); `sign` mirrors the person's commit.gpgSign. */
-export type FirstCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; operation: typeof FIRST_COMMIT_OPERATION_ID;
+type FirstCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; operation: typeof FIRST_COMMIT_OPERATION_ID;
   identity: boolean; sign: boolean; hooks: 'not-run'; total: number; selected: number; flagged: number; rows: readonly FirstCommitRow[]; more: number; digest: string }>;
-export type FirstCommitResult = Readonly<{ operation: typeof FIRST_COMMIT_OPERATION_ID; commit: string; tree: string; files: number; signed: boolean }>;
+type FirstCommitResult = Readonly<{ operation: typeof FIRST_COMMIT_OPERATION_ID; commit: string; tree: string; files: number; signed: boolean }>;
 /** `bytes`: stdout exactly as Git wrote it (blob content is not text). */
-export type FirstCommitGitResult = Readonly<{ code: number | null; stdout: string; stderr: string; overflow: boolean; bytes?: Buffer }>;
+type FirstCommitGitResult = Readonly<{ code: number | null; stdout: string; stderr: string; overflow: boolean; bytes?: Buffer }>;
 /** One Git process in the person's environment; `index` is a GIT_INDEX_FILE, `objects` a private GIT_OBJECT_DIRECTORY (a read-only preview never
  * writes the repository's objects). The port the focused test wraps to inject a ref race. */
 export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string | Uint8Array; index?: string; objects?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;

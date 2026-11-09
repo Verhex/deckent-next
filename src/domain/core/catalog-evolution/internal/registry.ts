@@ -28,7 +28,7 @@ const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: i
   inherit: z.strictObject({ recheckMinSamples: positive }).readonly(),
   rollout: z.strictObject({ minSuggestions: positive, minAgreementMicro: micro, maxReversalRateMicro: micro, minShadowNarrowings: positive }).readonly(),
   rules: z.array(ruleSchema).min(1).readonly() }).refine(value => new Set(value.rules.map(row => row.id)).size === value.rules.length).readonly();
-export const catalogEvolutionOverlaySchema = z.strictObject({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const catalogEvolutionOverlaySchema = z.strictObject({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
   rules: z.array(ruleSchema).optional() }).readonly();
 export type CatalogEvolutionRegistry = z.infer<typeof registrySchema>;
 export type CatalogEvolutionRule = CatalogEvolutionRegistry['rules'][number];

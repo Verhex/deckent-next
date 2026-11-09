@@ -5,7 +5,7 @@ import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 import { policyVerdictRefusal } from './verdict.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
 export interface PolicySource { load(): Promise<Policy> }
-/** Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
  * surfaces carry the code only, so a caller cannot tell a scope held by another company from an unknown one (no disclosure). */
 export type PolicyRefusalReason = 'COMPANY' | 'UNREGISTERED';
 export class PolicyAuthorizationError extends CodedError {

@@ -8,16 +8,16 @@ import { parseModes, policyModesCommand, typedMode } from './policy-modes.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
-export interface InstallationPreviewInput { readonly profilePath: string; readonly allowShutdown: boolean }
+interface InstallationPreviewInput { readonly profilePath: string; readonly allowShutdown: boolean }
 export type InstallationPreviewHandler = (projectRoot: string, input: InstallationPreviewInput) => Promise<InstallationPreview>;
 export type InstallationInspectionHandler = (projectRoot: string, input: InstallationPreviewInput & { readonly dockerExecutable: string }) => Promise<InstallationEvidencePreview>;
-export interface InstallationApplyInput extends InstallationPreviewInput {
+interface InstallationApplyInput extends InstallationPreviewInput {
   readonly profilePath: string; readonly dockerExecutable: string; readonly proposalDigest: string; readonly acceptCustom: true;
 }
-export interface InstallationResumeInput {
+interface InstallationResumeInput {
   readonly allowShutdown: boolean; readonly dockerExecutable: string; readonly proposalDigest: string; readonly acceptCustom: true;
 }
-export type InstallationPublicationResult = Awaited<ReturnType<InstallationPublicationApplication['apply']>>;
+type InstallationPublicationResult = Awaited<ReturnType<InstallationPublicationApplication['apply']>>;
 export type InstallationApplyHandler = (projectRoot: string, input: InstallationApplyInput) => Promise<InstallationPublicationResult>;
 export type InstallationResumeHandler = (projectRoot: string, input: InstallationResumeInput) => Promise<InstallationPublicationResult>;
 // SCR-B (owner 2026-09-28, checkpoint option B): a Docker/pool-free installation of just policy.json + bindings.json,

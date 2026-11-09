@@ -28,7 +28,7 @@ function entryLines(entry: MemoryEntry, locale: Locale): string[] {
     audience ? t('memory.view.audience', { family: safeCell(audience.workClassFamily), target: audience.workTargetId ? safeCell(audience.workTargetId) : t('memory.view.audience.anyTarget', {}, locale) }, locale)
       : t('memory.view.audience.scopeWide', {}, locale)];
 }
-export function reviewLines(item: MemoryReviewItem, locale: Locale): string[] {
+function reviewLines(item: MemoryReviewItem, locale: Locale): string[] {
   return [...entryLines(item.entry, locale),
     ...(item.support.length ? item.support.map(row => t('memory.view.support', { run: safeCell(row.source.runId), task: safeCell(row.source.taskId), attempt: safeCell(row.source.attemptId),
       rule: safeCell(row.ruleId), version: row.ruleVersion, evaluation: safeCell(row.evaluationId),

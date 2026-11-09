@@ -2,7 +2,7 @@ import { RECOVERY_DECISION_SEED, delegatedUseOf, loadRecoveryDecisionRegistry, m
 import { inspectRoleModelsInScope, roleModelInvocationReference, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import type { RecoveryModelRow } from './decide.js';
 
-/** The S2 role a recovery decision model must hold (registry data; the role registry restricts the recovery principal's model grant to its rows). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The S2 role a recovery decision model must hold (registry data; the role registry restricts the recovery principal's model grant to its rows). */
 export const RECOVERY_DECISION_ROLE = 'recovery-decision';
 /** The composition-root recovery principal acting for `owner` in one scope (S6R-4 identity; only the composition root issues it). */
 export const recoveryDecisionPrincipal = (owner: Readonly<{ issuer: string; subject: string }>, scopeId: string) => recoveryPrincipal(owner, [scopeId]);

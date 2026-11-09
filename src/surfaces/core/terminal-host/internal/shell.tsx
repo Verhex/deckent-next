@@ -8,11 +8,11 @@ import { StartupBanner, type WorklineStartup } from './startup-banner.js';
 import SHELL_LIMITS from './shell-limits.json' with { type: 'json' };
 
 /** Catalog words the caller resolved: the status row (`status`: the scope and "preparing"), `queued` (`{count}`), the one overflow note. */
-export interface TerminalShellLabels { readonly composer: ComposerLabels; readonly prompt: string; readonly banner: string; readonly hint: string;
+interface TerminalShellLabels { readonly composer: ComposerLabels; readonly prompt: string; readonly banner: string; readonly hint: string;
   readonly status: string; readonly queued: string; readonly dropped: string }
-export interface TerminalShellOptions extends Omit<TerminalHostOptions, 'view' | 'inlineStartup' | 'fullscreen'> {
+interface TerminalShellOptions extends Omit<TerminalHostOptions, 'view' | 'inlineStartup' | 'fullscreen'> {
   readonly startup: WorklineStartup; readonly labels: TerminalShellLabels }
-export type ShellLine = Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>;
+type ShellLine = Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>;
 /** What the shell hands to the view that takes its host: the draft as typed and the lines sent meanwhile, in order. */
 export interface TerminalShell { readonly host: TerminalHostHandle; take(): Readonly<{ draft: ComposerHistoryEntry | null; queued: readonly ShellLine[]; armedAt: number | null }> }
 

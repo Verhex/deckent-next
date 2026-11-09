@@ -4,12 +4,12 @@ import { ErrorRegistry } from '#platform/index.js';
 import type { AgentToolOutcome, ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/core/artifacts/index.js';
 
-export type NativeWorkerResources = Readonly<{ inputs?: readonly Readonly<{ name: string; sourceAttemptId: string; receipt: ArtifactReceipt; path: string }>[] | undefined;
+type NativeWorkerResources = Readonly<{ inputs?: readonly Readonly<{ name: string; sourceAttemptId: string; receipt: ArtifactReceipt; path: string }>[] | undefined;
   handoffInputs?: readonly Readonly<{ target: string; receipt: ArtifactReceipt; path: string }>[] | undefined;
   readOnlyMounts?: readonly Readonly<{ source: string; target: string }>[] | undefined }>;
-export type NativeWorkerInputBounds = Readonly<{ maxFiles: number; maxFileBytes: number; maxTotalBytes: number; timeoutMs: number; maxDepth: number }>;
+type NativeWorkerInputBounds = Readonly<{ maxFiles: number; maxFileBytes: number; maxTotalBytes: number; timeoutMs: number; maxDepth: number }>;
 type FileInfo = Readonly<{ size: number; nlink: number; mode: number; dev: number; ino: number; mtimeMs: number; ctimeMs: number; isDirectory(): boolean; isFile(): boolean }>;
-export interface NativeWorkerInputIO {
+interface NativeWorkerInputIO {
   admitInput(row: NonNullable<NativeWorkerResources['inputs']>[number]): void;
   admitMount(row: NonNullable<NativeWorkerResources['readOnlyMounts']>[number]): Promise<void>;
   realpath(path: string): Promise<string>; lstat(path: string): Promise<FileInfo>; readdir(path: string): Promise<string[]>;

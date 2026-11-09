@@ -1,9 +1,9 @@
 import { getConfigFieldDefault } from '#platform/core/config-fields/index.js';
 import type { OutputMode } from '#platform/core/common/index.js';
 import { formatValue } from './format.js';
-export type OutputLevel = 'info' | 'warning' | 'error' | 'critical';
+type OutputLevel = 'info' | 'warning' | 'error' | 'critical';
 export interface OutputSink { write(text: string): unknown }
-export interface EmitOptions<T> {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface EmitOptions<T> {
   json?: boolean; mode?: OutputMode; level?: OutputLevel;
   render?: (data: T, mode: Exclude<OutputMode, 'json'>) => string;
   stdout?: OutputSink; stderr?: OutputSink;

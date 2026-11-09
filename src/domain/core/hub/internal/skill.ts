@@ -10,6 +10,6 @@ export const hubSkillDefinitionSchema = z.strictObject(skillDefinitionSchema.unw
   .refine(row => (row.source.kind === 'import') === (row.signature.status === 'verified')).readonly();
 export const readableSkillDefinitionSchema = z.union([skillDefinitionSchema, hubSkillDefinitionSchema]);
 export type HubSkillContent = z.infer<typeof hubSkillContentSchema>;
-export type HubSkillDefinition = z.infer<typeof hubSkillDefinitionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubSkillDefinition = z.infer<typeof hubSkillDefinitionSchema>;
 
 export type ReadableSkillDefinition = z.infer<typeof readableSkillDefinitionSchema>;

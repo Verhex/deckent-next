@@ -6,7 +6,7 @@ export interface BatchPeer {
   readonly peerPid: number; readonly channel: 'terminal' | 'mcp' | 'sdk' | 'ai';
 }
 export interface BatchTerminalWitness { readonly processStart: string; readonly terminal: string }
-export interface BatchWitnessAuthority {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BatchWitnessAuthority {
   /** Service derives this from SO_PEERCRED and the controlling terminal; never from request fields. */
   capture(peer: BatchPeer): Promise<BatchTerminalWitness | null>;
   sessionActive(peer: BatchPeer): Promise<boolean>;

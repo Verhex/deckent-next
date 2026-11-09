@@ -22,7 +22,7 @@ export interface RunProgressionOperations {
   evaluate(command: TaskEvaluationCommand): Promise<'recorded' | 'changed'>;
   evaluationRecorded(identity: AttemptIdentity, revision: number): Promise<boolean>;
 }
-export interface RunProgressionRuntime { commandId(): string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RunProgressionRuntime { commandId(): string }
 /** The one mapping of a refused reservation's stable code to a quiet turn outcome (any other code is a real failure the host reports):
  * a moved revision is `changed`; no schedulable task, a full pool or a held pool (K5) is `waiting` — no reservation, no error noise. */
 export function reservationRefusalOutcome(code: string): 'changed' | 'waiting' | null {

@@ -4,7 +4,7 @@ import { delegationOwner, installationRegistrationSchema, projectAttachmentSchem
   type ProjectAttachment, type InstallationIdentity } from '#domain/index.js';
 import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/index.js';
 
-export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
   | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED'
   | 'PROJECT_ATTACHMENT_PERSON_MISMATCH' | 'MODEL_USE_NOT_ACTIVE' | 'MODEL_USE_BINDING_CHANGED';
 export class ProjectAttachmentError extends CodedError {

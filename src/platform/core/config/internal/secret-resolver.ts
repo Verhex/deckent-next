@@ -2,12 +2,12 @@ import type { Environment } from '#platform/core/host/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import type { SecretResolver } from './validate/interpolate.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * SECRET-K1: what the installation's secret backend is chosen from — the validated configuration (read before any reference is
  * resolved: the backend selection is never itself a secret reference), the caller's environment and platform.
  */
 export interface SecretResolverContext { readonly config: Readonly<Record<string, unknown>>; readonly env: Environment; readonly platform: string }
-/** Builds the resolver of the backend the configuration selects. Installed once by composition (`registerProviderConfig`). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Builds the resolver of the backend the configuration selects. Installed once by composition (`registerProviderConfig`). */
 export type SecretResolverFactory = (context: SecretResolverContext) => SecretResolver;
 
 let installed: SecretResolverFactory | null = null;
@@ -17,7 +17,7 @@ export function installSecretResolverFactory(factory: SecretResolverFactory): vo
   if (installed !== null && installed !== factory) throw ErrorRegistry.createError('CONFIG_SECTION_DUPLICATE', { params: { section: 'secrets' } });
   installed = factory;
 }
-/** The environment backend's lookup: own properties only (the behaviour every read site had before SECRET-K1). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The environment backend's lookup: own properties only (the behaviour every read site had before SECRET-K1). */
 export function environmentSecretResolver(env: Environment): SecretResolver {
   return async (name: string) => Object.hasOwn(env, name) ? env[name] : undefined;
 }

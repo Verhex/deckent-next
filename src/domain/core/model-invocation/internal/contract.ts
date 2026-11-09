@@ -1,19 +1,18 @@
 import { CodedError, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { modelInvocationResponseEvidenceSchema, modelInvocationResponseSummarySchema } from './response-evidence.js';
-import { counterSchema, createImmutableJsonObjectSchema, identitySchema,
-  type JsonObject } from '#domain/core/primitives/index.js';
+import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { modelActivationActorSchema, modelActivationAuthorizationSchema, modelActivationBindingSchema,
   type ModelActivationActor, type ModelActivationAuthorization, type ModelActivationBinding } from '#domain/core/model-activation/index.js';
 import { modelReferenceSchema, parseModelBindingDefinition,
-  type ModelBindingDefinition, type ModelReference } from '#domain/core/provider-catalog/index.js';
+  type ModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 
-export const MODEL_INVOCATION_SCHEMA_VERSION = 1;
-export const MODEL_INVOCATION_RECEIPT_VERSION = 4;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_INVOCATION_SCHEMA_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_INVOCATION_RECEIPT_VERSION = 4;
 // The receipt outcome is versioned independently of the receipt envelope (both are 4 today).
 export const MODEL_INVOCATION_OUTCOME_VERSION = 4;
-export const MODEL_INVOCATION_REQUEST_PREFIX = 'deckent.model-invocation-request.v1\n';
-export const MODEL_INVOCATION_PROFILE_PREFIX = 'deckent.model-invocation-profile.v1\n';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_INVOCATION_REQUEST_PREFIX = 'deckent.model-invocation-request.v1\n';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_INVOCATION_PROFILE_PREFIX = 'deckent.model-invocation-profile.v1\n';
 export const MODEL_INVOCATION_NATIVE_JSON_LIMITS = Object.freeze({ maxDepth: 16, maxNodes: 262_144,
   maxCodeUnits: 8 * 1024 * 1024 });
 // A receipt composes three independently bounded fragments: static receipt, outcome metadata,
@@ -37,14 +36,14 @@ export const modelInvocationCommandSchema = z.strictObject({ get schemaVersion()
   expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).readonly();
 export const modelInvocationQuerySchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, scopeId: identitySchema,
   invocationId: identitySchema, reference: modelReferenceSchema, get includeResponseContent() { return z.boolean().optional(); } }).readonly();
-/** Internal/local read lookup by immutable command identity; it does not replay or invoke a model. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Internal/local read lookup by immutable command identity; it does not replay or invoke a model. */
 export const modelInvocationCommandQuerySchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema,
   commandId: identitySchema, reference: modelReferenceSchema }).readonly();
 export type ModelInvocationCommandQuery = Readonly<z.infer<typeof modelInvocationCommandQuerySchema>>;
 export const modelInvocationPurgeCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, commandId: clientCommandIdSchema,
   scopeId: identitySchema, invocationId: identitySchema, reference: modelReferenceSchema,
   expectedContentDigest: digest }).readonly();
-export const modelInvocationPurgeReceiptSchema = z.strictObject({ get schemaVersion() { return z.literal(1); },
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationPurgeReceiptSchema = z.strictObject({ get schemaVersion() { return z.literal(1); },
   command: modelInvocationPurgeCommandSchema, actor: modelActivationActorSchema,
   authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema }).readonly();
 /** Descriptor-safe wire ingress. Raw object schemas remain available for closed-world JSON-schema generation. */
@@ -72,13 +71,13 @@ export const modelInvocationProfileSchema = z.discriminatedUnion('schemaVersion'
   z.strictObject({ schemaVersion: z.literal(3), billingAxis: modelInvocationBillingAxisSchema,
     useLeaseId: identitySchema, ...profileShape.unwrap().shape }),
 ]).readonly();
-export const modelInvocationRequestEvidenceSchema = modelInvocationCommandSchema.unwrap().omit({ nativeRequest: true })
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationRequestEvidenceSchema = modelInvocationCommandSchema.unwrap().omit({ nativeRequest: true })
   .extend({ requestDigest: digest }).strict().readonly();
 export const modelInvocationClaimSchema = z.strictObject({ scopeId: identitySchema, commandId: identitySchema,
   invocationId: identitySchema, requestDigest: digest, profileDigest: digest }).readonly();
-export const modelInvocationNativeResponseSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, native: requestJsonSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationNativeResponseSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, native: requestJsonSchema,
   get usage() { return requestJsonSchema.nullable(); } }).readonly();
-export const modelInvocationContentDescriptorSchema = z.discriminatedUnion('kind', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationContentDescriptorSchema = z.discriminatedUnion('kind', [
   z.strictObject({ get schemaVersion() { return z.literal(1); }, get kind() { return z.literal('native-response'); }, get encoding() { return z.literal('canonical-json'); },
     digest, byteLength: counterSchema }),
   z.strictObject({ get schemaVersion() { return z.literal(1); }, get kind() { return z.literal('response-body'); }, get encoding() { return z.literal('base64'); },
@@ -96,7 +95,7 @@ export const modelInvocationResponseContentSchema = z.discriminatedUnion('kind',
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_CONTENT_INVALID' });
   }
 }).readonly();
-export const modelInvocationNativeResultSchema = z.union([modelInvocationNativeResponseSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationNativeResultSchema = z.union([modelInvocationNativeResponseSchema,
   z.strictObject({ get kind() { return z.literal('rejected'); }, evidence: modelInvocationResponseEvidenceSchema }).readonly()]);
 export type ModelInvocationNativeResult = z.infer<typeof modelInvocationNativeResultSchema>;
 export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
@@ -116,7 +115,7 @@ export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_COMPLETENESS_INVALID' });
   }
 }).readonly();
-export const modelInvocationReceiptSchema = z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_RECEIPT_VERSION); }, request: modelInvocationRequestEvidenceSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationReceiptSchema = z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_RECEIPT_VERSION); }, request: modelInvocationRequestEvidenceSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: definitionSchema,
   get activationRevision() { return counterSchema.positive(); }, profile: modelInvocationProfileSchema, profileDigest: digest,
   claim: modelInvocationClaimSchema, claimedAtMs: counterSchema, get outcome() { return modelInvocationOutcomeSchema.nullable(); },
@@ -139,7 +138,7 @@ export type ModelInvocationQuery = Readonly<z.infer<typeof modelInvocationQueryS
 export type ModelInvocationPurgeCommand = Readonly<z.infer<typeof modelInvocationPurgeCommandSchema>>;
 export type ModelInvocationPurgeReceipt = Readonly<z.infer<typeof modelInvocationPurgeReceiptSchema>>;
 export type ModelInvocationProfile = Readonly<z.infer<typeof modelInvocationProfileSchema>>;
-export type ModelInvocationRequestEvidence = Readonly<z.infer<typeof modelInvocationRequestEvidenceSchema>>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationRequestEvidence = Readonly<z.infer<typeof modelInvocationRequestEvidenceSchema>>;
 export type ModelInvocationClaim = Readonly<z.infer<typeof modelInvocationClaimSchema>>;
 export type ModelInvocationNativeResponse = Readonly<z.infer<typeof modelInvocationNativeResponseSchema>>;
 export type ModelInvocationContentDescriptor = Readonly<z.infer<typeof modelInvocationContentDescriptorSchema>>;
@@ -148,11 +147,9 @@ export type ModelInvocationOutcome = Readonly<z.infer<typeof modelInvocationOutc
 export type ModelInvocationReceipt = Readonly<z.infer<typeof modelInvocationReceiptSchema>>;
 export type ModelInvocationActor = ModelActivationActor;
 export type ModelInvocationAuthorization = ModelActivationAuthorization;
-export type ModelInvocationBinding = ModelActivationBinding;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationBinding = ModelActivationBinding;
 export type ModelInvocationUnknownReason = 'transport-error';
-export type { JsonObject, ModelBindingDefinition, ModelReference };
-
-export type ModelInvocationErrorCode = 'MODEL_INVOCATION_INVALID' | 'MODEL_INVOCATION_BINDING_CONFLICT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationErrorCode = 'MODEL_INVOCATION_INVALID' | 'MODEL_INVOCATION_BINDING_CONFLICT'
   | 'MODEL_INVOCATION_PROFILE_CONFLICT';
 export class ModelInvocationError extends CodedError {
   constructor(override readonly code: ModelInvocationErrorCode) { super(code); this.name = 'ModelInvocationError'; }

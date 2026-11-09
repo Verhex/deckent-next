@@ -12,8 +12,8 @@ import { ModelInvocationStoreError } from './port.js';
 
 const entrySchema = z.strictObject({ receipt: z.unknown().optional(), control: z.unknown().optional() });
 const pageSchema = z.strictObject({ entries: z.array(entrySchema), nextAfterInvocationId: identitySchema.nullable() });
-export type ModelInvocationCancellationRecoveryStatus = ModelInvocationAbortResult | 'denied' | 'failed';
-export interface ModelInvocationCancellationRecoveryOutcome { readonly invocationId: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationCancellationRecoveryStatus = ModelInvocationAbortResult | 'denied' | 'failed';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationCancellationRecoveryOutcome { readonly invocationId: string;
   readonly status: ModelInvocationCancellationRecoveryStatus }
 export interface ModelInvocationCancellationRecoveryPage { readonly nextAfterInvocationId: string | null;
   readonly outcomes: readonly ModelInvocationCancellationRecoveryOutcome[] }

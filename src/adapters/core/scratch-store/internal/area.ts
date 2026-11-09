@@ -10,7 +10,7 @@ import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_READ_T
 import { ABSENT_FILE_VERSION, planWorkspaceEdit, resolveWritable, unifiedDiff, WORKSPACE_FILE_TARGET_KIND, WorkspaceFileTarget, writablePath,
   type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/core/workspace-write/index.js';
 
-export const SCRATCH_FILE_TARGET_KIND = 'scratch-file';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const SCRATCH_FILE_TARGET_KIND = 'scratch-file';
 /** Core operation of a scratch write (SCR-A). Under the `workspace` namespace Core already closes; its own id lets a company govern the
  * scratch area apart from project files (catalog data in code for the built-in Core target, like `workspace.file.write`). */
 export const SCRATCH_FILE_WRITE_OPERATION = Object.freeze({ schemaVersion: 1 as const, operation: Object.freeze({ id: 'workspace.scratch.write', version: 1 }),

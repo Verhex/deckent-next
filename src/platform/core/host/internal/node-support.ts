@@ -1,4 +1,4 @@
-/** Whether a Node.js version satisfies the package's engine range (the manifest range, never a source literal).
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Whether a Node.js version satisfies the package's engine range (the manifest range, never a source literal).
  * The range is one or more `||` clauses, each `>=X.Y.Z` with an optional `<M` upper major: one patched floor per supported major.
  * Node 24.21 and older 24.x carry a heap overrun in unaligned UTF-16LE decoding (fixed in 24.22.0); 24.22.1 and 26.12.1 are the
  * 2026-10-21 security release (Brotli out-of-bounds write, TLS hostname checks). An unparsable range or version is `unknown`. */

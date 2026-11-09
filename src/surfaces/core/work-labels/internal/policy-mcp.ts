@@ -34,7 +34,7 @@ export function mcpCapabilityWords(locale: Locale) {
 }
 
 /** R1a: a subscription has neither a key nor a price list, so its "not in catalog" row never speaks of either. */
-export function modelConnectPullWords(locale: Locale, subscription = false) {
+function modelConnectPullWords(locale: Locale, subscription = false) {
   return { connected: t('models.connect.pull.connected', { model: '{model}' }, locale), unpriced: t('models.connect.pull.unpriced', { model: '{model}' }, locale),
     notOnKey: t('models.connect.pull.notOnKey', { model: '{model}' }, locale),
     notInCatalog: subscription ? t('models.connect.pull.notInCatalogSubscription', { model: '{model}' }, locale) : t('models.connect.pull.notInCatalog', { model: '{model}' }, locale) };

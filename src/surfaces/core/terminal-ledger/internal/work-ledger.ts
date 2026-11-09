@@ -27,7 +27,7 @@ export type WorkerLiveActivity = Readonly<{
   readonly eventsTruncated: boolean;
 }>;
 
-export type WorkLedgerChatEntry = Readonly<{
+type WorkLedgerChatEntry = Readonly<{
   readonly schemaVersion: typeof WORK_LEDGER_SCHEMA_VERSION;
   readonly kind: 'chat';
   readonly id: string;
@@ -111,7 +111,7 @@ function workerLive(files: WorkerSidecars | null): WorkerLiveActivity | null {
   });
 }
 
-export function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId: string,
+function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId: string,
   context: { readonly ordinal?: number; readonly observedAtMs?: number } = {}): WorkLedgerWorkerEntry {
   const live = workerLive(worker.files);
   return Object.freeze({

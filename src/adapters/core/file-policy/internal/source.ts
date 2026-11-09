@@ -12,7 +12,7 @@ const optionsSchema = z.strictObject({ path: persistedString(z.string().min(1)),
   /** Authority revision archive directory (POLICY-ADMIN P2); absent = writes are not archived and keyed writes are refused. */
   archivePath: persistedString(z.string().min(1)).optional(),
   ownerUid: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
-export type FilePolicyOptions = z.infer<typeof optionsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type FilePolicyOptions = z.infer<typeof optionsSchema>;
 type PolicyFileResource = 'policy' | 'bindings' | 'archive';
 export class PolicyFileError extends CodedError {
   constructor(override readonly code: 'POLICY_FILE_INVALID' | 'POLICY_FILE_UNSAFE' | 'POLICY_FILE_TOO_LARGE' | 'POLICY_FILE_CHANGED' | 'POLICY_FILE_UNSUPPORTED'
@@ -21,7 +21,7 @@ export class PolicyFileError extends CodedError {
 /** Authority writes of one installation (keyed by its policy path) are serialized in this process, and across processes by the lock below. */
 const updates = new Map<string, Promise<void>>();
 /** Cross-process exclusion around one authority write (composition passes the platform's directory lock); absent = this process only. */
-export type AuthorityWriteLock = <T>(work: () => Promise<T>) => Promise<T>;
+type AuthorityWriteLock = <T>(work: () => Promise<T>) => Promise<T>;
 const sameFile = (left: BigIntStats, right: BigIntStats) => left.dev === right.dev && left.ino === right.ino && left.size === right.size
   && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 const snapshots = new Map<string, { readonly digest: string; readonly policy: Policy }>();

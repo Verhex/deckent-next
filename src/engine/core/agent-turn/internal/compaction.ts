@@ -7,7 +7,7 @@ import { AGENT_CONTEXT_RENDER_VERSION, agentContextExcerpt, createAgentContextCa
 
 /** Compaction starts when a round's measured prompt plus its reserves passes this share of the window (legacy high-water). */
 export const AGENT_COMPACTION_HIGH_WATER = 0.75;
-/** The newest messages kept verbatim (widened to the whole tool-call group they belong to). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The newest messages kept verbatim (widened to the whole tool-call group they belong to). */
 export const AGENT_COMPACTION_KEEP_MESSAGES = 8;
 
 /** Bounds of the summary object: its objective, and each list field's item length and item count. */
@@ -24,7 +24,7 @@ export const agentCompactionSummarySchema = z.object({
 }).strip();
 export type AgentCompactionSummary = z.infer<typeof agentCompactionSummarySchema>;
 
-export interface AgentCompactionPlan {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AgentCompactionPlan {
   readonly system: AgentTurnMessage | null;
   /** Summarized by the model; its user messages and tool calls are also carried by the engine, never by the model. */
   readonly older: readonly AgentTurnMessage[];

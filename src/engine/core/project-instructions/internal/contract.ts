@@ -7,7 +7,7 @@ export interface ProjectInstructionSource {
   /** Terminal import snapshot only; external content needs a person's session-only trust card. Workers never expand imports. */
   readonly imports?: readonly string[]; readonly external?: boolean;
 }
-export type ProjectInstructionIdentity = Readonly<{ kind: 'file'; dev: number; ino: number }> | Readonly<{ kind: 'ref'; ref: string; commit: string; blobOid: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProjectInstructionIdentity = Readonly<{ kind: 'file'; dev: number; ino: number }> | Readonly<{ kind: 'ref'; ref: string; commit: string; blobOid: string }>;
 /** A committed source of instruction files (a Git work target's base ref): `read` resolves the ref's commit again on every call and returns the
  * bounded blob of `name`, null when the commit has no such entry; it throws `unsafe` (link, submodule, non-tree parent) or `size` (above `maxBytes`). */
 export interface CommittedInstructionSource {
@@ -18,7 +18,7 @@ export type ProjectInstructionView =
   | Readonly<{ status: 'absent' }>
   | Readonly<{ status: 'blocked'; reason: 'size' | 'unsafe' | 'unreadable' }>
   | Readonly<{ status: 'trust-required' | 'ready'; source: ProjectInstructionSource }>;
-export interface InstructionBridge {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstructionBridge {
   readonly id: string; readonly path: string; readonly line: string; readonly detected: boolean;
 }
 export interface InstructionFileChange {

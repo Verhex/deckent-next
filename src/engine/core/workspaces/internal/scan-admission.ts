@@ -7,10 +7,10 @@ import { enforceWorkerTreeGate, type WorkerTreeGateContext, type WorkerTreeScan 
 
 /** What the gate needs of one adapter view (`WorkerTreeView`): a host path with an optional declared dependency tree, or delivered text. */
 export type WorkerTreeScanView = Readonly<{ source: string; label: string; dependencyTree?: Readonly<{ lockfile: string }> }> | Readonly<{ text: string; label: string }>;
-/** `execution.secretGate` scan admission (R2, owner/lead D3a 2026-10-18): concurrent scans in this process, the wait for a slot, and how many
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `execution.secretGate` scan admission (R2, owner/lead D3a 2026-10-18): concurrent scans in this process, the wait for a slot, and how many
  * load-dependent `time` refusals one Attempt retries before the refusal is final. */
 export type WorkerTreeScanAdmissionSettings = Readonly<{ maxConcurrentScans: number; admissionTimeoutMs: number; maxTimeRefusals: number }>;
-/** The wait for a scan slot ended at `admissionTimeoutMs`; nothing was scanned. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The wait for a scan slot ended at `admissionTimeoutMs`; nothing was scanned. */
 export class WorkerTreeScanAdmissionTimeout extends CodedError { constructor(readonly waited: number, readonly bound: number) { super('WORKER_TREE_SCAN_ADMISSION_TIMEOUT'); } }
 
 /**
@@ -76,14 +76,14 @@ export function mergeWorkerTreeScans(own: WorkerTreeScan, shared: WorkerTreeScan
 /** Never leaves this process: the shared-scan key is a keyed digest, so it reveals nothing about the configuration it covers. */
 const SHARE_KEY = randomBytes(32);
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
-/** The JSON record port (platform `JsonRecordFile`) keeping one Attempt's count of `time` refusals. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The JSON record port (platform `JsonRecordFile`) keeping one Attempt's count of `time` refusals. */
 export interface WorkerTreeTimeRefusalFile {
   read(): Promise<{ kind: 'absent' } | { kind: 'ready'; value: unknown } | { kind: 'corrupt' } | { kind: 'io' }>;
   write(value: unknown): Promise<void>; remove(): Promise<void>;
 }
 const refusalRecordSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, refusals: counterSchema });
 
-export interface AdmittedWorkerTreeGateInput<V extends WorkerTreeScanView> {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AdmittedWorkerTreeGateInput<V extends WorkerTreeScanView> {
   /** Everything the worker receives (`workerTreeViews`); the view labelled '' is the attempt checkout. */
   readonly views: readonly V[];
   /** The adapter scan of some of those views; its deadline starts when it is called, inside a granted slot. */

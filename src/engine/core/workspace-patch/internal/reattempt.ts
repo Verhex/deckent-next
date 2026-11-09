@@ -46,7 +46,7 @@ export function reattemptGraph(run: RunSnapshot, taskId: string): TaskGraph {
   return taskGraphSchema.parse({ schemaVersion: run.graph.schemaVersion, revision: 1, tasks: [{ ...frozen, dependencies: [] }],
     criterionDefinitions: run.graph.criterionDefinitions.filter(row => task.acceptanceCriteria.includes(row.id)) });
 }
-export interface DeliveryReattemptPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DeliveryReattemptPorts {
   readonly bound: number; readonly policyRevision: string; readonly ttlMs: number; now(): number;
   load(scopeId: string, commandId: string): TargetQueueRecord | null;
   forRun(scopeId: string, runId: string): readonly TargetQueueRecord[];
@@ -94,7 +94,7 @@ export async function stepDeliveryReattempt(ports: DeliveryReattemptPorts, recor
     reattempt: { sourceCommandId: request.commandId, intentCommandId: request.reattempt?.intentCommandId ?? request.commandId, count: used + 1, cause: record.reason!, approvedBy: approver } });
   return view('enqueued', { commandId: ids.ticket });
 }
-export interface WorkspaceReattemptContext {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspaceReattemptContext {
   readonly principal: VerifiedPrincipal; readonly document: { readonly revision: string }; readonly artifacts: ArtifactStore; readonly scopeMode: PatchScopeMode;
   readonly config: { readonly targetQueue: { readonly reattempts: number; readonly ttlMs: number; readonly perTarget: number }; readonly artifacts: { readonly maxBytes: number } };
   readonly queue: { load(scopeId: string, commandId: string): TargetQueueRecord | null; forRun(scopeId: string, runId: string, limit: number): readonly TargetQueueRecord[] };

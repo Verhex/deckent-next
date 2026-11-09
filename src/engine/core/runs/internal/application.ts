@@ -15,7 +15,7 @@ export const runCommandSchema = runQuerySchema.extend({ commandId: clientCommand
 export type RunQuery = z.infer<typeof runQuerySchema>;
 export type RunCommand = z.infer<typeof runCommandSchema>;
 export interface RunAuthorization { authorize(action: CorePolicyAction<'run'>, query: RunQuery, principal: VerifiedPrincipal): Promise<void> }
-/** Sealed worker evidence ports for the pinned model rows of `run inspect` (WORKER-CURRENCY-2); each attempt needs `read-output`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Sealed worker evidence ports for the pinned model rows of `run inspect` (WORKER-CURRENCY-2); each attempt needs `read-output`. */
 export interface RunModelEvidence {
   readonly store: Pick<WorkerEventLogStore, 'loadWorkerEventLog'>; readonly artifacts: WorkerEventArtifacts; readonly authorization: DispatchIdentityAuthorization;
 }

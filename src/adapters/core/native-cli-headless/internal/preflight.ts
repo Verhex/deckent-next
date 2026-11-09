@@ -26,7 +26,7 @@ export async function emptyRunDir(runDir: string): Promise<void> {
   for (const entry of await readdir(runDir)) await rm(join(runDir, entry), { recursive: true, force: true });
 }
 /** Field allowlist at the parser: account identity fields (email, organization) are dropped here and never reach a record or log. */
-export function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[number], unknown>> | null {
+function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[number], unknown>> | null {
   try {
     const value: unknown = JSON.parse(stdout);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -35,7 +35,7 @@ export function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[
 }
 /** The CLI's own login status, by registry data: `json` (allowlisted fields on stdout, the login dir it names) or `status` (the exit code and one exact
  * line; another exit-0 login kind, such as an API key, is not a subscription login). `unreadable`: neither shape (a typed preflight refusal). */
-export type HeadlessAuth = Readonly<{ state: 'signed-in'; authMethod: string; apiProvider: string | null; subscriptionType: string | null }>
+type HeadlessAuth = Readonly<{ state: 'signed-in'; authMethod: string; apiProvider: string | null; subscriptionType: string | null }>
   | Readonly<{ state: 'signed-out' | 'unreadable' | 'config-dir' }>;
 export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Readonly<{ exitCode: number | null; stdout: string; stderr: string }>, configDir: string): HeadlessAuth {
   if ('kind' in auth) {

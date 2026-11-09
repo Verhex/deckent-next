@@ -4,7 +4,7 @@ import { advanceNervousAbsence, detectNervousAttempt, detectNervousFeed, detectN
   type NervousAbsence, type NervousAttemptSignal, type NervousFeedKind, type NervousProposal } from './detect.js';
 import { nervousDisposition, nervousStandingApprovalSchema, type NervousDisposition, type NervousExecutors } from './broker.js';
 
-/** The one audit writer (seal before any effect; an existing case is a replay) and the trusted wall clock. Nervous holds no other write port. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The one audit writer (seal before any effect; an existing case is a replay) and the trusted wall clock. Nervous holds no other write port. */
 export interface NervousPorts {
   readonly audit: { record(event: AuditEvent): unknown; load(scopeId: string, eventId: string): AuditRecord | null | Promise<AuditRecord | null> };
   readonly now: () => number;
@@ -13,7 +13,7 @@ export interface NervousPorts {
  * `promoted` (alpha.56 G2): whether a person promoted exactly this rule id and version in this scope, read fresh per page (absent: none). */
 export type NervousContext = Readonly<{ owner: Readonly<{ issuer: string; subject: string }>; policyRevision: string; approval?: (proposal: NervousProposal) => unknown;
   promoted?: (ruleId: string, version: number) => boolean }>;
-export type NervousOutcome = Readonly<{ caseId: string; ruleId: string; action: NervousProposal['action']; disposition: NervousDisposition; replay: boolean; executed: boolean }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NervousOutcome = Readonly<{ caseId: string; ruleId: string; action: NervousProposal['action']; disposition: NervousDisposition; replay: boolean; executed: boolean }>;
 const PRESENT = new Set(['missing', 'created', 'running', 'paused', 'exited']);
 /** Insertion-ordered bounded memory: the oldest key leaves first. */
 function bounded<K, V>(map: Map<K, V>, key: K, value: V, max: number) { map.delete(key); map.set(key, value); while (map.size > max) map.delete(map.keys().next().value as K); }

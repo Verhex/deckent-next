@@ -10,7 +10,7 @@ import { readGraphInput } from './graph-input.js';
 import type { RunCommandContext } from './context.js';
 export type RunProposalHandler = (root: string, command: RunProposal, options: ConfigLoadOptions) => Promise<RunProposalResult>;
 export type RunProposalInspectHandler = (root: string, query: RunProposalQuery, options: ConfigLoadOptions) => Promise<RunPlanningResult | null>;
-export function renderRunProposal(data: RunPlanningResult, locale: Locale): string {
+function renderRunProposal(data: RunPlanningResult, locale: Locale): string {
   if (isRunIntentResult(data)) return runIntentLines(data, locale).join('\n');
   const r = data.proposal;
   const states = { recorded: t('proposal.status.recorded', {}, locale), pending: t('proposal.status.pending', {}, locale), accepted: t('proposal.status.accepted', {}, locale), rejected: t('proposal.status.rejected', {}, locale), parked: t('proposal.status.parked', {}, locale) } as const;

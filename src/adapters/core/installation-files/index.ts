@@ -2,8 +2,5 @@ export { localInstallationBindingSource } from './internal/installation-binding.
 export { FileInstallationIdentityStore } from './internal/installation-identity.js';
 export { InstallationFileError, inspectInstallationFile, readInstallationFile, publishInstallationFile } from './internal/publication.js';
 export { FileProjectIdentityStore } from './internal/project-identity.js';
-export type { InstallationFileErrorCode, InstallationFileInspection, InstallationFilePublication,
-  InstallationFileRequest, InstallationFilePublishRequest } from './internal/publication.js';
-
-export { inspectInstallationStartabilityFiles, type InstallationStartability } from './internal/startability.js';
+export { inspectInstallationStartabilityFiles, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type InstallationStartability } from './internal/startability.js';
 export { firstSessionTargets, firstSessionPublication } from './internal/first-session.js';

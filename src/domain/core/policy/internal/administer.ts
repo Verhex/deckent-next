@@ -13,7 +13,7 @@ import { policyResources } from './vocabulary.js';
  * restrictions, separation of duties and permission modes retain their own contracts.
  */
 export const POLICY_CHANGE_MAX = 32;
-/** Largest number of (action × id × scope) cells one change may make the bound evaluate; an `'all'` dimension counts once. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Largest number of (action × id × scope) cells one change may make the bound evaluate; an `'all'` dimension counts once. */
 export const DELEGATION_CELL_LIMIT = 4096;
 /** The owner root is data, never a code branch: a role of this id, bound to the installing principal, evaluated like any other. */
 export const INSTALLATION_OWNER_ROLE_ID = 'installation-owner';
@@ -147,7 +147,7 @@ export function kindCovers(ruleKind: string, kind: string): boolean { return rul
 
 /** The change kind the recovery policy card declares (engine input, never part of the `policy.administer@1` wire change). */
 export const POLICY_RECOVERY_CHANGE_KIND = 'policy-recovery';
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The resource kinds whose own require-approval cell a person may raise to allow inside a `policy-recovery` change (alpha.56 D1, owner 2026-10-24,
  * Jev c1d1afe9). A versioned security invariant, deliberately NOT derived from the AI floor: `secret` and `run-quota` are person-only too and stay bound.
  */

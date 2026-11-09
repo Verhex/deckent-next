@@ -12,7 +12,7 @@ import environmentLimits from './environment-requirements.json' with { type: 'js
 export const runIdentitySchema = z.strictObject({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).readonly();
 /** R3 (owner D4a/D5a): why a superseded Attempt was retried by the bounded stall recovery; only on a `stalled` previous binding. */
 export const STALL_CAUSES = ['inactivity', 'report-missing', 'report-invalid'] as const;
-export const runBindingSchema = z.strictObject({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
+const runBindingSchema = z.strictObject({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'stalled', 'lost']).nullable(),
   stallCause: z.enum(STALL_CAUSES).optional(),
   // S6R-4: the sealed recovery decision that continued a lost Attempt's task in a new one; only on a `lost` previous binding.
@@ -24,7 +24,7 @@ export const runBindingSchema = z.strictObject({ identity: attemptIdentitySchema
   probes: z.array(identitySchema).max(environmentLimits.limits.requirements).readonly().optional(),
 }).refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.observedKind === 'lost') === (value.recoveryDecisionId !== undefined)
   && (value.recoveryContext === undefined || value.observedKind === 'lost') && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
-/** S5b (Auditor owner decision 6): who placed a hold. `operator` is the public Run control and is never written, so earlier releases read every
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). S5b (Auditor owner decision 6): who placed a hold. `operator` is the public Run control and is never written, so earlier releases read every
  * operator hold; each safety source (Nervous pause, Auditor park) is resumed only by a person at a terminal (Y4 floor, ai-floor.ts). */
 export const RUN_HOLD_SOURCES = ['operator', 'nervous', 'auditor'] as const;
 export const safetyHoldSourceSchema = runSafetyHoldSourceSchema;
@@ -41,7 +41,7 @@ export const runStateSchema = z.discriminatedUnion('kind', [
 /** S2-D1: task phases with work in flight; with `unresolvedEffects` they hold a Run in custody (close refuses, a deadline never ends it). */
 export const RUN_LIVE_PHASES: ReadonlySet<string> = new Set(['active', 'evaluating', 'reconciling']);
 export const hasLiveWork = (task: Readonly<{ phase: string; unresolvedEffects: boolean }>) => task.unresolvedEffects || RUN_LIVE_PHASES.has(task.phase);
-/** Phases that stand only with an attempt binding. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Phases that stand only with an attempt binding. */
 export const RUN_BOUND_PHASES: ReadonlySet<string> = new Set([...RUN_LIVE_PHASES, 'awaiting-decision']);
 /** Every phase that is not final: a terminal Run holds none. */
 export const RUN_OPEN_PHASES: ReadonlySet<string> = new Set(['pending', ...RUN_BOUND_PHASES]);
@@ -114,7 +114,7 @@ export const runSnapshotSchema = z.strictObject({ schemaVersion: z.literal(4), i
     if (task.phase === 'awaiting-decision' && run.bindings.find(binding => binding.identity.taskId === task.taskId)?.observedKind !== 'exited') invalid();
   }
 }).readonly();
-export type RunIdentity = z.infer<typeof runIdentitySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunIdentity = z.infer<typeof runIdentitySchema>;
 export type RunSnapshot = z.infer<typeof runSnapshotSchema>;
 export class RunError extends CodedError {
   constructor(override readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE' | 'RUN_PARKED' | 'RUN_TERMINAL' | 'RUN_NOT_PARKED' | 'RUN_DECISION_NOT_READY' | 'RUN_DECISION_EXPIRED' | 'RUN_QUOTA_WAIT_LIMIT' | 'RUN_QUOTA_PERSON_REQUIRED') { super(code); this.name = 'RunError'; }

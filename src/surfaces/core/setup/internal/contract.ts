@@ -27,7 +27,7 @@ export type SetupObserveHandler = (root: string, options: SetupObserveOptions) =
   firstJob?: FirstJobFacts }>>;
 
 /** The shell realm doctor reports (structural: only the fields setup reads). */
-export type SetupShellRealmView = Readonly<{ selected: string | null; rejected: readonly Readonly<{ restricted: boolean }>[];
+type SetupShellRealmView = Readonly<{ selected: string | null; rejected: readonly Readonly<{ restricted: boolean }>[];
   selfTest?: Readonly<{ status: 'ok' | 'failed' | 'not-run' }> }>;
 
 /**

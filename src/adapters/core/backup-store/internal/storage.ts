@@ -35,7 +35,7 @@ export async function restoreLeftovers(projectRoot: string, approvals: string, k
   return found;
 }
 
-export interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string;
+interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string;
   readonly configDocument?: () => Promise<BackupConfigLayers>;
   /** The per-user global config file of the restoring environment (S1 D1); absent: the global layer is not restored. */
   readonly globalConfigPath?: string }

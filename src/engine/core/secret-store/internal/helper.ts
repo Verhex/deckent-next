@@ -18,7 +18,7 @@ export interface SecretHelperOptions {
   readonly maxOutputBytes: number;
   readonly authorize: (request: Readonly<{ backend: string; name: string }>) => Promise<SecretChangeDecision>;
 }
-/** Internal I/O port: adapter must dispose pipes and kill the process group on abort. No secret output/raw exceptions in its errors. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Internal I/O port: adapter must dispose pipes and kill the process group on abort. No secret output/raw exceptions in its errors. */
 export type SecretHelperReadPort = (options: SecretHelperOptions, name: string, signal: AbortSignal) => Promise<string | undefined>;
 const text = z.string().refine(value => !value.includes('\0'));
 const definition = z.strictObject({ id: z.string().regex(SECRET_STORE_ID_PATTERN).refine(id => !id.startsWith('core.')),

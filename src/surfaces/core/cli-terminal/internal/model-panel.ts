@@ -37,7 +37,7 @@ export const attachedScopeLabel = (root: string, scopeId: string, options: Confi
 const configFact = <T>(config: Config | null, read: (config: Config) => T, fallback: T): T => { try { return config ? read(config) : fallback; } catch { return fallback; } };
 /** F2-14 (owner: newest and higher tier first): runnable first, then the higher registry tier (unknown last), then the catalog's own `priority`
  * (lower first; undeclared after declared), then the declared order. The catalog carries no release date, so recency is the catalog's own order. */
-export function orderModelChoices<T extends Readonly<{ blocked: string | null }>>(choices: readonly T[], facts: (choice: T) => Readonly<{ tier: ModelTier | null; priority: number | null }>): T[] {
+function orderModelChoices<T extends Readonly<{ blocked: string | null }>>(choices: readonly T[], facts: (choice: T) => Readonly<{ tier: ModelTier | null; priority: number | null }>): T[] {
   const rank = (choice: T, index: number) => { const fact = facts(choice);
     return [Number(choice.blocked !== null), fact.tier === null ? MODEL_TIERS.length : MODEL_TIERS.length - 1 - MODEL_TIERS.indexOf(fact.tier), fact.priority ?? Number.MAX_SAFE_INTEGER, index]; };
   const ranked = choices.map((choice, index) => ({ choice, key: rank(choice, index) }));

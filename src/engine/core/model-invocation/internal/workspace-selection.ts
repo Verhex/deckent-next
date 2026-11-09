@@ -3,7 +3,7 @@ import { modelInvocationProfileSchema, type ModelInvocationProfile, type ModelRe
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
 import { planProfileChanges, type ProfileChange } from '#engine/core/model-activation/index.js';
 
-export type InvocationWorkspace = Readonly<{ id: string; name: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InvocationWorkspace = Readonly<{ id: string; name: string }>;
 export interface WorkspaceSelectionContext { readonly identity: string; readonly profiles: readonly ModelInvocationProfile[] }
 type Snapshot = Readonly<{ global: Record<string, unknown>; project: Record<string, unknown>; digest: string | null }>;
 export interface WorkspaceSelectionPorts<C extends WorkspaceSelectionContext> {

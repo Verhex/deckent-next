@@ -9,9 +9,9 @@ export const FOCUS_REPORTING_OFF = '\u001b[?1004l';
 // eslint-disable-next-line no-control-regex -- focus reports are control sequences.
 const FOCUS_REPORT = /\u001b\[([IO])/gu;
 
-export type FocusEvent = 'in' | 'out';
-export type FocusState = 'focused' | 'unfocused' | 'unknown';
-export type FocusListener = (event: FocusEvent) => void;
+type FocusEvent = 'in' | 'out';
+type FocusState = 'focused' | 'unfocused' | 'unknown';
+type FocusListener = (event: FocusEvent) => void;
 export type FocusSource = Readonly<{ subscribe: (listener: FocusListener) => () => void; state: () => FocusState }>;
 
 /** Splits one read into the text Ink should see and the focus events it carried, in order. */

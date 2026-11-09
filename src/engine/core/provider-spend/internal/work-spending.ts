@@ -7,7 +7,7 @@ import { createProviderSpendCheckpoint } from './checkpoint.js';
 import type { ProviderSpendBudget } from '#domain/index.js';
 import { providerSpendLocalZeroTariffProfile } from './no-charge.js';
 import { isNativeCliWorkerProfile, readNativeCliWorkerParameters } from '#capabilities/index.js';
-export type WorkSpending = 'metered' | 'not-metered';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkSpending = 'metered' | 'not-metered';
 const subscription = z.looseObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema });
 /** Trusted selected bindings only; never a model-authored billing claim. Unknown bindings stay metered. */
 export function classifyWorkSpending(input: Readonly<{ kind: 'model'; profile: ModelInvocationProfile | null }>

@@ -7,7 +7,7 @@ import { HubHttpEffectTarget, HUB_NETWORK_OPERATION } from './target.js';
 import { HubNetworkError } from './listener.js';
 import type { HubHttpTransport, HubHttpResult } from './request.js';
 
-export interface HubFirstUseReceipt {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface HubFirstUseReceipt {
   readonly scopeId: string; readonly hubId: string; readonly sourceRevision: number; readonly endpoint: string;
   readonly person: { readonly issuer: string; readonly subject: string }; readonly receiptDigest: string;
 }

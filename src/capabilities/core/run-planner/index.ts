@@ -39,11 +39,11 @@ export const brainModelSwitchedOff = (config: unknown, target: Readonly<{ channe
   (brainPlannerConfigSchema.parse(config ?? {}).excluded ?? []).some(row => row.channelId === target.channelId && row.modelId === target.modelId);
 /** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
 export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
-export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
-export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
 export { boundBrainContext } from './internal/context.js';
-export type { BrainRegistryContext, BrainMemoryContext, BrainMemoryEntry } from './internal/context.js';
-export type BrainDraft = z.infer<typeof brainDraftSchema>;
+export type { BrainRegistryContext, BrainMemoryContext, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BrainMemoryEntry } from './internal/context.js';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BrainDraft = z.infer<typeof brainDraftSchema>;
 export const prepareBrainEvaluatorParameters = (evaluator: EvaluatorDefinition) => toInputJsonSchema(installedEvaluatorParameters(evaluator));
 function redactJson(input: unknown, known?: KnownSecretSnapshot): unknown {
   if (typeof input === 'string') return redactForRecord(input, known);

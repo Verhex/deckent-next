@@ -12,7 +12,7 @@ import { exactModelIdSchema, modelReferenceSchema } from '#domain/core/provider-
  * behind the configured HTTPS reader, before these writes.
  */
 export const MODEL_CONNECT_OPERATION_ID = 'models.connect';
-export const MODEL_CONNECT_SCHEMA_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_CONNECT_SCHEMA_VERSION = 1;
 /** Leaves room for the derived step ids (`<commandId>.profile.global` …) inside the identity bound. */
 const commandIdSchema = clientCommandIdSchema.refine(value => value.length <= 192);
 const absolutePath = persistedString(z.string().min(2).max(4096)).refine(value => value.startsWith('/') && !value.includes('\0'));

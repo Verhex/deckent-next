@@ -11,13 +11,13 @@ import { FIXED_TOOL_PATH } from '#platform/index.js';
  */
 export type McpSandboxDiagnosis = { readonly kind: 'path-hidden'; readonly role: 'command' | 'argument'; readonly index: number; readonly path: string;
   readonly target?: string } | { readonly kind: 'package-runner' | 'container-daemon'; readonly runner: string };
-export type McpStartDiagnosis = { readonly kind: 'sandbox'; readonly diagnosis: McpSandboxDiagnosis } | { readonly kind: 'not-found' };
+type McpStartDiagnosis = { readonly kind: 'sandbox'; readonly diagnosis: McpSandboxDiagnosis } | { readonly kind: 'not-found' };
 
 /** Commands that fetch the server at start (npm/pnpm/bun/uv/pipx runners) and container clients: a hint only, named by the command's own name. */
 const PACKAGE_RUNNERS: ReadonlySet<string> = new Set(['npx', 'pnpx', 'bunx', 'uvx', 'pipx']);
 const CONTAINER_CLIENTS: ReadonlySet<string> = new Set(['docker', 'podman', 'nerdctl']);
 /** Bounds of the probe: absolute-path arguments looked at, its deadline and output. */
-export const MCP_DIAGNOSE_PATHS_MAX = 16;
+const MCP_DIAGNOSE_PATHS_MAX = 16;
 const PROBE_TIMEOUT_MS = 5_000;
 /** Prints (NUL-separated) every argument that does not exist in the view; runs only our own `/bin/sh` and `test`, never server code. */
 const PROBE_SCRIPT = 'for p do [ -e "$p" ] || printf "%s\\0" "$p"; done';

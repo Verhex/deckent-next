@@ -3,9 +3,9 @@ import { counterSchema, identitySchema, inspectTaskReadiness, type RunSnapshot }
 import { hasCapacityRoom, measureTaskOccupancy } from '#engine/core/scheduling/index.js';
 import { poolOccupancySchema, type PoolHoldRecord } from './pool-hold.js';
 const capacity = z.strictObject({ executionSlots: counterSchema, inFlightSlots: counterSchema }).readonly();
-export const poolWaitSchema = z.strictObject({ code: z.enum(['waiting-pool-slot', 'pool-held']), poolId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const poolWaitSchema = z.strictObject({ code: z.enum(['waiting-pool-slot', 'pool-held']), poolId: identitySchema,
   capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema, sinceMs: counterSchema.nullable() }).readonly();
-export const poolDriftSchema = z.strictObject({ code: z.literal('POOL_ADMISSION_CAPACITY_DRIFT'), poolId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const poolDriftSchema = z.strictObject({ code: z.literal('POOL_ADMISSION_CAPACITY_DRIFT'), poolId: identitySchema,
   source: z.enum(['admission', 'run']), requested: capacity, capacity }).readonly();
 export const runPoolObservationSchema = z.strictObject({ poolId: identitySchema, capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema,
   drift: z.array(poolDriftSchema).readonly(), waiting: z.array(z.strictObject({ taskId: identitySchema, reason: poolWaitSchema }).readonly()).readonly() }).readonly();

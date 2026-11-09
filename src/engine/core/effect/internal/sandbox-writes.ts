@@ -47,7 +47,7 @@ export function sandboxWriteClockVerdict(mark: SandboxWriteClockReading, scanned
 
 /** The edit cell a write-set entry is decided under (the same three an edit tool call can be), or a path the edit rules deny. */
 export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority' | 'edit-self-source';
-export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
   | { readonly ok: false; readonly reason: 'write-floor' | 'configuration-file' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable' };
 /** Decides one entry exactly like an edit of that path (design §6); the decision's owner audits a relaxation before handing out the gate. */
 export interface SandboxWriteDecider { decide(rel: string, cell: SandboxWriteCell): Promise<SandboxWriteDecision> }

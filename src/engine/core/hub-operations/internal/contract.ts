@@ -39,9 +39,9 @@ export const hubOperationSchemas = {
 } as const;
 export type HubOperationName = keyof typeof hubOperationSchemas;
 export type HubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.input<typeof hubOperationSchemas[K]> }> }[HubOperationName];
-export type ParsedHubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.output<typeof hubOperationSchemas[K]> }> }[HubOperationName];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ParsedHubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.output<typeof hubOperationSchemas[K]> }> }[HubOperationName];
 const hubEnvelopes = Object.entries(hubOperationSchemas).map(([operation, input]) => z.strictObject({ get operation() { return z.literal(operation); }, input }));
-export const hubOperationSchema = z.discriminatedUnion('operation', [hubEnvelopes[0]!, ...hubEnvelopes.slice(1)]);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubOperationSchema = z.discriminatedUnion('operation', [hubEnvelopes[0]!, ...hubEnvelopes.slice(1)]);
 export function parseHubOperation(input: unknown): ParsedHubOperation { return hubOperationSchema.parse(input) as ParsedHubOperation; }
 export const hubOperationWrites = (name: HubOperationName): boolean => !['hub.sources.list', 'hub.search', 'hub.inspect', 'hub.verify', 'hub.export', 'hub.cards'].includes(name);
 export const hubPersonOnlyOperation = (name: HubOperationName): boolean => name === 'hub.sources.add' || name === 'hub.sources.remove' || name === 'hub.cards';
