@@ -90,6 +90,55 @@
       "flags": "i"
     }
   ],
+  "diagnosticPatterns": [
+    {
+      "id": "basic-bearer",
+      "source": "\\b(?:Basic|Bearer)\\s+\\S+",
+      "flags": "giu",
+      "replacement": "[REDACTED]"
+    },
+    {
+      "id": "private-key-block",
+      "source": "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\\s\\S]*",
+      "flags": "gu",
+      "replacement": "[REDACTED]"
+    },
+    {
+      "id": "key-value",
+      "source": "(?<![\\w-])((?:[\"']?[\\w-]*(?:password|passwd|pwd|token|secret|api[_-]?key|private[_-]?key|credentials?)[\"']?|[\"']?(?:authorization|cookie)[\"']?)\\s*[:=]\\s*)(?:\"(?:[^\"\\\\\\r\\n]|\\\\.?)*(?:\"|$)|'(?:[^'\\\\\\r\\n]|\\\\.?)*(?:'|$)|[^\\s,;}]+)",
+      "flags": "gimu",
+      "replacement": "$1[REDACTED]"
+    },
+    {
+      "id": "url",
+      "source": "\\b[a-z][a-z0-9+.-]*:\\/\\/[^\\s<>\"'`]+",
+      "flags": "giu",
+      "parts": [
+        {
+          "source": "(\\/\\/)[^/?#]*@",
+          "flags": "u",
+          "replacement": "$1[REDACTED]@"
+        },
+        {
+          "source": "[?#].*$",
+          "flags": "u",
+          "replacement": "?[REDACTED]"
+        }
+      ]
+    },
+    {
+      "id": "email",
+      "source": "(?<![\\p{L}\\p{N}.!#$%&'*+/=?^_`{|}~-])[\\p{L}\\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\\p{L}\\p{N}.-]+",
+      "flags": "giu",
+      "replacement": "[REDACTED]"
+    },
+    {
+      "id": "long-run",
+      "source": "[A-Za-z0-9_+/.=-]{24,}",
+      "flags": "gu",
+      "replacement": "[REDACTED]"
+    }
+  ],
   "configSecret": {
     "id": "config-secret",
     "note": "S6 pre-dispatch gate only (redaction ignores it): the key-value vocabulary narrowed to config-like files and non-placeholder literal values. key-value itself stays gate:false (it matches ordinary code).",

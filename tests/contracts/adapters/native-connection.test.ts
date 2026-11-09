@@ -82,9 +82,9 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
   const owner = readLocalOsOwner();
   await expect(openNativeConnection({ principal: { issuer: owner.issuer, subject: String(Number(owner.subject) + 1) }, binding: { schemaVersion: 1, provider: 'codex' }, directory: await fixture(),
     credential: credential(), deadlineMs: 20000 })).rejects.toMatchObject({ code: 'NATIVE_SUBSCRIPTION_OTHER_PERSON' });
-  const origin = fakeOrigin(), other = fakeOrigin(), modelId = 'exact-relay-model';
+  const origin = fakeOrigin(), other = fakeOrigin(), modelId = 'exact-relay-model', received: unknown[] = [];
   const open = async (upstream: Upstream) => { const connection = await openNativeConnection({ principal: readLocalOsOwner(), binding: { schemaVersion: 2, provider: 'codex', model: { channelId: 'c', modelId, auxiliaryModelIds: [] } },
-    directory: await fixture(), credential: { tokens: { access_token: jwt(), id_token: 'synthetic-id', account_id: 'account-synthetic-1', refresh_token: 'never-forward' } }, deadlineMs: 20000, relayUpstream: upstream });
+    directory: await fixture(), credential: { tokens: { access_token: jwt(), id_token: 'synthetic-id', account_id: 'account-synthetic-1', refresh_token: 'never-forward' } }, deadlineMs: 20000, relayUpstream: upstream, onEvents: events => { received.push(...events); } });
     closes.push(connection.close); return connection; };
   const a = await open(origin.upstream), b = await open(other.upstream), keyA = await readFile(a.descriptor.capabilityPath, 'utf8');
   expect((await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', 'early', { model: modelId })).status).toBe(401); // no capability before bootstrap
@@ -94,6 +94,11 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
   expect(setupA.relay).toMatchObject({ placeholder: 'deckent-relay-placeholder', config: { 'model_providers.deckent_relay.auth.refresh_interval_ms': 0 } });
   const capabilityA = setupA.relay.capability as string;
   expect((await bootstrap(a.descriptor.socketPath, keyA)).status).toBe(403); // issued once
+  // The host event guard also masks the capability issued at bootstrap, a value added after the gateway opened.
+  const event = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'unmapped', nativeType: `x-${capabilityA}`, count: 1 }) + '\n';
+  expect(await new Promise<number>((resolve, reject) => request({ socketPath: a.descriptor.socketPath, path: '/events', method: 'POST', headers: { authorization: keyA,
+    'content-type': 'application/x-ndjson', 'content-length': Buffer.byteLength(event) } }, response => { response.resume(); resolve(response.statusCode!); }).on('error', reject).end(event))).toBe(204);
+  expect(JSON.stringify(received)).not.toContain(capabilityA); expect(received).toMatchObject([{ kind: 'unmapped', nativeType: 'x-[REDACTED]' }]);
   const answered = await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId, input: [] });
   expect(answered.status).toBe(200); expect(answered.body).toBe('data: Bearer [REDACTED]\n\n');
   expect(origin.calls).toHaveLength(1);

@@ -7,9 +7,9 @@ export interface RedactionResult { readonly text: string; readonly knownMatches:
 export interface KnownSecretSpan { readonly start: number; readonly end: number; readonly label: string }
 export interface KnownSecretSnapshot {
   readonly spans: (text: string) => readonly KnownSecretSpan[];
-  /** Record attribution only; raw known values take priority over this snapshot's own label lookalikes. */
   /** Earliest suffix that can still grow into an exact known value; never exposes the values. */
   readonly pendingStart: (text: string) => number;
+  /** Record attribution only; raw known values take priority over this snapshot's own label lookalikes. */
   readonly recordSpans: (text: string) => readonly KnownSecretSpan[];
   readonly apply: (text: string, redactRest: (text: string) => string) => { readonly text: string; readonly matches: number };
 }
@@ -22,8 +22,8 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
     .map(entry => ({ ...entry })).sort((a, b) => b.value.length - a.value.length || ((a.name ?? '') < (b.name ?? '') ? -1 : (a.name ?? '') > (b.name ?? '') ? 1 : 0));
   const names = new Map<string, string | null>();
   for (const entry of entries) if (!names.has(entry.value)) names.set(entry.value, entry.name);
-  const source = [...names.keys()].map(escape).join('|');
-  const spans = (text: string): readonly KnownSecretSpan[] => Object.freeze(source ? [...text.matchAll(new RegExp(`(?=(${source}))`, 'g'))]
+  const source = [...names.keys()].map(escape).join('|'), sourcePattern = new RegExp(`(?=(${source}))`, 'g');
+  const spans = (text: string): readonly KnownSecretSpan[] => Object.freeze(source ? [...text.matchAll(sourcePattern)]
     .map(match => Object.freeze({ start: match.index, end: match.index + match[1]!.length, label: label(names.get(match[1]!) ?? null) })) : []);
   // RECORD also covers a known value deliberately line-wrapped by its producer. DECISION still uses exact source bytes.
   const foldLines = (text: string) => {
@@ -39,11 +39,11 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
       return end - start > span.end - span.start ? [Object.freeze({ ...span, start, end })] : [];
     });
   };
-  const recordSource = [...new Set([...names.values()].filter(name => name !== null).map(label))].map(escape).join('|');
+  const recordSource = [...new Set([...names.values()].filter(name => name !== null).map(label))].map(escape).join('|'), recordPattern = new RegExp(`(?=(${recordSource}))`, 'g');
   const recordSpans = (text: string): readonly KnownSecretSpan[] => {
     const raw = [...spans(text), ...lineSpans(text)].sort((a, b) => a.start - b.start || b.end - a.end), records: KnownSecretSpan[] = [];
     let rawIndex = 0, rawEnd = 0;
-    if (recordSource) for (const match of text.matchAll(new RegExp(`(?=(${recordSource}))`, 'g'))) {
+    if (recordSource) for (const match of text.matchAll(recordPattern)) {
       const start = match.index, end = start + match[1]!.length;
       while (rawIndex < raw.length && raw[rawIndex]!.start < end) { rawEnd = Math.max(rawEnd, raw[rawIndex]!.end); rawIndex++; }
       // A literal label containing an actual registered value is still raw secret text, never a masking exemption.
@@ -92,13 +92,15 @@ export const REDACTION_PATTERNS = Object.freeze(REDACTION_TABLE.patterns.map(row
 export const REDACTION_CONFIG_SECRET = Object.freeze(REDACTION_TABLE.configSecret);
 /** S6 gate-only rows of the same table (credential families the record redactor does not mask yet; redaction ignores them). */
 export const REDACTION_GATE_PATTERNS = Object.freeze(REDACTION_TABLE.gatePatterns.map(row => Object.freeze({ ...row })));
-const patterns = (text: string) => Object.freeze(REDACTION_PATTERNS.map(row => ({ kind: row.id, count: [...text.matchAll(new RegExp(row.source, row.flags))].length })).filter(row => row.count > 0).map(row => Object.freeze(row)));
+/** Compiled once per table (KG8 P11); matchAll and a global replace work on their own copy, `.test` uses the non-global one (a global regex keeps lastIndex). */
+const COMPILED = REDACTION_PATTERNS.map(row => Object.freeze({ row, source: new RegExp(row.source, row.flags), record: new RegExp(row.recordSource ?? row.source, row.flags), test: new RegExp(row.source, row.flags.replace('g', '')) }));
+const patterns = (text: string) => Object.freeze(COMPILED.map(row => ({ kind: row.row.id, count: [...text.matchAll(row.source)].length })).filter(row => row.count > 0).map(row => Object.freeze(row)));
 /** Derived record text only: recordSource keeps legacy record coverage (Bearer); counters/standing use source (jwt's is linear, SEC-6/6b F39).
  * Merge original-text coverage before replacing. This snapshot's generated labels retain attribution without
  * exempting any pattern coverage or raw known value, including literal marker lookalikes. */
 export function redactForRecord(text: string, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): string {
   const spans: { start: number; end: number; labels: string[] }[] = known.recordSpans(text).map(match => ({ start: match.start, end: match.end, labels: [match.label] }));
-  for (const row of REDACTION_PATTERNS) for (const match of text.matchAll(new RegExp(row.recordSource ?? row.source, row.flags))) {
+  for (const { row, record } of COMPILED) for (const match of text.matchAll(record)) {
     const prefix = row.replacement.startsWith('$1') ? match[1]!.length : 0, suffix = row.replacement.endsWith('$2') ? match[2]!.length : 0;
     spans.push({ start: match.index + prefix, end: match.index + match[0].length - suffix, labels: [] });
   }
@@ -122,5 +124,5 @@ export function redactForDecision(text: string, known: KnownSecretSnapshot = EMP
   return Object.freeze({ text: result.text, knownMatches: result.matches, patternMatches: patterns(text) });
 }
 export function hasSecret(text: string, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): boolean {
-  return known.apply(text, part => part).matches > 0 || REDACTION_PATTERNS.some(row => new RegExp(row.source, row.flags).test(text));
+  return known.apply(text, part => part).matches > 0 || COMPILED.some(row => row.test.test(text));
 }

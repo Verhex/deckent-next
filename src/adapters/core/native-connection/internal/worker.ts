@@ -12,8 +12,8 @@ import { createHash } from 'node:crypto';
 // so the shapes are mirrored and the host re-validates every event. Redaction happens before any byte leaves the container.
 type BridgeEvent = Record<string, unknown> & { kind: string };
 // B7 GENERATED REDACTOR BEGIN
-// Canonical source+table sha256: d2e0fe4c00632529263c78176a0ac494784f555f476c2a7c4acde2ae2cb18ed7; scripts/sync-worker-redactor.mjs --check
-const REDACTION_TABLE = {"knownLabel":{"prefix":"‹secret:","suffix":"›","anonymous":"[REDACTED]"},"patterns":[{"id":"provider-token","gate":true,"source":"\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b","flags":"g","replacement":"[REDACTED]","streamPreviewSource":"\\b(?:sk-(?:ant-)?[\\w-]*|gh[pousr]_\\w*|github_pat_\\w*|AKIA[A-Z0-9]*|xox[abp]-[A-Za-z0-9_-]*|npm_[A-Za-z0-9]*|AIza[A-Za-z0-9_-]*)$"},{"id":"bearer-token","gate":true,"source":"(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}","recordSource":"(Bearer\\s+)\\S+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"\\bBearer\\s*$"},{"id":"url-userinfo","gate":true,"source":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)","flags":"gi","replacement":"$1[REDACTED]$2","streamPreviewSource":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]*(@?)$"},{"id":"key-value","gate":false,"source":"((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"(?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*(?:=\\s*)?$"},{"id":"jwt","gate":true,"source":"((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b","flags":"g","replacement":"$1[REDACTED]","streamPreviewSource":"((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]*(?:\\.[\\w-]*){0,2}$"}],"gatePatterns":[{"id":"private-key-block","source":"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----","distributionSource":"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[ \\t\\r\\n]+(?:[A-Za-z0-9-]+:[^\\r\\n]*[\\r\\n]+)*(?:[A-Za-z0-9+/][ \\t\\r\\n]*){32}","flags":""},{"id":"gitlab-token","source":"\\bglpat-[A-Za-z0-9_-]{20,}","flags":""},{"id":"aws-temporary-key","source":"\\bASIA[A-Z0-9]{16}\\b","flags":""},{"id":"aws-secret-key","source":"aws_?secret_?access_?key[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])","flags":"i"},{"id":"stripe-key","source":"\\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}","flags":""},{"id":"slack-token","source":"\\b(?:xox[a-z]|xapp)-[A-Za-z0-9-]{8,}","flags":""},{"id":"pypi-token","source":"\\bpypi-[A-Za-z0-9_-]{50,}","flags":""},{"id":"azure-account-key","source":"\\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}={0,2}","flags":"i"}],"configSecret":{"id":"config-secret","note":"S6 pre-dispatch gate only (redaction ignores it): the key-value vocabulary narrowed to config-like files and non-placeholder literal values. key-value itself stays gate:false (it matches ordinary code).","files":[".env",".env.*","*.json","*.yaml","*.yml","*.toml","*.ini","*.properties","*.conf","*.cfg","*.xml","docker-compose*","*.config"],"keys":["password","passwd","pwd","secret","token","api[_-]?key","private[_-]?key","access[_-]?key","account[_-]?key","shared[_-]?access[_-]?key","credentials?","connection[_-]?string","authorization","cookie"],"assignmentSource":"(?<![\\w.-])[\"']?([\\w.-]*(?:{keys}))[\"']?[ \\t]*[:=](?:[ \\t]*|\\s*(?=[\"']))(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|(\\$\\{\\{[^}\\r\\n]*\\}\\}(?=(?:[ \\t]+#[^\\r\\n]*)?[ \\t]*(?:\\r\\n|\\r|\\n|$))|\\$\\{[^}\\r\\n]*\\}|<[^>\\r\\n]*>|[^\\s\"',;#}\\]<]+))","elementSource":"<(?:[\\w.-]+:)?([\\w.-]*(?:{keys}))(?:\\s[^<>]*)?>([^<\\r\\n]*)</","flags":"gi","placeholders":["^\\$\\{[A-Za-z_][A-Za-z0-9_]*(?::?\\?[^}]*)?\\}$","^\\$\\(?[A-Za-z_][A-Za-z0-9_]*\\)?$","^%[A-Za-z_][A-Za-z0-9_]*%$","^<[^<>]*>$","^\\{\\{[^'\"{}]*\\}\\}$","^\\$\\{\\{[ \\t]*(?:github|secrets|env|vars|inputs|steps|needs|matrix|runner|job|strategy)\\.[A-Za-z0-9_.\\-]+[ \\t]*\\}\\}$","^\\*+$","^[xX]+$","^(?:changeme|change[_-]?me|change[_-]?it|example|dummy|redacted|placeholder|null|none|nil|true|false|todo|tbd|fixme|secret|password|your[_-][\\w-]*|xxx[\\w-]*|\\.\\.\\.)$"],"minValueLength":6,"envDefaultSource":"^\\$\\{[A-Za-z_][A-Za-z0-9_]*:?[-=](.*)\\}$"}};
+// Canonical source+table sha256: 7214ed7daebaee1aa692cac6dbc9b99a3287135a0cb1a2cf941af736bd08de7a; scripts/sync-worker-redactor.mjs --check
+const REDACTION_TABLE = {"knownLabel":{"prefix":"‹secret:","suffix":"›","anonymous":"[REDACTED]"},"patterns":[{"id":"provider-token","gate":true,"source":"\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b","flags":"g","replacement":"[REDACTED]","streamPreviewSource":"\\b(?:sk-(?:ant-)?[\\w-]*|gh[pousr]_\\w*|github_pat_\\w*|AKIA[A-Z0-9]*|xox[abp]-[A-Za-z0-9_-]*|npm_[A-Za-z0-9]*|AIza[A-Za-z0-9_-]*)$"},{"id":"bearer-token","gate":true,"source":"(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}","recordSource":"(Bearer\\s+)\\S+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"\\bBearer\\s*$"},{"id":"url-userinfo","gate":true,"source":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)","flags":"gi","replacement":"$1[REDACTED]$2","streamPreviewSource":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]*(@?)$"},{"id":"key-value","gate":false,"source":"((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"(?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*(?:=\\s*)?$"},{"id":"jwt","gate":true,"source":"((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b","flags":"g","replacement":"$1[REDACTED]","streamPreviewSource":"((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]*(?:\\.[\\w-]*){0,2}$"}],"gatePatterns":[{"id":"private-key-block","source":"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----","distributionSource":"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[ \\t\\r\\n]+(?:[A-Za-z0-9-]+:[^\\r\\n]*[\\r\\n]+)*(?:[A-Za-z0-9+/][ \\t\\r\\n]*){32}","flags":""},{"id":"gitlab-token","source":"\\bglpat-[A-Za-z0-9_-]{20,}","flags":""},{"id":"aws-temporary-key","source":"\\bASIA[A-Z0-9]{16}\\b","flags":""},{"id":"aws-secret-key","source":"aws_?secret_?access_?key[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])","flags":"i"},{"id":"stripe-key","source":"\\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}","flags":""},{"id":"slack-token","source":"\\b(?:xox[a-z]|xapp)-[A-Za-z0-9-]{8,}","flags":""},{"id":"pypi-token","source":"\\bpypi-[A-Za-z0-9_-]{50,}","flags":""},{"id":"azure-account-key","source":"\\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}={0,2}","flags":"i"}],"diagnosticPatterns":[{"id":"basic-bearer","source":"\\b(?:Basic|Bearer)\\s+\\S+","flags":"giu","replacement":"[REDACTED]"},{"id":"private-key-block","source":"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\\s\\S]*","flags":"gu","replacement":"[REDACTED]"},{"id":"key-value","source":"(?<![\\w-])((?:[\"']?[\\w-]*(?:password|passwd|pwd|token|secret|api[_-]?key|private[_-]?key|credentials?)[\"']?|[\"']?(?:authorization|cookie)[\"']?)\\s*[:=]\\s*)(?:\"(?:[^\"\\\\\\r\\n]|\\\\.?)*(?:\"|$)|'(?:[^'\\\\\\r\\n]|\\\\.?)*(?:'|$)|[^\\s,;}]+)","flags":"gimu","replacement":"$1[REDACTED]"},{"id":"url","source":"\\b[a-z][a-z0-9+.-]*:\\/\\/[^\\s<>\"'`]+","flags":"giu","parts":[{"source":"(\\/\\/)[^/?#]*@","flags":"u","replacement":"$1[REDACTED]@"},{"source":"[?#].*$","flags":"u","replacement":"?[REDACTED]"}]},{"id":"email","source":"(?<![\\p{L}\\p{N}.!#$%&'*+/=?^_`{|}~-])[\\p{L}\\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\\p{L}\\p{N}.-]+","flags":"giu","replacement":"[REDACTED]"},{"id":"long-run","source":"[A-Za-z0-9_+/.=-]{24,}","flags":"gu","replacement":"[REDACTED]"}],"configSecret":{"id":"config-secret","note":"S6 pre-dispatch gate only (redaction ignores it): the key-value vocabulary narrowed to config-like files and non-placeholder literal values. key-value itself stays gate:false (it matches ordinary code).","files":[".env",".env.*","*.json","*.yaml","*.yml","*.toml","*.ini","*.properties","*.conf","*.cfg","*.xml","docker-compose*","*.config"],"keys":["password","passwd","pwd","secret","token","api[_-]?key","private[_-]?key","access[_-]?key","account[_-]?key","shared[_-]?access[_-]?key","credentials?","connection[_-]?string","authorization","cookie"],"assignmentSource":"(?<![\\w.-])[\"']?([\\w.-]*(?:{keys}))[\"']?[ \\t]*[:=](?:[ \\t]*|\\s*(?=[\"']))(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|(\\$\\{\\{[^}\\r\\n]*\\}\\}(?=(?:[ \\t]+#[^\\r\\n]*)?[ \\t]*(?:\\r\\n|\\r|\\n|$))|\\$\\{[^}\\r\\n]*\\}|<[^>\\r\\n]*>|[^\\s\"',;#}\\]<]+))","elementSource":"<(?:[\\w.-]+:)?([\\w.-]*(?:{keys}))(?:\\s[^<>]*)?>([^<\\r\\n]*)</","flags":"gi","placeholders":["^\\$\\{[A-Za-z_][A-Za-z0-9_]*(?::?\\?[^}]*)?\\}$","^\\$\\(?[A-Za-z_][A-Za-z0-9_]*\\)?$","^%[A-Za-z_][A-Za-z0-9_]*%$","^<[^<>]*>$","^\\{\\{[^'\"{}]*\\}\\}$","^\\$\\{\\{[ \\t]*(?:github|secrets|env|vars|inputs|steps|needs|matrix|runner|job|strategy)\\.[A-Za-z0-9_.\\-]+[ \\t]*\\}\\}$","^\\*+$","^[xX]+$","^(?:changeme|change[_-]?me|change[_-]?it|example|dummy|redacted|placeholder|null|none|nil|true|false|todo|tbd|fixme|secret|password|your[_-][\\w-]*|xxx[\\w-]*|\\.\\.\\.)$"],"minValueLength":6,"envDefaultSource":"^\\$\\{[A-Za-z_][A-Za-z0-9_]*:?[-=](.*)\\}$"}};
 
 export interface NamedKnownSecret { readonly name: string | null; readonly value: string }
 export interface RedactionMatch { readonly kind: string; readonly count: number }
@@ -22,9 +22,9 @@ export interface RedactionResult { readonly text: string; readonly knownMatches:
 export interface KnownSecretSpan { readonly start: number; readonly end: number; readonly label: string }
 export interface KnownSecretSnapshot {
   readonly spans: (text: string) => readonly KnownSecretSpan[];
-  /** Record attribution only; raw known values take priority over this snapshot's own label lookalikes. */
   /** Earliest suffix that can still grow into an exact known value; never exposes the values. */
   readonly pendingStart: (text: string) => number;
+  /** Record attribution only; raw known values take priority over this snapshot's own label lookalikes. */
   readonly recordSpans: (text: string) => readonly KnownSecretSpan[];
   readonly apply: (text: string, redactRest: (text: string) => string) => { readonly text: string; readonly matches: number };
 }
@@ -37,8 +37,8 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
     .map(entry => ({ ...entry })).sort((a, b) => b.value.length - a.value.length || ((a.name ?? '') < (b.name ?? '') ? -1 : (a.name ?? '') > (b.name ?? '') ? 1 : 0));
   const names = new Map<string, string | null>();
   for (const entry of entries) if (!names.has(entry.value)) names.set(entry.value, entry.name);
-  const source = [...names.keys()].map(escape).join('|');
-  const spans = (text: string): readonly KnownSecretSpan[] => Object.freeze(source ? [...text.matchAll(new RegExp(`(?=(${source}))`, 'g'))]
+  const source = [...names.keys()].map(escape).join('|'), sourcePattern = new RegExp(`(?=(${source}))`, 'g');
+  const spans = (text: string): readonly KnownSecretSpan[] => Object.freeze(source ? [...text.matchAll(sourcePattern)]
     .map(match => Object.freeze({ start: match.index, end: match.index + match[1]!.length, label: label(names.get(match[1]!) ?? null) })) : []);
   // RECORD also covers a known value deliberately line-wrapped by its producer. DECISION still uses exact source bytes.
   const foldLines = (text: string) => {
@@ -54,11 +54,11 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
       return end - start > span.end - span.start ? [Object.freeze({ ...span, start, end })] : [];
     });
   };
-  const recordSource = [...new Set([...names.values()].filter(name => name !== null).map(label))].map(escape).join('|');
+  const recordSource = [...new Set([...names.values()].filter(name => name !== null).map(label))].map(escape).join('|'), recordPattern = new RegExp(`(?=(${recordSource}))`, 'g');
   const recordSpans = (text: string): readonly KnownSecretSpan[] => {
     const raw = [...spans(text), ...lineSpans(text)].sort((a, b) => a.start - b.start || b.end - a.end), records: KnownSecretSpan[] = [];
     let rawIndex = 0, rawEnd = 0;
-    if (recordSource) for (const match of text.matchAll(new RegExp(`(?=(${recordSource}))`, 'g'))) {
+    if (recordSource) for (const match of text.matchAll(recordPattern)) {
       const start = match.index, end = start + match[1]!.length;
       while (rawIndex < raw.length && raw[rawIndex]!.start < end) { rawEnd = Math.max(rawEnd, raw[rawIndex]!.end); rawIndex++; }
       // A literal label containing an actual registered value is still raw secret text, never a masking exemption.
@@ -107,13 +107,15 @@ export const REDACTION_PATTERNS = Object.freeze(REDACTION_TABLE.patterns.map(row
 export const REDACTION_CONFIG_SECRET = Object.freeze(REDACTION_TABLE.configSecret);
 /** S6 gate-only rows of the same table (credential families the record redactor does not mask yet; redaction ignores them). */
 export const REDACTION_GATE_PATTERNS = Object.freeze(REDACTION_TABLE.gatePatterns.map(row => Object.freeze({ ...row })));
-const patterns = (text: string) => Object.freeze(REDACTION_PATTERNS.map(row => ({ kind: row.id, count: [...text.matchAll(new RegExp(row.source, row.flags))].length })).filter(row => row.count > 0).map(row => Object.freeze(row)));
+/** Compiled once per table (KG8 P11); matchAll and a global replace work on their own copy, `.test` uses the non-global one (a global regex keeps lastIndex). */
+const COMPILED = REDACTION_PATTERNS.map(row => Object.freeze({ row, source: new RegExp(row.source, row.flags), record: new RegExp(row.recordSource ?? row.source, row.flags), test: new RegExp(row.source, row.flags.replace('g', '')) }));
+const patterns = (text: string) => Object.freeze(COMPILED.map(row => ({ kind: row.row.id, count: [...text.matchAll(row.source)].length })).filter(row => row.count > 0).map(row => Object.freeze(row)));
 /** Derived record text only: recordSource keeps legacy record coverage (Bearer); counters/standing use source (jwt's is linear, SEC-6/6b F39).
  * Merge original-text coverage before replacing. This snapshot's generated labels retain attribution without
  * exempting any pattern coverage or raw known value, including literal marker lookalikes. */
 export function redactForRecord(text: string, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): string {
   const spans: { start: number; end: number; labels: string[] }[] = known.recordSpans(text).map(match => ({ start: match.start, end: match.end, labels: [match.label] }));
-  for (const row of REDACTION_PATTERNS) for (const match of text.matchAll(new RegExp(row.recordSource ?? row.source, row.flags))) {
+  for (const { row, record } of COMPILED) for (const match of text.matchAll(record)) {
     const prefix = row.replacement.startsWith('$1') ? match[1]!.length : 0, suffix = row.replacement.endsWith('$2') ? match[2]!.length : 0;
     spans.push({ start: match.index + prefix, end: match.index + match[0].length - suffix, labels: [] });
   }
@@ -137,7 +139,7 @@ export function redactForDecision(text: string, known: KnownSecretSnapshot = EMP
   return Object.freeze({ text: result.text, knownMatches: result.matches, patternMatches: patterns(text) });
 }
 export function hasSecret(text: string, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): boolean {
-  return known.apply(text, part => part).matches > 0 || REDACTION_PATTERNS.some(row => new RegExp(row.source, row.flags).test(text));
+  return known.apply(text, part => part).matches > 0 || COMPILED.some(row => row.test.test(text));
 }
 // B7 GENERATED REDACTOR END
 /** Compatibility worker display: same record producer, then legacy control stripping and length bound. */
@@ -870,7 +872,7 @@ async function main() {
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[]; discovery?: string };
     promptDelivery?: { schemaVersion: number; channel: string; core: string; task: string;
       segments: { kind: string; id: string; version: number; sha256: string }[]; sha256: string; argvSha256: string } };
-  const home = '/tmp/deckent-home';
+  const home = '/tmp/deckent-home', base = (dir: string) => ({ PATH: process.env.PATH, HOME: dir, LANG: 'C.UTF-8' });
   if (setup.schemaVersion !== 1 || setup.home.includes('..') || setup.home.startsWith('/') || setup.file.includes('/')) throw new Error();
   const [executable, ...argv] = process.argv.slice(2); if (!executable) throw new Error();
   const hash = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -896,7 +898,7 @@ async function main() {
     try {
       const run = (args: readonly string[]) => execFileSync(executable, args, { cwd: probe, timeout: 10000,
         maxBuffer: 1048576, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-        env: { PATH: process.env.PATH, HOME: probe, LANG: 'C.UTF-8', DISABLE_AUTOUPDATER: '1' } });
+        env: { ...base(probe), DISABLE_AUTOUPDATER: '1' } });
       reportSupported = nativePreflightCapabilities(setup.capabilities, setup.preflight, run);
     } catch {
       process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', code: 78,
@@ -956,8 +958,7 @@ async function main() {
   if (!relayed) await new Promise<void>((resolve, reject) => { relay.once('error', reject); relay.listen(0, '127.0.0.1', resolve); });
   const address = relayed ? null : relay.address(); if (!relayed && (!address || typeof address === 'string')) throw new Error();
   const proxy = address && typeof address !== 'string' ? `http://127.0.0.1:${address.port}` : null;
-  const child = spawn(executable, argv, { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: home,
-    LANG: 'C.UTF-8', ...setup.environment,
+  const child = spawn(executable, argv, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...base(home), ...setup.environment,
     ...(setup.credentialEnvironment && typeof setup.credential?.accessToken === 'string' ? { [setup.credentialEnvironment]: setup.credential.accessToken } : {}),
     ...(proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy, NO_PROXY: '', no_proxy: '' } : {}) } });
   if (delivery) child.once('spawn', () => process.stdout.write(JSON.stringify({ schemaVersion: 1,

@@ -2286,7 +2286,8 @@
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/redaction"
       ],
       "plan": "PROVIDERS"
     },
@@ -5275,7 +5276,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42208,
+      "adapters": 42209,
       "surfaces": 45000,
       "composition": 13703
     },
