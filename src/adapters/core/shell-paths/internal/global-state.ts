@@ -1,10 +1,11 @@
 import { realpath, stat } from 'node:fs/promises';
 import { posix } from 'node:path';
-import { JSON_SCHEMA_LIMITS, pathWithin, StepBudgetExceeded } from '#platform/index.js';
-import { classifyShellContainment, shellNamedPaths } from '#engine/index.js';
+import { JSON_SCHEMA_LIMITS, PRODUCT_LAYOUT_REGISTRY, pathWithin, StepBudgetExceeded } from '#platform/index.js';
+import { shellGlobalStateUnresolved, type ShellCommandScan } from '#engine/index.js';
 import { expandGlob, segmentMatcher, SHELL_GLOB_MAX_MATCHES } from './paths.js';
 
 const GLOB = /[*?[]/u;
+const HOME_VARIABLE = new RegExp(`^\\$(?:\\{(HOME|${PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey})\\}|(HOME|${PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey}))(?=/|$)`, 'u');
 
 /** Names, not contents: resolve existing ancestors without dropping `link/..`; absent children still inherit their real parent. */
 async function realName(path: string): Promise<string> {
@@ -36,7 +37,7 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
     if (['[', '[[', ']', ']]'].includes(text)) return false;
     text = text.replace(/^[A-Za-z_][A-Za-z0-9_]*=/u, '');
     // Conservatively recognize HOME spellings even when quoted: quotes never open a protected name.
-    const expanded = text.replace(/^~(?=\/|$)/u, home ?? '~').replace(/^\$(?:\{(HOME|DECKENT_GLOBAL_HOME)\}|(HOME|DECKENT_GLOBAL_HOME))(?=\/|$)/u, (value, braced: string | undefined, plain: string | undefined) => env[braced ?? plain!] ?? value);
+    const expanded = text.replace(/^~(?=\/|$)/u, home ?? '~').replace(HOME_VARIABLE, (value, braced: string | undefined, plain: string | undefined) => env[braced ?? plain!] ?? value);
     const raw = posix.isAbsolute(expanded) ? expanded : `${projectRoot}/${expanded}`;
     if (protectedPath(posix.normalize(raw))) return true;
     const globAt = raw.search(GLOB);
@@ -72,11 +73,8 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
 }
 
 /** Host names are best effort, never confinement. Unresolved forms need a warning and per-call approval when global state exists. */
-export async function hostGlobalStateUnresolved(command: string, roots: readonly string[]): Promise<boolean> {
-  const unresolved = /[$`{}]/u.test(command) || shellNamedPaths(command, () => true).flatMap(word => word.split(/[<>]/u))
-    .some(word => /^~[^/]/u.test(word) || ['cd', 'pushd', 'popd', 'find', 'xargs'].includes(posix.basename(word.replace(/^[({]+|[)}]+$/gu, ''))))
-    || ['UNPARSEABLE', 'PROCESS_SUBSTITUTION'].includes(classifyShellContainment(command, () => false).reasonCode);
-  if (!unresolved) return false;
+export async function hostGlobalStateUnresolved(command: string, roots: readonly string[], shared?: ShellCommandScan): Promise<boolean> {
+  if (!shellGlobalStateUnresolved(command, shared)) return false;
   for (const root of roots) {
     try { await stat(root); return true; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true; }

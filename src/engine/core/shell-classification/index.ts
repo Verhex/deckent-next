@@ -6,6 +6,7 @@ export type { ShellReasonCode, ShellWord } from './internal/scanner.js';
 export type { ShellReadRisk } from './internal/programs.js';
 export { classifyShellMutation, NETWORK_PROGRAMS, PACKAGE_PROGRAMS, shellPermissionTier, type ShellMutationReason, type ShellMutationVerdict,
   type ShellPermissionTier, type ShellWriteKind, type ShellWritePathContext } from './internal/mutation.js';
-export { classifyShellContainment, shellNamedPaths, type ShellContainmentReason, type ShellContainmentVerdict } from './internal/containment.js';
+export { classifyShellContainment, shellNamedPaths, shellGlobalStateUnresolved, type ShellContainmentReason, type ShellContainmentVerdict } from './internal/containment.js';
 export { globSegmentRegExp } from './internal/glob.js';
 export { classifyShellAuthority } from './internal/authority.js';
+export { scanShellCommand, type ShellCommandScan } from './internal/scan.js';
