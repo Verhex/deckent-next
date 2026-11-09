@@ -65,7 +65,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   useEffect(() => {
     mounted.current = true;
     let live = true;
-    port.inspect().then(view => subscriptionModelView(view, port.provider, (port.provider as ProviderWindowPort | undefined)?.locale ?? 'en')).then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
+    inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
     port.cache?.inspect().then(value => { if (live) setCache(value); }, () => undefined);
     port.workspace?.inspect().then(value => { if (live) setWorkspaces(value); }, () => undefined);

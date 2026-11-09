@@ -296,9 +296,10 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const entry = channel?.access === 'allowed' ? channel.models.find(item => item.modelId === model.nativeId) : undefined;
         return entry !== undefined && entry.activation?.state !== 'active';
       };
-      const rows = await Promise.all((reading?.models ?? []).map(async model => { const login = subscriptionReadiness.recognizes(model.reference), closed = login && off(model);
-        return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(await subscriptionReadiness.inspect('chat', model.reference), locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
-        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; }));
+      const open = (reading?.models ?? []).filter(model => subscriptionReadiness.recognizes(model.reference) && !off(model)), readiness = await subscriptionReadiness.inspectMany('chat', open.map(model => model.reference));
+      const rows = (reading?.models ?? []).map(model => { const login = subscriptionReadiness.recognizes(model.reference), closed = login && off(model);
+        return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(readiness[open.indexOf(model)]!, locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
+        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; });
       // R3c: one note per subscription login (its models share the readiness words); a model whose words differ keeps its own; other models one note each.
       const groups = new Map<string, typeof rows>();
       for (const row of rows) { const key = row.login ? `${row.model.reference.providerId}\n${row.text}` : referenceKey(row.model.reference); groups.set(key, [...groups.get(key) ?? [], row]); }

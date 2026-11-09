@@ -829,7 +829,7 @@ it('K13: text invocability never mints agent readiness; the model and provider s
   const choice = { reference, label: 'Fixture', detail: 'OLD TEXT READY', group: native.id, blocked: null, configured: false, exact: 'fixture', command: null };
   let state: NativeAgentReadiness | undefined;
   const host = { providerConnect: { ...base, kinds: [native] }, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } }] }) as never,
-    inspectSubscriptionReadiness: async (_root: string, query: unknown) => { calls.push(query); return state as NativeAgentReadiness; } };
+    inspectSubscriptionReadiness: async (_root: string, query: { references: readonly unknown[] }) => { calls.push(query); return query.references.map(() => state as NativeAgentReadiness); } };
   const plain = { title: 'models', choices: [choice, { ...choice, reference: { ...reference, providerId: 'api-fixture' } }], notes: [], defaultBlocked: null };
   for (const locale of ['en', 'tr'] as const) {
     const port = providerPanelPort(root, 'scope', host, options, locale, errorText);
@@ -849,18 +849,20 @@ it('K13: text invocability never mints agent readiness; the model and provider s
       profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
     const ready = await subscriptionModelView(plain, port, locale);
     expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.k13.readiness.ready', {}, locale));
-    expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', reference });
-    // A later missing observation cannot retain an earlier ready projection.
-    state = undefined;
+    expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', references: [reference] });
+    // A later missing observation cannot retain an earlier ready projection: every view build reads again (no cross-build cache).
+    state = undefined; const builds = calls.length;
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect(calls).toHaveLength(builds + 1);
     const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
     expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
   }
   // R3c: a login with several models gives one note (onboarding pushes notes to scrollback), not one per model.
-  state = undefined;
+  state = undefined; calls.length = 0;
   const two = await providerPanelPort(root, 'scope', { ...host, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } },
     { reference: { ...reference, modelId: 'fixture-2' }, nativeId: 'fixture-2', availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText).inspect();
   expect(two.notes.filter(note => note.startsWith(two.kinds[0]!.label))).toEqual([`${two.kinds[0]!.label} · 2 model(s) connected: ${subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en')}`]);
+  expect(calls).toEqual([{ scopeId: 'scope', surface: 'chat', references: [reference, { ...reference, modelId: 'fixture-2' }] }]); // KG6 F5: one host read per view build
   // R8e: the production CLI host reads the seal a guarded turn wrote, so /provider says ready (without the host wiring it stayed "unknown").
   const sealedRoot = await mkdtemp(join(tmpdir(), 'deckent-r8e-')); roots.push(sealedRoot);
   const global = join(sealedRoot, 'global'), bin = join(sealedRoot, 'bin'), configDir = join(global, 'headless', 'logins', 'claude'), stateDir = join(global, 'headless', 'connections', 'r8e');
