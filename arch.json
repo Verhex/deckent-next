@@ -1670,7 +1670,9 @@
         "src/engine/core/provider-spend",
         "src/composition/core/model-use-grant",
         "src/composition/core/model-use",
-        "src/adapters/core/sqlite-read-view"
+        "src/adapters/core/sqlite-read-view",
+        "src/adapters/core/file-lock",
+        "src/composition/core/backup"
       ],
       "plan": "INSTALLATION"
     },
@@ -3467,7 +3469,8 @@
         "src/platform/core/integrity",
         "src/platform/core/utils",
         "src/platform/core/validate",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/adapters/core/file-lock"
       ],
       "plan": "INSTALLATION"
     },
@@ -3493,7 +3496,8 @@
         "src/adapters/core/installation-removal",
         "src/adapters/core/project-attachment",
         "src/platform/core/common",
-        "src/composition/core/attachment-lifecycle"
+        "src/composition/core/attachment-lifecycle",
+        "src/engine/core/effect"
       ],
       "plan": "INSTALLATION"
     },
@@ -4695,7 +4699,6 @@
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/utils",
         "src/domain/core/policy",
-        "src/adapters/core/local-runtime-socket",
         "src/engine/core/audit",
         "src/engine/core/workspaces",
         "src/adapters/core/project-instructions",
@@ -4705,7 +4708,8 @@
         "src/adapters/core/git-workspace",
         "src/domain/core/effect",
         "src/platform/core/validate",
-        "src/adapters/core/project-attachment"
+        "src/adapters/core/project-attachment",
+        "src/adapters/core/file-lock"
       ],
       "plan": "INSTALLATION"
     },
@@ -5247,9 +5251,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42385,
+      "adapters": 42379,
       "surfaces": 45000,
-      "composition": 13550
+      "composition": 13576
     },
     "totalSrcLines": 200000,
     "testCases": 8196,

@@ -1,4 +1,4 @@
-import { restoreLeftovers, listBackupSets, lastBackupVerifications, openLocalIntegrityAuthority, type BackupSetEntry } from '#adapters/index.js';
+import { restoreLeftovers, listBackupSets, lastBackupVerifications, openLocalIntegrityAuthority, BACKUP_AUDIT_LOCATIONS, type BackupSetEntry } from '#adapters/index.js';
 import { listConfiguredSecretNames } from '#composition/core/secrets/index.js';
 import { lstat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -22,7 +22,7 @@ export async function inspectConfiguredBackupSets(projectRoot: string, options: 
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {} });
   const layout = config.productLayout, limits = config.installation.packageMeasurement, directory = join(productResourcePath(layout, 'ledgerBackups'), 'recovery');
   const authority = await openLocalIntegrityAuthority(layout, config.approvals.keyFile).catch(() => null);
-  const verified = authority ? await lastBackupVerifications(join(productResourcePath(layout, 'audit'), 'backup-operations'), limits, authority) : new Map<string, number>();
+  const verified = authority ? await lastBackupVerifications(join(productResourcePath(layout, 'audit'), BACKUP_AUDIT_LOCATIONS.installation), limits, authority) : new Map<string, number>();
   const names = await listConfiguredSecretNames(projectRoot, options).then(view => view.names, () => null); // assurance-gated; refused or failed: unknown
   return { schemaVersion: 1 as const, directory, schedule: config.backup.schedule, retention: config.backup.retention,
     passphraseStored: names ? names.includes(BACKUP_SCHEDULE_SECRET) : null, sets: await listBackupSets(directory, limits, verified) as readonly BackupSetEntry[] };

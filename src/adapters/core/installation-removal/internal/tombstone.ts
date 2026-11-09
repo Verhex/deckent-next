@@ -8,7 +8,7 @@ import { PRIVATE_PERMISSION_MASK, generateEd25519Pair, ed25519Signer, signatureM
 import { policyNamedScopes, resolvePolicyBindings, type VerifiedPrincipal } from '#domain/index.js';
 import { authorizeUninstall, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { currentSetDigest, verifyBackupSet } from '#adapters/core/backup-store/index.js';
-import { acquireLedgerLock, type LedgerLock } from '#adapters/core/local-runtime-socket/index.js';
+import { withExclusiveFileLock, type ExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { forgetFolderLegacyTrust, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 import { memberStat, type DataRemovalSnapshot } from './data.js';
 import { verifyUninstallArchive } from './archive.js';
@@ -99,16 +99,16 @@ async function reconcileFinalTail(directory: string, root: string, actor: Verifi
 }
 type Env = Readonly<Record<string, string | undefined>>;
 /** The ledger lock, never stolen (a holder is a running service); `optional`: there may be none to take. */
-function custody(config: ResolvedConfig, optional = false): LedgerLock | undefined { try { return acquireLedgerLock(`${productResourcePath(config.productLayout, 'ledger')}-lock`); }
-  catch (error) { if ((error as { code?: string }).code === 'LOCAL_RUNTIME_ALREADY_RUNNING') throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); if (!optional) throw error; } }
+async function custody(config: ResolvedConfig, optional = false): Promise<ExclusiveFileLock | undefined> { const lock = await withExclusiveFileLock(`${productResourcePath(config.productLayout, 'ledger')}-lock`, { waitMs: 0, pollMs: 0 }).catch((error: unknown) => { if (!optional) throw error; return undefined; });
+  if (lock === null) throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); return lock; }
 /** R11: the one completion of a finished removal (normal step, resumed tail, already-absent reconcile). Keep tiers leave the retired marker (R1),
  * delete-everything forgets this folder's legacy trust (R6), both before `release` drops the hold (a failure keeps it); then the custody file goes
  * only when the plan did not keep it, Git does not track it and it is empty (R2), then emptied folders. An absent tail takes the custody here. */
-export async function completeUninstall(config: ResolvedConfig, plan: UninstallPlan, env: Env, release: () => Promise<void>, held?: LedgerLock) {
+export async function completeUninstall(config: ResolvedConfig, plan: UninstallPlan, env: Env, release: () => Promise<void>, held?: ExclusiveFileLock) {
   const root = config.productLayout.root, own = root === join(config.projectRoot, DECKENT_DIR), path = `${productResourcePath(config.productLayout, 'ledger')}-lock`;
   if (!plan.purge) await retireInstallation(root, { installationId: plan.installation.id, planDigest: plan.planDigest, tier: plan.tier });
   else if (own) await forgetFolderLegacyTrust(config.projectRoot, instructionTrustDirectory(env));
-  const lock = held ?? (plan.purge && own ? custody(config, true) : undefined);
+  const lock = held ?? (plan.purge && own ? await custody(config, true) : undefined);
   try {
     if (plan.purge) await settleAttachmentRemoval(config, plan.installation.id, env);
     await release();
@@ -126,7 +126,7 @@ export async function completeUninstall(config: ResolvedConfig, plan: UninstallP
 export async function resumeUninstallFinalTail(config: ResolvedConfig, directory: string, actor: VerifiedPrincipal, passphrase: string, env: Env = process.env): Promise<UninstallResult> {
   const layout = config.productLayout, root = layout.root, maxBytes = config.installation.profileMaxBytes;
   if (!passphrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED');
-  const lock = custody(config)!;
+  const lock = (await custody(config))!;
   try {
     const held = await reconcileFinalTail(directory, root, actor, maxBytes);
     if (!held?.remaining) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');

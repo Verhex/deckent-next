@@ -31,6 +31,7 @@ export type { ProcessCommand, ProcessEvidence } from '#adapters/core/process-run
 
 export { LocalPeerShutdownAuthentication } from '#adapters/core/local-runtime-socket/index.js';
 export * from '#adapters/core/local-runtime-socket/index.js';
+export * from '#adapters/core/file-lock/index.js';
 
 export { readInstallationProfileFile, InstallationProfileFileError } from '#adapters/core/installation-profile-file/index.js';
 export { measureInstalledPackage, InstallationArtifactError } from '#adapters/core/installation-artifacts/index.js';
@@ -126,7 +127,7 @@ export * from '#adapters/core/hub-package-file/index.js';
 export * from '#adapters/core/hub-cache/index.js';
 export * from '#adapters/core/hub-http/index.js';
 
-export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInventory, installationScopes, uninstallRecoveryDirectory, nativeServiceExec, nativeUserUnitLinks, restoreUninstallArchive, hasUninstallArchive, uninstallArchiveRoots, prepareUninstallBackup, writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease, completeUninstall } from '#adapters/core/installation-removal/index.js';
+export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInventory, installationScopes, uninstallRecoveryDirectory, nativeServiceExec, nativeUserUnitLinks, restoreUninstallArchive, hasUninstallArchive, uninstallArchiveRoots, uninstallBackupSet, archiveUninstallMembers, bindFinalSnapshot, writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease, completeUninstall } from '#adapters/core/installation-removal/index.js';
 export { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 export * from '#adapters/core/beuser-realm/index.js';
 export * from '#adapters/core/beuser-surface/index.js';

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attachmentLifecycle, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, openLocalIntegrityAuthority,
-  uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, nativeUserUnitLinks, acquireLedgerLock, type LedgerLock, selectWorkTarget, resolveGitWorkTarget, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
+  uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, nativeUserUnitLinks, withExclusiveFileLock, type LedgerLock, selectWorkTarget, resolveGitWorkTarget, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, DispatchPolicyAuthorization, workTargetAttemptAuthorization, resolvePolicyScopeMembership, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, prepareProductCompanionPath, recordedProcessState, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -66,11 +66,9 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
     settle: { budgetMs: config.cancellation?.claimTtlMs ?? terminal.serviceStartTimeoutMs, wait: delay },
     service: { async withStoppedCustody(confirmed, work) {
       const path = await prepareProductCompanionPath(layout, 'ledger', '-lock');
-      try { stoppedLock = acquireLedgerLock(path); } catch (error) {
-        if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
-        throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: confirmed.unit ?? '', command: confirmed.command ?? '', reason: 'new-instance-holds-ledger' } });
-      }
-      try { return await attachmentLifecycle(config, options).hold(work); } finally { stoppedLock.release(); stoppedLock = undefined; }
+      const lock = await withExclusiveFileLock(path, { waitMs: 0, pollMs: 0 });
+      if (!lock) throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: confirmed.unit ?? '', command: confirmed.command ?? '', reason: 'new-instance-holds-ledger' } });
+      try { stoppedLock = lock; return await attachmentLifecycle(config, options).hold(work); } finally { lock.release(); stoppedLock = undefined; }
     }, budgetMs: terminal.serviceStartTimeoutMs, describe: signal => client.describeService(signal),
       async unit(pid) { const found = await detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS, env));
         return found && { unit: found.unit, ...await observeUserUnit(found, pid, exec, links) }; },
