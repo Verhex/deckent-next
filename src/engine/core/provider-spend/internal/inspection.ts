@@ -7,6 +7,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import { parseProviderSpendAuditReceipt, type ProviderSpendAuditReceipt } from './audit-receipt.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from './checkpoint.js';
 import { ProviderSpendError } from './error.js';
+import { providerSpendRemaining } from './work-spending.js';
 
 export interface ProviderSpendAccountAuthorizer {
   authorize(action: 'inspect', target: Readonly<{ scopeId: string; budgetId: string; budgetRevision: number }>,
@@ -33,7 +34,7 @@ export function providerSpendPeriodView(checkpoint: ProviderSpendCheckpoint, asO
   if (!account.period) return undefined;
   const used = providerSpendPeriodUsedExact(account);
   return { schemaVersion: 1 as const, asOfMs, state: account.period, localTimeZone, usedExactMinorUnits: used,
-    remainingMinorUnits: Math.max(0, account.budget.limitMinorUnits - ceilProviderSpendExactMinorUnits(used) - account.reservedMinorUnits) };
+    remainingMinorUnits: providerSpendRemaining({ account }, ceilProviderSpendExactMinorUnits(used))!.remainingMinorUnits };
 }
 export type ProviderSpendAccountInspection = Readonly<{ schemaVersion: 2 | 3; scopeId: string; budgetId: string;
   budgetRevision: number; checkpoint: ProviderSpendCheckpoint | null; audit: ProviderSpendAuditReceipt | null;

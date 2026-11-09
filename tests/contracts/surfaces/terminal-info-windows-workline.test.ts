@@ -12,6 +12,7 @@ import { infoModelText, type InfoSurfaceLabels } from '#surfaces/core/terminal-w
 import type { WorklineProps } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { homeEnv } from '../support/host-platform.js';
+import { createProviderSpendAccount, createProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 
 // SW-1 (owner 2026-10-08): bare /help /status /usage /doctor /scope /context open information windows on the real workline. Nothing reaches the
 // chat stream while they are open; on close exactly one framed system summary line stays; identities are never the primary label.
@@ -40,6 +41,13 @@ async function open(props: Partial<WorklineProps>) {
 }
 const running: TerminalAdminContext = { describeRuntimeService: async () => ({ instanceId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', processId: 4242, build: { sourceCommit: COMMIT } }),
   describeTerminalChatPlan: async () => ({ status: 'ready', reference: { providerId: 'claude', providerVersion: 1, modelId: 'opus-5-5', modelVersion: 1 } as never }) };
+async function expectFrozenRemaining(root: string) {
+  const checkpoint = createProviderSpendCheckpoint({ ...createProviderSpendAccount({ schemaVersion: 1, scopeId: 's', budgetId: 'team-budget', revision: 3, currency: 'USD', limitMinorUnits: 50000 }),
+    reservedMinorUnits: 100, settledMinorUnits: 49901, settledExactMinorUnits: '49900.5', frozen: true }, 1, 0);
+  const frozen = await admin(root, { inspectProviderSpendAccount: (async () => ({ schemaVersion: 2, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3,
+    checkpoint, audit: null, spendingHistoryIntegrity: 'not-recorded' })) as never }).info.ports.usage!({ usage: EMPTY_SESSION_USAGE });
+  expect(infoModelText(frozen.model).join('\n')).toMatch(/Available after reservations[^\n]*0\.00 USD/u);
+}
 
 describe('information windows on the real workline (SW-1)', () => {
   it('/status opens a window, holds the composer, and leaves exactly one system summary line on Esc', async () => {
@@ -122,7 +130,7 @@ describe('information windows on the real workline (SW-1)', () => {
     expect(calls).toEqual([{ schemaVersion: 1, scopeId: 's', current: true }, { schemaVersion: 1, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3 }]);
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Usage: nothing reported yet in this conversation`), 'usage summary');
-    expect(count(view.stdout.frame, MARK)).toBe(1);
+    expect(count(view.stdout.frame, MARK)).toBe(1); await expectFrozenRemaining(root);
   });
 
   it('/doctor groups the structured doctor report by area with chips; without it the doctor text is one section', async () => {

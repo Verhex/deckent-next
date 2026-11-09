@@ -262,6 +262,9 @@ it('budget gates subtract reserved and settled money, accept equality using exac
   const refused = (() => { try { validateRunProposal({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 201 } }, f.state.registry, cp, 100); } catch (error) { return error as DeckentError; } throw new Error('NOT_REFUSED'); })();
   expect(refused.localize('en').message).toContain('$2.00'); expect(refused.localize('en').message).toContain('$2.01');
   expect(refused.localize('tr').message).toContain('2,00'); expect(refused.localize('tr').message).toContain('kalan');
+  const overrun = createProviderSpendCheckpoint({ ...account, settledMinorUnits: 1000, settledExactMinorUnits: '1000', frozen: true }, 3, 0);
+  expect(() => validateRunProposal(proposal, f.state.registry, overrun, 100)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_BUDGET_EXCEEDED',
+    params: { remaining: 0, ceiling: 200, currency: 'USD' } }));
 });
 // recheck_ceiling (owner 2026-10-18, Jev b7d6c0cf): the person approved the declared ceiling, never the moving balance. Registry, budget identity,
 // budget revision and currency stay exact; a parallel charge that still leaves the ceiling covered admits, one that does not is refused.
