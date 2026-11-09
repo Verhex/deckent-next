@@ -43,7 +43,7 @@ const permissionMode = { async inspect() { return mode; },
 const field = (key, value, source, schema, apply = 'live') => ({ key, value, defaultValue: value, source, descriptionKey: 'x.none', description: `${key} setting`, schema,
   binding: { state: 'bound', consumers: ['terminal'] }, apply, redacted: false });
 const fields = [field('language', locale, 'default', { type: 'string', enum: ['en', 'tr'] }), field('max_workers', 4, 'project', { type: 'integer', minimum: 1 }, 'restart'),
-  field('terminal.theme', 'auto', 'default', { type: 'string', enum: ['auto', 'dark', 'light'] })];
+  field('terminal.theme', 'auto', 'default', { type: 'string', enum: ['auto', 'dark', 'light'] }), field('terminal.scopeId', 'scope', 'project', { type: 'string' })];
 const decide = (keyPath, layer) => layer === 'global' || keyPath === 'language' ? 'deny' : keyPath === 'max_workers' ? 'require-approval' : 'allow';
 const application = { inspect: async () => ({ schemaVersion: 1, digest: null, layer: 'project', fields }), explain: async () => ({ apply: 'live' }),
   permissions: async input => input.keys.flatMap(keyPath => input.layers.map(layer => ({ keyPath, layer, decision: decide(keyPath, layer), ruleId: decide(keyPath, layer) === 'require-approval' ? 'company-config-approval' : null }))),

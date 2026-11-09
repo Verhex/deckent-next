@@ -1,4 +1,5 @@
 import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
+import { isDeepStrictEqual } from 'node:util';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -31,7 +32,8 @@ describe('invocation profile configuration authority', () => {
     const loaded = await loadConfig(f.project, { env: f.env });
     expect(loaded.provider_invocation_profiles).toEqual(collection(second));
     const profiles = configuredInvocationProfiles(loaded);
-    expect(profiles).toBe((loaded.provider_invocation_profiles as { profiles: unknown }).profiles);
+    // Secret resolution returns null-prototype records; profile consumers compare them with parsed model references.
+    expect(isDeepStrictEqual(profiles[0]?.reference, second.reference)).toBe(true);
     expect(profiles).toEqual([second]);
     expect(Object.isFrozen(profiles)).toBe(true);
     expect(configuredInvocationProfiles({})).toEqual([]);
