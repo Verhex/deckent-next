@@ -70,7 +70,11 @@ describe('provider connection check', () => {
         const build = () => connectionAdapter(kind, { endpoint: `${checked.base}${kind.connect!.chatPath}`, credentialRef: kind.key!.secretName, nativeId: model.nativeId,
           maxOutputTokens: (model as { maxOutputTokens?: number | null }).maxOutputTokens ?? 32768, currency: 'USD' });
         // Stage 1: a remote model is connected only with a verified published price (the table is pinned in provider-connect-tariff.test.ts).
-        if (!providerConnectModelPriced(kind, model.nativeId)) { expect(build).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED'); continue; }
+        if (!providerConnectModelPriced(kind, model.nativeId)) {
+          // Anthropic's existing refusal for an unknown tariff also applies to retiring catalog-only rows.
+          expect(build).toThrow(kind.connect!.adapter === 'anthropic-messages-http' ? 'MODEL_CONNECT_TARIFF_UNKNOWN' : 'MODEL_CONNECT_TARIFF_UNVERIFIED');
+          continue;
+        }
         const built = build();
         expect(built.tariff).toBe('published');
         expect(JSON.stringify(built.adapter.definition)).toContain(kind.key!.secretName!);

@@ -71,6 +71,10 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
   });
   it('registers facts, activates hierarchically, replays exactly and refuses conflicts, unknown targets and stale revisions', async () => {
     const { path } = await ledger(); const catalog = await seedCatalog();
+    const historicalHaiku = catalog.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'claude-haiku-4-5-20251001');
+    expect(historicalHaiku.lifecycle).toMatchObject({ state: 'retired', retiredOn: '2026-10-15' });
+    // The shipped row is already retired; start before retirement to exercise a real fact revision.
+    historicalHaiku.lifecycle = { ...historicalHaiku.lifecycle, state: 'active', retiredOn: null };
     const store = await openSqliteModelCatalogStore(path, options, 'forbid');
     try {
       const register = { schemaVersion: 1, commandId: 'seed', scopeId: 's', action: 'register', catalog };
