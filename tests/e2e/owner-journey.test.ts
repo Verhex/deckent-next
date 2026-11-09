@@ -186,8 +186,9 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     // Owner step 4: the person adds a line by hand before /do (working-tree delivery starts from it).
     await writeFile(join(project, 'notes.txt'), 'first line\nperson line\n');
     const t = open(), from = t.mark();
+    // alpha.64 NF-4 (99b30f439): read the Run card's preview below the first page before answering its one approval.
     await walk('j2', t, [[/Ready/, '/do JOURNEY-A append the line "second line" to notes.txt'], [800, '\r'],
-      ['Approval needed', ''], [2500, 'y'], ['admitted. Follow', ''], [1500, CTRL_O], [800, ESC], ['awaiting delivery', ''], [2000, '/deliver'], [1500, '\r'],
+      ['Approval needed', ''], [2500, '\u001b[6~'], ['This folder has uncommitted changes', ''], [800, 'y'], ['admitted. Follow', ''], [1500, CTRL_O], [800, ESC], ['awaiting delivery', ''], [2000, '/deliver'], [1500, '\r'],
       ['y check, prepare and deliver', ''], [2500, 'y'], ['Written into your files (no commit)', ''], [1500, '\r'], [1500, '/tasks'], [1500, '\r'], ['Background work', ''],
       [2500, CTRL_O], [800, DOWN], [800, 'x'], [/already finished|nothing to cancel/u, ''], [1500, ESC], [1500, '/exit\r']]);
     await t.closed;

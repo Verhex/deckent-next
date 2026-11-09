@@ -31,12 +31,12 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   if (input.dependencyContext && !binding.promptDelivery) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
   const spec = nativeProviderSpec(binding.provider);
   // The relay capability is bound to the login's owner: another principal's Attempt gets no gateway, so it can never bootstrap.
-  if (spec.dockerCredential === 'relayed' && !nativeLoginUseAllowed(input.principal)) throw new NativeConnectionError('NATIVE_SUBSCRIPTION_OTHER_PERSON');
+  if (spec.dockerCustody === 'relayed' && !nativeLoginUseAllowed(input.principal)) throw new NativeConnectionError('NATIVE_SUBSCRIPTION_OTHER_PERSON');
   const capabilities = nativeCliCommand(binding.provider).capabilities;
   const projected = projectNativeCredential(binding.provider, input.credential);
   // Owner 2026-11-08 (alpha.64 card): a `relayed` CLI's login stays in this host process; the container gets a placeholder and this Attempt's capability.
-  const relaySpec = spec.dockerCredential === 'relayed' ? spec.relay : undefined;
-  if (spec.dockerCredential === 'relayed' && !relaySpec) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
+  const relaySpec = spec.dockerCustody === 'relayed' ? spec.relay : undefined;
+  if (spec.dockerCustody === 'relayed' && !relaySpec) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
   const limits = catalog.limits;
   const root = await realpath(input.directory); const stat = await lstat(root);
   if (root !== input.directory || !stat.isDirectory() || stat.uid !== process.getuid?.() || (stat.mode & 0o022)

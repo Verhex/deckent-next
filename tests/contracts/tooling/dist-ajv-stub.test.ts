@@ -47,12 +47,12 @@ describe('MCP SDK ajv stub against the installed SDK', () => {
     const { violations } = await bundle(false);
     expect(violations).toEqual(expect.arrayContaining(['@modelcontextprotocol/client/_shims was bundled without the ajv stub',
       '@modelcontextprotocol/server/_shims was bundled without the ajv stub', expect.stringMatching(/^embedded fast-uri@3\.1\.8 in @modelcontextprotocol\/client@/u),
-      expect.stringMatching(/^bundle input node_modules\/@modelcontextprotocol\/server\/dist\/ajvProvider-/u)]));
+      expect.stringMatching(/^bundle input (?:.*\/)?node_modules\/@modelcontextprotocol\/server\/dist\/ajvProvider-/u)]));
   }, 60_000);
 
   it('the guard refuses the SDK\'s cf-worker provider if anything bundles it (installed SDK)', async () => {
     const { violations } = await bundle(true, `${ENTRY}\n${CF_WORKER}`);
-    expect(violations).toEqual([expect.stringMatching(/^bundle input node_modules\/@modelcontextprotocol\/server\/dist\/cfWorkerProvider-/u),
+    expect(violations).toEqual([expect.stringMatching(/^bundle input (?:.*\/)?node_modules\/@modelcontextprotocol\/server\/dist\/cfWorkerProvider-/u),
       expect.stringMatching(/^embedded @cfworker\/json-schema@4\.1\.1 in @modelcontextprotocol\/server@2\.4\.0/u)]);
   }, 60_000);
 });
