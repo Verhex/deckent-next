@@ -130,12 +130,12 @@ export const approvalRecordSchema = z.strictObject({ request: approvalRequestSch
   }
 }).readonly();
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
-/** S1-D5: only an expired or denied task approval is renewed, into a pending request bound to it (a tool-call or operation approval is single use
- * for its exact call or command; the next one opens its own). The engine refuses before any store; a store keeps it as defense. */
+/** S1-D5, owner B1-16: expired, denied or admission-window-aged task approvals renew into a bound pending request.
+ * Tool-call and operation approvals stay single use. Engine and store both enforce this; the successor TTL is the configured admission window. */
 export function approvalRenewalRefusal(previous: ApprovalRecord, next: ApprovalRecord): 'APPROVAL_INVALID' | 'APPROVAL_CONFLICT' | null {
   if (approvalSubject(previous.request).kind !== 'task' || approvalSubject(next.request).kind !== 'task') return 'APPROVAL_INVALID';
   return next.status !== 'pending' || next.request.renewal?.previousApprovalId !== previous.request.approvalId || next.request.scopeId !== previous.request.scopeId
-    || next.request.actionDigest !== previous.request.actionDigest || !(previous.status === 'expired' || previous.status === 'decided' && previous.decision?.decision === 'deny') ? 'APPROVAL_CONFLICT' : null;
+    || next.request.actionDigest !== previous.request.actionDigest || !(previous.status === 'expired' || previous.status === 'decided' && (previous.decision?.decision === 'deny' || previous.decision?.decision === 'allow' && next.request.createdAt > previous.decision.decidedAt + next.request.expiresAt - next.request.createdAt)) ? 'APPROVAL_CONFLICT' : null;
 }
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;

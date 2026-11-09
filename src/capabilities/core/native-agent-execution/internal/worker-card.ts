@@ -18,7 +18,7 @@ export const workerToolCardSummary = (input: Omit<WorkerToolCard, 'schemaVersion
   while (low < high) { const mid = Math.ceil((low + high) / 2); if (fits(shown(mid))) low = mid; else high = mid - 1; }
   return shown(low);
 };
-/** Display copies only. Authority consumers must additionally use the verified record and compare its subject below. */
+/** Sealed producer metadata also used by authority checks: verify the record and bind these fields to its subject before trusting them. */
 export function readWorkerToolCard(summary: string): WorkerToolCard | null {
   try { const parsed = workerCardSchema.safeParse(JSON.parse(summary)); return parsed.success ? parsed.data : null; } catch { return null; }
 }

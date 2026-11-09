@@ -181,7 +181,7 @@ describe('durable verified approval application', () => {
       expect(await f.make('mcp').renew(command, 100)).toEqual(next);
       await expect(f.make('mcp').renew({ ...command, commandId: 'second-renew' }, 100)).rejects.toThrow('APPROVAL_CONFLICT');
       await f.make('cli').decide({ ...f.command, approvalId: next.request.approvalId, commandId: 'allow-renewed' });
-      // S1-e3 (S1-R16, S1-D5): renewal refuses a changed policy, a decided allow and a non-task subject, and stores nothing for any of them.
+      // S1-e3 (S1-R16, S1-D5): renewal refuses a changed policy, an allow inside its window and a non-task subject, and stores nothing for any of them.
       // S1-D5: the engine refuses them before the store; a store without the adapter's own check (Enterprise) cannot skip the rule.
       const renewed = vi.spyOn(f.journal.store, 'renew'), requester = next.request.requester, stale = requestTaskApproval(f.journal.store, f.integrity, { scopeId: 'scope', runId: 'run', taskId: 'task-2', requester,
         actionDigest: 'b'.repeat(64), policyRevision: 'policy', summary: 'Execute task', createdAt: 1000, expiresAt: 1100 });
@@ -195,6 +195,22 @@ describe('durable verified approval application', () => {
       for (const id of ['renew-stale', 'renew-allowed', 'renew-tool']) expect(f.journal.store.receipt('scope', id)).toBeNull();
       expect(renewed).not.toHaveBeenCalled();
       expect(f.journal.store.find('scope', 'run', 'task-2', 'b'.repeat(64))?.request.approvalId).toBe(stale.request.approvalId);
+      const allow = f.journal.store.load('scope', next.request.approvalId)!;
+      f.clock.wallMs = 1200;
+      await expect(f.make('cli').renew({ ...base, approvalId: next.request.approvalId, commandId: 'renew-boundary', expectedRevision: 1 }, 100)).rejects.toThrow('APPROVAL_CONFLICT');
+      expect(f.journal.store.receipt('scope', 'renew-boundary')).toBeNull();
+      expect(renewed).not.toHaveBeenCalled();
+      f.clock.wallMs = 1201;
+      const agedCommand = { ...base, approvalId: next.request.approvalId, commandId: 'renew-aged-allow', expectedRevision: 1 };
+      const fresh = await f.make('cli').renew(agedCommand, 100);
+      expect(fresh).toMatchObject({ status: 'pending', decision: null, request: { createdAt: 1201, expiresAt: 1301,
+        renewal: { previousApprovalId: next.request.approvalId } } });
+      expect(fresh.request.approvalId).not.toBe(next.request.approvalId);
+      expect(f.journal.store.load('scope', next.request.approvalId)).toEqual(allow);
+      expect(f.journal.store.find('scope', 'run', 'task', 'a'.repeat(64))).toEqual(fresh);
+      expect(await f.make('cli').renew(agedCommand, 100)).toEqual(fresh);
+      await expect(f.make('cli').renew({ ...agedCommand, reason: 'Changed intent' }, 100)).rejects.toThrow('APPROVAL_CONFLICT');
+      await expect(f.make('cli').renew({ ...agedCommand, approvalId: fresh.request.approvalId, commandId: 'renew-pending', expectedRevision: 0 }, 100)).rejects.toThrow('APPROVAL_CONFLICT');
     } finally { await f.close(); }
   });
   it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] denies static credentials, revoked sessions, foreign scope, changed bytes and caller channel fields', async () => {

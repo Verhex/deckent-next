@@ -11,9 +11,8 @@ import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABI
 import { PolicyAuthorizationError, authorityRefusalAuditEvent, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
-import { approvalRequestDigest, expireDue, verifyApproval, sealApproval } from './integrity.js';
+import { approvalRequestDigest, decidedRefusal, expireDue, verifyApproval, sealApproval } from './integrity.js';
 import { approvalAssuranceRegistry, requiredApprovalAssurance, operationApprovalFacts } from './assurance.js';
-
 export const approvalQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema });
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
 /** v19 (B1): `channel` is the surface the client declares (recorded, never authority); `decisionCapability` is the one-time capability an agent
@@ -31,9 +30,8 @@ export function authorizeApproval(policy: Policy, action: 'inspect' | 'decide' |
   if (refusal === 'POLICY_APPROVAL_UNSUPPORTED') throw new PolicyAuthorizationError(refusal);
   if (refusal) throw new ApprovalError(refusal);
 }
-/** F6: the decider's own refusals (`decide` below) of the same person's allow of an operation approval the broker has not opened yet, taken before any
- * card: the `decide` grant covers every approval id (the broker's id is unknown until then, a fresh id stands for it), no four-eyes rule applies to the
- * requester deciding, and the minimum is Core's peer level (the card attests no turn capability). Writes nothing; throws the decider's code. */
+/** F6: pre-card check of the person's own operation allow: `decide` covers every approval id (fresh id stands for the broker's unknown id),
+ * no four-eyes rule applies and minimum assurance is Core's peer level (no turn capability). Read-only; throws the decider's code. */
 export function authorizeOwnApproval(policy: Policy, scopeId: string, principal: VerifiedPrincipal, descriptor: OperationDescriptor) {
   const id = randomUUID(); authorizeApproval(policy, 'decide', scopeId, id, principal);
   const rule = evaluatePolicy(policy, { principal, scopeId, action: 'decide', resource: { kind: 'approval', id } }).ruleId;
@@ -48,18 +46,12 @@ export function approvalCommandFingerprint(tag: string, command: z.infer<typeof 
     ...('decision' in command ? { decision: command.decision } : {}), ...('standing' in command ? { standing: command.standing } : {}),
     ...('approverNote' in command && command.approverNote ? { approverNote: true } : {}) }));
 }
-/**
- * Which approvals this decision surface may allow (POLICY-HARDEN K3). Approvals of an operation whose descriptor is `surface: 'authority'`
- * (`policy.administer@1`) are decided only where the composition names the authority surface (`/policy`, later); every other approval
- * surface — SDK, CLI, the terminal's y/N card — is refused with `APPROVAL_SURFACE_RESTRICTED` and the request stays
- * pending (a deny only withdraws a request and stays open). `refused` records that refusal (audit is best-effort here: it never turns
- * the refusal into something else).
- */
+/** POLICY-HARDEN K3: operations with descriptor `surface: 'authority'` (`policy.administer@1`) are decided only where composition
+ * names the authority surface (`/policy`, later). SDK, CLI and terminal y/N otherwise refuse `APPROVAL_SURFACE_RESTRICTED`, keeping
+ * the request pending; a deny only withdraws a request and stays open. `refused` records the refusal best-effort, never changes it. */
 export interface ApprovalDecisionRestriction { readonly catalog: OperationCatalog; readonly surface?: 'authority'; readonly refused?: (event: AuditEvent) => void | Promise<void> }
-/**
- * B1 evidence of this decision path: the assurance producers the service holds (its turn capability ring; Enterprise's own), the registered
- * channel ids a client may declare (absent: any id), and the socket peer's process (null: an in-process SDK call, never turn-bound).
- */
+/** B1: service-held assurance producers (turn capability ring; Enterprise's own), registered client channel ids (absent: any id),
+ * and socket peer process (null: an in-process SDK call, never turn-bound). */
 export interface ApprovalAssuranceOptions { readonly producers?: readonly ApprovalAssuranceProducer[]; readonly channels?: ReadonlySet<string>; readonly peerPid?: number | null; readonly interactive?: () => Promise<boolean> }
 export class ApprovalApplication {
   static requiresInteractiveTerminal(principal: VerifiedPrincipal): boolean { return !isAiPrincipal(principal); }
@@ -216,8 +208,16 @@ export class ApprovalApplication {
 /** Producer-only trusted port. No surface accepts caller-authored action bindings or request timestamps. */
 export function requestTaskApproval(store: ApprovalStore, integrity: IntegrityAuthority,
   input: Omit<Extract<ApprovalRequest, { schemaVersion: 1 }>, 'schemaVersion' | 'approvalId'>) {
-  const existing = store.find(input.scopeId, input.runId, input.taskId, input.actionDigest);
-  if (existing) return verifyApproval(existing, integrity);
-  const request = approvalRequestSchema.parse({ schemaVersion: 1, approvalId: randomUUID(), ...input });
-  return verifyApproval(store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, integrity)), integrity);
+  const found = store.find(input.scopeId, input.runId, input.taskId, input.actionDigest), previous = found && verifyApproval(found, integrity);
+  if (previous && !(previous.status === 'decided' && previous.decision?.decision === 'allow'
+    && decidedRefusal(previous, { now: input.createdAt, window: input.expiresAt - input.createdAt }) === 'APPROVAL_EXPIRED')) return previous;
+  const command = previous && { schemaVersion: 1 as const, scopeId: input.scopeId, approvalId: previous.request.approvalId,
+    commandId: randomUUID(), expectedRevision: previous.revision, reason: input.summary };
+  const renewal = command && { previousApprovalId: command.approvalId, commandId: command.commandId,
+    commandDigest: approvalCommandFingerprint('approval-renewal:1', command, input.requester), actor: input.requester, reason: command.reason };
+  const request = approvalRequestSchema.parse({ schemaVersion: 1, approvalId: randomUUID(), ...input, ...(renewal ? { renewal } : {}) });
+  const next = sealApproval({ request, revision: 0, status: 'pending', decision: null }, integrity), refused = previous && approvalRenewalRefusal(previous, next);
+  if (refused) throw new ApprovalError(refused);
+  return verifyApproval(previous && renewal ? store.renew(previous, next, { operation: 'renew', scopeId: input.scopeId,
+    commandId: renewal.commandId, fingerprint: renewal.commandDigest, record: next }) : store.create(next), integrity);
 }
