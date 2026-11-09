@@ -15,7 +15,7 @@ import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { assertEvaluationDigests, readEvaluationDigests, bindOperationEvidenceUse } from './evaluation-evidence.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
-import { decodeLedgerRunSnapshot as decodeRunSnapshot, withRunCapacityBindings, quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
+import { decodeLedgerRunSnapshot as decodeRunSnapshot, withRunCapacityBindings, quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure, ledgerTransaction, decodeStored } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { matchRunLifecycleCommand, proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 export async function readRunReceipt(db: DatabaseSync, scopeInput: string, commandInput: string): Promise<RunReceipt | null> {
@@ -23,12 +23,11 @@ export async function readRunReceipt(db: DatabaseSync, scopeInput: string, comma
   try {
     const row = db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     if (!row) return null;
-    let snapshot; try { snapshot = runSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-    if (snapshot.identity.scopeId !== scopeId || typeof row.command !== 'string') throw new RunStoreError('RUN_STORE_CORRUPT');
-    return Object.freeze({ commandId, command: row.command, snapshot });
+    const snapshot = decodeStored(runSnapshotSchema, row.snapshot, () => new RunStoreError('RUN_STORE_CORRUPT'), value => value.identity.scopeId === scopeId && typeof row.command === 'string');
+    return Object.freeze({ commandId, command: String(row.command), snapshot });
   } catch (error) { throw sqliteFailure(error); }
 }
-export async function readRunSnapshot(db: DatabaseSync, scopeId: string, runId: string) {
+export function readRunSnapshot(db: DatabaseSync, scopeId: string, runId: string) {
   try {
     const row = db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
     if (!row) return null;
@@ -40,7 +39,6 @@ export async function readRunSnapshot(db: DatabaseSync, scopeId: string, runId: 
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync, private readonly admission: Pick<RunAdmissionFilter, 'excluded'> | undefined,
     private readonly timing: { now: () => number; timeoutMs: number }, private readonly poolCeiling?: number) {}
-  private transaction<T>(work: () => T): T { return ledgerTransaction(this.db, work); }
   private receipt(scopeId: string, runId: string, commandId: string, command: string, matches: (prior: string) => boolean = prior => prior === command): RunReceipt | null {
     const row = this.db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     if (!row) return null;
@@ -53,12 +51,12 @@ export class SqliteRunJournal {
     return Object.freeze(receipt);
   }
   async loadRunReceipt(scopeId: string, commandId: string) { return readRunReceipt(this.db, scopeId, commandId); }
-  async createExecutionPool(input: ExecutionPool) { return this.transaction(() => new SqliteExecutionPools(this.db).create(input)); }
+  async createExecutionPool(input: ExecutionPool) { return ledgerTransaction(this.db, () => new SqliteExecutionPools(this.db).create(input)); }
   async loadRun(scopeId: string, runId: string) { return readRunSnapshot(this.db, scopeId, runId); }
   async fenceLostDispatch(input: LostDispatchWrite, audit: LostDispatchAudit): Promise<RunReceipt> {
     const { write, commandId, command } = encodeLostDispatchWrite(input), { scopeId, runId, attemptId } = write.identity;
     if (typeof audit !== 'function') throw new DispatchError('DISPATCH_NOT_ADMITTED');
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const { dispatch: custody } = readRunBoundDispatch(this.db, write.identity);
       if (custody) readDispatchFence(this.db, custody);
       const replay = this.receipt(scopeId, runId, commandId, command);
@@ -87,7 +85,7 @@ export class SqliteRunJournal {
     if (!actor.scopeIds.includes(scopeId) || typeof audit !== 'function') throw new DispatchError('DISPATCH_NOT_ADMITTED');
     const commandId = dispatchReleaseReceiptId(write.identity, write.owner);
     const command = JSON.stringify({ operation: 'release-worker-custody', identity: write.identity, owner: write.owner, actor, proof: write.proof });
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const { run, dispatch } = readRunBoundDispatch(this.db, write.identity);
       if (!dispatch || dispatch.owner !== write.owner) throw new DispatchError('DISPATCH_CONFLICT');
       const fence = readDispatchFence(this.db, dispatch);
@@ -116,7 +114,7 @@ export class SqliteRunJournal {
   }
   async projectRunAttempt(input: RunProjection): Promise<RunReceipt> {
     const parsed = runProjectionSchema.parse(input), command = JSON.stringify({ action: 'project-run-attempt', ...parsed }), { scopeId, runId } = parsed;
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
       const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
       if (!row || row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -138,7 +136,7 @@ export class SqliteRunJournal {
   }
   async commitTaskEvaluation(input: TaskEvaluationCommit): Promise<RunReceipt> {
     const parsed = taskEvaluationCommitSchema.parse(input), { scopeId, runId, attemptId } = parsed.evaluation.identity;
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const { run, dispatch } = readRunBoundDispatch(this.db, parsed.evaluation.identity);
       const normalized = bindOperationEvidenceUse(this.db, run, parsed.evaluation);
       const command = JSON.stringify({ action: 'apply-task-evaluation', ...parsed, evaluation: normalized });
@@ -178,7 +176,7 @@ export class SqliteRunJournal {
       const due = (current.state.kind === 'parked' && current.state.deadline <= now) || current.progress.some(task => task.decision && task.decision.deadline <= now);
       if (!due) return Object.freeze({ commandId, command, snapshot: current });
     }
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const replay = this.receipt(scopeId, runId, commandId, command, prior => {
         try { return matches(prior); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       }); if (replay) return replay;
@@ -206,7 +204,7 @@ export class SqliteRunJournal {
   async cancelRun(input: RunCancellation): Promise<RunReceipt> {
     const parsed = runCancellationSchema.parse(input); const command = JSON.stringify({ action: 'cancel-run', ...parsed });
     const { scopeId, runId } = parsed;
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
       const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
       if (!row) throw new RunStoreError('RUN_NOT_FOUND');
@@ -227,7 +225,7 @@ export class SqliteRunJournal {
     const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
     if (workspace && (workspace.scopeId !== scopeId || workspace.runId !== runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
-    return this.transaction(() => withRunCapacityBindings(this.db, parsed, resources, () => {
+    return ledgerTransaction(this.db, () => withRunCapacityBindings(this.db, parsed, resources, () => {
       const custody = new SqliteRunWorkspaceCustody(this.db);
       const replay = this.receipt(scopeId, runId, parsed.commandId, command);
       if (replay) { if (workspace && !custody.matchesWithin(workspace)) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return replay; }
@@ -250,7 +248,7 @@ export class SqliteRunJournal {
   }
   async reserveRunTasks(input: RunReservation): Promise<RunReceipt> {
     const parsed = runReservationSchema.parse(input), command = JSON.stringify({ action: 'reserve-run-tasks', ...parsed }), { scopeId, runId } = parsed;
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
       const row = this.db.prepare('SELECT revision,snapshot,policy FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
       if (!row || row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');

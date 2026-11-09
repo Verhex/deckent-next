@@ -1069,8 +1069,9 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** `run inspect` sınırlı izlerden Run başına bir maliyet raporu,
   `deckent agents stats` kabul istatistiklerini gösterir; ikisi de ölçülmüş bir kalite puanı değildir.
 - **Defter (ledger), her sürecin paylaştığı tek bir yerel SQLite dosyasıdır.** Yazmalar sırayla yapılır; `storage.sqlite.busyTimeoutMs`
-  süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*
-  komutu yeniden çalıştırın; yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini
+  süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. Kesinleştirme
+  (commit) anında başarısız olan bir yazma ise yazılmış olabilir; bu yüzden `ATTEMPT_STORE_OUTCOME_UNKNOWN` ile reddedilir. *Geçici çözüm:*
+  aynı komutu yeniden çalıştırın (kesinleşmiş bir komut kendi makbuzunu döndürür); yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini
   beklemez ve çalışan servis defterin yan dosyalarını yerinde tutar; bu, filo ölçeğinde değil, yüklü tek bir çekirdekte ölçüldü.
 
 Yönetilen `decision-steps` tabanını açıkça kabul eden kurucu, pipe/SDK üzerinden

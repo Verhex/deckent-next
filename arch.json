@@ -5278,12 +5278,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42368,
+      "adapters": 42255,
       "surfaces": 45000,
       "composition": 13703
     },
     "totalSrcLines": 200000,
-    "testCases": 8197,
+    "testCases": 8198,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

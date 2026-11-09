@@ -1,5 +1,5 @@
 export { effectClassSchema, operationRefSchema, operationDescriptorSchema, effectTargetRefSchema, effectCommandSchema, effectStateSchema, effectRefusalSchema,
-  effectIntentSchema, effectProducerSchema, PRINCIPAL_EFFECT_PRODUCER, effectEvidenceSchema, effectRecordSchema, EffectError, EFFECT_OPEN_STATES, isEffectOpen, assertEffectTransition, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
+  effectIntentSchema, effectProducerSchema, PRINCIPAL_EFFECT_PRODUCER, effectEvidenceSchema, effectRecordSchema, EffectError, EFFECT_OPEN_STATES, isEffectOpen, assertEffectTransition, claimEffectRecord, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
   AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION } from './internal/contract.js';
 export type { OperationRef, OperationDescriptor, EffectTargetRef, EffectCommand, EffectState, EffectIntent, EffectIntentApproval, EffectProducer, EffectEvidence, EffectRecord } from './internal/contract.js';
 

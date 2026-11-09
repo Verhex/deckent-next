@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { assertEffectTransition, effectIntentSchema, effectRecordSchema, EffectError, type EffectIntent, type EffectRecord } from '#domain/index.js';
-import { EFFECT_OPEN_STATE_SQL } from '#adapters/core/sqlite-ledger/index.js';
+import { assertEffectTransition, claimEffectRecord, effectIntentSchema, effectRecordSchema, EffectError, type EffectIntent, type EffectRecord } from '#domain/index.js';
+import { EFFECT_OPEN_STATE_SQL, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Generic effect intents (ledger v34; producer from S6R-1). Intent is durable before the effect; state moves only by the domain rule and CAS on the stored record. */
 export class SqliteEffectJournal {
@@ -29,43 +29,26 @@ export class SqliteEffectJournal {
   }
   async loadEffectCompensation(scopeId: string, commandId: string) { return this.readCompensation(scopeId, commandId); }
   async claimEffect(input: EffectIntent): Promise<EffectRecord> {
-    const intent = effectIntentSchema.parse(input);
-    const { scopeId, commandId, target } = intent.command;
-    // All checks and mutations are synchronous inside the writer transaction.
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      const existing = this.read(scopeId, commandId);
-      if (existing) {
-        if (JSON.stringify(existing.intent) !== JSON.stringify(intent)) throw new EffectError('EFFECT_CONFLICT');
-        this.db.exec('COMMIT'); return existing;
-      }
-      // S6R-1: a new intent names its producer (Attempt or direct principal); only older rows read without one.
-      if (!intent.producer) throw new EffectError('EFFECT_INVALID');
-      if (this.db.prepare('SELECT 1 FROM effect_intents WHERE scope_id=? AND idempotency_key_hash=?').get(scopeId, intent.idempotencyKeyHash)) {
-        throw new EffectError('EFFECT_CONFLICT');
-      }
-      if (this.db.prepare(`SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND ${EFFECT_OPEN_STATE_SQL}`).get(target.kind, target.id)) {
-        throw new EffectError('EFFECT_TARGET_BUSY');
-      }
-      const latest = this.db.prepare('SELECT MAX(sequence) AS sequence FROM effect_intents WHERE target_kind=? AND target_id=?').get(target.kind, target.id);
-      const sequence = Number(latest?.sequence ?? 0) + 1;
-      if (!Number.isSafeInteger(sequence)) throw new EffectError('EFFECT_CORRUPT');
-      const record = effectRecordSchema.parse({ intent, sequence, state: 'claimed', evidence: null, refusal: null });
-      this.db.prepare('INSERT INTO effect_intents(scope_id,command_id,target_kind,target_id,sequence,idempotency_key_hash,state,record) VALUES(?,?,?,?,?,?,?,?)')
-        .run(scopeId, commandId, target.kind, target.id, sequence, intent.idempotencyKeyHash, record.state, JSON.stringify(record));
-      this.db.exec('COMMIT'); return record;
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    const intent = effectIntentSchema.parse(input), { scopeId, commandId, target } = intent.command;
+    return ledgerTransaction(this.db, () => {
+      const existing = this.read(scopeId, commandId), record = claimEffectRecord(intent, existing, {
+        keyTaken: () => !!this.db.prepare('SELECT 1 FROM effect_intents WHERE scope_id=? AND idempotency_key_hash=?').get(scopeId, intent.idempotencyKeyHash),
+        open: () => !!this.db.prepare(`SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND ${EFFECT_OPEN_STATE_SQL}`).get(target.kind, target.id),
+        lastSequence: () => Number(this.db.prepare('SELECT MAX(sequence) AS sequence FROM effect_intents WHERE target_kind=? AND target_id=?').get(target.kind, target.id)?.sequence ?? 0) });
+      if (record !== existing) this.db.prepare('INSERT INTO effect_intents(scope_id,command_id,target_kind,target_id,sequence,idempotency_key_hash,state,record) VALUES(?,?,?,?,?,?,?,?)')
+        .run(scopeId, commandId, target.kind, target.id, record.sequence, intent.idempotencyKeyHash, record.state, JSON.stringify(record));
+      return record;
+    });
   }
   async saveEffect(previousInput: EffectRecord, nextInput: EffectRecord): Promise<EffectRecord> {
     const previous = effectRecordSchema.parse(previousInput), next = effectRecordSchema.parse(nextInput);
     assertEffectTransition(previous, next);
     const { scopeId, commandId } = next.intent.command;
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return ledgerTransaction(this.db, () => {
       const changed = this.db.prepare('UPDATE effect_intents SET state=?,record=? WHERE scope_id=? AND command_id=? AND record=?')
         .run(next.state, JSON.stringify(next), scopeId, commandId, JSON.stringify(previous));
       if (changed.changes !== 1) throw new EffectError('EFFECT_CONFLICT');
-      this.db.exec('COMMIT'); return next;
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+      return next;
+    });
   }
 }

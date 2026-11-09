@@ -108,6 +108,17 @@ export function assertEffectTransition(previous: TransitionSide, next: Transitio
   if (!isEffectOpen(previous.state) || next.state === 'claimed' || (previous.state === 'unknown' && next.state === 'refused') || previous.sequence !== next.sequence
     || (previous.intent !== next.intent && JSON.stringify(previous.intent) !== JSON.stringify(next.intent))) throw new EffectError('EFFECT_CONFLICT');
 }
+/** The one claim rule for every `EffectStore.claimEffect`, inside the store's writer: an exact replay returns the stored record; S6R-1 a new
+ * intent names its producer (only older rows read without one); the scoped idempotency key maps to one command; an open intent keeps its target busy. */
+export function claimEffectRecord(intent: EffectIntent, existing: EffectRecord | null, target: Readonly<{ keyTaken(): boolean; open(): boolean; lastSequence(): number }>): EffectRecord {
+  if (existing) { if (JSON.stringify(existing.intent) !== JSON.stringify(intent)) throw new EffectError('EFFECT_CONFLICT'); return existing; }
+  if (!intent.producer) throw new EffectError('EFFECT_INVALID');
+  if (target.keyTaken()) throw new EffectError('EFFECT_CONFLICT');
+  if (target.open()) throw new EffectError('EFFECT_TARGET_BUSY');
+  const sequence = target.lastSequence() + 1;
+  if (!Number.isSafeInteger(sequence)) throw new EffectError('EFFECT_CORRUPT');
+  return effectRecordSchema.parse({ intent, sequence, state: 'claimed', evidence: null, refusal: null });
+}
 /** Pure settlement of a claimed/unknown record from target evidence. */
 export function settleEffect(record: EffectRecord, evidence: EffectEvidence): EffectRecord {
   assertEffectTransition(record, { ...record, state: 'settled' }); return effectRecordSchema.parse({ ...record, state: 'settled', evidence, refusal: null });

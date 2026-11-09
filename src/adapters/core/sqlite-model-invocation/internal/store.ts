@@ -27,8 +27,8 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
 
   private fail(error: unknown): never {
     if (error instanceof ModelInvocationStoreError || error instanceof ProviderSpendError) throw error;
-    sqliteFailure(error);
-    throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    const mapped = sqliteFailure(error); // owner B1-9: a real ledger busy stays busy, also when an inner transaction already mapped it
+    throw mapped && typeof mapped === 'object' && 'code' in mapped && mapped.code === 'ATTEMPT_STORE_BUSY' ? mapped : new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
   private transaction<T>(work: () => T): T {
     let active = false; let commitAttempted = false;

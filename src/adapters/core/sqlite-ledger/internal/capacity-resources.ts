@@ -34,5 +34,5 @@ export function bindCapacityResource(db: DatabaseSync, input: CapacityResourceBi
       .run(resourceKey, binding.kind, binding.id, capacity.executionSlots, capacity.inFlightSlots);
     return readCapacityResource(db, resourceKey);
   };
-  return db.isTransaction ? bind() : ledgerTransaction(db, bind);
+  return ledgerTransaction(db, bind, { join: true });
 }

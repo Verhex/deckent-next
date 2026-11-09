@@ -14,14 +14,25 @@ export function sqliteFailure(error: unknown): unknown {
   if (typeof code === 'number' && [5, 6].includes(code & 255)) return new AttemptStoreError('ATTEMPT_STORE_BUSY');
   return error;
 }
-/** One synchronous writer transaction: a failed ROLLBACK leaves the outcome unknown; every other failure is mapped by `sqliteFailure`. */
-export function ledgerTransaction<T>(db: DatabaseSync, work: () => T): T {
-  let active = false;
-  try { db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); db.exec('COMMIT'); return value; }
+export type LedgerTransactionOptions = Readonly<{ mode?: 'write' | 'read'; join?: boolean; unknown?: () => Error; failure?: (error: unknown) => unknown }>;
+/** The one synchronous ledger transaction (`write` = BEGIN IMMEDIATE, `read` = one deferred snapshot; `join` runs inside the caller's open
+ * transaction, which owns commit and rollback). Owner B1-9 (a): once COMMIT was attempted, or when ROLLBACK fails, the outcome is unknown
+ * until reconciled; every earlier failure is the caller's mapping (default `sqliteFailure`). */
+export function ledgerTransaction<T>(db: DatabaseSync, work: () => T, { mode = 'write', join = false, failure = sqliteFailure,
+  unknown = () => new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN') }: LedgerTransactionOptions = {}): T {
+  if (join && db.isTransaction) return work();
+  let active = false, committing = false;
+  try { db.exec(mode === 'write' ? 'BEGIN IMMEDIATE' : 'BEGIN'); active = true; const value = work(); committing = true; db.exec('COMMIT'); return value; }
   catch (error) {
-    if (active) { try { db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-    throw sqliteFailure(error);
+    if (active) { try { db.exec('ROLLBACK'); } catch { throw unknown(); } }
+    if (committing) throw unknown();
+    throw failure(error);
   }
+}
+/** One stored JSON column decoded by its schema; a parse failure or a failed `matches` (identity, scope, revision) throws the caller's error. */
+export function decodeStored<S extends z.ZodType>(schema: S, stored: unknown, error: () => Error, matches: (value: z.output<S>) => boolean = () => true): z.output<S> {
+  try { const value = schema.parse(JSON.parse(String(stored))); if (matches(value)) return value; } catch { /* the caller's error below */ }
+  throw error();
 }
 /** Numeric (not lexical) per-segment compare: '3.9.0' must fail a '3.51.3' floor despite '9' > '5' as characters.
  * A missing or unparsable version (older Node builds without `process.versions.sqlite`, or a non-numeric segment)
@@ -38,7 +49,7 @@ export function sqliteEngineMeetsFloor(version: string | undefined, floor: strin
   }
   return true;
 }
-/** DEPS-P0: refuse at the single place the ledger opens node:sqlite, before any native module touch or file I/O,
+/** DEPS-P0: refuse before every ledger open of node:sqlite, before any native module touch or file I/O,
  * when the host's bundled SQLite predates the 3.51.3 WAL-reset corruption fix (SQLITE_ENGINE_FLOOR). Reading
  * `process.versions` never loads the `node:sqlite` binding, so this stays compatible with the adapter's lazy load. */
 export function assertSqliteEngineSupported(version: string | undefined): void {

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { assertDispatchFenceCommand, assertDispatchFenceReceipt, assertLostDispatchReplay, DispatchError, type DispatchRecord, dispatchFenceReceiptId } from '#engine/index.js';
 import { runSnapshotSchema } from '#domain/index.js';
+import { decodeStored } from '#adapters/core/sqlite-ledger/index.js';
 /** Every reader verifies both immutable journals and the persisted audit under its transaction. */
 export function readDispatchFence(db: DatabaseSync, record: DispatchRecord) {
   const scopeId = record.request.identity.scopeId, commandId = dispatchFenceReceiptId(record.request.identity, record.owner);
@@ -11,8 +12,7 @@ export function readDispatchFence(db: DatabaseSync, record: DispatchRecord) {
   for (const row of [run, attempt]) if (row) assertDispatchFenceCommand(record, row.command);
   if (!run || !attempt || run.command !== attempt.command) throw new DispatchError('DISPATCH_CORRUPT');
   const fence = assertDispatchFenceReceipt(record, attempt, joined.audit);
-  let snapshot;
-  try { snapshot = runSnapshotSchema.parse(JSON.parse(String(run.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
+  const snapshot = decodeStored(runSnapshotSchema, run.snapshot, () => new DispatchError('DISPATCH_CORRUPT'));
   if (snapshot.identity.scopeId !== scopeId || snapshot.identity.runId !== record.request.identity.runId) throw new DispatchError('DISPATCH_FENCE_CONFLICT');
   const receipt = { commandId, command: String(run.command), snapshot };
   assertLostDispatchReplay(attempt, receipt, fence.write);
