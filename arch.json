@@ -77,6 +77,7 @@
   "units": {
     "src/capabilities/core/native-agent-execution": {
       "dependencies": [
+        "src/platform/core/i18n",
         "src/domain/core/agent-tool",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
@@ -5294,7 +5295,7 @@
     "packageLines": {
       "platform": 25000,
       "domain": 11250,
-      "capabilities": 25000,
+      "capabilities": 1638,
       "engine": 60000,
       "adapters": 42199,
       "surfaces": 45000,

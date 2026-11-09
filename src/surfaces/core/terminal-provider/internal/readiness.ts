@@ -1,4 +1,4 @@
-import { nativeAgentReadinessSchema, type NativeAgentReadiness } from '#capabilities/index.js';
+import { nativeAgentReadinessSchema, nativeAgentReasonText, type NativeAgentReadiness } from '#capabilities/index.js';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelPanelView, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderPanelHost, ProviderWindowPort, SubscriptionReadinessPort } from './context.js';
@@ -7,17 +7,7 @@ import presentation from './presentation.json' with { type: 'json' };
 const unknown = (): NativeAgentReadiness => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
 export function subscriptionReadinessText(value: NativeAgentReadiness, locale: Locale): string {
   if (value.state === 'ready') return t('headless.agent.k13.readiness.ready', {}, locale);
-  const reason = (() => {
-    switch (value.reason) {
-      case 'NATIVE_AGENT_CLI_UNAVAILABLE': return value.state === 'unknown' ? t('headless.agent.k13.unknown.cli', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale);
-      case 'NATIVE_AGENT_LOGIN_REQUIRED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.login', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED', {}, locale);
-      case 'NATIVE_AGENT_CAPABILITY_UNSEALED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.sealed', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED', {}, locale);
-      case 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.tools', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', {}, locale);
-      case 'NATIVE_AGENT_PLUGIN_UNEXPECTED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.plugins', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale);
-      case 'NATIVE_AGENT_BRIDGE_UNAVAILABLE': return value.state === 'unknown' ? t('headless.agent.k13.unknown.bridge', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_BRIDGE_UNAVAILABLE', {}, locale);
-      case 'NATIVE_AGENT_ENVIRONMENT_REFUSED': return value.state === 'unknown' ? t('headless.agent.k13.unknown.environment', {}, locale) : t('headless.agent.reason.NATIVE_AGENT_ENVIRONMENT_REFUSED', {}, locale);
-    }
-  })();
+  const reason = nativeAgentReasonText(value.reason, locale, value.state === 'unknown');
   return value.state === 'unknown' ? t('headless.agent.k13.readiness.unknown', { reason }, locale) : t('headless.agent.k13.readiness.unavailable', { reason }, locale);
 }
 /** The host owns K7's scoped observation read. No inspection can mint a seal or refresh a login. */
