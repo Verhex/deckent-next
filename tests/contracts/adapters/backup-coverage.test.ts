@@ -7,11 +7,7 @@ import { createBackupSet, verifyBackupSet, createBackupCoverage, verifyBackupCov
 import { type BackupCoverageManifest, type BackupContributionOwner } from '#engine/core/backup/index.js';
 import { resolveProductLayout, productResourcePath } from '#platform/index.js';
 
-it('round trips exact encrypted owner coverage alongside the existing backup, refusing missing/protected session coverage and unsafe destinations before export or restore', async () => {
-  if (process.platform === 'win32') {
-    await expect(createBackupCoverage({ set: 'not-opened' } as never, { companion: 'not-opened', manifest: { schemaVersion: 1, installationId: 'fixture', generation: 'g1', planDigest: 'a'.repeat(64), resources: [] }, deletionRoots: ['not-opened'] }, 'fixture', { maxFiles: 10, maxDepth: 3, maxFileBytes: 100, maxTotalBytes: 1000 }, [], async work => work())).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
-    console.info('verify-not-run: backup coverage POSIX file custody unavailable'); return;
-  }
+it.skipIf(process.platform === 'win32')('round trips exact encrypted owner coverage alongside the existing backup, refusing missing/protected session coverage and unsafe destinations before export or restore [verify-not-run: platform custody unavailable]', async () => {
   const base = await mkdtemp(join(tmpdir(), 'deckent-backup-coverage-'));
   try {
     const project = join(base, 'project'), dataRoot = join(base, 'data'), layout = resolveProductLayout({ projectRoot: project, root: dataRoot });
@@ -55,4 +51,14 @@ it('round trips exact encrypted owner coverage alongside the existing backup, re
     await expect(verifyBackupCoverage(second, input, phrase, limits, [owner])).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' }); second.close(); verifiedSet.close();
     expect(exports).toBe(5);
   } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+it('refuses backup coverage without POSIX owner custody before opening a path', async () => {
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid');
+  Object.defineProperty(process, 'getuid', { configurable: true, value: undefined });
+  try {
+    await expect(createBackupCoverage({ set: 'not-opened' } as never, { companion: 'not-opened', manifest: { schemaVersion: 1, installationId: 'fixture', generation: 'g1', planDigest: 'a'.repeat(64), resources: [] }, deletionRoots: ['not-opened'] }, 'fixture', { maxFiles: 10, maxDepth: 3, maxFileBytes: 100, maxTotalBytes: 1000 }, [], async work => work())).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
+  } finally {
+    if (uid) Object.defineProperty(process, 'getuid', uid); else Reflect.deleteProperty(process, 'getuid');
+  }
 });

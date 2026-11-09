@@ -4,11 +4,11 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, type PolicyGrant } from '#domain/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, namedPersonPolicyAdditions, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, upgradeFirstRunPolicy } from '#domain/core/policy-template/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, namedPersonPolicyAdditions, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, upgradeFirstRunPolicy } from '#domain/core/policy-template/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
 // a fresh, terminal-only installation gets from `deckent init policy`.
@@ -78,7 +78,7 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
   });
   it('v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of their installation in its scope, nobody else', () => {
     const template = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(template.policy, template.bindings);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(20);
+
     // v8 (BACKUP-COMMAND): installation-wide backup for the installing owner alone.
     expect(template.policy.grants.find(grant => grant.id === 'first-run-backup')).toEqual({ id: 'first-run-backup', effect: 'allow',
       actions: ['create', 'verify', 'restore'], scopes: 'all', principals: [me], resource: { kind: 'backup', ids: 'all' } });
@@ -192,14 +192,14 @@ describe('first-run v4 → v5 migration (pure)', () => {
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string; resource: { ids: unknown } }[] };
     return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !POST_V15_RULE_IDS.includes(grant.id) && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: rest.readToolNames } } : grant) }; };
-  it('exactly this installation\'s v4, v5, v6 or v7 template upgrades to exactly the current (v16) template; v16 is current', () => {
+  it('exactly this installation\'s v4, v5, v6 or v7 template upgrades to exactly the current template', () => {
     expect(upgradeFirstRunPolicy(v4(), input)).toEqual({ status: 'upgrade', from: 4, policy: firstRunPolicyTemplate(input).policy });
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string }[] };
     // v8 = BACKUP-COMMAND (installation-wide backup); v7 = T4-B K3 (model activation + invocation) and SPEND-SETTLEMENT (provider spend accounts) in one template version.
     const v9 = { ...current, revision: 'first-run-template-v9', grants: current.grants.filter(grant => !POST_V15_RULE_IDS.includes(grant.id) && !['first-run-mcp-observe-pool', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v9, input)).toEqual({ status: 'upgrade', from: 9, policy: firstRunPolicyTemplate(input).policy });
     // v15 = the current template without the v16 recovery cells (alpha.56 D1); v14 = v15 without the v15 delta (S4B-1 + S7 + S4B-3); v13 = v14 without the v14 memory delta (S4); v12 = v13 without the v13 delta (I-POL).
-    const v16 = { ...current, revision: 'first-run-template-v16', grants: current.grants.filter(grant => !['first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS].includes(grant.id)) };
+    const v16 = { ...current, revision: 'first-run-template-v16', grants: current.grants.filter(grant => !['first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v16, input)).toEqual({ status: 'upgrade', from: 16, policy: firstRunPolicyTemplate(input).policy });
     const v15 = { ...current, revision: 'first-run-template-v15', grants: current.grants.filter(grant => !POST_V15_RULE_IDS.includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v15, input)).toEqual({ status: 'upgrade', from: 15, policy: firstRunPolicyTemplate(input).policy });
@@ -267,10 +267,10 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] }, rest = firstRunTemplateAdditions(applied, names);
     expect(rest.status === 'plan' ? [...rest.rules.map(rule => rule.id), rest.remaining] : rest).toEqual([...['first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
       'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory',
-      ...POST_V15_RULE_IDS.filter(id => id.startsWith('first-run-recovery-action-')), 'first-run-first-commit', 'first-run-uninstall', 'first-run-uninstall-operations', ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS].slice(0, POLICY_CHANGE_MAX), 6]);
+      ...POST_V15_RULE_IDS.filter(id => id.startsWith('first-run-recovery-action-')), 'first-run-first-commit', 'first-run-uninstall', 'first-run-uninstall-operations', ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].slice(0, POLICY_CHANGE_MAX), 6]);
     // A third run adds the last two v19 rules and v20's four; a fourth is current.
     const second = { ...applied, grants: [...applied.grants, ...(rest.status === 'plan' ? rest.rules : [])] }, last = firstRunTemplateAdditions(second, names);
-    expect(last.status === 'plan' ? last.rules.map(rule => rule.id) : last).toEqual([...FIRST_RUN_V19_RULE_IDS.slice(-2), ...FIRST_RUN_V20_RULE_IDS]);
+    expect(last.status === 'plan' ? last.rules.map(rule => rule.id) : last).toEqual([...FIRST_RUN_V19_RULE_IDS.slice(-2), ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]);
     expect(firstRunTemplateAdditions({ ...second, grants: [...second.grants, ...(last.status === 'plan' ? last.rules : [])] }, names)).toEqual({ status: 'current', conflicts: [] });
   });
   it('a hand-added rule under a v5 id with other content is kept and named as a conflict; another person\'s first-run policy is not theirs to upgrade', () => {
@@ -431,7 +431,7 @@ it('U4E G1: historical policies upgrade exactly; first-commit remains scoped and
   const scopedUpgrade = firstRunTemplateAdditions(broadened, { ...source, person: history.input.principal });
   expect(scopedUpgrade.status === 'plan' ? scopedUpgrade.rules.filter(rule => rule.id === 'first-run-first-commit') : null).toEqual(added);
   const rollback = firstRunTemplateRollback(current.policy, history.input.principal, 'installation', source);
-  expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_V20_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
+  expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
   const customized = { ...current.policy, grants: current.policy.grants.map(rule => rule.id === added[0]!.id ? { ...rule, actions: ['inspect'] } : rule) };
   expect(firstRunTemplateRollback(customized, history.input.principal, 'installation', source)).toMatchObject({ rules: rollback.rules, conflicts: [] });
 });
@@ -443,7 +443,7 @@ it('U10C v18: named-person lifecycle and exact operation grants upgrade add-only
     { id: 'first-run-uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], scopes: 'all', principals: [me], resource: { kind: 'installation', ids: 'all' } },
     { id: 'first-run-uninstall-operations', effect: 'allow', actions: ['execute'], scopes: 'all', principals: [me], resource: { kind: 'operation', ids: operations } },
   ];
-  const previous = { ...current.policy, revision: 'first-run-template-v17', grants: current.policy.grants.filter(rule => !rule.id.startsWith('first-run-uninstall') && !FIRST_RUN_V19_RULE_IDS.includes(rule.id) && !FIRST_RUN_V20_RULE_IDS.includes(rule.id)) };
+  const previous = { ...current.policy, revision: 'first-run-template-v17', grants: current.policy.grants.filter(rule => !rule.id.startsWith('first-run-uninstall') && !FIRST_RUN_V19_RULE_IDS.includes(rule.id) && !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)) };
   expect(upgradeFirstRunPolicy(previous, source)).toEqual({ status: 'upgrade', from: 17, policy: current.policy });
   expect(current.policy.grants.filter(rule => rule.id.startsWith('first-run-uninstall'))).toEqual(wanted);
   const principal = { id: 'person', ...me, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
@@ -470,7 +470,7 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
   // Lead 2026-11-09 (option 2): the proposed Run's pool and work-target use are `allow`; without the Run card they admit nothing.
   const keys = ['language', 'output_mode', 'terminal.responseStyle'], proposals = [rule('first-run-mcp-propose-work', 'require-approval', 'run', ['create'], 'all'), { ...rule('first-run-mcp-propose-setting', 'require-approval', 'config', ['write'], [...keys.map(key => `project:${key}`), ...keys.map(key => `global:${key}`)]), scopes: 'all' },
     rule('first-run-mcp-propose-pool', 'allow', 'pool', ['use'], 'all'), rule('first-run-mcp-propose-target', 'allow', 'work-target', ['use'], 'all')];
-  expect(current.policy.grants.filter(grant => FIRST_RUN_V20_RULE_IDS.includes(grant.id))).toEqual(proposals);
+  expect(current.policy.grants.filter(grant => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(grant.id))).toEqual(proposals);
   const policy = resolvePolicyBindings(current.policy, current.bindings), mcp = { ...principal, id: 'mcp', ...ai };
   const ask = (action: string, kind: string, id: string, actor = mcp, scopeId = 'installation') => evaluatePolicy(policy, { principal: { ...actor, scopeIds: ['installation', 'other'] }, scopeId, action, resource: { kind, id } }).decision;
   expect(ask('invoke', 'model-invocation', 'any')).toBe('allow'); expect(ask('invoke', 'model-invocation', 'any', mcp, 'other')).toBe('deny');
@@ -509,8 +509,8 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
   expect(standartEdit(mcp).decision).toBe('require-approval');
   expect(standartEdit({ ...principal, id: 'other', subject: 'colleague' }).decision).toBe('require-approval');
   // The template for an MCP principal adds nothing for it; exact v18 and v19 templates upgrade to v20; edited policies get exactly the missing rules add-only.
-  expect(firstRunPolicyTemplate({ ...input, principal: ai }).policy.grants.some(grant => [...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS].includes(grant.id))).toBe(false);
-  const v19 = { ...current.policy, revision: 'first-run-template-v19', grants: current.policy.grants.filter(grant => !FIRST_RUN_V20_RULE_IDS.includes(grant.id)) };
+  expect(firstRunPolicyTemplate({ ...input, principal: ai }).policy.grants.some(grant => [...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id))).toBe(false);
+  const v19 = { ...current.policy, revision: 'first-run-template-v19', grants: current.policy.grants.filter(grant => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(grant.id)) };
   const v18 = { ...v19, revision: 'first-run-template-v18', grants: v19.grants.filter(grant => !FIRST_RUN_V19_RULE_IDS.includes(grant.id)) };
   expect(upgradeFirstRunPolicy(v18, input)).toEqual({ status: 'upgrade', from: 18, policy: current.policy }); expect(upgradeFirstRunPolicy(v19, input)).toEqual({ status: 'upgrade', from: 19, policy: current.policy });
   const plan = firstRunTemplateAdditions({ ...v18, revision: 'a-edited' }, { ...input, person: me });

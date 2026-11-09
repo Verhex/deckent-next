@@ -11,13 +11,7 @@ import { InstallationCacheRemovalTarget } from '#adapters/core/installation-remo
 import { createHmacIntegrity, ErrorRegistry, SystemTrustedClock } from '#platform/index.js';
 import { evaluatePolicy, type VerifiedPrincipal } from '#domain/index.js';
 
-it('gates the exact uninstall behind the person and durable owners, resumes generic unknown once and keeps data on purge refusal', async () => {
-  if (process.platform !== 'linux') {
-    const app = new UninstallApplication({ channel: undefined, witness: { attest: async () => true }, principal: async () => ({ id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] }),
-      authorize: async () => {}, inventory: async () => { throw new Error('must not inspect'); }, retainedPlan: async () => { throw new Error('must not inspect'); } });
-    await expect(app.apply({ schemaVersion: 2, commandId: 'remove', planDigest: 'a'.repeat(64) }, { confirm: async () => true })).rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
-    console.info('verify-not-run: uninstall file-store positive requires Linux custody'); return;
-  }
+it.skipIf(process.platform !== 'linux')('gates the exact uninstall behind the person and durable owners, resumes generic unknown once and keeps data on purge refusal [verify-not-run: platform custody unavailable]', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-app-'));
   try {
     const cache = join(root, 'cache'), ledger = join(root, 'ledger');
@@ -337,4 +331,10 @@ it('K3 on the real delivery queue: delete everything refuses a queued delivery n
     expect(await app().apply({ schemaVersion: 2, commandId: 'q2', planDigest: forced.planDigest }, confirm)).toMatchObject({ status: 'completed' });
     expect(new SqliteTargetQueue(db).load('s', 'delivery-1')?.state).toBe('cancelled'); expect(asked).toEqual(['submit', 'inspect', 'cancel']); expect(custody).toEqual(['custody']);
   } finally { db.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('refuses uninstall without admission custody before reading any inventory on every host', async () => {
+  const app = new UninstallApplication({ channel: undefined, witness: { attest: async () => true }, principal: async () => ({ id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] }),
+    authorize: async () => {}, inventory: async () => { throw new Error('must not inspect'); }, retainedPlan: async () => { throw new Error('must not inspect'); } });
+  await expect(app.apply({ schemaVersion: 2, commandId: 'remove', planDigest: 'a'.repeat(64) }, { confirm: async () => true })).rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
 });

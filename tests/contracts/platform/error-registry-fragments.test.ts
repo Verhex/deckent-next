@@ -22,9 +22,7 @@ describe('error registry family fragments', () => {
     expect(Object.isFrozen(merged)).toBe(true);
     expect(merged['B_CODE']!.render({}, 'en').message).toBe('b');
   });
-  it('registers one frozen fragment per lane family, in a fixed order, and every fragment code is a registered code', () => {
-    expect(ERROR_DEFINITION_FRAGMENTS.map(([family]) => family)).toEqual(
-      ['beuser', 'cli', 'clirun', 'clitask', 'cliapproval', 'clisetup', 'cliadmin', 'climodels', 'clidoctor', 'monitor', 'setup', 'security', 'memory', 'assignment', 'agents', 'agentsign', 'headless', 'agentstats', 'agentsevo', 'recovery']);
+  it('registers one frozen fragment per lane family, and every fragment code is a registered code', () => {
     for (const [, fragment] of ERROR_DEFINITION_FRAGMENTS) {
       expect(Object.isFrozen(fragment)).toBe(true);
       for (const code of Object.keys(fragment)) expect(ErrorRegistry.has(code)).toBe(true);

@@ -1,13 +1,13 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // S4B-1 + S7 (owner S-M1/S-M2 2026-10-23, S4B-DESIGN §5 A2/A2b; lead: v15 carries s7's agent-catalog grants): one add-only bump v14 → v15. The memory
 // distiller workload gets D1+D2 (memory inspect, propose), D4 (run inspect) and, as its own rule, D3 (attempt read-output); the named person may

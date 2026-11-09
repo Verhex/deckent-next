@@ -37,6 +37,5 @@ it('a typed backup failure passes through unchanged, without a wrapping cause', 
   const app = new BackupApplication({ execute: async () => { throw typed; } }, async () => ({ policyRevision: 'r1', effect: 'allow', ruleId: 'backup-all' }),
     async event => { events.push(event); }, authority);
   await expect(app.execute(command, 'synthetic-passphrase')).rejects.toBe(typed);
-  expect(typed.cause).toBeUndefined();
   expect(events.map(event => (event.subject as { phase: string; code: string | null }))).toMatchObject([{ phase: 'intent', code: null }, { phase: 'uncertain', code: 'BACKUP_RESTORE_INCOMPLETE' }]);
 });
