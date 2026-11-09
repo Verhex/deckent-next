@@ -8,7 +8,7 @@ import settings from './model-role-admission.json' with { type: 'json' };
  * M2 typed role admission (owner 2026-10-23: a new model works through a data update, with no release and no model literal; it is fail-closed
  * until a person assigns its role). `inspect` is the one read view (CLI `models roles`, MCP `inspect_model_roles`, doctor): every registered
  * catalog model the scope sees, each with its tier/role row or `pending`. `assign` writes ONE row into the one installation overlay this
- * command owns (revision `<prefix><n>`, prefix in `model-role-admission.json`), through the governed config write of the global layer: the layer digest the
+ * command owns (`origin: 'person-assignment'`), through the governed config write of the global layer: the layer digest the
  * card showed is the compare-and-set, the merge (`mergeModelRoleRegistries`) validates the whole section before anything is submitted, and the
  * config application audits it as a sealed `config-change`. Overlays it does not own are never edited.
  */
@@ -66,7 +66,7 @@ export function modelRoleCoverage(policy: ModelRolePolicy, catalog: readonly Mod
   }));
 }
 
-/** Legacy write counter; alpha.64 still emits this revision shape for alpha.63.3 rollback. */
+/** The write counter still reads prefixed revisions; ownership only falls back to it for legacy records. */
 const counter = (overlay: Readonly<{ revision: string }>) => {
   const rest = overlay.revision.startsWith(settings.ownedOverlayRevisionPrefix) ? overlay.revision.slice(settings.ownedOverlayRevisionPrefix.length) : '';
   return /^[1-9]\d*$/.test(rest) && Number.isSafeInteger(Number(rest)) ? Number(rest) : null;
@@ -97,7 +97,7 @@ export function planModelRoleAssignment(section: unknown, request: Readonly<Role
   if (effective && effective.tier === request.tier && sameRoles(effective.roles, request.roles)) return { changed: false as const, row: effective, section: config };
   const body = { roles: mine?.roles ?? [], models: [...(mine?.models ?? []).filter(entry => roleModelKey(entry) !== key), row], exceptions: mine?.exceptions ?? [] };
   const revision = `${settings.ownedOverlayRevisionPrefix}${(mine ? counter(mine) ?? 0 : 0) + 1}`;
-  const overlay = { schemaVersion: 1 as const, revision, ...body };
+  const overlay = { schemaVersion: 1 as const, revision, origin: 'person-assignment' as const, ...body };
   if (index < 0) overlays.push(overlay); else overlays[index] = overlay;
   if (overlays.length > limits.overlays) fail('MODEL_ROLE_REGISTRY_LIMIT');
   const next = { schemaVersion: 1 as const, overlays };

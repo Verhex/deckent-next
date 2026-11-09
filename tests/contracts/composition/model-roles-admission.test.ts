@@ -58,7 +58,7 @@ it('a new catalog model is pending until a person assigns it; the write is one g
   const audits = auditRows(f.ledger).length;
   expect(await assignConfiguredModelRole(f.project, assign(before.digest), f.options, person)).toMatchObject({ status: 'applied', row: { ...NEW, version: 1, tier: 'frontier' } });
   const written = JSON.parse(await readFile(f.globalFile, 'utf8'));
-  expect(written.model_roles.overlays).toEqual([{ schemaVersion: 1, revision: 'installation-roles:1', roles: [], exceptions: [],
+  expect(written.model_roles.overlays).toEqual([{ schemaVersion: 1, revision: 'installation-roles:1', origin: 'person-assignment', roles: [], exceptions: [],
     models: [{ ...NEW, version: 1, tier: 'frontier', roles: ['brain', 'worker'] }] }]);
   const recorded = auditRows(f.ledger).slice(audits);
   expect(recorded).toHaveLength(1); expect(recorded[0]).toContain('config-change'); expect(recorded[0]).toContain('model_roles'); expect(recorded[0]).toContain('"layer":"global"');

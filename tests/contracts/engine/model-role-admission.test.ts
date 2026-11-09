@@ -61,10 +61,12 @@ describe('model role admission (M2)', () => {
     const fake = ports(undefined);
     expect(await new ModelRoleAdmissionApplication(fake.value).assign(command({}))).toMatchObject({ status: 'applied', row: { ...next, tier: 'frontier', roles: ['brain', 'worker'], version: 1 } });
     expect(fake.submitted).toHaveLength(1); expect(fake.submitted[0]).toMatchObject({ expect: DIGEST, commandId: 'c1' });
-    const section = modelRoleConfigSchema.parse(fake.submitted[0]!.value);
+    const section = modelRoleConfigSchema.parse(JSON.parse(JSON.stringify(fake.submitted[0]!.value)));
     expect(section.overlays).toHaveLength(1);
-    expect(section.overlays[0]).not.toHaveProperty('origin');
+    expect(section.overlays[0]).toMatchObject({ schemaVersion: 1, revision: 'installation-roles:1', origin: 'person-assignment' });
     expect(isOwnedRoleOverlay(section.overlays[0]!)).toBe(true);
+    const readback = await new ModelRoleAdmissionApplication(ports(section).value).inspect({ schemaVersion: 1, scopeId: 's' });
+    expect(readback.models.find(row => row.modelId === next.modelId)).toMatchObject({ state: 'assigned', tier: 'frontier', roles: ['brain', 'worker'], version: 1 });
     expect(isOwnedRoleOverlay({ revision: 'unrelated', origin: 'person-assignment' })).toBe(true);
     expect(isOwnedRoleOverlay({ revision: 'installation-roles:1', origin: 'policy' })).toBe(false);
     for (const revision of ['acme-1', 'installation-roles:0', 'installation-roles:01', 'installation-roles:9007199254740992'])
@@ -80,19 +82,26 @@ describe('model role admission (M2)', () => {
     const first = planModelRoleAssignment(undefined, { ...sonnet, tier: 'worker', roles: [] });
     expect(first.changed).toBe(true);
     expect(first.row).toEqual({ ...sonnet, version: 2, tier: 'worker', roles: [], override: { previousVersion: 1 } });
-    const second = planModelRoleAssignment(first.section, { ...sonnet, tier: 'worker', roles: ['worker'] });
+    const legacy = modelRoleConfigSchema.parse(JSON.parse(JSON.stringify({ ...first.section, overlays: [{ ...first.section.overlays[0]!, origin: undefined }] })));
+    expect(legacy.overlays[0]).not.toHaveProperty('origin');
+    expect(isOwnedRoleOverlay(legacy.overlays[0]!)).toBe(true);
+    const second = planModelRoleAssignment(legacy, { ...sonnet, tier: 'worker', roles: ['worker'] });
     expect(second.section.overlays).toHaveLength(1);
     expect(second.row).toEqual({ ...sonnet, version: 3, tier: 'worker', roles: ['worker'], override: { previousVersion: 1 } });
     expect(second.section.overlays[0]!.revision).not.toBe(first.section.overlays[0]!.revision);
-    expect(second.section.overlays[0]).not.toHaveProperty('origin');
+    expect(second.section.overlays[0]).toMatchObject({ revision: 'installation-roles:2', origin: 'person-assignment' });
     const typed = { ...first.section, overlays: [{ ...first.section.overlays[0]!, revision: 'person-edited', origin: 'person-assignment' }] };
     const migrated = planModelRoleAssignment(typed, { ...sonnet, tier: 'worker', roles: ['worker'] });
     expect(migrated.section.overlays).toHaveLength(1);
     expect(migrated.row).toEqual(second.row);
-    expect(migrated.section.overlays[0]).not.toHaveProperty('origin');
+    expect(migrated.section.overlays[0]).toMatchObject({ revision: 'installation-roles:1', origin: 'person-assignment' });
+    const third = planModelRoleAssignment(second.section, { ...sonnet, tier: 'worker', roles: [] });
+    expect(third.section.overlays).toHaveLength(1);
+    expect(third.section.overlays[0]).toMatchObject({ revision: 'installation-roles:3', origin: 'person-assignment' });
+    expect(third.row).toEqual({ ...sonnet, version: 4, tier: 'worker', roles: [], override: { previousVersion: 1 } });
     expect(() => mergeModelRoleRegistries(CORE_MODEL_ROLES, second.section.overlays)).not.toThrow();
-    // The same tier and roles again: nothing to write.
     expect(planModelRoleAssignment(second.section, { ...sonnet, tier: 'worker', roles: ['worker'] }).changed).toBe(false);
+    expect(planModelRoleAssignment(legacy, { ...sonnet, tier: 'worker', roles: [] })).toMatchObject({ changed: false, section: legacy });
   });
 
   it('never edits an overlay it does not own: an Enterprise overlay stays byte-identical and the person row compares-and-sets against it', () => {
