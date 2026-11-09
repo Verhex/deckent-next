@@ -23,7 +23,7 @@
       "homeOverride": "CODEX_HOME",
       "home": ".codex",
       "file": "auth.json",
-      "dockerCredential": "relayed",
+      "dockerCustody": "relayed",
       "destinations": [
         "chatgpt.com",
         "auth.openai.com",
@@ -75,7 +75,7 @@
       "homeOverride": "CLAUDE_CONFIG_DIR",
       "home": ".claude",
       "file": ".credentials.json",
-      "dockerCredential": "prohibited",
+      "dockerCustody": "prohibited",
       "destinations": [
         "api.anthropic.com",
         "platform.claude.com"
@@ -89,7 +89,7 @@
       "homeOverride": "",
       "home": ".config/cursor",
       "file": "auth.json",
-      "dockerCredential": "projected",
+      "dockerCustody": "projected",
       "destinations": [
         "api2.cursor.sh",
         "api3.cursor.sh",

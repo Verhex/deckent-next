@@ -230,7 +230,7 @@ describe('lint-arch unit contract', () => {
       'src/platform/core/example/internal/value.ts': 'export const value = 1; export type Value = number;',
       'src/platform/core/example/internal/use.ts': "import { value, type Value } from './value.js'; export const used: Value = value;",
       'src/platform/core/consumer/index.ts': "export { value } from '#platform/core/example/index.js';",
-      'src/platform/index.ts': "export { value } from './core/example/index.js';",
+      'src/platform/index.ts': "export { value } from '#platform/core/example/index.js';",
     }, true, true);
     const allowed = await lint(root);
     expect(allowed.code, allowed.out).toBe(0);

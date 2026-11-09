@@ -43,16 +43,16 @@ export interface NativeProviderSpec { readonly homeOverride: string; readonly ho
   readonly environment: Readonly<Record<string, string>>;
   /** How a Docker worker of this CLI authenticates: `relayed` (the host relay attaches the login per request; the container holds a placeholder),
    * `projected` (the short-lived token is projected into the container) or `prohibited` (no Docker subscription path; owner 2026-11-08). */
-  readonly dockerCredential: 'relayed' | 'projected' | 'prohibited'; readonly relay?: NativeRelaySpec }
+  readonly dockerCustody: 'relayed' | 'projected' | 'prohibited'; readonly relay?: NativeRelaySpec }
 /** The host relay of a `relayed` CLI: the provider origin and the only routes forwarded, the header naming the account, the placeholder bearer the
  * container's CLI sends, byte caps, and the CLI configuration (`-c` pairs; `{shimPort}` is the container's loopback shim) that points the CLI at it. */
 export interface NativeRelaySpec { readonly origin: string; readonly basePath: string; readonly routes: readonly Readonly<{ method: string; path: string; query: boolean; exclusive?: boolean }>[];
   readonly accountHeader: string; readonly placeholder: string; readonly capabilityBytes: number; readonly requestBytes: number; readonly responseBytes: number;
   /** Requests one Attempt's relay forwards in total; an `exclusive` route (the metered model call) runs one at a time. */ readonly maxRequests: number;
   /** Model calls the client dropped before their answer ended; past it the Attempt's model calls are refused. */ readonly maxAbandoned: number; readonly config: Readonly<Record<string, unknown>> }
-/** The provider's local credential spec from the adapter catalog; an id the catalog does not list is a typed unavailability, never `any`. */
 /** The environment names that move a native CLI's home (the runtime service keeps them, A6-3). */
 export const nativeHomeOverrideNames = (): readonly string[] => Object.values(catalog.providers as Readonly<Record<string, NativeProviderSpec>>).map(spec => spec.homeOverride).filter(Boolean);
+/** The provider's local credential spec from the adapter catalog; an id the catalog does not list is a typed unavailability, never `any`. */
 export function nativeProviderSpec(provider: NativeSubscription['provider']): NativeProviderSpec {
   const specs = catalog.providers as Readonly<Record<string, NativeProviderSpec | undefined>>;
   const spec = specs[provider];
@@ -68,7 +68,7 @@ export function nativeProviderSpec(provider: NativeSubscription['provider']): Na
 export function assertNativeDockerSubscription(provider: NativeSubscription['provider']): void {
   if (nativeDockerCredential(provider) === 'prohibited') throw new NativeConnectionError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE');
 }
-export const nativeDockerCredential = (provider: NativeSubscription['provider']): NativeProviderSpec['dockerCredential'] => nativeProviderSpec(provider).dockerCredential;
+export const nativeDockerCredential = (provider: NativeSubscription['provider']): NativeProviderSpec['dockerCustody'] => nativeProviderSpec(provider).dockerCustody;
 /** Owner 2026-11-08 (lead): a Docker login belongs to the OS account owning the file (this uid, checked at read). Delegation decides use: the person acted for must
  * be that owner and a non-person class needs consent; a Docker login records none, so the connect default (`DEFAULT_DELEGATED_CLASSES`) applies. */
 export const nativeLoginUseAllowed = (principal: Readonly<{ issuer: string; subject: string; assurance?: string }> | null | undefined): boolean => { if (!principal) return false;
