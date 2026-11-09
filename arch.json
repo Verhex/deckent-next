@@ -104,7 +104,6 @@
       "dependencies": [
         "src/domain/core/run",
         "src/engine/core/runs",
-        "src/engine/core/attempts",
         "src/engine/core/audit",
         "src/adapters/core/audit-store",
         "src/adapters/core/sqlite-ledger"
@@ -3486,7 +3485,8 @@
         "src/platform/core/utils",
         "src/platform/core/validate",
         "src/platform/core/common",
-        "src/adapters/core/file-lock"
+        "src/adapters/core/file-lock",
+        "src/adapters/core/sqlite-ledger"
       ],
       "plan": "INSTALLATION"
     },
@@ -3530,7 +3530,6 @@
         "src/engine/core/runs",
         "src/engine/core/provider-spend",
         "src/platform/core/errors",
-        "src/domain/core/run",
         "src/engine/core/run-proposal"
       ],
       "plan": "STORE"
@@ -5278,7 +5277,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42254,
+      "adapters": 42213,
       "surfaces": 45000,
       "composition": 13703
     },

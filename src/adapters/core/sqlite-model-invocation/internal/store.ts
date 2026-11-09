@@ -15,7 +15,7 @@ import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendErro
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, type ProviderSpendMeasurement, verifyModelActivationRecord,
   planModelAllocationSlotRelease, type ModelAllocationSlotRelease, type ModelAllocationSlotReleaseStore, type ModelAllocationStartCustody } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationCommandRow, invocationRow, loadInvocationRecord, loadInvocationCommandRecord, visitAllocationInvocations } from './read.js';
 
 type Row = Readonly<Record<string, unknown>>;
@@ -31,18 +31,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     throw mapped && typeof mapped === 'object' && 'code' in mapped && mapped.code === 'ATTEMPT_STORE_BUSY' ? mapped : new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
   private transaction<T>(work: () => T): T {
-    let active = false; let commitAttempted = false;
-    try {
-      this.db.exec('BEGIN IMMEDIATE'); active = true;
-      const result = work(); commitAttempted = true; this.db.exec('COMMIT'); active = false; return result;
-    } catch (error) {
-      if (active) {
-        try { this.db.exec('ROLLBACK'); active = false; }
-        catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
-      }
-      if (commitAttempted) throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN');
-      return this.fail(error);
-    }
+    return ledgerTransaction(this.db, work, { unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => this.fail(error) });
   }
   async loadReceipt(scopeInput: string, commandInput: string): Promise<ModelInvocationRecord | null> {
     try { return loadInvocationCommandRecord(this.db, scopeInput, commandInput); }

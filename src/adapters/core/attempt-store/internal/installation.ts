@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { persistedString, immutableJsonObjectSchema } from '#domain/index.js';
 import { executionPoolSchema, type ExecutionPool } from '#engine/index.js';
-import { migrateLedger, CURRENT_LEDGER_VERSION, sqliteLedgerOptionsSchema, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { migrateLedger, CURRENT_LEDGER_VERSION, sqliteLedgerOptionsSchema, ledgerTransaction, openLedgerDatabase, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteExecutionPools } from './pools.js';
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
@@ -51,37 +51,30 @@ export async function initializeInstallationLedger(path: string, options: Sqlite
     throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
   }
   const { ownership, pool, encoded } = inputs(ownershipInput, poolInput);
+  const outcomeUnknown = () => new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN');
+  const failure = (error: unknown) => error instanceof InstallationLedgerError ? error : new InstallationLedgerError('INSTALLATION_LEDGER_UNAVAILABLE');
   let db: DatabaseSync;
-  try { const sqlite = await import('node:sqlite'); db = new sqlite.DatabaseSync(path, { timeout: parsedOptions.data.busyTimeoutMs }); }
-  catch { throw new InstallationLedgerError('INSTALLATION_LEDGER_UNAVAILABLE'); }
-  let active = false, commitAttempted = false;
+  try { db = openLedgerDatabase(path, { timeout: parsedOptions.data.busyTimeoutMs }); } catch (error) { throw failure(error); }
   try {
     const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' } as const;
     const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' } as const;
     db.exec(durability[parsedOptions.data.durability]);
-    db.exec('BEGIN IMMEDIATE'); active = true;
-    const version = db.prepare('PRAGMA user_version').get()?.user_version;
-    if (version === 0) {
-      if (userObjects(db).length !== 0) throw new InstallationLedgerError('INSTALLATION_LEDGER_CONFLICT');
-      migrateLedger(db, 'allow');
-      db.prepare('INSERT INTO installation_ownership(singleton,record) VALUES(1,?)').run(encoded);
-      new SqliteExecutionPools(db).create(pool);
-    } else if (version === CURRENT_LEDGER_VERSION) exactReplay(db, encoded, pool);
-    else throw new InstallationLedgerError('INSTALLATION_LEDGER_CONFLICT');
-    commitAttempted = true; db.exec('COMMIT'); active = false;
-    if (db.prepare(journal[parsedOptions.data.journalMode]).get()?.journal_mode !== parsedOptions.data.journalMode) {
-      throw new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN');
-    }
-    return Object.freeze({ ownership, pool });
-  } catch (error) {
-    if (active) {
-      try { db.exec('ROLLBACK'); active = false; }
-      catch { throw new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN'); }
-    }
-    if (commitAttempted) throw new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN');
-    if (error instanceof InstallationLedgerError) throw error;
-    throw new InstallationLedgerError('INSTALLATION_LEDGER_UNAVAILABLE');
-  } finally { try { db.close(); } catch { /* The committed result remains authoritative. */ } }
+    ledgerTransaction(db, () => {
+      const version = db.prepare('PRAGMA user_version').get()?.user_version;
+      if (version === 0) {
+        if (userObjects(db).length !== 0) throw new InstallationLedgerError('INSTALLATION_LEDGER_CONFLICT');
+        migrateLedger(db, 'allow');
+        db.prepare('INSERT INTO installation_ownership(singleton,record) VALUES(1,?)').run(encoded);
+        new SqliteExecutionPools(db).create(pool);
+      } else if (version === CURRENT_LEDGER_VERSION) exactReplay(db, encoded, pool);
+      else throw new InstallationLedgerError('INSTALLATION_LEDGER_CONFLICT');
+    }, { unknown: outcomeUnknown, failure });
+    // After COMMIT every failure, including the journal mode not taking, leaves the outcome unknown.
+    try { if (db.prepare(journal[parsedOptions.data.journalMode]).get()?.journal_mode === parsedOptions.data.journalMode) return Object.freeze({ ownership, pool }); }
+    catch { /* unknown below */ }
+    throw outcomeUnknown();
+  } catch (error) { throw failure(error); }
+  finally { try { db.close(); } catch { /* The committed result remains authoritative. */ } }
 }
 
 /** Read-only final/replay verification. It never creates a path, starts a write transaction, or changes PRAGMAs. */
@@ -89,7 +82,7 @@ export async function verifyInstallationLedger(path: string, ownershipInput: unk
   if (typeof path !== 'string' || !path) throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
   const { ownership, pool, encoded } = inputs(ownershipInput, poolInput);
   let db: DatabaseSync;
-  try { const sqlite = await import('node:sqlite'); db = new sqlite.DatabaseSync(path, { readOnly: true }); }
+  try { db = openLedgerDatabase(path, { readOnly: true }); }
   catch { throw new InstallationLedgerError('INSTALLATION_LEDGER_UNAVAILABLE'); }
   try {
     if (db.prepare('PRAGMA user_version').get()?.user_version !== CURRENT_LEDGER_VERSION) {

@@ -4,10 +4,13 @@ import { RunStoreError, type RunReceipt } from '#engine/index.js';
 import { decodeStored, ledgerTransaction, sqliteFailure } from './options.js';
 /** `probing` (REVISE 2695): the custody written before the probe (its controller may still be probing); otherwise the 2693 uncertain hold. */
 export type EnvironmentProbeHold = Readonly<{ identity: AttemptIdentity; probes: readonly string[]; runRevision: number; probing: boolean }>;
-const decode = (snapshot: unknown) => decodeStored(runSnapshotSchema, snapshot, () => new RunStoreError('RUN_STORE_CORRUPT'));
+const corrupt = () => new RunStoreError('RUN_STORE_CORRUPT');
+const decode = (snapshot: unknown) => decodeStored(runSnapshotSchema, snapshot, corrupt);
+/** Another Attempt's row under this id is not this Attempt: null, not corrupt. */
 const attemptOf = (db: DatabaseSync, identity: AttemptIdentity) => {
   const row = db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-  try { const attempt = row ? attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))) : null; return attempt && sameAttemptIdentity(attempt.identity, identity) ? attempt : null; } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+  const attempt = row ? decodeStored(attemptSnapshotSchema, row.snapshot, corrupt) : null;
+  return attempt && sameAttemptIdentity(attempt.identity, identity) ? attempt : null;
 };
 const holdsOf = (db: DatabaseSync, run: RunSnapshot): EnvironmentProbeHold[] => run.bindings.flatMap((binding): EnvironmentProbeHold[] => {
   const task = run.progress.find(row => row.taskId === binding.identity.taskId), { scopeId, attemptId } = binding.identity;

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { EffectTargetError, type UninstallPlan } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import type { VerifiedBackup } from '#adapters/core/backup-store/index.js';
+import { openLedgerDatabase } from '#adapters/core/sqlite-ledger/index.js';
 import { productResourcePath, readPinnedFile, fileDigest, DECKENT_DIR, ErrorRegistry, type BoundMember, type ResolvedConfig, type ProductResource, type ConfigLoadOptions } from '#platform/index.js';
 import { memberStat, type DataRemovalMember, type DataRemovalSnapshot } from './data.js';
 import { writeUninstallIntent } from './tombstone.js';
@@ -18,8 +18,7 @@ async function bindMember(verified: VerifiedBackup, member: DataRemovalMember, b
   if (member.resourceId === 'ledger') {
     // Read-only readers leave empty SQLite sidecars; a checkpoint by the last connection removes them. Any left means another reader: keep.
     // node:sqlite loads only when a ledger is checkpointed, so importing the SDK never loads it (sqlite-ledger-lazy).
-    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    const db = new DatabaseSync(member.path, { timeout: busyTimeoutMs }); try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } finally { db.close(); }
+    const db = openLedgerDatabase(member.path, { timeout: busyTimeoutMs }); try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } finally { db.close(); }
     for (const suffix of ['-wal', '-shm', '-journal']) if (await lstat(member.path + suffix).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; })) unbound();
   }
   const before = await memberStat(member.path) && await readPinnedFile(member.path); if (!before) return unbound();

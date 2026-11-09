@@ -1,9 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { releaseRunQuota, runSnapshotSchema } from '#domain/index.js';
-import { AttemptStoreError, executionPoolSchema, runExecutionPolicySchema, quotaReleaseReceiptSchema, RunStoreError, type AuditStore, type QuotaReleaseWrite } from '#engine/index.js';
+import { releaseRunQuota } from '#domain/index.js';
+import { executionPoolSchema, runExecutionPolicySchema, quotaReleaseReceiptSchema, RunStoreError, type AuditStore, type QuotaReleaseWrite } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { decodeLedgerRunSnapshot, decodeStored, ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 const recordSchema = z.strictObject({ fingerprint: z.string(), receipt: quotaReleaseReceiptSchema });
 type ReleaseInput = Omit<QuotaReleaseWrite, 'authorizedPoolIds'>;
@@ -20,12 +20,9 @@ function priorReceipt(db: DatabaseSync, write: ReleaseInput) {
 function affectedRuns(db: DatabaseSync, write: ReleaseInput) {
   return db.prepare(`SELECT DISTINCT r.scope_id,r.run_id,r.snapshot,r.policy FROM run_quota_waits q
     JOIN runs r ON r.scope_id=q.scope_id AND r.run_id=q.run_id
-    WHERE q.channel_id=? AND q.deadline_ms>? AND q.released_at_ms IS NULL`).all(write.command.channelId, write.atMs).map(row => {
-    let run; try { run = runSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-    let policy; try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-    if (run.identity.scopeId !== row.scope_id || run.identity.runId !== row.run_id) throw new RunStoreError('RUN_STORE_CORRUPT');
-    return { run, poolId: policy.poolId };
-  });
+    WHERE q.channel_id=? AND q.deadline_ms>? AND q.released_at_ms IS NULL`).all(write.command.channelId, write.atMs).map(row => ({
+    run: decodeLedgerRunSnapshot(row.snapshot, String(row.scope_id), String(row.run_id)),
+    poolId: decodeStored(runExecutionPolicySchema, row.policy, () => new RunStoreError('RUN_STORE_CORRUPT')).poolId }));
 }
 /** Advisory authority scope; the writer re-reads it under BEGIN IMMEDIATE and refuses any unauthorized pool before its first write. */
 export function loadQuotaReleasePools(db: DatabaseSync, write: ReleaseInput): readonly string[] {
@@ -34,14 +31,12 @@ export function loadQuotaReleasePools(db: DatabaseSync, write: ReleaseInput): re
 }
 /** Indexed active waits, authoritative Run snapshots and sealed audit/receipt commit together; no synthetic reset signal. */
 export function releaseQuota(db: DatabaseSync, write: QuotaReleaseWrite, audit: (store: AuditStore, released: number, poolIds: readonly string[]) => void) {
-  let active = false;
-  try {
-    db.exec('BEGIN IMMEDIATE'); active = true;
+  return ledgerTransaction(db, () => {
     const { command, actor, atMs } = write, fingerprint = JSON.stringify({ command, actor });
     const prior = priorReceipt(db, write);
     if (prior) {
       if (prior.poolIds.some(id => !write.authorizedPoolIds.includes(id))) throw new RunStoreError('RUN_STORE_CONFLICT');
-      db.exec('COMMIT'); active = false; return prior;
+      return prior;
     }
     const pool = db.prepare('SELECT policy FROM execution_pools WHERE pool_id=?').get(command.poolId);
     if (!pool) throw new RunStoreError('RUN_POOL_REQUIRED');
@@ -64,9 +59,6 @@ export function releaseQuota(db: DatabaseSync, write: QuotaReleaseWrite, audit: 
     db.prepare('INSERT INTO quota_release_receipts(scope_id,command_id,record) VALUES(?,?,?)')
       .run(command.scopeId, command.commandId, JSON.stringify({ fingerprint, receipt }));
     audit(new SqliteAuditStore(db), released, poolIds);
-    db.exec('COMMIT'); active = false; return receipt;
-  } catch (error) {
-    if (active) { try { db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-    throw sqliteFailure(error);
-  }
+    return receipt;
+  });
 }

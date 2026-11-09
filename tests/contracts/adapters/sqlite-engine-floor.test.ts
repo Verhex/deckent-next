@@ -2,7 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openSqliteLedger, sqliteEngineMeetsFloor, assertSqliteEngineSupported, SQLITE_ENGINE_FLOOR } from '#adapters/core/sqlite-ledger/index.js';
+import { existsSync } from 'node:fs';
+import { openLedgerDatabase, openSqliteLedger, sqliteEngineMeetsFloor, assertSqliteEngineSupported, SQLITE_ENGINE_FLOOR } from '#adapters/core/sqlite-ledger/index.js';
+import { openMemoryEvaluationSourceReader } from '#adapters/core/memory-journal-store/index.js';
 import { AttemptStoreError } from '#engine/index.js';
 
 // DEPS-P0: 3.51.3 fixed the WAL-reset corruption bug present in every SQLite release from 3.7.0 through 3.51.2
@@ -49,6 +51,11 @@ describe('sqlite engine floor (DEPS-P0)', () => {
       try {
         expect(() => openSqliteLedger(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }))
           .toThrow(AttemptStoreError);
+        // The raw opener behind every other open (installer, inventory, backup copy and checkpoint, memory sources) refuses the same way.
+        expect(() => openLedgerDatabase(join(root, 'ledger.db'))).toThrow(AttemptStoreError);
+        await expect(openMemoryEvaluationSourceReader(join(root, 'ledger.db'), { busyTimeoutMs: 20 }, () => null, () => true))
+          .rejects.toMatchObject({ code: 'ATTEMPT_STORE_SQLITE_UNSUPPORTED' });
+        expect(existsSync(join(root, 'ledger.db'))).toBe(false);
       } finally { Object.defineProperty(process.versions, 'sqlite', { value: real, configurable: true, enumerable: true, writable: false }); }
     });
 
