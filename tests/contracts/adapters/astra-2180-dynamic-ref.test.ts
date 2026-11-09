@@ -42,7 +42,7 @@ it('Astra: nested dynamicRef output must not be accepted as schema-valid',async(
  const live={...tool('tree','structured',{outputSchema}),structured:{v:'ok',children:[{v:123}]}};
  const f=fixture('dual',[live]),server=f.server([pinOf(live)]),p=pool();
  expect(await p.open(server,settings([server]),context(f.root))).toMatchObject({ok:true});
- const answer=await p.call(server.id,'tree',pinOf(live).digest,{}, {timeoutMs:5000,signal:new AbortController().signal});
+ const answer=await p.call(server.id,'tree',pinOf(live).digest,{}, {timeoutMs:5000,signal:new AbortController().signal, admit: 'probe-only'});
  console.log('ASTRA_DYNAMIC_REF',JSON.stringify(answer));
  expect(answer).toMatchObject({outcome:'refused',reason:'invalid-output-schema'});
  expect(f.events().filter(event=>event.event==='call')).toHaveLength(0);
@@ -60,7 +60,7 @@ describe('MCP client: a recursive outputSchema through plain $ref', () => {
     const live = { ...tool('tree', 'structured', { outputSchema }), structured };
     const f = fixture('dual', [live]), server = f.server([pinOf(live)]), p = pool();
     expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true });
-    expect(await p.call(server.id, 'tree', pinOf(live).digest, {}, { timeoutMs: 5000, signal: new AbortController().signal })).toMatchObject(outcome);
+    expect(await p.call(server.id, 'tree', pinOf(live).digest, {}, { timeoutMs: 5000, signal: new AbortController().signal, admit: 'probe-only' })).toMatchObject(outcome);
     expect(f.events().filter(event => event.event === 'call')).toHaveLength(1);
   }, 30000);
 });

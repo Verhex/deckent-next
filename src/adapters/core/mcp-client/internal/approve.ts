@@ -8,7 +8,7 @@ import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js'
 import { displayMcpDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext, type McpPoolView } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, mcpToolWireName, type McpClientServerSettings } from './pin.js';
-import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, type McpScope, type McpServerEntry } from './registry.js';
+import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, MCP_VARIABLE_NAME, type McpScope, type McpServerEntry } from './registry.js';
 import { mcpCardLine, MCP_PROJECT_VARIABLES, readMcpTrust, updateMcpTrust, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 
 /** One trust change as the audit port records it (subject `mcp-trust`): never the command's values, only the definition and tool digests. */
@@ -43,7 +43,6 @@ export interface McpTrustCard {
   readonly execution?: Readonly<{ sandboxed: boolean; projectReadOnly: boolean }>;
   readonly tools?: readonly { readonly name: string; readonly digest: string; readonly description: string | null; readonly annotations: unknown; readonly alwaysAsk: boolean }[];
 }
-/** The owner's answer to one card: yes, no, or null when no answer came (a card that expired or a turn that ended): nothing is recorded then. */
 export type McpTrustAsk = (card: McpTrustCard) => Promise<boolean | null>;
 export interface McpTrustServer { readonly name: string; readonly scope: McpScope; readonly file: string; readonly definitionDigest: string; readonly entry: McpServerEntry;
   readonly trust: McpTrustRecord | null }
@@ -58,7 +57,7 @@ export interface McpTrustContext {
   readonly audit: McpTrustAudit;
   /** K1: the approver's grant for the trusted tools (absent: trust only, as before — a host without policy administration). */
   readonly grants?: McpToolGrantPort;
-  /** Where the record of this scope lives (user: the global root; project and local: the data root's `integrations`), prepared for writing. */
+  /** Where the record of this scope lives (SEC-2 F29: user trust in the global root, project and local trust in its per-project directory), prepared for writing. */
   readonly directory: (scope: McpScope) => Promise<string>;
   readonly inputMaxBytes?: number;
   readonly now?: () => number;
@@ -69,7 +68,6 @@ export interface McpTrustContext {
 }
 const toolsDigest = (tools: readonly { readonly name: string; readonly digest: string }[]) =>
   createHash('sha256').update(`mcp-tools:1\0${JSON.stringify(tools.map(tool => [tool.name, tool.digest]))}`).digest('hex');
-const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)/gu;
 /** The card's note (canonical English on the card; `describeMcpTrustCard` renders it in the reader's locale): what a project file may read
  * (F30), and (D6) that a trust record left in the project's data folder no longer decides anything. */
 export const mcpTrustNote = (scope: McpScope, moved: boolean, locale: Locale) => [...scope === 'project' ? [t('security.mcp.note.project', {
@@ -112,7 +110,7 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     // C5: the launch card already says what the realm means for the server's writes (the tools card then names the actual view).
     posture: realm ? mcpRealmPosture(realm) : MCP_HTTP_POSTURE,
     // A project file reads only allowlisted variables (F30): any other one is shown unset, because it reads as its default or empty.
-    variables: [...new Set(template.flatMap(text => [...text.matchAll(VARIABLE)].map(match => match[1]!)))].map(name => ({ name,
+    variables: [...new Set(template.flatMap(text => [...text.matchAll(MCP_VARIABLE_NAME)].map(match => match[1]!)))].map(name => ({ name,
       set: context.environment[name] !== undefined && context.environment[name] !== '' && (server.scope !== 'project' || MCP_PROJECT_VARIABLES.has(name)) })),
     note: mcpTrustNote(server.scope, options.moved === true, 'en') };
   const keep = (current: McpTrustRecord | null) => current?.reconnect ?? 0;

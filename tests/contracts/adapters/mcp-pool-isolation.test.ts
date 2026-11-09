@@ -37,7 +37,7 @@ function setup() {
   const pool = (options: { maxServers?: number } = {}) => { const created = new McpClientPool(new AbortController().signal, options); closers.push(() => created.close()); return created; };
   const signal = new AbortController().signal;
   const ask = async (view: ReturnType<McpClientPool['scoped']>, id = 'fx') => {
-    const answer = await view.call(id, 'where', mcpToolPinDigest(where), {}, { timeoutMs: 10_000, signal });
+    const answer = await view.call(id, 'where', mcpToolPinDigest(where), {}, { timeoutMs: 10_000, signal, admit: 'probe-only' });
     return answer.outcome === 'answered' && 'result' in answer ? JSON.parse((answer.result.content as { text: string }[])[0]!.text) as { pid: number; cwd: string } : answer;
   };
   const log = (dir: string) => existsSync(join(dir, 'calls.log')) ? readFileSync(join(dir, 'calls.log'), 'utf8').split('\n').filter(Boolean) : [];
@@ -92,10 +92,10 @@ describe.skipIf(process.platform === 'win32')('the MCP pool never shares a proce
     await viewA.open(server('token-a'), settings([server('token-a')]), { cwd: a, environment: {}, sandboxes: [] });
     const before = http.requests.length;
     await viewB.open(server('token-b'), settings([server('token-b')]), { cwd: b, environment: {}, sandboxes: [] });
-    await viewB.call('web', 'echo', mcpToolPinDigest(echo), {}, { timeoutMs: 10_000, signal: new AbortController().signal });
+    await viewB.call('web', 'echo', mcpToolPinDigest(echo), {}, { timeoutMs: 10_000, signal: new AbortController().signal, admit: 'probe-only' });
     expect(http.requests.slice(before).every(request => request.headers['authorization'] === 'Bearer token-b')).toBe(true);
     const fromA = http.requests.length;
-    await viewA.call('web', 'echo', mcpToolPinDigest(echo), {}, { timeoutMs: 10_000, signal: new AbortController().signal });
+    await viewA.call('web', 'echo', mcpToolPinDigest(echo), {}, { timeoutMs: 10_000, signal: new AbortController().signal, admit: 'probe-only' });
     expect(http.requests.slice(fromA).every(request => request.headers['authorization'] === 'Bearer token-a')).toBe(true);
   }, 60_000);
 });
@@ -127,7 +127,7 @@ describe.skipIf(process.platform === 'win32')('MCP HTTP never follows a redirect
     // On a call: the proxied requests reached the target through the front; after the switch nothing more does.
     redirecting = true;
     const proxied = target.requests.length;
-    const answer = await view.call('web', 'echo', mcpToolPinDigest(echo), { secret: 'BODY' }, { timeoutMs: 10_000, signal: new AbortController().signal });
+    const answer = await view.call('web', 'echo', mcpToolPinDigest(echo), { secret: 'BODY' }, { timeoutMs: 10_000, signal: new AbortController().signal, admit: 'probe-only' });
     expect(answer).not.toMatchObject({ ok: true });
     expect(target.requests.length).toBe(proxied);
     // On connect: a fresh view whose first request is redirected never reaches the target either.
