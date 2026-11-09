@@ -49,9 +49,11 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
       families.push(input.families); return { status: 'preview', expect: 'd'.repeat(64), added: [{}] }; } };
     const port = await configuredSetup(host).openOnboarding(f.root, 'erp-demo', '', { env: { ...f.env, PATH: f.empty } });
     const view = await port.observe({});
-    expect(await configuredSetup({}).inspectCodingRepository(f.root, { env: { ...f.env, PATH: f.empty } })).toMatchObject({ state: 'done' });
+    expect(await configuredSetup({}).inspectCodingRepository(f.root, { env: { ...f.env, PATH: f.empty } }))
+      .toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.noCommitsInfo' } });
     expect(view.folderFacts.kind).toBe('coding');
     expect(view.hosts.every(row => row.cli !== 'found')).toBe(true);
+    expect(view.plan.stages.find(row => row.id === 'coding:first-commit')).toMatchObject({ state: 'ready' });
     expect(view.plan.stages.find(row => row.id === 'work:kind')).toMatchObject({ state: 'needs-answer' });
     expect(families).toEqual([OWNER_BASELINE_DEFAULT_FAMILIES]);
   }, 120_000);

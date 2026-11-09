@@ -631,12 +631,15 @@ describe('stage 1 budget window (/model and /provider)', () => {
     const screen = mount(element, 100, 40);
     await settle(80);
     expect(screen.frame()).toContain('Bütçeyi değiştir'); expect(screen.frame()).toContain('Şu anki bütçe: 25 USD (revizyon 2)');
-    await screen.press(`${ENTER}${DOWN}${DOWN}${DOWN}${ENTER}`);
+    await screen.press(ENTER);
+    expect(screen.frame()).toMatch(/>.*25 USD/u);
+    await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain('Bu kapsamın ortak bütçesi 50 USD olsun mu?');
     expect(screen.frame()).toContain('Evet, ayarla ve aşım dondurmasını kaldır');
     await screen.press(`${DOWN}${DOWN}${ENTER}`);
     expect(budget.applied).toEqual([]);
-    await screen.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
+    expect(screen.frame()).toMatch(/>.*25 USD/u);
+    await screen.press(`${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
     expect(budget.applied).toEqual([{ action: 'change', usd: 50, unfreeze: true }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
