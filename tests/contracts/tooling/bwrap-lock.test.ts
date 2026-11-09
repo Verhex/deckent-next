@@ -3,10 +3,9 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rm
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-// BWRAP-BUNDLE: the shipped bubblewrap is identified by one lock (source, build image, every package, outputs); the build refuses a lock
-// that does not pin all of them, and the notice shipped next to the binary names its license, exact source and linked components.
+// BWRAP-BUNDLE: source, image, sysroot and output identities stay locked; host tools resolve at build time.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { BWRAP_ARCHES, bundledIdentityModule, bundleProblems, bwrapNotice, IDENTITY_MODULE, lockProblems, resolvedPackagePins, stageBundle } from '../../../scripts/build-bwrap.mjs';
+import { BWRAP_ARCHES, bundledIdentityModule, bundleProblems, bwrapNotice, dockerOutputOwner, IDENTITY_MODULE, lockProblems, resolvedPackagePins, stageBundle } from '../../../scripts/build-bwrap.mjs';
 
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const buildScript = readFileSync(new URL('../../../packaging/bwrap/build.sh', import.meta.url), 'utf8');
@@ -25,10 +24,13 @@ function fakeBuild() {
 }
 
 describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
-  it('pins source, image, every package and one output per architecture; a missing pin is a named problem', () => {
+  it('pins source, image, sysroot and one output per architecture; host tools may be unpinned', () => {
     expect(lockProblems(lock)).toEqual([]);
     expect(Object.keys(lock.outputs).sort()).toEqual([...BWRAP_ARCHES].sort());
-    expect(mutated(copy => { copy.hostPackages[0] = 'clang22'; })).toEqual(['hostPackages[0] is not pinned (name=version): clang22']);
+    expect(lock.hostPackages.every((spec: string) => !spec.includes('='))).toBe(true);
+    expect(mutated(copy => { copy.hostPackages[0] = 'clang22=22.1.3-r2'; })).toEqual([]);
+    expect(mutated(copy => { copy.hostPackages[0] = 'clang22; touch /tmp/unsafe'; })).toEqual(['hostPackages[0] is not a package name or pin: clang22; touch /tmp/unsafe']);
+    expect(mutated(copy => { copy.sysrootPackages[0] = 'musl-dev'; })).toEqual(['sysrootPackages[0] is not pinned (name=version): musl-dev']);
     expect(mutated(copy => { copy.buildImage.reference = 'alpine:3'; })).toEqual(['buildImage.reference is not pinned by digest: alpine:3']);
     expect(mutated(copy => { copy.source.sha256 = 'abc'; })).toEqual(['source.sha256 is not a sha256: abc']);
     expect(mutated(copy => { delete copy.outputs.aarch64; })).toEqual(['outputs.aarch64.sha256 is not a sha256: undefined']);
@@ -37,11 +39,11 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     expect(mutated(copy => { copy.resolvedPackages.host[0] = 'python3'; })).toEqual(['resolvedPackages.host[0] is not name-version: python3']);
   });
 
-  it('constrains transitive packages as well as direct requests; malformed inventory fails rather than yielding an unpinned request', () => {
+  it('retains host inventory and constrains direct and transitive sysroot packages; malformed inventory fails', () => {
     const hostPins = resolvedPackagePins(lock.resolvedPackages.host) as string[];
-    expect(hostPins).toContain('python3-pycache-pyc0=3.14.10-r1');
-    expect(hostPins).toContain('nghttp2-libs=1.70.0-r0');
-    for (const pin of lock.hostPackages) expect(hostPins).toContain(pin);
+    expect(resolvedPackagePins(['python3-pycache-pyc0-3.14.10-r1', 'nghttp2-libs-1.70.0-r0']))
+      .toEqual(['python3-pycache-pyc0=3.14.10-r1', 'nghttp2-libs=1.70.0-r0']);
+    for (const name of lock.hostPackages) expect(hostPins.some((pin: string) => pin.startsWith(`${name}=`))).toBe(true);
     for (const arch of BWRAP_ARCHES) {
       const sysrootPins = resolvedPackagePins(lock.resolvedPackages[`sysroot-${arch}`]) as string[];
       for (const pin of lock.sysrootPackages) expect(sysrootPins).toContain(pin);
@@ -56,6 +58,16 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     for (const option of lock.mesonOptions) expect(buildScript).toContain(option);
     expect(buildScript).not.toMatch(/chmod\s+(?:[0-7]*[4-7][0-7]{3}\b|[ug]\+s)/u);
     expect(lock.license).toBe('LGPL-2.1-or-later');
+    expect(buildScript).not.toContain('HOST_RESOLVED_PACKAGES');
+    expect(buildScript).toContain('$sysroot_pkgs $resolved_pkgs');
+    const info = (data: unknown) => dockerOutputOwner((binary: string, args: string[]) => {
+      expect(binary).toBe('docker'); expect(args).toEqual(['info', '--format', '{{json .}}']); return JSON.stringify(data);
+    });
+    expect(info({ SecurityOptions: ['name=seccomp,profile=builtin', 'name=rootless'] })).toBe('');
+    expect(info({ host: { security: { rootless: true } } })).toBe('');
+    expect(info({ SecurityOptions: ['name=seccomp,profile=builtin'] })).toBe(`${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`);
+    expect(info({ host: { security: { rootless: false } } })).toBe(`${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`);
+    expect(() => dockerOutputOwner(() => { throw new Error('Cannot connect to the Docker daemon'); })).toThrow('Cannot connect');
   });
 
   it('ships a notice with the license, the exact corresponding source and every linked component', () => {
@@ -92,6 +104,9 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     writeFileSync(join(build, 'out', 'x86_64', 'bwrap'), 'tampered\n'); chmodSync(join(build, 'out', 'x86_64', 'bwrap'), 0o755);
     expect(() => stageBundle(build, join(root, 'again'), copy)).toThrow(/is not the locked/u);
     expect(existsSync(join(root, 'again'))).toBe(false); // refused before anything is written
+    rmSync(join(build, 'out', 'x86_64', 'bwrap'));
+    expect(() => stageBundle(build, target, copy)).toThrow(/Incomplete bubblewrap output.*fresh directory/u);
+    expect(readFileSync(join(target, 'linux-x64', 'bwrap'), 'utf8')).toBe('other\n');
   });
 });
 

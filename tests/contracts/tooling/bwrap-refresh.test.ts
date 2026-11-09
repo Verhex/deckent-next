@@ -20,7 +20,8 @@ describe('candidate pin resolution', () => {
   it('refreshes transitive and direct pins together and requires every sysroot closure', () => {
     const resolved = closure(); resolved.host = resolved.host!.map(pin => pin.replace('meson-1.11.1-r0', 'meson-1.11.1-r1'));
     const candidate = refreshedLock(lock, resolved);
-    expect(candidate.hostPackages).toContain('meson=1.11.1-r1'); expect(candidate.resolvedPackages).toEqual(resolved);
+    expect(candidate.hostPackages).toContain('meson'); expect(candidate.hostPackages).toEqual(lock.hostPackages); expect(candidate.resolvedPackages).toEqual(resolved);
+    expect(refreshedLock({ ...lock, hostPackages: ['meson=1.11.1-r0'] }, resolved).hostPackages).toEqual(['meson=1.11.1-r1']);
     delete resolved['sysroot-aarch64']; expect(() => refreshedLock(lock, resolved)).toThrow('missing resolved closure: sysroot-aarch64');
   });
   it('refuses a direct pin with different versions across architectures and unverified linked-license upgrades', () => {
@@ -58,8 +59,10 @@ describe('candidate pin resolution', () => {
     const resolved = closure(); resolved.host = resolved.host!.map(pin => pin.replace('meson-1.11.1-r0', 'meson-1.11.1-r1'));
     const calls: string[][] = [];
     const execute = (_binary: string, args: string[]) => {
+      if (args[0] === 'info') return JSON.stringify({ host: { security: { rootless: true } } });
       calls.push(args);
       if (args[0] === 'run') {
+        expect(args.some(arg => arg.startsWith('OUT_OWNER='))).toBe(false);
         expect(args).toContain(lock.buildImage.reference);
         const mount = args.find(arg => arg.endsWith(':/out'))!;
         for (const [key, lines] of Object.entries(resolved)) writeFileSync(join(mount.slice(0, -5), `${key}-packages.txt`), lines.join('\n'));
@@ -103,6 +106,7 @@ describe('bounded PR publication (no live requests)', () => {
   const recording = (calls: { method: string; path: string; body: Record<string, unknown> | undefined }[]) => async (method: string, path: string, body?: Record<string, unknown>) => {
     calls.push({ method, path, body });
     if (path.includes('/pulls?')) return [];
+    if (path.includes('/git/matching-refs/')) return [];
     if (path.includes('/git/ref/')) return null;
     if (path.includes('/git/commits/') && method === 'GET') return { tree: { sha: 'base-tree' } };
     if (path.endsWith('/git/trees')) return { sha: 'candidate-tree' };
@@ -117,6 +121,31 @@ describe('bounded PR publication (no live requests)', () => {
     expect(tree.map(entry => entry.path)).toEqual(REFRESH_PATHS);
     expect(calls.at(-1)!.body).toMatchObject({ draft: true, base: 'main', head: input.branch, body: refreshBody(lock, input.candidateLock, EVIDENCE) });
     expect(calls.some(call => call.method === 'PATCH' || call.method === 'PUT' || call.path.includes('/merge'))).toBe(false);
+    const priorRef = async (method: string, path: string, body?: Record<string, unknown>) => path.includes('/git/ref/')
+      ? { object: { sha: 'prior-commit' } } : path.endsWith('/git/commits/prior-commit')
+        ? { tree: { sha: 'candidate-tree' } } : recording(calls)(method, path, body);
+    calls.length = 0;
+    await publish({ ...input, request: priorRef });
+    expect(calls.some(call => call.path.endsWith('/git/refs'))).toBe(false);
+    const old = 'build/bwrap-pins-fedcba9876543210', human = 'build/bwrap-pins-1111111111111111', reviewed = 'build/bwrap-pins-2222222222222222';
+    calls.length = 0;
+    const withOrphans = async (method: string, path: string, body?: Record<string, unknown>) => {
+      if (path.includes('/git/matching-refs/')) return [old, input.branch, human, reviewed, 'build/bwrap-pins-unrelated'].map(branch => ({ ref: `refs/heads/${branch}`, object: { sha: branch === human ? 'human' : 'bot' } }));
+      if (path.includes('/pulls?') && path.includes(encodeURIComponent(reviewed))) return [{ html_url: 'reviewed-pr' }];
+      if (path.includes('/commits/bot')) return { author: { login: 'github-actions[bot]' }, commit: { message: 'build(bwrap): refresh pins (Alpine 3.24)' }, files: [{ filename: REFRESH_PATHS[0] }] };
+      if (path.includes('/commits/human')) return { author: { login: 'human' } };
+      if (method === 'POST' && path.endsWith('/pulls')) throw new Error('GitHub request failed: HTTP 403');
+      return recording(calls)(method, path, body);
+    };
+    const fallback = await publish({ ...input, request: withOrphans });
+    expect(fallback.issue).toBe('https://example.test/pr'); expect(fallback.warning).toContain('HTTP 403');
+    expect(calls.filter(call => call.method === 'DELETE').map(call => call.path)).toEqual([old, input.branch].map(branch => `/repos/example/repo/git/refs/heads/${branch}`));
+    expect(calls.findIndex(call => call.method === 'DELETE')).toBeLessThan(calls.findIndex(call => call.path.endsWith('/git/refs')));
+    expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/repos/example/repo/issues', body: { body: expect.stringContaining(EVIDENCE) } });
+    await expect(publish({ ...input, request: async (method: string, path: string, body?: Record<string, unknown>) => {
+      if (path.endsWith('/issues')) throw new Error('issues disabled');
+      return withOrphans(method, path, body);
+    } })).rejects.toThrow(/BWRAP_REFRESH_PR_FAILED.*issues disabled.*Evidence:/u);
   });
   it('builds the PR body from the verified locks and its own run link, never from the untrusted PR-BODY.md (SEC F36)', async () => {
     const input = candidate(), calls: { method: string; path: string; body: Record<string, unknown> | undefined }[] = [];
@@ -156,7 +185,8 @@ describe('publish re-verifies the candidate written by npm-installed code', () =
   });
   it('refuses pin, resolved-package and output values that do not match the strict shapes (no code can ride into the generated module)', async () => {
     const injected = "' }); process.exit(1); ({ x: '";
-    for (const change of [{ hostPackages: [...lock.hostPackages.slice(1), `llvm22=${injected}`] }, { resolvedPackages: { ...lock.resolvedPackages, host: ['$(curl evil)-1-r0'] } },
+    for (const change of [{ hostPackages: [...lock.hostPackages.slice(1), `llvm22=${injected}`] }, { hostPackages: lock.hostPackages.map((name: string) => name === 'clang22' ? 'clang22=22.1.3-r2' : name) },
+      { hostPackages: ['unexpected-tool', ...lock.hostPackages.slice(1)] }, { resolvedPackages: { ...lock.resolvedPackages, host: ['$(curl evil)-1-r0'] } },
       { outputs: { ...lock.outputs, x86_64: { ...lock.outputs.x86_64, sha256: injected } } }]) {
       const input = base(), candidateLock = { ...lock, ...change };
       writeFileSync(join(input.out, 'files', REFRESH_PATHS[0]!), JSON.stringify(candidateLock)); writeFileSync(join(input.out, 'files', REFRESH_PATHS[1]!), bundledIdentityModule(candidateLock));

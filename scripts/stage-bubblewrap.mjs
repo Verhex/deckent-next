@@ -27,9 +27,9 @@ export function stageBubblewrap({ root: ROOT, run, platform = process.platform, 
     else {
       // The same locked download/digest/Docker recipe CI uses; failures must stop the source build.
       const out = join(ROOT, '.pack', 'bwrap', 'source-build');
-      if (existsSync(out)) throw new Error(`Incomplete locked bubblewrap output at ${out}. Remove that disposable output or set DECKENT_BWRAP_BUILD to a verified build.`);
+      if (existsSync(out)) throw new Error(`Incomplete locked bubblewrap output at ${out}. Keep it for diagnosis. Build into a fresh directory with node scripts/build-bwrap.mjs --out <fresh-directory>, then set DECKENT_BWRAP_BUILD=<fresh-directory> and rerun npm run build.`);
       try { run(process.execPath, [join(ROOT, 'scripts/build-bwrap.mjs'), '--out', out]); }
-      catch (error) { throw new Error(`BUBBLEWRAP_BUILD_REQUIRED: locked bubblewrap ${lock.version} staging failed. Start Docker and rerun npm run build, or set DECKENT_BWRAP_BUILD to a verified build-bwrap output.`, { cause: error }); }
+      catch (error) { throw new Error(`BUBBLEWRAP_BUILD_REQUIRED: locked bubblewrap ${lock.version} staging failed: ${error.message}. Start Docker, build with node scripts/build-bwrap.mjs --out <fresh-directory>, then set DECKENT_BWRAP_BUILD=<fresh-directory> and rerun npm run build.`, { cause: error }); }
       stageBundle(out, target, lock); state = 'staged from locked source build';
     }
   }

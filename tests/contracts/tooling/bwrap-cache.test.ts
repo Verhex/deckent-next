@@ -43,7 +43,7 @@ function fixture() {
   for (const [name, content] of [['bubblewrap-COPYING', 'copying'], ['musl-COPYRIGHT', 'musl'], ['libcap-License', 'libcap']]) write(`built/out/licenses/${name}`, content!);
   return { root, lock, build, cached: join(root, 'cache/build-x86_64'), arches: ['x86_64'] };
 }
-it('treats absence as miss; a hit verifies APK checksums, exact closure, source and locked binary before copying', () => {
+it('treats absence as miss; a hit verifies APK checksums, exact sysroot closure, source and locked binary before copying', () => {
   const f = fixture(), target = join(f.root, 'target');
   expect(restoreBuild(f.cached, target, f.root, f.lock, f.arches)).toBe(false);
   saveBuild(f.build, f.cached, f.root, f.lock, f.arches);
@@ -60,11 +60,18 @@ it('rejects tampered binary even if the cache checksum manifest was rewritten to
   manifest.files['out/x86_64/bwrap'] = sha('other'); writeFileSync(path, JSON.stringify(manifest));
   expect(() => verifyCache(f.cached, f.root, f.lock, f.arches)).toThrow(/locked sha256 mismatch/u);
 });
-it.each(['host', 'sysroot-x86_64'])('refuses a different %s closure before saving', key => {
+it.each(['host', 'sysroot-x86_64'])('records host drift but refuses a different sysroot closure before saving (%s)', key => {
   const f = fixture(), path = key === 'host' ? 'host-packages.txt' : 'x86_64/sysroot-packages.txt';
   writeFileSync(join(f.build, 'out', path), 'different-1.0-r0\n');
-  expect(() => saveBuild(f.build, f.cached, f.root, f.lock, f.arches)).toThrow(/package closure differs/u);
-  expect(existsSync(f.cached)).toBe(false);
+  if (key === 'host') {
+    saveBuild(f.build, f.cached, f.root, f.lock, f.arches);
+    expect(() => verifyCache(f.cached, f.root, f.lock, f.arches)).not.toThrow();
+    writeFileSync(join(f.cached, 'out/host-packages.txt'), 'tampered');
+    expect(() => verifyCache(f.cached, f.root, f.lock, f.arches)).toThrow(/file\/APK checksums/u);
+  } else {
+    expect(() => saveBuild(f.build, f.cached, f.root, f.lock, f.arches)).toThrow(/package closure differs/u);
+    expect(existsSync(f.cached)).toBe(false);
+  }
 });
 it.each(CACHE_INPUTS as string[])('binds cache identity to %s and target architecture', path => {
   const f = fixture(); saveBuild(f.build, f.cached, f.root, f.lock, f.arches);
@@ -84,18 +91,46 @@ it('the real driver consumes a verified hit without Docker, network or an execut
   expect(stdout).toContain('verified cache hit; no Docker or Alpine access');
   expect(readFileSync(join(f.root, 'served/out/x86_64/bwrap'), 'utf8')).toBe('binary-x86_64');
 });
-it.skipIf(process.platform === 'win32')('cache miss errors retain the failing build log and identify the refresh path; no implicit retry', () => {
+it.skipIf(process.platform === 'win32')('cache miss errors distinguish Docker and sysroot failures, retain logs and offer a non-destructive retry', () => {
   const f = fixture(), cache = join(f.root, 'downloads'), bin = join(f.root, 'bin'); mkdirSync(cache); mkdirSync(bin);
   writeFileSync(join(cache, `bubblewrap-${f.lock.version}.tar.xz`), 'source');
   mkdirSync(join(f.root, 'packaging/bwrap/licenses'));
   for (const [name, content] of [['musl-COPYRIGHT', 'musl'], ['libcap-License', 'libcap']]) writeFileSync(join(f.root, 'packaging/bwrap/licenses', name!), content!);
-  writeFileSync(join(bin, 'docker'), '#!/bin/sh\necho vanished-apk >&2\nexit 42\n'); chmodSync(join(bin, 'docker'), 0o755);
+  const docker = join(bin, 'docker');
+  writeFileSync(docker, '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"SecurityOptions":[]}\'; exit; fi\necho "ERROR: sysroot pin vanished" >&2\necho BWRAP_PIN_REFRESH_REQUIRED >&2\nexit 42\n'); chmodSync(docker, 0o755);
   const out = join(f.root, 'miss');
   try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--reuse', '--arch', 'x86_64', '--cache', cache, '--out', out],
     { env: { ...process.env, PATH: bin }, stdio: 'pipe' }); expect.unreachable(); }
-  catch (error) { expect(String((error as { stderr: Buffer }).stderr)).toContain('BWRAP_BUILD_FAILED: cache miss build failed. If Alpine pins vanished, run the platform verification deps-watch refresh'); }
-  expect(readFileSync(join(out, 'build.log'), 'utf8')).toContain('vanished-apk');
+  catch (error) {
+    const stderr = String((error as { stderr: Buffer }).stderr);
+    expect(stderr).toContain('BWRAP_BUILD_FAILED: Docker build/probe failed: ERROR: sysroot pin vanished');
+    expect(stderr).toContain('deps-watch'); expect(stderr).toContain('--out <fresh-directory>');
+  }
+  expect(readFileSync(join(out, 'build.log'), 'utf8')).toContain('sysroot pin vanished');
   expect(existsSync(join(cache, 'build-x86_64'))).toBe(false);
+  writeFileSync(join(out, 'personal-data'), 'keep');
+  expect(() => capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--out', out],
+    { env: { ...process.env, PATH: bin } })).toThrow();
+  expect(readFileSync(join(out, 'personal-data'), 'utf8')).toBe('keep');
+  writeFileSync(docker, '#!/bin/sh\necho "Cannot connect to the Docker daemon at unix:///missing.sock" >&2\nexit 1\n');
+  try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--arch', 'x86_64', '--cache', cache, '--out', join(f.root, 'unreachable')],
+    { env: { ...process.env, PATH: bin } }); expect.unreachable(); }
+  catch (error) {
+    const stderr = String((error as { stderr: Buffer }).stderr);
+    expect(stderr).toContain('Cannot connect to the Docker daemon'); expect(stderr).not.toContain('Alpine pins');
+    expect(stderr).not.toContain('deps-watch'); expect(stderr).toContain('--out <fresh-directory>');
+  }
+  for (const [mode, info] of Object.entries({ rootless: { SecurityOptions: ['name=rootless'] }, podman: { host: { security: { rootless: true } } }, rootful: { SecurityOptions: [] } })) {
+    writeFileSync(docker, `#!/bin/sh\nif [ "$1" = info ]; then echo '${JSON.stringify(info)}'; exit; fi\necho "$*" >&2\nexit 42\n`);
+    const dest = join(f.root, mode);
+    expect(() => capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--arch', 'x86_64', '--cache', cache, '--out', dest],
+      { env: { ...process.env, PATH: bin } })).toThrow();
+    const argv = readFileSync(join(dest, 'build.log'), 'utf8');
+    expect(argv.includes('OUT_OWNER=')).toBe(mode === 'rootful');
+    expect(argv).not.toContain('HOST_RESOLVED_PACKAGES=');
+    expect(argv).toContain('SYSROOT_X86_64_RESOLVED_PACKAGES=');
+    expect(argv).toContain('musl=1.2.6-r3');
+  }
 });
 it('committed license texts match the lock, and a missing or altered text refuses the build before any download or Docker run', () => {
   const lock = JSON.parse(readFileSync(join(repo, 'packaging/bwrap/bwrap.lock.json'), 'utf8'));

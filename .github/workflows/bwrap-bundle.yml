@@ -1,6 +1,6 @@
 name: bwrap-bundle
 # BWRAP-SELECT (owner S5, 2026-09-29): the bundled bubblewrap is built in CI from packaging/bwrap/bwrap.lock.json in check mode (no
-# --record: any sha256 or resolved-package drift fails), never committed to Git and never downloaded at install. The x86_64 output is
+# --record: any output sha256 or sysroot-package drift fails), never committed to Git and never downloaded at install. The x86_64 output is
 # staged where the runtime resolves it and the launcher/realm tests run against it. aarch64 is built and checked but not shipped until a
 # real arm64 host runs the realm tests (lock shipArches; the arm64 job below stays disabled until then).
 # Actions pinned by commit (release tags read 2026-09-29: checkout v7.0.1, setup-node v7.0.0, upload-artifact v7.0.1, download-artifact v8.0.1).

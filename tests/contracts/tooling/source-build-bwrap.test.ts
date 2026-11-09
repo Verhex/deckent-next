@@ -21,6 +21,11 @@ it('a fresh Linux source build invokes the existing locked recipe and fails clea
   } })).toThrow(/BUBBLEWRAP_BUILD_REQUIRED.*locked bubblewrap.*Start Docker/u);
   expect(calls).toEqual([{ binary: process.execPath, args: [join(root, 'scripts/build-bwrap.mjs'), '--out', join(root, '.pack/bwrap/source-build')] }]);
   expect(existsSync(join(root, 'dist/adapters/core/shell-sandbox-bwrap/bundled'))).toBe(false);
+  mkdirSync(join(root, '.pack/bwrap/source-build'), { recursive: true });
+  writeFileSync(join(root, '.pack/bwrap/source-build/personal-data'), 'keep');
+  expect(() => stageBubblewrap({ root, platform: 'linux', buildOutput: null, run() { expect.unreachable(); } }))
+    .toThrow(/Keep it for diagnosis.*--out <fresh-directory>.*DECKENT_BWRAP_BUILD/u);
+  expect(readFileSync(join(root, '.pack/bwrap/source-build/personal-data'), 'utf8')).toBe('keep');
 });
 it('an invalid staged binary is refused rather than reported as a successful ABSENT build', () => {
   const root = fixture(); const bundled = join(root, 'src/adapters/core/shell-sandbox-bwrap/bundled');
