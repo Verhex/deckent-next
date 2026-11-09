@@ -142,7 +142,7 @@ it('K22: K1 reads scoped inputs, predecessor handoff and dependency views; rejec
   const { mkdir, symlink, link, unlink } = await import('node:fs/promises');
   const { loadConfiguredScopeContext } = await import('#composition/core/scoped-request/index.js');
   const { fixtureDockerRegistry } = await import('../support/execution-registry.js');
-  const f = await brainProviderFixture(), c = await connection(), attempt = await mkdtemp(join(tmpdir(), 'k22-inputs-')); temporary.push(attempt);
+  const f = await brainProviderFixture(), c = await connection(), custody = await mkdtemp(join(tmpdir(), 'k22-inputs-')), attempt = join(custody, 'workspace'); temporary.push(custody); await mkdir(attempt);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -164,12 +164,38 @@ it('K22: K1 reads scoped inputs, predecessor handoff and dependency views; rejec
       readOnlyMounts: [{ source: dependencies, target: '/worker-deps' }] };
     port = await adapters.withMcpPrincipal(() => runtime.openTools(request, {} as NativeCliWorkerBinding, new AbortController().signal, resources));
     let sequence = 0;
-    const read = (path: string) => { const id = `input-${++sequence}`; return adapters.withMcpPrincipal(() => port!.propose({ id, name: 'read_file', argumentsJson: JSON.stringify({ path }) },
+    const read = (path: string, extra: object = {}) => { const id = `input-${++sequence}`; return adapters.withMcpPrincipal(() => port!.propose({ id, name: 'read_file', argumentsJson: JSON.stringify({ path, ...extra }) },
       { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal)); };
     for (const path of ['/deckent/inputs/prior', '/deckent/inputs/_handoff/first.json']) expect((await read(path)).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('task-one-delivered') });
     expect((await read('/worker-deps/note.txt')).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('dependency-only') });
     expect((await read('/worker-deps/../policy.json')).outcome.status).toBe('error');
+    await writeFile(prepared.path, 'changed-source'); await writeFile(join(dependencies, 'note.txt'), 'changed-dependency');
+    expect((await read('/deckent/inputs/prior', { startLine: 1 })).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('task-one-delivered') });
+    expect((await read('/worker-deps/note.txt', { startLine: 1 })).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('dependency-only') });
+    const { chmod, readdir } = await import('node:fs/promises');
+    const snapshot = join(custody, (await readdir(custody)).find(name => name.startsWith('worker-inputs-'))!);
+    const copy = join(snapshot, '0'); expect(await readFile(copy, 'utf8')).toBe('task-one-delivered');
+    await chmod(copy, 0o600); await writeFile(copy, 'forged-copy-bytes'); await chmod(copy, 0o400);
+    expect((await read('/deckent/inputs/prior', { endLine: 1 })).outcome.status).toBe('error');
+    await writeFile(prepared.path, 'task-one-delivered');
     await adapters.withMcpPrincipal(() => port!.cancel()); port = undefined;
+    const { prepareNativeWorkerInputs } = await import('../../../src/composition/core/execution/internal/worker-inputs.js');
+    const bounds = { allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 8, maxFileBytes: 64, maxTotalBytes: 128, timeoutMs: 5000 };
+    const admit = (changes = {}, maxBytes = 64) => prepareNativeWorkerInputs(resources, 's', f.project, attempt, context.layout, { ...bounds, ...changes }, maxBytes, 4096);
+    for (const changes of [{ maxFiles: 1 }, { maxFileBytes: 1 }, { maxTotalBytes: 1 }, { timeoutMs: 0 }]) await expect(admit(changes)).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
+    await expect(admit({}, 1)).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
+    const views = await admit(), owned = views.views[0]!.source;
+    await chmod(owned, 0o600); await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' }); await chmod(owned, 0o400);
+    const shared = join(custody, 'shared-copy'); await link(owned, shared);
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' }); await unlink(shared);
+    const saved = await readFile(owned); await unlink(owned); await symlink(prepared.path, owned);
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' }); await unlink(owned); await writeFile(owned, saved, { mode: 0o400 });
+    await views.validate();
+    await chmod(owned, 0o600); await writeFile(owned, Buffer.alloc(saved.length, 'x')); await chmod(owned, 0o400);
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
+    await chmod(owned, 0o600); await writeFile(owned, saved); await chmod(owned, 0o400); await views.validate();
+    await writeFile(join(views.views[2]!.source, 'injected'), 'unexpected');
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
     const open = (resources: Parameters<NativeCliWorkerPorts['openTools']>[3]) => adapters.withMcpPrincipal(() => runtime.openTools(request, {} as NativeCliWorkerBinding, new AbortController().signal, resources));
     await expect(open({ inputs: [{ ...resources.inputs[0]!, receipt: { ...receipt, scopeId: 'other' } }] })).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
     await expect(open({ inputs: [{ ...resources.inputs[0]!, path: join(attempt, 'outside') }] })).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
@@ -265,7 +291,7 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
   const { configuredApproval } = await import('#composition/core/approvals/index.js');
   const { createTerminalRuntimeClient, terminalRuntimePeer } = await import('../support/terminal-runtime-client.js');
   const { approvalRecordSchema } = await import('#domain/index.js');
-  const f = await brainProviderFixture(), c = await connection(), workspace = await mkdtemp(join(tmpdir(), 'k22-readonly-')); temporary.push(workspace);
+  const f = await brainProviderFixture(), c = await connection(), custody = await mkdtemp(join(tmpdir(), 'k22-readonly-')), workspace = join(custody, 'workspace'); temporary.push(custody); await mkdir(workspace);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -327,6 +353,13 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
       expect((await pending).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('Read-only file system') });
     }
     expect(await readFile(prepared.path, 'utf8')).toBe('immutable-input'); expect(await readFile(join(dependencies, 'note.txt'), 'utf8')).toBe('immutable-dependency');
+    const { chmod, readdir } = await import('node:fs/promises');
+    for (const name of (await readdir(custody)).filter(name => name.startsWith('worker-inputs-'))) {
+      const copy = join(custody, name, '0'); await chmod(copy, 0o600); await writeFile(copy, 'corrupted-input'); await chmod(copy, 0o400);
+    }
+    for (const [id, name, args] of [['corrupt-read', 'read_file', { path: '/deckent/inputs/locked' }], ['corrupt-shell', 'run_shell', { command: 'ls note.txt' }]] as const)
+      expect((await adapters.withMcpPrincipal(() => port!.propose({ id, name, argumentsJson: JSON.stringify(args) },
+        { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal))).outcome.status).toBe('error');
     await adapters.withMcpPrincipal(() => port!.cancel()); port = undefined; expect(f.posts).toBe(0);
   } finally { if (port) await adapters.withMcpPrincipal(() => port!.cancel()); await f.close(); }
 });
