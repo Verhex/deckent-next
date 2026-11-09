@@ -2,6 +2,7 @@ import { BeuserTransferError, assertUnsealedInstallation } from '#engine/core/be
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policySchema, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry, DeckentError, sha256 } from '#platform/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { backupCommandSchema, type BackupAuthority, type BackupAudit, type BackupAuthorization, type BackupStoragePort } from './contract.js';
 /** The single governed application for human and AI backup callers. Policy and audit never see the passphrase. */
 export class BackupApplication {
@@ -21,7 +22,7 @@ export class BackupApplication {
     });
     if (decision.effect !== 'allow') {
       await this.audit(event('refused', 'BACKUP_POLICY_DENIED'), this.authority.integrity);
-      throw ErrorRegistry.createError(decision.effect === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'BACKUP_POLICY_DENIED');
+      throw ErrorRegistry.createError(policyVerdictRefusal(decision.effect, { deny: 'BACKUP_POLICY_DENIED' }) ?? 'BACKUP_POLICY_DENIED');
     }
     await this.audit(event('intent', null), this.authority.integrity);
     let applied = false;

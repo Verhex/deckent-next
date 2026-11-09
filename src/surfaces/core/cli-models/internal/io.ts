@@ -1,4 +1,4 @@
-import { DeckentError, emit, getConfigFieldDefault, loadConfig, t, type Locale } from '#platform/index.js';
+import { DeckentError, emit, getConfigFieldDefault, isAuthorizationRefusal, loadConfig, PERSON_AUTHORIZATION_REFUSALS, t, type Locale } from '#platform/index.js';
 import { askCliCard, cliMode, type CliCardOption, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import type { ModelCommandContext } from './context.js';
 
@@ -27,7 +27,7 @@ export async function retirementWarningDays(context: ModelCommandContext): Promi
 }
 /** A denied activation change on a person's terminal: the typed denial stays, preceded by the step that resolves it (template candidate C3). */
 export function explainActivationDenial(error: unknown, context: ModelCommandContext, locale: Locale, action: 'activate' | 'deactivate', scope: string): never {
-  if (error instanceof DeckentError && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED')) {
+  if (error instanceof DeckentError && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS })) {
     emit(t('climodels.models.denied', { action, scope }, locale), { level: 'warning', ...modelsSinks(context) });
   }
   throw error;

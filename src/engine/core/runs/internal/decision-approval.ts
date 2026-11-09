@@ -3,7 +3,7 @@ import { approvalDecisionClass, approvalRequestSchema, encodeCommandProjection, 
   ApprovalError, policySchema, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import { MAX_WALL_SKEW_MS, sha256, t, type IntegrityAuthority, type Locale } from '#platform/index.js';
 import { RunLifecycleError, type RunDecisionAuthorization, type RunDecisionEvidence, type RunLifecycleCommand, type RunLifecycleWrite } from './lifecycle.js';
-import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval, minimumApprovalAssurance, type ApprovalStore } from '#engine/core/approval/index.js';
 /** Decision routing reuses the existing task subject, command-bound digest, sealed store and approval decision owner. */
 export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
@@ -27,7 +27,7 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     const control = evaluatePolicy(policy, { principal, scopeId: command.scopeId,
       action: taskStep ? 'evaluate' : command.action === 'hold' || command.action === 'close' ? 'cancel' : 'reserve',
       resource: { kind: taskStep ? 'attempt' : 'run', id: targetId } });
-    if (control.decision !== 'allow') throw new PolicyAuthorizationError(control.decision === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'POLICY_DENIED');
+    const refusal = policyVerdictRefusal(control.decision, { deny: 'POLICY_DENIED' }); if (refusal) throw new PolicyAuthorizationError(refusal);
     const ruleId = ordinary ? control.ruleId : explicitDecisionGrant(policy, principal, command.scopeId, kind, id, command.action);
     const evidence = (deciderClass: RunDecisionEvidence['deciderClass'], rule?: string, approvalId?: string): RunDecisionEvidence => ({ schemaVersion: 1,
       deciderClass, step: ordinary ? 'operator-control' : 'human-step', policyRevision: policy.revision, ...(rule ? { ruleId: rule } : {}), ...(approvalId ? { approvalId } : {}) });

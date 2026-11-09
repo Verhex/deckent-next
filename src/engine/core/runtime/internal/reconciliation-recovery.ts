@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Buffer } from 'node:buffer';
 import { attemptIdentitySchema, identitySchema } from '#domain/index.js';
+import { isAuthorizationRefusal } from '#platform/index.js';
 import { dispatchTerminalSchema, type DispatchInventoryPage } from '#engine/core/dispatch/index.js';
 
 const inputSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable() }).readonly();
@@ -22,9 +23,7 @@ export type ReconciliationRecoveryPage = Readonly<{ nextAfter: string | null; ou
 
 function failureReason(error: unknown): 'denied' | 'unavailable' {
   const code = z.looseObject({ code: z.string() }).safeParse(error);
-  return code.success && ['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED', 'POLICY_DENIED',
-    'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(code.data.code)
-    ? 'denied' : 'unavailable';
+  return code.success && isAuthorizationRefusal(code.data.code, { include: ['authentication', 'policy-denied', 'approval-unsupported', 'scope-unknown'] }) ? 'denied' : 'unavailable';
 }
 function follows(value: string, previous: string) {
   return Buffer.compare(Buffer.from(value, 'utf8'), Buffer.from(previous, 'utf8')) > 0;

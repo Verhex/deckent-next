@@ -1,5 +1,6 @@
 import { delegationWithin, evaluatePolicy, policyResources, policySchema, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 
 /** Current authority to consume an assigned execution pool. */
 export interface PoolAuthorization {
@@ -13,9 +14,8 @@ export class PoolPolicyAuthorization implements PoolAuthorization {
     try { decision = evaluatePolicy(await this.source.load(), { principal, action: policyResources.pool.actions[0], scopeId,
       resource: { kind: policyResources.pool.kind, id: poolId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
 }
 
@@ -46,7 +46,7 @@ export class PoolControlPolicyAuthorization implements PoolControlAuthorization 
 }
 /** Throws the typed refusal of a recorded decision; an allowed decision passes. */
 export function assertPoolControlAllowed(decision: PoolControlDecision): void {
-  if (decision.effect === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-  if (decision.effect !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+  const refusal = policyVerdictRefusal(decision.effect, { deny: 'POLICY_DENIED' });
+  if (refusal) throw new PolicyAuthorizationError(refusal);
   if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
 }

@@ -3,6 +3,8 @@ import type { ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 /** KG3 F3: the authorization-refusal class a code belongs to. One class per code; a caller names the classes it counts (`isAuthorizationRefusal`). */
 export type AuthorizationRefusal = 'policy-denied' | 'approval-unsupported' | 'scope-unknown' | 'approval-denied' | 'policy-unavailable' | 'authentication' | 'delivery';
+/** Owner B2-1 (2026-11-09): the one authorization-refusal class every person-facing surface counts; engine recovery and reconciliation keep their own lists. */
+export const PERSON_AUTHORIZATION_REFUSALS: readonly AuthorizationRefusal[] = Object.freeze(['policy-denied', 'approval-unsupported', 'scope-unknown', 'approval-denied', 'delivery']);
 /** One registered error code: its exit category, the localized renderer, its refusal class and its launch disposition (`permanent` closes the
  * Attempt as `launch-refused`, `held` parks the Run; absent = transient). */
 export interface ErrorDefinition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry;

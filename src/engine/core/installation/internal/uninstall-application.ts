@@ -6,7 +6,7 @@ import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } fro
 import { OperationPolicyAuthorization, type EffectApplication } from '#engine/core/effect/index.js';
 import { uninstallApplySchema, UninstallError, UNINSTALL_TIERS, type UninstallItem, type UninstallPlan, type UninstallResult } from './uninstall-contract.js';
 import { createUninstallPlan, uninstallRegistry, uninstallBlockerError, uninstallPlanDrift, uninstallOperationDescriptors, type UninstallInventory } from './uninstall-plan.js';
-import { PolicyAuthorizationError, RunPolicyAuthorization } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, policyVerdictRefusal, RunPolicyAuthorization } from '#engine/core/policy/index.js';
 
 /** Every scope the lifecycle decision covers: configured, every policy-named (deny/legal hold included) and every ledger-recorded scope. */
 export const uninstallAffectedScopes = (policy: unknown, configured: readonly string[], recorded: readonly string[] = []): readonly string[] =>
@@ -18,7 +18,7 @@ export function authorizeUninstall(input: unknown, principal: VerifiedPrincipal,
   for (const scopeId of scopeIds) {
     const decision = evaluatePolicy(document, { principal, scopeId, action, resource: { kind: 'installation', id: installationId } });
     const grant = principalGrants(document, principal).find(grant => grant.id === decision.ruleId);
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' }); if (refusal === 'POLICY_APPROVAL_UNSUPPORTED') throw new PolicyAuthorizationError(refusal);
     if (decision.decision !== 'allow' || grant?.scopes !== 'all') {
       if (action === 'purge') throw ErrorRegistry.createError('UNINSTALL_PURGE_DENIED', { params: { owner: decision.ruleId ?? scopeId } });
       if (action === 'uninstall' && decision.reason === 'DENIED') throw ErrorRegistry.createError('UNINSTALL_MANAGED', { params: { owner: decision.ruleId ?? scopeId } });

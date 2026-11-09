@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, FILE_SECRET_STORE_ID, type SecretCustody, type SecretStore } from './port.js';
 import type { SecretChangeAudit, SecretChangeDecision } from './administration.js';
 import { assertSecretRelocation } from './protection.js';
@@ -162,7 +163,7 @@ export class SecretStoreSwitch {
       subject: { kind: 'secret-store-switch', from, to: request.to, entries, downgrade, decision: { effect: decision.effect, ruleId: decision.ruleId } } };
     if (decision.effect === 'allow') { await this.ports.audit(event); return; }
     try { await this.ports.audit(event); } catch { /* an unrecordable refusal is still a refusal */ }
-    if (decision.effect === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
-    throw ErrorRegistry.createError('SECRET_STORE_SWITCH_DENIED', { params: { to: request.to } });
+    const refusal = policyVerdictRefusal(decision.effect, { deny: 'SECRET_STORE_SWITCH_DENIED' });
+    throw ErrorRegistry.createError(refusal ?? 'SECRET_STORE_SWITCH_DENIED', refusal === 'POLICY_APPROVAL_UNSUPPORTED' ? {} : { params: { to: request.to } });
   }
 }

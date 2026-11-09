@@ -1,6 +1,6 @@
 import { persistedString, persistedInteger, attemptIdentitySchema, identitySchema, readWorkerFinalReport, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, type WorkerFinalReportResult } from '#domain/index.js';
 import { z } from 'zod';
-import type { KnownSecretSnapshot } from '#platform/index.js';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type KnownSecretSnapshot } from '#platform/index.js';
 import { parseRetainedOutputEnvelope, type DispatchIdentityAuthorization, type RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import { describeAttemptWorkerModels, WorkerObservationError, type WorkerEventArtifacts, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { RunStoreError, type RunAuthorization, type RunStore } from '#engine/core/runs/index.js';
@@ -14,7 +14,7 @@ export const deliverySummaryRequestSchema = z.strictObject({ schemaVersion: z.li
   /** A queue ticket's command id: the host derives its verification Run id (surfaces never load the queue naming code). */
   ticketCommandId: identitySchema.optional() }).readonly();
 export type DeliverySummaryRequest = z.infer<typeof deliverySummaryRequestSchema>;
-/** The target adapter's change filler; null = no change evidence. A policy refusal it throws becomes `withheld`. */
+/** The target adapter's change filler; null = no change evidence. A person-facing authorization refusal it throws becomes `withheld`. */
 export type DeliveryChangeSource = (identity: AttemptIdentity, principal: VerifiedPrincipal) => Promise<DeliveryChangeFacts | null>;
 export interface DeliverySummaryPorts {
   readonly store: Pick<RunStore, 'loadRun'> & Pick<RunBoundDispatchStore, 'loadBoundDispatch'> & Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
@@ -22,8 +22,7 @@ export interface DeliverySummaryPorts {
   readonly runs: RunAuthorization; readonly attempts: DispatchIdentityAuthorization;
   readonly change?: DeliveryChangeSource; readonly known?: KnownSecretSnapshot;
 }
-const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error
-  && ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'APPROVAL_DENIED'].includes(String(error.code));
+const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS });
 async function readable(check: () => Promise<void>): Promise<boolean> {
   try { await check(); return true; } catch (error) { if (denied(error)) return false; throw error; }
 }

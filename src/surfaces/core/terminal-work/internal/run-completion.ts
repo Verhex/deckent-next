@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, type WorkLedgerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
@@ -41,8 +42,7 @@ export function useRunCompletion(input: { readonly limit: number | undefined; re
   const [tracked, setTracked] = useState<readonly TrackedRun[]>([]);
   const publish = useCallback(() => setTracked(Object.freeze([...records.current.values()].map(record => Object.freeze({ run: record.run, sinceMs: record.sinceMs })))), []);
   const [generation, advance] = useState(0);
-  const [pending, setPending] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [pending, setPending] = useState(false), [denied, setDenied] = useState(false);
   const observe = useCallback((runs: readonly RunView[]) => {
     let changed = false;
     for (const run of runs) {
@@ -90,7 +90,7 @@ export function useRunCompletion(input: { readonly limit: number | undefined; re
         if (current() && run) observe([run]);
       }
     }, error => {
-      if (['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED'].includes(String((error as { code?: unknown })?.code))) setDenied(true);
+      if (isAuthorizationRefusal((error as { code?: unknown })?.code, { include: PERSON_AUTHORIZATION_REFUSALS })) setDenied(true);
       input.push([systemSummaryEntry(input.errorText(error), 'error')]);
     });
   return { register, observe, generation, tracked, dismiss };

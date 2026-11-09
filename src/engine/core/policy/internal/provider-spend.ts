@@ -1,6 +1,7 @@
 import { evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 import type { ProviderSpendAccountAuthorizer, ProviderSpendAuditAuthorization } from '#engine/core/provider-spend/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 
 /** A model-invocation grant never implies access to the shared account of its scope. */
 export class ProviderSpendAccountPolicyAuthorization implements ProviderSpendAccountAuthorizer, ProviderSpendAuditAuthorization {
@@ -12,9 +13,8 @@ export class ProviderSpendAccountPolicyAuthorization implements ProviderSpendAcc
       decision = evaluatePolicy(await this.source.load(), { principal, scopeId: target.scopeId, action,
         resource: { kind: policyResources.providerSpendAccount.kind, id: target.budgetId } });
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
     if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
     return Object.freeze({ revision: decision.revision, ruleId: decision.ruleId });
   }

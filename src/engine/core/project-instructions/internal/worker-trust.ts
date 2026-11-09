@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policyResources, type AuthorityDecisionSubject, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import type { ProjectInstructionView } from './contract.js';
 
 export interface WorkerInstructionTrustRequest {
@@ -69,8 +70,8 @@ export async function decideWorkerInstructionTrust(request: WorkerInstructionTru
     inputDigest: hash('worker-instructions-trust:3', { action: request.action, ...request.binding }),
     basisDigest: request.binding.digest, policyDigest: hash('policy:1', ports.policy),
     verdict: { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason, ...(verdict.ruleId === undefined ? {} : { ruleId: verdict.ruleId }) } }, ports.now());
-  if (verdict.decision === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
-  if (verdict.decision !== 'allow') throw ErrorRegistry.createError('POLICY_DENIED');
+  const refusal = policyVerdictRefusal(verdict.decision, { deny: 'POLICY_DENIED' });
+  if (refusal) throw ErrorRegistry.createError(refusal);
   await ports.apply();
   return record.event.eventId;
 }

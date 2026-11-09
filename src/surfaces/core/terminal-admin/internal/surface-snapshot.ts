@@ -1,3 +1,4 @@
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import type { SurfaceSnapshotAccess, SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorklineLedgerPorts, WorklineSurfaceSnapshot, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 
@@ -18,7 +19,7 @@ export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => P
         if (kind === 'run') data.runs = await (await import('#surfaces/core/terminal-ledger/index.js')).loadRunViewsForWatch(ports);
         if (kind === 'approval' && ports.listApprovalPage) data.approvals = (await (await import('#surfaces/core/approval-presentation/index.js')).scanPendingApprovals(ports.listApprovalPage, Date.now())).pending;
       } catch (error) {
-        if (['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED'].includes(String((error as { code?: unknown })?.code))) denied.add(kind);
+        if (isAuthorizationRefusal((error as { code?: unknown })?.code, { include: PERSON_AUTHORIZATION_REFUSALS })) denied.add(kind);
         else throw error;
       }
     }

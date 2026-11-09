@@ -1303,7 +1303,8 @@
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
         "src/surfaces/core/recovery-text",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },
@@ -1795,7 +1796,8 @@
         "src/engine/core/provider-catalog",
         "src/domain/core/model-invocation",
         "src/domain/core/audit",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
@@ -2367,7 +2369,8 @@
         "src/capabilities/core/artifacts",
         "src/domain/core/worker-event",
         "src/domain/core/principal",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
     },
@@ -2470,7 +2473,8 @@
         "src/composition/core/resource-observation",
         "src/engine/core/dispatch",
         "src/engine/core/monitor",
-        "src/adapters/core/native-cli-worker"
+        "src/adapters/core/native-cli-worker",
+        "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
     },
@@ -2532,7 +2536,8 @@
         "src/platform/core/redaction",
         "src/domain/core/agent-turn",
         "src/domain/core/adapter-registry",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/errors"
       ],
       "plan": "SECURITY"
     },
@@ -2906,7 +2911,8 @@
         "src/domain/core/principal",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/domain/core/command"
+        "src/domain/core/command",
+        "src/engine/core/policy"
       ],
       "plan": "SECURITY"
     },
@@ -3032,7 +3038,8 @@
         "src/composition/core/agent-catalog",
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store",
-        "src/composition/core/workspace-patch"
+        "src/composition/core/workspace-patch",
+        "src/platform/core/errors"
       ],
       "plan": "MONITOR"
     },
@@ -3114,7 +3121,8 @@
         "src/domain/core/approval",
         "src/domain/core/command",
         "src/platform/core/integrity",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/engine/core/policy"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3352,7 +3360,8 @@
         "src/domain/core/audit",
         "src/domain/core/principal",
         "src/platform/core/errors",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/engine/core/policy"
       ],
       "plan": "SURFACES"
     },
@@ -3438,7 +3447,8 @@
         "src/platform/core/integrity",
         "src/platform/core/validate",
         "src/platform/core/utils",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -3664,7 +3674,8 @@
         "src/platform/core/validate",
         "src/domain/core/principal",
         "src/domain/core/identity-profile",
-        "src/engine/core/identity-profile"
+        "src/engine/core/identity-profile",
+        "src/engine/core/policy"
       ],
       "plan": "PROVIDERS"
     },
@@ -4077,7 +4088,8 @@
         "src/platform/core/output",
         "src/engine/core/dispatch",
         "src/engine/core/worker-observation",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/platform/core/errors"
       ],
       "plan": "CONTRACT"
     },

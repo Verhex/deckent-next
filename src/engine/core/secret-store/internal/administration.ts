@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
 import { assertPublicSecretName, assertSecretStorageProtection } from './protection.js';
 
@@ -93,7 +94,7 @@ export class SecretStoreAdministration {
         decision: { effect: decision.effect, ruleId: decision.ruleId } } };
     if (decision.effect === 'allow') { await this.audit(event); return; }
     try { await this.audit(event); } catch { /* an unrecordable refusal is still a refusal */ }
-    if (decision.effect === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
-    throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action, name: request.name } });
+    const refusal = policyVerdictRefusal(decision.effect, { deny: 'SECRET_CHANGE_DENIED' });
+    throw ErrorRegistry.createError(refusal ?? 'SECRET_CHANGE_DENIED', refusal === 'POLICY_APPROVAL_UNSUPPORTED' ? {} : { params: { action, name: request.name } });
   }
 }
