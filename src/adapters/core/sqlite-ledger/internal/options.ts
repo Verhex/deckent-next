@@ -15,19 +15,23 @@ export function sqliteFailure(error: unknown): unknown {
   return error;
 }
 export type LedgerTransactionOptions = Readonly<{ mode?: 'write' | 'read'; join?: boolean; unknown?: () => Error; failure?: (error: unknown) => unknown }>;
-/** The one synchronous ledger transaction (`write` = BEGIN IMMEDIATE, `read` = one deferred snapshot; `join` runs inside the caller's open
+/** One ledger transaction over a synchronous SQLite connection (`write` = BEGIN IMMEDIATE, `read` = one deferred snapshot; `join` runs inside the caller's open
  * transaction, which owns commit and rollback). Owner B1-9 (a): once COMMIT was attempted, or when ROLLBACK fails, the outcome is unknown
- * until reconciled; every earlier failure is the caller's mapping (default `sqliteFailure`). */
+ * until reconciled; every earlier failure is the caller's mapping (default `sqliteFailure`). A Promise keeps the transaction open until it settles. */
 export function ledgerTransaction<T>(db: DatabaseSync, work: () => T, { mode = 'write', join = false, failure = sqliteFailure,
   unknown = () => new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN') }: LedgerTransactionOptions = {}): T {
   if (join && db.isTransaction) return work();
   let active = false, committing = false;
-  try { db.exec(mode === 'write' ? 'BEGIN IMMEDIATE' : 'BEGIN'); active = true; const value = work(); committing = true; db.exec('COMMIT'); return value; }
-  catch (error) {
+  const commit = <V>(value: V): V => { committing = true; db.exec('COMMIT'); return value; };
+  const fail = (error: unknown): never => {
     if (active) { try { db.exec('ROLLBACK'); } catch { throw unknown(); } }
     if (committing) throw unknown();
     throw failure(error);
-  }
+  };
+  try {
+    db.exec(mode === 'write' ? 'BEGIN IMMEDIATE' : 'BEGIN'); active = true; const value = work();
+    return value instanceof Promise ? value.then(commit).catch(fail) as T : commit(value);
+  } catch (error) { return fail(error); }
 }
 /** One stored JSON column decoded by its schema; a parse failure or a failed `matches` (identity, scope, revision) throws the caller's error. */
 export function decodeStored<S extends z.ZodType>(schema: S, stored: unknown, error: () => Error, matches: (value: z.output<S>) => boolean = () => true): z.output<S> {

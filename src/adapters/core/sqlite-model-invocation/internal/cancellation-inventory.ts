@@ -1,11 +1,10 @@
 import { persistedInteger } from '#domain/index.js';
-import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { modelInvocationCancellationInventoryQuerySchema, ModelInvocationStoreError, verifyModelInvocationReceipt,
   type ModelInvocationCancellationInventory, type ModelInvocationCancellationInventoryEntry,
   type ModelInvocationCancellationInventoryPage } from '#engine/index.js';
-import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationControl, invocationControlSelect } from './control.js';
 
 const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647) });
@@ -58,9 +57,7 @@ export function openSqliteModelInvocationCancellationInventory(path: string,
   if (typeof path !== 'string' || !path || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   let db: DatabaseSync | undefined;
   try {
-    assertSqliteEngineSupported(process.versions.sqlite);
-    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
+    db = openLedgerDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION);
     return new SqliteModelInvocationCancellationInventory(db);
   } catch (error) {

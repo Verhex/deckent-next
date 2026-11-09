@@ -1,3 +1,4 @@
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteHubServiceTransaction } from './service.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { canonicalHubJson, hubEnvelopeSchema, hubPackageSchema, hubRevocationFeedSchema } from '#domain/index.js';
@@ -96,14 +97,9 @@ export class SqliteHubStore implements HubServerStore {
     const next = this.tail.then(work); this.tail = next.catch(() => undefined); return next;
   }
   transaction<T>(work: (transaction: HubServerTransaction) => Promise<T>): Promise<T> {
-    return this.serial(async () => {
-      this.db.exec('BEGIN IMMEDIATE');
-      try { const result = await work(this.view); this.db.exec('COMMIT'); return result; }
-      catch (error) {
-        try { this.db.exec('ROLLBACK'); } catch { throw new HubServerError('HUB_STORE_OUTCOME_UNKNOWN'); }
-        throw error;
-      }
-    });
+    return this.serial(() => ledgerTransaction(this.db, () => work(this.view), {
+      unknown: () => new HubServerError('HUB_STORE_OUTCOME_UNKNOWN'), failure: error => error,
+    }));
   }
   latestFeed() { return this.serial(() => this.view.latestFeed()); }
   revocations(targets: Parameters<HubServerTransaction['revocations']>[0]) { return this.serial(() => this.view.revocations(targets)); }

@@ -3,15 +3,13 @@ import { encodeCommandProjection, targetQueueRequestSchema, targetQueueRecordSch
   type TargetQueueRequest, type TargetQueueRecord } from '#domain/index.js';
 import { targetQueueKey, decodeTargetQueueRow, assertTargetQueueBounds, newQueueRecord, assertQueueChange, type TargetQueueStore, type TargetQueueBounds, type TargetQueueAudit } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { EFFECT_OPEN_STATE_SQL } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, EFFECT_OPEN_STATE_SQL } from '#adapters/core/sqlite-ledger/index.js';
 const open = "state NOT IN('settled','cancelled','expired','parked')";
 /** Short ledger transactions only; audit and queue CAS commit together. The service owns this writer, never the public client. */
 export class SqliteTargetQueue implements TargetQueueStore {
   constructor(private readonly db: DatabaseSync) {}
   private transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const result = work(); this.db.exec('COMMIT'); return result; }
-    catch (error) { try { this.db.exec('ROLLBACK'); } catch { throw new TargetQueueError('QUEUE_RECOVERY_REQUIRED'); } throw error; }
+    return ledgerTransaction(this.db, work, { unknown: () => new TargetQueueError('QUEUE_RECOVERY_REQUIRED'), failure: error => error });
   }
   load(scopeId: string, commandId: string): TargetQueueRecord | null {
     const row = this.db.prepare('SELECT * FROM target_queue WHERE scope_id=? AND command_id=?').get(scopeId, commandId);

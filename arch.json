@@ -1819,6 +1819,7 @@
     },
     "src/adapters/core/sqlite-agent-turn": {
       "dependencies": [
+        "src/engine/core/attempts",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/agent-tool",
         "src/engine/core/agent-turn",
@@ -4604,6 +4605,7 @@
     },
     "src/adapters/core/hub-store": {
       "dependencies": [
+        "src/adapters/core/sqlite-ledger",
         "src/domain/core/hub",
         "src/domain/core/primitives",
         "src/platform/core/integrity",
@@ -5431,7 +5433,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42233,
+      "adapters": 42123,
       "surfaces": 45000,
       "composition": 13655
     },
