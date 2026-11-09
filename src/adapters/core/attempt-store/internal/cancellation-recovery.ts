@@ -1,11 +1,9 @@
 import { MAX_WALL_SKEW_MS } from '#platform/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
-import { cancellationDeliverySchema, cancellationRecoveryPage, cancellationRecoveryQuerySchema, CancellationDeliveryError,
-  type CancellationRecoveryQuery, type CancellationRecoveryQueryStore } from '#engine/index.js';
-import { dispatchRecordSchema } from '#engine/index.js';
+import { cancellationDeliverySchema, cancellationRecoveryPage, cancellationRecoveryQuerySchema, CancellationDeliveryError, type CancellationRecoveryQuery, type CancellationRecoveryQueryStore, dispatchRecordSchema } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
-import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { readRunBoundDispatch } from '#adapters/core/run-store/index.js';
 
 export class SqliteCancellationRecoveryQuery implements CancellationRecoveryQueryStore {
   constructor(private readonly db: DatabaseSync) {}

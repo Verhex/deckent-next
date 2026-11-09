@@ -5,7 +5,9 @@ export async function openSqliteAttemptStore(path: string, options: SqliteLedger
   const { SqliteAttemptStore } = await import('./internal/sqlite.js');
   return new SqliteAttemptStore(path, options, timing, migration, profiles);
 }
-export { InstallationLedgerError } from './internal/installation.js'; export { SqliteExecutionPools } from './internal/pools.js';
+export { InstallationLedgerError } from './internal/installation.js';
+/** @deprecated Import SqliteExecutionPools from run-store; retained for one release. */
+export { SqliteExecutionPools } from '#adapters/core/run-store/index.js';
 export type { InstallationLedgerErrorCode, InstallationLedgerOwnership } from './internal/installation.js';
 /** Load the native driver only for the explicit installer operation. */
 export async function initializeInstallationLedger(path: string, options: SqliteLedgerOptions, ownership: unknown, pool: unknown) {
@@ -38,3 +40,5 @@ export async function upgradeExistingProductLedger(path: string, options: Sqlite
   return upgradeExistingLedger(path, options, backupDirectory, now, profiles, companyId, installationIdentity);
 }
 export type { LedgerUpgrade } from '#adapters/core/sqlite-ledger/index.js';
+/** @deprecated Import Run journal readers from run-store; retained for one release. */
+export { SqliteRunJournal, readRunReceipt, readRunSnapshot } from '#adapters/core/run-store/index.js';

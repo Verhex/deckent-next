@@ -1,7 +1,7 @@
 import type { AttemptIdentity } from '#domain/index.js';
 import type { WorkspaceSource } from '#engine/core/workspaces/index.js';
 import { createHash } from 'node:crypto';
-import { patchExclusions, workspacePatchSchema, patchPathSchema, historyPathSchema, isPatchExcluded, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchFile, type PatchLimits } from './contract.js';
+import { patchExclusions, workspacePatchSchema, patchPathSchema, historyPathSchema, isPatchExcluded, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchFile, type PatchLimits } from '#engine/core/workspace-patch-contract/index.js';
 export type Snapshot = Map<string, PatchFile>;
 /** Base tree entry from the trusted source repository: identity only, no content read. */
 export type BaseEntry = Readonly<{ mode: PatchFile['mode']; oid: string; size: number }>;

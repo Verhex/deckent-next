@@ -116,13 +116,11 @@
       "dependencies": [
         "src/adapters/core/quota-control-store",
         "src/adapters/core/service-shutdown-store",
-        "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
         "src/adapters/core/sqlite-ledger",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
-        "src/domain/core/effect",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
@@ -131,18 +129,18 @@
         "src/engine/core/run-progression",
         "src/engine/core/runs",
         "src/engine/core/runtime",
-        "src/engine/core/scheduling",
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",
         "src/engine/core/worker-observation",
         "src/engine/core/workspace-patch",
-        "src/engine/core/workspaces",
         "src/platform/core/clock",
-        "src/domain/core/worker-event",
-        "src/adapters/core/run-proposal-store",
         "src/adapters/core/target-queue-store",
         "src/adapters/core/sqlite-model-invocation",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/adapters/core/run-store",
+        "src/engine/core/workspace-adoption",
+        "src/engine/core/workspace-patch-contract",
+        "src/adapters/core/sqlite-effect-store"
       ],
       "plan": "STORE"
     },
@@ -542,7 +540,6 @@
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
         "src/engine/core/worker-observation",
-        "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
         "src/platform/core/bootstrap-state",
         "src/platform/core/errors",
@@ -568,7 +565,8 @@
         "src/engine/core/beuser-realm",
         "src/engine/core/project-attachment",
         "src/capabilities/core/native-agent-execution",
-        "src/engine/core/uninstall"
+        "src/engine/core/uninstall",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "FOUNDATION"
     },
@@ -695,7 +693,8 @@
         "src/engine/core/provider-catalog",
         "src/composition/core/model-use",
         "src/capabilities/core/native-agent-execution",
-        "src/adapters/core/native-cli-registry"
+        "src/adapters/core/native-cli-registry",
+        "src/engine/core/workspace-adoption"
       ],
       "plan": "EXECUTION"
     },
@@ -1028,7 +1027,8 @@
         "src/engine/core/workspace-patch",
         "src/platform/core/redaction",
         "src/platform/core/errors",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "CONTRACT"
     },
@@ -1645,7 +1645,8 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/sqlite-ledger",
         "src/engine/core/installation",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/adapters/core/run-store"
       ],
       "plan": "INSTALLATION"
     },
@@ -2329,9 +2330,9 @@
         "src/engine/core/handoff-observation",
         "src/domain/core/worker-event",
         "src/platform/core/errors",
-        "src/engine/core/workspace-patch",
         "src/domain/core/task-evaluation",
-        "src/domain/core/recovery"
+        "src/domain/core/recovery",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "EXECUTION"
     },
@@ -2400,7 +2401,6 @@
         "src/domain/core/run",
         "src/domain/core/principal",
         "src/domain/core/task-graph",
-        "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/redaction",
         "src/engine/core/effect",
@@ -2411,7 +2411,9 @@
         "src/engine/core/audit",
         "src/engine/core/delivery-summary",
         "src/domain/core/provider-catalog",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/engine/core/workspace-adoption",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "ISOLATION"
     },
@@ -2436,7 +2438,9 @@
         "src/adapters/core/native-cli-worker",
         "src/platform/core/config-fields",
         "src/platform/core/utils",
-        "src/adapters/core/file-lock"
+        "src/adapters/core/file-lock",
+        "src/engine/core/workspace-adoption",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "ISOLATION"
     },
@@ -2467,7 +2471,9 @@
         "src/engine/core/audit",
         "src/engine/core/runtime",
         "src/adapters/core/native-cli-worker",
-        "src/engine/core/working-tree-rollback"
+        "src/engine/core/working-tree-rollback",
+        "src/engine/core/workspace-adoption",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "ISOLATION"
     },
@@ -3147,7 +3153,6 @@
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
         "src/platform/core/output",
-        "src/engine/core/workspace-patch",
         "src/domain/core/principal",
         "src/engine/core/recovery",
         "src/engine/core/audit",
@@ -3156,7 +3161,8 @@
         "src/adapters/core/local-keyring",
         "src/adapters/core/recovery-case-store",
         "src/domain/core/recovery",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "MONITOR"
     },
@@ -3572,7 +3578,9 @@
         "src/engine/core/workspaces",
         "src/surfaces/core/delivery-summary",
         "src/surfaces/core/monitor",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/engine/core/workspace-patch-contract",
+        "src/engine/core/workspace-adoption"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -3948,7 +3956,9 @@
         "src/surfaces/core/delivery-summary",
         "src/engine/core/working-tree-rollback",
         "src/surfaces/core/delivery-port",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/engine/core/workspace-adoption",
+        "src/engine/core/workspace-patch-contract"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4515,9 +4525,9 @@
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
-        "src/engine/core/workspace-patch",
         "src/domain/core/task-graph",
-        "src/engine/core/dispatch"
+        "src/engine/core/dispatch",
+        "src/engine/core/workspace-adoption"
       ],
       "plan": "STORE"
     },
@@ -4888,13 +4898,13 @@
         "src/adapters/core/project-instructions",
         "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
-        "src/engine/core/workspace-patch",
         "src/adapters/core/git-workspace",
         "src/domain/core/effect",
         "src/platform/core/validate",
         "src/adapters/core/project-attachment",
         "src/adapters/core/file-lock",
-        "src/engine/core/uninstall"
+        "src/engine/core/uninstall",
+        "src/engine/core/workspace-adoption"
       ],
       "plan": "INSTALLATION"
     },
@@ -5426,7 +5436,9 @@
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
         "src/engine/core/effect",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/engine/core/workspace-patch-contract",
+        "src/engine/core/workspace-adoption"
       ],
       "plan": "ISOLATION"
     },
@@ -5523,6 +5535,70 @@
         "src/engine/core/approval"
       ],
       "ink": true
+    },
+    "src/engine/core/workspace-patch-contract": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/engine/core/effect",
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/engine/core/workspaces",
+        "src/domain/core/run",
+        "src/capabilities/core/artifacts",
+        "src/platform/core/common",
+        "src/platform/core/redaction",
+        "src/engine/core/delivery-summary"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/engine/core/workspace-adoption": {
+      "dependencies": [
+        "src/engine/core/workspace-patch-contract",
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/platform/core/redaction",
+        "src/platform/core/clock",
+        "src/engine/core/effect",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/domain/core/effect",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/workspaces",
+        "src/domain/core/principal"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/adapters/core/run-store": {
+      "dependencies": [
+        "src/engine/core/dispatch",
+        "src/domain/core/run",
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/attempt",
+        "src/domain/core/task-evaluation",
+        "src/engine/core/worker-observation",
+        "src/engine/core/task-evaluation",
+        "src/adapters/core/sqlite-effect-store",
+        "src/engine/core/attempts",
+        "src/engine/core/runs",
+        "src/engine/core/scheduling",
+        "src/domain/core/primitives",
+        "src/engine/core/workspaces",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/adapters/core/run-proposal-store",
+        "src/domain/core/principal",
+        "src/domain/core/worker-event",
+        "src/adapters/core/audit-store",
+        "src/engine/core/audit"
+      ],
+      "plan": "STORE"
+    },
+    "src/adapters/core/sqlite-effect-store": {
+      "dependencies": [
+        "src/domain/core/effect",
+        "src/adapters/core/sqlite-ledger"
+      ],
+      "plan": "STORE"
     }
   },
   "composition": {
@@ -5557,7 +5633,7 @@
       "domain": 11300,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42158,
+      "adapters": 42150,
       "surfaces": 45000,
       "composition": 13683
     },
@@ -6719,8 +6795,8 @@
         "src/engine/core/runs/internal/delivery-port.ts",
         "src/engine/core/runs/internal/delivery-transition.ts",
         "src/engine/core/runs/internal/delivery-worker.ts",
-        "src/engine/core/workspace-patch/internal/adoption-error.ts",
-        "src/engine/core/workspace-patch/internal/adoption.ts",
+        "src/engine/core/workspace-patch-contract/internal/adoption-error.ts",
+        "src/engine/core/workspace-adoption/internal/adoption.ts",
         "src/engine/core/workspace-patch/internal/delivery-run.ts",
         "src/engine/core/workspace-patch/internal/delivery.ts",
         "src/surfaces/core/mcp/internal/delivery.ts"

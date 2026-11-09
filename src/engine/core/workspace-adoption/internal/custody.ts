@@ -4,7 +4,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import { DispatchApplication, type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchInventoryStore, type DispatchRecord,
   type DispatchStore, type RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import { gitWorkspaceIdentityTarget, gitWorkspaceRecordSchema, validGitSourceBase, type RunWorkspaceCustodyStore, type WorkspaceRequest } from '#engine/core/workspaces/index.js';
-import { workspacePatchSchema, type WorkspacePatch } from './contract.js';
+import { workspacePatchSchema, type WorkspacePatch } from '#engine/core/workspace-patch-contract/index.js';
 type SupervisorProfile = DispatchRecord['profile']; type Supervisor = ConstructorParameters<typeof DispatchApplication>[1];
 
 /** EXEC-RELEASE (owner D8 A): why an attempt's stopped container and Git clone stay held. Never thrown: release is a step after the

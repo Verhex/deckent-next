@@ -5,7 +5,7 @@ import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { decidePoolHold, poolHoldReceiptSchema, RunStoreError, type AuditStore, type PoolHoldReceipt, type PoolHoldTransition,
   type PoolHoldWrite } from '#engine/index.js';
-import { SqliteExecutionPools } from './pools.js';
+import { SqliteExecutionPools } from '#adapters/core/run-store/index.js';
 const receiptRecordSchema = z.strictObject({ schemaVersion: z.literal(1), fingerprint: persistedString(z.string().min(1)), receipt: poolHoldReceiptSchema });
 const fingerprint = (write: PoolHoldWrite) => JSON.stringify({ command: write.command, actor: write.actor });
 

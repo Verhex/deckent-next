@@ -1,28 +1,46 @@
 export { WorkspacePatchApplication } from './internal/application.js';
 export type { WorkspacePatchSource, WorkspacePatchStore, RunBoundTaskStore } from './internal/application.js';
-export { AttemptCustodyReleaseApplication, sweepAttemptCustodyScopes, idleAttemptWorkspace } from './internal/custody.js';
-export type { AttemptCustodyOutcome, AttemptCustodyHoldReason, AttemptCustodyRetention, AttemptCustodySweep, AttemptCustodySweepEntry, AttemptWorkspaceCustody, AttemptCustodyPorts, SourceBaseSweep } from './internal/custody.js';
-export { classifyPatchScope, assertPatchScope, PATCH_SCOPE_MATCHER, PATCH_SCOPE_ERROR_PATHS } from './internal/scope.js';
-export type { PatchScope, PatchScopeMode } from './internal/scope.js';
-export { workspacePatchSchema, patchPathSchema, historyPathSchema, patchFile, patchDigest, patchExclusions, isPatchExcluded, patchLimitFields, WorkspacePatchError } from './internal/contract.js';
-export type { WorkspacePatch, PatchFile, PatchLimits } from './internal/contract.js';
-export { WorkspaceIntegrationApplication, integrationCommandSchema, integrationIntentSchema, integrationManifestSchema } from './internal/integration.js';
-export type { IntegrationCommand, IntegrationIntent, IntegrationManifest, IntegrationRecord, IntegrationStore, IntegrationTarget, IntegrationObservation } from './internal/integration.js';
+/** @deprecated Import from workspace-adoption; retained for one release. */
+export { AttemptCustodyReleaseApplication, sweepAttemptCustodyScopes, idleAttemptWorkspace } from '#engine/core/workspace-adoption/index.js';
+/** @deprecated Import from workspace-adoption; retained for one release. */
+export type { AttemptCustodyOutcome, AttemptCustodyHoldReason, AttemptCustodyRetention, AttemptCustodySweep, AttemptCustodySweepEntry, AttemptWorkspaceCustody, AttemptCustodyPorts, SourceBaseSweep } from '#engine/core/workspace-adoption/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export { classifyPatchScope, assertPatchScope, PATCH_SCOPE_MATCHER, PATCH_SCOPE_ERROR_PATHS } from '#engine/core/workspace-patch-contract/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export type { PatchScope, PatchScopeMode } from '#engine/core/workspace-patch-contract/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export { workspacePatchSchema, patchPathSchema, historyPathSchema, patchFile, patchDigest, patchExclusions, isPatchExcluded, patchLimitFields, WorkspacePatchError } from '#engine/core/workspace-patch-contract/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export type { WorkspacePatch, PatchFile, PatchLimits } from '#engine/core/workspace-patch-contract/index.js';
+export { WorkspaceIntegrationApplication } from './internal/integration.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export { integrationCommandSchema, integrationIntentSchema, integrationManifestSchema } from '#engine/core/workspace-patch-contract/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export type { IntegrationCommand, IntegrationIntent, IntegrationManifest, IntegrationRecord, IntegrationStore, IntegrationTarget, IntegrationObservation } from '#engine/core/workspace-patch-contract/index.js';
 export { WorkspaceIntegrationInspection, integrationQuerySchema } from './internal/inspection.js';
 export type { IntegrationQuery, IntegrationReader } from './internal/inspection.js';
-export { WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, integrationDeliveryPlanSchema, integrationDeliveryIntentSchema } from './internal/delivery.js';
-export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from './internal/delivery.js';
-export type { WorkspacePatchLimitDetail } from './internal/contract.js';
+export { WorkspaceDeliveryApplication } from './internal/delivery.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export { integrationDeliveryCommandSchema, integrationDeliveryPlanSchema, integrationDeliveryIntentSchema } from '#engine/core/workspace-patch-contract/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from '#engine/core/workspace-patch-contract/index.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export type { WorkspacePatchLimitDetail } from '#engine/core/workspace-patch-contract/index.js';
 export { pinRunToDelivery } from './internal/delivery-run.js';
 export type { DeliveryRunPinRequest } from './internal/delivery-run.js';
-export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, requireDelivered, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema, adoptionNotApplied } from './internal/adoption.js';
-export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, AdoptionClaimObservation, WorkspaceAdoptionErrorCode } from './internal/adoption.js';
+/** @deprecated Import from workspace-adoption; retained for one release. */
+export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, requireDelivered, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema, adoptionNotApplied } from '#engine/core/workspace-adoption/index.js';
+/** @deprecated Import from workspace-adoption; retained for one release. */
+export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, AdoptionClaimObservation, WorkspaceAdoptionErrorCode } from '#engine/core/workspace-adoption/index.js';
+/** @deprecated Import from workspace-adoption; retained for one release. */
 export { adoptionVerificationSchema, adoptionVerificationPhaseOutcome, executionProfileFingerprint, verifyDeliveredCommit, verifyAdoption,
-  adoptionCriteriaMeet } from './internal/verification.js';
+  adoptionCriteriaMeet } from '#engine/core/workspace-adoption/index.js';
+/** @deprecated Import from workspace-adoption; retained for one release. */
 export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerificationStore, AdoptionVerificationRequest,
-  AdoptionVerificationRequirement, CriterionWithin } from './internal/verification.js';
+  AdoptionVerificationRequirement, CriterionWithin } from '#engine/core/workspace-adoption/index.js';
 
-export type { IntegrationCommitMetadata } from './internal/commit-metadata.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export type { IntegrationCommitMetadata } from '#engine/core/workspace-patch-contract/index.js';
 
 export { bindIntegrationCandidate } from './internal/candidate-binding.js';
 export { queueCommandIds, queueTicketCommandIds, queueGenerationRef, queueGenerationSchema, assertQueueGitTarget } from './internal/queue-git.js';
@@ -52,5 +70,6 @@ export { reattemptCommandIds, reattemptEligibility, reattemptGraph, stepDelivery
 export type { DeliveryReattemptPorts, ReattemptEffects, WorkspaceReattemptContext } from './internal/reattempt.js';
 export { assertRunDeliveryIntent, stepRunDelivery, stepWorkspaceRunDelivery } from './internal/run-intent.js';
 export type { RunDeliveryPorts, RunDeliveryStep, WorkspaceRunDeliveryContext } from './internal/run-intent.js';
-export { workspacePatchChangeFacts, deliverySummary, patchChangeDigests } from './internal/effect-summary.js';
+/** @deprecated Import from workspace-patch-contract; retained for one release. */
+export { workspacePatchChangeFacts, deliverySummary, patchChangeDigests } from '#engine/core/workspace-patch-contract/index.js';
 export { assertSameWorkSource } from './internal/work-source.js';

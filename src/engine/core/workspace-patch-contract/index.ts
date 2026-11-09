@@ -1,0 +1,13 @@
+export { WorkspaceAdoptionError } from './internal/adoption-error.js';
+export type { WorkspaceAdoptionErrorCode } from './internal/adoption-error.js';
+export type { IntegrationCommitMetadata } from './internal/commit-metadata.js';
+export { unconfirmedEffect } from './internal/confirmation-default.js';
+export { patchLimitFields, WorkspacePatchError, patchDigest, patchExclusions, isPatchExcluded, historyPathSchema, patchPathSchema, patchFile, workspacePatchSchema } from './internal/contract.js';
+export type { WorkspacePatchLimitDetail, PatchFile, WorkspacePatch, PatchLimits } from './internal/contract.js';
+export { integrationDeliveryCommandSchema, integrationDeliveryPlanSchema, integrationDeliveryIntentSchema } from './internal/publication-contract.js';
+export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from './internal/publication-contract.js';
+export { patchChangeDigests, workspacePatchChangeFacts, deliverySummary } from './internal/effect-summary.js';
+export { integrationCommandSchema, integrationManifestSchema, integrationIntentSchema } from './internal/integration-contract.js';
+export type { IntegrationCommand, IntegrationObservation, IntegrationManifest, IntegrationIntent, IntegrationRecord, IntegrationStore, IntegrationTarget } from './internal/integration-contract.js';
+export { PATCH_SCOPE_MATCHER, PATCH_SCOPE_ERROR_PATHS, classifyPatchScope, assertPatchScope } from './internal/scope.js';
+export type { PatchScopeMode, PatchScope } from './internal/scope.js';

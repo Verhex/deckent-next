@@ -5,8 +5,7 @@ import { autonomyShadowRecord, readSystemDeliverySummary, type AutonomyShadowSto
 import type { IntegrationReader } from './inspection.js';
 import { readQueueCandidate } from './queue-custody.js';
 import { queueCommandIds } from './queue-git.js';
-import { classifyPatchScope, type PatchScopeMode } from './scope.js';
-import { workspacePatchChangeFacts } from './effect-summary.js';
+import { classifyPatchScope, type PatchScopeMode, workspacePatchChangeFacts } from '#engine/core/workspace-patch-contract/index.js';
 
 export interface WorkspaceQueueShadowPorts {
   readonly shadow: AutonomyShadowStore; readonly artifacts: ArtifactStore; readonly maxBytes: number; readonly scopeMode: PatchScopeMode;

@@ -2,9 +2,8 @@ import { attemptIdentitySchema, instructionSurfacePaths, sameAttemptIdentity, ty
 import type { ArtifactReceipt, ArtifactStore } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { DispatchClaim, DispatchRecord, RunBoundDispatchStore, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
-import { workspacePatchSchema, WorkspacePatchError, type WorkspacePatch } from './contract.js';
-import { assertPatchScope, classifyPatchScope, type PatchScope, type PatchScopeMode } from './scope.js';
-import type { AttemptCustodyReleaseApplication } from './custody.js';
+import { workspacePatchSchema, WorkspacePatchError, type WorkspacePatch, assertPatchScope, classifyPatchScope, type PatchScope, type PatchScopeMode } from '#engine/core/workspace-patch-contract/index.js';
+import type { AttemptCustodyReleaseApplication } from '#engine/core/workspace-adoption/index.js';
 /** Trusted lookup of the Run-bound task definition (the Run snapshot frozen at admission) after authorization; full identity binds. */
 export interface RunBoundTaskStore { loadBoundTask(identity: AttemptIdentity): Promise<TaskDefinition>;
   /** G1: the bound Run, read for its task's frozen execution profile (the instruction-surface set; immutable since admission). */

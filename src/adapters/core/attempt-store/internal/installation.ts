@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { persistedString, immutableJsonObjectSchema } from '#domain/index.js';
 import { executionPoolSchema, type ExecutionPool } from '#engine/index.js';
 import { migrateLedger, CURRENT_LEDGER_VERSION, sqliteLedgerOptionsSchema, ledgerTransaction, openLedgerDatabase, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-import { SqliteExecutionPools } from './pools.js';
+import { SqliteExecutionPools } from '#adapters/core/run-store/index.js';
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const ownershipSchema = z.strictObject({

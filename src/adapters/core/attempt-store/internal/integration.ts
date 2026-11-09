@@ -2,7 +2,7 @@ import { sameAttemptIdentity } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { integrationIntentSchema, WorkspacePatchError, type IntegrationQuery, type IntegrationIntent, type IntegrationRecord } from '#engine/index.js';
-import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { readRunBoundDispatch } from '#adapters/core/run-store/index.js';
 import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteIntegrationJournal {
   constructor(private readonly db: DatabaseSync) {}

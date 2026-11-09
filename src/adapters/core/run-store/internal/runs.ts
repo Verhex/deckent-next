@@ -4,20 +4,15 @@ import { readDispatchFence } from './dispatch-fence.js';
 import { propagateRunCancellation } from './run-cancellation.js';
 import { settleRunCancellation } from './run-settlement.js';
 import { SqliteExecutionPools } from './pools.js';
-import type { RunAdmissionFilter } from '#engine/index.js';
+import { type RunAdmissionFilter, assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, dispatchReleaseReceiptId, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, planSchedulingWave, assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema, type RunCapacityBinding, type RunCreate, type RunReservation, type RunProjection, type RunReceipt, type RunWorkspaceCustody, matchRunLifecycleCommand, proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { releaseWorkerCustody, verifiedPrincipalSchema, readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt, observeRunAttemptClosure, closesAttemptWithoutExit, RunError, TaskEvaluationError } from '#domain/index.js';
-import { assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, dispatchReleaseReceiptId, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, planSchedulingWave,
-  assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
-  type RunCapacityBinding, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { assertEvaluationDigests, readEvaluationDigests, bindOperationEvidenceUse } from './evaluation-evidence.js';
-import type { RunWorkspaceCustody } from '#engine/index.js';
 import { decodeLedgerRunSnapshot as decodeRunSnapshot, withRunCapacityBindings, quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure, ledgerTransaction, decodeStored } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { matchRunLifecycleCommand, proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 export async function readRunReceipt(db: DatabaseSync, scopeInput: string, commandInput: string): Promise<RunReceipt | null> {
   const scopeId = identitySchema.parse(scopeInput); const commandId = identitySchema.parse(commandInput);
   try {

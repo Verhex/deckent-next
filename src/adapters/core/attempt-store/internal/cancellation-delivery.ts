@@ -3,7 +3,7 @@ import { attemptIdentitySchema } from '#domain/index.js';
 import { CancellationDeliveryError, cancellationDeliverySchema, decideCancellationDeliveryClaim, decideCancellationDeliveryFinish,
   type CancellationDelivery, type CancellationDeliveryClaim, type CancellationDeliveryClaimResult, type CancellationDeliveryOutcome, type CancellationDeliveryStore } from '#engine/index.js';
 import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
-import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { readRunBoundDispatch } from '#adapters/core/run-store/index.js';
 
 /** Durable cancellation retry leases. This journal never grants launch authority. */
 export class SqliteCancellationDeliveryJournal implements CancellationDeliveryStore {

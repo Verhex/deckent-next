@@ -1,0 +1,6 @@
+export { requireDelivered, adoptionTargetRefSchema, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, adoptionBasisSchema, integrationAdoptionIntentSchema, adoptionNotApplied, WorkspaceAdoptionApplication, WorkspaceAdoptionError } from './internal/adoption.js';
+export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, AdoptionClaimObservation, IntegrationAdoptionStore, AdoptionFence, AdoptionTargetObservation, IntegrationAdoptionTarget, WorkspaceAdoptionErrorCode } from './internal/adoption.js';
+export { AttemptCustodyReleaseApplication, sweepAttemptCustodyScopes, idleAttemptWorkspace } from './internal/custody.js';
+export type { AttemptCustodyHoldReason, AttemptCustodyOutcome, AttemptCustodyRetention, AttemptCustodySweepEntry, SourceBaseSweep, AttemptCustodySweep, AttemptWorkspaceCustody, AttemptCustodyPorts } from './internal/custody.js';
+export { adoptionVerificationSchema, adoptionVerificationPhaseOutcome, executionProfileFingerprint, adoptionCriteriaMeet, verifyAdoption, verifyDeliveredCommit } from './internal/verification.js';
+export type { AdoptionVerification, AdoptionVerificationStore, AdoptionVerificationRequirement, CriterionWithin, AdoptionVerificationPolicy, AdoptionVerificationRequest } from './internal/verification.js';

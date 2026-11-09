@@ -2,8 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema } from '#domain/index.js';
 import { RunStoreError, runExecutionPolicySchema, type RunPoolEvidence } from '#engine/index.js';
 import { readQuotaHolds, ledgerTransaction, requireLedgerVersion, POOL_HOLD_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { readRunSnapshot } from './runs.js';
-import { SqliteExecutionPools } from './pools.js';
+import { readRunSnapshot, SqliteExecutionPools } from '#adapters/core/run-store/index.js';
 /** Run, policy, pool and occupancy from a single deferred read transaction. Never persist a per-poll wait. */
 export async function readRunPoolEvidence(db: DatabaseSync, scopeId: string, runId: string): Promise<RunPoolEvidence> {
   identitySchema.parse(scopeId); identitySchema.parse(runId);

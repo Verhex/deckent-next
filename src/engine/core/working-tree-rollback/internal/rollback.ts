@@ -4,8 +4,9 @@ import { EMPTY_KNOWN_SECRETS, ErrorRegistry, type KnownSecretSnapshot, type Trus
 import { assertSessionActive, authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { EffectConfirmation } from '#engine/core/effect/index.js';
-import { deliverySummary, patchChangeDigests, requireDelivered, WorkspacePatchError, type IntegrationAdoptionStore, type IntegrationDeliveryPlan, type IntegrationDeliveryStore, type IntegrationDeliveryTarget,
-  type WorkspacePatch, type WorkspacePatchApplication } from '#engine/core/workspace-patch/index.js';
+import { deliverySummary, patchChangeDigests, WorkspacePatchError, type IntegrationDeliveryPlan, type IntegrationDeliveryStore, type IntegrationDeliveryTarget, type WorkspacePatch } from '#engine/core/workspace-patch-contract/index.js';
+import { requireDelivered, type IntegrationAdoptionStore } from '#engine/core/workspace-adoption/index.js';
+import { type WorkspacePatchApplication } from '#engine/core/workspace-patch/index.js';
 
 /** L1c (lead 2026-11-05): put back the files one written working-tree delivery (`deliveryCommandId`) replaced. */
 export const workingTreeRollbackCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
