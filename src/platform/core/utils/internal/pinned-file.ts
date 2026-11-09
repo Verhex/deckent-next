@@ -130,8 +130,8 @@ const existing = async (path: string): Promise<string> => await lstat(path).then
  * did not check: missing folders are created one level at a time below `root` (default: the deepest existing folder); the bytes go to an
  * exclusive no-follow temporary and are linked into place (link never replaces). An existing file is replaced only when it is this user's
  * regular single-link file whose bytes `replaceable` accepts, checked again on a moved-aside name; anything that appears meanwhile stays.
+ * `parent`: caller-held custody, kept open by the caller across its lock, read and publication; only basename(path) is resolved there.
  */
-/** `parent`: caller-held custody, kept open by the caller across its lock, read and publication; only basename(path) is resolved there. */
 export async function writePinnedFile(path: string, bytes: Uint8Array, root?: string, replaceable: (current: Buffer) => boolean = () => false, parent?: FileHandle) {
   const dir = parent ?? await openPinnedParent(path, root ?? await existing(dirname(path)));
   if (!dir) throw new PinnedFileError('unsafe');

@@ -2,8 +2,13 @@ import { lstat, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, sep } from 'node:path';
 /** Owner-only file mode: a private file or directory has none of these bits. */
 export const PRIVATE_PERMISSION_MASK = 0o077;
-/** Lexical containment of normalized absolute paths: `child` is `parent` or lies below it. */
-export const pathWithin = (parent: string, child: string) => { const path = relative(parent, child); return !path || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)); };
+/** Lexical containment of absolute paths (`relative` normalizes both; a name such as `..x` is a child): `child`'s path below `parent`
+ * (`''` for `parent` itself), or null when it is not `parent` or below it. */
+export const relativeInside = (parent: string, child: string): string | null => {
+  const path = relative(parent, child);
+  return path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path) ? null : path;
+};
+export const pathWithin = (parent: string, child: string) => relativeInside(parent, child) !== null;
 
 /**
  * Whether two host paths share a tree (one is the other or lies inside it), judged by device and inode along each real path's ancestors: a

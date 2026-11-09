@@ -190,7 +190,6 @@ it.skipIf(process.platform === 'win32')('requires POSIX private file secret stor
   // Escaping growth: a 64 KiB value of U+0001 is 6 bytes per character once serialized (\u0001), a quote or backslash 2.
   const g = await root(), escaped = createFileSecretStore({ root: g.global, platform: 'linux' });
   const control = '\u0001'.repeat(65_536), quoted = '"\\'.repeat(32_768);
-  expect(Buffer.byteLength(control, 'utf8')).toBe(65_536);
   await escaped.set('CONTROL_A', control); await escaped.set('CONTROL_B', control);
   await escaped.set('QUOTED_A', quoted);
   const before = await readFile(g.path);

@@ -5211,7 +5211,7 @@
       "composition": 13558
     },
     "totalSrcLines": 200000,
-    "testCases": 8218,
+    "testCases": 8220,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
@@ -6391,6 +6391,70 @@
           "file": "src/adapters/core/beuser-realm/internal/custody.ts",
           "count": 1,
           "reason": "Text of a script that runs inside the BeUser realm; its process.env is the realm's own."
+        }
+      ]
+    },
+    "parentPrefix": {
+      "note": "KG12 F2 (alpha.64 PRIV-E): containment is decided by pathWithin or relativeInside (#platform); a bare startsWith('..') takes a child named ..x for a parent. Written now and off: LINT-R sets enforce after the migrating cards (PRIV-M1) lower or drop their rows. Shrink-only once enforced.",
+      "enforce": false,
+      "patterns": [
+        "\\.startsWith\\((['\"`])\\.\\.\\1\\)"
+      ],
+      "allow": [
+        {
+          "file": "src/adapters/core/agent-workspace-floor/internal/floor.ts",
+          "count": 6,
+          "reason": "Lines 26, 46, 74, 83, 101: KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1). Line 34: KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
+        },
+        {
+          "file": "src/adapters/core/host-shell/internal/landlock.ts",
+          "count": 1,
+          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
+        },
+        {
+          "file": "src/adapters/core/host-shell/internal/realm.ts",
+          "count": 2,
+          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
+        },
+        {
+          "file": "src/adapters/core/host-shell/internal/result.ts",
+          "count": 1,
+          "reason": "KG12 F2 display only (note or prompt text); no boundary decision."
+        },
+        {
+          "file": "src/adapters/core/host-shell/internal/write-set.ts",
+          "count": 2,
+          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
+        },
+        {
+          "file": "src/adapters/core/shell-paths/internal/paths.ts",
+          "count": 3,
+          "reason": "KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
+        },
+        {
+          "file": "src/adapters/core/shell-sandbox-bwrap/internal/realm.ts",
+          "count": 3,
+          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
+        },
+        {
+          "file": "src/adapters/core/workspace-read/internal/scope.ts",
+          "count": 1,
+          "reason": "KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
+        },
+        {
+          "file": "src/composition/core/execution/internal/task.ts",
+          "count": 1,
+          "reason": "KG12 F2 fail-open: a root named ..x counts as outside; migrates to pathWithin/relativeInside (PRIV-M1)."
+        },
+        {
+          "file": "src/engine/core/agent-turn/internal/system-prompt.ts",
+          "count": 1,
+          "reason": "KG12 F2 display only (note or prompt text); no boundary decision."
+        },
+        {
+          "file": "src/surfaces/core/config/internal/records.ts",
+          "count": 1,
+          "reason": "KG12 F2 over-refusing: a path named ..x is refused; kept as it is (owner decision A25)."
         }
       ]
     }

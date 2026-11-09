@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { appendFile, chmod, link, lstat, mkdir, mkdtemp, open, readFile, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { lineCut, readPinnedFile, removePinnedFile, restorePinnedFile } from '#platform/index.js';
+import { lineCut, pathWithin, privateDirectory, privateFile, readPinnedFile, readPrivateFile, relativeInside, removePinnedFile, restorePinnedFile } from '#platform/index.js';
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
@@ -90,4 +91,53 @@ it.skipIf(process.platform !== 'linux')('R1: the retired marker is written and r
     await expect(retireInstallation(data, body)).rejects.toMatchObject({ reason: 'changed' });
     expect(await readFile(join(data, 'installation/retired.json'), 'utf8')).toBe('PERSON DATA');
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('KG12 F2: containment is lexical over normalized absolute paths; a child named ..x is inside, a sibling prefix and the parent of / are not', () => {
+  const cases: [string, string, string | null][] = [['/a', '/a', ''], ['/a', '/a/..x', '..x'], ['/a/..x', '/a/..x/b', 'b'], ['/a/..x', '/a/..xy', null], ['/a', '/ab', null],
+    ['/', '/', ''], ['/', '/x', 'x'], ['/a', '/', null], ['/a', '/a/./b/../c', 'c'], ['/a', '/a/b/../../c', null], ['/a/b/..', '/a/c', 'c']];
+  for (const [parent, child, inside] of cases) {
+    expect(relativeInside(parent, child), `${parent} ${child}`).toBe(inside);
+    expect(pathWithin(parent, child), `${parent} ${child}`).toBe(inside !== null);
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('KG12 F1: a private file is read only as this user\'s single-link regular file, bounded, never through a link, a FIFO or a change', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-private-')), file = join(root, 'record'), other = join(root, 'other');
+  const refused = (reason: string) => expect.objectContaining({ reason });
+  try {
+    await writeFile(file, 'RECORD', { mode: 0o600 }); await writeFile(other, 'OTHER', { mode: 0o600 });
+    expect((await readPrivateFile(file, 64, { mode: 'mask' }))?.toString()).toBe('RECORD');
+    expect(await readPrivateFile(join(root, 'absent'), 64, { mode: 'mask' })).toBeNull();
+    expect(await privateDirectory(root)).toBe(true); expect(await privateDirectory(join(root, 'absent'))).toBeNull();
+    // Owner decision A28: 0400 passes the default mask, key material needs exactly 0600; group bits fail both.
+    await chmod(file, 0o400);
+    expect(await readPrivateFile(file, 64, { mode: 'mask' })).not.toBeNull();
+    await expect(readPrivateFile(file, 64, { mode: 'exact0600' })).rejects.toEqual(refused('unsafe'));
+    await chmod(file, 0o640); await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('unsafe'));
+    await chmod(file, 0o600); await expect(readPrivateFile(file, 5, { mode: 'mask' })).rejects.toEqual(refused('too-large'));
+    // A hard link, a symlink and a FIFO are refused; the FIFO open does not block.
+    await link(file, join(root, 'second')); await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('unsafe')); await unlink(join(root, 'second'));
+    await symlink(other, join(root, 'linked')); await expect(readPrivateFile(join(root, 'linked'), 64, { mode: 'mask' })).rejects.toEqual(refused('unsafe'));
+    execFileSync('mkfifo', ['-m', '600', join(root, 'fifo')]); await expect(readPrivateFile(join(root, 'fifo'), 64, { mode: 'mask' })).rejects.toEqual(refused('unsafe'));
+    await symlink(root, join(root, 'dir-link')); expect(await privateDirectory(join(root, 'dir-link'))).toBe(false);
+    await chmod(root, 0o750); expect(await privateDirectory(root)).toBe(false); await chmod(root, 0o700);
+    // Owner decision A23: without getuid nothing is private (no skipped owner check).
+    const getuid = Object.getOwnPropertyDescriptor(process, 'getuid')!;
+    Object.defineProperty(process, 'getuid', { value: undefined, configurable: true });
+    try {
+      expect(privateFile(await lstat(file))).toBe(false); expect(await privateDirectory(root)).toBe(false);
+      await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('unsafe'));
+    } finally { Object.defineProperty(process, 'getuid', getuid); }
+    // Growth after the size check and a path swapped for a link after the open, both made deterministic on the descriptor's first stat.
+    const probe = await open(other, 'r'), proto = Object.getPrototypeOf(probe) as { stat(): Promise<unknown> }; await probe.close();
+    const afterFirstStat = (change: () => Promise<void>) => { const stat = proto.stat, spy = vi.spyOn(proto, 'stat').mockImplementation(async function (this: unknown) {
+      spy.mockRestore(); const info = await stat.call(this); await change(); return info; }); };
+    afterFirstStat(() => appendFile(file, 'GROWN'));
+    await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('changed'));
+    afterFirstStat(() => appendFile(file, 'X'.repeat(64)));
+    await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('too-large'));
+    afterFirstStat(async () => { await rename(file, `${file}.aside`); await symlink(other, file); });
+    await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('unsafe'));
+  } finally { await chmod(root, 0o700).catch(() => undefined); await rm(root, { recursive: true, force: true }); }
 });
