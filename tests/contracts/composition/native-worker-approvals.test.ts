@@ -169,6 +169,17 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     expect((await terminalRequest(f, 'decideApproval', { ...command, approvalId: deniedCard.request.approvalId, commandId: 'human-deny-worker', decision: 'deny' })).response.ok).toBe(true);
     expect((await deniedWrite).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
     await expect(readFile(join(f.attempt, 'src/denied.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    // KG4 F1 (X3): the worker settles like the chat. Policy denies the call after the owner allowed it: the policy's refusal, in the turn's audit record.
+    const revoked = f.propose('revoked-output', 'src/revoked.ts'), revokedCard = await f.pending();
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'revoked', grants: [{ id: 'no-write', effect: 'deny', principals: 'all', scopes: ['scope'], actions: ['invoke'],
+      resource: { kind: 'agent-tool', ids: ['write_file'] } }, ...policy.grants] }), { mode: 0o600 }); clearConfigCache();
+    expect((await terminalRequest(f, 'decideApproval', { ...command, approvalId: revokedCard.request.approvalId, commandId: 'human-allow-revoked' })).response.ok).toBe(true);
+    expect((await revoked).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-policy') });
+    await expect(readFile(join(f.attempt, 'src/revoked.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await adapters.withMcpPrincipal(() => f.port.cancel());
+    expect(f.policyTurns().flatMap(turn => turn.refused.calls)).toContainEqual(expect.objectContaining({ decision: 'deny', stage: 'effect', revision: expect.stringContaining(policy.revision),
+      call: expect.objectContaining({ callId: 'revoked-output' }) }));
   } finally { await adapters.withMcpPrincipal(() => f.port.cancel()); }
 }, 30_000);
 
@@ -191,10 +202,10 @@ it('K23 the bridge deadline before the card TTL still expires durably and overri
 }, 30_000);
 
 it('K23 worker mint refuses AI, expiry, foreign subject and forged capability while keeping peer/principal binding single-use', async () => {
-  const { nativeWorkerApprovalExpired, mintAttendedWorkerDecision, workerToolCardSummary } = await import('#capabilities/index.js');
-  const { createTurnDecisionCapabilities } = await import('#engine/index.js');
+  const { mintAttendedWorkerDecision, workerToolCardSummary } = await import('#capabilities/index.js');
+  const { agentToolApprovalLeft, createTurnDecisionCapabilities } = await import('#engine/index.js');
   const { principal } = await import('../support/agent-turn-modes.js');
-  expect(nativeWorkerApprovalExpired(100, { wallMs: 50, monotonicMs: 5 }, { wallMs: 40, monotonicMs: 55 })).toBe(true);
+  expect(agentToolApprovalLeft(100, { wallMs: 50, monotonicMs: 5 }, { wallMs: 40, monotonicMs: 55 })).toBeLessThanOrEqual(0);
   const ring = createTurnDecisionCapabilities(), identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 'scope', layoutRevision: 'l', generation: 1 };
   const subject = { kind: 'agent-tool-call' as const, turnId: 'worker-turn', round: 0, index: 0, tool: 'write_file', toolVersion: 1, resource: 'src/x.ts', argsDigest: 'a'.repeat(64) };
   const record = { request: { schemaVersion: 3, scopeId: 'scope', approvalId: 'card', subject, expiresAt: 100,

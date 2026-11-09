@@ -1,6 +1,6 @@
 import { approvalRecordSchema, ApprovalError, encodeCommandProjection, policySchema, type ApprovalRecord, type ApprovalRequest,
   type RunSnapshot, type ApprovalActor } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority } from '#platform/index.js';
+import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
 export function approvalActionDigest(run: RunSnapshot, taskId: string, actor: ApprovalActor, policyInput: unknown) {
   if (!run.graph.tasks.some(task => task.id === taskId)) throw new ApprovalError('APPROVAL_INVALID');
@@ -45,6 +45,9 @@ export function decidedRefusal(record: ApprovalRecord, at: { readonly now: numbe
   if (at && decision.decidedAt > at.now + MAX_WALL_SKEW_MS) return 'APPROVAL_CONFLICT' as const;
   return at && at.now > decision.decidedAt + at.window ? 'APPROVAL_EXPIRED' as const : null;
 }
+/** The one expiry rule of a tool-call request (I40-c): ms left until `expiresAt` on the wall clock and of the producer's monotonic TTL from `started`. */
+export const agentToolApprovalLeft = (expiresAt: number, started: ClockSample, now: ClockSample) =>
+  Math.min(expiresAt - now.wallMs, expiresAt - started.wallMs - (now.monotonicMs - started.monotonicMs));
 /** `decidedRefusal` as the typed refusal of a broker; returns the admitted decision. */
 export function admitDecided(record: ApprovalRecord, at: { readonly now: number; readonly window: number } | null, accepted = true) {
   const refusal = decidedRefusal(record, at, accepted); if (refusal) throw new ApprovalError(refusal);

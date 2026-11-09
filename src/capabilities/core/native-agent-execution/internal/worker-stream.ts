@@ -54,7 +54,3 @@ export function nativeWorkerToolLifetime() {
     return { ...await session.cancel(), kind };
   } };
 }
-
-/** Policy rechecks spend the original wall/monotonic approval budget too. */
-export const nativeWorkerApprovalExpired = (expiresAt: number, started: { wallMs: number; monotonicMs: number }, now: { wallMs: number; monotonicMs: number }) =>
-  now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs;

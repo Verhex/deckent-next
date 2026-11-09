@@ -11,7 +11,7 @@ import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABI
 import { PolicyAuthorizationError, authorityRefusalAuditEvent, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
-import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
+import { approvalRequestDigest, expireDue, verifyApproval, sealApproval } from './integrity.js';
 import { approvalAssuranceRegistry, requiredApprovalAssurance, operationApprovalFacts } from './assurance.js';
 
 export const approvalQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema });
@@ -102,12 +102,9 @@ export class ApprovalApplication {
     } catch { /* the refusal stands without its audit record */ }
     throw new ApprovalError('APPROVAL_SURFACE_RESTRICTED');
   }
-  private expired(record: ApprovalRecord, now: number) {
-    // I40-c B: only the producing turn judges tool-call expiry, through its wall clock and monotonic TTL.
-    // A decision is durable history; the producer still checks expiry before consuming it at the effect claim.
-    if (approvalSubject(record.request).kind === 'agent-tool-call' || record.status !== 'pending' || now < record.request.expiresAt) return record;
-    return expireApproval(this.store, this.integrity, record);
-  }
+  // I40-c B: only the producing turn judges tool-call expiry, through its wall clock and monotonic TTL.
+  // A decision is durable history; the producer still checks expiry before consuming it at the effect claim.
+  private expired = (record: ApprovalRecord, now: number) => approvalSubject(record.request).kind === 'agent-tool-call' ? record : expireDue(this.store, this.integrity, record, now);
   async inspect(input: unknown, credential?: unknown) {
     const query = approvalQuerySchema.parse(input); const principal = await authenticate(this.verifier, credential, query.scopeId);
     await this.authorize('inspect', query.scopeId, query.approvalId, principal);

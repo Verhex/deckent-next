@@ -5302,9 +5302,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42241,
+      "adapters": 42240,
       "surfaces": 45000,
-      "composition": 13686
+      "composition": 13684
     },
     "totalSrcLines": 200000,
     "testCases": 8203,
