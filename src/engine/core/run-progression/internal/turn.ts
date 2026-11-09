@@ -1,4 +1,4 @@
-import { persistedInteger, runSnapshotSchema, type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
+import { persistedInteger, parseRun, RUN_PARKS, type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import { runQuerySchema, projectRunView, RunStoreError, type RunQuery, type RunReservationCommand } from '#engine/core/runs/index.js';
 import type { TaskEvaluationCommand } from '#engine/core/task-evaluation/index.js';
 
@@ -29,6 +29,9 @@ export function reservationRefusalOutcome(code: string): 'changed' | 'waiting' |
   if (code === 'RUN_STORE_CONFLICT') return 'changed';
   return code === 'RUN_CAPACITY_OR_ORDER' || code === 'RUN_POOL_FULL' || code === 'RUN_POOL_HELD' ? 'waiting' : null;
 }
+function stops(run: RunSnapshot) {
+  return run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !RUN_PARKS.turn.has(run.state.reason));
+}
 const concurrencySchema = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 
 /** One finite, completion-driven advancement turn. Scheduler, launch and acceptance remain with existing owners.
@@ -43,12 +46,11 @@ export class RunProgressionTurn {
     this.maxReservations = maxReservations === undefined ? undefined : concurrencySchema.parse(maxReservations);
   }
   private async read(query: RunQuery) {
-    const run = runSnapshotSchema.parse(await this.operations.read(query));
+    const run = parseRun(await this.operations.read(query));
     if (run.identity.scopeId !== query.scopeId || run.identity.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return run;
   }
-  private async evaluateReady(query: RunQuery, signal: AbortSignal, read: (query: RunQuery) => Promise<RunSnapshot>) {
-    const initial = await read(query);
+  private async evaluateReady(query: RunQuery, signal: AbortSignal, read: (query: RunQuery) => Promise<RunSnapshot>, initial: RunSnapshot) {
     for (const binding of initial.bindings) {
       if (signal.aborted) return;
       const latest = await read(query);
@@ -95,13 +97,13 @@ export class RunProgressionTurn {
         throwIfFailed();
         let run = await read(query);
         throwIfFailed();
-        if (run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
+        if (stops(run)) break;
         // One serial acceptance pass per completion; concurrently finishing workers may change revision.
         // A typed changed outcome is deferred, never retried in a tight loop.
-        await this.evaluateReady(query, signal, read);
+        await this.evaluateReady(query, signal, read, run);
         run = await read(query);
         throwIfFailed();
-        if (signal.aborted || run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
+        if (signal.aborted || stops(run)) break;
         await startReserved(run);
         // Cooperative yield: stop taking new reservations, but drain existing custody before returning.
         if (run.state.kind === 'running' && (this.maxReservations === undefined || reservations < this.maxReservations)

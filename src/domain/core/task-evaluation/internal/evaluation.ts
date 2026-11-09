@@ -4,7 +4,7 @@ import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './accep
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
-import { runSnapshotSchema, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
+import { safeParseRun, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema, workerReportEvidenceSchema, workerReportRefusal } from '#domain/core/worker-event/index.js';
 const modelText = persistedString(z.string().min(1).max(256));
 /**
@@ -63,7 +63,7 @@ export class TaskEvaluationError extends Error {
  * Application/store must establish provenance and fresh attempt/Run evidence before an atomic transition.
  */
 export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
-  const run = runSnapshotSchema.safeParse(runInput); const parsed = taskEvaluationSchema.safeParse(input);
+  const run = safeParseRun(runInput); const parsed = taskEvaluationSchema.safeParse(input);
   if (!run.success || !parsed.success) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const evaluation = parsed.data; const binding = run.data.bindings.find(value => value.identity.taskId === evaluation.identity.taskId);
   if (!binding || !sameAttemptIdentity(binding.identity, evaluation.identity) || evaluation.graphRevision !== run.data.graph.revision

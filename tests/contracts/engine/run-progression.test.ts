@@ -95,6 +95,18 @@ it('honors cancellation recorded during execution without evaluating or undoing 
   expect(result.stopped).toBe(true); expect(result.run.cancellationRequested).toBe(true);
   expect(f.stats().evaluations).toBe(0);
   expect(result.run.tasks.find(task => task.id === 'c')?.phase).not.toBe('accepted');
+  const fresh = await fixture();
+  await fresh.operations.reserve({ ...query, commandId: 'reserve-fresh', expectedRevision: 0 });
+  for (const binding of (await fresh.store.loadRun('s', 'r'))!.bindings) await fresh.operations.execute(binding.identity);
+  const recorded = vi.fn(async () => {
+    const run = (await fresh.store.loadRun('s', 'r'))!;
+    if (!run.cancelRequested) await fresh.store.cancelRun({ scopeId: 's', runId: 'r', commandId: 'between-bindings', actor, expectedRevision: run.revision });
+    return true;
+  });
+  fresh.operations.evaluationRecorded = recorded;
+  const stopped = await fresh.turn.advance(query, new AbortController().signal);
+  expect(recorded).toHaveBeenCalledTimes(1); expect(fresh.stats().evaluations).toBe(0);
+  expect(stopped.stopped).toBe(true);
 });
 
 it('records intent atomically with admission, deduplicates it and limits discovery to its actor', async () => {

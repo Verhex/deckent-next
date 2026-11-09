@@ -6,8 +6,8 @@ import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdent
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
-import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
+import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
+  RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -57,8 +57,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         status: existing.launch === 'prevented-before-launch' ? 'prevented' : existing.terminal ? 'terminal' : 'unresolved',
         terminal: existing.terminal, outputRecorded: !!existing.output }) }));
       if (identity.layoutRevision !== layout.revision) throw new RunStoreError('RUN_STORE_CONFLICT');
-      const run = await store.loadRun(identity.scopeId, identity.runId);
-      const selected = selectReservedTaskProfile(run, await store.load(identity.scopeId, identity.attemptId), identity);
+      const startContext = await new TaskStartApplication(store, verifier, authorization).open(identity);
+      const { run, profile: selected } = startContext;
       const native = isNativeCliWorkerProfile(selected) ? resolveNativeCliWorkerProfile(selected) : null;
       const nativePorts = options.nativeCliWorker?.ports ?? (options.nativeCliWorker?.runtime
         ? createConfiguredNativeCliWorkerPorts(projectRoot, identity.scopeId, store, options, options.nativeCliWorker.runtime) : undefined);
@@ -85,7 +85,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
         ...(Object.keys(layout.resources) as ProductResource[]).map(resource => productResourcePath(layout, resource))]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-      let start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
+      let start = await prepareTaskStart(startContext, store, artifacts, authorization, config);
       const agent = run?.execution.tasks.find(task => task.taskId === identity.taskId)?.agent;
       if (agent?.skills.length) {
         const catalog = openSqliteHubClientStore(await path(), config.storage.sqlite, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, false), 'read');

@@ -1,4 +1,4 @@
-import { attemptIdentitySchema, sameAttemptIdentity, workspaceDeliveryState, runSnapshotSchema, targetQueueRecordSchema, type AttemptIdentity, type RunSnapshot, type WorkspaceDeliveryState } from '#domain/index.js';
+import { attemptIdentitySchema, sameAttemptIdentity, workspaceDeliveryState, safeParseRun, targetQueueRecordSchema, type AttemptIdentity, type RunSnapshot, type WorkspaceDeliveryState } from '#domain/index.js';
 import type { ArtifactReceipt, ArtifactStore } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { DispatchApplication, type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchInventoryStore, type DispatchRecord,
@@ -178,7 +178,7 @@ export async function idleAttemptWorkspace(lease: unknown, folder: string, work:
   if (status !== 'ready' || !await verify(record.data).catch(() => false) || !validGitSourceBase(sourceBase, request) || gitWorkspaceIdentityTarget(identity, '/', { checkout: '', lease: '' }).id !== folder
     || !work.complete || [...work.running, ...work.parked].some(ref => ref.scopeId === identity.scopeId && ref.id === identity.runId)
     || [...work.deliveries, ...work.uncertain].some(ref => ref.scopeId === identity.scopeId)) return false;
-  const found = await read(identity), run = runSnapshotSchema.safeParse(found.run);
+  const found = await read(identity), run = safeParseRun(found.run);
   if (!run.success || run.data.state.kind !== 'terminal') return false;
   const owed = workspaceDeliveryState(run.data, identity);
   return owed === 'not-required' || owed === 'patch-required' && found.deliveries.some(value => { const ticket = targetQueueRecordSchema.safeParse(value);
