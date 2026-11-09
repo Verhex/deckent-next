@@ -252,7 +252,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   beklemede kalır. Sonrasında `deckent secret store` (çalışma zamanı depo geçişi) bir yetki değişikliğidir ve yukarıdaki
   değişiklikler gibi terminal tanığı ister. Verilen bir profil (`deckent init apply --profile` ya da `init resume`) yalnız taşıdığı
   her kural şablonun kuran kişiye vereceğinin içinde kaldığı sürece tanıksız yayımlanır; daha genişi (sormadan izin verilen düzenleme
-  ya da kabuk araçları, şablonun kendi v19 kurallarını aşan MCP aktörü izinleri ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
+  ya da kabuk araçları, şablonun kendi v19 ve v20 kurallarını aşan MCP aktörü izinleri ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
   yazmadan önce `AUTHORITY_WITNESS_REQUIRED` ile reddedilir. *Etki:* yeni bir projede ilk kurulumu çalıştırabilen kişi şablonun
   başlangıç yetkisini alır (fazlasını değil) ve bir ajan şablonla sınırlı verilen bir kurulumu gözetimsiz çalıştırabilir; bu kapı
   yapay zekâ ajanı işaretine değil terminale bakar, `init policy --upgrade --apply` ile aynı. *Geçici çözüm:* ilk kurulumları
@@ -483,9 +483,23 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   açıksa kart çıkar). Yerel işçi de AI aktörünün sahibi olan kurulum kişisinin modunu aynı şekilde izler. Sahibi olan kişi
   olmadan bir AI aktörü hiçbir mod gevşetmesi almaz. Aktör model çağırabilir ve meta verisini okuyabilir, ama başka bir kimliğin
   model içeriğini okuyamaz ve çağrılarını iptal edemez. Kabuk komutları, yazma tabanı ve diğer sert taban hücreleri yine sorar ya
-  da reddeder. Bu kuralları kapatmak yerel ajanı da durdurur. *Yol:* kendi terminalinizde `deckent policy upgrade --template current
-  --rollback` çalıştırın (kendi kartınız; yeni bir v19 kurulumunda da), tam olarak v19 AI aktörü kuralları kalkar; `--apply` onları geri
-  ekler. Ya da model çağırmasını istemediğiniz MCP istemcisini bağlamayın.
+  da reddeder. Bu kuralları kapatmak yerel ajanı da durdurur. *Yol:* v20'den beri `deckent policy upgrade --template current --rollback`
+  yalnız en yeni farkı (aşağıdaki v20 öneri kuralları) kaldırır; v19 kuralları için bugün kişinin kendi komutu yok: `<host>/mcp` için
+  `model-invocation`/`agent-tool` üzerinde şirket deny'ı kullanın ya da model çağırmasını istemediğiniz MCP istemcisini bağlamayın.
+- **Sohbetteki yapay zekâ iş ve üç ayarı yalnız sizin kartınızla önerir (şablon v20, owner 2026-11-09).** V20'den beri AI aktörü
+  (`<host>/mcp`: sohbet ajanı ve her dış MCP istemcisi) moda açık olmayan iki `require-approval` kuralı taşır: Run oluşturmak ve
+  `language`, `output_mode` ya da `terminal.responseStyle` yazmak (proje ya da genel katman). Hiçbir mod, tam erişim dahil, bunları
+  indiremez: `propose_setting` `/config` ile aynı önce/sonra kartını, `propose_work` `/do` ile aynı plan kartını açar ve yalnız sizin
+  "evet"iniz etki yapar; araçlar yalnız bu kurallar dururken sunulur (şirketin `agent-tool` reddi de kapatır). Modeller ve Brain modeli
+  `/model`'de, diğer her ayar kendi penceresinde kalır. Mevcut bir kurulum bu sürümdeki ilk servis başlangıcında iki kuralı kartsız,
+  kendiliğinden alır (owner kararı); servis politika dosyalarının sahibi olan kişi olarak çalışmalı ve bir kural o kişiyi yapılandırılmış
+  servis kapsamında adlandırmalıdır (ya da bir ilk kurulum okuma kuralı): başlangıç bir `authority-change` denetim kaydı ve kurulumun
+  yükseltme anahtarıyla arşivlenmiş bir revizyon yazar, bir kez; kuralları kendi kartınızla `deckent policy upgrade --template current
+  --rollback` ile geri aldıktan sonra başlangıç onları bir daha eklemez, `--apply` geri ekler. `/policy` penceresinde bu kurallar için
+  henüz satır yok; diğer biçimler kişinin yükseltme kartını kullanır. Açık:
+  `propose_work` henüz kartına ulaşmaz; Run kabulü istekçi için `pool/use` (yapılandırılmış hedef varsa `work-target/use`) da denetler
+  ve AI aktöründe ikisi de yoktur, öneri `POLICY_DENIED` ile biter (owner kararı bekliyor); sohbetten başlayan planda kirli ağaç kartı ve
+  kota bekleme penceresi yoktur. Araç kullanamayan model yine `/do` ister. *Yol:* işi `/do` ile başlatın.
 
 ## Bütçe ve harcama
 
@@ -735,12 +749,12 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   klasördeki unix soketi denetlenmez. *Yol:* başka bir servisin soketini tutan klasörleri bağlamayın. İşçilerin dış sistemlerde
   kendilerinin işlem yapması henüz sunulmuyor.
 - **Kurtarma yalnız kendi kesin politika hücrelerinizle açılır.** V16 şablonu kişinin onay gerektiren kurtarma
-  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v19 bunları, v17'nin ilk commit hakkını ve v18'in kaldırma
-  haklarını korur, v19'un MCP aktörü araç kurallarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
+  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v20 bunları, v17'nin ilk commit hakkını, v18'in kaldırma
+  haklarını ve v19'un MCP aktörü araç kurallarını korur, v20'nin öneri kurallarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
   Eski kurulum yalnız açık yükseltmeyle değişir; yönetilen `deckent policy upgrade` yolu kişide olmayan yetkiyi ekleyemiyorsa
-  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v19 farkını kaldırır;
-  tarihsel v16–v18 haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
-  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17–v19 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
+  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v20 farkını kaldırır;
+  tarihsel v16–v19 haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
+  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17–v20 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
   politika revizyonuna bağlıdır, sonra mühürlenen ölçümlere değil. Alpha.56 öncesi kaybolan işçinin yalıtım kaydı yoktur;
   vaka kişiye gider ve gölge ölçümü yeniden başlar.
 

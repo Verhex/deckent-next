@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "scope": "Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.",
   "sources": {
-    "src/domain/core/agent-tool/index.ts": "ee21687140f2ad66c4dc91b70c2047cbac9a97890fda524b69f7100395270549",
+    "src/domain/core/agent-tool/index.ts": "9b49f0aabb75ef57411b2be9ed5e1ceee4017af475f5a5ec1b100f6d62606da5",
+    "src/domain/core/agent-tool/internal/ai-proposals.ts": "554f73aac59a4087e8ce1aa854a2dfe0cff00d490a0f6b0960368ea5eb01fbb8",
     "src/domain/core/agent-tool/internal/contract.ts": "4c587623e4e422972c3256b7de84d99ab9f7b38a919b1ae18a061b5ad5200735",
     "src/domain/core/agent-tool/internal/text.ts": "9ee5a731b6745d74c261e71c0f805494ca206474a632513f237e792e308192d2",
     "src/domain/core/agent-turn/index.ts": "a2eaa7a3fae83e76dfbf80e957d8fe2770a76e728246753189289697013c1a3b",
@@ -53,7 +54,7 @@
     "src/domain/core/policy/internal/delegations.ts": "4d25449ab3e8d129c6969c0f7a57ecab657c8e4c034b16460fb142821113db60",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
     "src/domain/core/policy/internal/evaluate.ts": "fe3a96a8833ebf599ff2cdfa408979817413f044468dfc38d98c897e7e692cbd",
-    "src/domain/core/policy/internal/first-run-template.ts": "ee112302432a354dac96b328909f580ef7a0f7c46ede0cb0f13641dedede208a",
+    "src/domain/core/policy/internal/first-run-template.ts": "98669b56d01ae1d9871d6a750a0bf823316586aebfdbd25373074a946b40c052",
     "src/domain/core/policy/internal/mcp-capabilities.ts": "4d86bea76446cf118025ed9e207e3bf6ea73163e3b9a3b153a81ec1aa411c90a",
     "src/domain/core/policy/internal/mcp-grant.ts": "8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a",
     "src/domain/core/policy/internal/mode.ts": "a8fe9c7e856e448a08c4fbfaf8faadf790457aaf53e699df43f9d7a2328fc117",

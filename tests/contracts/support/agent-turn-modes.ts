@@ -10,6 +10,7 @@ import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteModelActivationStore, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
@@ -49,7 +50,7 @@ const baseGrants = [
 
 export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null;
   /** SHELL-AUTONOMY: the `terminal.shell` section (realm) and the sandbox providers (code-only port) when a test pins them. */
-  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string }) {
+  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string; /** alpha.64 B: the service's plan port `propose_work` runs. */ planWork?: PlanServiceRun }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-modes-')); roots.push(root);
   const project = join(root, 'project'), data = input.dataRoot ? join(project, input.dataRoot) : join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
@@ -108,7 +109,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   await writeAuthority(input.grants, input.mode);
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   await ensureConfiguredTerminalIdentity(project, 'scope', { env });
-  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, input.sandboxes ? { shellSandboxes: input.sandboxes } : {});
+  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, { ...(input.sandboxes ? { shellSandboxes: input.sandboxes } : {}), ...(input.planWork ? { planWork: input.planWork } : {}) });
   services.push(service);
   // LIVENESS-EINTR: what a failed status assertion needs to tell the turn's abort sources apart (service shutdown vs. a turn-level abort
   // with the service still running), without any runtime field: the service's own settlement and the last turn's decision responses.

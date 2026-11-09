@@ -21,6 +21,9 @@ export { inspectConfiguredRoleModels, inspectConfiguredBrainModels } from './int
 export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
   return plan(root, input, options, (command, signal) => invokeConfiguredFeatureModel(root, command, options, signal), signal, undefined, observe);
 }
+/** alpha.64 B: the runtime service's own plan (a chat turn's `propose_work`): the same application, its Brain call on the service's model host. */
+export const planServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>,
+  signal?: AbortSignal) => plan(root, input, options, invoke, signal);
 export function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
   const client = createConfiguredRuntimeClient(root, options);
   return plan(root, input, options, async (command, signal) => {

@@ -1,5 +1,5 @@
 import type { AgentToolSpec } from '#domain/index.js';
-import { effectivePermissionMode, type PermissionMode, type VerifiedPrincipal } from '#domain/index.js';
+import { AI_PROPOSAL_REGISTRY, effectivePermissionMode, type PermissionMode, type VerifiedPrincipal } from '#domain/index.js';
 import { PACKAGE_VERSION } from '#platform/index.js';
 import type { AgentTurnShellPosture } from './system-prompt.js';
 
@@ -30,7 +30,7 @@ export type AgentSessionDecision = 'allow' | 'deny' | 'require-approval' | null;
 export type AgentSessionShellInput = { readonly realm: 'sandbox' | 'host'; readonly contained: true };
 const SCRATCH_EDIT_TOOLS: ReadonlySet<string> = new Set(['scratch_write']);
 /** A read-class tool whose allowed call still opens the person's own window in every mode (the MCP proposal): described as asking. */
-const WINDOW_TOOLS: ReadonlySet<string> = new Set(['propose_mcp_server']);
+const WINDOW_TOOLS: ReadonlySet<string> = new Set(['propose_mcp_server', AI_PROPOSAL_REGISTRY.tools.work, AI_PROPOSAL_REGISTRY.tools.setting]); // alpha.64: each opens the person's card
 const FETCH_TOOL = 'fetch_url';
 /** The cells one offered tool is shown under, in a fixed order (the representative calls of its class). */
 export function agentSessionCells(tool: AgentToolSpec): readonly AgentSessionCell[] {

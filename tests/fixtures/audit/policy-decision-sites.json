@@ -10,6 +10,7 @@
     "unsure": "classification needs the owning slice's review"
   },
   "sites": {
+    "src/engine/core/agent-turn/internal/proposals.ts": { "sites": 1, "class": "pure", "note": "alpha.64: offers the proposal tools while the AI actor's v20 Run/setting rule holds; never gates an effect (Run create and config write decide again, sealed)" },
     "src/domain/core/identity-profile/internal/diff.ts": { "sites": 2, "class": "pure", "note": "draft before/after diff preview, no writer" },
     "src/domain/core/policy/internal/administration.ts": { "sites": 1, "class": "pure", "note": "admin capability probe; POLICY_LAST_ADMIN refusal sealed as authority-refusal (best-effort)" },
     "src/domain/core/policy/internal/decision-step.ts": { "sites": 1, "class": "pure", "note": "explicit decision grant probe for approval/runs callers" },

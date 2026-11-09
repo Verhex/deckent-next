@@ -4,7 +4,7 @@ import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFil
 import { policyResources } from './vocabulary.js';
 import { POLICY_CHANGE_MAX, policyChangeSchema, type PolicyChange } from './administer.js';
 import { RECOVERY_ACTIONS } from '#domain/core/audit/index.js';
-import { RECOVERY_DECISION_ACTIONS, RECOVERY_ROLLOUT } from '#domain/core/recovery/index.js';
+import { RECOVERY_DECISION_ACTIONS, RECOVERY_ROLLOUT } from '#domain/core/recovery/index.js'; import { aiSettingResourceIds } from '#domain/core/agent-tool/index.js';
 
 /**
  * SCR-B (owner 2026-09-28): the versioned default policy a fresh, terminal-only installation gets when it opts
@@ -38,39 +38,30 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * With it (owner 2026-10-07, K1 option A, Jev 3e7c5b38) the owner may run the governed `policy.administer@1` operation and inspect/decide approvals in
  * the installed scope: the trust grant and every other policy change still pass the card, the audit and the delegation bound (I2). */
 // No template bump for assurance: Core's assurance minimum is a code constant; policy data can only raise it.
-/** v7 (T4-B K3 + SPEND-SETTLEMENT, owner 2026-10-08, Jev 125e4435): the installing owner may activate and inspect models (`model-activation`,
- * every scope: the ledger catalog register is installation-wide), invoke, inspect and cancel model calls in the installed scope (`model-invocation`),
- * and inspect, audit, reconcile and revise the provider spend accounts of the installed scope (`provider-spend-account`), so `models connect`,
- * terminal turns and the governed budget revision work on a fresh installation; every activation, call and spend is still decided, budgeted and
- * recorded per call. */
-/** v8 (BACKUP-COMMAND, owner 2026-10-08): the installing owner may create, verify and restore recovery sets (`backup`, every scope: a
- * recovery set is installation-wide); restore still needs the service stopped and every operation is audited. */
-/** v9 (W3-AUTHORITY): a separately named MCP actor gets observation only. Mutations and paid calls need an explicit MCP grant;
- * neither an owner grant nor `principals: all` is a delegation to MCP. No approval broker is claimed on model/spend paths. */
+/** v7 (T4-B K3 + SPEND-SETTLEMENT, owner 2026-10-08, Jev 125e4435): the installing owner may activate and inspect models (`model-activation`, every scope: the ledger catalog register is installation-wide), invoke, inspect
+ * and cancel model calls in the installed scope (`model-invocation`), and inspect, audit, reconcile and revise the provider spend accounts of the installed scope (`provider-spend-account`), so `models connect`, terminal
+ * turns and the governed budget revision work on a fresh installation; every activation, call and spend is still decided, budgeted and recorded per call. */
+/** v8 (BACKUP-COMMAND, owner 2026-10-08): the installing owner may create, verify and restore recovery sets (`backup`, every scope: a recovery set is installation-wide); restore still needs the service stopped and every operation is audited. */
+/** v9 (W3-AUTHORITY): a separately named MCP actor gets observation only. Mutations and paid calls need an explicit MCP grant; neither an owner grant nor `principals: all` is a delegation to MCP. No approval broker is claimed on model/spend paths. */
 /** v10 (RUN-HAZIR-A): the named installing person can run work in the installed scope; pool management and integration remain separate. */
 /** v11 (SABLON-V11): the named person gets separate installation-wide quota release and scoped integration/adoption authority. */
-/** v12 (POLICY-V12, owner 2026-10-16): the named person may inspect the installed scope (inventory, worker observation and the service's own
- * recovery passes run as this person) and shut down exactly their installation's runtime service (`service.identity`, written at install).
- * Owner 2026-10-16 option A: edited first-run and named hand-built policies get the same two rules through the add-only plan (named person only). */
-/** v13 (alpha.48, owner A48-D3 + MON-NAMES + CA-1 + C3, 2026-10-19): seven add-only rules, each its own id (`FIRST_RUN_V13_RULE_IDS`). The named
- * person may install the registered execution environments (`execution-environment`/`install`), repair the installation (`installation`/`repair`),
- * deactivate models (`model-activation`/`deactivate`, a separate rule beside the v7 activation rule so the add-only plan and the rollback can carry it),
- * read decisions in the installed scope (`decision`/`inspect`), see refused and failed scopes by name in the monitor (`monitor`/
- * `inspect-scope-diagnostics`) and read everyone's standing approvals (`policy`/`inspect-standing-grants`); the MCP actor gets one more observation
- * rule, `pool`/`inspect` in the installed scope. No authority action for the MCP actor; a terminal-only action (install, repair) is enforced by its consumer. */
-/** v14 (alpha.55 S4, lead 2026-10-23): two add-only rules: the named person and the MCP actor read the installed scope's memory journal (`memory`/`inspect`).
- * No memory change is granted to anyone (propose/verify/retire stay a separate decision). */
-/** v15 (alpha.55 S4B-1 + S7, owner S-M1/S-M2 2026-10-23): add-only rules: the named person may propose memory candidates (needed to delegate D2), the memory
- * distiller workload reads and proposes in the installed scope's memory journal (D1, D2), reads Runs (D4) and, as its own rule, the raw sealed output of
- * Attempts (D3, A2b); the named person inspects and defines in the agent/skill catalog, the MCP actor inspects it. Its floor allows nothing beyond D1–D4. */
-/** v16 (alpha.56 D1, owner 2026-10-24 option v16_require_approval_raise, Jev c1d1afe9): add-only rules, one per cell
- * the recovery policy card manages: the named person holds `recovery-action/apply` for every stop-list action and the continuation, and
- * `nervous-rule/promote` for every measured lost-worker rule at its seed version, all at `require-approval`. The readers need allow, so recovery
- * stays off after install and upgrade; only the card's `policy-recovery` change raises one cell to allow (I2 raise). Never the MCP actor or `all`. */
+/** v12 (POLICY-V12, owner 2026-10-16): the named person may inspect the installed scope (inventory, worker observation and the service's own recovery passes run as this person) and shut down exactly their installation's
+ * runtime service (`service.identity`, written at install). Owner 2026-10-16 option A: edited first-run and named hand-built policies get the same two rules through the add-only plan (named person only). */
+/** v13 (alpha.48, owner A48-D3 + MON-NAMES + CA-1 + C3, 2026-10-19): seven add-only rules, each its own id (`FIRST_RUN_V13_RULE_IDS`). The named person may install the registered execution environments (`execution-environment`/`install`), repair the
+ * installation (`installation`/`repair`), deactivate models (`model-activation`/`deactivate`, a separate rule beside the v7 activation rule so the add-only plan and the rollback can carry it), read decisions in the installed scope
+ * (`decision`/`inspect`), see refused and failed scopes by name in the monitor (`monitor`/ `inspect-scope-diagnostics`) and read everyone's standing approvals (`policy`/`inspect-standing-grants`); the MCP actor gets one more observation rule,
+ * `pool`/`inspect` in the installed scope. No authority action for the MCP actor; a terminal-only action (install, repair) is enforced by its consumer. */
+/** v14 (alpha.55 S4, lead 2026-10-23): two add-only rules: the named person and the MCP actor read the installed scope's memory journal (`memory`/`inspect`). No memory change is granted to anyone (propose/verify/retire stay a separate decision). */
+/** v15 (alpha.55 S4B-1 + S7, owner S-M1/S-M2 2026-10-23): add-only rules: the named person may propose memory candidates (needed to delegate D2), the memory distiller workload reads and proposes in the installed scope's
+ * memory journal (D1, D2), reads Runs (D4) and, as its own rule, the raw sealed output of Attempts (D3, A2b); the named person inspects and defines in the agent/skill catalog, the MCP actor inspects it. Its floor allows
+ * nothing beyond D1–D4. */
+/** v16 (alpha.56 D1, owner 2026-10-24 option v16_require_approval_raise, Jev c1d1afe9): add-only rules, one per cell the recovery policy card manages: the named person holds `recovery-action/apply` for every stop-list
+ * action and the continuation, and `nervous-rule/promote` for every measured lost-worker rule at its seed version, all at `require-approval`. The readers need allow, so recovery stays off after install and upgrade; only
+ * the card's `policy-recovery` change raises one cell to allow (I2 raise). Never the MCP actor or `all`. */
 /** v17 (alpha.56 U4E, owner G1 2026-10-26): one named-person execute grant; the adapter still requires its card and durable effect. */
 /** v18 (alpha.56 U10C): named-person lifecycle and exact uninstall operation grants; the witness/card remain mandatory. */
-/** v19 (alpha.63 R4a, owner 2026-11-05 option 3): the MCP actor (native agent and external MCP clients) gets the person's first-run tool rules (`v19Rules`). */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 19;
+/** v19 (alpha.63 R4a, owner 2026-11-05 option 3): the MCP actor (native agent and external MCP clients) gets the person's first-run tool rules (`v19Rules`). v20: its proposals (`v20Rules`). */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 20;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -120,7 +111,7 @@ export function firstRunServiceId(scopeId: string): string {
   const scope = identitySchema.parse(scopeId), suffix = '-runtime';
   return identitySchema.parse(`${scope.slice(0, IDENTITY_MAX_LENGTH - suffix.length)}${suffix}`);
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -164,7 +155,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(version >= 15 ? v15Rules(principal, [scopeId]) : []),
       ...(version >= 16 ? v16Rules(principal, [scopeId], input.recoveryRules) : []),
       ...(version >= 17 ? v17Rules(principal, [scopeId], input.firstCommitOperationId) : []),
-      ...(version >= 18 ? v18Rules(principal, input.uninstallOperationIds) : []), ...(version >= 19 ? v19Rules(principal, [scopeId], input) : []),
+      ...(version >= 18 ? v18Rules(principal, input.uninstallOperationIds) : []), ...(version >= 19 ? v19Rules(principal, [scopeId], input) : []), ...(version >= 20 ? v20Rules(principal, [scopeId]) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -173,7 +164,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -186,7 +177,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
   // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
+  for (const from of [19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -227,12 +218,12 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model',
   memoryPurge: 'first-run-memory-purge', recoveryModel: 'first-run-recovery-model', signers: 'first-run-skill-signers', catalogImport: 'first-run-agent-catalog-import',
   aggregatorCatalog: 'first-run-catalog-aggregator', aggregatorRuns: 'first-run-catalog-aggregator-runs', aggregatorMemory: 'first-run-catalog-aggregator-memory', firstCommit: 'first-run-first-commit', uninstall: 'first-run-uninstall', uninstallOperations: 'first-run-uninstall-operations',
-  mcpModelInvocation: 'first-run-mcp-model-invocation', mcpReadTools: 'first-run-mcp-read-tools', mcpScratchTools: 'first-run-mcp-scratch-tools', mcpEditShellTools: 'first-run-mcp-edit-shell-tools', mcpToolOperations: 'first-run-mcp-tool-operations' });
+  mcpModelInvocation: 'first-run-mcp-model-invocation', mcpReadTools: 'first-run-mcp-read-tools', mcpScratchTools: 'first-run-mcp-scratch-tools', mcpEditShellTools: 'first-run-mcp-edit-shell-tools', mcpToolOperations: 'first-run-mcp-tool-operations', mcpProposeWork: 'first-run-mcp-propose-work', mcpProposeSetting: 'first-run-mcp-propose-setting' });
 /** v16 cells (alpha.56 D1): the card's recovery actions (the stop list and the continuation) and the promotable lost-worker rules, by rule id. */
 const RECOVERY_CARD_ACTIONS = Object.freeze([...RECOVERY_ACTIONS, RECOVERY_DECISION_ACTIONS[0]]);
 const recoveryActionRuleId = (action: string) => `first-run-recovery-action-${action}`, recoveryPromoteRuleId = (rule: string) => `first-run-recovery-promote-${rule}`;
-/** v19 alone is the current rollback delta; previous authority stays installed. */
-export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze((['mcpModelInvocation', 'mcpReadTools', 'mcpScratchTools', 'mcpEditShellTools', 'mcpToolOperations'] as const).map(key => FIRST_RUN_UPGRADE_RULE_IDS[key]));
+/** v20 alone is the current rollback delta (and the automatic upgrade's, owner S6); previous authority stays installed. */
+export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze((['mcpProposeWork', 'mcpProposeSetting'] as const).map(key => FIRST_RUN_UPGRADE_RULE_IDS[key]));
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -300,7 +291,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     // v15 (S4B-1 + S7, owner 2026-10-23): the memory distiller's D1–D4 and the agent catalog rules, added the same add-only way.
     ...v15Rules(person, scopes),
     // v16 (alpha.56 D1): the recovery cells at require-approval; a person already allowed on a cell keeps it (an allow rule covers it, nothing is added).
-    ...v16Rules(person, scopes, input.recoveryRules), ...v17Rules(person, firstCommitScopes, input.firstCommitOperationId), ...v18Rules(person, input.uninstallOperationIds), ...v19Rules(person, scopes, input)];
+    ...v16Rules(person, scopes, input.recoveryRules), ...v17Rules(person, firstCommitScopes, input.firstCommitOperationId), ...v18Rules(person, input.uninstallOperationIds), ...v19Rules(person, scopes, input), ...v20Rules(person, scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
@@ -491,13 +482,13 @@ function evaluatorRules(evaluator: Person, rule: (id: string, principal: Person,
     rule(ids.evaluatorModel, evaluator, vocabulary.modelInvocation.kind, ['invoke'])];
 }
 
-/** Latest add-only delta (v19) by content: a same-id customization (a cell the card raised to allow too) is preserved and reported, never deleted. */
-export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined, names: V19Names): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
+/** Latest add-only delta (v20) by content: a same-id customization (a cell the card raised to allow too) is preserved and reported, never deleted. */
+export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
   const policy = policyFileSchema.parse(current), read = policy.schemaVersion === 2 ? policy.grants.find(rule => rule.id === 'first-run-read-tools') : undefined;
   const scopes = scopeId ? [identitySchema.parse(scopeId)] : read && read.scopes !== 'all' && read.scopes.length === 1 && namesPerson(read, person) ? read.scopes : null;
   if (policy.schemaVersion !== 2 || isMcpPrincipal(person) || !scopes) return { rules: [], conflicts: [] };
   const rules: PolicyGrant[] = [], conflicts: string[] = [], missing: string[] = [];
-  for (const want of v19Rules({ issuer: person.issuer, subject: person.subject }, scopes, names)) {
+  for (const want of v20Rules({ issuer: person.issuer, subject: person.subject }, scopes)) {
     const held = policy.grants.find(rule => rule.id === want.id);
     if (!held) missing.push(want.id);
     else if (canonicalJson(held) === canonicalJson(want)) rules.push(held); else conflicts.push(held.id);
@@ -523,4 +514,11 @@ function v19Rules(person: Person, scopes: readonly string[], names: V19Names): r
     [ids.mcpScratchTools, 'allow', tool.kind, tool.actions, names.scratchToolNames], [ids.mcpEditShellTools, 'require-approval', tool.kind, tool.actions, names.editShellToolNames],
     [ids.mcpToolOperations, 'allow', operation.kind, ['execute'], [names.writeOperationId, names.shellOperationId, names.scratchWriteOperationId]]] as const).map(([id, effect, kind, actions, resource]) => policyGrantSchema.parse({
     id, effect, actions: [...actions], scopes: [...scopes], principals: [mcpPrincipalRef(person)], resource: { kind, ids: resource === 'all' ? 'all' : [...resource] }, ...(effect === 'require-approval' ? { modeEligible: true } : {}) }));
+}
+/** v20 (alpha.64 B + C, owner S4–S6 2026-11-09): the MCP actor's Run and registry-setting proposals, `require-approval` WITHOUT `modeEligible` (no mode, full access included, lowers the
+ * person's card; the proposal tools are offered only while these hold); config is installation-wide like the person's rule. The person holds both cells, so I2 lets them grant and revoke. */
+function v20Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS, { run, config } = policyResources, rule = (id: string, kind: string, action: string, resource: readonly string[] | 'all', ruleScopes: readonly string[] | 'all') =>
+    policyGrantSchema.parse({ id, effect: 'require-approval', actions: [action], scopes: ruleScopes === 'all' ? 'all' : [...ruleScopes], principals: [mcpPrincipalRef(person)], resource: { kind, ids: resource === 'all' ? 'all' : [...resource] } });
+  return isMcpPrincipal(person) || isWorkloadPrincipalRef(person) ? [] : [rule(ids.mcpProposeWork, run.kind, 'create', 'all', scopes), rule(ids.mcpProposeSetting, config.kind, 'write', aiSettingResourceIds(), 'all')];
 }

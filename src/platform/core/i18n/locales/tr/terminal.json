@@ -129,7 +129,7 @@
   "terminal.workline.queuedService": "Sırada — çalışma servisi henüz hazır değil; servis yanıt verir vermez gönderilir",
   "terminal.workline.queuedWindow": "Sırada — bir pencere açık; pencere kapanınca gönderilir",
   "terminal.workline.queuedCommand": "Sırada — bir komut hâlâ çalışıyor; o bitince gönderilir",
-  "terminal.workline.toolsNone": "Bu model burada araç kullanamaz: yalnız metinle yanıt verir, dosya okuyamaz ve değiştiremez. Ayrıntılar /model ile.",
+  "terminal.workline.toolsNone": "Bu model burada araç kullanamaz: yalnız metinle yanıt verir, dosya okuyamaz ve değiştiremez; işi /do ile başlat. Ayrıntılar /model ile.",
   "terminal.workline.uninstall.title": "Deckent'i kaldır",
   "terminal.workline.uninstall.where": "Kaldırma bu terminalde değil, kabuğunuzda çalışır: Deckent'i kapatın, sonra aşağıdaki komutu çalıştırın.",
   "terminal.workline.uninstall.what": "Çalışma servisini durdurur, neyi kaldırıp neyi tuttuğunu gösterir ve bir şey kaldırmadan önce size sorar.",

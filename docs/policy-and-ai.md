@@ -94,8 +94,12 @@ narrowest set. Generic `evaluate` or `reserve` is not permission to accept or re
 Fresh first-run policy gives the installing human authority and the MCP actor observation
 rules plus, since template v19 (owner 2026-11-05), the person's own tool rules in the installed
 scope: model calls, read and scratch tools, edit/shell tools behind the card, and their three
-operations. The native agent and external MCP clients share this actor. No AI decision step,
-configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
+operations. Since template v20 (owner 2026-11-09) the actor may also propose a Run and one of three
+settings (`language`, `output_mode`, `terminal.responseStyle`), both `require-approval` with no mode
+eligibility, so the person's `/do` plan card or `/config` before/after card opens in every mode;
+existing installations get these two rules at their next service start, once and audited.
+The native agent and external MCP clients share this actor. No AI decision step,
+other configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.
 
 ## Inspect, grant and revoke using available surfaces
@@ -219,7 +223,7 @@ is not business acceptance. The existing CLI is
 
 **“MCP read-only observer.”** Since template v19 the first-run policy also lets the MCP actor
 call models and use agent tools; a company deny for the MCP actor on `model-invocation` and
-`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the v19 AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
+`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the newest (v20 proposal) AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
 no write groups. On an existing installation revoke each unwanted managed group
 with the preview/apply sequence above and review custom/role grants too. “No managed groups”
 does not prove read-only when other grants exist. Tool discovery is not authority; ordinary

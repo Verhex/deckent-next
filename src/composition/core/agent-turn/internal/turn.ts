@@ -3,12 +3,12 @@ import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chat
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, ModelInvocationError, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
-  type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
+  type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
-  renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
-  type ModelInvocationDelivery } from '#engine/index.js';
+  renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
+  type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
 import { t, MESSAGE_REGISTRY, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
@@ -21,6 +21,7 @@ import type { NativeAgentExecution } from '#capabilities/index.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
+import { createAgentProposals } from './proposals.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -45,11 +46,14 @@ export interface RuntimeChatTurnHost {
   /** MCP-CLIENT: the owner's local MCP servers, started by the turns that need them and closed with the service. */
   readonly mcp: McpClientPool;
   /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities; readonly answers: SessionApprovalAnswers;
+  /** alpha.64 B: the service's plan application `propose_work` runs (the CLI host binds it; absent: the tool is not offered). */ readonly planWork?: PlanServiceRun;
 }
+/** The service's own plan call (`planServiceRun`): the same application as /do, its Brain call through the given invoke. */
+export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal) => Promise<RunPlanningResult>;
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
-  return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
+  return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), ...(planWork ? { planWork } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
 /** v30: a running turn's steered lines; `closed` once the loop ended, so a later line is `not-running` (never accepted and lost). `room`: the
  * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */
@@ -79,7 +83,7 @@ export function chatTurnApprovalPreview(tool: string, args: Record<string, unkno
 /** alpha.59 L6: the declared class of each built-in agent tool (the same specs the turn offers), for the terminal's presentation only — the
  * tool line groups consecutive read-class calls. MCP tools (`mcp__…` wire names) are not built in and stay unknown (null), so never grouped. */
 const BUILTIN_TOOL_CLASSES: ReadonlyMap<string, AgentToolClass> = new Map([...WORKSPACE_READ_TOOL_SPECS, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
-  FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SESSION_STATE_TOOL_SPEC].map(spec => [spec.name, spec.toolClass]));
+  FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SESSION_STATE_TOOL_SPEC, ...AI_PROPOSAL_TOOL_SPECS].map(spec => [spec.name, spec.toolClass]));
 export const builtinAgentToolClass = (name: string): AgentToolClass | null => BUILTIN_TOOL_CLASSES.get(name) ?? null;
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 /** One governed terminal turn: authenticated peer, fresh policy and tools; the engine owns execution.
@@ -206,9 +210,13 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
       proposer: `model ${reference.modelId}`, locale: language }) : null;
+    // alpha.64 B + C (owner S4/S5): work and setting proposals, decided and applied as the AI actor in both loops; the person's card decides.
+    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval, locale: language,
+      ...(host.planWork ? { plan: (plan: BrainPlanCommand, planSignal: AbortSignal) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
+        undefined, invokeSignal ?? planSignal), planSignal) } : {}) }) : null;
     // NATIVE-BAGLAM: `session_state` is offered only where policy allows it now (decided like every call; never a default grant).
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy), tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
-      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...mcpTools.specs, PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];
+      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...mcpTools.specs, PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await agentProposals?.offered() ?? []), ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId, locale: language,
       ...(project ? { authority, selfSource: selfSource && !fullAccess ? isSelfSourceWriteFloored : () => false } : {}) }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
@@ -258,7 +266,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, ...(native ? { person: native.witness } : {}), standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush;
     // NATIVE-BAGLAM: the descriptive session snapshot over one fresh policy snapshot (mode, thinking, model facts, each tool's effect now); the prompt states it, `session_state` returns it fresh; a native turn's mode is the witnessed person's (R5c).
     const posture = shell ? await shell.posture() : null, sessionOf = async () => { const policy = await context.policy.load().catch(() => null); return agentSessionSnapshot({ policy, principal: native?.witness ?? context.principal, scopeId: command.scopeId, sessionId: command.sessionId ?? null, fullAccess, tools, shell: posture,
-      thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => decisions.probe(policy, tool, cell, shellInput) }); };
+      thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool) : decisions.probe(policy, tool, cell, shellInput) }); };
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
       model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
@@ -361,7 +369,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         hostNote: () => cliNotices.size ? t('headless.agent.k13.cliNotices', { events: [...cliNotices].join(', ') }, language) : null,
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
-      authorize: (tool, args, call) => decisions.authorize(tool, args, call),
+      authorize: (tool, args, call) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool) : decisions.authorize(tool, args, call),
       async prepare(tool, args) {
         if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool) || mcps(tool)) return decisions.prepare(tool, args);
         return { ok: true };
@@ -453,6 +461,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
         if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));
         if (proposals?.owns(tool.name)) return proposals.apply(args);
+        if (agentProposals?.owns(tool.name)) return agentProposals.apply(tool.name, args, callId);
         decisions.ranAllowed(tool, args, execution, callId); return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
       // v30 steer: the engine takes a line only at its model-call boundary; taking is synchronous, so a line joins once or stays pending.

@@ -1,12 +1,12 @@
-import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS } from '../support/first-run-v16.js';
+import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V19_RULE_IDS, RECOVERY_ROLLOUT, IDENTITY_MAX_LENGTH, firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, RECOVERY_ROLLOUT, IDENTITY_MAX_LENGTH, firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, firstRunTemplateRollback,
   mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { DispatchInventoryPolicyAuthorization, ServicePolicyAuthorization } from '#engine/core/policy/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS];
 
 // POLICY-V12 (owner 2026-10-16, "Evet, v12 hazırla"; clean-install rehearsal F1/F2): the named installing person inspects the installed scope and
 // shuts down exactly this installation's runtime service. No new MCP/AI authority; edited and hand-built policies keep the v11 add-only plan.
@@ -27,7 +27,7 @@ const source = (policy: unknown) => ({ async load() { return resolvePolicyBindin
 const SERVICE = 'installation-runtime';
 
 it('v12 adds exactly two rules naming the person alone, in the installed scope only, on the installed scope and this installation\'s service id', () => {
-  expect(current.version).toBe(19); // the v12 rules below are unchanged inside v13–v19
+  expect(current.version).toBe(20); // the v12 rules below are unchanged inside v13–v20
   expect(built.policy.grants.filter(rule => v12ids.includes(rule.id))).toEqual([
     { id: 'first-run-scope-inspect', effect: 'allow', actions: ['inspect'], scopes: ['installation'], principals: [person], resource: { kind: 'scope', ids: ['installation'] } },
     { id: 'first-run-service-shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['installation'], principals: [person], resource: { kind: 'service', ids: [SERVICE] } },

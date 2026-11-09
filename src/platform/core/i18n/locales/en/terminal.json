@@ -129,7 +129,7 @@
   "terminal.workline.queuedService": "Queued — the runtime service is not ready yet; it sends as soon as the service answers",
   "terminal.workline.queuedWindow": "Queued — a window is open; it sends after the window closes",
   "terminal.workline.queuedCommand": "Queued — a command is still running; it sends after it",
-  "terminal.workline.toolsNone": "This model cannot use tools here: it answers from text only and cannot read or change files. /model shows the details.",
+  "terminal.workline.toolsNone": "This model cannot use tools here: it answers from text only and cannot read or change files; start work with /do. /model shows the details.",
   "terminal.workline.uninstall.title": "Remove Deckent",
   "terminal.workline.uninstall.where": "Removal runs in your shell, not in this terminal: close Deckent, then run the command below.",
   "terminal.workline.uninstall.what": "It stops the runtime service, shows what it removes and what it keeps, and asks you before it removes anything.",

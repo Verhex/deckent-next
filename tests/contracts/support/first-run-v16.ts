@@ -13,3 +13,5 @@ export const FIRST_RUN_V16_RULE_IDS: readonly string[] = Object.freeze([
 ]);
 // Frozen v18 delta from 4466a4e33 (the rollback delta until v19 moved it on).
 export const FIRST_RUN_V18_RULE_IDS: readonly string[] = Object.freeze(["first-run-uninstall", "first-run-uninstall-operations"]);
+// Frozen v19 delta (R4a, the MCP actor's tool rules; the rollback delta until v20 moved it on).
+export const FIRST_RUN_V19_RULE_IDS: readonly string[] = Object.freeze(['first-run-mcp-model-invocation', 'first-run-mcp-read-tools', 'first-run-mcp-scratch-tools', 'first-run-mcp-edit-shell-tools', 'first-run-mcp-tool-operations']);

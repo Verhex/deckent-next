@@ -6,7 +6,7 @@ import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/pol
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
 /** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`; owner A48-D3, D3c). */
-const FIRST_RUN_DELTA_VERSION = 19;
+const FIRST_RUN_DELTA_VERSION = 20;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
@@ -49,7 +49,7 @@ export class PolicyTemplateUpgrade {
     return out;
   }
   private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
-    // The installer's key must name a version that can actually have added the current delta (v19's MCP actor tool rules).
+    // The installer's key must name a version that can actually have added the current delta (v20's proposal rules; the automatic upgrade too).
     // Earlier template upgrades cannot prove custody of this later grant.
     const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
     if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
@@ -83,9 +83,9 @@ export class PolicyTemplateUpgrade {
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names);
+      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId);
       const history = await this.deps.policy.authorityHistory?.();
-      // J3, amended by the owner 2026-11-05 (R4a) for the v19 MCP-actor delta: a policy at a template's own revision that carries the whole delta
+      // J3, amended by the owner 2026-11-05 (R4a) for the MCP-actor delta (v20 now): a policy at a template's own revision that carries the whole delta
       // (no `a-`/`m-` write since) is a provably fresh install, and the installer wrote that delta, so the same card removes it. Any other policy
       // without archived history stays `history-unavailable` (fail closed).
       const template = policy.revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-')) ? null : matchFirstRunPolicyTemplate(policy.policyRevision);
