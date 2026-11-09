@@ -1,5 +1,5 @@
 import { resourcePathsIntersect } from '#domain/index.js';
-import { WorkspacePatchError, historyPathSchema } from './contract.js';
+import { WorkspacePatchError, historyPathSchema } from '#engine/core/workspace-patch-contract/index.js';
 /** Directory/file replacement and either end of a rename conflict with a patch path. Textual mergeability is irrelevant. The path
  * family's one rule (R4): scheduling orders scope-conflicting tasks by the same intersection the delivery revalidation refuses. */
 export function patchPathsIntersect(a: string, b: string): boolean { return resourcePathsIntersect(a, b); }

@@ -1,5 +1,5 @@
 import { changedHistoryPaths, assertDisjointHistory } from './path-history.js';
-import { WorkspacePatchError, patchPathSchema, type WorkspacePatch } from './contract.js';
+import { WorkspacePatchError, patchPathSchema, type WorkspacePatch } from '#engine/core/workspace-patch-contract/index.js';
 import { gitBlobOid, hashAlgorithmOf, type SnapshotBudget } from './snapshot.js';
 /** A forward base move is safe only when every touched path still has its approved before identity. */
 export async function assertIntegrationBase(git: (args: string[]) => Promise<string>, patch: WorkspacePatch, head: string, budget: SnapshotBudget) {

@@ -1,13 +1,10 @@
 import { persistedInteger, clientCommandIdSchema, identitySchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot, type TrustedClock } from '#platform/index.js';
 import type { EffectConfirmation } from '#engine/core/effect/index.js';
-import { unconfirmedEffect } from './confirmation-default.js';
-import { deliverySummary } from './effect-summary.js';
+import { unconfirmedEffect, deliverySummary, type IntegrationDeliveryPlan, type IntegrationDeliveryRecord, type IntegrationDeliveryTarget, WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from '#engine/core/workspace-patch-contract/index.js';
 import { z } from 'zod';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
-import type { IntegrationDeliveryPlan, IntegrationDeliveryRecord, IntegrationDeliveryTarget } from './delivery.js';
-import { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from './adoption-error.js';
 import { adoptionVerificationSchema, verifyAdoption, type AdoptionVerification, type AdoptionVerificationPolicy,
   type AdoptionVerificationStore } from './verification.js';
 export { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode };

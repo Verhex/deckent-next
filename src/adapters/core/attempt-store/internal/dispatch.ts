@@ -1,4 +1,4 @@
-import { readDispatchFence } from './dispatch-fence.js';
+import { readDispatchFence } from '#adapters/core/run-store/index.js';
 import { grantDispatchLaunch } from './launch.js';
 import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';

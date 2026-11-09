@@ -1,7 +1,7 @@
 import { persistedInteger, identitySchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { AdoptionFence } from './adoption.js';
+import type { AdoptionFence } from '#engine/core/workspace-adoption/index.js';
 export const adoptionFenceRef = (target: string) => `refs/deckent/adoption-fences/${createHash('sha256').update(target).digest('hex')}`;
 /** Fixed versioned Git payload, unchanged for historical replay. Not queue authority. */
 export const adoptionFenceText = (target: string, fence: AdoptionFence) => JSON.stringify({ schemaVersion: 1, kind: 'deckent-adoption-fence', target,

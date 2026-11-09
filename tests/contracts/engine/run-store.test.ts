@@ -25,6 +25,13 @@ async function fixture() {
 }
 it('atomically persists Run progress and attempts, with exact replay across independent connections and reopen', async () => {
   const f = await fixture(); await f.store.createRun(create);
+  const reader = await openSqliteInventoryReader(f.path, { busyTimeoutMs: options.busyTimeoutMs });
+  try {
+    expect(await reader.loadRun('s', 'r')).toEqual(await f.store.loadRun('s', 'r'));
+    expect(await reader.loadRunReceipt('s', 'create')).toEqual(await f.store.loadRunReceipt('s', 'create'));
+    expect(await reader.loadRun('foreign', 'r')).toBeNull();
+    expect(await reader.loadRunReceipt('foreign', 'create')).toBeNull();
+  } finally { reader.close(); }
   const second = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(second);
   const results = await Promise.allSettled([f.store.reserveRunTasks(reservation(['a', 'b'])), second.reserveRunTasks(reservation(['a', 'b'], 'other-command'))]);
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);

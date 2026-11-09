@@ -5,7 +5,7 @@ import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { RunBoundDispatchStore, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { RunStore } from '#engine/core/runs/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
-import { workspacePatchSchema, patchDigest, type WorkspacePatch } from '#engine/core/workspace-patch/index.js';
+import { workspacePatchSchema, patchDigest, type WorkspacePatch } from '#engine/core/workspace-patch-contract/index.js';
 import { HandoffError } from '#engine/core/handoff-observation/index.js';
 export interface AcceptedPredecessorPatch { readonly source: AttemptIdentity; readonly receipt: ArtifactReceipt; readonly patch: WorkspacePatch }
 type Store = Pick<RunStore, 'loadRun'> & Pick<AttemptStore, 'load'> & RunBoundDispatchStore;

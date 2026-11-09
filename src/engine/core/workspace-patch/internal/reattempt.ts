@@ -6,8 +6,8 @@ import type { QueueReattemptView, TargetQueueApplication } from '#engine/core/ef
 import type { RunAdmission, RunStore } from '#engine/core/runs/index.js';
 import type { DispatchIdentityAuthorization, RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import { WorkspacePatchApplication, type RunBoundTaskStore } from './application.js';
-import { WorkspaceIntegrationApplication, type IntegrationTarget } from './integration.js';
-import type { PatchScopeMode } from './scope.js';
+import { WorkspaceIntegrationApplication } from './integration.js';
+import type { IntegrationTarget, PatchScopeMode } from '#engine/core/workspace-patch-contract/index.js';
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Adapter-classified effect reach of a task's frozen execution profile. Anything not proven workspace-only is never re-attempted. */
 export type ReattemptEffects = 'workspace-only' | 'external' | 'unknown';

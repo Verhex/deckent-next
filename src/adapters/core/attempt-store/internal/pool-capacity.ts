@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { decidePoolCapacity, poolCapacityReceiptSchema, RunStoreError, type AuditStore, type PoolCapacityReceipt, type PoolCapacityWrite } from '#engine/index.js';
-import { SqliteExecutionPools } from './pools.js';
+import { SqliteExecutionPools } from '#adapters/core/run-store/index.js';
 const recordSchema = z.strictObject({ fingerprint: z.string(), receipt: poolCapacityReceiptSchema });
 /** One capacity writer; occupancy, replay, override, immutable receipt and sealed audit commit together. */
 export class SqlitePoolCapacityJournal {

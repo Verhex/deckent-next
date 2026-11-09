@@ -1,9 +1,6 @@
 import { candidateBindingSchema, type CandidateBinding, type TargetBinding } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
-import type { WorkspacePatch } from './contract.js';
-import { WorkspacePatchError } from './contract.js';
-import type { IntegrationManifest } from './integration.js';
-import type { IntegrationDeliveryPlan } from './delivery.js';
+import { type WorkspacePatch, WorkspacePatchError, type IntegrationManifest, type IntegrationDeliveryPlan } from '#engine/core/workspace-patch-contract/index.js';
 
 /** Maps historical Git custody into the opaque envelope without rewriting any sealed v1/v2 manifest or plan. */
 export function bindIntegrationCandidate(target: TargetBinding, patch: WorkspacePatch, manifest: IntegrationManifest,

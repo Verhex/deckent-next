@@ -1,18 +1,14 @@
 import { readRunPoolEvidence } from './run-pool-observation.js';
 import { readIntegration } from './integration.js';
-import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
-import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
-  openLedgerDatabase, decodeStored, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-import { readRunReceipt, readRunSnapshot } from './runs.js';
+import { readRunBoundDispatch, readRunBoundTask, readRunReceipt, readRunSnapshot, SqliteRunWorkspaceCustody } from '#adapters/core/run-store/index.js';
+import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema, openLedgerDatabase, decodeStored, type SqliteLedgerOptions, findCapacityResource, type CapacityResourceBinding } from '#adapters/core/sqlite-ledger/index.js';
 import { attemptSnapshotSchema, identitySchema } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
 import { SqliteRunProgression } from './progression.js';
-import { SqliteEffectJournal } from './effect.js';
-import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
-import { findCapacityResource, type CapacityResourceBinding } from '#adapters/core/sqlite-ledger/index.js';
+import { SqliteEffectJournal } from '#adapters/core/sqlite-effect-store/index.js';
 export type SqliteInventoryOptions = Pick<SqliteLedgerOptions, 'busyTimeoutMs'>;
 /** Existing ledger only: no creation, migrations, journal-mode changes or write methods.
  * WAL readers may use SQLite shared-memory bookkeeping. Path custody belongs to composition.

@@ -18,7 +18,7 @@ it('keeps coding-tree and isolated BeUser launches behind their own admitted gat
   // recover output or release a recorded dispatch. Only the bounded BeUser controller receives an execute-capable dispatch port.
   const builders = sites(/new DispatchApplication\(/u);
   expect(builders).toEqual([BEUSER, 'src/composition/core/execution/internal/task.ts', 'src/composition/core/runs/internal/cancellation-runtime.ts',
-    'src/composition/core/runs/internal/reconcile.ts', 'src/composition/core/runs/internal/recover-output.ts', 'src/engine/core/workspace-patch/internal/custody.ts']);
+    'src/composition/core/runs/internal/reconcile.ts', 'src/composition/core/runs/internal/recover-output.ts', 'src/engine/core/workspace-adoption/internal/custody.ts']);
   const beuser = files.find(file => file.path === BEUSER)!.text;
   const admitted = beuser.indexOf("await policy.authorizeIdentity('execute', request.identity, c.principal)"), selected = beuser.indexOf('selectReservedTaskProfile(await store.loadRun(');
   expect(admitted).toBeGreaterThan(-1); expect(selected).toBeGreaterThan(admitted);

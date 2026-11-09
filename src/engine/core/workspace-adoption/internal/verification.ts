@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { counterSchema, encodeExecutionProfileDefinition, executionRegistrySchema, identitySchema, type RunSnapshot,
   type VerifiedPrincipal } from '#domain/index.js';
 import type { RunWorkspaceCustody, RunWorkspaceProvider } from '#engine/core/workspaces/index.js';
-import { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from './adoption-error.js';
+import { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from '#engine/core/workspace-patch-contract/index.js';
 
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** What a verified adoption binds (B06-2b): one Task of the named kind, run on this exact commit with the installation's current

@@ -4,7 +4,7 @@ import { sameAttemptIdentity, TaskEvaluationError, operationEvidenceBindingSchem
 import { readAcceptedOperationSettlements } from '#adapters/core/sqlite-ledger/index.js';
 import { workerEventLogSchema, bindUsedOperationEvidence, selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from '#engine/index.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
-import { SqliteEffectJournal } from './effect.js';
+import { SqliteEffectJournal } from '#adapters/core/sqlite-effect-store/index.js';
 /** The immutable admission row owns Run authority; dispatch grant owns execution authority and start time. */
 export function readRunEvaluationPrincipal(db: DatabaseSync, identity: AttemptIdentity) {
   attemptIdentitySchema.parse(identity);

@@ -15,6 +15,11 @@ it('imports the compiled SDK without loading native SQLite, then loads it only o
     await import(process.argv[1]);
     if (selected !== 0) throw new Error('EAGER_SQLITE_LOAD');
     const { openSqliteAttemptStore } = await import(process.argv[2]);
+    const legacy = await import(process.argv[3]), current = await import(process.argv[4]);
+    await import(process.argv[5]);
+    for (const name of ['SqliteExecutionPools', 'SqliteRunJournal', 'readRunReceipt', 'readRunSnapshot']) {
+      if (legacy[name] !== current[name]) throw new Error('RUN_STORE_COMPATIBILITY_EXPORT');
+    }
     if (selected !== 0) throw new Error('EAGER_ADAPTER_LOAD');
     let blocked = false;
     try { await openSqliteAttemptStore(':memory:', { busyTimeoutMs: 100, journalMode: 'delete', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); }
@@ -23,7 +28,8 @@ it('imports the compiled SDK without loading native SQLite, then loads it only o
     process.stdout.write(JSON.stringify({ importedWithoutSqlite: true, selected }));
   `;
   const result = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script,
-    pathToFileURL(resolve('dist/index.js')).href, pathToFileURL(resolve('dist/adapters/index.js')).href],
+    pathToFileURL(resolve('dist/index.js')).href, pathToFileURL(resolve('dist/adapters/index.js')).href,
+    ...['attempt-store', 'run-store', 'sqlite-effect-store'].map(unit => pathToFileURL(resolve('dist/adapters/core', unit, 'index.js')).href)],
   { timeout: 10_000, maxBuffer: 65_536 });
   expect(JSON.parse(result.stdout)).toEqual({ importedWithoutSqlite: true, selected: 1 });
 });

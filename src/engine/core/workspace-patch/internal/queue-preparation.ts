@@ -5,13 +5,13 @@ import { PrivateCandidateRunAdmission, type PrivateCandidateWorkspace, type RunA
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { TargetQueuePreparation, TargetQueueStore } from '#engine/core/effect/index.js';
 import { WorkspacePatchApplication } from './application.js';
-import { WorkspaceIntegrationApplication, type IntegrationStore, type IntegrationTarget } from './integration.js';
+import { WorkspaceIntegrationApplication } from './integration.js';
+import type { IntegrationStore, IntegrationTarget, IntegrationDeliveryTarget } from '#engine/core/workspace-patch-contract/index.js';
 import { queueCommandIds } from './queue-git.js';
 import { queueCommitMetadata } from './queue-custody.js';
 import { bindIntegrationCandidate } from './candidate-binding.js';
 import { queueVerificationGraph, assertQueueVerification } from './queue-verification.js';
-import type { AdoptionVerificationStore, AdoptionVerificationRequirement } from './verification.js';
-import type { IntegrationDeliveryTarget } from './delivery.js';
+import type { AdoptionVerificationStore, AdoptionVerificationRequirement } from '#engine/core/workspace-adoption/index.js';
 import { createHash } from 'node:crypto';
 const queueDigest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 interface QueuePreparationContext {
