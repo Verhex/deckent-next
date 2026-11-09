@@ -563,7 +563,8 @@
         "src/engine/core/provider-spend",
         "src/adapters/core/contract",
         "src/platform/core/config",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/platform/core/errors"
       ],
       "plan": "FOUNDATION"
     },
@@ -5280,7 +5281,7 @@
       "composition": 13703
     },
     "totalSrcLines": 200000,
-    "testCases": 8198,
+    "testCases": 8199,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

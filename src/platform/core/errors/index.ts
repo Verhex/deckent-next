@@ -7,3 +7,4 @@ export type { AuthorizationRefusal, ErrorDefinition, ErrorDefinitions } from './
 export { PERSON_AUTHORIZATION_REFUSALS } from './internal/definition.js';
 export { mergeErrorDefinitions } from './internal/merge.js';
 export { ERROR_DEFINITION_FRAGMENTS } from './internal/defs/index.js';
+export * from './internal/coded-error.js';

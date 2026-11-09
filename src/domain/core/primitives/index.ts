@@ -13,3 +13,4 @@ export type { WorkspaceHiddenPaths } from './internal/hidden-paths.js';
 export { rolloutCriterionMet } from './internal/rollout.js';
 export type { RolloutBounds, RolloutMeasure } from './internal/rollout.js';
 export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode } from './internal/persisted-schema.js';
+export { CodedError, isCodedError } from './internal/coded-error.js';
