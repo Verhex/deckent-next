@@ -9,7 +9,7 @@
 //   terminal start contract: TTY `deckent` workline (lazy ink/react/yoga render: banner, Ready, composer placeholder, no line prompt; Ctrl+C
 //            twice), piped `deckent terminal` typed refusal, line mode on a TTY (tr prompt) and piped (no prompt) — texts from the shipped catalogs
 //   native   every shipped .node addon loads in this Node (Node-API: one binary serves Node 24 and 26)
-//   lazy     the static import closure of `deckent` reaches no ink/react/yoga/MCP code, of `deckent-mcp` only the MCP server
+//   lazy     the static import closure of `deckent` reaches no ink/react/yoga/MCP/xterm code, of `deckent-mcp` only the MCP server
 //   imports  every shipped .js file names only node: builtins, relative files or the package's own #imports (nothing left to resolve)
 //   bootstrap the native worker bootstrap, which Deckent mounts ALONE into worker containers as /run/deckent-bootstrap.mjs, imports only node:
 //            builtins and loads when copied by itself into an empty directory (PACKAGED-WORKER-BOOTSTRAP: a shared vendor chunk killed every worker)
@@ -256,7 +256,7 @@ if (want('lazy') && report.checks.install?.ok !== false) {
   const reach = entry => { const seen = new Set(), stack = [entry], heavy = new Set();
     while (stack.length) { const file = stack.pop(); if (seen.has(file) || !file.endsWith('.js')) continue; seen.add(file);
       const code = readFileSync(file, 'utf8');
-      for (const match of code.matchAll(/^\/\/ node_modules\/((?:@[^/]+\/)?[^/]+)\//gm)) if (['ink', 'react', 'react-reconciler', 'yoga-layout', '@modelcontextprotocol'].some(name => match[1] === name || match[1].startsWith(`${name}/`))) heavy.add(match[1]);
+      for (const match of code.matchAll(/^\/\/ node_modules\/((?:@[^/]+\/)?[^/]+)\//gm)) if (['ink', 'react', 'react-reconciler', 'yoga-layout', '@modelcontextprotocol', '@xterm'].some(name => match[1] === name || match[1].startsWith(`${name}/`))) heavy.add(match[1]);
       for (const match of code.matchAll(STATIC)) { const next = target(file, match[1] ?? match[2]); if (next) stack.push(next); } }
     return { files: seen.size, heavy: [...heavy].sort() }; };
   const cli = reach(join(root, manifest.bin.deckent)), mcp = reach(join(root, manifest.bin['deckent-mcp'])), extensions = reach(join(root, manifest.exports['./extensions'].import));

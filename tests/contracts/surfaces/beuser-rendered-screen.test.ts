@@ -6,7 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import ts from 'typescript';
 import theme from '../../../assets/beuser/journeys/theme-light.json' with { type: 'json' };
-import { BeuserScreenRenderer, beuserTerminalFixture } from '#adapters/core/beuser-surface/index.js';
+import { beuserTerminalFixture } from '#adapters/core/beuser-surface/index.js';
+// The renderer is the lazily loaded xterm half (KG9 F2) with no index export; this file measures it directly.
+// eslint-disable-next-line no-restricted-imports
+import { BeuserScreenRenderer } from '#adapters/core/beuser-surface/internal/screen.js';
 
 const bytes = (text: string) => Buffer.from(text, 'utf8');
 const renderer = (columns = 20, rows = 4) => new BeuserScreenRenderer({ columns, rows, scrollback: 8 }, 20000);

@@ -8,7 +8,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { beuserBindingSchema } from '#domain/core/beuser/index.js';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema } from '#domain/core/principal/index.js';
 import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
-import { createBeuserSurface, pinBeuserDriverBoot, type BeuserRealmChannel, type BeuserSurfaceOptions, type HarnessEvent, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
+import { loadBeuserTerminal, pinBeuserDriverBoot, type BeuserRealmChannel, type BeuserSurfaceOptions, type HarnessEvent, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
+const { createBeuserSurface } = await loadBeuserTerminal();
 
 const binding = beuserBindingSchema.parse({ schemaVersion: 1,
   identity: { scopeId: 'scope', runId: 'run', taskId: 'task', attemptId: 'attempt', layoutRevision: 'layout', generation: 1 },

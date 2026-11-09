@@ -15,12 +15,11 @@ import { dist, HOST_GRAPH, staticReach } from '../../fixtures/static-graph.js';
 const INK = ['ink', 'react'], SERVER = ['@modelcontextprotocol/server'], XTERM = ['@xterm/headless', '@xterm/addon-unicode11'];
 const HEAVY = [...INK, ...SERVER, '@modelcontextprotocol/client', ...XTERM];
 // The load budget of every entry and every lazy target of the CLI start path: [heavy packages it loads by design, today's offenders].
-// The offender column is a ratchet (KG9 F1): BOOT-2 (xterm), BARREL (Ink in text families) and later cards shrink it, and it ends empty.
+// The offender column is a ratchet (KG9 F1): BARREL (Ink in text families) and later cards shrink it, and it ends empty.
 const LOAD_BUDGET: Readonly<Record<string, readonly [byDesign: readonly string[], today: readonly string[]]>> = {
-  'index.js': [[], XTERM], 'extensions.js': [[], XTERM], 'composition/core/mcp/internal/entry.js': [SERVER, XTERM],
-  'composition/core/cli/internal/entry.js': [[], []], 'composition/core/cli/internal/cli-main.js': [[], []],
-  ...Object.fromEntries(['host', 'git-tracked', 'model-help'].map(name => [`composition/core/cli/internal/${name}.js`, [[], XTERM]])),
-  ...Object.fromEntries(['query-errors', 'scoped-request', 'model-connect'].map(unit => [`composition/core/${unit}/index.js`, [[], XTERM]])),
+  'index.js': [[], []], 'extensions.js': [[], []], 'composition/core/mcp/internal/entry.js': [SERVER, []], 'adapters/core/beuser-surface/internal/pty.js': [XTERM, []],
+  ...Object.fromEntries(['entry', 'cli-main', 'host', 'git-tracked', 'model-help'].map(name => [`composition/core/cli/internal/${name}.js`, [[], []]])),
+  ...Object.fromEntries(['query-errors', 'scoped-request', 'model-connect'].map(unit => [`composition/core/${unit}/index.js`, [[], []]])),
   'surfaces/core/mcp/index.js': [SERVER, []], 'surfaces/core/hub-mcp/index.js': [SERVER, []],
   ...Object.fromEntries(['terminal', 'terminal-work', 'terminal-ledger', 'setup'].map(unit => [`surfaces/core/${unit}/index.js`, [INK, []]])),
   'surfaces/core/cli/internal/terminal.js': [INK, []], 'surfaces/core/cli/internal/launch-shell.js': [INK, []],

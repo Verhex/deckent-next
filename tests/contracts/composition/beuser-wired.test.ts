@@ -126,7 +126,7 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
       writeFileSync(join(f.candidate, 'dist', 'entry.js'), 'changed;\n');
       return createRealm(input);
     });
-    const surface = vi.spyOn(adapters, 'createBeuserSurface'), runtime = vi.spyOn(adapters.DockerBeuserRealmRuntime.prototype, 'create');
+    const surface = vi.spyOn(await adapters.loadBeuserTerminal(), 'createBeuserSurface'), runtime = vi.spyOn(adapters.DockerBeuserRealmRuntime.prototype, 'create');
     const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
     expect(report).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'BEUSER_CANDIDATE_MISMATCH' },
       { branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }] });

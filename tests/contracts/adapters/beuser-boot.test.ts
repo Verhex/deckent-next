@@ -11,10 +11,11 @@ import { pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext } from '#en
 import { BeuserController, walkBeuser } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmCustody, type BeuserRealmLease } from '#engine/core/beuser-realm/index.js';
 import { BEUSER_REALM_RECIPE, createBeuserChannel, readBeuserInstallationSummary, type BeuserRealmCommand, type BeuserRealmOptions } from '#adapters/core/beuser-realm/index.js';
-import { createBeuserSurface, pinBeuserDriverBoot, beuserTerminalFixture, type BeuserTerminalFixture, type BeuserDriverBoot } from '#adapters/core/beuser-surface/index.js';
+import { loadBeuserTerminal, pinBeuserDriverBoot, beuserTerminalFixture, type BeuserTerminalFixture, type BeuserDriverBoot } from '#adapters/core/beuser-surface/index.js';
 import { beuserJourneyLaunch } from '#composition/core/beuser/index.js';
 import theme from '../../../assets/beuser/journeys/theme-light.json' with { type: 'json' };
 import personas from '../../../assets/beuser/personas.json' with { type: 'json' };
+const { createBeuserSurface } = await loadBeuserTerminal();
 
 const realmCommand = vi.hoisted(() => vi.fn<BeuserRealmCommand>(async () => 'fixture-container'));
 // Only Docker transport is replaced. The production producer, validation, binding and Python are real.
