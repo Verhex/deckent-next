@@ -4,7 +4,7 @@ import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { assertEffectTransition, EffectError, effectIntentSchema, effectRecordSchema, isEffectOpen, type EffectIntent, type EffectRecord } from '#domain/index.js';
+import { assertEffectTransition, claimEffectRecord, EffectError, effectIntentSchema, effectRecordSchema, isEffectOpen, type EffectIntent, type EffectRecord } from '#domain/index.js';
 import type { EffectStore } from '#engine/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
@@ -86,16 +86,12 @@ export class FileEffectStore implements EffectStore {
   async claimEffect(input: EffectIntent): Promise<EffectRecord> {
     const intent = effectIntentSchema.parse(input);
     return this.transaction(async body => {
-      const { scopeId, commandId, target } = intent.command;
-      const existing = body.records.find(record => record.intent.command.scopeId === scopeId && record.intent.command.commandId === commandId);
-      if (existing) { if (!same(existing.intent, intent)) throw new EffectError('EFFECT_CONFLICT'); return existing; }
-      if (!intent.producer) throw new EffectError('EFFECT_INVALID');
-      if (body.records.some(record => record.intent.command.scopeId === scopeId && record.intent.idempotencyKeyHash === intent.idempotencyKeyHash)) throw new EffectError('EFFECT_CONFLICT');
-      const targetRecords = body.records.filter(record => same(record.intent.command.target, target));
-      if (targetRecords.some(record => isEffectOpen(record.state))) throw new EffectError('EFFECT_TARGET_BUSY');
-      const sequence = Math.max(0, ...targetRecords.map(record => record.sequence)) + 1;
-      const record = effectRecordSchema.parse({ intent, sequence, state: 'claimed', evidence: null, refusal: null });
-      await this.write({ ...body, revision: body.revision + 1, records: [...body.records, record] }); return record;
+      const { scopeId, commandId, target } = intent.command, targetRecords = body.records.filter(record => same(record.intent.command.target, target));
+      const existing = body.records.find(record => record.intent.command.scopeId === scopeId && record.intent.command.commandId === commandId) ?? null;
+      const record = claimEffectRecord(intent, existing, { open: () => targetRecords.some(entry => isEffectOpen(entry.state)), lastSequence: () => Math.max(0, ...targetRecords.map(entry => entry.sequence)),
+        keyTaken: () => body.records.some(entry => entry.intent.command.scopeId === scopeId && entry.intent.idempotencyKeyHash === intent.idempotencyKeyHash) });
+      if (record !== existing) await this.write({ ...body, revision: body.revision + 1, records: [...body.records, record] });
+      return record;
     });
   }
   async saveEffect(previousInput: EffectRecord, nextInput: EffectRecord): Promise<EffectRecord> {

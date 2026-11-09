@@ -22,7 +22,6 @@ export class SqliteDispatchJournal {
   private assertNotFenced(record: DispatchRecord, action: Exclude<LostDispatchAction, 'release-slot'>): void {
     void action; if (readDispatchFence(this.db, record)) throw new DispatchError('DISPATCH_FENCED');
   }
-  private transaction<T>(work: () => T): T { return ledgerTransaction(this.db, work); }
   async listDispatches(input: DispatchInventoryQuery) {
     const query = dispatchInventoryQuerySchema.parse(input);
     try {
@@ -41,7 +40,7 @@ export class SqliteDispatchJournal {
   async requestDispatchCancellation(input: DispatchClaim['request'], actor: VerifiedPrincipal) {
     const request = sandboxRequestSchema.parse(input); const principal = verifiedPrincipalSchema.parse(actor);
     if (!principal.scopeIds.includes(request.identity.scopeId)) throw new DispatchError('DISPATCH_NOT_ADMITTED');
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const existing = this.read(request);
       if (!existing) throw new DispatchError('DISPATCH_NOT_ADMITTED');
       if (existing.terminal || existing.cancellation) return existing;
@@ -66,7 +65,7 @@ export class SqliteDispatchJournal {
   /** Launch evidence of a granted, unfenced dispatch, each written once: the container id when `create` returned (S6R-1, before `start`), then
    * the incarnation, which must be that container (older records have no id to compare). The same value replays; another one conflicts. */
   private retainLaunch(claim: DispatchClaim, evidence: Readonly<{ containerId: string } | { worker: NonNullable<DispatchRecord['worker']> }>) {
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner || existing.launch !== 'granted') throw new DispatchError('DISPATCH_CONFLICT');
       if (readDispatchFence(this.db, existing)) throw new DispatchError('DISPATCH_FENCED');
@@ -83,7 +82,7 @@ export class SqliteDispatchJournal {
   private retainArtifact(input: DispatchClaim, value: ArtifactReceipt, kind: 'output' | 'patch') {
     const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);
     if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
       this.assertNotFenced(existing, kind);
@@ -106,7 +105,7 @@ export class SqliteDispatchJournal {
     const claim = dispatchAdmissionSchema.parse(input);
     if (!this.profiles) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
     if (this.profiles.validate(claim.profile) !== undefined) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const existing = this.read(claim.request);
       if (existing) return Object.freeze({ acquired: false, record: existing });
       const identity = claim.request.identity;
@@ -121,10 +120,10 @@ export class SqliteDispatchJournal {
       return Object.freeze({ acquired: true, record });
     });
   }
-  async grantLaunch(input: LaunchRequest, timing: import('#domain/index.js').RunLifecycleTiming) { return this.transaction(() => grantDispatchLaunch(this.db, input, timing)); }
+  async grantLaunch(input: LaunchRequest, timing: import('#domain/index.js').RunLifecycleTiming) { return ledgerTransaction(this.db, () => grantDispatchLaunch(this.db, input, timing)); }
   async finishDispatch(input: DispatchClaim, value: DispatchTerminal, timing: import('#domain/index.js').RunLifecycleTiming) {
     const claim = dispatchClaimSchema.parse(input); const terminal = dispatchTerminalSchema.parse(value);
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
       this.assertNotFenced(existing, 'finish-dispatch');

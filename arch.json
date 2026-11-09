@@ -5251,12 +5251,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42379,
+      "adapters": 42266,
       "surfaces": 45000,
       "composition": 13576
     },
     "totalSrcLines": 200000,
-    "testCases": 8196,
+    "testCases": 8197,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

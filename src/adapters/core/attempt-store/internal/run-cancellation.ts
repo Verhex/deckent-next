@@ -1,22 +1,13 @@
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptPhase, attemptSnapshotSchema, sameAttemptIdentity, requestAttemptCancellation, type RunSnapshot } from '#domain/index.js';
+import { attemptPhase, requestAttemptCancellation, type RunSnapshot } from '#domain/index.js';
 import { dispatchRecordSchema, RunStoreError, type RunCancellation } from '#engine/index.js';
+import { readAttempt, readDispatch } from './run-settlement.js';
 /** Called only inside the Run cancellation transaction. Intent does not imply process termination. */
 export function propagateRunCancellation(db: DatabaseSync, run: RunSnapshot, actor: RunCancellation['actor']): void {
   for (const binding of run.bindings) {
     const identity = binding.identity;
-    const row = db.prepare('SELECT revision,snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-    if (!row) throw new RunStoreError('RUN_STORE_CORRUPT');
-    let attempt;
-    try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-    if (attempt.revision !== row.revision || !sameAttemptIdentity(attempt.identity, identity)) throw new RunStoreError('RUN_STORE_CORRUPT');
-    const dispatchRow = db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-    let dispatch;
-    if (dispatchRow) {
-      try { dispatch = dispatchRecordSchema.parse(JSON.parse(String(dispatchRow.record))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-      if (!sameAttemptIdentity(dispatch.request.identity, identity)) throw new RunStoreError('RUN_STORE_CORRUPT');
-    }
+    const attempt = readAttempt(db, identity), dispatch = readDispatch(db, identity);
     if (attemptPhase(attempt) === 'finished') continue;
     if (dispatch?.terminal) throw new RunStoreError('RUN_STORE_CORRUPT');
     const next = requestAttemptCancellation(attempt, attempt.revision);

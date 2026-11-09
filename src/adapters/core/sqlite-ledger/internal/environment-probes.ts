@@ -1,10 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptIdentitySchema, attemptSnapshotSchema, holdEnvironmentProbes, identitySchema, releaseEnvironmentProbes, RunError, runSnapshotSchema, sameAttemptIdentity, settleEnvironmentProbe, type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import { RunStoreError, type RunReceipt } from '#engine/index.js';
-import { ledgerTransaction, sqliteFailure } from './options.js';
+import { decodeStored, ledgerTransaction, sqliteFailure } from './options.js';
 /** `probing` (REVISE 2695): the custody written before the probe (its controller may still be probing); otherwise the 2693 uncertain hold. */
 export type EnvironmentProbeHold = Readonly<{ identity: AttemptIdentity; probes: readonly string[]; runRevision: number; probing: boolean }>;
-const decode = (snapshot: unknown) => { try { return runSnapshotSchema.parse(JSON.parse(String(snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); } };
+const decode = (snapshot: unknown) => decodeStored(runSnapshotSchema, snapshot, () => new RunStoreError('RUN_STORE_CORRUPT'));
 const attemptOf = (db: DatabaseSync, identity: AttemptIdentity) => {
   const row = db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
   try { const attempt = row ? attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))) : null; return attempt && sameAttemptIdentity(attempt.identity, identity) ? attempt : null; } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }

@@ -217,6 +217,9 @@ it('reports immutable allocation ceiling conflicts without mutation and rolls al
   const check = new DatabaseSync(base.path, { readOnly: true });
   expect(check.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 1, in_flight: 0 });
   expect(check.prepare('SELECT count(*) AS count FROM model_invocations').get()?.count).toBe(1); check.close();
+  // Owner B1-9: a real ledger busy is reported as busy, never as an unavailable store.
+  const busy = await openSqliteModelInvocationStore(base.path, { ...options, busyTimeoutMs: 20 }, 'forbid'), holder = new DatabaseSync(base.path); holder.exec('BEGIN IMMEDIATE');
+  try { await expect(busy.claim(admission(base, 'command-3', 'invocation-3'))).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' }); } finally { holder.exec('ROLLBACK'); holder.close(); busy.close(); }
 });
 
 it('fails closed for stale activation and corrupt allocation counters', async () => {

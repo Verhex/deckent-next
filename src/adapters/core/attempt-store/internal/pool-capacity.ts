@@ -1,30 +1,21 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
-import { AttemptStoreError, decidePoolCapacity, poolCapacityReceiptSchema, RunStoreError, type AuditStore, type PoolCapacityReceipt, type PoolCapacityWrite } from '#engine/index.js';
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
+import { decidePoolCapacity, poolCapacityReceiptSchema, RunStoreError, type AuditStore, type PoolCapacityReceipt, type PoolCapacityWrite } from '#engine/index.js';
 import { SqliteExecutionPools } from './pools.js';
 const recordSchema = z.strictObject({ fingerprint: z.string(), receipt: poolCapacityReceiptSchema });
 /** One capacity writer; occupancy, replay, override, immutable receipt and sealed audit commit together. */
 export class SqlitePoolCapacityJournal {
   constructor(private readonly db: DatabaseSync) {}
-  private transaction<T>(mode: 'BEGIN' | 'BEGIN IMMEDIATE', work: () => T): T {
-    let active = false, committing = false;
-    try { this.db.exec(mode); active = true; const result = work(); committing = true; this.db.exec('COMMIT'); return result; }
-    catch (error) {
-      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-      if (committing) throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN');
-      throw sqliteFailure(error);
-    }
-  }
   async readPoolCapacity(poolId: string) {
-    return this.transaction('BEGIN', () => {
+    return ledgerTransaction(this.db, () => {
       const pools = new SqliteExecutionPools(this.db), pool = pools.require(poolId);
       return Object.freeze({ schemaVersion: 1 as const, poolId, capacity: pool.capacity, occupancy: pools.occupancy(poolId), receipt: pools.capacityReceipt(poolId) });
-    });
+    }, { mode: 'read' });
   }
   async applyPoolCapacity(write: PoolCapacityWrite, audit: (store: AuditStore, receipt: PoolCapacityReceipt) => void) {
-    return this.transaction('BEGIN IMMEDIATE', () => {
+    return ledgerTransaction(this.db, () => {
       const { scopeId, commandId, poolId } = write.command, fingerprint = JSON.stringify({ command: write.command, actor: write.actor });
       const prior = this.db.prepare('SELECT record FROM execution_pool_capacity_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
       if (prior) {

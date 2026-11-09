@@ -71,8 +71,9 @@ describe('separate-process SQLite lock contention', () => {
     const input = { commandId: 'create', command: 'create', expectedRevision: null,
       snapshot: createAttempt({ runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'v' }) };
     if (journalMode === 'delete') {
-      // The reader allows BEGIN IMMEDIATE and INSERT, but prevents the exclusive lock at COMMIT.
-      await expect(f.store.commit(input)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
+      // The reader allows BEGIN IMMEDIATE and INSERT, but prevents the exclusive lock at COMMIT: owner B1-9, once COMMIT was attempted the
+      // outcome is unknown until reconciled (here the rollback held, so nothing was written).
+      await expect(f.store.commit(input)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_OUTCOME_UNKNOWN' });
       expect(await f.store.load('s', 'a')).toBeNull();
       expect(await f.store.receipt('s', 'create')).toBeNull();
     } else {

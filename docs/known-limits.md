@@ -1041,8 +1041,9 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **A worker's resource use is measured in bounded local traces only.** `run inspect` shows a per-Run cost report from bounded traces
   and `deckent agents stats` shows acceptance statistics; neither is a measured quality score.
 - **The ledger is one local SQLite file shared by every process.** Writes are serialized; a write that waits longer than
-  `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
-  retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
+  `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. A write that fails
+  at its commit may have been written, so it is refused with `ATTEMPT_STORE_OUTCOME_UNKNOWN` instead. *Workaround:* retry the same
+  command (a command that did commit replays its receipt); on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
   lock and the running service keeps the ledger's side files in place; this was measured on one loaded core, not at fleet scale.
 
 A founder who explicitly accepts the managed `decision-steps` baseline can make

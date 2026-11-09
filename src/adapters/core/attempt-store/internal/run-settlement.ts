@@ -2,25 +2,20 @@ import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, preventRunAttempt, sameAttemptIdentity, settleCancelledRunAttempt, type RunLifecycleTiming, type AttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
 import { dispatchRecordSchema, RunStoreError, type DispatchRecord, type RunCancellationSettlement } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { decodeStored } from '#adapters/core/sqlite-ledger/index.js';
+const corrupt = () => new RunStoreError('RUN_STORE_CORRUPT');
 
 /** Caller owns the write transaction. Settlement consumes durable cancellation intent and recorded
  * terminal evidence only: an unlaunched attempt is prevented, an exited one is settled, everything
  * else (running, unknown, unresolved effects, accepted/failed) is left to its existing owner. */
-function readAttempt(db: DatabaseSync, identity: AttemptIdentity): AttemptSnapshot {
+export function readAttempt(db: DatabaseSync, identity: AttemptIdentity): AttemptSnapshot {
   const row = db.prepare('SELECT revision,snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-  if (!row) throw new RunStoreError('RUN_STORE_CORRUPT');
-  let attempt;
-  try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-  if (attempt.revision !== row.revision || !sameAttemptIdentity(attempt.identity, identity)) throw new RunStoreError('RUN_STORE_CORRUPT');
-  return attempt;
+  if (!row) throw corrupt();
+  return decodeStored(attemptSnapshotSchema, row.snapshot, corrupt, attempt => attempt.revision === row.revision && sameAttemptIdentity(attempt.identity, identity));
 }
-function readDispatch(db: DatabaseSync, identity: AttemptIdentity): DispatchRecord | null {
+export function readDispatch(db: DatabaseSync, identity: AttemptIdentity): DispatchRecord | null {
   const row = db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-  if (!row) return null;
-  let record;
-  try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-  if (!sameAttemptIdentity(record.request.identity, identity)) throw new RunStoreError('RUN_STORE_CORRUPT');
-  return record;
+  return row ? decodeStored(dispatchRecordSchema, row.record, corrupt, record => sameAttemptIdentity(record.request.identity, identity)) : null;
 }
 /** `evidence.dispatched`: a dispatch record exists (claimed, granted or prevented); `evidence.terminal`: terminal exit is recorded for it. */
 export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, evidence: Readonly<{ dispatched: boolean; terminal: boolean }>,
@@ -40,7 +35,6 @@ export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, e
   }
   return Object.freeze({ status: 'not-settleable', run });
 }
-/** Applies prevention/settlement to every binding of a cancel-requested Run snapshot. */
 export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot, timing: RunLifecycleTiming): RunSnapshot {
   let current = run;
   for (const binding of run.bindings) {
@@ -50,7 +44,6 @@ export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot, timing
   }
   return current;
 }
-/** Settles one attempt and persists the Run when it changed. */
 export function settleAttemptCancellation(db: DatabaseSync, identityInput: unknown, timing: RunLifecycleTiming): RunCancellationSettlement {
   const { run, dispatch } = readRunBoundDispatch(db, identityInput);
   const identity = run.bindings.find(value => value.identity.attemptId === (identityInput as AttemptIdentity).attemptId)!.identity;

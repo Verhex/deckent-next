@@ -4,23 +4,27 @@ import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/inde
 import { CURRENT_LEDGER_VERSION, migrateLedger } from './schema.js';
 import { sqliteLedgerOptionsSchema, sqliteFailure, assertSqliteEngineSupported, type SqliteLedgerOptions } from './options.js';
 
-/** Open the existing product ledger for normal writes. The caller owns close and path custody.
- * Installer and read-only readers retain their distinct precheck/transaction protocols.
- * This module is reached only through a selected adapter's lazy implementation import.
- */
-export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
+/** The ledger open every store unit moves to under SQL-M (contract: `new DatabaseSync(` only here): the DEPS-P0 floor check before any native
+ * touch, the lazy `node:sqlite` load (reached only through a selected adapter's lazy import) and validated options. The caller owns close and path custody.
+ * `write`: the existing product ledger for normal writes. `read`: never migrates or takes the write lock; the runtime service remains the writer.
+ * `anchor` (R6): the runtime service's lifetime connection. While any connection is open no client's close is SQLite's last one, so concurrent
+ * client opens never meet -wal/-shm being checkpointed, unlinked and recreated. Read-only; one read maps the WAL index; no transaction is
+ * ever held, so it blocks no writer and no checkpoint. Installer and inventory readers retain their distinct precheck/transaction protocols. */
+export function openLedgerStore(path: string, options: SqliteLedgerOptions, mode: 'write' | 'read' | 'anchor',
   migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator, companyId?: string): DatabaseSync {
   assertSqliteEngineSupported(process.versions.sqlite);
-  if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   const parsed = sqliteLedgerOptionsSchema.safeParse(options);
-  if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+  if ((migration !== 'allow' && migration !== 'forbid') || !parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+  const timeout = parsed.data.busyTimeoutMs;
   let db: DatabaseSync;
   try {
     const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, { timeout: parsed.data.busyTimeoutMs, enableForeignKeyConstraints: true });
+    db = new NativeDatabase(path, mode === 'write' ? { timeout, enableForeignKeyConstraints: true } : { readOnly: true, timeout });
   }
   catch (error) { throw sqliteFailure(error); }
+  if (mode === 'read') return db;
   try {
+    if (mode === 'anchor') { db.prepare('PRAGMA user_version').get(); return db; }
     /* R6: a current ledger needs no migration, so its open takes no write lock (under load 99% of ATTEMPT_STORE_BUSY was this check).
      * Any other version (older, newer, unreadable) takes the lock and `migrateLedger` re-reads and judges it there, as before. */
     if (db.prepare('PRAGMA user_version').get()?.user_version !== CURRENT_LEDGER_VERSION) {
@@ -33,26 +37,12 @@ export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
     db.exec(durability[parsed.data.durability]);
     return db;
   } catch (error) {
-    try { db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
+    if (mode === 'write') try { db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
     db.close(); throw sqliteFailure(error);
   }
 }
-
-/** Read an existing ledger without migrating or taking the write lock. The runtime service remains the writer. */
-export function openSqliteLedgerReadOnly(path: string, options: SqliteLedgerOptions): DatabaseSync {
-  assertSqliteEngineSupported(process.versions.sqlite);
-  const parsed = sqliteLedgerOptionsSchema.safeParse(options);
-  if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-  try {
-    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    return new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
-  } catch (error) { throw sqliteFailure(error); }
-}
-
-/** R6: the runtime service's lifetime connection. While any connection is open no client's close is SQLite's last one, so concurrent
- * client opens never meet -wal/-shm being checkpointed, unlinked and recreated. Read-only; one read maps the WAL index; no transaction is
- * ever held, so it blocks no writer and no checkpoint. The caller closes it when its custody ends. */
-export function openSqliteLedgerAnchor(path: string, options: SqliteLedgerOptions): DatabaseSync {
-  const db = openSqliteLedgerReadOnly(path, options);
-  try { db.prepare('PRAGMA user_version').get(); return db; } catch (error) { db.close(); throw sqliteFailure(error); }
-}
+/** Kept for the store units that SQL-M has not yet moved to `openLedgerStore`. */
+export const openSqliteLedger = (path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator,
+  companyId?: string) => openLedgerStore(path, options, 'write', migration, profiles, companyId);
+export const openSqliteLedgerReadOnly = (path: string, options: SqliteLedgerOptions) => openLedgerStore(path, options, 'read');
+export const openSqliteLedgerAnchor = (path: string, options: SqliteLedgerOptions) => openLedgerStore(path, options, 'anchor');

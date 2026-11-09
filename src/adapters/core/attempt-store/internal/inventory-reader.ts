@@ -73,7 +73,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {
       requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
-      return await readRunSnapshot(this.db, scope, run);
+      return readRunSnapshot(this.db, scope, run);
     } catch (error) { throw readFailure(error); }
   }
   async hasTaskEvaluation(identity: unknown, revision: number) {

@@ -1,10 +1,7 @@
-import { runSnapshotSchema } from '#domain/index.js';
+import { runSnapshotSchema, type RunSnapshot } from '#domain/index.js';
 import { RunStoreError } from '#engine/index.js';
-/** One canonical row decoder for Run writers and cross-scope resource occupancy readers. */
-export function decodeLedgerRunSnapshot(snapshot: unknown, scopeId: string, runId: string) {
-  try {
-    const value = runSnapshotSchema.parse(JSON.parse(String(snapshot)));
-    if (value.identity.scopeId !== scopeId || value.identity.runId !== runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-    return value;
-  } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-}
+import { decodeStored } from './options.js';
+/** One canonical row decoder for Run writers and cross-scope resource occupancy readers: identity always, plus the caller's checks and code. */
+export const decodeLedgerRunSnapshot = (snapshot: unknown, scopeId: string, runId: string, error: () => Error = () => new RunStoreError('RUN_STORE_CORRUPT'),
+  matches: (run: RunSnapshot) => boolean = () => true) =>
+  decodeStored(runSnapshotSchema, snapshot, error, value => value.identity.scopeId === scopeId && value.identity.runId === runId && matches(value));

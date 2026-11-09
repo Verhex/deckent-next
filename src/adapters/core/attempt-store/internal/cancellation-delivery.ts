@@ -2,26 +2,12 @@ import type { DatabaseSync } from 'node:sqlite';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { CancellationDeliveryError, cancellationDeliverySchema, decideCancellationDeliveryClaim, decideCancellationDeliveryFinish,
   type CancellationDelivery, type CancellationDeliveryClaim, type CancellationDeliveryClaimResult, type CancellationDeliveryOutcome, type CancellationDeliveryStore } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 
 /** Durable cancellation retry leases. This journal never grants launch authority. */
 export class SqliteCancellationDeliveryJournal implements CancellationDeliveryStore {
   constructor(private readonly db: DatabaseSync) {}
-
-  private transaction<T>(work: () => T): T {
-    let active = false;
-    try {
-      this.db.exec('BEGIN IMMEDIATE'); active = true;
-      const result = work(); this.db.exec('COMMIT'); return result;
-    } catch (error) {
-      if (active) {
-        try { this.db.exec('ROLLBACK'); }
-        catch { throw new CancellationDeliveryError('CANCELLATION_DELIVERY_CORRUPT'); }
-      }
-      throw sqliteFailure(error);
-    }
-  }
 
   private requireCancelledDispatch(identityInput: unknown) {
     const identity = attemptIdentitySchema.parse(identityInput);
@@ -56,7 +42,7 @@ export class SqliteCancellationDeliveryJournal implements CancellationDeliverySt
   }
 
   async claimCancellationDelivery(input: CancellationDeliveryClaim): Promise<CancellationDeliveryClaimResult> {
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const identity = this.requireCancelledDispatch(input.identity);
       const previous = this.read(identity);
       const decision = decideCancellationDeliveryClaim({ ...input, identity }, previous?.record ?? null);
@@ -66,7 +52,7 @@ export class SqliteCancellationDeliveryJournal implements CancellationDeliverySt
   }
 
   async finishCancellationDelivery(input: CancellationDeliveryClaim & { readonly outcome: CancellationDeliveryOutcome }): Promise<CancellationDelivery> {
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const identity = this.requireCancelledDispatch(input.identity);
       const previous = this.read(identity);
       if (!previous) throw new CancellationDeliveryError('CANCELLATION_DELIVERY_CONFLICT');

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { integrationAdoptionIntentSchema, WorkspaceAdoptionError, type IntegrationAdoptionIntent, type IntegrationAdoptionRecord, type AdoptionClaimObservation } from '#engine/index.js';
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 /** Rows recorded before ledger v58 carry no repository; only the fence chain that names them attributes them. Never written by a claim. */
 const UNATTRIBUTED = 'pre-v58', repositoryId = /^[a-f0-9]{64}$/;
 /** Adoption/rollback intents with a per-repository, per-target sequence fence (settled: 0 claimed, 1 applied, 2 released as not applied).
@@ -40,14 +41,12 @@ export class SqliteAdoptionJournal {
   async claimAdoption(input: IntegrationAdoptionIntent, observed: AdoptionClaimObservation): Promise<IntegrationAdoptionRecord> {
     const intent = integrationAdoptionIntentSchema.parse(input);
     const { scopeId } = intent.command.identity, { commandId } = intent.command;
-    // All checks/mutations in the transaction are synchronous; no await while holding the writer.
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return ledgerTransaction(this.db, () => {
       const existing = this.read(scopeId, commandId);
       if (existing) {
         if (JSON.stringify(existing.intent) !== JSON.stringify(intent)) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
         if (existing.repository !== observed.repository) throw new WorkspaceAdoptionError('ADOPTION_REPOSITORY_CHANGED'); // Astra 2616 F2
-        this.db.exec('COMMIT'); return existing;
+        return existing;
       }
       const latest = this.head(intent.targetRef, observed);
       if (intent.kind === 'rollback') {
@@ -60,8 +59,8 @@ export class SqliteAdoptionJournal {
       if (!Number.isSafeInteger(sequence)) throw new WorkspaceAdoptionError('ADOPTION_CORRUPT');
       this.db.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?,0)')
         .run(scopeId, commandId, observed.repository, intent.targetRef, sequence, intent.kind, JSON.stringify(intent));
-      this.db.exec('COMMIT'); return { intent, sequence, settled: false, released: false, repository: observed.repository };
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+      return { intent, sequence, settled: false, released: false, repository: observed.repository };
+    });
   }
   async finishAdoption(input: IntegrationAdoptionIntent) { return this.settle(input, 1); }
   async releaseAdoption(input: IntegrationAdoptionIntent) { return this.settle(input, 2); }
@@ -69,13 +68,12 @@ export class SqliteAdoptionJournal {
   private settle(input: IntegrationAdoptionIntent, outcome: 1 | 2): IntegrationAdoptionRecord {
     const intent = integrationAdoptionIntentSchema.parse(input);
     const { scopeId } = intent.command.identity, { commandId } = intent.command;
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return ledgerTransaction(this.db, () => {
       const changed = this.db.prepare('UPDATE workspace_adoptions SET settled=? WHERE scope_id=? AND command_id=? AND intent=? AND settled=0')
         .run(outcome, scopeId, commandId, JSON.stringify(intent));
       const record = this.read(scopeId, commandId);
       if (!record || (outcome === 1 ? !record.settled : !record.released) || (changed.changes !== 1 && JSON.stringify(record.intent) !== JSON.stringify(intent))) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
-      this.db.exec('COMMIT'); return record;
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+      return record;
+    });
   }
 }
