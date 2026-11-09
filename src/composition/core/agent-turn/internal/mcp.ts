@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, assertAuthorityWitness, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
-import { ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { getConfigKnownSecrets, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
   McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand,
   type LocalPeerIdentity, type McpImportFrom,
@@ -54,7 +54,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const locale = resolveLocale(undefined, environment, config.language), notices: McpStartNotice[] = [];
   const credentials = projectCredentialResolver(context, scopeId, input.options), resolveSecret = (name: string) => credentials.resolve(name); // SECRET-K1 + KER-17: `$DECK:` via the PRE-8 decision (grant)
   // K1: a trust card's yes also writes the answering person's grant for the pinned tools (their own authority; the governed policy chain).
-  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
+  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name), knownSecrets: getConfigKnownSecrets(config), // P21/F30
     grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId, ...(input.sessionId ? { sessionId: input.sessionId } : {}),
@@ -111,7 +111,7 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   // `--yes` included, and before any start, audit or write; the MCP actor never decides. In-turn cards are already witnessed by `decideApproval`.
   const peer = localPrincipalPeer(), channel = localPrincipalChannel(), witnessed: McpCommandContext['ask'] = async card => {
     await assertAuthorityWitness('mcpTrust', channel, { attest: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) }); return ask(card); };
-  const context: McpCommandContext = { ...(signal ? { signal } : {}), projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
+  const context: McpCommandContext = { ...(signal ? { signal } : {}), projectRoot, scopeId, layout: config.productLayout, environment, knownSecrets: getConfigKnownSecrets(config), sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
     grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: async name => projectCredentialResolver(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, options).resolve(name), limits: { inputMaxBytes: config.mcp.inputMaxBytes, maxServers: config.mcp.maxServers }, // KER-17: as a turn

@@ -1,10 +1,9 @@
-import { persistedString, persistedInteger, ManagedFileError, redactForRecord, terminalSafeText, type KnownSecretSnapshot } from '#platform/index.js';
+import { persistedString, persistedInteger, ManagedFileError, redactBounded, redactForRecord, terminalSafeText, type KnownSecretSnapshot } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open, readdir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { agentTurnMessageSchema, type AgentTurnMessage } from '#domain/index.js';
-import { redactText } from '#adapters/core/native-connection/index.js';
 import titleLimits from './session-title-limits.json' with { type: 'json' };
 import { sessionOriginMatches, writeSessionOrigin, type TerminalSessionFilter, type TerminalSessionOrigin } from './session-origin.js';
 
@@ -29,7 +28,7 @@ export interface TerminalSessionStore {
 const TITLE_SUFFIX = '.title';
 
 // Known secret shapes and control characters only; the text is never shortened here (the store bounds the file instead).
-const scrub = (text: string) => redactText(text, [], Number.MAX_SAFE_INTEGER);
+const scrub = (text: string) => redactBounded(text);
 /** One line, control characters and known secret shapes out, bounded; empty means "no usable title". */
 const cleanTitle = (text: string) => terminalSafeText(scrub(text)).replace(/\s+/g, ' ').trim().slice(0, titleLimits.titleChars);
 const redacted = (message: AgentTurnMessage): AgentTurnMessage => message.role === 'assistant'

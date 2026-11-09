@@ -2622,7 +2622,6 @@
       "dependencies": [
         "src/platform/core/managed-files",
         "src/domain/core/agent-turn",
-        "src/adapters/core/native-connection",
         "src/platform/core/redaction",
         "src/platform/core/output",
         "src/platform/core/validate"
@@ -2846,7 +2845,8 @@
         "src/adapters/core/native-connection",
         "src/domain/core/agent-tool",
         "src/engine/core/effect",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
     },
@@ -2865,7 +2865,6 @@
       "dependencies": [
         "src/platform/core/validate",
         "src/adapters/core/host-shell",
-        "src/adapters/core/native-connection",
         "src/adapters/core/shell-sandbox-bwrap",
         "src/domain/core/agent-tool",
         "src/domain/core/effect",
@@ -5253,9 +5252,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42379,
+      "adapters": 42377,
       "surfaces": 45000,
-      "composition": 13577
+      "composition": 13576
     },
     "totalSrcLines": 200000,
     "testCases": 8196,

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 import { nativeAgentBridgeSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
-import { PACKAGE_VERSION, DeckentJsonSchemaValidator, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
+import { PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { bridgeBody, bridgeResponse, refuseBridge } from './http.js';
 
 export interface NativeToolBridgeLimits {
@@ -43,8 +43,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID,
     onsessioninitialized: id => { sessionId = id; }, keepAliveMs: progressIntervalMs, maxRequestBodySize: bridge.bodyMaxBytes });
   const server = new Server({ name: bridge.serverName, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new DeckentJsonSchemaValidator() });
-  // Project values through the already-resolved secret snapshots, without discovering or reading credentials.
-  const safe = (value: string) => redactForRecord(input.knownSecrets ? redactForRecord(value, input.knownSecrets) : value, known);
+  // KG8 P12/P13: the turn token's one snapshot and one combined projection (the configured snapshot plus the token); callers reuse both.
+  const projected = input.knownSecrets ? combineKnownSecrets(input.knownSecrets, known) : known, safe = (value: string) => redactForRecord(value, projected);
   const envelope = (deckentCallId: string, code: string) => ({ schemaVersion: 1 as const, turnId: session.turnId, generation: session.generation,
     deckentCallId, outcome: { status: 'error' as const, text: code } });
   const result = (value: unknown, isError: boolean): CallToolResult => ({ content: [{ type: 'text', text: safe(JSON.stringify(value)) }], isError });
@@ -141,6 +141,6 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   return Object.freeze({ sentinelHost: bridge.sentinelHost, path: bridge.path, maxConnections: limits.maxConnections, url,
     toJSON: () => ({ url, turnId: session.turnId, generation: session.generation }),
     /** Only put these into the private Claude MCP file or the explicitly built Codex environment. Never log this object. */
-    turnToken, tokenHeader, tokenEnvName: bridge.tokenEnvName, progressIntervalMs, handle, close,
+    turnToken, tokenHeader, tokenEnvName: bridge.tokenEnvName, known, project: safe, progressIntervalMs, handle, close,
     cancel: async () => { await close(); return input.port.cancel(); }, revoke: async () => { await close(); return input.port.revoke(); } });
 }

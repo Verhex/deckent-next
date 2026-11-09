@@ -1,9 +1,8 @@
-import { persistedString, persistedInteger } from '#platform/index.js';
+import { persistedString, persistedInteger, redactBounded } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
-import { redactText } from '#adapters/core/native-connection/index.js';
 import { fetchableUrlError, fetchHttps, type HttpFetchResult, type HttpFetchTransport } from './request.js';
 
 const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
@@ -127,7 +126,7 @@ export function describeFetchResult(run: FetchRun): AgentToolOutcome {
   lines.push(stored?.ok ? `[deckent] saved: ${stored.path} (scratch_read path: ${stored.rel})` : `[deckent] not saved: error=${stored?.error ?? 'scratch-unavailable'}`);
   if (!isText(result.contentType)) lines.push('[deckent] binary content is not shown');
   else {
-    lines.push(redactText(head(result.body, FETCH_HEAD_BYTES), [], Number.MAX_SAFE_INTEGER));
+    lines.push(redactBounded(head(result.body, FETCH_HEAD_BYTES)));
     if (result.body.length > FETCH_HEAD_BYTES) lines.push(`[deckent] showing the first ${FETCH_HEAD_BYTES} of ${result.body.length} bytes`);
   }
   const ok = stored?.ok === true && result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;

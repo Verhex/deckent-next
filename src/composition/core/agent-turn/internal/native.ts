@@ -4,7 +4,7 @@ import { modelInvocationProfileDigest, modelUseProfiles, type ModelInvocationNat
 import { nativeCliAgent, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import type { NativeAgentExecution, NativeAgentReadinessReason, ToolSessionPort } from '#capabilities/index.js';
-import { snapshotKnownSecrets, t, type Locale, type KnownSecretSnapshot, type DeckentConfig } from '#platform/index.js';
+import { t, type Locale, type KnownSecretSnapshot, type DeckentConfig } from '#platform/index.js';
 /** R8b/R3a: the scope's connected subscription CLIs that can run a worker (registry capability): profile id and its CLI id. */
 export const connectedWorkerClis = (config: DeckentConfig, scopeId: string | null | undefined) => modelUseProfiles(config).filter(row => row.scopeId === scopeId && row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)
   .flatMap(row => { const agent = nativeCliAgent(row.protocol.family); return agent ? [{ id: row.id, provider: agent.id }] : []; });
@@ -47,8 +47,7 @@ export async function withNativeChatInvocation<T>(input: { readonly runtime: Nat
     if (!isDeepStrictEqual(driver.port.session, input.session.session)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     bridge = await createNativeToolBridge({ port: driver.port, bridge: entry.bridge, limits: input.runtime.limits,
       correlationKind: entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp', signal: input.signal, knownSecrets: input.knownSecrets });
-    const turn = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: bridge.turnToken }]);
-    const port = driver.native(bridge, { configured: input.knownSecrets, turn });
+    const port = driver.native(bridge, { configured: input.knownSecrets, turn: bridge.known });
     return await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
       recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });
   } finally { try { await bridge?.close(); } finally { await driver.close(); } }

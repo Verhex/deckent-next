@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { agentWorkspaceDeny, buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpTurnTools,
   openMcpAgentTools } from '#adapters/index.js';
@@ -11,7 +11,7 @@ import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/sh
 import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
-import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths, resolveProductLayout } from '#platform/index.js';
 import { mcpCommand } from '#surfaces/core/cli/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
@@ -106,6 +106,12 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
     await w.approve('fx');
     expect(byName(await w.cli('list', '--check'))['fx']).toMatchObject({ status: 'trusted', health: 'connected' });
     expect(fx.started()).toBeGreaterThan(started);
+    // P21/F30 on the production CLI context: an allowlisted value equal to an installation secret (a `$DECK:` config value) refuses the entry.
+    const installation = resolveGlobalConfigPaths(w.env).platformPath, zone = 'fixture-zone-canary';
+    mkdirSync(dirname(installation), { recursive: true }); writeFileSync(installation, JSON.stringify({ service: { identity: { scopeId: 's', serviceId: '$DECK:FIXTURE_ZONE' } } }));
+    Object.assign(w.env, { FIXTURE_ZONE: zone, TZ: zone });
+    writeFileSync(file, JSON.stringify({ mcpServers: { fx: { ...raw.mcpServers['fx'], args: [...(raw.mcpServers['fx']!['args'] as string[]), '--tz', '${TZ}'] } } }));
+    expect(byName(await w.cli('list'))['fx']).toMatchObject({ status: 'changed', reason: 'variable-value-refused:TZ' });
   }, 60_000);
 
   it('an expanded ${VAR} (a personal token in args) never shows on the approval card or the tool-call card; the definition stays the template', async () => {

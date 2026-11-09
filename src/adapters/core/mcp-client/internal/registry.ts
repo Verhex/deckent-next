@@ -148,7 +148,8 @@ export function mcpEndpointRefusal(url: string): string | null {
   return parsed.protocol === 'http:' ? LOOPBACK.has(parsed.hostname) ? null : 'url-insecure-remote' : 'url-scheme-refused';
 }
 export type McpExpandedEntry = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Readonly<Record<string, string>>;
-  /** The resolved `$DECK:` values: never shown, and cut out of anything the server sends back to the model. */
+  /** The server's known values (KG8 P16, owner B2-10): the resolved `$DECK:` values and the personal `${VAR}` values read into `env` and header values;
+   * never shown, and cut out of anything the server sends back or a failed start shows. */
   readonly secrets: readonly string[] }
   | { readonly ok: true; readonly url: string; readonly headers: Readonly<Record<string, string>>; readonly secrets: readonly string[] }
   | { readonly ok: false; readonly reason: string; readonly refusal?: McpSecretRefusal };
@@ -164,15 +165,15 @@ const refusedBy = (refusal: McpSecretRefusal) => ({ ok: false as const, refusal,
 export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, environment: Readonly<Record<string, string | undefined>>,
   secret: (name: string) => Promise<string | undefined>, known?: KnownSecretSnapshot): Promise<McpExpandedEntry> {
   let missing: string | null = null, refused: string | null = null;
-  const expand = (text: string) => text.replace(VARIABLE, (_match, name: string, fallback: string | undefined) => {
+  const secrets: string[] = [];
+  const expand = (text: string, into?: string[]) => text.replace(VARIABLE, (_match, name: string, fallback: string | undefined) => {
     if (scope === 'project' && !MCP_PROJECT_VARIABLES.has(name)) return fallback ?? '';
     const value = environment[name];
     if (value !== undefined && value !== '' && scope === 'project' && mcpProjectValueRefused(value, known)) { refused ??= name; return ''; }
-    if (value !== undefined && value !== '') return value;
+    if (value !== undefined && value !== '') { if (scope !== 'project') into?.push(value); return value; }
     if (fallback !== undefined) return fallback;
     missing ??= name; return '';
   });
-  const secrets: string[] = [];
   let denied: string | null = null; const unresolved = (key: string) => refusedBy(denied ? { kind: 'secret-refused', code: denied, key } : { kind: 'secret-unresolved', key });
   const resolve = async (reference: string): Promise<string | null> => {
     const resolved = await secret(reference).catch((error: unknown) => { const code = String((error as { code?: unknown } | null)?.code); denied = /^(?:SECRET_GRANT_REQUIRED|DECK_DECLARATION_REQUIRED|SECRET_PROJECT_IDENTITY_REQUIRED|SECRET_PROJECT_MISSING)$/u.test(code) ? code : null; return undefined; });
@@ -184,7 +185,7 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
     for (const [name, value] of Object.entries(entry.headers ?? {})) {
       const references = [...value.matchAll(SECRET_IN_HEADER)].map(match => match[1]!);
       if (references.length && scope === 'project') return refusedBy({ kind: 'secret-reference-in-project-file' });
-      let text = expand(value);
+      let text = expand(value, secrets);
       for (const reference of references) {
         const resolved = await resolve(reference);
         if (resolved === null) return unresolved(reference);
@@ -199,10 +200,10 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
     if (endpoint) return { ok: false, reason: endpoint };
     return { ok: true, url, headers: Object.freeze(headers), secrets: Object.freeze(secrets) };
   }
-  const command = expand(entry.command), args = (entry.args ?? []).map(expand), env: Record<string, string> = {};
+  const command = expand(entry.command), args = (entry.args ?? []).map(arg => expand(arg)), env: Record<string, string> = {};
   for (const [name, value] of Object.entries(entry.env ?? {})) {
     const reference = value.match(SECRET_REFERENCE)?.[1];
-    if (reference === undefined) { env[name] = expand(value); continue; }
+    if (reference === undefined) { env[name] = expand(value, secrets); continue; }
     if (scope === 'project') return refusedBy({ kind: 'secret-reference-in-project-file' });
     const resolved = await resolve(reference);
     if (resolved === null) return unresolved(reference);

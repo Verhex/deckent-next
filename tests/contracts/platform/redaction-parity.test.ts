@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { backtrackingSteps, calibratedBudgetMs, modelMatches } from '../../fixtures/regex-cost.js';
-import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret, REDACTION_PATTERNS } from '#platform/index.js';
+import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret, knownSecretValues, redactBounded, REDACTION_PATTERNS } from '#platform/index.js';
 import { workerRedactForRecord as workerRecord, workerRedactForDecision as workerDecision, workerSnapshotKnownSecrets as workerSnapshot, redactText } from '#adapters/core/native-connection/index.js';
 // @ts-expect-error Host generation tooling has no declaration file.
 import { syncWorkerRedactor, workerRedactorBlock } from '../../../scripts/sync-worker-redactor.mjs';
@@ -120,6 +120,8 @@ describe('B7 canonical producer and standalone mirror', () => {
     expect(workerRedactorBlock(source, literalTable)).toContain(`const REDACTION_TABLE = ${JSON.stringify(JSON.parse(literalTable))};\n`);
     expect(redactText('a\u0000b'+'x'.repeat(500), [], 240)).toHaveLength(240);
     expect(redactText('a\u0000b', [], 240)).toBe('a b');
+    // KG8 P9: the platform's bounded display (outside the mirrored block) equals the worker wrapper, known values and the bound included.
+    for (const text of [...corpus, 'a\u0000b'+'x'.repeat(500)]) expect(redactBounded(text, knownSecretValues(['fictitious-value-123']), 240)).toBe(redactText(text, ['fictitious-value-123'], 240));
     const text = 'x'.repeat(160_000); expect(redactForRecord(text)).toBe(text);
   });
 });
