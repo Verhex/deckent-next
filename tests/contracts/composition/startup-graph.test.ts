@@ -23,7 +23,7 @@ const LOAD_BUDGET: Readonly<Record<string, readonly [byDesign: readonly string[]
   'surfaces/core/mcp/index.js': [SERVER, []], 'surfaces/core/hub-mcp/index.js': [SERVER, []],
   ...Object.fromEntries(['terminal', 'terminal-work', 'terminal-ledger', 'setup'].map(unit => [`surfaces/core/${unit}/index.js`, [INK, []]])),
   'surfaces/core/cli/internal/terminal.js': [INK, []], 'surfaces/core/cli/internal/launch-shell.js': [INK, []],
-  ...Object.fromEntries(['terminal-turn', 'cli-models', 'cli-beuser', 'cli-approval', 'cli-identity', 'monitor', 'cli-decision', 'cli-memory', 'cli-agents', 'cli-task']
+  ...Object.fromEntries(['terminal-turn', 'cli-models', 'cli-beuser', 'cli-approval', 'cli-identity', 'monitor', 'cli-decision', 'cli-memory', 'cli-agents', 'cli-task', 'run-planning']
     .map(unit => [`surfaces/core/${unit}/index.js`, [[], []]])),
   ...Object.fromEntries(['cli-observe', 'cli-admin', 'cli-run', 'cli-installation', 'config', 'cli-hub'].map(unit => [`surfaces/core/${unit}/index.js`, [[], INK]])),
   'surfaces/core/cli/internal/mcp.js': [[], INK], 'surfaces/core/cli/internal/setup-offer.js': [[], INK], 'surfaces/core/terminal-labels/index.js': [[], ['react']],
