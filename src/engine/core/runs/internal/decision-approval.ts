@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { approvalDecisionClass, approvalRequestSchema, encodeCommandProjection, evaluatePolicy, explicitDecisionGrant, isAiPrincipal, readRunHold,
-  ApprovalError, policySchema, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
+  ApprovalError, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, t, type IntegrityAuthority, type Locale } from '#platform/index.js';
 import { RunLifecycleError, type RunDecisionAuthorization, type RunDecisionEvidence, type RunLifecycleCommand, type RunLifecycleWrite } from './lifecycle.js';
 import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
@@ -14,7 +14,7 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
   }
   async authorize(command: RunLifecycleCommand, principal: VerifiedPrincipal, run: RunSnapshot, replay?: RunLifecycleWrite): Promise<RunDecisionEvidence> {
     const ai = isAiPrincipal(principal), witness = !ai && await this.interactive(principal);
-    const policy = policySchema.parse(await this.policy.load());
+    const policy = await this.policy.load();
     const taskStep = 'taskId' in command, kind = taskStep ? 'task-decision' : 'run-decision', id = taskStep ? command.taskId : command.runId;
     const sameReplayActor = replay?.actor.issuer === principal.issuer && replay.actor.subject === principal.subject && replay.actor.id === principal.id;
     // S5b (Auditor owner decision 6): hold is the ordinary control; every resume is a decision. A replay of a resume recorded as an

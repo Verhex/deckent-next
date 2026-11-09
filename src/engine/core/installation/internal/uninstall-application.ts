@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { effectCommandSchema, queueNextState, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, isEffectOpen, type Policy, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
+import { asPolicy, effectCommandSchema, queueNextState, evaluatePolicy, policyNamedScopes, principalGrants, isAiPrincipal, isEffectOpen, type Policy, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
@@ -13,7 +13,7 @@ export const uninstallAffectedScopes = (policy: unknown, configured: readonly st
   Object.freeze([...new Set([...configured, ...policyNamedScopes(policy), ...recorded])]);
 /** An installation-wide lifecycle decision never inherits a project-only allow or overrides another scope's deny. */
 export function authorizeUninstall(input: unknown, principal: VerifiedPrincipal, installationId: string, scopeIds: readonly string[], action: 'inspect' | 'uninstall' | 'purge') {
-  const document = policySchema.parse(input);
+  const document = asPolicy(input);
   if (!scopeIds.length) throw new PolicyAuthorizationError('POLICY_DENIED');
   for (const scopeId of scopeIds) {
     const decision = evaluatePolicy(document, { principal, scopeId, action, resource: { kind: 'installation', id: installationId } });
@@ -36,7 +36,7 @@ export function authorizeUninstall(input: unknown, principal: VerifiedPrincipal,
 
 /** Scopes a policy restriction names (company control): an unreconciled item there keeps data deletion closed, force included (K3). */
 export const uninstallManagedScopes = (policy: unknown, affected: readonly string[]): readonly string[] => {
-  const rules = policySchema.parse(policy).restrictions;
+  const rules = asPolicy(policy).restrictions;
   return Object.freeze(affected.filter(scope => rules.some(rule => rule.scopes === 'all' || rule.scopes.includes(scope))));
 };
 /** Trusted, local interaction. Neither answers nor a witness are fields in UninstallApply. */

@@ -1,4 +1,4 @@
-import { policySchema, type Policy, type PolicyBinding } from '#domain/core/policy/index.js';
+import { asPolicy, type Policy, type PolicyBinding } from '#domain/core/policy/index.js';
 import { encodeIdentityProfile, IdentityProfileError, type IdentityPreviewInput, type IdentityProfileDefinition } from './schema.js';
 
 const invalid = (): never => { throw new IdentityProfileError('IDENTITY_PREVIEW_INVALID'); };
@@ -57,6 +57,6 @@ export function draftIdentityPolicy(input: IdentityPreviewInput, profile: Identi
     }
     return Object.freeze({ id: assignment.id, principals: Object.freeze([member.principal]), roles: Object.freeze([assignment.roleId]), scopes: assignment.scopeIds });
   });
-  const candidate = policySchema.parse({ ...current, roles: [...roles.values()], bindings: { ...current.bindings, entries: [...existing, ...addedBindings] } });
+  const candidate = asPolicy({ ...current, roles: [...roles.values()], bindings: { ...current.bindings, entries: [...existing, ...addedBindings] } });
   return { candidate, addedBindings, removedBindings, addedRoles };
 }

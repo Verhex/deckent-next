@@ -6,16 +6,16 @@ import { agentWorkspaceDeny, createWorkspaceReadTools, agentAuthorityPaths, agen
 import { nativeWorkerEnvironmentProbe, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, nativeWorkerToolBounds } from '#capabilities/index.js';
 import { assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
-import { userInfo } from 'node:os';
+
 type OpenTools = NativeCliWorkerPorts['openTools'];
 export async function nativeWorkerToolFloor(root: string, request: Parameters<OpenTools>[0], binding: Parameters<OpenTools>[1],
   resources: Parameters<OpenTools>[3], options: ConfigLoadOptions) {
   const { scopeId } = request.identity;
   const current = await recheckNativeWorkerUse(root, scopeId, binding, options), loaded = await loadConfiguredScopeContext(root, scopeId, options, 'write'), person = (await withLocalPrincipalChannel(undefined, () => loadConfiguredScopeContext(root, scopeId, options, 'read'))).principal;
-  const context = { ...loaded, policy: createLayoutPolicySource(loaded.layout, userInfo().uid, loaded.config.inspection.policyMaxBytes),
+  const context = { ...loaded, policy: contextPolicySource(loaded),
     async freshConfig() { const config = await loadComposedConfig(root, { ...options, heal: false });
       if (JSON.stringify(config.productLayout) !== JSON.stringify(loaded.layout)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED'); return config; } };
   const env = options.env ?? process.env, known = getConfigKnownSecrets(context.config);

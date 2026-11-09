@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, samePrincipalRef, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, samePrincipalRef, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, type DeckentError } from '#platform/index.js';
 import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
@@ -27,7 +27,7 @@ export type SecretChangeAudit = (event: AuditEvent) => void | Promise<void>;
 
 /** The one `secret` policy cell table (KG12 F3): `set|delete` of a name, `switch` of the installation store, `set` of the vault handover. */
 export const evaluateSecretCell = (policy: unknown, principal: VerifiedPrincipal, scopeId: string, action: 'set' | 'delete' | 'switch', id: string) =>
-  evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: policyResources.secret.kind, id } });
+  evaluatePolicy(asPolicy(policy), { principal, scopeId, action, resource: { kind: policyResources.secret.kind, id } });
 /** A refused verdict as its typed error: require-approval is `POLICY_APPROVAL_UNSUPPORTED` without params, deny is `deny`; allow is null. */
 export function secretVerdictRefusal(verdict: SecretChangeDecision['effect'], deny: string, params: Readonly<Record<string, string>>): DeckentError | null {
   const refusal = policyVerdictRefusal(verdict, { deny });

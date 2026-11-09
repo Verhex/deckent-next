@@ -1,7 +1,7 @@
 import { APPROVAL_ASSURANCE } from '#domain/core/approval/index.js';
 import { isWorkloadPrincipalRef } from '#domain/core/principal/index.js';
 import { evaluatePolicy } from './evaluate.js';
-import { includes, policySchema, principalGrants, type Policy, type PolicyRule } from './schema.js';
+import { includes, principalGrants, type Policy, type PolicyRule } from './schema.js';
 
 type Person = { readonly issuer: string; readonly subject: string };
 const REST = Symbol('remaining-scopes');
@@ -73,12 +73,11 @@ function headlessRepair(before: Policy, after: Policy, scope: Scope): boolean {
   return [...old.positive].every(rule => next.positive.has(rule)) && [...next.negative].every(rule => old.negative.has(rule));
 }
 /** Exact policy-capable named principals, never proof of external directory activity, terminal presence or host custody. Modes grant no authority. */
-export function usablePolicyAdmins(input: unknown, scopeId: string, assurance: AdministrationAssurance = coreAssurance): readonly Person[] {
-  return Object.freeze(admins(policySchema.parse(input), scopeId, assurance).map(person => Object.freeze({ ...person })));
+export function usablePolicyAdmins(input: Policy, scopeId: string, assurance: AdministrationAssurance = coreAssurance): readonly Person[] {
+  return Object.freeze(admins(input, scopeId, assurance).map(person => Object.freeze({ ...person })));
 }
 /** Protect each scope partition, including wildcard remainders. Zero/unknown before authority never exempts a reduction; headless repair stays open. */
-export function assertPolicyAdministrationPreserved(beforeInput: unknown, afterInput: unknown, assurance: AdministrationAssurance = coreAssurance): void {
-  const before = policySchema.parse(beforeInput), after = policySchema.parse(afterInput);
+export function assertPolicyAdministrationPreserved(before: Policy, after: Policy, assurance: AdministrationAssurance = coreAssurance): void {
   const partitions: Scope[] = [...new Set([...scopes(before), ...scopes(after)]), REST];
   for (const scope of partitions) {
     const previous = admins(before, scope, assurance).length;

@@ -443,6 +443,18 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
     [`src/${layer}/${tier}/${name}/index.ts`]: `export * from './internal/${file}.js';\n`, [`src/${layer}/${tier}/${name}/internal/${file}.ts`]: body });
   const clean = unit('engine', 'core', 'a', 'x', 'export const x = 1;\n');
 
+  it('keeps raw policy parsing in domain and policy construction in the context factory', async () => {
+    const raw = 'policySchema.parse(input); policySchema.safeParse(input);';
+    const create = 'createLayoutPolicySource(layout, uid, maxBytes); new FilePolicySource(options);';
+    const red = await lint(await fixture(unit('engine', 'core', 'a', 'x', `${raw}\n${create}\n`)));
+    expect(red.code, red.out).toBe(1);
+    expect(red.out.match(/\[policy-owner\]/gu)).toHaveLength(4);
+    const alias = await lint(await fixture(unit('engine', 'core', 'a', 'x', "import { policySchema as schema, FilePolicySource as Source, createLayoutPolicySource as make } from '#domain/index.js';\nschema.parse(input); new Source(options); make(layout, uid, bytes);")));
+    expect(alias.code, alias.out).toBe(1); expect(alias.out.match(/\[policy-owner\]/gu)).toHaveLength(3);
+    const green = await lint(await fixture({ ...unit('domain', 'core', 'policy', 'parse', raw), ...unit('composition', 'core', 'policy', 'source', create) }));
+    expect(green.out).not.toContain('[policy-owner]');
+  });
+
   it('G-b: product source may import outside src only from assets/', async () => {
     const files = (specifier: string) => ({ ...clean, 'assets/y.json': '{}', 'scripts/s.mjs': '', 'tests/t.ts': '', '.agents/refactor/h.mjs': '',
       'src/engine/core/a/internal/x.ts': `import data from '${specifier}' with { type: 'json' };\nexport const x = data;\n` });

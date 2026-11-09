@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { randomUUID } from 'node:crypto';
 import { modelInvocationProfileSchema, type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
 import { subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
@@ -38,7 +39,7 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
       const profile = modelInvocationProfileSchema.parse(value), metered = modelInvocationBillingAxis(profile) === 'metered' && profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY;
       const usage = request.operation === 'usage' && profile.adapter.id === SIWC_INFERENCE.adapter.id && profile.adapter.definition['connectionId'] === request.connectionId;
       if (profile.scopeId !== request.scopeId || !metered && !usage) continue;
-      try { await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('inspect', profile, context.principal); } catch { continue; }
+      try { await new ModelInvocationPolicyAuthorization(contextPolicySource(context, context.document)).authorize('inspect', profile, context.principal); } catch { continue; }
       if (metered) apiTargets.push({ id: profile.id, reference: profile.reference });
       if (usage) references.push(profile.reference);
     }

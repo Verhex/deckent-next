@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
 import { AuditApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryCatalogFacts, memoryCatalogKey, memoryRolloutGated, type MemoryHeld,
   type MemoryRolloutModes, type MemoryRolloutStatus } from '#engine/index.js';
 import { FileMemoryPurgeJournal, memoryKeyedDigest, openLocalIntegrityAuthority, openMemoryEvaluationSourceReader, openReadOnlyAuditStore, openSqliteMemoryJournalStore,
@@ -7,7 +6,7 @@ import { FileMemoryPurgeJournal, memoryKeyedDigest, openLocalIntegrityAuthority,
 import { ErrorRegistry, SystemTrustedClock, getConfigKnownSecrets, productResourcePath, type ConfigLoadOptions, type DeckentConfig } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 /** The three `memoryAutomation` switch modes of one effective configuration. */
@@ -24,7 +23,7 @@ export async function inspectConfiguredMemoryRollout(projectRoot: string, scopeI
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, { ...options, heal: false }, 'read'), { config, layout } = c, sqlite = config.storage.sqlite;
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, false).catch(() => null);
     if (!integrity) return { schemaVersion: 1, status: 'held', code: 'MEMORY_UNAVAILABLE' };
-    const path = await c.path(), policy = new MemoryPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
+    const path = await c.path(), policy = new MemoryPolicyAuthorization(contextPolicySource({ layout, config }));
     const view = await policy.readFilter(c.principal, scopeId);
     // The sealed-Run re-derivation (independence) opens its own readers; when they cannot open, only that measure is unreadable.
     const sources = await (async () => {

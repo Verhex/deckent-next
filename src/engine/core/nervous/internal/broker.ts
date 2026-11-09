@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RECOVERY_ACTIONS, RECOVERY_ROLLOUT, counterSchema, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, recoveryActionSchema, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, RECOVERY_ACTIONS, RECOVERY_ROLLOUT, counterSchema, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, recoveryActionSchema, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import type { NervousProposal } from './detect.js';
 
 /**
@@ -22,7 +22,7 @@ export type NervousDisposition = Extract<AuditEvent['subject'], { kind: 'recover
 export function nervousStandingApproval(document: unknown, principal: VerifiedPrincipal, proposal: Pick<NervousProposal, 'scopeId' | 'action'>, nowMs: number): NervousStandingApproval | null {
   const { kind, actions: [apply] } = policyResources.recoveryAction;
   try {
-    const decision = evaluatePolicy(document, { principal, scopeId: proposal.scopeId, action: apply, resource: { kind, id: proposal.action } });
+    const decision = evaluatePolicy(asPolicy(document), { principal, scopeId: proposal.scopeId, action: apply, resource: { kind, id: proposal.action } });
     if (decision.decision !== 'allow' || !decision.ruleId) return null;
     const record = nervousStandingApprovalSchema.safeParse({ schemaVersion: 1, decisionRef: decision.ruleId, approvedBy: { issuer: principal.issuer, subject: principal.subject,
       assurance: principal.assurance }, approvedAtMs: nowMs, scopeIds: [proposal.scopeId], actions: [proposal.action] });
@@ -37,7 +37,7 @@ export function nervousRulePromoted(document: unknown, principal: VerifiedPrinci
   const { kind, actions: [promote] } = policyResources.nervousRule;
   try {
     return !isAiPrincipal(principal) && RECOVERY_ROLLOUT.rules.includes(ruleId)
-      && evaluatePolicy(document, { principal, scopeId, action: promote, resource: { kind, id: `${ruleId}@${version}` } }).decision === 'allow';
+      && evaluatePolicy(asPolicy(document), { principal, scopeId, action: promote, resource: { kind, id: `${ruleId}@${version}` } }).decision === 'allow';
   } catch { return false; }
 }
 /** Which target each executable action needs: the stop chain one Attempt, a hold one Run (an Attempt's or a task's); a scope case has neither. */

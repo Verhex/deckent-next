@@ -1,11 +1,10 @@
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
-import { userInfo } from 'node:os';
 import type { McpCapabilityRequest } from '#domain/index.js';
 import { McpCapabilities, mcpCapabilityRegistry, mcpCapabilityScopeCandidates } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, readLocalOsIdentity, selectWorkTarget } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from '#composition/core/scoped-request/index.js';
 import { withPolicyAdministration } from './standing.js';
 
@@ -14,7 +13,7 @@ export async function listConfiguredMcpCapabilityScopes(root: string, options: C
   const config = await loadComposedConfig(root, { ...options, heal: false }), actor = readLocalOsIdentity();
   // J2e (C-APPROVE smoke finding): a folder with no installation answers the J2d setup step (CLI_INSTALLATION_MISSING: run `deckent init`), not a
   // raw ENOENT. Only a missing policy file means "no installation"; an unsafe, changed or invalid one keeps its own refusal.
-  const document = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
+  const document = await contextPolicySource({ layout: config.productLayout, config }).load()
     .catch((error: unknown) => { if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); throw error; });
   const candidates = mcpCapabilityScopeCandidates(document, actor);
   return candidates.length ? resolveConfiguredScopeMembership(config, document, actor, candidates, 'read') : [];

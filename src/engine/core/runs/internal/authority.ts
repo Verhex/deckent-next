@@ -1,4 +1,4 @@
-import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, policySchema, standingAgentsChanged, AuditError,
+import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, standingAgentsChanged, AuditError,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
@@ -18,7 +18,7 @@ export class RunCreationAuthority {
     private readonly presentation: { readonly locale?: Locale; readonly known?: KnownSecretSnapshot; readonly registry?: WorkClassRegistry | undefined } = {}) {}
   async evaluate(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<RunAdmissionEvaluation> {
     let policy: Policy, verdict: PolicyDecision;
-    try { policy = policySchema.parse(await this.source.load()); verdict = evaluatePolicy(policy, { principal, action: 'create',
+    try { policy = await this.source.load(); verdict = evaluatePolicy(policy, { principal, action: 'create',
       scopeId: command.scopeId, resource: { kind: 'run', id: command.runId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     if (verdict.decision === 'deny') {
@@ -46,7 +46,7 @@ export class RunCreationAuthority {
   }
   async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate, workspace?: RunWorkspaceCustody) {
     // Resolution may have awaited catalogs or workspace custody; never apply a stale sampled policy.
-    const current = policySchema.parse(await this.source.load());
+    const current = await this.source.load();
     if (hash('policy:1', current) !== hash('policy:1', evaluation.policy)) {
       this.recordUnapplied(command, principal, evaluation);
       throw ErrorRegistry.createError('APPROVAL_STALE');

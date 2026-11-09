@@ -1,11 +1,10 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { userInfo } from 'node:os';
 import { SystemTrustedClock, getConfigKnownSecrets, isSensitiveConfigKey, redactForRecord, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import { LocalOsSessionAuthority, createLocalPeerSession, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
   resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
 import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, operationInputDescriber, runtimeOperationQuerySchema, type EffectOutcome } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Query ('read') or command ('write') admission of the scope; stated by every entry below (Astra 2126 R1). */
@@ -31,7 +30,7 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     const clock = new SystemTrustedClock();
     const sessions = peer ? await createLocalPeerSession(peer, principal.scopeIds, config.approvals.sessionTtlMs, clock)
       : await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
-    const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+    const source = contextPolicySource({ layout, config });
     const policy = new OperationPolicyAuthorization(source);
     // A producer of approvals, like Run reservation and the agent turn: the integrity key is created on first use (decisions only read it).
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);

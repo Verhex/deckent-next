@@ -1,11 +1,10 @@
-import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { ErrorRegistry, prepareProductDirectory, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { TargetQueueError } from '#domain/index.js';
 import { createWorkspaceQueueAdmission, describeWorkspaceQueueCandidate, DispatchPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/index.js';
 import { FileArtifactStore, GitQueueTarget, openLocalIntegrityAuthority, openSqliteAttemptStore, resolveGitWorkTarget, selectWorkTarget, SqliteTargetQueue, openSqliteLedger, openSqliteLedgerReadOnly, type LocalPeerIdentity, type WorkTargetDeclaration, type ResolvedGitWorkTarget } from '#adapters/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 /** Pure prerequisite shared with decisions that must precede a card and cannot open the queue. */
 export function assertQueueWorkTarget(selected: WorkTargetDeclaration | null, resolved: Pick<ResolvedGitWorkTarget, 'id'>): asserts selected is WorkTargetDeclaration {
   if (!selected || resolved.id !== selected.id) throw selected ? new TargetQueueError('QUEUE_AUTHORITY_REQUIRED') : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
@@ -23,7 +22,7 @@ async function openQueueContext(root: string, scopeId: string, options: ConfigLo
   const limits = { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes };
   const target = new GitQueueTarget(git, installationId, selected.id, config.execution.adoption.targets, config.execution.adoption.protectedTargets);
   const artifacts = new FileArtifactStore({ root: await directory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-  const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+  const policy = contextPolicySource({ layout, config });
   const authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selected.id);
   // F6: SQLite readOnly may create/write WAL sidecars. No write-free live snapshot port exists here: refuse before opening it.
   if (readOnly === 'inspect') throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED');

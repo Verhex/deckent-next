@@ -1,4 +1,4 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, authorityDocuments, delegationWithin, evaluatePolicy, isMcpPrincipal,
+import { asPolicy, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, authorityDocuments, delegationWithin, evaluatePolicy, isMcpPrincipal,
   identityDistributionSelectionSchema, identityDistributionSubmissionSchema, encodeIdentityProfile, IdentityProfileError, planPolicyChange, policySchema,
   type IdentityDistributionSubmission, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
@@ -38,7 +38,7 @@ export class IdentityProfileDistributionApplication {
   async preview(raw: unknown) {
     const parsed = identityDistributionSelectionSchema.safeParse(raw); if (!parsed.success) return fail('IDENTITY_PREVIEW_INVALID');
     const selection = parsed.data, scopes = [...new Set([selection.scopeId, ...selection.assignments.flatMap(item => item.scopeIds)])];
-    const snapshot = await this.source.load(scopes), policy = policySchema.parse(snapshot.policy);
+    const snapshot = await this.source.load(scopes), policy = asPolicy(snapshot.policy);
     admin(policy, snapshot.principal, selection.scopeId);
     if (policy.schemaVersion !== 2) return fail('IDENTITY_PREVIEW_UNAVAILABLE');
     const profile = this.registry.resolve(selection.profile);
@@ -83,7 +83,7 @@ export class IdentityProfileDistributionApplication {
       change: submission.command.input, revision: submission.command.expectedVersion }));
     if (expectedId !== submission.command.commandId) return fail('IDENTITY_PREVIEW_CONFLICT');
     const snapshot = await this.source.load([submission.selection.scopeId]);
-    admin(policySchema.parse(snapshot.policy), snapshot.principal, submission.selection.scopeId);
+    admin(asPolicy(snapshot.policy), snapshot.principal, submission.selection.scopeId);
     if (!equal(submission.actor, { issuer: snapshot.principal.issuer, subject: snapshot.principal.subject })) return fail('IDENTITY_PREVIEW_SCOPE_DENIED');
     if (!this.deps) return fail('IDENTITY_PREVIEW_UNAVAILABLE');
     const previous = await this.deps.effects.loadEffect(submission.command.scopeId, submission.command.commandId);

@@ -1,8 +1,7 @@
-import { userInfo } from 'node:os';
 import { SystemTrustedClock, getConfigKnownSecrets, resolveLocale, type IntegrityAuthority } from '#platform/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
 import { configuredProposalRegistry, createRunCreationAuthority, type AuditStore, type RunCreationAuthority } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import type { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Connections live through the Run's last in-transaction authority check; no caller-supplied keys, clocks or policies. */
 /** `sealing` (S4B-5): the same audit store and integrity key, for the admission's own sealed `memory-context` events. */
@@ -14,7 +13,7 @@ export async function withRunCreationAuthority<T>(context: Awaited<ReturnType<ty
   try {
     const journal = openSqliteApprovalStore(path, config.storage.sqlite, 'forbid');
     try {
-      return await work(createRunCreationAuthority(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), audit, journal.store, integrity, clock, config.approvals.requestTtlMs, { locale: resolveLocale(undefined, {}, config.language), known: getConfigKnownSecrets(config), registry: configuredProposalRegistry(config.admission) }), { audit, integrity });
+      return await work(createRunCreationAuthority(contextPolicySource({ layout, config }), audit, journal.store, integrity, clock, config.approvals.requestTtlMs, { locale: resolveLocale(undefined, {}, config.language), known: getConfigKnownSecrets(config), registry: configuredProposalRegistry(config.admission) }), { audit, integrity });
     } finally { journal.close(); }
   } finally { audit.close(); }
 }

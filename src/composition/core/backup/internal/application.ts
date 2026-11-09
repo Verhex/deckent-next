@@ -1,14 +1,13 @@
 import { relocateConfiguredProjectAttachment } from '#composition/core/attachment-lifecycle/index.js';
 import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
+import { policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
 import { BackupApplication, EffectTargetError, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority, type BackupStoragePort } from '#engine/index.js';
 import { PolicyFileError, FileBackupStorage, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup, verifySharedProjectRestore, BACKUP_AUDIT_LOCATIONS } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory, restoreUninstallArchive, uninstallArchiveRoots } from '#adapters/index.js';
 import { PRODUCT_LAYOUT_REGISTRY, ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { userInfo } from 'node:os';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 
 /** Direct local SDK/CLI contract. Network surfaces must supply their authenticated peer through an admitted transport, never a principal body. */
 export async function executeConfiguredBackup(projectRoot: string, input: BackupCommand, passphrase: string, options: ConfigLoadOptions = {}) {
@@ -42,14 +41,14 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     const release = command.action === 'restore' ? await uninstallRestoreRelease(uninstallRecoveryDirectory(config, options.env ?? process.env), layout.root, { ...identity, scopeIds: [] }, config.installation.profileMaxBytes, command.set) : null;
     let document, authority: BackupAuthority;
     // Astra 2471 R1: a held installation's policy pair is what the interrupted restore left; only then may restore fall back to the set's policy.
-    const current = existingPolicy && await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load().catch(async error => {
+    const current = existingPolicy && await contextPolicySource({ layout, config }).load().catch(async error => {
       if (command.action === 'restore' && await lstat(restoreHoldPath(projectRoot)).then(() => true, () => false)) return null;
       // S1 D3: a damaged policy file is a typed refusal naming the file and the next step; it never falls back to the set's policy here.
       if (!(error instanceof PolicyFileError)) throw error;
       const path = error.resource === 'archive' ? join(productResourcePath(layout, 'audit'), 'authority-revisions') : productResourcePath(layout, error.resource);
       throw ErrorRegistry.createError('BACKUP_POLICY_UNREADABLE', { params: { path, reason: error.code } }); });
     if (current) {
-      document = policySchema.parse(current);
+      document = current;
       // Restore owns recovery and can read a moved identity from the authenticated set; every other command keeps the normal preflight.
       let installation;
       try { installation = config.installation.sharedRegistrationId ? undefined : await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read(); }

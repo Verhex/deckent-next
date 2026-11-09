@@ -3,7 +3,7 @@ import { openInstallationPoolStore, openLocalIntegrityAuthority, readLocalOsIden
 import { AuditApplication, configuredInstallationPool, installExecutionPool, type InstallationPoolResult } from '#engine/index.js';
 import { inspectProductFile, productResourcePath, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { assertConfiguredInstallationIdentity } from './apply.js';
 
 /** Local installer custody only; no policy approval, migration, runtime or new installation. */
@@ -26,7 +26,7 @@ export async function installConfiguredExecutionPool(projectRoot: string, scopeI
   const input = { scopeId, owner: true, pool, store, principal, now: () => clock.sample().wallMs };
   const preview = await installExecutionPool({ ...input, apply: false, policyRevision: '', record: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
   if (!apply || preview.status !== 'preview') return preview;
-  const policy = await createLayoutPolicySource(layout, callerUid!, config.inspection.policyMaxBytes).load();
+  const policy = await contextPolicySource({ layout, config, ownerUid: callerUid }).load();
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
   return installExecutionPool({ ...input, apply: true, policyRevision: policy.revision,
     record: (auditStore, event) => { new AuditApplication(auditStore, integrity).record(event); } });

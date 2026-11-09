@@ -1,21 +1,19 @@
-import { userInfo } from 'node:os';
 import { inspectProductFile, type ResolvedConfig } from '#platform/index.js';
 import { LocalPeerShutdownAuthentication, openSqliteAttemptStore, readLocalOsIdentity, type LocalPeerIdentity } from '#adapters/index.js';
-import { policySchema } from '#domain/index.js';
 import { ServiceShutdownApplication, ServicePolicyAuthorization, ServiceShutdownError, PolicyAuthorizationError,
   type ServiceInstance, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from '#composition/core/scoped-request/index.js';
 
 /** Hosting composition pins installation/storage identity; the policy source is read afresh on every admission. */
 export function configuredServiceShutdown(config: ResolvedConfig, instance: ServiceInstance) {
-  const source = createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes);
+  const source = contextPolicySource({ layout: config.productLayout, config });
   const openStore = async () => openSqliteAttemptStore(
     await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
   return Object.freeze({
     async admit(input: unknown, peer: LocalPeerIdentity) {
       let document;
-      try { document = policySchema.parse(await source.load()); }
+      try { document = await source.load(); }
       catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
       const scopes = await resolveConfiguredScopeMembership(config, document, readLocalOsIdentity(), [instance.scopeId], 'write');
       const authentication = new LocalPeerShutdownAuthentication(peer, scopes);

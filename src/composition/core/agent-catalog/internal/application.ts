@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
 import { AgentCatalogApplication, AgentCatalogPolicyAuthorization, AgentCatalogStoreError, AgentStandingApplication, SignerKeyApplication, registeredWorkClassIds, agentDefineCommandSchema as defineAgent,
   agentInspectQuerySchema as inspectAgent, agentListQuerySchema as listAgents, skillDefineCommandSchema as defineSkill, skillImportCommandSchema as importSkill,
   skillInspectQuerySchema as inspectSkill, skillListQuerySchema as listSkills, signerListQuerySchema as listSigners, signerEnrolCommandSchema as enrolSigner,
@@ -12,7 +11,7 @@ import { openSqliteAgentCatalogStore, openLocalIntegrityAuthority, attestLocalIn
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { memoryJournalFor } from '#composition/core/memory/index.js';
 const schemas = { listAgents, inspectAgent, listSkills, inspectSkill, defineAgent, defineSkill, importSkill, listSigners, enrolSigner, addSigner, revokeSigner, repairSigners,
@@ -37,7 +36,7 @@ const lessonReadable = (context: ScopeContext): NonNullable<AgentCatalogDependen
   return out;
 };
 export function catalogDependencies(context: ScopeContext, principal: VerifiedPrincipal = context.principal): AgentCatalogDependencies {
-  const { layout, config } = context, clock = new SystemTrustedClock(), policy = new AgentCatalogPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
+  const { layout, config } = context, clock = new SystemTrustedClock(), policy = new AgentCatalogPolicyAuthorization(contextPolicySource({ layout, config }));
   return { verifier: { verify: async () => principal }, authorize: policy.authorize.bind(policy),
     authorizeSigner: (action, scopeId, who) => policy.authorize(action, scopeId, who, undefined, 'skill-signer'), openStore: storeOf(context),
     workClassIds: async () => registeredWorkClassIds(config.admission ? executionRegistrySchema.parse(config.admission.registry).workClasses : undefined),

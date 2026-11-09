@@ -1,4 +1,4 @@
-import { encodeCommandProjection, isMcpPrincipal, policyDeclaredScopes, mcpCapabilityIdChunks, mcpCapabilityRules, mcpPrincipalRef, principalGrants, sameMcpCapabilityRule, policySchema, type PolicyGrant, type VerifiedPrincipal, type McpCapabilityGroup } from '#domain/index.js';
+import { type Policy, encodeCommandProjection, isMcpPrincipal, policyDeclaredScopes, mcpCapabilityIdChunks, mcpCapabilityRules, mcpPrincipalRef, principalGrants, sameMcpCapabilityRule, type PolicyGrant, type VerifiedPrincipal, type McpCapabilityGroup } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 
 export const mcpCapabilityNamespace = (group: McpCapabilityGroup, scopeId: string, actor: { readonly issuer: string; readonly subject: string }) =>
@@ -11,7 +11,7 @@ export function mcpCapabilityScopeCandidates(document: unknown, actor: { readonl
   return policyDeclaredScopes(document);
 }
 
-export function resolvedMcpCapabilityRules(group: McpCapabilityGroup, scopeId: string, principal: VerifiedPrincipal, policy: ReturnType<typeof policySchema.parse>, workTargetId: string | null, operationIds: readonly string[]) {
+export function resolvedMcpCapabilityRules(group: McpCapabilityGroup, scopeId: string, principal: VerifiedPrincipal, policy: Policy, workTargetId: string | null, operationIds: readonly string[]) {
     const actor = mcpPrincipalRef(principal);
     const namespace = mcpCapabilityNamespace(group, scopeId, actor);
     const cells = group.cells.flatMap(cell => {
@@ -28,7 +28,7 @@ export function resolvedMcpCapabilityRules(group: McpCapabilityGroup, scopeId: s
     return mcpCapabilityRules({ ...group, cells }, scopeId, actor, namespace, text => sha256(text).slice(0, 16));
   }
   /** Known current and superseded shapes only; a hand-edited owned id is a conflict, never silently deleted. */
-export function ownedMcpCapabilityRules(group: McpCapabilityGroup, scopeId: string, principal: VerifiedPrincipal, policy: ReturnType<typeof policySchema.parse>, current: readonly PolicyGrant[]) {
+export function ownedMcpCapabilityRules(group: McpCapabilityGroup, scopeId: string, principal: VerifiedPrincipal, policy: Policy, current: readonly PolicyGrant[]) {
     const actor = mcpPrincipalRef(principal), namespace = mcpCapabilityNamespace(group, scopeId, actor);
     const shapes = [group.cells, ...group.supersedes.map(earlier => earlier.cells)];
     const prefix = `mcp-cap-${namespace}-`;

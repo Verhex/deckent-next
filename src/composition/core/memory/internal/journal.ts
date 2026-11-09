@@ -1,18 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
 import { MemoryJournalApplication, MemoryPolicyAuthorization, MemoryJournalError, type MemoryEvaluatorInvocations } from '#engine/index.js';
 import { FileMemoryPurgeJournal, memoryKeyedDigest, openLocalIntegrityAuthority, openSqliteMemoryJournalStore, openSqliteModelInvocationReader,
   openSqliteModelInvocationStore } from '#adapters/index.js';
 import { SystemTrustedClock, productResourcePath, type IntegrityAuthority, type ProductLayout } from '#platform/index.js';
 import type { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 /** The journal application over one scope context: keyed digests, the source filter, the purge journal and (write) the evaluator-content purge.
  * `key` (S4B-6): a read that already holds the installation key (it seals with it) uses it for the keyed digests too. */
 export async function memoryJournalFor(context: Context, mode: 'read' | 'write', key?: IntegrityAuthority) {
   const { layout, config } = context, clock = new SystemTrustedClock();
-  const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), policy = new MemoryPolicyAuthorization(source);
+  const source = contextPolicySource({ layout, config }), policy = new MemoryPolicyAuthorization(source);
   // A write opens (or creates) the key first; a read opens it inside the store, so a missing key is a typed hold, never an empty answer.
   const integrity = key ?? (mode === 'write' ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null);
   const readKey = () => integrity ? Promise.resolve(integrity) : openLocalIntegrityAuthority(layout, config.approvals.keyFile, false);

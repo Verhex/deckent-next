@@ -1,4 +1,4 @@
-import { encodeCommandProjection, evaluatePolicy, policySchema, samePrincipalRef, ApprovalError, type ApprovalActor, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
+import { type Policy, encodeCommandProjection, evaluatePolicy, samePrincipalRef, ApprovalError, type ApprovalActor, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
 import { approvalActionDigest, approvalActorRef, decidedRefusal, expireDue, verifyApproval } from './integrity.js';
@@ -8,10 +8,10 @@ import { requestTaskApproval } from './application.js';
  * NO_GRANT means this optional task-level restriction is absent, never an execution grant.
  */
 export class TaskApprovalAdmission {
-  private readonly policy: ReturnType<typeof policySchema.parse>;
-  constructor(policy: unknown, private readonly principal: VerifiedPrincipal, private readonly store: ApprovalStore,
+  private readonly policy: Policy;
+  constructor(policy: Policy, private readonly principal: VerifiedPrincipal, private readonly store: ApprovalStore,
     private readonly integrity: IntegrityAuthority, private readonly ttlMs: number, private readonly admitWithinMs: number) {
-    this.policy = policySchema.parse(policy);
+    this.policy = policy;
     for (const value of [ttlMs, admitWithinMs]) if (!Number.isSafeInteger(value) || value < 1) throw new ApprovalError('APPROVAL_INVALID');
   }
   private decision(run: RunSnapshot, taskId: string) {
@@ -49,8 +49,9 @@ export class TaskApprovalAdmission {
 }
 
 /** A fresh command must be retried if trusted policy changed during asynchronous admission. */
-export function assertApprovalPolicyCurrent(expected: unknown, current: unknown) {
-  const policy = policySchema.parse(current);
-  if (encodeCommandProjection('policy:1', policySchema.parse(expected)) !== encodeCommandProjection('policy:1', policy)) throw new ApprovalError('APPROVAL_STALE');
+export function assertApprovalPolicyCurrent(expected: Policy, current: Policy) {
+  if (expected === current) return current;
+  const policy = current;
+  if (encodeCommandProjection('policy:1', expected) !== encodeCommandProjection('policy:1', policy)) throw new ApprovalError('APPROVAL_STALE');
   return policy;
 }

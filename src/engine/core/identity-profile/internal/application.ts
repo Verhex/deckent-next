@@ -1,4 +1,4 @@
-import { companyIdSchema, policySchema, verifiedPrincipalSchema, evaluatePolicy, draftIdentityPolicy, validateIdentityDraft, identityPermissionDiff,
+import { asPolicy, companyIdSchema, verifiedPrincipalSchema, evaluatePolicy, draftIdentityPolicy, validateIdentityDraft, identityPermissionDiff,
   identityPreviewInputSchema, encodeIdentityProfile, IdentityProfileError, type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { IdentityProfileRegistry } from './registry.js';
@@ -17,7 +17,7 @@ export class IdentityProfileApplication {
     if (!parsed.success) throw new IdentityProfileError('IDENTITY_PREVIEW_INVALID');
     const input = parsed.data, profile = this.registry.resolve(input.profile), scopes = input.projectScopeIds ?? [input.scopeId];
     const snapshot = await this.source.load(scopes);
-    const policy = policySchema.parse(snapshot.policy), principal = verifiedPrincipalSchema.parse(snapshot.principal), companyId = companyIdSchema.parse(snapshot.companyId);
+    const policy = asPolicy(snapshot.policy), principal = verifiedPrincipalSchema.parse(snapshot.principal), companyId = companyIdSchema.parse(snapshot.companyId);
     validateIdentityDraft(input, companyId, scopes);
     for (const scopeId of scopes) {
       if (!snapshot.projectScopeIds.includes(scopeId) || !principal.scopeIds.includes(scopeId)

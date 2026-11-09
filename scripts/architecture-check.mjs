@@ -359,7 +359,8 @@ for (const unit of discoveredUnits) if (!visitState.has(unit)) visitUnit(unit);
 // Composition may validate schemas and carry domain types, but domain decision functions belong behind
 // application services. Resolve re-exports with the TypeScript checker so aliases cannot hide their origin.
 if (arch.composition?.enforceDomainDecisionImports) {
-  const isDomainCallable = (symbol, node) => Boolean(symbol && (symbol.declarations ?? []).some(declaration => rel(declaration.getSourceFile().fileName).startsWith('src/domain/'))
+  const isDomainCallable = (symbol, node) => Boolean(symbol && (symbol.declarations ?? []).some(declaration => rel(declaration.getSourceFile().fileName).startsWith('src/domain/')
+    && !(rel(declaration.getSourceFile().fileName) === 'src/domain/core/policy/internal/evaluate.ts' && ['asPolicy', 'safePolicy'].includes(declaration.name?.getText())))
     && checker.getTypeOfSymbolAtLocation(symbol, node).getCallSignatures().length);
   for (const sourceFile of program.getSourceFiles()) {
     if (!rel(sourceFile.fileName).startsWith('src/composition/')) continue;
@@ -842,6 +843,29 @@ const MD_WRITE = /(?:writeFile|writeFileSync|appendFile|appendFileSync|createWri
 for (const file of srcFiles) {
   const src = readFileSync(file, 'utf8');
   for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'markdown write from product source; documentation is not written by src');
+}
+
+// Policy parsing and construction each have one owner; consumers receive a typed snapshot or a context source.
+for (const file of srcFiles) {
+  const path = rel(file), source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const names = new Map();
+  for (const statement of source.statements) if (ts.isImportDeclaration(statement) && statement.importClause?.namedBindings
+    && ts.isNamedImports(statement.importClause.namedBindings)) for (const entry of statement.importClause.namedBindings.elements)
+    names.set(entry.name.text, entry.propertyName?.text ?? entry.name.text);
+  const name = expression => ts.isPropertyAccessExpression(expression) ? expression.name.text : names.get(expression.getText(source)) ?? expression.getText(source);
+  const visit = node => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && name(node.expression.expression) === 'policySchema' && ['parse', 'safeParse'].includes(node.expression.name.text)
+      && !path.startsWith('src/domain/core/policy/')) fail('policy-owner', path, 'raw policy parsing belongs to domain/core/policy');
+    if ((ts.isCallExpression(node) && name(node.expression) === 'createLayoutPolicySource'
+      || ts.isNewExpression(node) && name(node.expression) === 'FilePolicySource')
+      && !path.startsWith('src/composition/core/policy/')
+      // Existing adapter-only read probes cannot depend on composition; neither admits work or writes authority.
+      && !['src/adapters/core/installation-files/internal/startability.ts', 'src/adapters/core/monitor-ledger/internal/install.ts'].includes(path))
+      fail('policy-owner', path, 'policy sources belong to contextPolicySource');
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
 }
 
 // ---- 6: budgets

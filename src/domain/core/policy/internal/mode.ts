@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { evaluatePolicy } from './evaluate.js';
+import { asPolicy, evaluatePolicy } from './evaluate.js';
 import { includes, PERMISSION_MODES, principalGrants, principalPermissionMode, upgradeBindingsDocument, type PermissionMode, type PermissionModeEntry, type Policy,
   type PrincipalPermissionMode } from './schema.js';
 import { policyResources } from './vocabulary.js';
@@ -50,12 +50,12 @@ const same = (left: Actor, right: Actor) => left.issuer === right.issuer && left
  * `full-access`. The decision function asks the same on every call; the turn's admission records it.
  */
 export function fullAccessGrant(input: unknown, principal: VerifiedPrincipal, scopeId: string) {
-  return evaluatePolicy(input, { principal, scopeId, action: policyResources.permissionMode.actions[0], resource: { kind: policyResources.permissionMode.kind, id: 'full-access' } });
+  return evaluatePolicy(asPolicy(input), { principal, scopeId, action: policyResources.permissionMode.actions[0], resource: { kind: policyResources.permissionMode.kind, id: 'full-access' } });
 }
 /** PRE-9 (b), lead decision 2026-10-21 (Jev 0de38b48): whether a company grant allows this person full-auto in this scope now — re-checked on every
  * call like full access, so a revoked grant (closed, denied, removed) takes effect on the very next call. */
 export function fullAutoGrant(input: unknown, principal: VerifiedPrincipal, scopeId: string) {
-  return evaluatePolicy(input, { principal, scopeId, action: policyResources.permissionMode.actions[0], resource: { kind: policyResources.permissionMode.kind, id: 'full-auto' } });
+  return evaluatePolicy(asPolicy(input), { principal, scopeId, action: policyResources.permissionMode.actions[0], resource: { kind: policyResources.permissionMode.kind, id: 'full-auto' } });
 }
 /** The person's mode as the decision applies it: a stored full-auto without its grant now is standart (the "ask for edits too" preference and the
  * entry id are kept; the stored choice is unchanged, only not in effect). A stored full-access start mode is the caller's (a launched turn). */

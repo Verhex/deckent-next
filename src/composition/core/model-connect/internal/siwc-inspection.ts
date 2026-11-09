@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { modelInvocationProfileSchema, type SubscriptionConnectionInspection } from '#domain/index.js';
 import { ModelInvocationPolicyAuthorization, OAuthConnectionError } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, SIWC_INFERENCE } from '#adapters/index.js';
@@ -12,7 +13,7 @@ export async function inspectConfiguredSiwcConnections(root: string, scopeId: st
     .filter(profile => profile.scopeId === scopeId && profile.adapter.id === SIWC_INFERENCE.adapter.id);
   if (!profiles.length) return [];
   const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
-  const authorization = new ModelInvocationPolicyAuthorization({ load: async () => context.document });
+  const authorization = new ModelInvocationPolicyAuthorization(contextPolicySource(context, context.document));
   const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id);
   if (!kind) return [];
   const rows: SubscriptionConnectionInspection[] = [];

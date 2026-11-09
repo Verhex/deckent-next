@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { SIWC_INFERENCE, listSiwcModels } from '#adapters/index.js';
 import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { recordConfiguredProviderFailure } from '#composition/core/provider-catalog/index.js';
@@ -63,7 +64,7 @@ export async function listConfiguredConnectionWorkspaces(root: string, scopeId: 
   const kind = (host.registry ?? PROVIDER_CONNECT_REGISTRY).kinds.find(row => row.id === connection);
   if (!kind?.connect?.workspaceList || !kind.connect.seed) throw ErrorRegistry.createError('MODEL_CONNECT_NOT_CONNECTABLE');
   const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
-  const authorize = () => new ModelCatalogPolicyAuthorization({ load: async () => (await loadConfiguredScopeContext(root, scopeId, options, 'read')).document })
+  const authorize = () => new ModelCatalogPolicyAuthorization(contextPolicySource(context, async () => (await loadConfiguredScopeContext(root, scopeId, options, 'read')).document))
     .authorize('inspect', scopeId, { channelId: kind.connect!.seed!, modelId: null }, context.principal, 'scope');
   await authorize();
   const base = providerProbeBase(kind, endpoint), name = providerConnectSecretName(kind, base);

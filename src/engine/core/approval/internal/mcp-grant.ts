@@ -1,4 +1,4 @@
-import { authorityDocuments, delegationWithin, mcpGrantRuleIds, mcpToolGrantChange, mcpToolGrantRevokeChange, planPolicyChange, policySchema } from '#domain/index.js';
+import { authorityDocuments, delegationWithin, mcpGrantRuleIds, mcpToolGrantChange, mcpToolGrantRevokeChange, planPolicyChange } from '#domain/index.js';
 import { isAuthorizationRefusal, sha256 } from '#platform/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
@@ -22,7 +22,7 @@ export class McpToolGrants {
     return sha256(`mcp-tool-grant:1\0${server.scope}\0${server.name}\0${principal.issuer}\0${principal.subject}\0${server.scope === 'user' ? '*' : scopeId}`).slice(0, 24);
   }
   private async snapshot() {
-    const policy = policySchema.parse(await this.deps.policy.load());
+    const policy = await this.deps.policy.load();
     return policy.schemaVersion === 2 ? policy : null;
   }
   async grant(input: { readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly server: McpToolGrantTarget;

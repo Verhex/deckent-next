@@ -70,7 +70,7 @@ export class ApprovalApplication {
     private readonly restriction?: ApprovalDecisionRestriction, private readonly assurance: ApprovalAssuranceOptions = {}) {
     identitySchema.parse(channel); counterSchema.positive().parse(pageLimit);
   }
-  private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: unknown, decision: 'allow' | 'deny'): Promise<boolean> {
+  private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: Policy, decision: 'allow' | 'deny'): Promise<boolean> {
     const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request.summary);
     if (worker && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
     if (decision === 'allow' && (worker || record.request.schemaVersion === 3 && record.request.preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');

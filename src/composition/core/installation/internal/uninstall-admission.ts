@@ -6,9 +6,8 @@ import { ApprovalApplication, AuditApplication, EffectApplication, OperationAppr
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, resolveGlobalConfigReadPath, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { withVerifiedUninstallSet } from '#composition/core/backup/index.js';
-import { userInfo } from 'node:os';
 import { uninstallRecoveryDirectory, installationScopes, uninstallBackupSet, archiveUninstallMembers, bindFinalSnapshot, writeUninstallTombstone, completeUninstall, observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
@@ -28,7 +27,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     const clock = new SystemTrustedClock(), peer = localPrincipalPeer();
     const sessions = await LocalOsSessionAuthority.create(scopeIds, config.approvals.sessionTtlMs, clock, peer ? { pid: peer.pid, uid: peer.uid } : undefined);
     sessions.requireInteractiveTerminal();
-    const policy = createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes);
+    const policy = contextPolicySource({ layout: config.productLayout, config });
     const path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
     // Every ledger-recorded and policy-named scope is quiescent and decided again under custody: a deny or legal hold is never skipped.
     const affected = installationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopeIds);

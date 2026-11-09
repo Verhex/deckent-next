@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 import { join } from 'node:path';
-import { userInfo } from 'node:os';
 import { z } from 'zod';
 import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
@@ -14,7 +13,7 @@ import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, B
 import { persistedString, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createBeuserChannel, retainBeuserJson } from '#adapters/index.js';
 import { openConfiguredBeuserRealmOwner } from '#composition/core/supervisors/index.js';
@@ -153,7 +152,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
 export async function executeConfiguredBeuserAttempt(root: string, request: SandboxRequest, profile: SupervisorProfile,
   context: BeuserContext, store: SqliteAttemptStore, options: ConfigLoadOptions = {}) {
   const c = await loadConfiguredScopeContext(root, request.identity.scopeId, options, 'write');
-  const policy = new DispatchPolicyAuthorization(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes));
+  const policy = new DispatchPolicyAuthorization(contextPolicySource(c));
   await policy.authorizeIdentity('execute', request.identity, c.principal);
   const selected = selectReservedTaskProfile(await store.loadRun(request.identity.scopeId, request.identity.runId),
     await store.load(request.identity.scopeId, request.identity.attemptId), request.identity);
@@ -237,7 +236,7 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
       if (latest.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
       runId = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: persistedString(z.string().min(1)) }).parse(latest.value).runId;
     }
-    await new RunPolicyAuthorization(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes)).authorize('inspect', { scopeId, runId }, c.principal);
+    await new RunPolicyAuthorization(contextPolicySource(c)).authorize('inspect', { scopeId, runId }, c.principal);
     const read = await directory(sha256(JSON.stringify([scopeId, runId]))).read();
     if (read.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
     if (read.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');

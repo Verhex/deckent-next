@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policyResources, type AuthorityDecisionSubject, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policyResources, type AuthorityDecisionSubject, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import type { ProjectInstructionView } from './contract.js';
@@ -63,7 +63,7 @@ const RESOURCE = Object.freeze({ kind: policyResources.config.kind, id: 'project
  */
 export async function decideWorkerInstructionTrust(request: WorkerInstructionTrustRequest, ports: WorkerInstructionTrustPorts): Promise<string> {
   const { principal, scopeId } = request;
-  const verdict = evaluatePolicy(ports.policy, { principal, scopeId, action: policyResources.config.actions[0], resource: RESOURCE });
+  const verdict = evaluatePolicy(asPolicy(ports.policy), { principal, scopeId, action: policyResources.config.actions[0], resource: RESOURCE });
   const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: request.commandId, scopeId,
     principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, idempotencyKeyHash: hash('worker-instructions-trust-command:1', request.commandId) });
   const record = ports.record({ kind: 'authority-decision', schemaVersion: 1, envelope, action: ACTIONS[request.action], resource: RESOURCE,

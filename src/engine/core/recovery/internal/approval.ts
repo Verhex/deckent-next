@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, counterSchema, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 
 /** The standing-list id of a continuation (not a Nervous stop action: Nervous never chooses continuation, S6R-DESIGN §3). */
 export const RECOVERY_CONTINUE_ACTION = 'continue-new-attempt';
@@ -16,7 +16,7 @@ export function recoveryContinuationApproval(document: unknown, principal: Verif
   const { kind, actions: [apply] } = policyResources.recoveryAction;
   try {
     if (isAiPrincipal(principal)) return null;
-    const decision = evaluatePolicy(document, { principal, scopeId, action: apply, resource: { kind, id: RECOVERY_CONTINUE_ACTION } });
+    const decision = evaluatePolicy(asPolicy(document), { principal, scopeId, action: apply, resource: { kind, id: RECOVERY_CONTINUE_ACTION } });
     if (decision.decision !== 'allow' || !decision.ruleId) return null;
     const record = recoveryContinuationApprovalSchema.safeParse({ schemaVersion: 1, decisionRef: decision.ruleId, approvedBy: { issuer: principal.issuer, subject: principal.subject,
       assurance: principal.assurance }, approvedAtMs: nowMs, scopeIds: [scopeId], action: RECOVERY_CONTINUE_ACTION });

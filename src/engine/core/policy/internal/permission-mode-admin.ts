@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeView, policyResources,
-  policySchema, resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeView, policyResources,
+  resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
   type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError } from './authorize.js';
 import { policyVerdictRefusal } from './verdict.js';
@@ -30,7 +30,7 @@ export type PermissionModeAudit = (event: AuditEvent) => void;
 export function inspectPermissionMode(policy: unknown, principal: VerifiedPrincipal, input: unknown): PermissionModeView {
   let query;
   try { query = parsePermissionModeQuery(input); } catch { throw new PermissionModeError('PERMISSION_MODE_INVALID'); }
-  return permissionModeView(policySchema.parse(policy), principal, query.scopeId);
+  return permissionModeView(asPolicy(policy), principal, query.scopeId);
 }
 /**
  * A person sets their own terminal permission mode in one scope (T-L4 slice 4c, owner q7; MODES-3). The principal is the verified caller —
@@ -55,7 +55,7 @@ export class PermissionModeApplication {
   private write(principal: VerifiedPrincipal, command: ReturnType<typeof parsePermissionModeCommand>): Promise<PermissionModeChange> {
     const actor = { issuer: principal.issuer, subject: principal.subject };
     return this.store.updateAuthority<PermissionModeChange>(snapshot => {
-      const policy = snapshot.bindings === null ? policySchema.parse(snapshot.policy) : resolvePolicyBindings(snapshot.policy, snapshot.bindings);
+      const policy = snapshot.bindings === null ? asPolicy(snapshot.policy) : resolvePolicyBindings(snapshot.policy, snapshot.bindings);
       if (policy.revision !== command.expectedRevision) throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
       if (policy.schemaVersion === 1) throw new PermissionModeError('PERMISSION_MODE_UNSUPPORTED');
       const bindings = bindingsFileSchema.parse(snapshot.bindings);

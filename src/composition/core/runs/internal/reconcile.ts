@@ -1,11 +1,10 @@
 import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
-import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { inspectProductDirectory, jsonRecordDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { openLocalIntegrityAuthority, FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { AuditApplication, LostDispatchApplication, dispatchFenceReceiptId, removeDispatchLaunchRecord, authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Reconcile a recorded attempt; callers cannot supply executable, workspace or supervisor options.
@@ -18,8 +17,8 @@ export async function reconcileAttemptFor(projectRoot: string, input: AttemptIde
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
-    const os = userInfo(); const verifier = { async verify() { return principal; } };
-    const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
+    const verifier = { async verify() { return principal; } };
+    const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(contextPolicySource({ layout, config }));
     const actor = await authenticate(verifier, undefined, identity.scopeId);
     await authorization.authorizeIdentity('reconcile', identity, actor);
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');

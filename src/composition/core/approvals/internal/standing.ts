@@ -1,10 +1,9 @@
-import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
@@ -16,7 +15,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
   use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore; readonly serviceIdentity?: { readonly scopeId: string; readonly serviceId: string } | null }, person: Person) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(root, scopeId, options, access);
-    const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+    const source = contextPolicySource({ layout, config });
     const denied = () => Promise.reject(new Error('read-only'));
     if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied, serviceIdentity: config.service.identity }, principal);
     const peer = localPrincipalPeer(), clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock, peer);
@@ -53,7 +52,7 @@ export async function listConfiguredAllStandingGrants(root: string, input: { rea
         return { page: (after: number, limit: number) => audit.listKind(scopeId, 'authority-change', after, limit).map(({ sequence, event }) =>
           ({ sequence, atMs: event.atMs, inputDigest: event.subject.kind === 'authority-change' ? event.subject.inputDigest : '' })), close: () => store.close() };
       } catch (error) { store.close(); throw error; } } };
-    return await new StandingGrantsInspection({ policy: createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), history })
+    return await new StandingGrantsInspection({ policy: contextPolicySource({ layout, config }), history })
       .list({ schemaVersion: 1, scopeId: input.scopeId, ...(input.after === undefined ? {} : { after: input.after }) }, principal);
   } catch (error) { throw queryFailure(error); }
 }
