@@ -53,6 +53,9 @@ it('refuses changed bytes, extra fields, noncanonical base64 and oversize transp
   const noncanonical = JSON.parse(Buffer.from(encodeHubBundle(bundle())).toString()); noncanonical.files[0].base64 += '\n';
   expect(() => decodeHubBundle(Buffer.from(JSON.stringify(noncanonical)))).toThrow(code('HUB_PACKAGE_INVALID'));
   expect(() => decodeHubBundle(Buffer.alloc(HUB_LIMITS.packageMaxBytes + 1))).toThrow(code('HUB_LIMIT_EXCEEDED'));
+  const unsigned = bundle();
+  expect.soft(() => encodeHubBundle({ ...unsigned, envelope: { ...unsigned.envelope, signatures: [] } })).toThrow(code('HUB_PACKAGE_INVALID'));
+  expect.soft(() => encodeHubBundle({ ...unsigned, delegation: {} as NonNullable<typeof unsigned.delegation> })).toThrow(code('HUB_PACKAGE_INVALID'));
   expect(count(f.path, 'hub_installs')).toBe(0); expect(count(f.path, 'skill_definitions')).toBe(0);
 });
 
@@ -196,6 +199,9 @@ it('the install grant cannot perform an update and a sealed source revision mism
   await expect(f.app.installFile(install('install-higher', bundle({ version: '1.0.1' })))).rejects.toThrow(code('HUB_INSTALL_CONFLICT'));
   const db = new DatabaseSync(f.path); db.exec('UPDATE hub_sources SET revision=revision+1'); db.close();
   await expect(f.app.listSources({ schemaVersion: 1, scopeId: 's' })).rejects.toThrow(code('HUB_STORE_CORRUPT'));
+  const installs = new DatabaseSync(f.path); installs.exec('UPDATE hub_installs SET revision=revision+1'); installs.close();
+  const store = await f.deps.openStore('read');
+  try { await expect(store.retainedArtifacts()).rejects.toThrow(code('HUB_STORE_CORRUPT')); } finally { store.close(); }
 });
 
 it('resolves a foreign dependency only under its own pinned source and signed feed (G6/G7/G23)', async () => {

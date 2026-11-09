@@ -35,6 +35,10 @@ export function canonicalHubManifest(input: unknown): string {
 /** Raw-byte completeness, size and digest check. No path is opened; all bytes are supplied by the adapter. No extras, links or modes in this contract. */
 export function verifyHubPackageFiles(manifest: HubPackage, files: readonly HubPackageFile[]): void {
   canonicalHubManifest(manifest);
+  matchCanonicalHubPackageFiles(manifest, files);
+}
+/** Byte match for a manifest already canonicalized in this custody window. */
+export function matchCanonicalHubPackageFiles(manifest: HubPackage, files: readonly HubPackageFile[]): void {
   const expected = hubPackageFileManifest(manifest);
   if (files.length + 2 > HUB_LIMITS.packageMaxFiles) throw new HubError('HUB_LIMIT_EXCEEDED');
   if (files.length !== expected.length || new Set(files.map(file => file.path.toLowerCase())).size !== files.length) throw new HubError('HUB_PACKAGE_INVALID');

@@ -1,7 +1,7 @@
 import { persistedInteger, identitySchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection, acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { z } from 'zod';
-import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, sealBeuserContext, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { runAdmissionSchema, runReservationCommandSchema, type RunAdmissionApplication, type RunReservationApplication } from '#engine/core/runs/index.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -35,7 +35,7 @@ export function admitBeuserAttempt(campaign: BeuserCampaign, input: { binding: u
     || binding.candidateDigest !== campaign.candidateDigest || binding.rubricDigest !== campaign.rubric.digest
     || binding.personaDigest !== sha256(encodeCommandProjection('beuser-persona:1', cell.summary))
     || !isBeuserEvaluatorPrincipal(principal) || principal.assurance !== 'workload-verified') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-  const context = Object.freeze({ binding, principal, signal: input.signal, limits: campaign.limits });
+  const context = Object.freeze(sealBeuserContext({ binding, principal, signal: input.signal, limits: campaign.limits }));
   assertBeuserAccess(context, binding, principal, { kind: 'run', id: binding.identity.runId }, 'inspect');
   return context;
 }

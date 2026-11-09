@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { beuserBindingSchema } from '#domain/index.js';
 import { beuserEvidenceSchema, type ArtifactStore } from '#capabilities/index.js';
 import { beuserPrivateRecord } from '#adapters/index.js';
-import { beuserProfileLimits, BeuserContractError, SupervisorError, beuserEvaluatorFor, beuserBindingDigest, sameSandboxRequest, sandboxResultSchema,
+import { beuserProfileLimits, BeuserContractError, SupervisorError, beuserEvaluatorFor, beuserBindingDigest, sameSandboxRequest, sandboxResultSchema, sealBeuserContext,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type DispatchRecord, type DispatchStore, type ExecutionSupervisor, type SupervisorProfileSource, type SandboxRequest, type BeuserContext } from '#engine/index.js';
 import { sha256, inspectProductDirectory, type ResolvedConfig, type ProductLayout } from '#platform/index.js';
 import { profileData } from './beuser-profile.js';
@@ -15,7 +15,7 @@ export function recordedBeuserSupervisor(recorded: DispatchRecord, input: {
 }): ExecutionSupervisor & SupervisorProfileSource {
   const data = profileData(recorded.profile), limits = beuserProfileLimits(data);
   const context = (): BeuserContext => { if (!recorded.grant) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    return { binding: data.binding, principal: beuserEvaluatorFor(recorded.grant.principal, recorded.request.identity.scopeId), limits, signal: new AbortController().signal }; };
+    return sealBeuserContext({ binding: data.binding, principal: beuserEvaluatorFor(recorded.grant.principal, recorded.request.identity.scopeId), limits, signal: new AbortController().signal }); };
   let opened: ReturnType<typeof openConfiguredBeuserRealmOwner> | undefined;
   const get = (request: SandboxRequest) => {
     if (!sameSandboxRequest(request, recorded.request)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');

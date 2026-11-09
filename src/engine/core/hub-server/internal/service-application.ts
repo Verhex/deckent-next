@@ -147,22 +147,24 @@ export class HubModeratedApplication extends HubServiceBase {
     const bytes = await super.readFile(context, packageId, version, path);
     await this.inspect(context, packageId, version); return bytes;
   }
-  override async search(context: HubServerContext, after = '', limit = HUB_LIMITS.searchPageMax) {
+  override async searchPage(context: HubServerContext, after = '', limit = HUB_LIMITS.searchPageMax) {
     await this.authorize(context, 'read', 'packages', '');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > HUB_LIMITS.searchPageMax || after.length > HUB_LIMITS.packageMaxBytes) throw new HubServerError('HUB_RATE_REFUSED');
     return this.ports.store.transaction(async tx => {
       const result: { key: string; manifest: HubPackage; envelope: HubEnvelope; revocationState: 'clear' }[] = [];
       let cursor = after;
-      while (result.length < limit) {
+      while (result.length < limit + 1) {
         const refs = await tx.packages(cursor, HUB_LIMITS.searchPageMax);
         for (const ref of refs) {
           const row = await this.requireVersion(ref.packageId, ref.version, tx);
           if (await this.readable(tx, row, true)) result.push({ key: ref.key, manifest: row.manifest, envelope: row.envelope, revocationState: 'clear' });
-          cursor = ref.key; if (result.length === limit) break;
+          cursor = ref.key; if (result.length === limit + 1) break;
         }
         if (refs.length < HUB_LIMITS.searchPageMax) break;
       }
-      await this.authorize(context, 'read', 'packages', ''); return result;
+      await this.authorize(context, 'read', 'packages', '');
+      const packages = result.slice(0, limit), last = packages.at(-1);
+      return { packages, ...(result.length > limit && last ? { nextCursor: last.key } : {}) };
     });
   }
   override async listSkills(context: HubServerContext, after = '', limit = HUB_LIMITS.searchPageMax) {

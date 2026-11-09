@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, symlinkSync, chmodSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { afterEach, expect, it, type TestContext } from 'vitest';
+import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -316,12 +316,54 @@ it('authenticates each modern HTTP request, serves resource metadata and delegat
     expect((await f.app.inspect(context, 'acme/invoice', '1.0.0')).envelope.signatures.map(sig => sig.role)).toEqual(['publisher', 'hub']);
     const result = await client.request({ method: 'hub/packages/list', params: {} }, z.object({ value: z.object({ hubId: z.string(), packages: z.array(z.unknown()) }) }));
     expect(result.value.hubId).toBe(hub.keyId); expect(result.value.packages).toHaveLength(1);
+    const second = bundle('1.0.1');
+    await f.app.publish(context, second.manifest, second.envelope, second.files);
+    const pageSchema = z.object({ value: z.object({ packages: z.array(z.object({ key: z.string() }).passthrough()), nextCursor: z.string().optional() }) });
+    const page = await client.request({ method: 'hub/packages/list', params: { limit: 1 } }, pageSchema);
+    expect(page.value.packages).toHaveLength(1); expect(page.value.nextCursor).toBe(page.value.packages[0]!.key);
+    const rest = await client.request({ method: 'hub/packages/list', params: { after: page.value.nextCursor, limit: 1 } }, pageSchema);
+    expect(rest.value.packages).toHaveLength(1); expect(rest.value.nextCursor).toBeUndefined();
+
+    let packageReadable = true;
+    const packageAuthority = vi.spyOn(f.app.ports.authority, 'require').mockImplementation((_ctx, action, resource) => {
+      if (action === 'read' && resource === 'acme/invoice' && !packageReadable) throw new HubServerError('HUB_SERVER_DENIED');
+    });
+    const get = f.store.get.bind(f.store);
+    const withdrawalDuringRead = vi.spyOn(f.store, 'get').mockImplementation(async (packageId, version) => {
+      const row = await get(packageId, version);
+      if (packageId === 'acme/invoice') packageReadable = false;
+      return row;
+    });
+    try {
+      await expect.soft(f.app.search(context, '', 1), 'search rechecks the package grant after reading').rejects.toThrow(code('HUB_SERVER_DENIED'));
+      packageReadable = true;
+      await expect.soft(client.request({ method: 'hub/packages/list', params: { limit: 1 } }, z.unknown()), 'MCP list rechecks the package grant after reading').rejects.toThrow();
+    } finally { withdrawalDuringRead.mockRestore(); packageAuthority.mockRestore(); }
+
     expect(result.value.packages[0]).toMatchObject({ revocationState: 'clear', envelope: { signatures: expect.arrayContaining([expect.objectContaining({ role: 'publisher' }), expect.objectContaining({ role: 'hub' })]) } });
     const fetched = await client.request({ method: 'hub/packages/get', params: { packageId: 'acme/invoice', version: '1.0.0' } }, z.object({ value: z.object({ bundle: z.object({ manifest: z.unknown(), files: z.array(z.unknown()) }) }) }));
     expect(fetched.value.bundle.files).toHaveLength(2);
+    const delegation = vi.spyOn(f.app, 'packageDelegation').mockImplementation(async () => { await Promise.resolve(); f.deny(); return null; });
+    await expect.soft(client.request({ method: 'hub/packages/get', params: { packageId: 'acme/invoice', version: '1.0.0' } }, z.unknown())).rejects.toThrow();
+    f.allow();
+    const revocations = f.store.revocations.bind(f.store);
+    let revoked = false;
+    delegation.mockImplementation(async () => { await Promise.resolve(); revoked = true; return null; });
+    const withdrawalDuringDelegation = vi.spyOn(f.store, 'revocations').mockImplementation(async targets => revoked
+      ? [{ kind: 'package-version', id: 'acme/invoice@1.0.0', severity: 'revoke', reason: 'withdrawn', atMs: 200 }] : revocations(targets));
+    const withdrawn = await client.request({ method: 'hub/packages/get', params: { packageId: 'acme/invoice', version: '1.0.0' } }, z.object({ value: z.object({ revocationState: z.string() }) }));
+    expect.soft(withdrawn.value.revocationState).toBe('revoked');
+    delegation.mockRestore(); withdrawalDuringDelegation.mockRestore();
+
     await expect(client.request({ method: 'hub/agents/get', params: { packageId: 'acme/invoice', version: '1.0.0', agentId: 'missing' } }, z.unknown())).rejects.toThrow();
     const portable = portableBundle({ name: 'payable' });
     await f.app.publish(context, portable.manifest, { ...portable.envelope, signatures: portable.envelope.signatures.filter(sig => sig.role === 'publisher') }, portable.files);
+    const authority = vi.spyOn(f.app.ports.authority, 'require').mockImplementation((_ctx, action, resource) => {
+      if (action === 'read' && resource === 'acme/payable') throw new HubServerError('HUB_SERVER_DENIED');
+    });
+    await expect.soft(client.request({ method: 'hub/packages/list', params: { after: 'acme/invoice@1.0.0', limit: 1 } }, z.unknown())).rejects.toThrow();
+    authority.mockRestore();
+
     const agent = await client.request({ method: 'hub/agents/get', params: { packageId: 'acme/payable', version: '1.0.0', agentId: 'payable-agent' } }, z.object({ value: z.object({ agent: z.object({ agentId: z.string(), persona: z.string() }) }) }));
     expect(agent.value.agent).toEqual({ agentId: 'payable-agent', persona: 'Review the business record.' });
     const withdrawal = { schemaVersion: 1 as const, commandId: 'wire-yank', authority: 'publisher' as const, kind: 'package-version' as const, id: 'acme/invoice@1.0.0', reason: 'superseded', keyId: publisher.keyId };

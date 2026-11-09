@@ -1,4 +1,4 @@
-import { persistedString, persistedNumber, persistedInteger, HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema, identitySchema, requireBoundedHubJson } from '#domain/index.js';
+import { persistedString, persistedNumber, persistedInteger, HUB_LIMITS, canonicalHubJson, hubExtensionId, hubPackageIdSchema, hubVersionSchema, identitySchema, requireBoundedHubJson } from '#domain/index.js';
 import { toInputJsonSchema, t, ErrorRegistry, type Locale, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { executeHubService } from './service-methods.js';
 import { ProtocolError, type Server, type ServerContext } from '@modelcontextprotocol/server';
@@ -23,17 +23,15 @@ const cache = { resultType: 'complete' as const, ttlMs: 0, cacheScope: 'private'
 type Entry = { readonly schema: z.ZodTypeAny; readonly run: (input: unknown, request: ServerContext) => Promise<unknown> };
 
 export function registerHubMethods(server: Server, app: HubServerApplication, context: (request: ServerContext) => HubServerContext, options: HubMcpOptions) {
-  if (!/^[a-z0-9.-]+\/[a-z0-9-]+$/.test(options.extensionId) || options.extensionId === 'io.modelcontextprotocol/skills') throw new HubClientError('HUB_SOURCE_INVALID');
+  if (!hubExtensionId(options.extensionId)) throw new HubClientError('HUB_SOURCE_INVALID');
   const methods: Record<string, Entry> = {
     'hub/packages/list': { schema: search, run: async (input, request) => {
-      const p = search.parse(input), rows = await app.search(context(request), p.after, p.limit), last = rows.at(-1);
-      const more = last && (await app.search(context(request), last.key, 1)).length > 0;
-      return { hubId: app.ports.hubId, packages: rows, ...(more ? { nextCursor: last.key } : {}) };
+      const p = search.parse(input), page = await app.searchPage(context(request), p.after, p.limit);
+      return { hubId: app.ports.hubId, packages: page.packages, ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}) };
     } },
     'hub/packages/get': { schema: query, run: async (input, request) => {
-      const p = query.parse(input), ctx = context(request), row = await app.inspect(ctx, p.packageId, p.version), delegation = await app.packageDelegation(row.envelope);
-      const files = await Promise.all(row.files.map(async file => ({ path: file.path, bytes: await app.readFile(ctx, p.packageId, p.version, file.path) })));
-      return { hubId: app.ports.hubId, ...(app instanceof HubModeratedApplication ? { evidence: await app.evidence(ctx, p.packageId, p.version) } : {}), revocationState: await app.revocationState(ctx, p.packageId, p.version), bundle: JSON.parse(Buffer.from(encodeHubBundle({ manifest: row.manifest, envelope: row.envelope, files, ...(delegation ? { delegation } : {}) })).toString('utf8')) as unknown };
+      const p = query.parse(input), ctx = context(request), payload = await app.packagePayload(ctx, p.packageId, p.version), delegation = await app.packageDelegation(payload.envelope);
+      return { hubId: app.ports.hubId, ...(app instanceof HubModeratedApplication ? { evidence: await app.evidence(ctx, p.packageId, p.version) } : {}), revocationState: await app.revocationState(ctx, p.packageId, p.version), bundle: JSON.parse(Buffer.from(encodeHubBundle({ manifest: payload.manifest, envelope: payload.envelope, files: payload.files, ...(delegation ? { delegation } : {}) })).toString('utf8')) as unknown };
     } },
     'hub/agents/get': { schema: agent, run: async (input, request) => {
       const p = agent.parse(input), row = await app.inspect(context(request), p.packageId, p.version);

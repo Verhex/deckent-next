@@ -24,3 +24,4 @@ export const hubFilesSchema = z.array(hubFileSchema).min(1).max(HUB_LIMITS.skill
     && files.reduce((sum, f) => sum + f.size, 0) <= HUB_LIMITS.skillReadMaxBytes).readonly();
 export const hubSignatureValueSchema = z.string().regex(/^[A-Za-z0-9+/]{86}==$/);
 export const hubPublicKeySchema = z.string().regex(/^[A-Za-z0-9+/]{59}=$/);
+export const hubExtensionId = (id: string): boolean => /^[a-z0-9.-]+\/[a-z0-9-]+$/.test(id) && id !== 'io.modelcontextprotocol/skills';
