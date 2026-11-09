@@ -1,7 +1,7 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
 import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
 import { DeckentError } from './error.js';
-import type { ErrorDefinitions, ErrorEntry } from './definition.js';
+import type { AuthorizationRefusal, ErrorDefinition, ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
 import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
 export type { ErrorEntry } from './definition.js';
@@ -154,8 +154,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SIWC_ACCOUNT_STILL_CONNECTED: { category: 'error', render: (p, l) => ({ message: t('siwc.account.signOutFirst', p, l) }) },
   SIWC_USAGE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.usageUnavailable', p, l) }) },
   SIWC_SERVICE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.serviceUnavailable', p, l) }) },
-  SIWC_WORKER_ISOLATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_WORKER_ISOLATION_UNAVAILABLE', p, l) }) },
-  SIWC_APP_SERVER_AUTH_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'activation-hold' ? t('siwc.worker.activationHold', p, l) : t('error.SIWC_APP_SERVER_AUTH_UNAVAILABLE', p, l) }) },
+  SIWC_WORKER_ISOLATION_UNAVAILABLE: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.SIWC_WORKER_ISOLATION_UNAVAILABLE', p, l) }) },
+  SIWC_APP_SERVER_AUTH_UNAVAILABLE: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['reason'] === 'activation-hold' ? t('siwc.worker.activationHold', p, l) : t('error.SIWC_APP_SERVER_AUTH_UNAVAILABLE', p, l) }) },
   SIWC_RELAY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_RELAY_REFUSED', p, l) }) },
   SIWC_APP_SERVER_EFFECT_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_APP_SERVER_EFFECT_UNKNOWN', p, l) }) },
   SIWC_WORKER_CLEANUP_UNPROVEN: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_WORKER_CLEANUP_UNPROVEN', p, l) }) },
@@ -254,7 +254,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CONFIG_KEY_NOT_OBJECT: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_KEY_NOT_OBJECT', p, l) }) },
   CONFIG_METADATA_MISSING: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_METADATA_MISSING', p, l) }) },
   APPROVAL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_INVALID', p, l) }) },
-  APPROVAL_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_DENIED', p, l) }) },
+  APPROVAL_DENIED: { category: 'error', refusal: 'approval-denied', render: (p, l) => ({ message: t('error.APPROVAL_DENIED', p, l) }) },
   APPROVAL_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_MISSING', p, l) }) },
   APPROVAL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_CONFLICT', p, l) }) },
   APPROVAL_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_EXPIRED', p, l) }) },
@@ -437,8 +437,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   EVALUATION_EVIDENCE_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_LIMIT', p, l) }) },
   EVALUATION_EVIDENCE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_CORRUPT', p, l) }) },
   EVALUATION_EVIDENCE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_UNAVAILABLE', p, l) }) },
-  EXECUTION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_NOT_CONFIGURED', p, l) }) },
-  EXECUTION_HOST_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_HOST_UNSUPPORTED', p, l) }) },
+  EXECUTION_NOT_CONFIGURED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.EXECUTION_NOT_CONFIGURED', p, l) }) },
+  EXECUTION_HOST_UNSUPPORTED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.EXECUTION_HOST_UNSUPPORTED', p, l) }) },
   CANCELLATION_DELIVERY_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_DELIVERY_CONFLICT', p, l) }) },
   RECONCILIATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.RECONCILIATION_NOT_CONFIGURED', p, l) }) },
   RECONCILIATION_RECOVERY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.RECONCILIATION_RECOVERY_INVALID', p, l) }) },
@@ -487,8 +487,6 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // H34 S3 Q1 (owner 2026-09-27 evening decision 6): `runtime serve` refuses to start while one of its own scopes is already pinned
   // to another company (config/ledger mismatch; same 'config' category, exit 78, as CONFIG_VERSION_UNSUPPORTED/LAYOUT_VERSION_UNSUPPORTED
   // and the INSTALLATION_PROFILE_* siblings above — the operator's remedy is their own company.id or ledger, not a transport retry).
-  // Locale key not yet present (locale files are lead-owned, common; same temporary pattern as POLICY_APPROVAL_UNSUPPORTED /
-  // INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED before their keys were added). See i18n-delta.json for the suggested en/tr text.
   RUN_PROGRESSION_SCOPE_SKIPPED: { category: 'config', render: (p, l) => ({ message: t('error.RUN_PROGRESSION_SCOPE_SKIPPED', p, l) }) },
   RUNTIME_SERVICE_SCOPE_FOREIGN: { category: 'config', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_SCOPE_FOREIGN', p, l) }) },
   RUN_WORKSPACE_CUSTODY_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_WORKSPACE_CUSTODY_CONFLICT', p, l) }) },
@@ -506,7 +504,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
     message: t('error.CANCELLATION_NOT_CONFIGURED', { ...p, missing: p['missing'] ?? t('output.unknown', {}, l) }, l),
     suggestion: t('error.CANCELLATION_NOT_CONFIGURED.init', {}, l),
   }) },
-  EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
+  EXECUTION_PROFILE_INVALID: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
   EXECUTION_RESOURCE_CEILING: { category: 'config', render: (p, l) => ({ message: t('error.EXECUTION_RESOURCE_CEILING', p, l) }) },
   TASK_GRAPH_LIMIT: { category: 'config', render: (p, l) => ({ message: taskGraphLimit(p, l) }) },
   TASK_GRAPH_INVALID: { category: 'usage', render: (p, l) => ({ message: taskGraphInvalid(p, l) }) },
@@ -554,36 +552,36 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   PATCH_WORKING_TREE_KEPT: { category: 'error', render: (p, l) => ({ message: p['written'] ? t('error.PATCH_WORKING_TREE_KEPT.partial', p, l) : t('error.PATCH_WORKING_TREE_KEPT', p, l) }) },
   // R3017/R3019: a journal, lock record or recovery custody that is unreadable or of another version (`path`): an explicit refusal, nothing settled or written.
   PATCH_WORKING_TREE_RECORD_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_RECORD_UNSUPPORTED', p, l) }) },
-  PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
-  PATCH_WORKING_TREE_SUBFOLDER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_SUBFOLDER', p, l) }) },
-  PATCH_WORKING_TREE_FILTER: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_FILTER', p, l) }) },
+  PATCH_WORKING_TREE_UNSUPPORTED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_UNSUPPORTED', p, l) }) },
+  PATCH_WORKING_TREE_SUBFOLDER: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_SUBFOLDER', p, l) }) },
+  PATCH_WORKING_TREE_FILTER: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_FILTER', p, l) }) },
   // A6-1 (owner 2026-11-08, K-1): params count, paths (first 16), omitted — a patch writing a filtered path kept at HEAD; found, required — the Git floor.
   PATCH_WORKING_TREE_FILTERED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_FILTERED', p, l) }) },
-  PATCH_WORKING_TREE_GIT_VERSION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_GIT_VERSION', p, l) }) },
+  PATCH_WORKING_TREE_GIT_VERSION: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_GIT_VERSION', p, l) }) },
   PATCH_WORKING_TREE_NOT_WRITTEN: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_NOT_WRITTEN', p, l) }) },
   PATCH_WORKING_TREE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_WORKING_TREE_CHANGED', p, l) }) },
   // Params limit (bytes), maxEntries; without them (a later view of the recorded refusal) the summary stands.
-  PATCH_WORKING_TREE_LISTING_LIMIT: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.PATCH_WORKING_TREE_LISTING_LIMIT.summary', p, l) : t('error.PATCH_WORKING_TREE_LISTING_LIMIT', p, l) }) },
-  DELIVERY_WORKING_TREE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_DENIED', p, l) }) },
-  DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED', p, l) }) },
+  PATCH_WORKING_TREE_LISTING_LIMIT: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.PATCH_WORKING_TREE_LISTING_LIMIT.summary', p, l) : t('error.PATCH_WORKING_TREE_LISTING_LIMIT', p, l) }) },
+  DELIVERY_WORKING_TREE_DENIED: { category: 'error', refusal: 'delivery', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_DENIED', p, l) }) },
+  DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED: { category: 'error', refusal: 'delivery', render: (p, l) => ({ message: t('error.DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED', p, l) }) },
   PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },
   PATCH_INSTRUCTION_SURFACE_WRITE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INSTRUCTION_SURFACE_WRITE', p, l) }) },
   // S6 (owner 2026-10-14): the pre-dispatch secret gate; params count, paths (first 16 as `path (rule)`), omitted — never a value. Without
   // params (a later view of the recorded code) the summary sentence stands. INCOMPLETE names the exhausted bound (limit, observed, bound).
-  WORKER_TREE_SECRET_REFUSED: { category: 'error', render: (p, l) => ({ message: p['paths'] === undefined ? t('error.WORKER_TREE_SECRET_REFUSED.summary', p, l) : t('error.WORKER_TREE_SECRET_REFUSED', p, l),
+  WORKER_TREE_SECRET_REFUSED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['paths'] === undefined ? t('error.WORKER_TREE_SECRET_REFUSED.summary', p, l) : t('error.WORKER_TREE_SECRET_REFUSED', p, l),
     suggestion: t('remedy.WORKER_TREE_SECRET_REFUSED', p, l) }) },
-  WORKER_TREE_SCAN_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_INCOMPLETE.summary', p, l) : t('error.WORKER_TREE_SCAN_INCOMPLETE', p, l),
+  WORKER_TREE_SCAN_INCOMPLETE: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_INCOMPLETE.summary', p, l) : t('error.WORKER_TREE_SCAN_INCOMPLETE', p, l),
     suggestion: t('remedy.WORKER_TREE_SCAN_INCOMPLETE', p, l) }) },
   // PRE-7 ORTAM-HAZIR: Deckent's own preflight found a declared environment requirement unmet; params requirement, kind, target, registered
   // (yes|no). Without params (a later view of the recorded refusal) the summary stands. An installation defect, never a task failure.
-  EXECUTION_ENVIRONMENT_NOT_READY: { category: 'error', render: (p, l) => ({ message: p['kind'] === undefined ? t('error.EXECUTION_ENVIRONMENT_NOT_READY.summary', p, l)
+  EXECUTION_ENVIRONMENT_NOT_READY: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['kind'] === undefined ? t('error.EXECUTION_ENVIRONMENT_NOT_READY.summary', p, l)
     : p['registered'] === 'no' ? t('error.EXECUTION_ENVIRONMENT_NOT_READY.unregistered', p, l) : t('error.EXECUTION_ENVIRONMENT_NOT_READY', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_NOT_READY', p, l) }) },
   // REVISE 2691: the preflight could not prove its probe container gone; params requirement, kind, probe. Nothing launched; never met or unmet.
-  EXECUTION_ENVIRONMENT_UNCERTAIN: { category: 'error', render: (p, l) => ({ message: p['probe'] === undefined ? t('error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary', p, l)
+  EXECUTION_ENVIRONMENT_UNCERTAIN: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: p['probe'] === undefined ? t('error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary', p, l)
     : t('error.EXECUTION_ENVIRONMENT_UNCERTAIN', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_UNCERTAIN', p, l) }) },
   // E1: the probe for a requirement was stopped by its own deadline before it answered (container proven gone); params requirement, kind.
   // The Run is held (progression park with this code) for an explicit re-run; never an installation defect, never retried on its own.
-  EXECUTION_ENVIRONMENT_TIMED_OUT: { category: 'error', render: (p, l) => ({ message: p['requirement'] === undefined ? t('error.EXECUTION_ENVIRONMENT_TIMED_OUT.summary', p, l)
+  EXECUTION_ENVIRONMENT_TIMED_OUT: { category: 'error', launch: 'held', render: (p, l) => ({ message: p['requirement'] === undefined ? t('error.EXECUTION_ENVIRONMENT_TIMED_OUT.summary', p, l)
     : t('error.EXECUTION_ENVIRONMENT_TIMED_OUT', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_TIMED_OUT', p, l) }) },
   // R2 (D3a 2026-10-18): a load-dependent `time` bound (limit timeoutMs or admissionTimeoutMs), retried on a later turn; params refusals, maxTimeRefusals.
   WORKER_TREE_SCAN_DEFERRED: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_DEFERRED.summary', p, l) : t('error.WORKER_TREE_SCAN_DEFERRED', p, l),
@@ -750,17 +748,17 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
   MONITOR_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MONITOR_UNAVAILABLE', p, l) }) },
   DISPATCH_INVENTORY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.DISPATCH_INVENTORY_LIMIT', p, l) }) },
-  AUTHENTICATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },
-  AUTHENTICATION_SCOPE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_SCOPE_DENIED', p, l) }) },
-  POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
+  AUTHENTICATION_REQUIRED: { category: 'error', refusal: 'authentication', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },
+  AUTHENTICATION_SCOPE_DENIED: { category: 'error', refusal: 'authentication', render: (p, l) => ({ message: t('error.AUTHENTICATION_SCOPE_DENIED', p, l) }) },
+  POLICY_UNAVAILABLE: { category: 'error', refusal: 'policy-unavailable', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
   POLICY_DELEGATION_STEP_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_STEP_INVALID', p, l) }) },
   POLICY_DELEGATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_CONFLICT', p, l) }) },
   // BeUser ZEY-02/D-04/E-05: a CLI refusal may carry the missing cell (operation, or cell + founder family) and its founder-baseline next step; the code stays.
-  POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: p['operation'] !== undefined ? t('error.POLICY_DENIED.operation', p, l) : p['cell'] !== undefined ? t('error.POLICY_DENIED.founder', p, l) : t('error.POLICY_DENIED', p, l) }) },
+  POLICY_DENIED: { category: 'error', refusal: 'policy-denied', render: (p, l) => ({ message: p['operation'] !== undefined ? t('error.POLICY_DENIED.operation', p, l) : p['cell'] !== undefined ? t('error.POLICY_DENIED.founder', p, l) : t('error.POLICY_DENIED', p, l) }) },
   // KER-03: a refusal that knows the requested scope names it; both say where the usable scopes are listed.
-  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: typeof p['scope'] === 'string' ? t('error.SCOPE_UNKNOWN.named', p, l) : t('error.SCOPE_UNKNOWN', p, l) }) },
+  SCOPE_UNKNOWN: { category: 'error', refusal: 'scope-unknown', render: (p, l) => ({ message: typeof p['scope'] === 'string' ? t('error.SCOPE_UNKNOWN.named', p, l) : t('error.SCOPE_UNKNOWN', p, l) }) },
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
-  POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
+  POLICY_APPROVAL_UNSUPPORTED: { category: 'error', refusal: 'approval-unsupported', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
   // alpha.56 U5-S1: params kind, action, target, scope, reason, hint (owner|other|unnamed|deny|approval), people; without them the summary sentence.
   POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: p['kind'] === undefined ? t('error.POLICY_DELEGATION_EXCEEDS.summary', p, l)
@@ -845,7 +843,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_CLASS_EVIDENCE_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_EVIDENCE_NOT_REGISTERED', p, l) }) },
   TASK_EVALUATION_PROFILE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_PROFILE_MISMATCH', p, l) }) },
   DISPATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CORRUPT', p, l) }) },
-  DISPATCH_ARTIFACT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_ARTIFACT_REQUIRED', p, l) }) },
+  DISPATCH_ARTIFACT_REQUIRED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.DISPATCH_ARTIFACT_REQUIRED', p, l) }) },
   DISPATCH_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CONFLICT', p, l) }) },
   DISPATCH_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_NOT_ADMITTED', p, l) }) },
   DISPATCH_PROFILE_VALIDATION_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.DISPATCH_PROFILE_VALIDATION_REQUIRED', p, l) }) },
@@ -925,8 +923,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_PROFILE_SHUTDOWN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_SHUTDOWN', p, l) }) },
   // C12 Q8 follow-up (owner 2026-09-27): installation owns its typed require-approval refusal, same 'config' category
   // (exit 78) as its INSTALLATION_PROFILE_* siblings above, instead of the shared cross-module POLICY_APPROVAL_UNSUPPORTED
-  // ('error' category, exit 1) used by the other 9 authorization points outside the operation catalog.
-  // Locale key not yet present (locale files are lead-owned, common); see i18n-delta.json for suggested en/tr text.
+  // ('error' category, exit 1) used by the other authorization points outside the operation catalog.
   INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED', p, l) }) },
   INSTALLATION_PROFILE_PATHS: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_PATHS', p, l) }) },
   BOOTSTRAP_STATE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_INVALID', p, l) }) },
@@ -1067,7 +1064,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   HUB_FOREIGN_PACKAGE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FOREIGN_PACKAGE', p, l) }) },
   HUB_FEED_REPLAYED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_REPLAYED', p, l) }) },
   HUB_FEED_STALE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_STALE', p, l) }) },
-  HUB_SKILL_FILES_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_FILES_UNAVAILABLE', p, l) }) },
+  HUB_SKILL_FILES_UNAVAILABLE: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('error.HUB_SKILL_FILES_UNAVAILABLE', p, l) }) },
   HUB_SKILL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_INVALID', p, l) }) },
   HUB_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FILE_UNSUPPORTED', p, l) }) },
   HUB_SOURCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SOURCE_INVALID', p, l) }) },
@@ -1087,6 +1084,14 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
 const definitions = mergeErrorDefinitions([['core', coreDefinitions], ...ERROR_DEFINITION_FRAGMENTS]);
 for (const definition of Object.values(definitions)) Object.freeze(definition);
 export const ERROR_CODES: readonly string[] = Object.freeze(Object.keys(definitions));
+const registered = (code: unknown): ErrorDefinition | undefined => typeof code === 'string' && Object.hasOwn(definitions, code) ? definitions[code] : undefined;
+/** KG3 F3: whether `code` is a registered refusal of one of the `include` classes (each caller names its own); an unregistered code is not. */
+export const isAuthorizationRefusal = (code: unknown, options: { readonly include: readonly AuthorizationRefusal[] }): boolean => {
+  const refusal = registered(code)?.refusal;
+  return refusal !== undefined && options.include.includes(refusal);
+};
+/** S2-e4: the launch disposition a registered code carries; null = transient, an unregistered code included. */
+export const launchRefusal = (code: unknown): 'permanent' | 'held' | null => registered(code)?.launch ?? null;
 export const ErrorRegistry = Object.freeze({
   has(code: string): boolean { return Object.hasOwn(definitions, code); },
   get(code: string, locale: Locale = resolveLocale(), params: Params = {}): Readonly<ErrorEntry> | undefined {

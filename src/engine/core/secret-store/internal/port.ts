@@ -17,6 +17,8 @@ export const SECRET_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,127}$/;
 export const SECRET_VALUE_MAX_BYTES = 65_536;
 /** `<namespace>.secret-store.<name>@<version>`; Core owns the `core` namespace. */
 export const SECRET_STORE_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/;
+/** The Core backends' ids (product data ids, not provider ids): the engine ranks them, the adapters register under them (KG3 F4). */
+export const ENV_SECRET_STORE_ID = 'core.secret-store.env@1', FILE_SECRET_STORE_ID = 'core.secret-store.file@1', ENCRYPTED_FILE_SECRET_STORE_ID = 'core.secret-store.encrypted-file@1';
 export type SecretStoreErrorCode = 'SECRET_NAME_INVALID' | 'SECRET_VALUE_INVALID' | 'SECRET_STORE_UNKNOWN' | 'SECRET_STORE_UNAVAILABLE'
   | 'SECRET_STORE_UNSAFE' | 'SECRET_STORE_CORRUPT' | 'SECRET_STORE_READ_ONLY' | 'SECRET_STORE_UNSUPPORTED' | 'SECRET_STORE_FULL'
   | 'SECRET_HELPER_INVALID' | 'SECRET_HELPER_DENIED' | 'SECRET_HELPER_TIMEOUT' | 'SECRET_HELPER_OUTPUT_LIMIT' | 'SECRET_HELPER_FAILED'

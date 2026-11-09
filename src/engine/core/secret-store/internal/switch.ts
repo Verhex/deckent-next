@@ -1,17 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-import type { SecretCustody, SecretStore } from './port.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, FILE_SECRET_STORE_ID, type SecretCustody, type SecretStore } from './port.js';
 import type { SecretChangeAudit, SecretChangeDecision } from './administration.js';
 import { assertSecretRelocation } from './protection.js';
 
 /** The policy resource id of a store switch: one installation store, so one fixed id; a rule for every secret name (`all`) covers it. */
 export const SECRET_STORE_SWITCH_RESOURCE_ID = 'secret-store';
-/** The environment backend's id (the selection an absent `secrets` section means). */
-const ENVIRONMENT_STORE = 'core.secret-store.env@1';
 /** Core stores by custody strength: a move to a lower rank is a downgrade; a store outside this list (Enterprise/custom) always asks. */
-const CORE_STORE_RANK: Readonly<Record<string, number>> = Object.freeze({ 'core.secret-store.env@1': 1, 'core.secret-store.file@1': 2,
-  'core.secret-store.encrypted-file@1': 3 });
+const CORE_STORE_RANK: Readonly<Record<string, number>> = Object.freeze({ [ENV_SECRET_STORE_ID]: 1, [FILE_SECRET_STORE_ID]: 2, [ENCRYPTED_FILE_SECRET_STORE_ID]: 3 });
 
 /** The installation's store selection (`secrets.store` of the installation config): `store` null = no selection (the environment backend). */
 export interface SecretStoreSelectionPort {
@@ -88,10 +85,10 @@ export class SecretStoreSwitch {
   }
 
   private async move(request: SecretStoreSwitchRequest): Promise<SecretStoreSwitchResult> {
-    const selection = await this.ports.selection.read(), from = selection.store ?? ENVIRONMENT_STORE;
+    const selection = await this.ports.selection.read(), from = selection.store ?? ENV_SECRET_STORE_ID;
     if (from === request.to) return this.finish(request, from);
     const source = this.ports.open(from), target = this.ports.open(request.to);
-    if (from === ENVIRONMENT_STORE) {
+    if (from === ENV_SECRET_STORE_ID) {
       const missing = await this.ports.environmentReferences(target);
       if (missing.length && !request.confirmEnvMissing) throw ErrorRegistry.createError('SECRET_STORE_ENV_UNCONFIRMED', {
         params: { to: request.to, names: missing.join(', ') } });

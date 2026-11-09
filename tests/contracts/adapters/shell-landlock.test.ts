@@ -73,7 +73,7 @@ describe('shell realm selection with Landlock (S11)', () => {
   const sandbox = [landlockShellSandbox({ project: { root: '/nonexistent', denied: () => false, ignoredDirs: new Set<string>() }, scratchDir: null })];
   // An owner-approved standart call (project and its write floor writable, `.git` read-only) — the default most assertions here care about.
   const OWNER_APPROVED_STANDART = { projectReadOnly: false, writeFloorReadOnly: false, repositoryWritable: false };
-  it('chooses Landlock for prefer-sandbox and require-sandbox, never for host', () => {
+  it('chooses Landlock for prefer-sandbox and require-sandbox, never for host; refuses a contained workspace layout it cannot hide', async () => {
     for (const mode of ['prefer-sandbox', 'require-sandbox'] as const) {
       const picked = resolveShellRealm(mode, caps(7), sandbox);
       expect(picked).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', notice: null });
@@ -82,6 +82,10 @@ describe('shell realm selection with Landlock (S11)', () => {
     const host = resolveShellRealm('host', caps(7), sandbox);
     expect(host).toMatchObject({ ok: true, realm: hostShellRealm, notice: null, marker: null });
     expect(host.ok && host.posture(OWNER_APPROVED_STANDART)).toContain('not a sandbox');
+    // KG3 F5: only bubblewrap hides a contained workspace's state ancestor; Landlock refuses the call before it builds or runs anything.
+    const contained = landlockShellSandbox({ project: { root: '/nonexistent', denied: () => false, ignoredDirs: new Set<string>() }, scratchDir: null, containedWorkspaceRoot: '/nonexistent-state' }).usable(caps(7));
+    if (!contained.ok) throw new Error(contained.reason);
+    expect(await contained.realm.run({ command: 'true', cwd: '/nonexistent' })).toMatchObject({ status: 'spawn-failed', exitCode: null, output: expect.stringContaining('contained workspace') });
   });
   it('names what an old kernel leaves open (typed DEGRADED, visible notice)', () => {
     const degraded = resolveShellRealm('prefer-sandbox', caps(3), sandbox);
