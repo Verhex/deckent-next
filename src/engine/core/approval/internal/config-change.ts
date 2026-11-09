@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { approvalRequestSchema, configChangeSubjectConsistent, encodeCommandProjection, ApprovalError, type ApprovalActor, type ApprovalFacts,
   type ApprovalRecord, type ApprovalSubject } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
+import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, expireDue, sealApproval, verifyApproval } from './integrity.js';
 import { minimumApprovalAssurance } from './assurance.js';
 
 export type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
@@ -23,7 +23,6 @@ export function configChangeApprovalFacts(policy: unknown, scopeId: string): App
 
 export interface ConfigChangeApprovalRequest {
   readonly scopeId: string; readonly requester: ApprovalActor; readonly subject: ConfigChangeSubject;
-  /** The current policy document (facts) and its revision (the request's `policyRevision`). */
   readonly policy: unknown; readonly policyRevision: string;
   /** The card's bounded, human-readable sentence (the producer's words in the requester's language). */
   readonly summary: string;
@@ -50,16 +49,9 @@ export class ConfigChangeApprovalBroker {
     const now = this.clock.sample().wallMs;
     const found = this.store.findConfigChange(input.scopeId, actionDigest);
     if (!found) return { pending: this.pending(this.open(input, actionDigest, now)) };
-    let current = verifyApproval(found, this.integrity);
-    if (current.status === 'pending' && now >= current.request.expiresAt) current = expireApproval(this.store, this.integrity, current);
+    const current = expireDue(this.store, this.integrity, verifyApproval(found, this.integrity), now);
     if (current.status === 'pending') return { pending: this.pending(current) };
-    if (current.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const stored = current.decision!;
-    if (stored.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (stored.requestDigest !== approvalRequestDigest(current.request)) throw new ApprovalError('APPROVAL_INTEGRITY');
-    // Another process may have decided on a clock ahead of this one; only the bounded skew is tolerated (I40), never a window extension.
-    if (stored.decidedAt > now + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
-    if (now > stored.decidedAt + this.options.admitWithinMs) throw new ApprovalError('APPROVAL_EXPIRED');
+    admitDecided(current, { now, window: this.options.admitWithinMs });
     return { approved: { approvalId: current.request.approvalId, actionDigest } };
   }
 

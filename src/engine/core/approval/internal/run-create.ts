@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError,
+import { approvalRequestSchema, approvalSubject, encodeCommandProjection, samePrincipalRef, ApprovalError,
   type ApprovalActor, type ApprovalSubject, type AuthorityAdmission } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
+import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, approvalActorRef, approvalRequestDigest, expireApproval, expireDue, sealApproval, verifyApproval } from './integrity.js';
 import { minimumApprovalAssurance } from './assurance.js';
 type Subject = Extract<ApprovalSubject, { kind: 'run-create' }>;
 export interface RunCreateApprovalInput { readonly scopeId: string; readonly subject: Subject; readonly requester: ApprovalActor;
@@ -33,20 +33,15 @@ export class RunCreateApprovalBroker {
     // L1c: the same plan (command, Run, input, requester) whose basis changed before it was used (the person's mode, the policy revision): the unused card is
     // retired and a fresh card with the current basis and summary asks again. The old decision never admits the changed basis; a denial stands.
     const held = approvalSubject(record.request) as Subject, same = held.kind === 'run-create' && held.commandId === input.subject.commandId && held.runId === input.subject.runId && held.inputDigest === input.subject.inputDigest;
-    if (record.request.actionDigest !== digest && same && encodeCommandProjection('requester:1', record.request.requester) === encodeCommandProjection('requester:1', input.requester) && (record.status === 'pending' || record.decision?.decision === 'allow')) {
+    if (record.request.actionDigest !== digest && same && samePrincipalRef(approvalActorRef(record.request.requester), approvalActorRef(input.requester)) && (record.status === 'pending' || record.decision?.decision === 'allow')) {
       try { record = this.store.supersedeRunCreate(record.status === 'pending' ? expireApproval(this.store, this.integrity, record) : record, fresh()); } /* an old pending card ends expired, never answerable */ catch (error) { const winner = this.store.findRunCreate(input.scopeId, input.subject.commandId); if (!winner || winner.request.actionDigest !== digest) throw error; record = verifyApproval(winner, this.integrity); }
     }
     if (record.request.actionDigest !== digest || record.request.policyRevision !== input.policyRevision
       || encodeCommandProjection('run-create-subject:1', approvalSubject(record.request)) !== encodeCommandProjection('run-create-subject:1', input.subject)
-      || encodeCommandProjection('requester:1', record.request.requester) !== encodeCommandProjection('requester:1', input.requester)) throw new ApprovalError('APPROVAL_CONFLICT');
-    if (record.status === 'pending' && now >= record.request.expiresAt) record = expireApproval(this.store, this.integrity, record);
+      || !samePrincipalRef(approvalActorRef(record.request.requester), approvalActorRef(input.requester))) throw new ApprovalError('APPROVAL_CONFLICT');
+    record = expireDue(this.store, this.integrity, record, now);
     if (record.status === 'pending') return { pending: { approvalId: record.request.approvalId, expiresAt: record.request.expiresAt } };
-    if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const decision = record.decision!;
-    if (decision.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (decision.requestDigest !== approvalRequestDigest(record.request)) throw new ApprovalError('APPROVAL_INTEGRITY');
-    if (decision.decidedAt > now + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
-    if (now > decision.decidedAt + this.options.admitWithinMs) throw new ApprovalError('APPROVAL_EXPIRED');
+    const decision = admitDecided(record, { now, window: this.options.admitWithinMs });
     return { approved: { approvalId: record.request.approvalId, actionDigest: digest, requestDigest: decision.requestDigest, commandId: decision.commandId } };
   }
   /** A committed Run is historical replay, not a new use of an expired admission window. */

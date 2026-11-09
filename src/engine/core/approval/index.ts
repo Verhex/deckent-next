@@ -1,5 +1,6 @@
 export { agentToolUndo } from './internal/assurance.js';
 export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval, expireApproval } from './internal/integrity.js';
+export { admitDecided, expireDue } from './internal/integrity.js';
 export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, authorizeOwnApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand, ApprovalDecisionRestriction } from './internal/application.js';

@@ -24,7 +24,7 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
       if (policyGatesTaskAdmission(document)) {
         const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
         approvalJournal = openSqliteApprovalStore(await path(), config.storage.sqlite);
-        admission = new TaskApprovalAdmission(document, principal, approvalJournal.store, integrity, config.approvals.requestTtlMs);
+        admission = new TaskApprovalAdmission(document, principal, approvalJournal.store, integrity, config.approvals.requestTtlMs, config.approvals.requestTtlMs);
         store.setRunAdmissionFilter(admission);
       }
       const clock = new SystemTrustedClock();

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, policySchema, ApprovalError, type ApprovalActor, type ApprovalRecord,
+import { approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffectOpen, policySchema, ApprovalError, type ApprovalActor, type ApprovalRecord,
   type ApprovalSubject, type EffectCommand, type EffectIntentApproval, type OperationDescriptor, type VerifiedPrincipal } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
+import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
 import type { EffectAdmission, EffectApprovalContext, EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, approvalRequestDigest, expireDue, sealApproval, verifyApproval } from './integrity.js';
 import { operationApprovalFacts } from './assurance.js';
 import { CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION } from './config-change.js';
 import { RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './run-create.js';
@@ -43,8 +43,7 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     context: EffectApprovalContext): Promise<EffectAdmission | void> {
     if (descriptor.approval !== 'required' && decision === 'allow') return;
     const { record } = context;
-    // A terminal record replays its outcome: no approval is read or opened for it.
-    if (record && (record.state === 'settled' || record.state === 'refused')) return;
+    if (record && !isEffectOpen(record.state)) return;
     if (record?.intent.approval) return { approval: this.consumed(record.intent.approval, command) };
     const requester: ApprovalActor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     const subject: OperationSubject = { kind: 'operation', operation: command.operation, target: command.target, commandId: command.commandId,
@@ -53,16 +52,9 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     const now = this.clock.sample().wallMs;
     const found = this.store.findOperation(command.scopeId, actionDigest);
     if (!found) return { pending: this.pending(await this.open(descriptor, command, subject, requester, actionDigest, now)) };
-    let current = verifyApproval(found, this.integrity);
-    if (current.status === 'pending' && now >= current.request.expiresAt) current = expireApproval(this.store, this.integrity, current);
+    const current = expireDue(this.store, this.integrity, verifyApproval(found, this.integrity), now);
     if (current.status === 'pending') return { pending: this.pending(current) };
-    if (current.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const stored = current.decision!;
-    if (stored.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (stored.requestDigest !== approvalRequestDigest(current.request)) throw new ApprovalError('APPROVAL_INTEGRITY');
-    // Another process may have decided on a clock ahead of this one; only the bounded skew is tolerated (I40), never a window extension.
-    if (stored.decidedAt > now + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
-    if (now > stored.decidedAt + (descriptor.admitWithinMs ?? this.options.defaultAdmitWithinMs)) throw new ApprovalError('APPROVAL_EXPIRED');
+    admitDecided(current, { now, window: descriptor.admitWithinMs ?? this.options.defaultAdmitWithinMs });
     return { approval: { approvalId: current.request.approvalId, actionDigest } };
   }
 

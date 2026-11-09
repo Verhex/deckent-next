@@ -28,7 +28,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
       { id: 'decide', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } },
     ] };
     const integrity = createHmacIntegrity('key', randomBytes(32));
-    const gate = new TaskApprovalAdmission(policy, principal, journal.store, integrity, 1000); store.setRunAdmissionFilter(gate);
+    const gate = new TaskApprovalAdmission(policy, principal, journal.store, integrity, 1000, 1000); store.setRunAdmissionFilter(gate);
     let generated = 0;
     const app = new RunReservationApplication(store, { verify: async () => principal }, { authorize: async () => undefined },
       { authorize: async () => undefined }, { now: () => 1000, attemptId: () => `attempt-${++generated}` }, gate);
@@ -39,11 +39,13 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
     await approvals.decide({ schemaVersion: 1, scopeId: 'scope', approvalId: pending[0]!.request.approvalId,
       commandId: 'approve-a', expectedRevision: 0, decision: 'allow', reason: 'Reviewed action' });
     const changedPolicy = { ...policy, grants: [...policy.grants, { ...policy.grants[0]!, id: 'another-task', resource: { kind: 'task', ids: ['unrelated'] } }] };
-    const changedGate = new TaskApprovalAdmission(changedPolicy, principal, journal.store, integrity, 1000);
+    const changedGate = new TaskApprovalAdmission(changedPolicy, principal, journal.store, integrity, 1000, 1000);
     const current = (await store.loadRun('scope', 'run'))!;
     expect(changedGate.excluded(current, actor, 1000)).toEqual(['a']);
     expect(() => assertApprovalPolicyCurrent(policy, changedPolicy)).toThrow('APPROVAL_STALE');
     expect(gate.excluded(current, actor, 1000)).toEqual([]);
+    // S1-e5, owner B1-16: an allow is usable within the admission window after its decision (1000 + 1000), not after it.
+    expect([gate.excluded(current, actor, 2000), gate.excluded(current, actor, 2001)]).toEqual([[], ['a']]);
     // S1-D4 (A39): the same actor written in another key order is refused today, and the shared comparison keeps that meaning.
     const reordered = { subject: actor.subject, issuer: actor.issuer, id: actor.id };
     expect(() => gate.excluded(current, reordered, 1000)).toThrow('APPROVAL_DENIED');

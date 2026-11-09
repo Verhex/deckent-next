@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
+import { approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffectOpen, samePrincipalRef, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
   type EffectCommand, type EffectIntentApproval, type VerifiedPrincipal } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
+import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, approvalActorRef, expireApproval, sealApproval, verifyApproval } from './integrity.js';
 import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
@@ -147,22 +147,18 @@ export function agentToolCallApprovalGate(records: () => Promise<{ readonly stor
     const loaded = store.load(command.scopeId, reference.approvalId);
     if (!loaded) throw new ApprovalError('APPROVAL_MISSING');
     const record = verifyApproval(loaded, integrity), { request } = record;
-    const requester = request.requester;
     if (request.scopeId !== call.scopeId || !isDeepStrictEqual(approvalSubject(request), call.subject) || request.actionDigest !== expectedDigest
-      || reference.actionDigest !== expectedDigest || requester.id !== principal.id || requester.issuer !== principal.issuer || requester.subject !== principal.subject) {
+      || reference.actionDigest !== expectedDigest || !samePrincipalRef(approvalActorRef(request.requester), approvalActorRef(principal))) {
       throw new ApprovalError('APPROVAL_CONFLICT');
     }
     if (record.status === 'pending') throw new ApprovalError('APPROVAL_REQUIRED');
-    if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    if (record.decision?.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (record.decision.requestDigest !== approvalRequestDigest(request)) throw new ApprovalError('APPROVAL_INTEGRITY');
+    admitDecided(record, null);
     return record;
   };
   return {
     async admit(descriptor, decision, command, principal, context) {
       const { record } = context;
-      // A terminal record replays its outcome: nothing is admitted again.
-      if (record && (record.state === 'settled' || record.state === 'refused')) return;
+      if (record && !isEffectOpen(record.state)) return;
       // Consumed: the intent pinned this approval; it is still the sealed allow of exactly this call, whatever the clock says now.
       if (record?.intent.approval) { await verified(record.intent.approval, command, principal); return { approval: record.intent.approval }; }
       if (descriptor.approval !== 'required' && decision === 'allow' && !call.approval) return;
@@ -174,7 +170,7 @@ export function agentToolCallApprovalGate(records: () => Promise<{ readonly stor
       // Admission is measured now (and again right before the claim): the owner's allow is usable only inside the request's expiry.
       const now = clock.sample(), { started } = call.approval, { expiresAt } = stored.request;
       if (now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs) throw new ApprovalError('APPROVAL_EXPIRED');
-      if (stored.decision!.decidedAt > now.wallMs + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
+      admitDecided(stored, { now: now.wallMs, window: Number.POSITIVE_INFINITY }); // the request expiry above is its window
       consumed.set(reference.approvalId, command.commandId);
       return { approval: reference };
     },
