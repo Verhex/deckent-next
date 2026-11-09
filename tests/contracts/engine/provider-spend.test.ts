@@ -2,7 +2,7 @@ import { registerProviderSpendPeriod, ProviderSpendPeriodRegistry } from '#engin
 import { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from '#engine/core/provider-spend/index.js';
 import { checkModelInvocationCapacity } from '#engine/index.js';
 import { expect, it, vi } from 'vitest';
-import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest, providerSpendLocalZeroTariff } from '#engine/core/provider-spend/index.js';
+import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest, providerSpendLocalZeroTariff, providerSpendRemaining } from '#engine/core/provider-spend/index.js';
 
 const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'shared', revision: 1, currency: 'USD', limitMinorUnits: 100 };
 const pricingDefinition = { schemaVersion: 1, kind: 'synthetic-price' }, meterEvidence = { schemaVersion: 1, kind: 'synthetic-meter' };
@@ -40,6 +40,11 @@ it('shares account arithmetic across distinct profile quotes and rejects changin
     expect(() => reserveProviderSpend(first.account, { ...budget, ...change }, descriptor('next'))).toThrow('PROVIDER_SPEND_CONFLICT');
   }
   expect(createProviderSpendAccount({ ...budget, scopeId: 'other' }).reservedMinorUnits).toBe(0);
+  expect(providerSpendRemaining(null)).toBeNull();
+  expect(providerSpendRemaining({ account: first.account })).toEqual({ currency: 'USD', limitMinorUnits: 100, frozen: false, remainingMinorUnits: 40 });
+  const overrun = { account: { ...first.account, settledMinorUnits: 65, settledExactMinorUnits: '65', frozen: true } };
+  expect(providerSpendRemaining(overrun)).toEqual({ currency: 'USD', limitMinorUnits: 100, frozen: true, remainingMinorUnits: 0 });
+  expect(overrun.account.reservedMinorUnits).toBe(60);
 });
 
 it('releases only proven not-sent and settles measured local cost without asserting invoice truth', () => {
@@ -75,6 +80,8 @@ it('uses exact safe integer arithmetic at the limit and rejects corrupt totals a
   expect(() => reserveProviderSpend(first.account, configured, descriptor('two', 1))).toThrow('PROVIDER_SPEND_EXHAUSTED');
   const final = settleProviderSpend(first.account, first.reservation, { kind: 'measured-local', amountMinorUnits: maximum, evidenceDigest });
   expect(final.account.settledMinorUnits).toBe(maximum);
+  expect(providerSpendRemaining({ account: first.account })?.remainingMinorUnits).toBe(0);
+  expect(providerSpendRemaining({ account: { ...first.account, reservedMinorUnits: maximum - 3, settledMinorUnits: 2 } })?.remainingMinorUnits).toBe(1);
   expect(() => parseProviderSpendAccount({ ...final.account, reservedMinorUnits: 1 })).toThrow('PROVIDER_SPEND_INVALID');
   let invoked = false;
   const accessor = Object.defineProperty({}, 'schemaVersion', { enumerable: true, get() { invoked = true; return 1; } });

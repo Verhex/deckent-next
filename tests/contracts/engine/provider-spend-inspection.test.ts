@@ -1,4 +1,4 @@
-import { initializeProviderSpendPeriod } from '#engine/index.js';
+import { initializeProviderSpendPeriod, providerSpendRemaining } from '#engine/index.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint, ProviderSpendAccountInspectionApplication,
   parseProviderSpendAccountInspectionForQuery, type ProviderSpendAccountReader } from '#engine/index.js';
@@ -141,6 +141,8 @@ it('projects the due month without mutating the checkpoint and refuses forged re
   try {
     const old = createProviderSpendCheckpoint(initializeProviderSpendPeriod(checkpoint.account, Date.parse('2026-10-26T00:00:00Z'), true), 4, 1);
     const before = JSON.stringify(old), f = fixture({ checkpoint: old, audit: null });
+    expect(providerSpendRemaining(old)?.remainingMinorUnits).toBe(93);
+    expect(providerSpendRemaining(old, 1)?.remainingMinorUnits).toBe(92);
     const result = await f.app.inspect(query);
     expect(result.period).toMatchObject({ usedExactMinorUnits: '0', remainingMinorUnits: 93, state: { nextResetAtMs: Date.parse('2026-12-01T00:00:00Z'), legacyTransition: false } });
     expect(JSON.stringify(old)).toBe(before); expect(result.checkpoint).toEqual(old);

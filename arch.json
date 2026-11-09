@@ -1210,6 +1210,7 @@
     },
     "src/surfaces/core/terminal-admin": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
         "src/domain/core/provider-catalog",
@@ -2339,6 +2340,7 @@
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
+        "src/platform/core/output",
         "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
@@ -5299,7 +5301,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42240,
+      "adapters": 42243,
       "surfaces": 45000,
       "composition": 13629
     },

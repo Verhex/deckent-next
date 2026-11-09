@@ -7,6 +7,7 @@ import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { main } from '#surfaces/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
+import { createProviderSpendAccount, createProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 
 registerProviderConfig(); // the `terminal` section (terminal.scopeId) is registered by the composed entry
 
@@ -137,6 +138,14 @@ it('--declared shows the connected providers\' declarations; --scope names anoth
   expect(spending.calls).toEqual([{ kind: 'spending', value: { schemaVersion: 1, scopeId: 'live', current: true } }]);
   expect(spending.out.text()).toContain('scope: live (default)');
   expect(spending.out.text()).toMatch(/50/u); expect(spending.out.text()).toMatch(/12[.,]35/u);
+  expect(spending.out.text()).toContain('Left: 36.46 USD');
+  for (const language of ['en', 'tr']) {
+    const setup = await project(undefined, language), frozen = host(setup, [], { inspectProviderSpendAccount: async () => ({ schemaVersion: 2, scopeId: 'live', budgetId: 'scope-budget', budgetRevision: 1,
+      checkpoint: createProviderSpendCheckpoint({ ...createProviderSpendAccount({ schemaVersion: 1, scopeId: 'live', budgetId: 'scope-budget', revision: 1, currency: 'USD', limitMinorUnits: 100 }),
+        reservedMinorUnits: 50, settledMinorUnits: 51, settledExactMinorUnits: '50.5', frozen: true }, 1, 0), audit: null, spendingHistoryIntegrity: 'not-recorded' }) });
+    expect(await main(['models', 'spending'], frozen.context)).toBe(0);
+    expect(frozen.out.text()).toContain(language === 'en' ? 'Left: 0 USD' : 'Kalan: 0 USD');
+  }
 });
 
 it('a person activates by selection: provider, then the exact model id (never an alias), binding and revision read by the system, a scoped card', async () => {

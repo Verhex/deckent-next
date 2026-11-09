@@ -44,8 +44,7 @@ export function diagnoseReservationWave(wave: DiagnosticWave, site: ReservationD
   const reason: ReservationDiagnosticReason = wave.selectedTaskIds.length === 0 && wave.resourceWaits?.length ? 'resource-capacity-exhausted'
     : site === 'transaction-wave-mismatch' ? 'store-wave-mismatch'
     : counts.ready === 0 && counts.delayed > 0 ? 'delayed'
-      : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.resourceWaits?.length ? 'resource-capacity-exhausted'
-        : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.deferredTaskIds.length > 0 ? 'capacity-exhausted' : 'no-ready-task';
+      : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.deferredTaskIds.length > 0 ? 'capacity-exhausted' : 'no-ready-task';
   return Object.freeze({ site, reason, now: wave.observedAt,
     ...(wave.eligibilityGapMs === undefined ? {} : { eligibilityGapMs: wave.eligibilityGapMs }),
     executionSlots: capacity.executionSlots, inFlightSlots: capacity.inFlightSlots,

@@ -49,7 +49,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     // R8b/R3a: a chosen subscription connection (answer `{ connection }`), or an `execution` without Docker, runs the worker without an image or runtime.
     const connections = config ? connectedWorkerClis(config, config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId) : [];
     const chosen = connections.find(row => row.id === (options.answers?.['work:kind'] as { connection?: unknown } | undefined)?.connection);
-    const connected = chosen || config?.execution && !config.execution.docker ? config?.execution ? 'configured' as const : 'pending' as const : undefined;
+    const connected = (chosen || (config?.execution && !config.execution.docker)) ? (config?.execution ? 'configured' as const : 'pending' as const) : undefined;
     const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
     const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
       connected && stage.id === 'execution:runtime' ? { state: 'skipped' as const, reason: { code: 'setup.execution.workerConnection', params: {} } }
