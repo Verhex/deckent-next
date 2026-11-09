@@ -4,7 +4,7 @@ import { render } from 'ink';
 import { t } from '#platform/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
-import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { policyPanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { changeConfiguredDecisionDelegation, configuredPolicyTemplateUpgrade, inspectConfiguredDecisionDelegations, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
