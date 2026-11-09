@@ -41,7 +41,7 @@ function discoveryRefusal(error: unknown, provider: string, fallback: string): n
   const typed = ({ NATIVE_CODING_DISCOVERY_UNSUPPORTED: 'CODING_DISCOVERY_UNSUPPORTED', NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' } as Record<string, string>)[String((error as { code?: unknown } | null)?.code)]; if (typed) throw ErrorRegistry.createError(typed, { params: { provider } });
   refuse(fallback);
 }
-
+const connectionBasis = (snapshot: ConfigSnapshot, catalog = true) => JSON.stringify({ profiles: snapshot.effective['provider_invocation_profiles'], ...(catalog ? { catalog: snapshot.effective['provider_catalog'] } : {}) });
 function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template'], discovered?: ExecutionProfileDefinition, worker?: NativeCliWorkerBinding) {
   const admission = snapshot.effective.admission;
   if (!admission?.poolId || !admission.executionSlots || !admission.inFlightSlots) refuse('CODING_TEMPLATE_ADMISSION_REQUIRED');
@@ -55,17 +55,18 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   if (worker && discoveryMode !== 'disabled') refuse('CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED');
   const pins = affectedToolchainProfiles({ admission: { registry: registry.data } }).filter(pin => pin.provider === request.provider && pin.imageId === imageId
     && (!(request.connection || request.detach) || !bound || pin.profile.id === bound.profile.id && pin.profile.version === bound.profile.version));
-  const candidates = discovered ? [discovered] : pins.map(pin => {
+  const candidates = discovered ? [discovered] : [];
+  for (const pin of discovered ? [] : pins) {
     const source = registry.data.profiles.find(profile => profile.id === pin.profile.id && profile.version === pin.profile.version)!;
     const invocation = source.parameters['invocation'] as { discovery?: JsonValue } | undefined;
     const preflight = (source.parameters['nativeSubscription'] as { preflight?: { discovery?: string } } | undefined)?.preflight;
     const discovery = discoveryMode ? { schemaVersion: 1, mode: discoveryMode }
       : invocation?.discovery ?? (preflight?.discovery ? { schemaVersion: 1, mode: preflight.discovery } : null);
-    if (!discovery) refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
-    try { return template(resourceLimits, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }, worker); }
+    if (!discovery) return { status: 'no-toolchain' as const };
+    try { candidates.push(template(resourceLimits, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }, worker)); }
     catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); }
-  });
-  if (new Set(candidates.map(candidate => JSON.stringify(candidate))).size !== 1) refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
+  }
+  if (new Set(candidates.map(candidate => JSON.stringify(candidate))).size !== 1) return { status: 'no-toolchain' as const };
   const candidate = candidates[0]!;
   const same = (profile: typeof candidate) => JSON.stringify(profile) === JSON.stringify(candidate);
   const existing = registry.data.profiles.find(profile => profile.id === candidate.id && profile.version === candidate.version);
@@ -74,11 +75,10 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const replacing = bound && (bound.profile.id !== kind.profile.id || bound.profile.version !== kind.profile.version);
   if (bound && replacing && (!(request.connection || request.detach) || !registry.data.profiles.some(profile => profile.id === bound.profile.id
     && profile.version === bound.profile.version && profile.adapter.id === NATIVE_CODING_TEMPLATE_ADAPTER_ID))) refuse('CODING_TEMPLATE_KIND_CONFLICT');
-  if (bound && !replacing) return { profile: candidate, kind: bound, registry: registry.data, changed: false };
+  if (bound && !replacing) return { status: 'ready' as const, profile: candidate, kind: bound, registry: registry.data, changed: false };
   const next = { ...registry.data, profiles: existing ? registry.data.profiles : [...registry.data.profiles, candidate], kinds: bound ? registry.data.kinds.map(row => row.kind === request.kind ? kind : row) : [...registry.data.kinds, kind] };
-  return { profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };
+  return { status: 'ready' as const, profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };
 }
-
 export async function addNativeProfile(input: unknown, ports: NativeTemplatePorts) {
   const parsed = requestSchema.omit({ connection: true, detach: true }).extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(), digest: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict().safeParse(input);
@@ -89,7 +89,6 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   if (request.expect !== undefined && request.expect !== read.digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   const settings = read.effective.execution?.docker;
   if (!settings) refuse('CODING_TEMPLATE_IMAGE_REQUIRED');
-  // Validate registry/layer/kind prerequisites before a detection process is allowed to start.
   const hold = registryLayerHold(read);
   if (hold) refuse(hold);
   const existing = executionRegistrySchema.safeParse(read.effective.admission?.registry);
@@ -100,6 +99,7 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   const candidate = ((): ExecutionProfileDefinition => { try { return ports.template({ ...resources, imageId: request.image }, { provider: request.provider, cliVersion, permissionMode: 'unattended',
     ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}) }); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } })();
   const plan = proposal(read, request, ports.template, candidate);
+  if (plan.status === 'no-toolchain') refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
   const digest = sha256(JSON.stringify({ project: read.digest, global: read.global, profile: plan.profile, registry: plan.registry }));
   const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, digest };
   if (!request.apply) return { ...result, status: plan.changed ? 'preview' as const : 'unchanged' as const, write: null };
@@ -135,8 +135,12 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const own = (snapshot: ConfigSnapshot) => {
     try { return ports.template(limits(snapshot, worker, request.image, 'CODING_TEMPLATE_IMAGE_REQUIRED'), { provider: request.provider, cliVersion: cliVersion!,
       discovery: { schemaVersion: 1, mode: request.discovery ?? 'disabled' }, permissionMode: 'unattended' }, worker); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } };
-  const planFor = (snapshot: ConfigSnapshot) => { try { return proposal(snapshot, request, ports.template, undefined, worker); } catch (error) {
-    if (!worker || (error as { code?: unknown }).code !== 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') throw error; return proposal(snapshot, request, ports.template, own(snapshot), worker); } };
+  const planFor = (snapshot: ConfigSnapshot) => {
+    const found = proposal(snapshot, request, ports.template, undefined, worker),
+      plan = found.status === 'no-toolchain' && worker ? proposal(snapshot, request, ports.template, own(snapshot), worker) : found;
+    if (plan.status === 'no-toolchain') refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
+    return plan;
+  };
   const plan = planFor(read), result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null };
   if (!request.apply || !plan.changed) return { ...result, status: plan.changed ? 'preview' : 'unchanged', write: null };
   const config = read.effective;
@@ -145,8 +149,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const principal = await ports.principal(scopeId);
   // Refuse a changed global registry or effective resource source under the writer's lock as well as the project CAS.
   const guard = (current: ConfigSnapshot) => {
-    if (worker && (JSON.stringify(current.effective['provider_invocation_profiles']) !== JSON.stringify(read.effective['provider_invocation_profiles'])
-      || JSON.stringify(current.effective['provider_catalog']) !== JSON.stringify(read.effective['provider_catalog']))) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+    if (worker && connectionBasis(current) !== connectionBasis(read)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
     const fresh = planFor(current);
     if (JSON.stringify(fresh.profile) !== JSON.stringify(plan.profile)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   };
@@ -155,7 +158,6 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     layer: 'project', principal, scopeId, commandId: randomUUID(), expect: read.digest });
   return { ...result, status: 'applied', write };
 }
-
 const initializeSchema = requestSchema.omit({ detach: true }).extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
   expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(),
   poolId: identitySchema, executionSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlightSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
@@ -174,7 +176,6 @@ function initialSource(snapshot: ConfigSnapshot, request: InitialRegistryRequest
   if (scope !== request.scopeId) refuse('INITIAL_REGISTRY_CONFIG_CONFLICT');
   return limits(snapshot, worker, request.image, existing ? 'INITIAL_REGISTRY_EXISTS' : 'CODING_TEMPLATE_IMAGE_REQUIRED');
 }
-/** The first registry for one detected CLI version: one profile, one kind, the default evaluators; deterministic revision. */
 function initialRegistry(request: InitialRegistryRequest, settings: ReturnType<typeof limits>, cliVersion: string, template: NativeTemplatePorts['template'], worker?: NativeCliWorkerBinding) {
   const discovery = request.discovery ?? (worker ? 'disabled' : undefined); if (worker && discovery !== 'disabled') refuse('CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED');
   let profile: ExecutionProfileDefinition;
@@ -185,7 +186,6 @@ function initialRegistry(request: InitialRegistryRequest, settings: ReturnType<t
   const content = { schemaVersion: 1, profiles: [profile], kinds: [kind], evaluators: initialRegistryDefaults.evaluators };
   return { profile, kind, registry: executionRegistrySchema.parse({ ...content, revision: `initial-registry-${sha256(JSON.stringify(content))}` }) };
 }
-/** An identical first registry is current; any other authored registry remains refused. */
 function currentRegistry(snapshot: ConfigSnapshot, request: InitialRegistryRequest, template: NativeTemplatePorts['template'], worker?: NativeCliWorkerBinding) {
   if (authoredRegistry(snapshot.global)) refuse('INITIAL_REGISTRY_EXISTS');
   if (!authoredRegistry(snapshot.project)) return null;
@@ -221,7 +221,7 @@ export async function initializeNativeRegistry(input: unknown, ports: NativeTemp
   const principal = await ports.principal(request.scopeId);
   const guard = (current: ConfigSnapshot) => {
     if (JSON.stringify(initialSource(current, request, false, worker)) !== JSON.stringify(settings) || JSON.stringify(current.effective.admission) !== JSON.stringify(read.effective.admission)
-      || worker && JSON.stringify(current.effective['provider_invocation_profiles']) !== JSON.stringify(read.effective['provider_invocation_profiles'])) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+      || worker && connectionBasis(current, false) !== connectionBasis(read, false)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   };
   await ports.beforeWrite?.();
   const write = await ports.writer(guard).set({ keyPath: 'admission', value: admission, layer: 'project', principal,

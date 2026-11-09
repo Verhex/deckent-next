@@ -23,7 +23,7 @@ export async function inspectConfiguredInvocableModels(root: string, scopeId: st
       bindingDigest: binding.status === 'declared' ? binding.binding.digest : '' });
   }
   return new ModelInvocableNowApplication(async reference => {
-    const invocation = application(context, options, undefined, true, 'feature');
+    const invocation = application({ context, options, readOnly: true, entry: 'feature' });
     await inspectModelSwitch(scopeId, reference, {
       commandId: randomUUID, families: [OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY, ...terminalTextChatFamilies], tools: WORKSPACE_READ_TOOL_SPECS,
       shapeRequest: (request, definition) => definition.model.protocols.some(protocol => terminalTextChatFamilies.includes(protocol.family)) ? textOnlyModelInvocationRequest(request) : request,

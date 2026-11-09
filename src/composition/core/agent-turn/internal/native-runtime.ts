@@ -13,17 +13,17 @@ export function createConfiguredNativeChatRuntime(projectRoot: string, options: 
   if (!limits) return undefined;
   const ports = modelUseReadPorts(options);
   const pinModel = (profile: ModelInvocationProfile, actor: VerifiedPrincipal) => pinCurrentModelUse(ports, projectRoot, profile, actor);
-  const pins = new WeakMap<object, NonNullable<Awaited<ReturnType<typeof pinModel>>>>();
+  const pins = new WeakSet<object>();
   const runtime: NativeChatRuntime = { readiness: configuredNativeChatReadiness(projectRoot, options), limits,
     async resolveModelUse(profile, actor, check) {
       if (check.action === 'pin') {
         const pin = await pinModel(profile, actor);
         if (!pin) return null;
-        pins.set(pin, pin); return pin;
+        pins.add(pin); return pin;
       }
-      const pin = pins.get(check.pin);
-      if (!pin) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
-      await recheckCurrentModelUse(ports, projectRoot, profile, actor, pin);
+      const pin = check.pin;
+      if (!pins.has(pin)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
+      await recheckCurrentModelUse(ports, projectRoot, profile, actor, pin as NonNullable<Awaited<ReturnType<typeof pinModel>>>);
     },
     async preflight(profile, signal) { await preflightNativeAgent(profile, Date.now, isolation, signal); },
     driver: async input => createNativeAgentDriver({ ...input, now: Date.now, isolation }),
