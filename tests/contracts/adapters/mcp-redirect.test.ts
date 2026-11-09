@@ -71,7 +71,7 @@ describe('MCP bounded manual redirects (stub fetch only)', () => {
       }, cancel() { cancelled++; } }, { highWaterMark: 0 });
       const response = await pool.createMcpRedirectFetch(APPROVED, stub(new Response(body, { headers: { 'Content-Length': '1' } })), cap)(APPROVED);
       if (length <= cap) { expect((await response.arrayBuffer()).byteLength).toBe(length); expect(cancelled).toBe(0); }
-      else { await expect(response.arrayBuffer()).rejects.toMatchObject({ code: 'MCP_HTTP_RESPONSE_TOO_LARGE', maxBytes: cap }); expect(cancelled).toBe(1); }
+      else { await expect(response.arrayBuffer()).rejects.toMatchObject({ code: 'MCP_HTTP_RESPONSE_TOO_LARGE', params: { maxBytes: cap } }); expect(cancelled).toBe(1); }
       expect(produced).toBeLessThanOrEqual(cap + chunkBytes);
       console.info('MCP_HTTP_BOUND', JSON.stringify({ length, cap, produced, cancelled, heapDelta: process.memoryUsage().heapUsed - memoryBefore.heapUsed, externalDelta: process.memoryUsage().external - memoryBefore.external }));
     }

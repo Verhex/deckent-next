@@ -393,9 +393,11 @@ it('K22: guard rejection is a terminal negative; corrupted, linked and writable 
     expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_PLUGIN_UNEXPECTED' }); expect(f.run).toHaveBeenCalledOnce();
     const record = await readFileText(path);
     await chmod(path, 0o666); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await chmod(path, 0o600);
-    await link(path, join(state, 'hardlink')); await expect(file.read()).rejects.toThrow(); await unlink(join(state, 'hardlink'));
+    await link(path, join(state, 'hardlink')); await expect(file.read()).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await unlink(join(state, 'hardlink'));
     await unlink(path); await symlink(join(state, 'absent'), path); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await unlink(path);
-    await writeFile(path, 'x'.repeat(8193), { mode: 0o600 }); await expect(file.read()).rejects.toThrow();
+    await writeFile(path, 'x'.repeat(8193), { mode: 0o600 }); await expect(file.read()).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
+    // Owner B2-11: an unsafe evidence directory refuses the claim with the typed F08 reason, not a bare error.
+    await chmod(state, 0o755); await expect(file.claim()).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await chmod(state, 0o700);
     await writeFile(path, '{', { mode: 0o600 }); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
     await writeFile(path, record, { mode: 0o600 }); expect(await file.read()).toMatchObject({ verdict: { state: 'refused' } });
   } finally { await rm(root, { recursive: true, force: true }); }
