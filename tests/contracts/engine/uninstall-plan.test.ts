@@ -109,4 +109,17 @@ it('binds D0 to every member, location, version and owner evidence; guards the r
   expect(createUninstallPlan(query('keep-data'), { ...base, resources: [resource('service', 'service', 'fixture.service', { ownership: 'unknown' })] }).items[0]).toMatchObject({ action: 'keep', reason: 'service-unresolved' });
   // Of several blockers the refusal names today the first in alphabetical order (BAK-4 states this order in its table).
   expect(uninstallBlockerError(createUninstallPlan(query('all'), { ...base, recoveryUnsafe: true, work: { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 1 }] } }))).toMatchObject({ code: 'UNINSTALL_RECOVERY_LOCATION' });
+  // The whole order: an authority path first (before archive-limit), then alphabetical; a resource or policy blocker alone takes the fallback.
+  const order = [['authority-relocated:/r', 'UNINSTALL_AUTHORITY_UNVERIFIED'], ['authority-unsafe:/u', 'UNINSTALL_AUTHORITY_UNVERIFIED'], ['archive-limit', 'UNINSTALL_BACKUP_COVERAGE'],
+    ['backup-destination', 'UNINSTALL_RECOVERY_LOCATION'], ['delivery-queued', 'UNINSTALL_DELIVERY_QUEUED'], ['service-managed', 'UNINSTALL_SERVICE_RUNNING'],
+    ['uncertain-effects', 'UNINSTALL_UNCERTAIN_EFFECTS'], ['uncertain-managed', 'UNINSTALL_UNCERTAIN_MANAGED'], ['work-active', 'UNINSTALL_WORK_ACTIVE'],
+    ['work-pending', 'UNINSTALL_WORK_ACTIVE'], ['work-unverified', 'UNINSTALL_SCOPE_UNVERIFIED'], ['policy:POLICY_DENIED', 'UNINSTALL_OWNERSHIP'], ['durable:backup-coverage', 'UNINSTALL_OWNERSHIP']];
+  const work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 1 }], deliveries: [{ scopeId: 'd', id: 'del-1', revision: 1 }], uncertain: [{ kind: 'effect' as const, scopeId: 'u', id: 'e-1', target: null }] };
+  const refusal = (blockers: string[], purge = false) => uninstallBlockerError({ blockers: blockers.sort(), work, service: stopped, purge, installation: base.installation, backup: { destination: '/r/set' } });
+  order.forEach(([, code], at) => expect([at, refusal(order.slice(at).map(([blocker]) => blocker!))?.code]).toEqual([at, code]));
+  expect([refusal(['durable:backup-coverage'], true)?.code, refusal([])]).toEqual(['UNINSTALL_BACKUP_COVERAGE', null]);
+  expect(refusal(['authority-unsafe:/u:v', 'work-active'])?.params).toEqual({ path: '/u:v' });
+  const params = { runs: '1', approvals: '0', workspaces: '0', reason: 'manager-conditions-or-separate-consent', unit: '', command: '', path: '/fixture/data', recovery: '/r/set' };
+  expect(refusal(['delivery-queued', 'work-active'])?.params).toEqual({ ...params, count: '1', list: 'del-1', owner: 'd' });
+  expect(refusal(['work-active'], true)?.params).toEqual({ ...params, count: '1', list: 'effect e-1', owner: 'u' });
 });

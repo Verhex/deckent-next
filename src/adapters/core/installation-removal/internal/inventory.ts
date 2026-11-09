@@ -1,9 +1,9 @@
-import { persistedString, persistedInteger, productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
+import { persistedString, persistedInteger, productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
-import { verifyAuditRecord, idleAttemptWorkspace, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
+import { verifyAuditRecord, idleAttemptWorkspace, PROJECT_VAULT, type UninstallInventory, type UninstallResource, type UninstallBlocker } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY, folderTrustRecords, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 import { listProjectVaults } from '#adapters/core/secret-store/index.js';
@@ -11,16 +11,16 @@ import { ABSENT_FILE_VERSION } from '#adapters/core/workspace-write/index.js';
 import type { ProjectTracking } from './vcs.js'; import { attemptRecords } from './quiescence.js';
 import paths from './paths.json' with { type: 'json' };
 import { GitWorkspaceBroker, resolveGitWorkTarget } from '#adapters/core/git-workspace/index.js';
-import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
+import { BACKUP_RESOURCES, BACKUP_AUDIT_LOCATIONS } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
 export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
 export const removalRegistry = z.strictObject({ schemaVersion: z.literal(6), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
   recoveryRoot: z.partialRecord(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.strictObject({ environment: z.string().nullable(), fallback: persistedString(z.string().min(1)), path: persistedString(z.string().min(1)) })),
   systemctl: z.array(z.string().refine(isAbsolute)).min(1), busctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
-  archive: z.strictObject({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.strictObject({ pattern: z.string(), lease: z.string() }), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: persistedString(z.string().min(1)), manifestSuffix: persistedString(z.string().min(1)), owner: persistedString(z.string().min(1)) }),
+  archive: z.strictObject({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.strictObject({ pattern: z.string(), lease: z.string() }), members: z.array(z.string().transform(source => source.replace('{backupAudit}', BACKUP_AUDIT_LOCATIONS.installation))), transient: z.array(z.string()), companionSuffix: persistedString(z.string().min(1)), manifestSuffix: persistedString(z.string().min(1)), owner: persistedString(z.string().min(1)) }),
   purgeMembers: z.record(z.string(), z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
-  treeMembers: z.record(z.string(), z.strictObject({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }))
+  treeMembers: z.record(z.string(), z.strictObject({ directory: z.literal('{backupAudit}').transform(() => BACKUP_AUDIT_LOCATIONS.installation), proof: z.literal('sealed-audit-record') }))
     .refine(value => Object.keys(value).every(name => restorable.includes(name))),
   cacheWriterWitness: z.strictObject({ $comment: z.string().optional(), resourceId: persistedString(z.string().min(1)), budgetMs: persistedInteger().positive(), pollMs: persistedInteger().positive() }),
   cacheMembers: z.record(z.string(), z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).parse(paths);
@@ -42,7 +42,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   const layout = config.productLayout, installationId = base.installation.id, resources = [...base.resources];
   const bounds = config.installation.packageMeasurement, targets = [];
   let members: DataRemovalMember[] = [];
-  const blockers: string[] = [], kept = (path: string) => { const keep = tracked(path), resourceId = `tracked.${sha256(path)}`;
+  const blockers: UninstallBlocker[] = [], kept = (path: string) => { const keep = tracked(path), resourceId = `tracked.${sha256(path)}`;
     return !!keep && (resources.some(row => row.resourceId === resourceId) || !!resources.push({ resourceId,
     contribution: 'durable', locator: path, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: true, capability: false, backup: 'missing', keep })); };
   if (!base.deletionRoots.includes(layout.root)) blockers.push(`authority-relocated:${layout.root}`);
@@ -50,7 +50,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
       if (name === 'projectAttachment' && !config.installation.sharedRegistrationId) continue;
       const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
-      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path)) { blockers.push(`authority-relocated:${path}`); continue; }
+      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !pathWithin(layout.root, path)) { blockers.push(`authority-relocated:${path}`); continue; }
       try { if (await memberStat(path) && !kept(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null, archivePath: relative(resourcePath, path).split(sep).join('/') }); }
       catch { blockers.push(`authority-unsafe:${path}`); }
     }
@@ -84,14 +84,14 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     for (const entry of (await readdir(directory)).sort()) {
       const path = join(directory, entry);
       if (++seen > bounds.maxFiles || depth > bounds.maxDepth) throw new Error('UNINSTALL_ARCHIVE_LIMIT');
-      if (taken.has(path) || project.caches.some(cache => inside(cache, path))) continue;
+      if (taken.has(path) || project.caches.some(cache => pathWithin(cache, path))) continue;
       const info = await lstat(path);
       if (info.isDirectory()) { await walk(path, depth + 1); continue; }
       const custody = await workspace(path);
       if (custody && !custody.evidence) continue;
       if (kept(path) || matches(registry.archive.transient, path) && !(info.size && path === `${productResourcePath(layout, 'ledger')}-lock`)) continue;
       if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && matches(registry.archive.members, path))
-        archived.push(...(conversation.some(resource => inside(resource, path)) || matches(registry.archive.conversationFiles, path) || custody?.idle ? ['conversation-data', 'global-data'] : ['global-data'])
+        archived.push(...(conversation.some(resource => pathWithin(resource, path)) || matches(registry.archive.conversationFiles, path) || custody?.idle ? ['conversation-data', 'global-data'] : ['global-data'])
           .map(target => ({ resourceId: rel(path), path, directory: null, archivePath: '', target, archived: true })));
       else unlisted(path);
     }
@@ -120,7 +120,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       else for (const entry of await readdir(directory)) if ([PROJECT_VAULT.projectFile, PROJECT_VAULT.grantsFile, ...registry.sharedSecretFiles].includes(entry)) add(join(directory, entry), { directory }); else unlisted(join(directory, entry));
   }
   archived.push(...outside);
-  const covers = (row: UninstallResource, target: string) => [...members, ...archived].some(member => (member.target ?? 'global-data') === target && (inside(row.locator, member.path) || inside(member.path, row.locator)));
+  const covers = (row: UninstallResource, target: string) => [...members, ...archived].some(member => (member.target ?? 'global-data') === target && (pathWithin(row.locator, member.path) || pathWithin(member.path, row.locator)));
   if (project.own) for (const [index, row] of resources.entries()) if (row.contribution === 'durable' && covers(row, 'global-data'))
     resources[index] = { ...row, tiers: covers(row, 'conversation-data') ? ['keep-data'] : ['keep-data', 'keep-work'] };
   const owners = new Set(project.own ? [] : members.map(member => member.resourceId)), retained = resources.filter(item => !owners.has(item.resourceId));
@@ -134,7 +134,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     }
   }
   const all = [...members, ...archived], memberResources = new Set(members.map(member => productResourcePath(layout, member.resourceId as ProductResource)));
-  const protectedPaths = base.protectedPaths.filter(path => !memberResources.has(path) && !archived.some(member => inside(path, member.path) || inside(member.path, path)));
+  const protectedPaths = base.protectedPaths.filter(path => !memberResources.has(path) && !archived.some(member => pathWithin(path, member.path) || pathWithin(member.path, path)));
   const target = new InstallationDataRemovalTarget(sha256(JSON.stringify([installationId, layout.root])), all, protectedPaths);
   for (const [resourceId, contribution] of [['global-data', 'durable'], ['conversation-data', 'conversation']] as const) {
     const own = all.filter(member => (member.target ?? 'global-data') === resourceId);
@@ -163,7 +163,7 @@ async function treeMembers(layout: ResolvedConfig['productLayout'], integrity: I
   const found: DataRemovalMember[] = [];
   for (const [name, tree] of Object.entries(registry.treeMembers) as [ProductResource, { directory: string }][]) {
     const resourcePath = productResourcePath(layout, name), directory = join(resourcePath, tree.directory);
-    if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, directory)) continue;
+    if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !pathWithin(layout.root, directory)) continue;
     const names = await readdir(directory).catch(() => null);
     if (!names || names.length > bounds.maxFiles) continue;
     for (const entry of names.sort()) {

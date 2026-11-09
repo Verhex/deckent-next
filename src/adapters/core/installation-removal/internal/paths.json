@@ -33,7 +33,7 @@
   },
   "treeMembers": {
     "audit": {
-      "directory": "backup-operations",
+      "directory": "{backupAudit}",
       "proof": "sealed-audit-record"
     }
   },
@@ -101,7 +101,7 @@
       "^(installation|project)-identity/identity\\.json$",
       "^brain/resource-trace\\.json(\\.segment-\\d{16}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jsonl|\\.trim)?$",
       "^audit/authority-revisions/(k-[A-Za-z0-9_-]{1,128}|r-[0-9a-f]{32})\\.json$",
-      "^audit/backup-operations/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "^audit/{backupAudit}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
       "^artifacts/(hub-cache/)?[0-9a-f]{64}/[0-9a-f]{64}$",
       "^integrations/mcp-start-failures\\.json$",
       "^crashes/crash-\\d+-\\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$",
