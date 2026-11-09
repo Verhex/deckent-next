@@ -1,4 +1,4 @@
-import { isBeuserEvaluatorPrincipal, isAiPrincipal, isAuditorPrincipal, isCatalogAggregatorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
+import { isBeuserEvaluatorPrincipal, isAiPrincipal, isAuditorPrincipal, isCatalogAggregatorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js'; import { AI_NON_DELEGABLE_CARD_CELLS } from '#domain/core/approval/index.js';
 /** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
 export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
 /** S6 Nervous (K-B): the only actions the Nervous principal may ever be granted; it writes no state (the broker applies proposals). */
@@ -71,7 +71,7 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'hub' && (action === 'sources.add' || action === 'sources.remove')) return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
-  if (resource.kind === 'agent-tool-call' && ['edit-authority', 'edit-floor'].includes(resource.id)) return true;
+  if (resource.kind === 'agent-tool-call' && AI_NON_DELEGABLE_CARD_CELLS.some(cell => cell === resource.id)) return true; // A3 (law audit): the tool-call gate's own set, mcp-floor included
   // S5b (Auditor owner decision 6): a safety hold (Nervous pause, Auditor park; any source but the public `operator` control) is a person's to lift.
   if (resource.kind === 'run-hold' && action === 'resume' && resource.id !== 'operator') return true;
   if (resource.kind === 'config' && action === 'write') return protectedConfigKey(resource.id.slice(resource.id.indexOf(':') + 1));

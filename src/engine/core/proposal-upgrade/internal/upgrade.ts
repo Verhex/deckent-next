@@ -1,6 +1,6 @@
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, firstRunProposalRules, proposalCoverageGrants, policyFileSchema, policyGrantSchema, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
-import { governedPolicyDigest, type AuthorityRevision } from '#engine/core/policy/index.js';
+import { governedPolicyDigest, policyTemplateUpgradeKey, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { installerAuthorityChangeEvent, type PolicyTemplateDocumentWriter } from '#engine/core/installation/index.js';
 
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
@@ -34,7 +34,7 @@ export async function upgradeFirstRunProposalRules(writer: PolicyTemplateDocumen
     if (ever || wanted.some(rule => kept(rule.id) && JSON.stringify(policyGrantSchema.parse(kept(rule.id))) !== JSON.stringify(policyGrantSchema.parse(rule))) || !rules.length) return { status: 'current' as const, revision };
     const body = { ...(current as Record<string, unknown>), grants: [...(current as { grants: readonly unknown[] }).grants, ...rules] };
     const next = { ...body, revision: `a-${sha256(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
-    return { status: 'plan' as const, revision, scopeId, rules, skipped, next, basis: read && read.scopes.includes(scopeId) ? 'first-run' as const : 'named-person' as const, key: `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-${sha256(`${revision ?? ''}\0${JSON.stringify(next)}`)}` };
+    return { status: 'plan' as const, revision, scopeId, rules, skipped, next, basis: read && read.scopes.includes(scopeId) ? 'first-run' as const : 'named-person' as const, key: policyTemplateUpgradeKey(FIRST_RUN_POLICY_TEMPLATE_VERSION, sha256(`${revision ?? ''}\0${JSON.stringify(next)}`)) };
   };
   const first = await writer.updateAuthority(snapshot => ({ write: null, result: planned(snapshot.policy, snapshot.bindings) }));
   if (first.status !== 'plan') return first.status;

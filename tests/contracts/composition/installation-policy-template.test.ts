@@ -11,7 +11,7 @@ import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/in
 import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 
@@ -37,14 +37,14 @@ describe.skipIf(process.platform === 'win32')('requires POSIX local principal an
 it('previews without touching disk, then a real apply journals and writes policy.json + bindings.json privately; a repeated apply is a byte-identical replay', async () => {
   const root = await project();
   const preview = await previewPolicyTemplateInstallation(root, 'installation');
-  expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: 20 } });
+  expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION } });
   await expect(stat(join(root, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });
   const identity = readLocalOsIdentity();
   expect(preview.principal).toEqual({ issuer: identity.issuer, subject: identity.subject });
   expect(await inspectPolicyTemplate(root)).toBeNull(); // no policy file yet
 
   const result = await applyPolicyTemplateInstallation(root, 'installation');
-  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 20 }, scopeId: 'installation' });
+  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, scopeId: 'installation' });
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
   const policyBytes = await readFile(policyPath, 'utf8'), bindingsBytes = await readFile(bindingsPath, 'utf8');
   const identityPaths = ['installation-identity', 'project-identity'].map(name => join(root, '.deckent', name, 'identity.json'));
@@ -55,7 +55,7 @@ it('previews without touching disk, then a real apply journals and writes policy
   expect(JSON.parse(bindingsBytes)).toMatchObject({ schemaVersion: 3, revision: expect.stringMatching(/^a-/u), bindings: [expect.objectContaining({ id: expect.stringMatching(/^sr-/u) })], modes: [] });
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600); expect((await stat(bindingsPath)).mode & 0o777).toBe(0o600);
 
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 20 }); // separate committed data rows preserve recognition
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION }); // separate committed data rows preserve recognition
 
   const replay = await applyPolicyTemplateInstallation(root, 'installation');
   expect(replay).toMatchObject({ status: 'replayed' });
@@ -161,7 +161,7 @@ it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07
   expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600);
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 20 });
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION });
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'current' });
 });
 

@@ -129,7 +129,7 @@ describe('matchFirstRunPolicyTemplate (doctor recognition, never authority)', ()
     expect(matchFirstRunPolicyTemplate('first-run-template-v16')).toEqual({ id: 'first-run-template', version: 16 });
     expect(matchFirstRunPolicyTemplate('first-run-template-v18')).toEqual({ id: 'first-run-template', version: 18 });
     expect(matchFirstRunPolicyTemplate('first-run-template-v19')).toEqual({ id: 'first-run-template', version: 19 });
-    expect(matchFirstRunPolicyTemplate('first-run-template-v20')).toEqual({ id: 'first-run-template', version: 20 });
+    expect(matchFirstRunPolicyTemplate(`first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`)).toEqual({ id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION });
     expect(matchFirstRunPolicyTemplate('first-run-template-v21')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v0')).toBeNull();
     expect(matchFirstRunPolicyTemplate('')).toBeNull();

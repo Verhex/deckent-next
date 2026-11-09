@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=380 floor=279 policy=2280 steps=48 uyumlu=2328 İHLAL=0
+ai-floor: routes=381 floor=280 policy=2286 steps=48 uyumlu=2334 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -99,6 +99,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | agent-tool-call / fixture-target / invoke | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | agent-tool-call / fixture-target / invoke | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | agent-tool-call / fixture-target / invoke | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-tool-call / mcp-floor / invoke | tools | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-tool-call / mcp-floor / invoke | tools | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | approval / audit-rebaseline / decide | cards | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | approval / audit-rebaseline / decide | cards | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | approval / audit-rebaseline / decide | cards | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -2396,15 +2402,15 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/model-invocation/internal/headless-rejection.ts`: `a9f7d53e4f9ec8e51770997f288e9f497a90f8bf808dfcf26b2fb82b516c984c`
 - `src/domain/core/model-invocation/internal/plan-usage.ts`: `38fd6eb92cb63cbec1e5c5f168a0845c700c82f9a3b0cc6db97f1910f760070c`
 - `src/domain/core/model-invocation/internal/response-evidence.ts`: `d4301b490989dfa21af479b13bf5a8ee966d607a3de218bb0b97e84cd00c60d2`
-- `src/domain/core/policy/index.ts`: `873e5b0a5345508b60575f7c40fe343b39a3b8f0463c58b96001720e49658547`
+- `src/domain/core/policy/index.ts`: `6b17bfa83639cc94e998e1ebc1531d9b163f3cf841b5bffa1d85bd2e331e2037`
 - `src/domain/core/policy/internal/administer.ts`: `ee739d69d7090ed64479adf55e9e7d16e3c1c86f222608e62c20adabb410c99b`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
-- `src/domain/core/policy/internal/ai-floor.ts`: `02a5bac3124c900cd3aec2a24faa80e6c22d609c75a7079f76d4cb9e337868ac`
+- `src/domain/core/policy/internal/ai-floor.ts`: `30675d0dc5b244c9a0f6656df437803f81e23e9fea248049cdc2bff4499e34a9`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `4d25449ab3e8d129c6969c0f7a57ecab657c8e4c034b16460fb142821113db60`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `12485f923f42a1b8f616af5371761303eafd3f885c3afc77929f290aec1b8dac`
-- `src/domain/core/policy/internal/first-run-template.ts`: `08085195a14d860ac477623bc128e30f8dc8bf0fa9349dcf74ec6048cc15e9ef`
+- `src/domain/core/policy/internal/first-run-template.ts`: `83f23f877bf2b0b97337ae7eb97f49bf85170d12db45002162ad7d5c9ba85239`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `4d86bea76446cf118025ed9e207e3bf6ea73163e3b9a3b153a81ec1aa411c90a`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `a8fe9c7e856e448a08c4fbfaf8faadf790457aaf53e699df43f9d7a2328fc117`

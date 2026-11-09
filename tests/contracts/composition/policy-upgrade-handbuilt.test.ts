@@ -4,7 +4,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, readLocalOsIdentity } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 /** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
 const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
   'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
@@ -156,7 +156,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
     // R3-B: unapplied BeUser system rows share this one installer publication, keyed spr1-…; otherwise the template-upgrade key.
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^(policy-template-upgrade-v20-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(new RegExp(`^(policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$`)) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
     // The same upgrade run again adds the remaining rules (each run add-only and idempotent, POLICY_CHANGE_MAX each; v20 made it three runs); then current.
