@@ -1009,8 +1009,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   it('never writes or runs a call whose stored approval is still pending, although the turn was told allow (C12 G3)', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: [...editGrants('require-approval'), ...shellGrants('require-approval').filter(grant => grant.id !== 'decide')] });
     await f.start();
-    // The wait reports allow, but nobody decided: the durable record stays pending.
-    const wait = vi.spyOn(engine, 'awaitAgentToolApproval').mockResolvedValue('allow');
+    // The turn receives an allow pointer, but nobody decided: the durable effect gate must still refuse the pending record.
+    const wait = vi.spyOn(engine, 'settleAgentToolApproval').mockImplementation(async (_store, _integrity, record, _clock, _signal, started, steps) => { steps.allowed?.({ approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started }); steps.settled?.('allow'); return 'allow'; });
     try {
       f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' },
         { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'touch made.txt' }) } }, { content: 'Ok.' }];

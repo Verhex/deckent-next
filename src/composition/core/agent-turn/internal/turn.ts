@@ -1,15 +1,15 @@
-import { loadComposedConfig } from '#composition/core/root/index.js';
 import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, ModelInvocationError, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
+  type ChatTurnCommand, type ModelInvocationProfile,
   type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type BrainPlanObserver, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, modelUseProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
-import { t, MESSAGE_REGISTRY, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
@@ -78,15 +78,16 @@ async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvoca
   if (!admission.allowed) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
   if (!recorded) throw ErrorRegistry.createError('AUDIT_UNAVAILABLE');
 }
-/** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
 export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string { return projectModelIngressField(boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`)).modelText; }
-/** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 /** alpha.59 L6: the declared class of each built-in agent tool (the same specs the turn offers), for the terminal's presentation only — the
  * tool line groups consecutive read-class calls. MCP tools (`mcp__…` wire names) are not built in and stay unknown (null), so never grouped. */
 const BUILTIN_TOOL_CLASSES: ReadonlyMap<string, AgentToolClass> = new Map([...WORKSPACE_READ_TOOL_SPECS, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
   FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SESSION_STATE_TOOL_SPEC, ...AI_PROPOSAL_TOOL_SPECS].map(spec => [spec.name, spec.toolClass]));
 export const builtinAgentToolClass = (name: string): AgentToolClass | null => BUILTIN_TOOL_CLASSES.get(name) ?? null;
+/** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
+type ChatTurnStart = { readonly command: ChatTurnCommand; readonly witness: Awaited<ReturnType<typeof loadPeerInvocationContext>>;
+  readonly config: ResolvedConfig; readonly reference: ChatTurnCommand['reference']; readonly profile: ModelInvocationProfile | undefined };
 /** One governed terminal turn: authenticated peer, fresh policy and tools; the engine owns execution.
  * Required events drain before further work; disconnect, own-principal cancellation and stop abort the turn. */
 export async function runPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
@@ -94,10 +95,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const parsed = chatTurnCommandSchema.safeParse(input);
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const command = parsed.data, witness = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
+  const config = witness.config;
+  // T4 MODEL-SWITCH/S19, T4-B D1: a session pin wins over project/default/config; a refused pin never falls back.
   const reference = command.reference ?? (await terminalModelHere(projectRoot, options)).choice?.reference ?? readTerminalChatConfig(config)?.reference;
-  const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
-    .map(value => modelInvocationProfileSchema.parse(value)).find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
+  const profile = modelUseProfiles(config).find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
+  const loaded = { command, witness, config, reference, profile };
   if (profile?.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID) {
     const observed = await inspectNativeChat(profile, host.nativeAgent);
     const start = async (controller?: AbortController) => {
@@ -111,7 +113,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (readiness.state === 'unavailable') execution = null;
         } catch (error) {
           if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted)
-            return runChatTurn(projectRoot, input, peer, options, delivery, host, channel, undefined, controller);
+            return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
           execution = null; readiness = { state: 'unavailable', reason: nativeChatPreflightReason(error) };
         }
       }
@@ -120,13 +122,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         channel.emit({ kind: 'text', text: t('headless.agent.k20.verifying', {}, language) + '\n' });
         await channel.drained();
       }
-      if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, { ...command, reference }, peer, options,
+      if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, loaded, peer, options,
         delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
       const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
       channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
       await channel.drained();
-      return runChatTurn(projectRoot, input, peer, options, delivery, host, channel, undefined, controller);
+      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
     };
     if (observed.state !== 'unknown' || !host.nativeAgent?.preflight) return start();
     const key = runningKey(command.scopeId, command.turnId);
@@ -138,36 +140,26 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     try { return await start(controller); }
     finally { if (host.running.get(key)?.controller === controller) host.running.delete(key); }
   }
-  return runChatTurn(projectRoot, input, peer, options, delivery, host, channel);
+  return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel);
 }
 
-async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
+async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   delivery: ModelInvocationDelivery, host: RuntimeChatTurnHost, channel: RuntimeServiceTurnChannel,
   native?: { readonly profile: import('#domain/index.js').ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly witness: Awaited<ReturnType<typeof loadPeerInvocationContext>>['principal'] }, controller?: AbortController): Promise<ChatTurnResult> {
-  const parsed = chatTurnCommandSchema.safeParse(input);
-  if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-  const command = parsed.data;
+  const { command, config, reference, profile } = loaded;
   const clock = new SystemTrustedClock();
-  const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
+  // Native execution authenticates the AI actor separately from the person who witnessed the turn.
+  const context = native ? await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write') : loaded.witness;
   const fullAccess = command.fullAccess === true;
   if (fullAccess) await admitFullAccess(context, command, clock);
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   const configuredChat = readTerminalChatConfig(config);
   if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  // v23 (T4 MODEL-SWITCH, S19): the session's pinned model, else the configured one. A pinned model that is not declared, has no profile or is
-  // not active is refused typed by the same checks below; the configured model is never used in its place (no silent fallback).
-  // T4-B D1: without a pin the one precedence decides (project model > the user's default > the user's configured model).
-  const reference = command.reference ?? (await terminalModelHere(projectRoot, options)).choice?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, command.scopeId, reference) };
   const binding = await inspectModelBinding(projectRoot, reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED', { params: { model: `${reference.providerId}/${reference.modelId}@${reference.modelVersion}` } });
   const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)
     && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
-  const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
-    .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
-    .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
-  if (native && (!profile || modelInvocationProfileDigest(profile) !== modelInvocationProfileDigest(native.profile))) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const toolCapable = native !== undefined || profile?.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID && declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
   const runtime = native && host.nativeAgent;
   const pin = native && runtime ? await runtime.resolveModelUse(native.profile, context.principal, { action: 'pin' }) : null;
@@ -200,7 +192,6 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
     // MCP-SANDBOX-PATHS: a server that could not be decided or started is named by a typed notice of the result (v30; never in `note`).
-    // The trusted selected invocation profile, before deciding which project MCP tools this turn may offer.
     let mcpNotices: readonly ChatTurnNotice[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
       turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}), signal, emit: emitApproval, sandboxes: host.shellSandboxes(agentShellSandboxLayout(projectRoot, context.layout, workspace.scope, fullAccess ? isWriteApprovalFloored : writeFloor, false, null, options.env ?? process.env)), cwd: workspace.scope.root }) : null;
@@ -339,7 +330,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
                 evidence: { ...evidence, body: { ...evidence.body, ...(body ? { data: body } : {}) } } } as typeof outcome, diagnosis.rejectionCodes) };
             }
             // Lead 2026-10-10 (E2, P1): a provider's rejection body never reaches the person or the turn; only the provider and HTTP status are named. The body stays in the governed retained-content record (inspect-content policy, redacted inspection).
-            const provider = diagnosis.labelKey ? (MESSAGE_REGISTRY.catalogs[language] as Readonly<Record<string, string>>)[diagnosis.labelKey] ?? t('tui.provider.unknown', {}, language)
+            const provider = diagnosis.labelKey ? messageText(diagnosis.labelKey, language) ?? t('tui.provider.unknown', {}, language)
               : t('tui.provider.unknown', {}, language);
             return { status: 'failed', state: [t('tui.provider.badRequestUnknown', { provider }, language), diagnosis.migration
               ? t('tui.provider.badRequestMigration', {}, language) : t('tui.provider.badRequestProfile', {}, language)].join(' ') };
@@ -385,11 +376,11 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         try {
           // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
-          const policy = await context.policy.load() as { revision?: unknown };
+          const policy = await context.policy.load();
           const callSubject = approvals.subject({ round, index }, tool, target, argsDigest), resource = callSubject.resource, started = clock.sample(), now = started.wallMs;
           const { id, issuer, subject } = context.principal, facts = agentToolApprovalFacts(policy, command.scopeId, decisions.cell(tool, args));
           const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject }, subject: callSubject, facts,
-            policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
+            policyRevision: policy.revision,
             summary: agentToolApprovalSummary({ tool: tool.name, resource, argsDigest, cell: decisions.cell(tool, args), selfSourceReason: decisions.cell(tool, args) === 'edit-self-source' ? t('terminal.approval.selfSource',
               { path: resource, mode: fullAccess ? 'full-access' : agentCallPermissionMode(policy, native?.witness ?? context.principal, command.scopeId) }, language) : '' }), createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           const diff = editsOf(tool.name)?.preview(tool.name, args);
@@ -404,24 +395,13 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
             expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, args, facts),
             ...cardCall(tool, args), ...(bounded.cut ? { previewCut: bounded.cut } : {}) });
           requested = { approvalId: record.request.approvalId };
-          const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
-          let outcome = decided;
-          if (outcome === 'allow') await answer?.wait();
-          // Approved: re-evaluate policy now; a deny since the request wins (contract §2). The owner's decision stays `allow` (the settlement says
-          // so); the call is refused by policy, never reported as the owner's refusal (DENY-WORDING, lead 2026-10-07).
-          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal, mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined) === 'deny') { decisions.refusedAfterApproval(tool, args, { round, index, callId: call.id }, typeof policy.revision === 'string' ? policy.revision : 'unknown'); settlement = 'allow'; return 'policy-deny'; }
-          // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
-          if (outcome === 'allow') {
-            const consumed = clock.sample();
-            if (approvalSignal.aborted) outcome = 'cancelled';
-            else if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
-          }
-          // The effect gate verifies this stored record (MAC, allow, digest of the executed call, expiry) before anything is written or run.
-          if (outcome === 'allow') approvals.allowed({ round, index }, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
-          settlement = outcome;
-          // APPROVER-NOTE: the owner's own words on this very decision travel with it (never when policy or time changed the outcome since).
-          const note = (outcome === 'allow' || outcome === 'deny') && outcome === decided ? agentToolApprovalNote(journal.store, integrity, record) : null;
-          return note !== null && (outcome === 'allow' || outcome === 'deny') ? { outcome, note } : outcome;
+          // DENY-WORDING (lead 2026-10-07): policy may refuse an allow; the owner's settlement stays allow.
+          // APPROVER-NOTE: the helper carries the owner's note only while that decision still holds.
+          return await settleAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, started, {
+            recheck: async () => { await answer?.wait(); return await toolAuthority.decide(tool, command.scopeId, context.principal, mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined) !== 'deny'; },
+            refused: () => decisions.refusedAfterApproval(tool, args, { round, index, callId: call.id }, policy.revision),
+            allowed: approval => approvals.allowed({ round, index }, approval), settled: outcome => { settlement = outcome; },
+          });
         } finally {
           answer?.close(); journal.close();
           if (kept) await dropFullPreview(kept);
@@ -471,7 +451,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
       steer: { pending: () => [...steer.pending], join: steerId => { const at = steer.pending.findIndex(line => line.steerId === steerId);
         if (steer.closed || at < 0) return false; steer.pending.splice(at, 1); steer.joined.push(steerId); return true; },
         close: () => { steer.closed = true; return { joined: [...steer.joined], returned: steer.pending.map(line => line.steerId) }; } },
-      now: () => clock.sample().wallMs, recordIngress: async notice => { if (notice.disposition === 'unchanged') return; const loaded = await context.policy.load() as { revision?: unknown }; const policyRevision = typeof loaded.revision === 'string' ? loaded.revision : 'unknown'; const atMs = clock.sample().wallMs; await withAgentAudit(context, audit => audit.record({ schemaVersion: 1, eventId: sha256(`model-ingress:1\0${command.scopeId}\0${command.turnId}\0${notice.fieldDigest}\0${notice.codePoints}\0${atMs}`), scopeId: command.scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision, atMs, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest, decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } })); },
+      now: () => clock.sample().wallMs, recordIngress: async notice => { if (notice.disposition === 'unchanged') return; const { revision: policyRevision } = await context.policy.load(); const atMs = clock.sample().wallMs; await withAgentAudit(context, audit => audit.record({ schemaVersion: 1, eventId: sha256(`model-ingress:1\0${command.scopeId}\0${command.turnId}\0${notice.fieldDigest}\0${notice.codePoints}\0${atMs}`), scopeId: command.scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision, atMs, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest, decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } })); },
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, ...(native ? { nativeSession: { schemaVersion: 1 as const, turnId: command.turnId, generation: 1, tools, approvalTtlMs: context.config.approvals.requestTtlMs } } : {}), signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
