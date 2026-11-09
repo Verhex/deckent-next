@@ -133,15 +133,18 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
       .rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' });
     // KG4 F1 (X3): every producer settles an allow alike: policy now (a deny is recorded, the owner's settlement stays allow), then a cancelled call
     // or a spent budget wins over the allow; only a usable allow reaches the effect pointer.
-    for (const [index, after, expected] of [[3, 'policy-deny', 'policy-deny'], [4, 'cancel', 'cancelled'], [5, 'spend', 'expired'], [6, 'none', 'allow']] as const) {
+    for (const [index, after, expected] of [[3, 'policy-deny', 'policy-deny'], [4, 'cancel', 'cancelled'], [5, 'spend', 'expired'], [6, 'none', 'allow'],
+      [7, 'policy-deny-cancel', 'policy-deny'], [8, 'policy-deny-spend', 'policy-deny']] as const) {
       f.time.wallMs = 50_000; f.time.monotonicMs = 50_000;
       const asked = f.request(subjectAt(index)), stop = new AbortController(), seen: string[] = [];
       await f.decide(asked.pointer.approvalId, 'allow');
       expect(await settleAgentToolApproval(f.journal.store, integrity, asked.record, f.clock, stop.signal, asked.pointer.started, {
-        recheck: async () => { seen.push('recheck'); if (after === 'cancel') stop.abort(); if (after === 'spend') f.time.monotonicMs += 60_000; return after !== 'policy-deny'; },
+        recheck: async () => { seen.push('recheck'); if (after === 'cancel' || after === 'policy-deny-cancel') stop.abort();
+          if (after === 'spend' || after === 'policy-deny-spend') f.time.monotonicMs += 60_000; return !after.startsWith('policy-deny'); },
         refused: () => seen.push('refused'), allowed: approval => seen.push(`allowed:${approval.approvalId === asked.pointer.approvalId}`),
         settled: outcome => seen.push(`settled:${outcome}`) })).toBe(expected);
-      expect(seen).toEqual(['recheck', ...{ 'policy-deny': ['refused', 'settled:allow'], cancel: ['settled:cancelled'], spend: ['settled:expired'], none: ['allowed:true', 'settled:allow'] }[after]]);
+      expect(seen).toEqual(['recheck', ...{ 'policy-deny': ['refused', 'settled:allow'], 'policy-deny-cancel': ['refused', 'settled:allow'],
+        'policy-deny-spend': ['refused', 'settled:allow'], cancel: ['settled:cancelled'], spend: ['settled:expired'], none: ['allowed:true', 'settled:allow'] }[after]]);
     }
   } finally { f.close(); }
 });
