@@ -54,6 +54,14 @@ export function delegationExceeded(verdict: Extract<DelegationVerdict, { ok: fal
 export function chainAuthorityRevision(tag: string, prefix: 'a' | 'm', previous: string, body: unknown): string {
   return `${prefix}-${createHash('sha256').update(`${tag}\0${previous}\0${JSON.stringify(body)}`).digest('hex').slice(0, 40)}`;
 }
+/** Whether a resolved revision (`policy+bindings`) has a part `chainAuthorityRevision` wrote (`a-`/`m-`): an authority write since the template's own. */
+export const administeredSince = (revision: string) => revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-'));
+/** The installer's template-upgrade archive key, `policy-template-upgrade-v<template version>-<64 hex>`, and the version a key names (null: not one). */
+export const policyTemplateUpgradeKey = (version: number, digest: string) => `policy-template-upgrade-v${version}-${digest}`;
+export function policyTemplateUpgradeKeyVersion(key: string | null): number | null {
+  const match = /^policy-template-upgrade-v(\d+)-[a-f0-9]{64}$/.exec(key ?? '');
+  return match ? Number(match[1]) : null;
+}
 
 type Person = { readonly issuer: string; readonly subject: string };
 /** The sealed-audit event of one applied `policy.administer` change (audit subject `authority-change`), recorded before any file changes. */

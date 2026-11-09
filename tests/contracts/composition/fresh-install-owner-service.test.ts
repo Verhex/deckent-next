@@ -12,7 +12,7 @@ import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#c
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { DispatchInventoryPolicyAuthorization, ServicePolicyAuthorization, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { clearConfigCache, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
@@ -64,7 +64,7 @@ async function installed(edit?: (policy: { revision: string; grants: { id: strin
 describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket and OS-user identity] fresh install: the owner observes and restarts their own installation', () => {
   it('init policy --apply → service start → inventory → no POLICY_DENIED recovery → runtime restart → runtime shutdown', async () => {
     const f = await installed();
-    expect(f.result).toMatchObject({ status: 'installed', template: { version: 20 }, serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
+    expect(f.result).toMatchObject({ status: 'installed', template: { version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     // `config explain service.identity` shows the deterministic, non-secret identity from the project layer.
     expect(await createConfiguredConfigApplication(f.project, { env: f.env }).explain({ keyPath: 'service.identity' }))
       .toMatchObject({ value: { scopeId: SCOPE, serviceId: SERVICE }, source: 'project', apply: 'restart', redacted: false });

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, withMcpPrincipal } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
@@ -267,7 +267,7 @@ describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner
     expect(grants()).toEqual(fresh.policy.grants.filter(rule => !DELTA.includes(rule.id)));
     expect(changes()).toBe(1);
     // alpha.64 (/policy re-enable): `only: 'ai-proposals'` restores exactly the v20 rules; an older rule the person removed by hand stays removed.
-    const handEdited = { ...JSON.parse(bytes()), revision: 'first-run-template-v20', grants: grants().filter(rule => rule.id !== 'first-run-backup') };
+    const handEdited = { ...JSON.parse(bytes()), revision: `first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`, grants: grants().filter(rule => rule.id !== 'first-run-backup') };
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify(handEdited), { mode: 0o600 }); clearConfigCache();
     expect(await upgrade('preview', undefined, 'ai-proposals')).toMatchObject({ status: 'preview', rules: DELTA.map(id => ({ id })), held: [] });
     expect(await upgrade('apply', undefined, 'ai-proposals')).toMatchObject({ status: 'upgraded' });

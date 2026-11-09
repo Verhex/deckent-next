@@ -92,7 +92,7 @@ describe.skipIf(process.platform !== 'linux')('PRE-9: the installation owner ope
       { id: RULE_IDS['full-access'], effect: 'allow', actions: ['set'], scopes: [SCOPE], principals: named, resource: { kind: 'permission-mode', ids: ['full-access'] } },
     ]);
     const change = f.audit().map(event => event.subject).filter(subject => subject.kind === 'authority-change').at(-1);
-    expect(change).toMatchObject({ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 20 } }, counts: { grantsAdded: 2, grantsRemoved: 0 } });
+    expect(change).toMatchObject({ kind: 'authority-change', installer: { basis: 'first-run', template: { version: FIRST_RUN_POLICY_TEMPLATE_VERSION } }, counts: { grantsAdded: 2, grantsRemoved: 0 } });
     expect((change as { commandId: string }).commandId.startsWith(INSTALLER_PERMISSION_MODES_COMMAND_PREFIX)).toBe(true);
     // The same set again changes nothing.
     expect(await open(f.root, ['full-auto', 'full-access'])).toMatchObject({ status: 'current' });

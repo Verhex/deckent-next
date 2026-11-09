@@ -5273,7 +5273,7 @@
       "engine": 60000,
       "adapters": 42376,
       "surfaces": 45000,
-      "composition": 13733
+      "composition": 13732
     },
     "totalSrcLines": 200000,
     "testCases": 8196,

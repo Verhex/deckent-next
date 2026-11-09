@@ -111,7 +111,7 @@ export function firstRunServiceId(scopeId: string): string {
   const scope = identitySchema.parse(scopeId), suffix = '-runtime';
   return identitySchema.parse(`${scope.slice(0, IDENTITY_MAX_LENGTH - suffix.length)}${suffix}`);
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: number) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -158,13 +158,13 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(version >= 18 ? v18Rules(principal, input.uninstallOperationIds) : []), ...(version >= 19 ? v19Rules(principal, [scopeId], input) : []), ...(version >= 20 ? v20Rules(principal, [scopeId]) : []),
     ],
   });
-  const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
+  const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: firstRunBindingsRevision(revision), bindings: [] });
   return { policy, bindings };
 }
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: number; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -176,12 +176,12 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   if (!parsed.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
-  // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
+  for (let from = FIRST_RUN_POLICY_TEMPLATE_VERSION - 1; from >= 4; from--) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
 }
+export const firstRunBindingsRevision = (policyRevision: string) => `${policyRevision}-bindings`; // the template's own bindings revision
 /** Key-order independent JSON of a parsed document (both sides went through the same schema). */
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
   ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
@@ -222,8 +222,8 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
 /** v16 cells (alpha.56 D1): the card's recovery actions (the stop list and the continuation) and the promotable lost-worker rules, by rule id. */
 const RECOVERY_CARD_ACTIONS = Object.freeze([...RECOVERY_ACTIONS, RECOVERY_DECISION_ACTIONS[0]]);
 const recoveryActionRuleId = (action: string) => `first-run-recovery-action-${action}`, recoveryPromoteRuleId = (rule: string) => `first-run-recovery-promote-${rule}`;
-/** v20 alone is the current rollback delta (and the automatic upgrade's, owner S6); previous authority stays installed. */
-export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze((['mcpProposeWork', 'mcpProposeSetting', 'mcpProposePool', 'mcpProposeTarget'] as const).map(key => FIRST_RUN_UPGRADE_RULE_IDS[key]));
+/** The template version whose add-only rules alone are the current rollback delta and the automatic upgrade's (owner A48-D3, D3c, S6); previous authority stays installed. A bump that changes the ids changes the version with them. */
+export const FIRST_RUN_CURRENT_UPGRADE_VERSION = 20, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze((['mcpProposeWork', 'mcpProposeSetting', 'mcpProposePool', 'mcpProposeTarget'] as const).map(key => FIRST_RUN_UPGRADE_RULE_IDS[key]));
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;

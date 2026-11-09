@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { governedPolicyDigest, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
+import { governedPolicyDigest, policyTemplateUpgradeKey, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { delegationWithin, resolvePolicyBindings } from '#domain/index.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, systemPolicyRowsPublicationEvent } from '#engine/core/system-policy-rows/index.js';
 import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
@@ -371,7 +371,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     if (held === null || held.status === 'applied') return result('unavailable', { reason: 'invalid' });
   }
   if (!input.apply || first.planned.result.status !== 'preview') return first.planned.result;
-  const key = first.planned.dataKey ?? `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-${digestOf(`${first.revision ?? ''}\0${canonical(first.planned.next as object)}`).slice(0, 64)}`;
+  const key = first.planned.dataKey ?? policyTemplateUpgradeKey(FIRST_RUN_POLICY_TEMPLATE_VERSION, digestOf(`${first.revision ?? ''}\0${canonical(first.planned.next as object)}`));
   return writer.updateAuthority(snapshot => {
     if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
     const again = plan(snapshot);
