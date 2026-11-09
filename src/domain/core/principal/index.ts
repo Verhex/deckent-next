@@ -4,3 +4,4 @@ export { verifiedPrincipalSchema, mcpPrincipalRef, isMcpPrincipal, isAiPrincipal
   catalogAggregatorPrincipalRef, isCatalogAggregatorPrincipal, catalogAggregatorPrincipal } from './internal/principal.js';
 export type { VerifiedPrincipal } from './internal/principal.js';
 export { beuserEvaluatorPrincipalRef, isBeuserEvaluatorPrincipal } from './internal/principal.js';
+export { samePrincipalRef } from './internal/principal.js';

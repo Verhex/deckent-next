@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteApprovalStore, LocalOsSessionAuthority } from '#adapters/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
+import { samePrincipalRef } from '#domain/index.js';
 import { RunReservationApplication, ApprovalApplication, TaskApprovalAdmission, assertApprovalPolicyCurrent } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
@@ -43,6 +44,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
     expect(changedGate.excluded(current, actor, 1000)).toEqual(['a']);
     expect(() => assertApprovalPolicyCurrent(policy, changedPolicy)).toThrow('APPROVAL_STALE');
     expect(gate.excluded(current, actor, 1000)).toEqual([]);
+    // S1-D4 (A39): the same actor written in another key order is refused today, and the shared comparison keeps that meaning.
+    const reordered = { subject: actor.subject, issuer: actor.issuer, id: actor.id };
+    expect(() => gate.excluded(current, reordered, 1000)).toThrow('APPROVAL_DENIED');
+    expect([samePrincipalRef(actor, reordered), samePrincipalRef(actor, { ...actor })]).toEqual([false, true]);
     expect(await app.reserve(command)).toEqual(first); expect(generated).toBe(1);
     const next = await app.reserve({ ...command, commandId: 'reserve-after', expectedRevision: 1 });
     expect(next.identities.map(v => v.taskId)).toEqual(['a']); expect(generated).toBe(2);
