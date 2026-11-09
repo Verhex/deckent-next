@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "claude-cli-subscription-2026-10-31",
+  "revision": "claude-cli-subscription-2026-11-09",
   "providers": [
     {
       "id": "claude-cli-subscription",
@@ -339,14 +339,12 @@
             }
           ],
           "lifecycle": {
-            "state": "active",
+            "state": "retired",
             "deprecatedOn": null,
             "retireNotBefore": "2026-10-15",
             "retiredOn": "2026-10-15",
-            "source": {
-              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
-              "observedOn": "2026-09-30"
-            }
+            "source": null,
+            "replacementModelId": "claude-haiku-5-5"
           },
           "minCliVersion": null,
           "efforts": [],

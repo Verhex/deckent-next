@@ -159,7 +159,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   Bu yazar kanıtı Linux/WSL sentetik PTY ve yerel sahte modelle sınırlıdır; gerçek sağlayıcı, diğer platformlar ve monte sürüm kabulü ayrıdır.
 - **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; ilk açılış aşamasıdır, `deckent init` dışında, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
-  (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
+  (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar. Bilinmeyen gelecek kod adları reddedilir;
+  Deckent'i güncelleme veya Docker'ın güncel desteğini kontrol ederek elle kurma yolu gösterilir, eski sürüme eşlenmez.
+  Geri kalan her durumda (yerel
   Windows/macOS, WSL'de Docker Desktop, Linux Mint gibi türevler, çakışan `docker.io`/`containerd`/`runc` paketleri, eski bir
   `docker.list`, ağ yok) yalnız sonraki adımı yazar. *Etki:* gerçek kurulum yalnız kayıt tutan sahte bir `sudo` ile
   prova edildi; Deckent testleri onu hiç çalıştırmaz. Docker anahtarını değiştirirse apt depoyu yeni anahtar bir Deckent

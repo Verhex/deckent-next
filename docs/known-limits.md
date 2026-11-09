@@ -159,7 +159,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Author evidence is limited to Linux/WSL synthetic PTY and a local fake model; real providers, other platforms and assembled-release acceptance remain separate.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
-  lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
+  lists (checked 2026-10-19), with Docker's signing key shipped in Deckent. Unknown future codenames are refused with
+  guidance to update Deckent or check Docker's current support and install manually; they are never mapped to an older release.
+  Everything else (native Windows/macOS, Docker
   Desktop on WSL, derivatives such as Linux Mint, conflicting `docker.io`/`containerd`/`runc` packages, an older
   `docker.list`, no network) only prints the next step. *Impact:* a real install has only been rehearsed with a recording
   fake `sudo`, never run by Deckent's tests. If Docker changes its key, apt refuses the repository until a Deckent update

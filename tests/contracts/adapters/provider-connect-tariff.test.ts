@@ -78,12 +78,13 @@ it('the shipped seeds: exactly the models with a verified row (or a published An
     const seed = await readProviderConnectSeed(kind.connect.seed);
     table[kind.id] = Object.fromEntries(seed.providers.flatMap(provider => provider.models.map(model => [model.nativeId, providerConnectModelPriced(kind, model.nativeId)])));
   }
-  // Verified pricing snapshot (2026-10-08); CNY-only China rows remain locked.
+  // Published prices retain the 2026-10-08 snapshot; deprecated Sonnet has no verified price. CNY-only China rows remain locked.
   expect(table['openai-api']).toEqual({ 'gpt-6-astra': true, 'gpt-6.1-sol': true, 'gpt-6-luna': true });
   expect(table['deepseek-api']).toEqual({ 'deepseek-flash': true, 'deepseek-v4-pro': true });
   expect(table['zai-api']).toEqual({ 'glm-5.3': true, 'glm-4.7-flash': true });
   expect(table['zai-cn-api']).toEqual({ 'glm-5.3': false, 'glm-4.7-flash': false, 'glm-4.6': false });
-  expect(Object.values(table['anthropic-api']!).every(Boolean)).toBe(true);
+  expect(table['anthropic-api']).toEqual({ 'claude-fable-5-1': true, 'claude-opus-5-5': true, 'claude-sonnet-5-5': true,
+    'claude-haiku-5-5': true, 'claude-sonnet-4-5-20250929': false });
 });
 
 it('new Anthropic connections wire the same-origin token counter and the seed declares its capability', async () => {

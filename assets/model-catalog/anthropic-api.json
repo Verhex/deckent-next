@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "anthropic-api-2026-10-08-token-count",
+  "revision": "anthropic-api-2026-11-09",
   "providers": [
     {
       "id": "anthropic-api",
@@ -310,6 +310,73 @@
           "provenance": {
             "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
             "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "claude-sonnet-4-5-20250929",
+          "version": 1,
+          "nativeId": "claude-sonnet-4-5-20250929",
+          "protocols": [
+            {
+              "family": "anthropic-messages",
+              "version": "2023-06-01",
+              "capabilities": [
+                { "id": "token-count", "version": 1, "state": "supported" }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "deprecated",
+            "deprecatedOn": "2026-09-30",
+            "retireNotBefore": "2026-11-30",
+            "retiredOn": "2026-11-30",
+            "replacementModelId": "claude-sonnet-5-5",
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "observedOn": "2026-11-09"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "claude-sonnet-4-5-20250929",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-sonnet-4-5-20250929",
+          "displayName": "Claude Sonnet 4.5",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": null,
+          "maxOutputTokens": 64000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "unknown",
+            "source": {
+              "sourceUrl": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "fetchedOn": "2026-11-09"
+            },
+            "asOf": "2026-11-09"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+            "fetchedOn": "2026-11-09"
           }
         }
       ]

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteModelCatalogReader, openSqliteModelCatalogStore, readMonitorLedger } from '#adapters/index.js';
-import { catalogPinModelEvidence, parseModelCatalogCommand, parseProviderCatalogDocument } from '#domain/index.js';
+import { catalogModelRetired, catalogPinModelEvidence, parseModelCatalogCommand, parseProviderCatalogDocument, retiredModelActivationRefusal } from '#domain/index.js';
 import { admitWorkerModels, composeModelRolePolicy, inspectAdmissibleWorkerModels, type ModelCatalogAdmission } from '#engine/index.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -31,6 +31,24 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
     // HAIKU55-CATALOG (owner 2026-10-08): Claude Haiku 5.5 joins the recommended active set.
     expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5'].sort());
     expect(raw.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'claude-haiku-4-5-20251001').lifecycle.retiredOn).toBe('2026-10-15');
+    const doc = parseProviderCatalogDocument(raw);
+    const haiku = doc.providers[0]!.models.find(m => m.nativeId === 'claude-haiku-4-5-20251001')!;
+    expect(haiku.lifecycle.state).toBe('retired');
+    expect(haiku.lifecycle.source).toBeNull(); // Owner cutoff, not a vendor retirement announcement.
+    expect(catalogModelRetired(haiku.lifecycle, '2026-11-09')).toBe(true);
+    const api = parseProviderCatalogDocument(await seed('anthropic-api'));
+    const models = api.providers[0]!.models.map(model => ({ modelId: model.nativeId, model }));
+    const sonnet = models.find(row => row.modelId === 'claude-sonnet-4-5-20250929')!;
+    expect(sonnet.model.lifecycle).toMatchObject({ state: 'deprecated', deprecatedOn: '2026-09-30', retiredOn: '2026-11-30',
+      replacementModelId: 'claude-sonnet-5-5', source: { observedOn: '2026-11-09' } });
+    expect(catalogModelRetired(sonnet.model.lifecycle, '2026-11-29')).toBe(false);
+    expect(retiredModelActivationRefusal(models, sonnet.modelId, '2026-11-29')).toBeNull();
+    expect(retiredModelActivationRefusal(models, sonnet.modelId, '2026-11-30')).toMatchObject({ code: 'MODEL_CATALOG_MODEL_RETIRED',
+      params: { model: sonnet.modelId, day: '2026-11-30', successor: 'claude-sonnet-5-5' } });
+    for (const catalog of [doc, api]) for (const row of catalog.recommendedActivations ?? []) expect(row.modelIds).not.toContain(sonnet.modelId);
+    for (const asset of ['model-roles/model-roles', 'native-coding/work-classes']) {
+      expect(await readFile(new URL(`../../../assets/${asset}.json`, import.meta.url), 'utf8')).not.toContain(sonnet.modelId);
+    }
   });
   it('reads and replays a v2 receipt after registering v3 facts without a ledger migration', async () => {
     const root = await mkdtemp(join(tmpdir(), 'catalog-v2-replay-')); roots.push(root); const path = join(root, 'ledger.db');

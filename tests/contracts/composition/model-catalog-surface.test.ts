@@ -137,7 +137,7 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     // A model turned on before its retirement is still turned off: activate it while current, record its retirement, then deactivate.
     const register = async (commandId: string, retiredOn: string | null) => { const catalog = await seedCatalog(); catalog.revision = commandId;
       Object.assign(catalog.providers[0].models.find((model: { nativeId: string }) => model.nativeId === 'claude-haiku-4-5-20251001').lifecycle,
-        retiredOn ? { retiredOn, retireNotBefore: retiredOn } : { retiredOn: null, retireNotBefore: '2099-01-01' });
+        retiredOn ? { state: 'retired', retiredOn, retireNotBefore: retiredOn } : { state: 'active', retiredOn: null, retireNotBefore: '2099-01-01' });
       await applyModelCatalog(admin.project, { schemaVersion: 1, commandId, scopeId: 's', action: 'register', catalog }, admin.options); };
     await register('current', null);
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r2', '--expected-revision', '0')).code).toBe(0);
