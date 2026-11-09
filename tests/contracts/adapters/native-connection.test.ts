@@ -28,10 +28,12 @@ async function gateway(root: string, preflight?: Preflight, promptDelivery?: Del
 }
 /** A fake provider origin: records what the host relay sent and answers with an echo of the bearer it received (the relay must mask it). */
 function fakeOrigin() {
-  const calls: { method: string; url: string; headers: Readonly<Record<string, string>>; body: string }[] = [];
-  const upstream: Upstream = async input => { calls.push({ method: input.method, url: input.url, headers: input.headers, body: input.body.toString('utf8') });
+  const calls: { method: string; url: string; headers: Readonly<Record<string, string>>; body: string }[] = []; let gate = Promise.resolve();
+  const upstream: Upstream = async input => { calls.push({ method: input.method, url: input.url, headers: input.headers, body: input.body.toString('utf8') }); await gate;
     return { status: 200, headers: { 'content-type': 'text/event-stream', 'set-cookie': 'never-forward' }, body: (async function* () { yield Buffer.from(`data: ${input.headers['authorization']}\n\n`); })() }; };
-  return { calls, upstream };
+  /** Holds every answer until the returned release is called (an in-flight request). */
+  const hold = () => { let release!: () => void; gate = new Promise<void>(resolve => { release = resolve; }); return () => { gate = Promise.resolve(); release(); }; };
+  return { calls, upstream, hold };
 }
 function relayCall(socketPath: string, path: string, bearer: string, body?: object) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
@@ -104,6 +106,17 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
     [capabilityA, '/backend-api/codex/other', { model: modelId }, 404]] as const) expect((await relayCall(a.descriptor.socketPath, path, bearer, body)).status).toBe(status);
   expect(origin.calls).toHaveLength(2); expect(other.calls).toHaveLength(0);
   expect(a.statistics()).toMatchObject({ relay: { relayed: 2, refused: 6 } });
+  // Relay accounting: one model call in flight per Attempt, a registry-bounded total, both refused with the typed code before the origin. A models
+  // fetch beside the held call passes: the CLI overlaps them at start (codex-cli 0.166.0 probe 2026-11-09).
+  const limitRefusal = JSON.stringify({ error: { type: 'deckent_relay_refused', code: 'NATIVE_RELAY_LIMIT' } });
+  const release = origin.hold(), held = relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId });
+  while (origin.calls.length < 3) await sleep(5);
+  expect(await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId })).toEqual({ status: 429, body: limitRefusal });
+  const beside = relayCall(a.descriptor.socketPath, '/backend-api/codex/models', capabilityA); while (origin.calls.length < 4) await sleep(5);
+  release(); expect((await held).status).toBe(200); expect((await beside).status).toBe(200);
+  const { maxRequests } = JSON.parse(await readFile(new URL('../../../src/adapters/core/native-connection/internal/providers.json', import.meta.url), 'utf8')).providers.codex.relay;
+  let last; do last = await relayCall(a.descriptor.socketPath, '/backend-api/codex/models', capabilityA); while (last.status === 200 && origin.calls.length <= maxRequests);
+  expect(last).toEqual({ status: 429, body: limitRefusal }); expect(origin.calls).toHaveLength(maxRequests - 1); // the other-model request counted, never reached the origin
   await new Promise<void>((resolve, reject) => { // a relayed CLI gets no CONNECT tunnel
     const socket = connect(a.descriptor.socketPath, () => socket.write('CONNECT chatgpt.com:443 HTTP/1.1\r\nHost: chatgpt.com:443\r\n\r\n'));
     socket.on('data', () => reject(new Error('unexpected permit'))); socket.on('close', resolve); socket.on('error', reject);

@@ -43,7 +43,8 @@
           {
             "method": "POST",
             "path": "/responses",
-            "query": false
+            "query": false,
+            "exclusive": true
           }
         ],
         "accountHeader": "chatgpt-account-id",
@@ -51,6 +52,7 @@
         "capabilityBytes": 32,
         "requestBytes": 8388608,
         "responseBytes": 67108864,
+        "maxRequests": 1024,
         "config": {
           "model_provider": "deckent_relay",
           "model_providers.deckent_relay.name": "Deckent relay",

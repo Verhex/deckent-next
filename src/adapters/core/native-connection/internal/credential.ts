@@ -46,8 +46,9 @@ export interface NativeProviderSpec { readonly homeOverride: string; readonly ho
   readonly dockerCredential: 'relayed' | 'projected' | 'prohibited'; readonly relay?: NativeRelaySpec }
 /** The host relay of a `relayed` CLI: the provider origin and the only routes forwarded, the header naming the account, the placeholder bearer the
  * container's CLI sends, byte caps, and the CLI configuration (`-c` pairs; `{shimPort}` is the container's loopback shim) that points the CLI at it. */
-export interface NativeRelaySpec { readonly origin: string; readonly basePath: string; readonly routes: readonly Readonly<{ method: string; path: string; query: boolean }>[];
-  readonly accountHeader: string; readonly placeholder: string; readonly capabilityBytes: number; readonly requestBytes: number; readonly responseBytes: number; readonly config: Readonly<Record<string, unknown>> }
+export interface NativeRelaySpec { readonly origin: string; readonly basePath: string; readonly routes: readonly Readonly<{ method: string; path: string; query: boolean; exclusive?: boolean }>[];
+  readonly accountHeader: string; readonly placeholder: string; readonly capabilityBytes: number; readonly requestBytes: number; readonly responseBytes: number;
+  /** Requests one Attempt's relay forwards in total; an `exclusive` route (the metered model call) runs one at a time. */ readonly maxRequests: number; readonly config: Readonly<Record<string, unknown>> }
 /** The provider's local credential spec from the adapter catalog; an id the catalog does not list is a typed unavailability, never `any`. */
 /** The environment names that move a native CLI's home (the runtime service keeps them, A6-3). */
 export const nativeHomeOverrideNames = (): readonly string[] => Object.values(catalog.providers as Readonly<Record<string, NativeProviderSpec>>).map(spec => spec.homeOverride).filter(Boolean);

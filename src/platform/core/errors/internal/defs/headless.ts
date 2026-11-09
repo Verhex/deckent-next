@@ -36,6 +36,7 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   NATIVE_PROJECTION_RETIRED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED', p, l) }) },
   NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', p, l) }) },
   NATIVE_SUBSCRIPTION_OTHER_PERSON: { category: 'config', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_SUBSCRIPTION_OTHER_PERSON', p, l) }) },
+  NATIVE_RELAY_LIMIT: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_RELAY_LIMIT', p, l) }) },
   NATIVE_WORKER_F08_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED', p, l) }) },
   NATIVE_WORKER_CAPACITY_WAIT: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT', p, l) }) },
   NATIVE_CLI_WORKER_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('headless.agent.k13.worker.NATIVE_CLI_WORKER_PROFILE_INVALID', p, l) }) },

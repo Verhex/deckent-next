@@ -313,8 +313,13 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   şablonları ve hazırlanmış profiller reddedilir; mevcut bir Claude Docker şablonu Run kabulünde `NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE` ile
   reddedilir. *Geçici çözüm:* şablonu `deckent coding template --connection <profil>` ile token'sız işçiye bağlayın. Codex Docker işçisi artık
   girişi almaz: CLI'si yer tutucu bir değeri loopback ara katmanına gönderir; Attempt'in host aktarıcısı token'ı ve hesap kimliğini yalnızca iki
-  Codex yolu için ve kabul edilen modelle ekler, CONNECT tüneli yoktur. Aynı konteynerdeki diğer süreçler Attempt boyunca bu ara katmana
-  ulaşabilir (aynı iki yol; token asla). Aktarıcı yalnızca girişin sahibi olan kişinin (runtime'ın çalıştığı hesap) ya da varsayılan devredilmiş kullanımla (`ai`, `models connect`
+  Codex yolu için ve kabul edilen modelle ekler, CONNECT tüneli yoktur. Aynı konteynerdeki diğer süreçler (işçinin araçları, bir prompt
+  enjeksiyonunun çalıştırdığı her şey) Attempt boyunca bu ara katmana hâlâ ulaşabilir ve aynı iki yoldan aboneliği harcayabilir; token'a asla
+  ulaşamaz: yer tutucu CLI sürecine bağlı değildir, çünkü Codex'in `auth.command`'ı alt sürecine özel bir kanal sunmaz (yalnız komut, argümanlar ve
+  çalışma dizini; stdin kapalı) ve istemci başına bir kez, tek bir `codex exec` içinde iki kez çalışır. Host aktarıcısı bu harcamayı sınırlar:
+  Attempt başına aynı anda tek model çağrısı (`POST responses`) ve en çok `maxRequests` aktarılmış istek (kayıt verisi); fazlası
+  `NATIVE_RELAY_LIMIT` ile reddedilir. Tek model çağrısını meşgul tutan bir süreç CLI'yı durdurabilir; CLI bu durumda Attempt'ini görünür biçimde
+  başarısız eder. Aktarıcı yalnızca girişin sahibi olan kişinin (runtime'ın çalıştığı hesap) ya da varsayılan devredilmiş kullanımla (`ai`, `models connect`
   çıktısındaki gibi) o kişinin AI'ının kabul ettirdiği Run'lara hizmet eder; başka bir kişinin Run'ı ya da onayı olmayan bir sınıf (sistem iş
   yükü) kabulde ve dağıtımdan önce yeniden `NATIVE_SUBSCRIPTION_OTHER_PERSON` ile reddedilir ve bunun yerine API anahtarlı bir bağlantı kullanabilir. Abonelik girişleri kişiler arasında paylaşılmaz; bunu genişletmek owner kararıdır.
   codex-cli 0.167.0 ve sahte bir kaynakla kanıtlandı; gerçek hesapla yürüyüş açık.
