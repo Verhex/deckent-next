@@ -1,9 +1,9 @@
-import { delegationWithin, evaluatePolicy, policyResources, policySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
+import { delegationWithin, evaluatePolicy, policyResources, policySchema, type AttemptIdentity, type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 import { policyVerdictRefusal } from './verdict.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
-export interface PolicySource { load(): Promise<unknown> }
+export interface PolicySource { load(): Promise<Policy> }
 /** Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
  * surfaces carry the code only, so a caller cannot tell a scope held by another company from an unknown one (no disclosure). */
 export type PolicyRefusalReason = 'COMPANY' | 'UNREGISTERED';
@@ -20,7 +20,8 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization, Dispa
     const policy = policySchema.parse(await this.source.load());
     const verdict = delegationWithin(policy, principal, [{ id: 'collection-read', effect: 'allow', scopes: [scopeId],
       actions: ['read-output'], resource: { kind: policyResources.attempt.kind, ids: 'all' } }]);
-    if (!verdict.ok) throw new PolicyAuthorizationError(verdict.reason === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'POLICY_DENIED');
+    const refusal = verdict.ok ? null : policyVerdictRefusal(verdict.reason, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
   async authorize(action: Parameters<DispatchAuthorization['authorize']>[0], request: SandboxRequest, principal: VerifiedPrincipal): Promise<void> {
     return this.authorizeIdentity(action, request.identity, principal);

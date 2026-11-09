@@ -1,5 +1,5 @@
 import type { TrustedClock, KnownSecretSnapshot } from '#platform/index.js';
-import { TargetQueueError, type TargetQueueRecord, type TargetBinding, type CandidateEvidence, type VerifiedPrincipal } from '#domain/index.js';
+import { TargetQueueError, type TargetQueueRecord, type TargetBinding, type CandidateEvidence, type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 import { criterionWithin } from '#capabilities/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
@@ -16,7 +16,7 @@ import type { AdoptionVerificationRequirement } from './verification.js';
 import { readQueueCandidate, planQueueCommit } from './queue-custody.js';
 import { queueCommandIds, type GitQueueFence } from './queue-git.js';
 interface QueueEffectContext {
-  readonly principal: VerifiedPrincipal; readonly document: unknown; readonly artifacts: ArtifactStore; readonly maxBytes: number;
+  readonly principal: VerifiedPrincipal; readonly document: Policy; readonly artifacts: ArtifactStore; readonly maxBytes: number;
   readonly registry: unknown; readonly bar: AdoptionVerificationRequirement | null; readonly allowedTargets: readonly string[];
   readonly authorization: DispatchIdentityAuthorization;
   validate(request: TargetQueueRecord['request']): Promise<void>;

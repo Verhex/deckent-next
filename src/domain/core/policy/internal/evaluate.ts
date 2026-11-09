@@ -16,7 +16,7 @@ function matches(rule: PolicyRule, request: PolicyRequest) {
       principal.issuer === request.principal.issuer && principal.subject === request.principal.subject));
 }
 /** A deep-frozen document (every policy schema level is readonly, so a parsed document is one) is validated once per object: one monitor
- * snapshot evaluates the same loaded document for hundreds of attempts. Any other input is validated on every call, as before. */
+ * snapshot evaluates the same loaded document for hundreds of attempts. Any other input is validated on every call. */
 const validated = new WeakMap<object, Policy>(), unfrozen = new WeakSet<object>();
 const deepFrozen = (value: unknown): boolean => value === null || typeof value !== 'object' || (Object.isFrozen(value) && Object.values(value).every(deepFrozen));
 function parsePolicy(input: unknown): ReturnType<typeof policySchema.safeParse> {
