@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteModelActivationStore, type ShellSandboxFactory } from '#adapters/index.js';
+import { loadProposalViews } from '#surfaces/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
@@ -124,7 +125,9 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
       models: [{ channelId: reference.providerId, modelId: model.nativeId, version: 1, tier: 'frontier', roles: ['brain'] }], exceptions: [] }] } })); }
   await ensureConfiguredTerminalIdentity(project, 'scope', { env });
   if (input.planWork) { const { store } = await openConfiguredAttemptStore(project, { env }); try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 } }); } finally { store.close(); } }
-  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, { ...(input.sandboxes ? { shellSandboxes: input.sandboxes } : {}), ...(input.planWork ? { planWork: input.planWork } : {}) });
+  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, { ...(input.sandboxes ? { shellSandboxes: input.sandboxes } : {}), ...(input.planWork ? { planWork: input.planWork } : {}),
+    // The CLI host lends the proposal card and choice views (composition never imports surfaces); the fixture lends the same ones.
+    proposalViews: () => loadProposalViews().then(([planning, config]) => ({ cardLines: planning.brainProposalCardLines, schemaChoices: config.configSchemaChoices })) });
   services.push(service);
   // LIVENESS-EINTR: what a failed status assertion needs to tell the turn's abort sources apart (service shutdown vs. a turn-level abort
   // with the service still running), without any runtime field: the service's own settlement and the last turn's decision responses.
