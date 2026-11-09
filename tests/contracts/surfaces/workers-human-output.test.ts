@@ -5,6 +5,7 @@ import { afterEach, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
+import { PolicyAuthorizationError } from '#engine/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -98,7 +99,7 @@ it('C-DOCTOR: no scope flag and no configured scope off a terminal names the val
   const errors: string[] = [];
   const context = { root, env: { HOME: join(root, 'h') }, initialize() {}, stdout: { write() {} }, stderr: { write(v: string) { errors.push(v); } },
     configChoiceSources: () => ({ async list() { return [{ value: 'live' }, { value: 'pilot' }]; } }),
-    async inspectWorkers() { throw Object.assign(new Error('SCOPE_UNKNOWN'), { code: 'SCOPE_UNKNOWN' }); } };
+    async inspectWorkers() { throw new PolicyAuthorizationError('SCOPE_UNKNOWN'); } };
   expect(await main(['workers', 'list', '--lang', 'en'], context as never)).toBe(2);
   expect(errors.join('')).toContain('Valid scopes: live, pilot');
   errors.length = 0;

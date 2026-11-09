@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { redactForDecision, snapshotKnownSecrets } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
+import { ApprovalError } from '#domain/index.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 import { appendLedger, compactLedger, EMPTY_LEDGER, buildWorklineBridgeSnapshot, ledgerEntrySummary,
@@ -196,7 +197,7 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
     const first = approval('first', 'first command'), second = approval('second', 'second\u200B command', { decisionCapability: 'Q'.repeat(43) });
     const seen: Array<{ item: DecisionTarget; answer: string }> = [], gate = deferred();
     const view = mount({ ledger: ledger([first, second], async (item, answer) => {
-      seen.push({ item, answer }); if (answer === 'allow') { await gate.promise; throw Object.assign(new Error('APPROVAL_ASSURANCE_INSUFFICIENT'), { code: 'APPROVAL_ASSURANCE_INSUFFICIENT' }); }
+      seen.push({ item, answer }); if (answer === 'allow') { await gate.promise; throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT'); }
       return { ...second, status: 'decided', decision: 'deny' };
     }) });
     await type(view, '/approvals\r'); await until(() => view.stdout.frame.includes('> A-ITEM 1 first'), 'picker'); await settle(40);

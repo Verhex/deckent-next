@@ -1,17 +1,18 @@
 import { expect, it, vi } from 'vitest';
+import { OAuthConnectionError } from '#engine/index.js';
 const state = vi.hoisted(() => ({ config: {} as Record<string, unknown>, ready: true, preflights: 0 }));
 vi.mock('../../../src/composition/core/model-invocation/internal/context.js', () => ({
   loadInvocationContext: async () => ({ config: {}, document: {}, freshConfig: async () => state.config }),
 }));
 vi.mock('../../../src/composition/core/model-invocation/internal/delivery-audit.js', () => ({ configuredModelInvocationDeliverySurfaces: () => [] }));
 vi.mock('#adapters/index.js', async original => ({ ...await original<object>(), effectiveTerminalOutputCap: () => 32 }));
-vi.mock('../../../src/composition/core/model-invocation/internal/invoke.js', () => ({ application: (...args: unknown[]) => ({
+vi.mock('../../../src/composition/core/model-invocation/internal/invoke.js', () => ({ application: (options: { readOnly: boolean; entry: string }) => ({
   preview: async (_command: unknown, _credential: unknown, _signal: unknown, checks: { credentialPresent(profile: unknown): Promise<boolean> }) => {
-    expect(args[3]).toBe(true); expect(args[4]).toBe('feature');
+    expect(options.readOnly).toBe(true); expect(options.entry).toBe('feature');
     // The composition must route a session reference through native admission, never through a named API-key lookup.
     expect(await checks.credentialPresent({ adapter: { id: 'siwc-responses', definition: {} } })).toBe(true);
     state.preflights++;
-    if (!state.ready) throw Object.assign(new Error(), { code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    if (!state.ready) throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
   },
 }) }));
 import { inspectConfiguredInvocableModels } from '../../../src/composition/core/model-invocation/index.js';
