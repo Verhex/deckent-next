@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { ErrorRegistry, PRIVATE_PERMISSION_MASK } from '#platform/index.js';
+import { basename, dirname, join, resolve } from 'node:path';
+import { ErrorRegistry, PRIVATE_PERMISSION_MASK, relativeInside } from '#platform/index.js';
 /** The directory of the Deckent global root that holds one trust directory per project (SEC-2, F29). */
 export const MCP_PROJECT_TRUST_DIR = 'mcp-project-trust';
 const unavailable = (reason: string) => ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason } });
@@ -17,7 +17,7 @@ export async function mcpProjectTrustDirectory(projectRoot: string, globalRoot: 
   const root = await realpath(projectRoot), identity = await stat(root);
   const key = createHash('sha256').update(`mcp-project-trust:1\0${root}\0${identity.dev}\0${identity.ino}`).digest('hex');
   const parent = join(globalRoot, MCP_PROJECT_TRUST_DIR), directory = join(parent, key);
-  const outside = async () => { const rel = relative(root, await realOf(directory)); return rel !== '' && (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)); };
+  const outside = async () => relativeInside(root, await realOf(directory)) === null;
   // Checked before anything is created (nothing is made inside the project) and again after (a link swapped in meanwhile).
   if (!(await outside())) throw unavailable('trust-store-in-project');
   if (prepare) {

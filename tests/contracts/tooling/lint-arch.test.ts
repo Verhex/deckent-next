@@ -20,12 +20,14 @@ const emptyRegistry = { schemaVersion: 2, policy: { reviewIntervalDays: { P0: 30
 type ArchPatch = (arch: any) => void;
 async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}, patch?: ArchPatch): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
-  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string }; tiers: { enforce: boolean }; imports: { enforce: boolean }; markdown: { trackedAllow: string[] }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
+  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string; namespaceRatchet: { frozen: string[]; allowlist: string } }; tiers: { enforce: boolean }; imports: { enforce: boolean }; markdown: { trackedAllow: string[] }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
   arch.tiers.enforce = tiersEnforce;
   arch.imports.enforce = importsEnforce;
   await cp(fileURLToPath(new URL('../../../scripts', import.meta.url)), join(root, 'scripts'), { recursive: true });
   arch.hardcodeRatchet.frozen = [];
   await writeFile(join(root, arch.hardcodeRatchet.allowlist), '[]');
+  arch.hardcodeRatchet.namespaceRatchet.frozen = [];
+  await writeFile(join(root, arch.hardcodeRatchet.namespaceRatchet.allowlist), '[]');
   const packages = Object.keys(arch.packages);
   await writeFile(join(root, 'package.json'), JSON.stringify({ imports: Object.fromEntries(packages.map(p => [`#${p}/*`, `./dist/${p}/*`])),
     dependencies: deps.dependencies ?? {}, devDependencies: deps.devDependencies ?? {} }));
@@ -52,8 +54,8 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
     arch.units[from]!.dependencies = [...dependencies].sort();
   }
   // Shrink-only repository debt (allowlists, caps, frozen lists) describes the real tree, not a fixture: start every fixture from zero.
-  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; childEnv: { allow: unknown[] }; catalogRead: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
-  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.childEnv.allow = []; guards.catalogRead.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
+  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; childEnv: { allow: unknown[] }; catalogRead: { allow: unknown[] }; parentPrefix: { allow: unknown[] }; errorClassification: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
+  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.childEnv.allow = []; guards.catalogRead.allow = []; guards.parentPrefix.allow = []; guards.errorClassification.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
   delete (guards as { publicExtensions?: unknown }).publicExtensions; // names the real tree's entry, registrations and overlay fixture
   (arch as unknown as { literals: { allowUnits: unknown[] } }).literals.allowUnits = [];
   patch?.(arch);
@@ -315,6 +317,17 @@ describe('lint-arch unit contract', () => {
     const result = await lint(root);
     expect(result.out).toContain('[unit-budget]');
     expect(result.out).toContain('[vocabulary]');
+    const cases = await fixture({ 'tests/count.test.ts': [
+      "it('plain', () => {});", "test.skip('skipped', () => {});", "it.each([1, 2])('row', () => {});",
+      "it.skipIf(flag)('conditional', () => {});", "test.runIf(flag)('conditional', () => {});",
+      "it.skipIf(flag).each([1, 2])('conditional rows', () => {});",
+    ].join('\n') }, true, false, {}, arch => { arch.budgets.testCases = 6; });
+    const counted = await lint(cases);
+    expect(counted.out).toContain('6 test cases');
+    expect(counted.out).not.toContain('[test-budget]');
+    const arch = JSON.parse(await (await import('node:fs/promises')).readFile(join(cases, 'arch.json'), 'utf8'));
+    arch.budgets.testCases = 5; await writeFile(join(cases, 'arch.json'), JSON.stringify(arch));
+    expect((await lint(cases)).out).toContain('[test-budget] tests — 6 test cases > budget 5');
   });
 
 });
@@ -455,6 +468,23 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
     expect(green.out).not.toContain('[policy-owner]');
   });
 
+  it('X2: rejects copied refusal and launch sets but preserves wire enums and unrelated sets', async () => {
+    const registry = unit('platform', 'core', 'errors', 'registry', "export const rows = { DENIED: { refusal: 'policy-denied' }, NEEDS_CARD: { refusal: 'approval-unsupported' }, BAD_LAUNCH: { launch: 'permanent' }, HELD: { launch: 'held' } };\n");
+    const red = await lint(await fixture({ ...registry, ...unit('engine', 'core', 'a', 'x',
+      "const denied = new Set(['DENIED', 'NEEDS_CARD']);\nconst launch = ['BAD_LAUNCH', 'HELD'];\nconst mixed = ['DENIED', 'NEEDS_CARD', 'UNRELATED'];\n") }));
+    expect(red.code, red.out).toBe(1);
+    expect(red.out.match(/\[error-classification\]/gu)).toHaveLength(3);
+    const green = await lint(await fixture({ ...registry, ...unit('engine', 'core', 'a', 'x',
+      "const wire = z.enum(['DENIED', 'NEEDS_CARD']);\nconst other = ['DENIED', 'UNRELATED'];\nconst denied = isAuthorizationRefusal(code, { include: ['policy-denied', 'approval-unsupported'] });\n") }));
+    expect(green.out).not.toContain('[error-classification]');
+    const audit = { ...registry, ...unit('engine', 'core', 'a', 'x', "const audited = new Set(['DENIED', 'NEEDS_CARD', 'AUDIT_ONLY']);\n") };
+    const allow = (count: number, reason = 'audit events, not the refusal class'): ArchPatch => arch => {
+      arch.guards.errorClassification.allow = [{ file: 'src/engine/core/a/internal/x.ts', symbol: 'audited', count, reason }]; };
+    expect((await lint(await fixture(audit, true, false, {}, allow(1)))).out).not.toContain('[error-classification]');
+    for (const patch of [allow(2), allow(1, ''), arch => { allow(1)(arch); arch.guards.errorClassification.allow[0].symbol = 'other'; }] as ArchPatch[])
+      expect((await lint(await fixture(audit, true, false, {}, patch))).out).toContain('[error-classification]');
+  });
+
   it('G-b: product source may import outside src only from assets/', async () => {
     const files = (specifier: string) => ({ ...clean, 'assets/y.json': '{}', 'scripts/s.mjs': '', 'tests/t.ts': '', '.agents/refactor/h.mjs': '',
       'src/engine/core/a/internal/x.ts': `import data from '${specifier}' with { type: 'json' };\nexport const x = data;\n` });
@@ -502,11 +532,23 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
 
   it('A6-3 child-env: passing a whole environment to a child is red, a listed site only shrinks', async () => {
     const body = (text: string) => unit('engine', 'core', 'a', 'x', text);
-    for (const text of ['export const x = { env: process.env };\n', 'export const x = { ...process.env };\n', 'export const x = callerEnvironment(process.env);\n'])
+    for (const text of ['export const x = { env: process.env };\n', 'export const x = { ...process.env };\n', 'export const x = callerEnvironment(process.env);\n',
+      'export const x = getDefaultEnvironment();\n', 'export const x = new StdioClientTransport(options);\n'])
       expect((await lint(await fixture(body(text)))).out, text).toContain('[child-env] src/engine/core/a/internal/x.ts:');
     expect((await lint(await fixture(body("export const x = inheritedEnvironment(process.env, ['PATH']);\n")))).out).not.toContain('[child-env]');
     const allow: ArchPatch = arch => { arch.guards.childEnv.allow = [{ file: 'src/engine/core/a/internal/x.ts', count: 1, reason: 'fixture' }]; };
     expect((await lint(await fixture(body('export const x = 1;\n'), true, false, {}, allow))).out).toContain('stale childEnv.allow entry');
+  });
+
+  it('X10: bare parent prefixes are guarded, explicit exceptions only shrink', async () => {
+    const body = (text: string) => unit('engine', 'core', 'a', 'x', text);
+    const guard = (count?: number): ArchPatch => arch => { arch.guards.parentPrefix.enforce = true;
+      arch.guards.parentPrefix.allow = count ? [{ file: 'src/engine/core/a/internal/x.ts', count, reason: 'over-refusal retained' }] : []; };
+    const bare = "export const x = rel.startsWith('..');\n";
+    expect((await lint(await fixture(body(bare), true, false, {}, guard()))).out).toContain('[parent-prefix]');
+    expect((await lint(await fixture(body(bare), true, false, {}, guard(1)))).out).not.toContain('[parent-prefix]');
+    expect((await lint(await fixture(body(bare), true, false, {}, guard(2)))).out).toContain('lower the allowance');
+    expect((await lint(await fixture(body('export const x = pathWithin(root, child);'), true, false, {}, guard(1)))).out).toContain('stale parentPrefix.allow');
   });
 
   it('G-d2: /home/ paths are red in docs, skills, Cursor rules and fixtures, host words there are not, and listed hits only shrink', async () => {
