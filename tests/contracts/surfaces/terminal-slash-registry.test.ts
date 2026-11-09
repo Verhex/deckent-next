@@ -202,7 +202,10 @@ it('U4-2: first-task and /setup handoffs traverse ordinary /do once with their o
   const kept = pendingBrainFixture(), completeTurn = vi.fn(async () => 'must not chat');
   const result = { ...kept, proposal: { ...kept.proposal, status: 'parked' as const, approval: null, reason: 'WORKER_SETUP_PENDING' } };
   const plan = vi.fn(async () => result), openSetup = vi.fn(async () => ({ commandId: 'second-choice', scopeId: 's', folder: '', intent: 'Inspect the orders' }));
+  const inspect = vi.fn(async () => ({ schemaVersion: 1 as const, scopeId: 's', eligible: true, supported: true, mode: openSetup.mock.calls.length ? 'full-auto' as const : 'standart' as const,
+    askEdits: false, fullAuto: true, fullAccess: false, revision: 'r1' }));
   const view = mountWorkline({ completeTurn, onboarding: { initial: { commandId: 'first-choice', scopeId: 's', folder: '', intent: 'Inspect the folder' }, open: openSetup },
+    permissionMode: { inspect, set: async () => { throw new Error('not a mode write'); } },
     doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', plan, lines: () => ['DURABLE-WAIT'] } });
   views.push(view);
   await until(() => view.stdout.text.includes('DURABLE-WAIT'), 'normal do result');
@@ -211,6 +214,7 @@ it('U4-2: first-task and /setup handoffs traverse ordinary /do once with their o
   await type(view, '/setup \r');
   await until(() => plan.mock.calls.length === 2, 'setup return to do');
   expect(openSetup).toHaveBeenCalledTimes(1); expect(plan.mock.calls[1]?.[1]).toBe('second-choice');
+  await until(() => view.stdout.frame.includes('full-auto'), 'setup mode read-back in status row');
   expect(completeTurn).not.toHaveBeenCalled(); view.stdin.write('\u001b'); await settle(60);
   await type(view, '/status \r'); await settle(60); expect(plan).toHaveBeenCalledTimes(2);
 });

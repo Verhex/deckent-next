@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { onboardingNeedsBudget } from './onboarding-budget.js';
+import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { configuredInvocationProfiles, planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
@@ -44,7 +45,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     const planned = planSetup(observed.observation, { schemaVersion: 2, values }, observed.registry, { phase: 'onboarding' });
     const worker = (observed.observation.families?.['execution'] as { worker?: { acquisition?: { images: { provider: string; imageId: string }[] } | null } } | undefined)?.worker;
     const selectedImage = worker?.acquisition?.images.find(row => row.provider === values['work:kind'])?.imageId ?? null;
-    const eligible = coding?.repository === 'present' && coding.hosts.some(row => row.cli === 'found');
+    const eligible = coding?.repository === 'present';
     const stages = planned.stages;
     const names: string[] = []; let inspected = false;
     try { const dir = await opendir(directory); inspected = true; for await (const entry of dir) { if (names.length >= 64) break; if (entry.isFile() || entry.isDirectory()) names.push(entry.name); } } catch { /* unknown remains explicit */ }
@@ -78,7 +79,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles, scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
         presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending, ...await rights() };
   };
-  const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: ['mcp-delegable'], apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card
+  const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: OWNER_BASELINE_DEFAULT_FAMILIES, apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card
   const rights = async () => { const view = terminal.openOwnerBaselineInstallation ? await baseline(false).catch(() => null) : null; return view ? { rights: { state: view.status === 'preview' ? 'needed' as const : view.status === 'current' ? 'current' as const : 'unavailable' as const, ...(view.expect ? { digest: view.expect } : {}), rules: view.added.length } } : {}; };
   return { observe, assertPerson, async rights(digest: string) { await assertPerson(); return { status: (await baseline(true, digest)).status }; },
     async previewFirstCommit(message: string, include: readonly string[] = []) {

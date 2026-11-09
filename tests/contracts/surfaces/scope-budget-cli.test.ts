@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
+import { budgetPanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { main } from '../../fixtures/cli-input.js';
 import type { ProviderSpendManagementCommand } from '#domain/index.js';
 import { createGovernedProviderSpendAccount, createProviderSpendAccount, createProviderSpendCheckpoint, providerSpendEvidenceDigest,
@@ -35,6 +36,9 @@ function current(limitMinorUnits = 2500): ProviderSpendAccountInspection {
 
 it('create-budget builds budget-create (revision 1, whole dollars as cents, USD) and prints one line; revise-budget reads the current account', async () => {
   const f = await fixture(), sent: ProviderSpendManagementCommand[] = [];
+  const firstBudget = budgetPanelPort(f.root, 'scope', { inspectProviderSpendAccount: async () => ({ ...current(), checkpoint: null }),
+    manageProviderSpend: async () => { throw new Error('inspection must not write'); } }, { env: f.env }, 'en', String);
+  expect(await firstBudget.inspect()).toMatchObject({ action: 'create', start: 10 });
   let output = '';
   const context = { ...f, ...person, stdout: { isTTY: true, write(value: string) { output += value; } },
     manageProviderSpend: async (_root: string, command: ProviderSpendManagementCommand) => { sent.push(command); return recorded(command, command.kind === 'budget-create' ? null : current().checkpoint); },

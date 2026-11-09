@@ -40,6 +40,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
+    codingRepository: context.inspectCodingRepository ? await context.inspectCodingRepository(root, options).catch(() => null) : null,
     egress: await egressFacts(root, config, context, options),
     providerSpending, budgetPeriodText,
     modelConnections: await Promise.all(configuredInvocationProfiles(config)
@@ -132,7 +133,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const node = assessNodeSupport(process.version, NODE_ENGINE_RANGE);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, node, auditIntegrity, startability, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
   const checks = [...doctorChecks(data, facts, locale)];
@@ -142,7 +143,8 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push(ownerBaseline.missing ? { group: 'security', id: 'owner-baseline', state: 'warning',
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
     : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
-  return { data: { ...data, providerSpending: facts.providerSpending ?? null }, checks, config, options };
+  return { data: { ...data, status: checks.some(check => check.state === 'error') ? 'degraded' as const : 'ready' as const,
+    providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:

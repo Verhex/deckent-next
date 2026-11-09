@@ -1,4 +1,4 @@
-import { t, type Locale, type OutputSink } from '#platform/index.js';
+import { messageText, t, type Locale, type OutputSink } from '#platform/index.js';
 import type { InfoChip, InfoChipState, InfoSection, InfoView } from '#surfaces/core/terminal-window/index.js';
 
 /** `/doctor`: the very report `deckent doctor` prints, captured as lines (`run` is the CLI's own doctor command writing to this sink). */
@@ -8,7 +8,11 @@ export async function doctorLines(run: (sink: OutputSink) => Promise<void>): Pro
 
 async function capture(run: (sink: OutputSink) => Promise<void>): Promise<string> {
   let text = '';
-  await run({ write: chunk => { text += chunk; return true; } });
+  try { await run({ write: chunk => { text += chunk; return true; } }); }
+  catch (error) {
+    // Doctor writes its diagnosis before refusing startup; retain it on both terminal surfaces.
+    if (!text.trim() || (error as { code?: string })?.code !== 'INSTALLATION_NOT_STARTABLE') throw error;
+  }
   return text;
 }
 
@@ -19,6 +23,8 @@ type DoctorJson = Partial<Readonly<{ schemaVersion: number; scope: string; platf
   imageRefresh: Readonly<{ status: string; reason: string | null; imageVersion: string | null }> | null;
   installationBinding: Readonly<{ capability: string; strength?: string | null; required?: boolean }> | null;
   poolReadiness: Readonly<{ status: string; code?: string | null }> | null;
+  startability: Readonly<{ status: string; checks: readonly Readonly<{ code: string; message: string }>[] }> | null;
+  codingRepository: Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }> | null;
   shellRealm: Readonly<{ selected: string | null; code: string | null; notice: string | null; mode: string;
     preferSandbox: Readonly<{ selected: string | null; code: string | null; notice: string | null }> | null }> | null;
   toolchains: Readonly<{ providers: readonly Readonly<{ provider: string; status: string; reason?: string | null }>[] }> }>>;
@@ -45,6 +51,9 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
     const lines = (await capture(text)).replace(/\n+$/u, '').split('\n');
     sections.push({ title: t('terminal.info.doctor.section.report', {}, locale), items: lines.filter(line => line.trim()).map(line => ({ text: line })), notes: [t('terminal.info.doctor.reportFallback', {}, locale)] });
   } else {
+    if (data.startability) sections.push({ title: t('terminal.info.doctor.section.report', {}, locale),
+      chip: chip(data.startability.status === 'blocked' ? 'fail' : 'ok'),
+      items: data.startability.checks.map(check => ({ text: check.message, chip: { state: 'fail' as const, text: check.code } })) });
     if (data.host) sections.push({ title: t('terminal.info.doctor.section.machine', {}, locale), rows: [{ key: t('terminal.info.doctor.key.platform', {}, locale), value: data.platform ?? '-' },
       { key: t('terminal.info.doctor.key.cpu', {}, locale), value: String(data.host.cpuCores) }, { key: t('terminal.info.doctor.key.memory', {}, locale), value: t('terminal.info.doctor.memoryValue', { memory: data.host.totalMemMB }, locale) },
       { key: t('terminal.info.doctor.key.workers', {}, locale), value: String(data.host.recommendedMaxWorkers) }] });
@@ -83,7 +92,8 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
     }
     if (data.poolReadiness) {
       const status = data.poolReadiness.status;
-      const words = status === 'ready' ? t('doctor.poolReadiness.status.ready', {}, locale) : status === 'drift' ? t('doctor.poolReadiness.status.drift', {}, locale)
+      const prerequisite = status === 'unconfigured' && data.codingRepository && data.codingRepository.state !== 'done' ? data.codingRepository.reason : null;
+      const words = prerequisite ? messageText(prerequisite.code, locale, prerequisite.params) ?? prerequisite.code : status === 'ready' ? t('doctor.poolReadiness.status.ready', {}, locale) : status === 'drift' ? t('doctor.poolReadiness.status.drift', {}, locale)
         : status === 'unavailable' ? t('doctor.poolReadiness.status.unavailable', {}, locale) : status === 'unconfigured' ? t('doctor.poolReadiness.status.unconfigured', {}, locale)
           : status === 'missing' ? t('doctor.poolReadiness.status.missing', {}, locale) : status; // I-S7: registry present, pool not set up yet
       // Not configured is not a failure and not unknown: the chip says so in the readiness word itself.
@@ -91,7 +101,7 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
         : { state: 'neutral', text: words },
         rows: [{ key: t('terminal.info.doctor.key.readiness', {}, locale), value: words,
           ...(data.poolReadiness.code ? { chip: { state: 'neutral' as const, text: data.poolReadiness.code } } : {}) }],
-        ...(['unconfigured', 'missing'].includes(status) ? { notes: [t('terminal.info.doctor.poolSetup', {}, locale)] } : {}) });
+        ...(!prerequisite && ['unconfigured', 'missing'].includes(status) ? { notes: [t('terminal.info.doctor.poolSetup', {}, locale)] } : {}) });
     }
     if (data.shellRealm) {
       const realm = (view: Readonly<{ selected: string | null; code: string | null }>) => view.selected === null ? t('terminal.info.doctor.sandbox.refused', {}, locale)

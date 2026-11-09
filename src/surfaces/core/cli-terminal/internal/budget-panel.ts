@@ -29,7 +29,7 @@ export function budgetPanelPort(root: string, scopeId: string, host: Host, optio
       const declared = ((config['provider_spending'] as { budgets?: readonly Configured[] } | undefined)?.budgets ?? []).find(budget => budget.scopeId === scopeId);
       if (declared) return { ...choices, action: null, current: null, frozen: false, start: choices.min,
         note: t('tui.budget.configured', { current: `${usdOf(Number(declared.limitMinorUnits))} ${String(declared.currency)}` }, locale) };
-      return { ...choices, action: 'create', current: null, note: null, frozen: false, start: choices.presets[0] ?? choices.min };
+      return { ...choices, action: 'create', current: null, note: null, frozen: false, start: SCOPE_BUDGET_CHOICES.defaultPresetUsd };
     },
     async apply(request) {
       try {
