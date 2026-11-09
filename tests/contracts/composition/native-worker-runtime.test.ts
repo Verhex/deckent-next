@@ -8,7 +8,7 @@ import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type Nativ
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
-  resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, executionTaskBase, executionTaskSilenceDeadline, executionTaskHiddenPaths, validateDockerTaskProfile, type NativeCliWorkerBinding } from '#adapters/index.js';
+  resolveNativeCliWorkerProfile, inspectNativeCliWorker, readLocalOsIdentity, localPrincipalChannel, executionTaskBase, executionTaskSilenceDeadline, executionTaskHiddenPaths, validateDockerTaskProfile, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest, connectedModelProfile } from '#engine/index.js';
@@ -71,6 +71,10 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     const ports = createConfiguredNativeCliWorkerPorts(f.project, 's', store as never, f.options, runtime), signal = new AbortController().signal;
     const request = { protocolVersion: 1 as const, identity, workspace: '/synthetic/attempt/workspace', argv: resolveNativeCliWorkerProfile(execution.tasks[0]!.profile).argv };
     expect(await ports.readiness(frozen)).toEqual({ state: 'ready', execution: seal }); expect(await ports.f08(frozen)).toEqual(seal);
+    // KG6 F1/F2: the production readiness point reads the observation once and its F08 reuses that seal and the point's K5 resolution.
+    const reads = vi.mocked(runtime.readiness.read).mock.calls.length;
+    expect(await inspectNativeCliWorker(frozen, ports)).toEqual({ state: 'ready', execution: seal }); expect(runtime.readiness.read).toHaveBeenCalledTimes(reads + 1);
+    expect(runtime.f08).toHaveBeenLastCalledWith(expect.objectContaining({ execution: seal, use: expect.objectContaining({ pin: frozen.modelUsePin }) }));
     expect(await ports.prepare!(frozen)).toBeNull(); expect(runtime.prepare).toHaveBeenCalledWith(profile);
     await ports.recheck(request, frozen, signal);
     const slot = await ports.capacity.acquire(request, frozen, signal); expect(slot.state).toBe('acquired');
@@ -87,7 +91,7 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     await expect(ports.openTools(request, frozen, signal, {})).rejects.toBeTruthy(); expect(runtime.openTools).toHaveBeenCalledOnce(); expect(runtime.driver).not.toHaveBeenCalled();
     await expect(ports.prepare!(frozen)).rejects.toBeTruthy(); expect(runtime.prepare).toHaveBeenCalledOnce();
     // KG6 OQ1: the guard that passed before the change and the execute recheck after it each read a fresh snapshot, as does every readiness point.
-    for (const point of [() => ports.recheck(request, frozen, signal), () => recheckNativeWorkerUse(f.project, 's', frozen, f.options), () => ports.readiness(frozen), () => ports.f08(frozen)])
+    for (const point of [() => ports.recheck(request, frozen, signal), () => recheckNativeWorkerUse(f.project, 's', frozen, f.options), () => ports.readiness(frozen), () => ports.readinessPoint!(frozen), () => ports.f08(frozen)])
       await expect(point()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     const check = new DatabaseSync(f.path, { readOnly: true });
     try { expect(check.prepare('SELECT count(*) AS n FROM model_invocations').get()).toEqual({ n: 0 }); } finally { check.close(); }

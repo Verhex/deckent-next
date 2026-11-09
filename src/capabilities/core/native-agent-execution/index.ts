@@ -14,7 +14,7 @@ export * from './internal/worker-verification.js';
 export { errorDiagnostic } from './internal/error-diagnostic.js';
 export * from './internal/worker-profile.js';
 export { nativeWorkerPreflight, nativeWorkerApprovalExpired, nativeWorkerToolLifetime, nativeWorkerToolGate, nativeWorkerProcessResult } from './internal/worker-stream.js';
-export { nativeWorkerReadiness } from './internal/worker-readiness.js';
+export { nativeWorkerReadiness, sealMatchesDefinition } from './internal/worker-readiness.js';
 export { prepareNativeWorkerObservation } from './internal/worker-preparation.js';
 export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';
 export { nativeWorkerEnvironmentProbes, nativeWorkerTemplateEnvironment, nativeWorkerToolBounds, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, type NativeWorkerProbeRunner } from './internal/worker-environment.js';

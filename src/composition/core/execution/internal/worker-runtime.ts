@@ -22,9 +22,9 @@ export function createConfiguredNativeCliWorkerRuntime(root: string, options: Co
   });
   return Object.freeze({ readiness, verification: evidence().verification, f08: f08 ?? (async query => {
     const entry = nativeCliAgent(query.binding.protocolFamily); if (!entry) return null;
-    const observed = await readiness.read({ surface: 'worker', scopeId: query.scopeId, reference: query.reference,
-      profileDigest: query.binding.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) });
-    return observed?.execution ? evidence(query.use).read(query.scopeId, query.binding, observed.execution) : null;
+    const execution = query.execution ?? (await readiness.read({ surface: 'worker', scopeId: query.scopeId, reference: query.reference,
+      profileDigest: query.binding.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) }))?.execution;
+    return execution ? evidence(query.use).read(query.scopeId, query.binding, execution) : null;
   }),
     async prepare(profile) {
       const entry = nativeCliAgent(profile.protocol.family); if (!entry) return 'NATIVE_AGENT_CAPABILITY_UNSEALED';
