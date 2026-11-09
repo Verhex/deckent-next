@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { lstat, open, opendir, readdir, realpath, rename } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, parse } from 'node:path';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
-import { pathWithin as inside, PRIVATE_PERMISSION_MASK, readPinnedFile, recordedProcessState, removePinnedFile, removeEmptyPinnedDirectory } from '#platform/index.js';
+import { pathWithin, PRIVATE_PERMISSION_MASK, readPinnedFile, recordedProcessState, removePinnedFile, removeEmptyPinnedDirectory } from '#platform/index.js';
 /** `members`: the resource owner's naming, one anchored pattern per level below `path`; a last-level match is one owned tree. */
 export interface CacheRemovalResource { readonly resourceId: string; readonly path: string; readonly ownershipDigest: string; readonly members: readonly string[] }
 export interface CacheRemovalBounds { readonly maxEntries: number; readonly maxDepth: number }
@@ -14,7 +14,6 @@ export interface CacheRemovalBounds { readonly maxEntries: number; readonly maxD
  * the removal is a late writer's, left to it. */
 export type CacheWriterWitness = Readonly<{ resourceId: string; directory: string; fence: string; budgetMs: number; pollMs: number }>;
 const rejected = (): never => { throw new EffectTargetError('EFFECT_TARGET_REJECTED'); };
-/** The live records directory or one a removal renamed (`<directory>.<16 hex>`). */
 const recordsDirectory = (witness: CacheWriterWitness, name: string) => name === witness.directory || name.startsWith(`${witness.directory}.`) && /^[0-9a-f]{16}$/u.test(name.slice(witness.directory.length + 1));
 /** Disposal is restricted to the owner's named members below a registered path; unlisted entries and non-empty parents stay.
  * Directory removal is bounded, link-free and never recursive rm. */
@@ -33,7 +32,7 @@ export class InstallationCacheRemovalTarget implements EffectTarget {
     const found = this.resources.find(item => item.resourceId === target.id);
     if (target.kind !== this.kind || !found || !/^[a-f0-9]{64}$/u.test(found.ownershipDigest) || !isAbsolute(found.path)
       || found.path === parse(found.path).root || !found.members.length || found.members.some(pattern => !/^\^.*\$$/u.test(pattern))
-      || this.protectedPaths.some(path => inside(found.path, path) || inside(path, found.path))) return rejected();
+      || this.protectedPaths.some(path => pathWithin(found.path, path) || pathWithin(path, found.path))) return rejected();
     return found;
   }
   private async scan(resource: CacheRemovalResource, removing = false) {

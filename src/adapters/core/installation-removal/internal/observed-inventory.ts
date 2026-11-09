@@ -3,7 +3,7 @@ import { lstat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { InstallationCacheRemovalTarget } from './cache.js';
 import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapters/core/worker-image/index.js';
-import { packageRemovalCommand, pathWithin as inside, sha256, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
+import { packageRemovalCommand, pathWithin, sha256, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
 import { extendUninstallInventory, assertNativeUninstallSupport, removalRegistry, restorable } from './inventory.js';
 import { observeUninstallWork } from './quiescence.js';
 import { configuredTracking } from './vcs.js';
@@ -19,7 +19,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   const projectData = join(config.projectRoot, DECKENT_DIR), bounds = config.installation.packageMeasurement;
   const rooted = layout.root === globalRoot || layout.root === projectData, env = options.env ?? process.env;
   const candidates = (['scratch', 'treeScanCache', 'compileCache'] as const).filter(resource => rooted
-    && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && inside(layout.root, productResourcePath(layout, resource)));
+    && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && pathWithin(layout.root, productResourcePath(layout, resource)));
   const tracked = await configuredTracking(config);
   const protectedPaths = [...new Set([...(layout.root === projectData ? [] : [projectData]), layout.bootstrapConfigPath, ...Object.keys(layout.resources)
     .filter(resource => !candidates.includes(resource as typeof candidates[number])).map(resource => productResourcePath(layout, resource as ProductResource))])];

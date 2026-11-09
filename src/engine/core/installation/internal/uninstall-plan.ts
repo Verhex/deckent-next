@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, resolve, parse } from 'node:path';
 import { z } from 'zod';
 import data from './uninstall-resources.json' with { type: 'json' };
-import { UninstallError, UNINSTALL_TIERS, uninstallInstallationSchema, uninstallPlanQuerySchema, uninstallResourceSchema, uninstallWorkSchema, uninstallServiceSchema,
-  type UninstallPlan, type UninstallResource, type UninstallItem, type UninstallInstallation, type UninstallTier, type UninstallWork, type UninstallService } from './uninstall-contract.js';
+import { UninstallError, UNINSTALL_TIERS, UNINSTALL_BLOCKERS, uninstallInstallationSchema, uninstallPlanQuerySchema, uninstallResourceSchema, uninstallWorkSchema, uninstallServiceSchema,
+  type UninstallPlan, type UninstallResource, type UninstallItem, type UninstallInstallation, type UninstallTier, type UninstallWork, type UninstallService, type UninstallBlocker } from './uninstall-contract.js';
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
 const contribution = z.strictObject({ id, owner: id, kind: z.enum(['service', 'image', 'path']), removeFrom: z.enum(UNINSTALL_TIERS), operation: id, targetKind: id, after: z.array(id) });
 export type UninstallContribution = z.infer<typeof contribution>;
@@ -36,8 +36,8 @@ export interface UninstallInventory {
   readonly installation: UninstallInstallation; readonly scopeSummary: readonly string[];
   readonly layoutRevision: string; readonly policyRevision: string; readonly inventoryRevision: string;
   readonly resources: readonly UninstallResource[]; readonly blockers: readonly string[];
-  /** Refusals that stop only the data-deleting tier (a relocated or unsafe authority file, unreadable VCS state). */
-  readonly dataBlockers: readonly string[];
+  /** Refusals that stop only the data-deleting tier (a relocated or unsafe authority file, an archive walk over its bound or unreadable). */
+  readonly dataBlockers: readonly UninstallBlocker[];
   readonly protectedPaths: readonly string[]; readonly deletionRoots: readonly string[];
   readonly backupDestination: string | null; readonly packageRemoval: UninstallPlan['packageRemoval'];
   readonly work: UninstallWork; readonly service: UninstallService;
@@ -140,20 +140,15 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
     backup: { required: archived, destination: inventory.backupDestination }, packageRemoval: { ...inventory.packageRemoval }, canApply: false as const };
   return freeze(JSON.parse(JSON.stringify({ ...body, planDigest: hash(body) })) as UninstallPlan);
 }
-const BLOCKER_ERRORS: Readonly<Record<string, string>> = { 'work-active': 'UNINSTALL_WORK_ACTIVE', 'work-pending': 'UNINSTALL_WORK_ACTIVE', 'delivery-queued': 'UNINSTALL_DELIVERY_QUEUED',
-  'uncertain-effects': 'UNINSTALL_UNCERTAIN_EFFECTS', 'uncertain-managed': 'UNINSTALL_UNCERTAIN_MANAGED', 'service-managed': 'UNINSTALL_SERVICE_RUNNING',
-  'work-unverified': 'UNINSTALL_SCOPE_UNVERIFIED', 'backup-destination': 'UNINSTALL_RECOVERY_LOCATION', 'archive-limit': 'UNINSTALL_BACKUP_COVERAGE' };
-/** The typed refusal of a plan's first blocker, with the counts and next step its message names; null when the plan has none. */
+/** The typed refusal of the plan's deciding blocker (UNINSTALL_BLOCKERS order) with the counts and next step its message names; null when the plan has none. */
 export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'work' | 'service' | 'purge' | 'installation'> & { readonly backup?: { readonly destination: string | null } }) {
-  const authority = plan.blockers.find(value => /^authority-(relocated|unsafe):/u.test(value));
-  if (authority) return ErrorRegistry.createError('UNINSTALL_AUTHORITY_UNVERIFIED', { params: { path: authority.slice(authority.indexOf(':') + 1) } });
-  const known = plan.blockers.find(value => BLOCKER_ERRORS[value]), work = plan.work;
-  if (known) return ErrorRegistry.createError(BLOCKER_ERRORS[known]! as 'UNINSTALL_WORK_ACTIVE', { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)),
-    approvals: String(plan.purge ? work.approvals.length : 0), workspaces: String(plan.purge ? work.workspaces ?? 0 : 0), count: String(known === 'delivery-queued' ? work.deliveries.length : work.uncertain.length),
-    list: known === 'delivery-queued' ? work.deliveries.slice(0, 5).map(item => item.id).join(', ') : work.uncertain.slice(0, 5).map(item => `${item.kind} ${item.id}`).join(', '),
-    owner: (known === 'delivery-queued' ? work.deliveries[0]?.scopeId : work.uncertain[0]?.scopeId) ?? '',
+  const named = (entry: typeof UNINSTALL_BLOCKERS[number]) => plan.blockers.find(value => 'path' in entry ? value.startsWith(`${entry.id}:`) : value === entry.id), row = UNINSTALL_BLOCKERS.find(named);
+  if (!row) return plan.blockers.length ? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP') : null;
+  if ('path' in row) return ErrorRegistry.createError(row.code, { params: { path: named(row)!.slice(row.id.length + 1) } });
+  const work = plan.work, listed = 'lists' in row ? work.deliveries.map(item => [item.id, item.scopeId]) : work.uncertain.map(item => [`${item.kind} ${item.id}`, item.scopeId]);
+  return ErrorRegistry.createError(row.code, { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)), approvals: String(plan.purge ? work.approvals.length : 0),
+    workspaces: String(plan.purge ? work.workspaces ?? 0 : 0), count: String(listed.length), list: listed.slice(0, 5).map(([label]) => label).join(', '), owner: listed[0]?.[1] ?? '',
     reason: 'manager-conditions-or-separate-consent', unit: plan.service.unit ?? '', command: plan.service.command ?? '', path: plan.installation.root, recovery: plan.backup?.destination ?? '' } });
-  return plan.blockers.length ? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP') : null;
 }
 export function assertUninstallPlanCurrent(approved: UninstallPlan, current: UninstallPlan) {
   if (approved.planDigest !== current.planDigest) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
