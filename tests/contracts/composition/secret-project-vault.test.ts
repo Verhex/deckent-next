@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { chmod, cp, link, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -102,6 +103,11 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     expect(await (await resolverOf(root, env)).check('DECKENT_ANTHROPIC_KEY')).toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });
     await writeFile(join(root, '.deck'), 'DECK_FORMAT=1\nOPENAI_API_KEY=main:OTHER\n');
     expect(await code((await resolverOf(root, env)).check('OPENAI_API_KEY'))).toBe('DECK_FILE_INVALID');
+    // p4 e6 (R17): a symlinked or non-regular `.deck` is `not-a-file`, never followed or read.
+    const notAFile = async () => expect(await (await resolverOf(root, env)).check('OPENAI_API_KEY').catch((error: unknown) => error)).toMatchObject({ code: 'DECK_FILE_INVALID', params: { reason: 'not-a-file' } });
+    await writeFile(join(base, 'elsewhere.deck'), 'DECK_FORMAT=1\nOPENAI_API_KEY=project\n'); await rm(join(root, '.deck'));
+    await symlink(join(base, 'elsewhere.deck'), join(root, '.deck')); await notAFile();
+    await unlink(join(root, '.deck')); await mkdir(join(root, '.deck')); await notAFile();
     expect(JSON.stringify(await readFile(join(installationSecretRoot(env)!, PROJECT_VAULT.directory), 'utf8').catch(() => ''))).not.toContain(OWN_VALUE);
   });
 
@@ -113,6 +119,28 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     expect(await (await resolverOf(a, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
     expect(await (await resolverOf(b, env)).check('DECKENT_ANTHROPIC_KEY')).toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });
     expect(await (await resolverOf(b, env)).check('OWN_KEY')).toMatchObject({ code: 'SECRET_PROJECT_MISSING' });
+  });
+
+  it('grants.json of another project, non-private, hard-linked or oversized grants nothing and is never overwritten; a grant is project-wide (owner B1 6)', async () => {
+    const { base, env } = await home(), root = await project(base, 'p');
+    await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+    const anchor = (await resolveProjectVaultAnchor(await loadConfiguredScopeContext(root, 'scope', { env }, 'read'), { env }))!;
+    const path = join(installationSecretRoot(env)!, PROJECT_VAULT.directory, projectVaultKey(anchor), PROJECT_VAULT.grantsFile);
+    const granted = JSON.parse(await readFile(path, 'utf8'));
+    // Owner B1 row 6 (a): a grant serves its project by name; its recorded scope is not compared with the asking one.
+    await writeFile(path, JSON.stringify({ ...granted, grants: granted.grants.map((grant: object) => ({ ...grant, scopeId: 'another-scope' })) }));
+    expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
+    const refusedUnchanged = async (expected: string) => {
+      const before = await readFile(path);
+      expect(await code((await resolverOf(root, env)).check('DECKENT_ANTHROPIC_KEY'))).toBe(expected);
+      clearConfigCache();
+      expect(await code(changeProjectSecretGrant(root, 'scope', 'OTHER_KEY', 'grant', 'admin', { env }, human))).toBe(expected);
+      expect((await readFile(path)).equals(before)).toBe(true);
+    };
+    await writeFile(path, JSON.stringify({ ...granted, projectId: randomUUID() })); await refusedUnchanged('SECRET_GRANT_STORE_INVALID');
+    await writeFile(path, JSON.stringify(granted)); await chmod(path, 0o644); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE');
+    await chmod(path, 0o600); await link(path, join(base, 'second')); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE'); await unlink(join(base, 'second'));
+    await writeFile(path, ' '.repeat(PROJECT_VAULT.grantsMaxBytes + 1)); await refusedUnchanged('SECRET_GRANT_STORE_UNSAFE');
   });
 
   it('a copied project (cp -r, then init identity --keep) cannot open the original vault; a move hands over only after the original is gone', async () => {
