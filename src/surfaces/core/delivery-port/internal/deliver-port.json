@@ -3,5 +3,6 @@
   "scanRuns": 200,
   "maxDiffFiles": 50,
   "maxDiffLinesPerFile": 400,
-  "maxDiffBytesPerFile": 65536
+  "maxDiffBytesPerFile": 65536,
+  "titleChars": 80
 }

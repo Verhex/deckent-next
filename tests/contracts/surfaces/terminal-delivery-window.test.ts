@@ -5,10 +5,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { targetQueueViewSchema, type QueueConsent, type EffectConfirmationView, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, deliveredTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
-  type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
+import { deliveryLines, shellWord } from '#surfaces/core/terminal-delivery/index.js';
+import { awaitingDeliveryTargets, deliveredTargets, consentMatches, patchDiffs, terminalDeliveryPort, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview,
+  type TerminalDeliveryPort, type VerificationCandidate } from '#surfaces/core/delivery-port/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { patchDiffs, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';

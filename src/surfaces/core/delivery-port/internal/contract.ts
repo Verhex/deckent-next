@@ -1,0 +1,126 @@
+import type { AttemptIdentity } from '#domain/index.js';
+import { queueTargetConfigRefusal, type DeliverySummary, type EffectConfirmationView, type RunView, type TargetQueueView, type QueueConsent, type TargetBatchExecution } from '#engine/index.js';
+import { ErrorRegistry } from '#platform/index.js';
+import PORT from './deliver-port.json' with { type: 'json' };
+
+/**
+ * TESLIM-PENCERESI (owner 2026-10-14): the terminal delivery window's port. The surface never writes Git, refs or the ledger itself:
+ * `preview` is read-only (inventory, patch preview, integration check, configured adoption targets) and `deliver` / `adopt` go through the
+ * existing integration applications and the TESLIM-GUVENLIK confirmation port that the trusted CLI composition binds to this verified TTY.
+ */
+/** `delivered` (BeUser M-25/DR2-07): the task's result is already at its delivery ref and not adopted; the window offers the adoption step only. */
+/** `setAside` (BeUser M-33): a set-aside row in /deliver carrying its own title; opening it brings the result back first. */
+/** `request`: the task's request as the Run recorded it (L1c: `r` on a working-tree conflict prepares `/do <request>`). */
+export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string; request?: string }>;
+export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
+/**
+ * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
+ * (hunk headers included) of the same patch the preview counted; `hidden` counts lines cut at the line bound; `unavailable` says why no body is
+ * carried (binary content, or beyond the byte/file bound). Viewing it never prepares, delivers or adopts anything.
+ */
+export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]; hidden: number; unavailable: 'binary' | 'too-large' | null }>;
+/** What the window shows before the person's `y`; `base`/`source`/`proposal` come from the integration check of the current source. */
+/** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
+/** `reattempt`: with a queue target, the enqueue carries the bounded service re-attempt intent (`targetQueue.reattempts` > 0). */
+/** `summary`: TESLIM-KARTI-OZET, what the Attempt claims, what acceptance rests on, model and risk (null: not readable; absent: no reader bound). */
+/** `workingTree`: the installation's delivery writes into the project's files (`execution.deliveryMode`); `changes`: each path's before/after digest the yes binds. */
+export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
+  source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
+  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null; workingTree?: true; changes?: EffectConfirmationView['changes'] }>;
+/** `setAside` (R1, Astra 3017): files a working-tree delivery left beside their names; the person is told. */
+export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string; setAside?: readonly string[] | undefined }>;
+/** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
+export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
+/** An accepted Run of the configured verification kind with one task (the bar's shape). Whether it ran on this delivered commit and meets the
+ * criteria is decided by the adoption application, never by this list. */
+export type VerificationCandidate = Readonly<{ runId: string; taskId: string }>;
+/** The answer the confirmation port asks for; only the window that showed the card supplies it (never a command field, model or SDK). */
+export type DeliveryAnswer = (view: EffectConfirmationView) => Promise<boolean>;
+export interface TerminalDeliveryPort {
+  queue?: {
+    prepareCurrent(target: DeliveryTarget, commandId: string): Promise<TargetQueueView>;
+    /** Read-only: whether `prepareCurrent` would carry the bounded re-attempt intent now (a work target and `targetQueue.reattempts` > 0). */
+    reattempt(): Promise<boolean>;
+    /** BeUser DR2-06: the queue's refusal of the configured branch known without Git (then `r` is not offered and the refusal is shown instead). */
+    blocked?(): Promise<Error | null>;
+    inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
+    /** `ask` also receives each asked ticket's summary, read when the card is asked: shown ABOVE the exact card, never in its place. */
+    confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => Promise<boolean>): Promise<TargetBatchExecution>;
+    summary?(view: TargetQueueView): Promise<DeliverySummary | null>;
+  };
+  preview(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
+  previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** BeUser M-32: the retained patch's read-only per-file diffs without the integration check, so a refused check still shows what the worker changed. */
+  patchOnly?(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card); the Run view then says `set-aside`. */
+  dismiss?(target: DeliveryTarget, action: 'dismiss' | 'restore'): Promise<void>;
+  /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
+  deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
+  /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. A verification Run is named like the CLI's
+   * `--verification-run`; its kind is read from the configuration at that moment, never from the window. */
+  adopt(preview: DeliveryPreview, delivery: DeliveryOutcome, targetRef: string, commandId: string, answer: DeliveryAnswer, verificationRunId?: string): Promise<AdoptionOutcome>;
+  /** Y1: the scope's accepted Runs of the configured verification kind (read-only); empty when none exists yet. */
+  verificationRuns(preview: DeliveryPreview): Promise<readonly VerificationCandidate[]>;
+}
+
+/**
+ * The window's `y` is recorded as a one-shot consent of exactly what it showed. The confirmation port's answer consumes it and says yes only
+ * when the port's card is the same operation, scope, Run, Task and command, and — for delivery — the same changed file set and base commit,
+ * for adoption the same target branch and delivered commit. Anything else is shown to the person as the port's exact card and needs a fresh `y`.
+ */
+export type DeliveryConsent = Readonly<{ operation: 'deliver-integration' | 'adopt-integration'; scopeId: string; runId: string; taskId: string; commandId: string;
+  files?: readonly string[]; from?: string; resource?: string; to?: string; changes?: EffectConfirmationView['changes'] }>;
+export function consentMatches(consent: DeliveryConsent, view: EffectConfirmationView): boolean {
+  if (view.operation !== consent.operation || view.scopeId !== consent.scopeId || view.runId !== consent.runId || view.taskId !== consent.taskId
+    || view.commandId !== consent.commandId) return false;
+  if (consent.files) {
+    const shown = [...new Set(consent.files)].sort(), asked = [...new Set(view.files)].sort();
+    if (shown.length !== asked.length || shown.some((path, index) => path !== asked[index])) return false;
+  }
+  if (consent.changes && JSON.stringify(consent.changes) !== JSON.stringify(view.changes)) return false;
+  return (consent.from === undefined || consent.from === view.from) && (consent.resource === undefined || consent.resource === view.resource)
+    && (consent.to === undefined || consent.to === view.to);
+}
+
+/** F2-5: a task's human title: the Brain-authored title, else the instruction's first line within the window's bound (never the whole instruction). */
+function taskTitle(task: RunView['tasks'][number], fallbackTitle: string): string {
+  const titled = task.taskBrief?.title?.trim(), first = task.taskBrief?.task?.split(/\r?\n/u).find(line => line.trim())?.trim().replace(/\s+/gu, ' ');
+  const text = titled || first, chars = text ? [...text] : [];
+  return !text ? fallbackTitle : chars.length > PORT.titleChars ? `${chars.slice(0, PORT.titleChars - 1).join('')}…` : text;
+}
+/** BeUser M-25/DR2-07: accepted tasks of finished Runs whose result is delivered to its ref and adopted nowhere yet (the brief's delivery receipt). */
+export function deliveredTargets(runs: readonly RunView[], fallbackTitle: string): readonly DeliveryTarget[] {
+  const out: DeliveryTarget[] = [];
+  for (const run of runs) if (run.state.kind === 'terminal') for (const task of run.tasks) {
+    const delivery = task.resultBrief?.runDelivery;
+    if (task.phase !== 'accepted' || delivery?.state !== 'delivered' || !delivery.commit || !delivery.commandId) continue;
+    out.push(Object.freeze({ key: `${run.scopeId}:${run.runId}:${task.id}`, scopeId: run.scopeId, runId: run.runId, taskId: task.id,
+      title: taskTitle(task, fallbackTitle),
+      delivered: Object.freeze({ ref: delivery.targetRef ?? delivery.commit, commit: delivery.commit, commandId: delivery.commandId }) }));
+  }
+  return Object.freeze(out);
+}
+/**
+ * Tasks whose prepared patch awaits delivery: an accepted task that carries work input, whose Run is finished and whose result brief says
+ * "awaiting delivery" (the monitor's derivation; no new rule). A Run's tasks without work input deliver nothing.
+ */
+export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle: string): readonly DeliveryTarget[] {
+  const targets = new Map<string, DeliveryTarget>();
+  for (const run of runs) {
+    if (run.state.kind !== 'terminal') continue;
+    for (const task of run.tasks) {
+      const instruction = task.taskBrief?.task;
+      const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
+      if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
+      const key = `${run.scopeId}:${run.runId}:${task.id}`, title = taskTitle(task, fallbackTitle);
+      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(aside ? { setAside: title } : {}) }));
+    }
+  }
+  return Object.freeze([...targets.values()]);
+}
+/** BeUser DR2-06: the queue's refusal of the work target's branch that configuration alone shows (protected, not allow-listed), as the typed error the service would give. */
+export function queueConfigRefusal(execution: Readonly<{ workTargets?: Readonly<{ targets: readonly Readonly<{ baseRef: string }>[] }> | undefined; adoption: Readonly<{ targets: readonly string[]; protectedTargets: readonly string[] }> }> | null | undefined) {
+  const ref = execution?.workTargets?.targets[0]?.baseRef, refusal = execution && ref ? queueTargetConfigRefusal(ref, execution.adoption.targets, execution.adoption.protectedTargets) : null;
+  return refusal ? ErrorRegistry.createError(refusal.code, refusal.params ? { params: refusal.params } : undefined) : null;
+}

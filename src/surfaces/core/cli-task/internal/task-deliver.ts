@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { t, type Locale } from '#platform/index.js';
 import type { DeliverySummary, EffectConfirmationView, QueueConsent, TargetQueueView } from '#engine/index.js';
 import { consentSummaryLines, renderDeliverySummary, ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
+import type { DeliveryPreview, DeliveryTarget, TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { deliveryCardText, deliveryOperationLabel, renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
-import type { DeliveryPreview, DeliveryTarget, TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
 import REGISTRY from './task.json' with { type: 'json' };
 
 /** The person's answer on one card (the CLI card launcher in production): an option id, or null when cancelled. */

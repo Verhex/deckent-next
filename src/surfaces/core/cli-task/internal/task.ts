@@ -3,7 +3,7 @@ import { inspectTask, phaseWord } from './task-inspect.js';
 import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
 import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, patchBody, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runQuerySchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -28,7 +28,7 @@ function scopeLine(scope: PatchScope, locale: Locale) {
     ? [t('cli.task.patch.scope.enforced', {}, locale)] : [])].join('\n');
 }
 import type { TaskCommandContext } from './context.js';
-import { patchStat, resolveLatestAttempt, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
+import { patchStat, resolveLatestAttempt, terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { notAcceptedLabel, notAcceptedNextStep, renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 /**
  * SEC-5S F1: a worker-written file body reaches the owner's terminal only through `terminalSafeText`, line by line. A carriage return
@@ -48,7 +48,6 @@ export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, opt
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
-/** Same resolution as the terminal delivery window (`resolveLatestAttempt` in cli-terminal). */
 async function latestAttempt(context: TaskCommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
   return resolveLatestAttempt(context.inspectInventory!, context.root ?? process.cwd(), scopeId, runId, taskId, { env: context.env ?? process.env });
 }
@@ -323,17 +322,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
         return [heading(data), scopeLine(data.scope, locale), ...counted.files.map(file => `${file.path} | +${file.added} -${file.removed}`),
           t('cli.task.patch.stat.summary', { count: counted.files.length, added: counted.added, removed: counted.removed }, locale), notice].join('\n');
       }
-      const sections = data.patch.changes.map(change => {
-        let before = change.before?.text ?? null, after = change.after?.text ?? null;
-        // A trailing newline is not a phantom empty line, unless it is the only difference.
-        if ((before === null || before.endsWith('\n')) && (after === null || after.endsWith('\n'))) {
-          before = before?.slice(0, -1) ?? null; after = after?.slice(0, -1) ?? null;
-        }
-        const modeChanged = change.before && change.after && change.before.mode !== change.after.mode;
-        const body = change.before && change.after && change.before.text === change.after.text ? '' : render(change.path, before, after);
-        const mode = modeChanged ? `mode ${change.before!.mode} -> ${change.after!.mode} ${change.path}` : '';
-        return { body, mode };
-      });
+      const sections = data.patch.changes.map(change => patchBody(change, render));
       return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [safeDiff(section.body, t('cli.task.patch.neutralised', {}, locale)), section.mode].filter(Boolean)), notice].join('\n');
     })()) }); return;
   }

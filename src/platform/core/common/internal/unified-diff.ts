@@ -41,3 +41,16 @@ export function unifiedDiff(path: string, before: string | null, after: string |
   }
   return [...header, ...hunks].join('\n');
 }
+
+type PatchSide = Readonly<{ text: string; mode: string }> | null;
+/**
+ * One changed file's diff for every reader (CLI patch view and stat, delivery window, delivery summary): a trailing newline is not a phantom
+ * empty line, unless it is the only difference; equal text has no body; a mode change has its mode line. `before`/`after` are the texts rendered.
+ */
+export function patchBody(change: Readonly<{ path: string; before: PatchSide; after: PatchSide }>, render: (path: string, before: string | null, after: string | null) => string) {
+  const { path, before: from, after: to } = change;
+  let before = from?.text ?? null, after = to?.text ?? null;
+  if ((before === null || before.endsWith('\n')) && (after === null || after.endsWith('\n'))) { before = before?.slice(0, -1) ?? null; after = after?.slice(0, -1) ?? null; }
+  return Object.freeze({ before, after, body: from && to && from.text === to.text ? '' : render(path, before, after),
+    mode: from && to && from.mode !== to.mode ? `mode ${from.mode} -> ${to.mode} ${path}` : '' });
+}

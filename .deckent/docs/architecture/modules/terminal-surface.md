@@ -246,7 +246,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the strip itself is unchanged and the note grants nothing.
   Read-only diff (alpha.46): `DeliveryPreview.diffs` (bounded per file by `deliver-port.json`) feed a file list + hunk view inside the same window; viewing is inert for delivery.
   TESLIM-PENCERESI (owner 2026-10-14; landed in alpha.36): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
-  window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
+  window over a `TerminalDeliveryPort` that `delivery-port/deliver-port.ts` (Ink-free unit with the pure delivery contract; KG9 F3) builds from the CLI's own handlers (inventory, patch preview,
   integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by
   the CLI composition, never SDK/MCP). A tracked Run's accepted work-input task with `deliveryOutlook: awaiting-delivery` opens it once in
   the background; `/deliver` (fresh /runs read model) and the strip's "awaiting delivery" row open it in the foreground. One window at a

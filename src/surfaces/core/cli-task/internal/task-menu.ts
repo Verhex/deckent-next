@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { displayId, listRunIds, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
-import type { TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
+import type { TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import type { TaskCommandContext } from './context.js';
 import { deliverTask, type TaskCardAsk } from './task-deliver.js';
 import { phaseWord } from './task-inspect.js';

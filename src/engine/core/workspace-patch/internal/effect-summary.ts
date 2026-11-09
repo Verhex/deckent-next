@@ -1,4 +1,4 @@
-import { unifiedDiff, redactForRecord, EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
+import { patchBody, unifiedDiff, redactForRecord, EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
 import type { AttemptIdentity, RunSnapshot } from '#domain/index.js';
 import type { DeliveryChangeFacts } from '#engine/core/delivery-summary/index.js';
 import type { WorkspacePatch } from './contract.js';
@@ -7,12 +7,7 @@ import type { PatchScope } from './scope.js';
 function patchLineCounts(patch?: Pick<WorkspacePatch, 'changes'>) {
   let added = 0, removed = 0;
   for (const change of patch?.changes ?? []) {
-    if (change.before?.text === change.after?.text) continue;
-    let before = change.before?.text ?? null, after = change.after?.text ?? null;
-    if ((before === null || before.endsWith('\n')) && (after === null || after.endsWith('\n'))) {
-      before = before?.slice(0, -1) ?? null; after = after?.slice(0, -1) ?? null;
-    }
-    const body = unifiedDiff(change.path, before, after).split('\n').slice(2);
+    const { before, after, body: diff } = patchBody(change, unifiedDiff), body = diff.split('\n').slice(2);
     // The bounded renderer declines a large comparison: count it as a full replacement (over-states the risk, never under-states it, and
     // never blocks a delivery the way an error here would).
     if (body.some(line => line.startsWith('@@') && !/^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@$/.test(line))) {
