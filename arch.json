@@ -1474,6 +1474,9 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/capabilities/core/run-planner",
+        "src/engine/core/model-use",
         "src/surfaces/core/terminal-beuser",
         "src/platform/core/config-fields",
         "src/surfaces/core/terminal-host",
@@ -5277,7 +5280,7 @@
       "engine": 60000,
       "adapters": 42254,
       "surfaces": 45000,
-      "composition": 13703
+      "composition": 13705
     },
     "totalSrcLines": 200000,
     "testCases": 8198,

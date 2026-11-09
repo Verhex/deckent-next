@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
-import { inspectConfiguredRoleModels } from '#composition/core/run-planner/index.js';
+import { inspectConfiguredRoleModels, planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { brainOfferCommand, configCommand } from '#surfaces/core/config/index.js';
@@ -74,10 +74,15 @@ describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner co
       { root: f.project, env: f.options.env, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal, stdout: { write: () => true } } as never);
     // An undeclared reference names which model the planner took, before any count or POST.
     const took = (commandId: string, reference?: object) => planRun(f.project, { ...command, commandId, ...(reference ? { reference } : {}) }, f.options).then(() => 'planned', (error: { code: string; params?: { model?: string } }) => error.params?.model ?? error.code);
+    // The terminal hands its chat model to the composition, which plans with it only while no Brain model is chosen.
+    const tookHere = (commandId: string) => planRuntimeRun(f.project, { ...command, commandId }, f.options, undefined, undefined, { ...f.reference, modelId: 'chat-here' })
+      .then(() => 'planned', (error: { code: string; params?: { model?: string } }) => error.params?.model ?? error.code);
+    expect(await tookHere('chat-here')).toBe('test-operator/chat-here@1');
     await set('user-brain', '--global');
     expect(await took('brain-user')).toBe('test-operator/user-brain@1');
     await set('project-brain');
     expect(await took('brain-project')).toBe('test-operator/project-brain@1');
+    expect(await tookHere('brain-over-chat')).toBe('test-operator/project-brain@1');
     expect(await took('brain-pinned', { ...f.reference, modelId: 'pinned' })).toBe('test-operator/pinned@1');
     expect(f.posts).toBe(0);
     await set(f.reference.modelId);

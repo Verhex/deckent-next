@@ -24,7 +24,9 @@ export function planConfiguredRun(root: string, input: BrainPlanCommand, options
 /** alpha.64 B: the runtime service's own plan (a chat turn's `propose_work`): the same application, its Brain call on the service's model host. */
 export const planServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>,
   signal?: AbortSignal, observe?: BrainPlanObserver) => plan(root, input, options, invoke, signal, undefined, observe);
-export function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
+/** R9b (owner D3: command model, Brain model, chat model): a surface's `chatModel` enters the command only without a Brain model, before the intent is recorded. */
+export async function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver, chatModel?: BrainPlanCommand['reference']) {
+  if (chatModel && !input.reference && !configuredBrainModel((await loadComposedConfig(root, options))['brain_planner'])) input = { ...input, reference: chatModel };
   const client = createConfiguredRuntimeClient(root, options);
   return plan(root, input, options, async (command, signal) => {
     const configured = (await loadComposedConfig(root, options))['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
