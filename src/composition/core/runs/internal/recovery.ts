@@ -1,5 +1,5 @@
 import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
-import { verifiedPrincipal, AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
+import { configuredInvocationProfiles, verifiedPrincipal, AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
   recoveryGrantState, recoveryModeState, recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModeState, type RecoveryModelPorts,
   type RoleModelSources } from '#engine/index.js';
 import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader, openSqliteModelActivationReader, openSqliteModelCatalogReader,
@@ -24,7 +24,7 @@ async function claimedInvocation(c: Context, path: string, scopeId: string, comm
  * delegated-use consent; one call under the recovery principal through the existing model-invocation path (policy, binding, activation, spend). */
 function recoveryModelPorts(projectRoot: string, options: ConfigLoadOptions, c: Context, path: string, principal: VerifiedPrincipal, facts: ReadonlyMap<string, MemoryCatalogFact>,
   roles: RoleModelSources): RecoveryModelPorts {
-  const profiles = c.config['provider_invocation_profiles'];
+  const profiles = { profiles: configuredInvocationProfiles(c.config) };
   const rows: RecoveryModelPorts['rows'] = scopeId => recoveryModelRows(roles, profiles, scopeId, (channelId, modelId) => facts.get(memoryCatalogKey(channelId, modelId))?.billing ?? null, Date.now());
   return { rows, async invoke(request) {
       // The exact row must still be an active, invocable role row just before the call (the role registry restricts the recovery principal's grant).

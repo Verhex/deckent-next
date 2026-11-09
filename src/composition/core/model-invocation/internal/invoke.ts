@@ -3,8 +3,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { t, SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 import { randomUUID } from 'node:crypto';
-import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
-import { verifiedPrincipal, ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, ModelActivationApplication, ModelActivationPolicyAuthorization, assessModelInvocationProfileDeliveries, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
+import { ModelInvocationError, modelInvocationCommandInputSchema, type ModelInvocationCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
+import { configuredInvocationProfiles, verifiedPrincipal, ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, ModelActivationApplication, ModelActivationPolicyAuthorization, assessModelInvocationProfileDeliveries, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, openSqliteModelActivationStore, type LocalPeerIdentity } from '#adapters/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
@@ -73,8 +73,7 @@ export function application(context: Awaited<ReturnType<typeof loadInvocationCon
   return new ModelInvocationApplication(verifier, new ModelInvocationPolicyAuthorization(context.policy), bindings,
     async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),
     { async resolve(scopeId, reference) {
-      const configured = (await context.freshConfig())['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
-      const profiles = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)) ?? [];
+      const profiles = configuredInvocationProfiles(await context.freshConfig());
       const profile = profiles.find(profile => profile.scopeId === scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference)) ?? null;
       if (profile && profileGuard) await profileGuard(profile);
       return profile;
@@ -85,7 +84,7 @@ export function application(context: Awaited<ReturnType<typeof loadInvocationCon
       const config = await context.freshConfig();
       return new ModelActivationApplication(verifier, new ModelActivationPolicyAuthorization(context.policy), bindings,
         async () => openSqliteModelActivationStore(await context.path(), config.storage.sqlite, 'forbid'), () => clock.sample().wallMs,
-        { profiles: config['provider_invocation_profiles'], surfaces: configuredModelInvocationDeliverySurfaces(config), assess: assessModelInvocationProfileDeliveries }).admit(command);
+        { profiles: { profiles: configuredInvocationProfiles(config) }, surfaces: configuredModelInvocationDeliverySurfaces(config), assess: assessModelInvocationProfileDeliveries }).admit(command);
     }, entry);
 }
 /** Connected application features only; no wire field selects this path. */

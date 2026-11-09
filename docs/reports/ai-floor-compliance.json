@@ -14,7 +14,7 @@
     "src/domain/core/agent-turn/internal/workspace-files.ts": "ae38afcf5d38a97f0b4f468c70091ce1e449c2d3e10f11677a2116eb2fcfeb31",
     "src/domain/core/approval/index.ts": "0f7cb57e2145e5c033ccb7f4428ba07d0fefa3682e434d8e10925d248a1c1fab",
     "src/domain/core/approval/internal/ai-cells.ts": "1d21009bc1f56d29e758fa8ea77eaff142e0361cf6c649634cfa15b11bd4f98b",
-    "src/domain/core/approval/internal/contract.ts": "c03e9b389259d9528f5dd2bc37c78d2874873098ab191a28f514104964f7d2ec",
+    "src/domain/core/approval/internal/contract.ts": "d000f3a25f0011de606695563b3561d93bff0ee657a933c10feb36c86404942d",
     "src/domain/core/attempt/index.ts": "a2234fa31bde2aa77747a7ffe545103827e75935bcf3762be241cdd0928873a9",
     "src/domain/core/attempt/internal/contract.ts": "b22f69acb87323015b0f971f7137b2ad8b7ace0d2924434fcb6514f28bf765b0",
     "src/domain/core/attempt/internal/dispatch-loss.ts": "d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f",

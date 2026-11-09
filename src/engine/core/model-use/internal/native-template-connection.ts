@@ -1,9 +1,10 @@
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
 import { nativeCliHeadlessDefinitionSchema, nativeCliWorkerBindingSchema, type NativeCliHeadlessDefinition, type NativeCliWorkerBinding } from '#capabilities/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { ErrorRegistry, type DeckentConfig } from '#platform/index.js';
-import { modelUseProfiles, pinCurrentModelUse } from './read.js';
+import { pinCurrentModelUse } from './read.js';
 import type { ModelUseReadPorts, ModelUseContext } from './ports.js';
 import { modelInvocationProfileDigest } from '#engine/core/model-invocation/index.js';
 
@@ -13,7 +14,7 @@ export async function resolveNativeTemplateConnection(root: string, config: Deck
   resource: (context: ModelUseContext, definition: NativeCliHeadlessDefinition) => Promise<{ resourceKey: string } | null>) {
   const scopeId = config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
-  const profiles = modelUseProfiles(config).filter(profile => profile.id === id && profile.scopeId === scopeId);
+  const profiles = configuredInvocationProfiles(config).filter(profile => profile.id === id && profile.scopeId === scopeId);
   const profile = profiles.length === 1 ? profiles[0] : null;
   if (!profile) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
   const entry = agent(profile.protocol.family);
@@ -33,7 +34,7 @@ export async function resolveNativeTemplateConnection(root: string, config: Deck
  * runs on that login's connected profile for it, with that profile's own definition (state dir, consent) and checks. Null when none is declared. */
 export async function connectedModelProfile(config: DeckentConfig, scopeId: string, binding: NativeCliWorkerBinding, model: { channelId: string; modelId: string }) {
   const login = (value: unknown) => { const parsed = nativeCliHeadlessDefinitionSchema.safeParse(value); return parsed.success ? [parsed.data.ownerUid, parsed.data.configDir, parsed.data.executable] : null; };
-  for (const profile of modelUseProfiles(config)) {
+  for (const profile of configuredInvocationProfiles(config)) {
     if (profile.scopeId !== scopeId || profile.protocol.family !== binding.protocolFamily || profile.reference.providerId !== model.channelId
       || profile.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || !isDeepStrictEqual(login(profile.adapter.definition), login(binding.definition))) continue;
     const catalog = await new ModelBindingApplication({ read: async () => config.provider_catalog }).inspect(profile.reference);

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import { configuredModelProfiles, inspectConfiguredModelUse } from '#composition/core/model-use/index.js';
+import { inspectConfiguredModelUse } from '#composition/core/model-use/index.js';
 import { modelActivationQuerySchema, type ModelActivationQuery } from '#domain/index.js';
-import { verifiedPrincipal, ModelActivationInspectionApplication, ModelActivationPolicyAuthorization } from '#engine/index.js';
+import { configuredInvocationProfiles, verifiedPrincipal, ModelActivationInspectionApplication, ModelActivationPolicyAuthorization } from '#engine/index.js';
 import { openSqliteModelActivationReader } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -13,7 +13,7 @@ export async function inspectConfiguredModelActivation(projectRoot: string, inpu
   try {
     const query = modelActivationQuerySchema.parse(input);
     const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
-    const profile = configuredModelProfiles(config).find(item => item.scopeId === query.scopeId && isDeepStrictEqual(item.reference, query.reference));
+    const profile = configuredInvocationProfiles(config).find(item => item.scopeId === query.scopeId && isDeepStrictEqual(item.reference, query.reference));
     if (profile && use.modelUse !== false) await inspectConfiguredModelUse(projectRoot, profile, principal, options);
     const app = new ModelActivationInspectionApplication(verifiedPrincipal(principal),
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),

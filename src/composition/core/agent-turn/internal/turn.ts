@@ -6,7 +6,7 @@ import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCom
   type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type BrainPlanObserver, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, modelUseProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
 import { t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
@@ -98,7 +98,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const config = witness.config;
   // T4 MODEL-SWITCH/S19, T4-B D1: a session pin wins over project/default/config; a refused pin never falls back.
   const reference = command.reference ?? (await terminalModelHere(projectRoot, options)).choice?.reference ?? readTerminalChatConfig(config)?.reference;
-  const profile = modelUseProfiles(config).find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
+  const profile = configuredInvocationProfiles(config).find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
   const loaded = { command, witness, config, reference, profile };
   if (profile?.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID) {
     const observed = await inspectNativeChat(profile, host.nativeAgent);

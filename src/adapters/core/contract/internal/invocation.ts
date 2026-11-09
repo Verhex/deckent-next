@@ -48,7 +48,7 @@ export function registerInvocationProfileConfig(): void {
   registerConfigSection('provider_invocation_profiles', invocationProfilesSchema, {
     optional: true, secretReferences: 'forbid',
     // Live: every invocation and binding read takes it through freshConfig(), so a model connection never needs a service restart (FIX8c).
-    metadata: { descriptionKey: 'config.field.provider_invocation_profiles', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/composition/core/model-invocation'] }, apply: 'live' },
+    metadata: { descriptionKey: 'config.field.provider_invocation_profiles', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/engine/core/provider-catalog'] }, apply: 'live' },
     validateLayers: validateInvocationProfileLayers,
     validateValue: value => { if (value !== undefined) validate(value); },
   });

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { DEFAULT_DELEGATED_CLASSES, type ModelConnectCommand } from '#domain/index.js';
-import { ModelConnectError, assertAuthorityWitness, modelUseProfiles, prepareSubscriptionConsent, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
+import { ModelConnectError, assertAuthorityWitness, configuredInvocationProfiles, prepareSubscriptionConsent, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
   bindCapacityResource, headlessCapacityBinding, openSqliteLedger,
   prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, type HeadlessLoginResult,
@@ -61,7 +61,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       const seed = await readProviderConnectSeed(kind.connect!.seed!);
       const references = seed.providers.flatMap(provider => provider.models.filter(model => model.nativeId === value.nativeId)
         .map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version })));
-      const profiles = modelUseProfiles(context.config);
+      const profiles = configuredInvocationProfiles(context.config);
       const existing = [value.existing, ...profiles.filter(profile => profile.scopeId === command.scopeId
         && references.some(reference => isDeepStrictEqual(reference, profile.reference))).map(profile => profile.adapter.definition)];
       if (existing.some(definition => {

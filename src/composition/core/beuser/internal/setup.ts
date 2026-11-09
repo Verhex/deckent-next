@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import personas from '../../../../../assets/beuser/personas.json' with { type: 'json' };
 import calibration from '../../../../../assets/beuser/calibration/manifest.json' with { type: 'json' };
 import controllerData from '../../../../../assets/beuser/controller.json' with { type: 'json' };
-import { executionRegistrySchema, modelInvocationProfileSchema } from '#domain/index.js';
+import { executionRegistrySchema } from '#domain/index.js';
 import { inspectPackagedBeuserJourney, readInstallationProfileFile, readBeuserCandidate, readMeasuredBeuserRecord, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
-import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest, PoolControlPolicyAuthorization, assertPoolControlAllowed } from '#engine/index.js';
+import { configuredInvocationProfiles, inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest, PoolControlPolicyAuthorization, assertPoolControlAllowed } from '#engine/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { CONFIG_FIELDS, ErrorRegistry, globalStateRoot, loadConfig, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { configPersonWitness, createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -56,8 +56,8 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
   await withConfiguredBeuserWalkCustody(root, scopeId, options, async () => undefined);
   const models = await modelSources(c, async sources => {
     const rows = (await inspectRoleModelsInScope(sources, 'beuser-walker', scopeId, Date.now())).models;
-    const profiles = ((c.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
-    const available = rows.filter(row => row.active && roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], scopeId, row));
+    const profiles = configuredInvocationProfiles(c.config);
+    const available = rows.filter(row => row.active && roleModelInvocationReference(sources, { profiles: configuredInvocationProfiles(c.config) }, scopeId, row));
     const suggestions = new Set<string>(), seeds = await readdir(join(BEUSER_PACKAGE_ROOT, 'assets', 'model-catalog'));
     for (const channelId of new Set(available.map(row => row.channelId))) {
       const catalog = seeds.includes(`${channelId}.json`)
@@ -68,7 +68,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
       suggestions.add(JSON.stringify([channelId, modelId]));
     }
     return available.map(({ channelId, modelId }) => {
-      const reference = roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], scopeId, { channelId, modelId });
+      const reference = roleModelInvocationReference(sources, { profiles: configuredInvocationProfiles(c.config) }, scopeId, { channelId, modelId });
       const profile = profiles.find(row => row.scopeId === scopeId && isDeepStrictEqual(row.reference, reference, { skipPrototype: true }));
       return { channelId, modelId, recommended: suggestions.has(JSON.stringify([channelId, modelId])), subscription: !!profile && profile.schemaVersion !== 1 && profile.billingAxis === 'subscription' };
     });
@@ -146,7 +146,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
       for (const role of ['beuser-walker', 'beuser-evaluator'] as const) {
         const target = p.choices[role], held = await inspectRoleModelsInScope(sources, role, input.scopeId, Date.now());
         if (!held.models.some(row => row.channelId === target.channelId && row.modelId === target.modelId && row.active)
-          || !roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], input.scopeId, target)) throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE');
+          || !roleModelInvocationReference(sources, { profiles: configuredInvocationProfiles(c.config) }, input.scopeId, target)) throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE');
       }
     }
   });

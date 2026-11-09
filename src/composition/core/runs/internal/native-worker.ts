@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { immutableJsonObjectSchema, type RunExecutionSnapshot, type VerifiedPrincipal } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelUseProfiles, pinCurrentModelUse, sameModelUseOwner, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
+import { modelInvocationProfileDigest, configuredInvocationProfiles, pinCurrentModelUse, sameModelUseOwner, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
 import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile, withMcpPrincipal,
   headlessCapacityBinding, openSqliteInventoryReader, type SqliteAttemptStore, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -11,7 +11,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function resolveNativeWorkerUse(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions) {
   return withMcpPrincipal(async () => {
     const ports = modelUseReadPorts(options), context = await ports.context(root, scopeId);
-    const profile = modelUseProfiles(context.config).find(value => value.scopeId === scopeId && value.protocol.family === binding.protocolFamily
+    const profile = configuredInvocationProfiles(context.config).find(value => value.scopeId === scopeId && value.protocol.family === binding.protocolFamily
       && modelInvocationProfileDigest(value) === binding.profileDigest);
     if (!profile || !isDeepStrictEqual(profile.adapter.definition, binding.definition)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
     const pin = await pinCurrentModelUse(ports, root, profile, context.principal, context);

@@ -5,7 +5,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
-import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, modelUseProfiles, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
+import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, configuredInvocationProfiles, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
   OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
@@ -50,9 +50,9 @@ const describeModel = (reference: ModelReference): string => `${reference.provid
 const nativeChatProfile = (profiles: readonly ModelInvocationProfile[], scopeId: string | undefined, reference: ModelReference) => profiles.find(profile => profile.scopeId === scopeId
   && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && isDeepStrictEqual(profile.reference, reference));
 /** R8e: the host's chat readiness read for `/provider` and `/model` (read only: no preflight, spawn or sign-in). KG6 F5: one view build is one call,
- * one forced config load and one profile parse; each model still reads its own observation, and nothing is kept for the next build. */
+ * one forced config load and one typed profile read; each model still reads its own observation, and nothing is kept for the next build. */
 export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; references: readonly ModelReference[] }>, options: ConfigLoadOptions = {}) {
-  const profiles = query.surface === 'chat' ? modelUseProfiles(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>) : [];
+  const profiles = query.surface === 'chat' ? configuredInvocationProfiles(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>) : [];
   const readiness = configuredNativeChatReadiness(projectRoot, options, true, profiles);
   return Promise.all(query.references.map(reference => { const profile = nativeChatProfile(profiles, query.scopeId, reference);
     return profile ? inspectNativeChat(profile, { readiness }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const; }));
@@ -65,7 +65,7 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const { choice, skipped } = await terminalModelHere(projectRoot, options), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
   if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
   const binding = await inspectModelBinding(projectRoot, reference, options);
-  const profile = nativeChatProfile(modelUseProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
+  const profile = nativeChatProfile(configuredInvocationProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
   const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true)).catch(() => null) : null;

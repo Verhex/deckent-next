@@ -37,6 +37,8 @@ const FIELDS = [
     binding: { state: 'bound', consumers: ['cli'] }, apply: 'live', redacted: false },
   { key: 'secrets.token', value: '[REDACTED]', defaultValue: null, source: 'project', descriptionKey: 'x.none', description: 'Token', schema: { type: 'string' },
     binding: { state: 'declared-only', reason: 'secret' }, apply: 'live', redacted: true },
+  { key: 'terminal.scopeId', value: 'scope', defaultValue: null, source: 'project', descriptionKey: 'x.none', description: 'Scope', schema: { type: 'string' },
+    binding: { state: 'bound', consumers: ['terminal'] }, apply: 'live', redacted: false },
 ];
 function context(permissions: readonly ConfigWritePermission[] | Error | null, seen: { action: string; input: Record<string, unknown> }[], outcome?: ConfigChangeOutcome,
   principal = true): ConfigCommandContext {

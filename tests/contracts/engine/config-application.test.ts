@@ -1,6 +1,7 @@
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
-import { ConfigApplication, ConfigApplicationError, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
-import { createDefaultConfig, validateConfig } from '../../../src/platform/core/config/index.js';
+import { ConfigApplication, ConfigApplicationError, configDefinitions, definitionFor, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
+import { createDefaultConfig, validateConfig, registerConfigSection } from '../../../src/platform/core/config/index.js';
 import { ModelBindingApplication } from '#engine/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { parseModelInvocationProfile } from '#domain/index.js';
@@ -13,12 +14,12 @@ function fixture() {
   const document = {}, effective = createDefaultConfig();
   const snapshot = { document, global: {}, project: {}, effective, digest: null, layer: 'project' as const, env: {} };
   const events: unknown[] = [];
-  let published: unknown;
+  let published: unknown; let reads = 0;
   const app = new ConfigApplication({
-    async snapshot() { return snapshot; },
+    async snapshot() { reads++; return snapshot; },
     async publish(input, planner) { const plan = await planner(snapshot); published = plan.document; return { keyPath: input.keyPath, layer: 'project', beforeDigest: null, afterDigest: digestText(JSON.stringify(plan.document)), backupPath: null, overridden: false }; },
   }, { async authorize() { return 'test-policy'; }, async audit(event) { events.push(event); } });
-  return { app, events, published: () => published };
+  return { app, events, reads: () => reads, published: () => published };
 }
 describe('registry config application', () => {
   it('rejects invalid fields before publish', async () => {
@@ -38,6 +39,16 @@ describe('registry config application', () => {
   });
   it('shows environment provenance and redacts secret-like fields', async () => {
     const f = fixture(); const view = await f.app.inspect(); expect(view.fields.find(field => field.key === 'max_workers')?.value).toBe('auto');
+    const count = f.reads();
+    expect(await f.app.explainMany({ keys: ['max_workers', 'language'] })).toMatchObject([{ key: 'max_workers', value: 'auto' }, { key: 'language' }]);
+    expect(f.reads() - count).toBe(1);
+    await expect(f.app.explain({ keyPath: 'not_a_key' })).rejects.toMatchObject({ code: 'CONFIG_KEY_UNKNOWN' });
+    const before = configDefinitions();
+    registerConfigSection('cfg_characterization', z.strictObject({ enabled: z.boolean().default(false) }), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/engine/core/config'] }, apply: 'live' } });
+    expect(before.has('cfg_characterization')).toBe(false);
+    expect(definitionFor('cfg_characterization.enabled').schema.safeParse(true).success).toBe(true);
+    const copy = configDefinitions() as Map<string, unknown>; copy.clear();
+    expect(configDefinitions().has('max_workers')).toBe(true);
   });
 });
 

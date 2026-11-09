@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Environment } from '#platform/core/host/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
-import { CORE_SCHEMA, type ConfigFieldMetadata } from '#platform/core/config-fields/index.js';
+import { CORE_SCHEMA, clearConfigFieldDefaultCache, type ConfigFieldMetadata } from '#platform/core/config-fields/index.js';
 import { persistedString, isStandardSchemaV1, type StandardSchemaV1, type StandardJSONSchemaV1 } from '#platform/core/validate/index.js';
 import { isRecord } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA } from '#platform/core/config-fields/index.js';
@@ -54,7 +54,7 @@ export function registerConfigSection(name: string, schema: ConfigSectionSchema,
     ? Object.freeze({ ...options.metadata.binding, consumers: Object.freeze([...options.metadata.binding.consumers]) })
     : Object.freeze({ ...options.metadata.binding }) });
   sections.set(name, { schema, options: Object.freeze({ ...options, ...(metadata ? { metadata } : {}) }) });
-  generation++;
+  generation++; clearConfigFieldDefaultCache();
 }
 /** Snapshot avoids exposing mutation authority through registry iteration. */
 export function configSections(): ReadonlyMap<string, Section> { return new Map(sections); }

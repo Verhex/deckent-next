@@ -1,15 +1,20 @@
-import { CORE_SCHEMA, configSections, type DeckentConfig } from './schema.js';
+import { freezeConfigDefault } from '#platform/core/config-fields/index.js';
+import { CORE_SCHEMA, configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
 import { deepMerge, type JsonRecord } from '#platform/core/utils/index.js';
 import { validateStandardSchemaSync } from '#platform/core/validate/index.js';
 
-/** New deep copy per request; absent provider selection remains explicit null until P1. */
+let generation = -1, memo: DeckentConfig;
+/** Independent deep copies; registry additions invalidate the private frozen defaults. */
 export function createDefaultConfig(): DeckentConfig {
+  const current = configRegistryGeneration();
+  if (generation === current) return structuredClone(memo);
   const defaults: DeckentConfig = CORE_SCHEMA.parse({});
   for (const [name, { schema }] of configSections()) {
     const parsed = validateStandardSchemaSync(schema, {});
     if (parsed.status === 'valid') defaults[name] = structuredClone(parsed.value);
   }
-  return defaults;
+  memo = freezeConfigDefault(structuredClone(defaults)); generation = current;
+  return structuredClone(memo);
 }
 
 /** Preserve derived-default absence until validation sees the effective service capacity. */

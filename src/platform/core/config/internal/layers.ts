@@ -61,7 +61,9 @@ async function stamp(path: string): Promise<string> {
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'absent'; throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error }); }
 }
 export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 'platform' | 'onWarning'> = {}): Promise<JsonRecord | null> {
-  const path = await resolveGlobalConfigReadPath(options.env, options.platform);
+  return readGlobalConfig(await resolveGlobalConfigReadPath(options.env, options.platform), options);
+}
+async function readGlobalConfig(path: string, options: Pick<ConfigLoadOptions, 'env' | 'platform' | 'onWarning'>): Promise<JsonRecord | null> {
   const result = await readJsonFile(path);
   if (result.kind === 'io') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: result.error });
   if (result.kind === 'absent') return null;
@@ -130,7 +132,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     await checkHold(cached.value.productLayout.root);
     return cached.value; }
   const warnings: ConfigWarning[] = [];
-  const global = await loadGlobalConfig({ env, platform, onWarning: w => warnings.push(w) }) ?? {};
+  const global = await readGlobalConfig(globalPath, { env, platform, onWarning: w => warnings.push(w) }) ?? {};
   const project: unknown = options.globalOnly || projectPath === globalPath ? {} : await readProjectConfig(projectPath, {
     ...(options.heal === undefined ? {} : { heal: options.heal }),
     ...(bootstrap ? { beforeHeal: () => assertInstallationBootstrap(root, bootstrap, admission, hold) } : {}),

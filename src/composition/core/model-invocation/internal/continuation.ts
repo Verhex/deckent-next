@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelReference } from '#domain/index.js';
-import { subscriptionActor, readSubscriptionRejection, modelInvocationProfileDigest, ModelBindingApplication, modelInvocationBillingAxis, type ModelInvocationResult } from '#engine/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, type ModelInvocationCommand, type ModelReference } from '#domain/index.js';
+import { configuredInvocationProfiles, subscriptionActor, readSubscriptionRejection, modelInvocationProfileDigest, ModelBindingApplication, modelInvocationBillingAxis, type ModelInvocationResult } from '#engine/index.js';
 import { SIWC_USAGE_LIMIT_STATUS, SIWC_INFERENCE, siwcResponsesDefinitionSchema } from '#adapters/index.js';
 import { ErrorRegistry, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { withConfiguredSiwcModel } from '#composition/core/siwc/index.js';
@@ -35,8 +35,7 @@ export async function prepareConfiguredSiwcContinuation(context: Context, option
   const content = inspected.responseContent;
   if (!siwcLimitContinuation(outcome.evidence.adapter.id, outcome.evidence.httpStatus, content?.kind === 'response-body' ? content.data : null)) return null;
   const readProfiles = async () => {
-    const config = await context.freshConfig(), section = config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
-    return (section?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+    return configuredInvocationProfiles(await context.freshConfig());
   };
   const profiles = await readProfiles(), current = profiles.find(row => row.scopeId === original.scopeId && isDeepStrictEqual(row.reference, original.reference));
   if (!isDeepStrictEqual(current, source)) throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');

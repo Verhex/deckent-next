@@ -1,3 +1,4 @@
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -27,7 +28,13 @@ describe('invocation profile configuration authority', () => {
     const second = profile({ id: 'second', reference: { ...reference, modelId: 'other' } }), parent = collection(profile(), second);
     await writeFile(f.globalPath, JSON.stringify({ provider_invocation_profiles: parent }));
     await writeFile(f.projectPath, JSON.stringify({ provider_invocation_profiles: collection(second) }));
-    expect((await loadConfig(f.project, { env: f.env })).provider_invocation_profiles).toEqual(collection(second));
+    const loaded = await loadConfig(f.project, { env: f.env });
+    expect(loaded.provider_invocation_profiles).toEqual(collection(second));
+    const profiles = configuredInvocationProfiles(loaded);
+    expect(profiles).toBe((loaded.provider_invocation_profiles as { profiles: unknown }).profiles);
+    expect(profiles).toEqual([second]);
+    expect(Object.isFrozen(profiles)).toBe(true);
+    expect(configuredInvocationProfiles({})).toEqual([]);
     for (const changed of [profile({ limits: { requestMaxBytes: 101, responseMaxBytes: 200, timeoutMs: 1000 } }),
       profile({ adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint: 'http://127.0.0.1:9999/customer/native-chat', maxOutputTokens: 4, authentication: { type: 'none' } } } })]) {
       await writeFile(f.projectPath, JSON.stringify({ provider_invocation_profiles: collection(changed) })); clearConfigCache();
@@ -46,6 +53,7 @@ describe('invocation profile configuration authority', () => {
     const shared = profile({ id: 'other', reference: { ...reference, modelId: 'other' },
       allocation: { id: 'allocation', maxCalls: 3, maxInFlight: 1 } });
     await rejected(collection(profile(), shared));
+    await rejected(collection(profile(), { ...profile({ id: 'broken', reference: { ...reference, modelId: 'broken' } }), limits: {} }));
   });
 
   it('rejects secret interpolation before invoking a resolver', async () => {

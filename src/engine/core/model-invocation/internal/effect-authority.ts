@@ -1,4 +1,5 @@
-import { modelInvocationProfileSchema, type ModelInvocationProfile } from '#domain/index.js';
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
+import { type ModelInvocationProfile } from '#domain/index.js';
 import { ModelInvocationStoreError } from './port.js';
 import { modelInvocationProfileDigest } from './evidence.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
@@ -17,8 +18,7 @@ export function invocationEffectAuthority<C extends Readonly<Record<string, unkn
   return async (signal?: AbortSignal) => {
     guard(signal);
     const config = await context.freshConfig(); guard(signal);
-    const configured = config['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
-    const current = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value))
+    const current = configuredInvocationProfiles(config)
       .find(value => value.scopeId === profile.scopeId && value.id === profile.id);
     if (!current || modelInvocationProfileDigest(current) !== expected) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     await authorization.authorize('invoke', { scopeId: profile.scopeId, reference: profile.reference }, context.principal);

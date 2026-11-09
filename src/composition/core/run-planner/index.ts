@@ -1,6 +1,6 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
-  brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { verifiedPrincipal, listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+  brainPlanCommandInputSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
+import { configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { SIWC_INFERENCE, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -29,8 +29,8 @@ export async function planRuntimeRun(root: string, input: BrainPlanCommand, opti
   if (chatModel && !input.reference && !configuredBrainModel((await loadComposedConfig(root, options))['brain_planner'])) input = { ...input, reference: chatModel };
   const client = createConfiguredRuntimeClient(root, options);
   return plan(root, input, options, async (command, signal) => {
-    const configured = (await loadComposedConfig(root, options))['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
-    const profile = configured?.profiles?.map(value => modelInvocationProfileSchema.parse(value)).find(row => row.scopeId === command.scopeId
+    const configured = configuredInvocationProfiles(await loadComposedConfig(root, options));
+    const profile = configured.find(row => row.scopeId === command.scopeId
       && JSON.stringify(row.reference) === JSON.stringify(command.reference));
     // The Brain is a connected feature, whereas the runtime's generic invokeModel is deliberately a raw operation.
     // Keep the host-only continuation pin and the caller's verified identity on the direct application contract.
@@ -63,7 +63,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       continueBilling: (command, result, notice, signal) => prepareConfiguredFeatureContinuation(root, command, result, options, notice,
         async next => gateConfiguredBrainModel(await loadConfiguredScopeContext(root, next.scopeId, options, 'read'), next), signal),
       admitCorrection: async (from, to) => { carryContinuationPin(from, to); const config = (await loadConfiguredScopeContext(root, to.scopeId, options, 'read')).config, brain = config['brain_planner']; assertBrainContextFits(to, brain, null, null); // Astra R2/R4
-        assertBrainContextFits(to, brain, ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === to.scopeId && JSON.stringify(value.reference) === JSON.stringify(to.reference))?.contextWindowTokens ?? null, await measureConfiguredModel(root, to, options, signal, 'feature')); },
+        assertBrainContextFits(to, brain, configuredInvocationProfiles(config).find(value => value.scopeId === to.scopeId && JSON.stringify(value.reference) === JSON.stringify(to.reference))?.contextWindowTokens ?? null, await measureConfiguredModel(root, to, options, signal, 'feature')); },
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
       stoppedAtLength: openAiChatStoppedAtLength,
@@ -80,8 +80,8 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         // R9b (owner D3): the caller's model, else the person's Brain model (project over user), else the chat model; the gate below decides, never a swap.
         const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference ?? configuredBrainModel(context.config['brain_planner']));
         const gate = await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
-        const configured = context.config['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
-        const profile = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === command.scopeId
+        const configured = configuredInvocationProfiles(context.config);
+        const profile = configured.find(value => value.scopeId === command.scopeId
           && JSON.stringify(value.reference) === JSON.stringify(selected.command.reference)) ?? null;
         const spending = classifyWorkSpending({ kind: 'model', profile });
         const requiresTaskBudget = registry.profiles.every(value => !isNativeCodingTemplate(value) && classifyWorkSpending({ kind: 'worker', profile: value }) === 'metered');

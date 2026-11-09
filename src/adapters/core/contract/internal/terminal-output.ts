@@ -1,4 +1,5 @@
-import { modelInvocationProfileSchema, type ModelReference } from '#domain/index.js';
+import { configuredInvocationProfiles } from '#engine/index.js';
+import { type ModelReference } from '#domain/index.js';
 import defaults from './terminal-chat-defaults.json' with { type: 'json' };
 import { readTerminalChatConfig } from './terminal.js';
 
@@ -8,8 +9,8 @@ import { readTerminalChatConfig } from './terminal.js';
 export function effectiveTerminalOutputCap(config: Record<string, unknown>, scopeId: string, reference: ModelReference): number {
   const chat = readTerminalChatConfig(config);
   if (!chat) throw new Error('TERMINAL_CHAT_NOT_CONFIGURED');
-  const profiles = (config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [];
-  const profile = profiles.map(input => modelInvocationProfileSchema.parse(input)).find(value => value.scopeId === scopeId
+  const profiles = configuredInvocationProfiles(config);
+  const profile = profiles.find(value => value.scopeId === scopeId
     && value.reference.providerId === reference.providerId && value.reference.providerVersion === reference.providerVersion
     && value.reference.modelId === reference.modelId && value.reference.modelVersion === reference.modelVersion);
   const definition = profile?.adapter.definition;

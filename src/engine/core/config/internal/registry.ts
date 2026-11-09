@@ -4,15 +4,22 @@ import { CONFIG_FIELDS, configSections, configRegistryGeneration, createDefaultC
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
+let definitionsGeneration = -1;
+let definitionsMemo: ReadonlyMap<string, ConfigDefinition>;
 export function configDefinitions(): ReadonlyMap<string, ConfigDefinition> {
+  const generation = configRegistryGeneration();
+  if (generation === definitionsGeneration) return new Map(definitionsMemo);
   const definitions = new Map<string, ConfigDefinition>();
-  for (const [key, field] of Object.entries(CONFIG_FIELDS)) definitions.set(key, { schema: field.schema, ...field.metadata });
+  for (const [key, field] of Object.entries(CONFIG_FIELDS)) definitions.set(key, { schema: field.schema, ...field.metadata, ...(field.derivedFrom ? { derivedFrom: field.derivedFrom } : {}) });
   for (const [key, section] of configSections()) {
     const metadata = section.options.metadata;
     if (!metadata) throw new ConfigApplicationError('CONFIG_METADATA_MISSING');
     definitions.set(key, { schema: configSchemaNode(section.schema), ...metadata });
   }
-  return definitions;
+  definitionsMemo = new Map([...definitions].map(([key, definition]) => [key, Object.freeze({ ...definition,
+    binding: definition.binding.state === 'bound' ? Object.freeze({ ...definition.binding, consumers: Object.freeze([...definition.binding.consumers]) }) : Object.freeze({ ...definition.binding }), ...(definition.derivedFrom ? { derivedFrom: Object.freeze({ ...definition.derivedFrom }) } : {}) })]));
+  definitionsGeneration = generation;
+  return new Map(definitionsMemo);
 }
 /** BeUser KER-02: the refusal names the key the person asked for (control and format characters shown as `?`), never a literal `{key}`. */
 const unknownKey = (keyPath: string) => new ConfigApplicationError('CONFIG_KEY_UNKNOWN', { key: keyPath.slice(0, 256).replace(/[\p{Cc}\p{Cf}]/gu, '?') });
@@ -20,6 +27,10 @@ export function configPath(keyPath: string): string[] {
   const path = keyPath.split('.');
   if (!path.length || path.some(part => !part || ['__proto__', 'constructor', 'prototype'].includes(part))) throw unknownKey(keyPath);
   return path;
+}
+export function isDerivedConfigPath(keyPath: string): boolean {
+  const definition = configDefinitions().get(configPath(keyPath)[0]!);
+  return Object.keys(definition?.derivedFrom ?? {}).some(key => keyPath === key || keyPath.startsWith(key + '.'));
 }
 export function atConfigPath(value: unknown, path: readonly string[]): unknown {
   for (const part of path) { if (!isRecord(value) && !Array.isArray(value)) return undefined; value = (value as Record<string, unknown>)[part]; }
@@ -109,10 +120,10 @@ function schemaDisplayView(value: unknown, path: readonly string[], secrets: Rea
 }
 export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): ConfigFieldView {
   const { path, definition, schema, schemaKey } = definitionFor(keyPath), defaults = createDefaultConfig();
-  const field = Object.entries(CONFIG_FIELDS).find(([key]) => key === path[0])?.[1];
+  const field = CONFIG_FIELDS[path[0] as keyof typeof CONFIG_FIELDS];
   const env = field?.environment.some(binding => binding.names.some(name => snapshot.env[name] !== undefined && snapshot.env[name] !== '') &&
     (() => { const bound = [path[0]!, ...(binding.path ?? [])]; return path.slice(0, bound.length).join('.') === bound.join('.'); })());
-  const sourcePath = keyPath === 'toolchains.image.providers' ? ['toolchains', 'image', 'consents'] : path;
+  const sourcePath = (definition.derivedFrom?.[keyPath] ?? keyPath).split('.');
   const source = env ? 'env' : atConfigPath(snapshot.project, sourcePath) !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
   const provenance = snapshot.effective['secretPaths'];
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
