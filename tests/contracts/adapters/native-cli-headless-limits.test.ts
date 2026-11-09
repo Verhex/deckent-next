@@ -51,7 +51,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('f5 the realm bounds a
     await c.port.preflight(c.profile);
     expect((await c.log()).map(entry => entry.mode)).toContain('version');
   });
-  it('item 5: serializes Deckent spawns per login dir: a live holder makes a second one wait and refuse typed; a dead or old holder is stale', async () => {
+  it('item 5: serializes Deckent spawns per login dir: a live holder makes a second one wait and refuse typed; a legacy holder is reclaimed only once its process is gone', async () => {
     const c = await connection({ steps: [{ line: initLine() }, { line: resultLine('{}') }] });
     const dir = join(c.root, 'login-locks'), path = join(dir, `${createHash('sha256').update(c.configDir).digest('hex').slice(0, 32)}.lock`);
     await mkdir(dir, { mode: 0o700 });

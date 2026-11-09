@@ -1,6 +1,7 @@
 import { constants, type Stats } from 'node:fs';
-import { lstat, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, open, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
+import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { writeTextAtomic } from '#platform/index.js';
 import type { NativeWorkerEvidenceFile } from '#capabilities/index.js';
 
@@ -23,13 +24,15 @@ export function nativeWorkerEvidenceFile(directory: string, uid: number, bound: 
       } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
       finally { await file?.close(); }
     },
+    /** Owner 2026-11-09 (B1 12b): the claim is the kernel lock, so a dead holder's claim is released and a live holder's is never taken. */
     async claim() {
-      await parent(); let file;
-      try { file = await open(lock, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return null; throw error; }
-      const owned = await file.stat(); await file.sync(); await file.close();
-      return { async release() { const current = await lstat(lock);
-        if (!safe(current) || current.ino !== owned.ino || current.dev !== owned.dev) throw new Error('NATIVE_WORKER_F08_INVALID'); await unlink(lock); } };
+      await parent();
+      const held = await withExclusiveFileLock(lock, { waitMs: 0, pollMs: 0 }).catch((error: unknown) => {
+        throw (error as { code?: unknown }).code === 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' ? new Error('NATIVE_WORKER_F08_INVALID') : error; });
+      if (!held) return null;
+      const owned = await lstat(lock).catch((error: unknown) => { held.release(); throw error; });
+      return { async release() { const current = await lstat(lock).finally(() => held.release());
+        if (!safe(current) || current.ino !== owned.ino || current.dev !== owned.dev) throw new Error('NATIVE_WORKER_F08_INVALID'); } };
     },
     async write(record) { await parent(); const text = JSON.stringify(record);
       if (Buffer.byteLength(text) > bound) throw new Error('NATIVE_WORKER_F08_INVALID');

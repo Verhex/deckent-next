@@ -487,7 +487,8 @@ or expired observations invoke the existing native-agent preflight and retain it
 an existing observation, including a known refusal, is never reprobed by preparation. Readiness queries
 remain read only. The current K5 binding is rechecked before preparation, and an exclusive host-side claim
 for the profile serializes concurrent preparations across processes. Contention and probe failures park the
-Run with a typed reason; an abandoned claim is never stolen. This claim grants neither model execution nor
+Run with a typed reason. The claim is a kernel lock: a live holder's claim is never taken, and the holder's
+exit releases it (owner 2026-11-09, B1 12b). This claim grants neither model execution nor
 F08: the tree gate, lease/delegation checks, K6 reservation and guarded verification Attempt still apply.
 
 Admitted task artifacts and predecessor handoffs appear only in tool views at `/deckent/inputs/...`;

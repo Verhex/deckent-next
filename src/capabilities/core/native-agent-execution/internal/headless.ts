@@ -70,7 +70,7 @@ export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal
   return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name)) && value.isolation.refreshLock.names.every(name => value.isolation.configVisible.includes(name))
     && (value.isolation.configEphemeral?.files.every(name => value.isolation.configVisible.includes(name) && !value.isolation.refreshLock.names.includes(name)
       && !['auth.json', '.credentials.json', '.claude.json'].includes(name)) ?? true)
-    && new Set(login).size === login.length && !login.some(name => value.env.deny.includes(name)) && value.login.timeoutMs < value.isolation.refreshLock.staleMs
+    && new Set(login).size === login.length && !login.some(name => value.env.deny.includes(name))
     && !value.args.some(arg => value.forbiddenFlags.some(forbidden => arg === forbidden || arg.startsWith(forbidden + '=')));
 }).readonly();
 export type NativeCliHeadless = z.infer<typeof nativeCliHeadlessSchema>;

@@ -15,7 +15,7 @@ export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentT
 export { nativeAgentInitReason, nativeAgentItemReason } from '#capabilities/index.js';
 export { headlessFlagSetDigest, nativeAgentFlagSetDigest } from './internal/env.js'; export { codexAgentArgv, codexAgentTurn, type CodexAgentResultLookup } from './internal/codex-agent.js';
 
-export { withLoginLock as withHeadlessLoginLock } from './internal/login-lock.js';
+export { withLoginLock as withHeadlessLoginLock, loginLockPath as headlessLoginLockPath } from './internal/login-lock.js';
 export { prepareClaudeAgentRun, createClaudeAgentDriver, ClaudeAgentError } from './internal/claude-agent.js';
 export type { ClaudeAgentResult, ClaudeAgentDriver } from './internal/claude-agent.js';
 export { headlessPreflight } from './internal/preflight.js';
