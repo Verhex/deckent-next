@@ -188,7 +188,8 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     const after = await open();
     expect(after.offered.size).toBe(0); expect(after.notices).toEqual([JSON.stringify({ kind: 'secret-refused', name: 'web-docs', code: 'SECRET_GRANT_REQUIRED', key: 'GH', scope: 'scope' })]);
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal, admit: 'probe-only' })).toMatchObject({ outcome: 'refused', reason: 'not-connected' });
-    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH' }] });
+    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH',
+      refusal: { kind: 'secret-refused', code: 'SECRET_GRANT_REQUIRED', key: 'GH' } }] });
     expect((await open()).notices).toEqual([]); // Same refusal, even in a later turn, says nothing twice.
     granted = true;
     expect((await open()).offered.size).toBe(2);

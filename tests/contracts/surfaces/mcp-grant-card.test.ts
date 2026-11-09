@@ -23,8 +23,8 @@ it('after a turn the card is offered once per key and session; no keeps it close
 it('/mcp shows "allow its key" only on a server refused for a missing grant, and the action uses the same card', async () => {
   const c = card();
   const run = async (_root: string, request: { verb: string }) => request.verb === 'list' ? { servers: [
-    { name: 'gh', scope: 'user', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH' },
-    { name: 'docs', scope: 'user', status: 'invalid-launch', reason: 'secret-refused:SECRET_PROJECT_MISSING:DOCS' }], problems: [] } : {};
+    { name: 'gh', scope: 'user', status: 'invalid-launch', refusal: { kind: 'secret-refused', code: 'SECRET_GRANT_REQUIRED', key: 'GH' } },
+    { name: 'docs', scope: 'user', status: 'invalid-launch', refusal: { kind: 'secret-refused', code: 'SECRET_PROJECT_MISSING', key: 'DOCS' } }], problems: [] } : {};
   const port = mcpPanelPort('/p', run as never, {}, 'en', c.port);
   const list = await port.list();
   expect(list.servers.map(server => server.grantKey)).toEqual(['GH', undefined]);

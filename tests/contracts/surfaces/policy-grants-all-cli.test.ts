@@ -52,7 +52,8 @@ it('admin: a readable table on a pipe (EN and TR), raw page only with --json, th
 
 it('refused by policy (a person without the grant, a revoked rule, the MCP actor): typed refusal naming the permission and the next step, EN and TR', async () => {
   const f = await fixture();
-  for (const code of ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED']) {
+  // Owner B2-1: every other person-facing refusal class answers with the one grants-all refusal.
+  for (const code of ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'APPROVAL_DENIED', 'DELIVERY_WORKING_TREE_DENIED']) {
     for (const [lang, words] of [['en', ['policy inspect-standing-grants', 'nothing was read', 'deckent policy upgrade --template current', 'scope live']],
       ['tr', ['policy inspect-standing-grants', 'hiçbir şey okunmadı', 'yöneticiden']]] as const) {
       const out = sink(), err = sink();
@@ -66,6 +67,12 @@ it('refused by policy (a person without the grant, a revoked rule, the MCP actor
   const err = sink();
   expect(await main(['policy', 'grants', '--all'], { ...f, stdout: sink().stream, stderr: err.stream, listAllStandingGrants: async () => { throw ErrorRegistry.createError('POLICY_UNAVAILABLE'); } })).not.toBe(0);
   expect(err.out.text).toContain('POLICY_UNAVAILABLE');
+  // REFUSAL-UI: an unknown scope (or one of another company) keeps the scope message; the permission guidance is not its next step.
+  const scope = sink();
+  expect(await main(['policy', 'grants', '--all', '--scope', 'nope', '--lang', 'en'], { ...f, stdout: sink().stream, stderr: scope.stream,
+    listAllStandingGrants: async () => { throw ErrorRegistry.createError('SCOPE_UNKNOWN', { params: { scope: 'nope' } }); } })).toBe(1);
+  expect(scope.out.text).toContain('SCOPE_UNKNOWN'); expect(scope.out.text).toContain('nope');
+  expect(scope.out.text).not.toContain('CLI_POLICY_GRANTS_ALL_UNAVAILABLE'); expect(scope.out.text).not.toContain('inspect-standing-grants');
   // --after belongs to --all; --mine --all stays a usage error; nothing is read.
   const seen: unknown[] = [];
   for (const argv of [['policy', 'grants', '--after', 'x'], ['policy', 'grants', '--mine', '--all'], ['policy', 'revoke', 'standing-a', '--after', 'x']]) {

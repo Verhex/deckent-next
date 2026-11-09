@@ -51,6 +51,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     const f = await fixture();
     expect(await cliFailure(f, ['inventory', '--scope', 'fabricated'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
     expect(await cliFailure(f, ['run', 'inspect', '--scope', 'fabricated', '--id', 'r'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
+    expect(await cliFailure(f, ['policy', 'grants', '--all', '--scope', 'fabricated'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
     const library = await exec(process.execPath, ['--input-type=module', '-e', `import {inspectInventory} from ${JSON.stringify(sdk)};
       try { await inspectInventory(process.cwd(), {schemaVersion:1,scopeId:'fabricated'}); console.log('admitted'); } catch (error) { console.log(error.code); }`],
     { cwd: f.project, env: f.env });
