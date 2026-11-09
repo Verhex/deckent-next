@@ -5,7 +5,7 @@ import { approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffe
 import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
-import { admitDecided, approvalActorRef, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, agentToolApprovalLeft, approvalActorRef, expireApproval, sealApproval, verifyApproval } from './integrity.js';
 import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
@@ -64,9 +64,6 @@ async function closeExpired(store: ApprovalStore, integrity: IntegrityAuthority,
 export async function awaitAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord,
   clock: TrustedClock, signal: AbortSignal, pollMs = 250, started: ClockSample = clock.sample()): Promise<AgentToolApprovalOutcome> {
   const { scopeId, approvalId, expiresAt } = record.request;
-  // The producer passes its creation sample so preview/persistence time also spends the original TTL.
-  const deadline = started.monotonicMs + Math.max(0, expiresAt - started.wallMs);
-  const remaining = () => { const now = clock.sample(); return Math.min(expiresAt - now.wallMs, deadline - now.monotonicMs); };
   const settled = (current: ApprovalRecord): AgentToolApprovalOutcome | null =>
     current.status === 'expired' ? 'expired' : current.status === 'decided' ? current.decision?.decision === 'allow' ? 'allow' : 'deny' : null;
   for (;;) {
@@ -75,7 +72,8 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
     if (!current) return 'expired';
     // A terminal decision is durable history, not permission to consume an allow after expiry or cancellation.
     if (signal.aborted) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'cancelled'; }
-    const left = remaining();
+    // The producer passes its creation sample so preview/persistence time also spends the original TTL.
+    const left = agentToolApprovalLeft(expiresAt, started, clock.sample());
     if (left <= 0) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'expired'; }
     const stored = settled(current);
     if (stored) return stored;
@@ -88,6 +86,25 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
 }
 
 /**
+ * KG4 F1 (X3): every producer's side of one requested tool-call approval. An allow is re-decided by policy now (`recheck`; a deny is the policy's
+ * refusal, `refused` records it, the owner's settlement stays `allow`), then is `cancelled` or `expired` when the call was cancelled or the request
+ * budget spent meanwhile; only a usable allow is `allowed`. `settled` hears the outcome once (`unsettled`: the wait failed). APPROVER-NOTE: a note comes only with the owner's own decision.
+ */
+export async function settleAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord, clock: TrustedClock, signal: AbortSignal, started: ClockSample,
+  steps: { recheck?(): Promise<boolean>; refused?(): void; allowed?(approval: NonNullable<AgentToolCallAdmission['approval']>): void; settled?(outcome: AgentToolApprovalOutcome | 'unsettled'): void }) {
+  let settlement: AgentToolApprovalOutcome | 'unsettled' = 'unsettled';
+  try {
+    const decided = await awaitAgentToolApproval(store, integrity, record, clock, signal, 250, started);
+    if (decided === 'allow' && steps.recheck && !await steps.recheck()) { steps.refused?.(); settlement = 'allow'; return 'policy-deny'; }
+    const outcome: AgentToolApprovalOutcome = decided !== 'allow' ? decided : signal.aborted ? 'cancelled' : agentToolApprovalLeft(record.request.expiresAt, started, clock.sample()) <= 0 ? 'expired' : 'allow';
+    settlement = outcome;
+    if (outcome === 'allow') steps.allowed?.({ approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
+    const note = outcome === decided && (outcome === 'allow' || outcome === 'deny') ? agentToolApprovalNote(store, integrity, record) : null;
+    return note !== null && (outcome === 'allow' || outcome === 'deny') ? { outcome, note } : outcome;
+  } finally { steps.settled?.(settlement); }
+}
+
+/**
  * APPROVER-NOTE (owner 2026-10-07): the decider's own words on a decided tool-call approval — its sealed reason when the decision is a noted
  * v3 decision (`approverNote`), else null (a surface's default sentence, an expired or undecided record, a record that does not verify).
  */
@@ -95,7 +112,6 @@ export function agentToolApprovalNote(store: ApprovalStore, integrity: Integrity
   let current: ApprovalRecord | null;
   try { const loaded = store.load(record.request.scopeId, record.request.approvalId); current = loaded ? verifyApproval(loaded, integrity) : null; }
   catch { return null; }
-  // Decision v3 is exactly a noted decision (APPROVER-NOTE); v1/v2 carry a surface's default sentence or an unmarked reason.
   return current?.status === 'decided' && current.decision && 'approverNote' in current.decision ? current.decision.reason : null;
 }
 
@@ -169,7 +185,7 @@ export function agentToolCallApprovalGate(records: () => Promise<{ readonly stor
       if (user !== undefined && user !== command.commandId) throw new ApprovalError('APPROVAL_CONFLICT');
       // Admission is measured now (and again right before the claim): the owner's allow is usable only inside the request's expiry.
       const now = clock.sample(), { started } = call.approval, { expiresAt } = stored.request;
-      if (now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs) throw new ApprovalError('APPROVAL_EXPIRED');
+      if (agentToolApprovalLeft(expiresAt, started, now) <= 0) throw new ApprovalError('APPROVAL_EXPIRED');
       admitDecided(stored, { now: now.wallMs, window: Number.POSITIVE_INFINITY }); // the request expiry above is its window
       consumed.set(reference.approvalId, command.commandId);
       return { approval: reference };

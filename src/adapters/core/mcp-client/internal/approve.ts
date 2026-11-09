@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, modelTextPrefix } from '#domain/index.js';
-import { AuditApplication, awaitAgentToolApproval, boundApprovalPreview, requestAgentToolApproval, type AgentToolApprovalFacts, type AgentToolApprovalOutcome } from '#engine/index.js';
+import { AuditApplication, boundApprovalPreview, requestAgentToolApproval, settleAgentToolApproval, type AgentToolApprovalFacts, type AgentToolApprovalOutcome } from '#engine/index.js';
 import { ErrorRegistry, prepareProductFile, t, type KnownSecretSnapshot, type Locale, type ProductLayout, type TrustedClock } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
@@ -232,24 +232,23 @@ export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number
     const journal = openSqliteApprovalStore(await input.ledgerPath(), input.sqlite);
     // `mcp_trust` keeps its digest and call id scheme (`mcp-trust-card:1`, `mcp-trust-<server>-<phase>`); another card tool gets its own.
     const kind = card.tool.replace(/_/gu, '-'), argsDigest = createHash('sha256').update(`${kind}-card:1\0${card.text}`).digest('hex'), callId = `${kind}-${card.name}-${card.phase}`;
-    let requested: string | null = null, outcome: AgentToolApprovalOutcome | 'unsettled' = 'unsettled';
     try {
       const integrity = await input.integrity(), started = input.clock.sample();
       const record = requestAgentToolApproval(journal.store, integrity, { scopeId: input.scopeId, requester: input.requester, policyRevision: input.policyRevision,
         subject: { kind: 'agent-tool-call', turnId: input.turnId, round: 1, index: indexBase + asked++, tool: card.tool, toolVersion: 1, resource: `mcp:${card.name}`, argsDigest },
         summary: `${card.tool} · mcp:${card.name} · ${card.phase}`, createdAt: started.wallMs, expiresAt: started.wallMs + input.ttlMs, facts: input.facts });
-      requested = record.request.approvalId;
+      const approvalId = record.request.approvalId;
       // The event's facts come from the sealed record itself (an existing record keeps its own), so the card and the record never disagree.
       const sealed = record.request.schemaVersion === 3 ? record.request.facts : null;
-      input.emit({ kind: 'approval.requested', callId, approvalId: requested, revision: record.revision, summary: record.request.summary,
+      input.emit({ kind: 'approval.requested', callId, approvalId, revision: record.revision, summary: record.request.summary,
         preview: boundApprovalPreview(card.preview ?? card.text), expiresAt: record.request.expiresAt, ...(sealed ? { risk: sealed.risk?.source === 'cell' ? sealed.risk.cell : null,
           requiredAssurance: sealed.requiredAssurance } : {}) });
-      outcome = await awaitAgentToolApproval(journal.store, integrity, record, input.clock, input.signal, 250, started);
+      // The card's answer is the decision itself: no policy recheck and no effect pointer (KG4 F1).
+      const answer = await settleAgentToolApproval(journal.store, integrity, record, input.clock, input.signal, started, {
+        settled: outcome => input.emit({ kind: 'approval.settled', callId, approvalId, outcome }) });
+      const outcome = typeof answer === 'string' ? answer : answer.outcome;
       return outcome === 'allow' ? true : outcome === 'deny' ? false : null;
-    } finally {
-      journal.close();
-      if (requested) input.emit({ kind: 'approval.settled', callId, approvalId: requested, outcome });
-    }
+    } finally { journal.close(); }
   };
 }
 /** The pseudo tool of a first-use trust card on the turn's approval path (no approval schema change: an agent-tool-call subject named `mcp_trust`). */

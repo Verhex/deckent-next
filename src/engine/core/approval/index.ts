@@ -1,11 +1,11 @@
 export { agentToolUndo } from './internal/assurance.js';
 export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval, expireApproval } from './internal/integrity.js';
-export { admitDecided, expireDue } from './internal/integrity.js';
+export { admitDecided, agentToolApprovalLeft, expireDue } from './internal/integrity.js';
 export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, authorizeOwnApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand, ApprovalDecisionRestriction } from './internal/application.js';
 export { TaskApprovalAdmission, assertApprovalPolicyCurrent } from './internal/admission.js';
-export { agentToolApprovalNote, agentToolCallActionDigest, agentToolCallApprovalGate, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestAgentToolApproval, type AgentToolApprovalOutcome,
+export { agentToolApprovalNote, agentToolCallActionDigest, agentToolCallApprovalGate, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestAgentToolApproval, settleAgentToolApproval, type AgentToolApprovalOutcome,
   type AgentToolCallAdmission } from './internal/tool-call.js';
 export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, awaitOperationApproval, operationApprovalActionDigest,
   type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';

@@ -1,7 +1,7 @@
 import { nativeWorkerToolFloor } from './worker-floor.js';
-import { nativeWorkerApprovalExpired, workerToolCardSummary, nativeWorkerToolLifetime, type ToolSessionPort } from '#capabilities/index.js';
+import { workerToolCardSummary, nativeWorkerToolLifetime, type ToolSessionPort } from '#capabilities/index.js';
 import { ErrorRegistry, SystemTrustedClock, sha256, redactForRecord, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
-import { runDurableAgentTurn, requestAgentToolApproval, awaitAgentToolApproval,
+import { runDurableAgentTurn, requestAgentToolApproval, settleAgentToolApproval, agentToolApprovalLeft,
   prepareApprovalPreview, projectModelIngressField, agentToolApprovalFacts, AgentToolPolicyAuthorization, type AgentTurnPorts } from '#engine/index.js';
 import { projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC,
   isSelfSourceWriteFloored, agentProductStateDeny, agentGlobalStateRoots,
@@ -49,15 +49,13 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
           subject: approvals.subject(input, input.tool, input.target, input.argsDigest), facts: agentToolApprovalFacts(policy, scopeId, decisions.cell(input.tool, input.args)),
           policyRevision: policy.revision, summary: workerToolCardSummary({ identity: request.identity, turnId, tool: input.tool.name, resource: redactForRecord(input.target ?? '(no target)', known), resourceDigest: sha256(input.target ?? '(no target)'), argsDigest: input.argsDigest }),
           createdAt: started.wallMs, expiresAt: started.wallMs + context.config.approvals.requestTtlMs });
-        const outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, callSignal, undefined, started);
-        if (outcome === 'expired' || outcome === 'cancelled' && (!signal.aborted && callSignal.reason?.name === 'TimeoutError' || nativeWorkerApprovalExpired(record.request.expiresAt, started, clock.sample()))) failure = 'approval-expired';
-        if (outcome === 'allow') {
-          await recheckNativeWorkerUse(root, scopeId, binding, options);
-          if (await new AgentToolPolicyAuthorization(context.policy).decide(input.tool, scopeId, context.principal) === 'deny') return 'policy-deny';
-          if (nativeWorkerApprovalExpired(record.request.expiresAt, started, clock.sample())) { failure = 'approval-expired'; return 'expired'; }
-          approvals.allowed(input, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
-        }
-        return outcome;
+        const answer = await settleAgentToolApproval(journal.store, integrity, record, clock, callSignal, started, {
+          recheck: async () => { await recheckNativeWorkerUse(root, scopeId, binding, options); return await new AgentToolPolicyAuthorization(context.policy).decide(input.tool, scopeId, context.principal) !== 'deny'; },
+          refused: () => decisions.refusedAfterApproval(input.tool, input.args, { round: input.round, index: input.index, callId: input.call.id }, policy.revision),
+          allowed: approval => approvals.allowed(input, approval) });
+        const outcome = typeof answer === 'string' ? answer : answer.outcome;
+        if (outcome === 'expired' || outcome === 'cancelled' && (!signal.aborted && callSignal.reason?.name === 'TimeoutError' || agentToolApprovalLeft(record.request.expiresAt, started, clock.sample()) <= 0)) failure = 'approval-expired';
+        return answer;
       } finally { journal.close(); if (kept) await dropFullPreview(kept); }
     },
     async execute(tool, args, callSignal, callId, execution) {
