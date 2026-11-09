@@ -52,7 +52,7 @@ function snapshot(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
   try { return { version: db.prepare('PRAGMA user_version').get()?.user_version,
     allocations: db.prepare('SELECT * FROM model_invocation_allocations').all(),
-    invocations: db.prepare('SELECT * FROM model_invocations').all(), controls: db.prepare('SELECT * FROM model_invocation_controls').all() }; }
+    invocations: db.prepare('SELECT scope_id,command_id,invocation_id,allocation_id,state,record FROM model_invocations').all(), controls: db.prepare('SELECT * FROM model_invocation_controls').all() }; }
   finally { db.close(); }
 }
 

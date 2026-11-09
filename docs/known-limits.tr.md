@@ -770,6 +770,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **Yedek kümesinin göreli yolu yanıltıcı bir mesajla reddedilir.** Mutlak yol kullanın.
 - **Ledger yükseltmesinden sonra eski bir Deckent'e dönemezsiniz;** yükseltmeden önce alınan yedeği geri yüklemeden olmaz
   (yeni ledger sürümlerini eski derlemeler açamaz).
+- **Alpha.64'ten alpha.63.3'e geri dönüş desteklenmez.** Alpha.64 yeni kalıcı alanları yazar; kurtarma ileri sürüm düzeltmesiyle yapılır.
+  Veri kurtarma için yükseltme öncesi yedeği saklayın; bu yedek eski sürüme dönüşü desteklenen bir işlem yapmaz.
 - **Günlük yedek ayarı ledger yükseltmesinden hemen önce yedek almaz.** `backup.schedule` tek değer alır (kapalı, günlük ya da
   yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
   gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya

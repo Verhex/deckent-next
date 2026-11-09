@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { bindCapacityResource, CURRENT_LEDGER_VERSION, migrateLedger, openSqliteLedger, revertCapacityResources, upgradeExistingLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { DOWNGRADE_TO_V74_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -28,16 +29,16 @@ async function fixture() {
       identities: [{ scopeId: 'project', runId: 'run', layoutRevision: 'layout', taskId: 'a', attemptId: 'attempt', generation: 1 }] });
   } finally { store.close(); }
   const db = new DatabaseSync(path);
-  try { db.exec('BEGIN IMMEDIATE'); revertCapacityResources(db); db.exec('PRAGMA user_version=73; COMMIT'); return { path, backups, previous: data(db) }; } finally { db.close(); }
+  try { db.exec('BEGIN IMMEDIATE'); db.exec(DOWNGRADE_TO_V74_LEDGER_SQL); revertCapacityResources(db); db.exec('PRAGMA user_version=73; COMMIT'); return { path, backups, previous: data(db) }; } finally { db.close(); }
 }
 it('migrates a populated v73 Run/Attempt/receipt shape without rewriting rows, fences old writers, and restores the backup exactly', async () => {
-  const f = await fixture(); expect(CURRENT_LEDGER_VERSION).toBe(74);
+  const f = await fixture(); expect(CURRENT_LEDGER_VERSION).toBe(75);
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow('ATTEMPT_STORE_VERSION');
   const upgrade = upgradeExistingLedger(f.path, options, f.backups, new Date('2026-11-03T00:00:00Z'))!;
-  expect(upgrade).toMatchObject({ from: 73, to: 74 });
+  expect(upgrade).toMatchObject({ from: 73, to: 75 });
   const current = openSqliteLedger(f.path, options, 'forbid');
   try {
-    const after = data(current); delete after.capacity_resources; delete after.run_capacity_resources;
+    const after = data(current); delete after.capacity_resources; delete after.run_capacity_resources; delete after.ledger_extensions;
     expect(after).toEqual(f.previous);
     const resource = bindCapacityResource(current, { kind: 'fixture', id: 'connection' }, { executionSlots: 1, inFlightSlots: 1 });
     expect(resource.resourceKey).toMatch(/^[0-9a-f-]{36}$/u);
@@ -51,7 +52,7 @@ it('reverses an unused additive migration with every old row unchanged', async (
   const f = await fixture(), db = new DatabaseSync(f.path);
   try {
     db.exec('BEGIN IMMEDIATE'); migrateLedger(db, 'allow'); db.exec('COMMIT');
-    db.exec('BEGIN IMMEDIATE'); revertCapacityResources(db); db.exec('PRAGMA user_version=73; COMMIT');
+    db.exec('BEGIN IMMEDIATE'); db.exec(DOWNGRADE_TO_V74_LEDGER_SQL); revertCapacityResources(db); db.exec('PRAGMA user_version=73; COMMIT');
     expect(data(db)).toEqual(f.previous);
   } finally { db.close(); }
 });

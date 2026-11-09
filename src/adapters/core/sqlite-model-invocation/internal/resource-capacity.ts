@@ -3,16 +3,21 @@ import { nativeCliLoginCapacity } from '#adapters/core/native-cli-registry/index
 import type { ModelInvocationProfile, RunSnapshot } from '#domain/index.js';
 import { bindCapacityResource, findCapacityResource, readCapacityOccupancy, readRunResourceCapacity as readLedgerRunResourceCapacity } from '#adapters/core/sqlite-ledger/index.js';
 import { hasCapacityRoom, ModelInvocationStoreError, verifyModelInvocationReceipt } from '#engine/index.js';
+const invocationLogin = (profile: ModelInvocationProfile) => nativeCliLoginCapacity(profile)?.binding ?? null;
 /** Every claimed receipt is verified; an unbound legacy receipt of another login cannot occupy a resource and observation never creates its metadata. */
 function claimedLogin(row: Readonly<Record<string, unknown>>) {
   const receipt = verifyModelInvocationReceipt(JSON.parse(String(row.record)));
   if (receipt.claim.scopeId !== row.scope_id || receipt.claim.invocationId !== row.invocation_id || receipt.outcome !== null) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-  return nativeCliLoginCapacity(receipt.profile)?.binding ?? null;
+  return invocationLogin(receipt.profile);
+}
+export function invocationResourceKey(db: DatabaseSync, profile: ModelInvocationProfile): string | null {
+  const binding = invocationLogin(profile);
+  return binding ? findCapacityResource(db, binding)?.resourceKey ?? null : null;
 }
 const reconnect = (): never => { throw new ModelInvocationStoreError('NATIVE_AGENT_RECONNECT_REQUIRED'); };
 export function invocationCapacityResource(db: DatabaseSync, profile: ModelInvocationProfile) {
-  const login = nativeCliLoginCapacity(profile);
-  return login ? findCapacityResource(db, login.binding) ?? reconnect() : null;
+  const binding = invocationLogin(profile);
+  return binding ? findCapacityResource(db, binding) ?? reconnect() : null;
 }
 export const readCapacityResourceOccupancy = (db: DatabaseSync, resourceKey: string) => readCapacityOccupancy(db, resourceKey, claimedLogin);
 export function assertInvocationResourceCapacity(db: DatabaseSync, profile: ModelInvocationProfile) {

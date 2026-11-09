@@ -777,6 +777,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **The relative path of a backup set is refused with a misleading message.** Use an absolute path.
 - **You cannot go back to an older Deckent after a ledger upgrade** without restoring the backup taken before the upgrade
   (newer ledger versions cannot be opened by older builds).
+- **Rollback from alpha.64 to alpha.63.3 is unsupported.** Alpha.64 writes the new persisted fields; recovery uses forward fixes.
+  Keep the pre-upgrade backup for data recovery; it does not make a release downgrade supported.
 - **The daily backup schedule takes no backup right before a ledger upgrade.** `backup.schedule` holds one value (off, daily or
   before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose

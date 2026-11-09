@@ -70,6 +70,7 @@ it('claims one canonical record, replays it, and releases a closed null-content 
   const db = new DatabaseSync(base.path, { readOnly: true });
   expect(db.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 2, in_flight: 1 });
   expect(db.prepare("SELECT state FROM model_invocations WHERE invocation_id='invocation-1'").get()).toEqual({ state: 'unknown' });
+  expect(db.prepare('SELECT resource_key FROM model_invocations').all()).toEqual([{ resource_key: null }, { resource_key: null }]);
   expect(db.prepare('SELECT count(*) AS count FROM model_invocation_contents').get()?.count).toBe(0);
   expect(String(row(db, 'model_invocations', 'invocation-1')?.record)).not.toContain('private prompt');
   db.close();
