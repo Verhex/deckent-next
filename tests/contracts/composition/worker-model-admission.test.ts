@@ -45,7 +45,7 @@ const profiles: Profile[] = [
   compiled('sonnet-r3-cli', invocation('claude-sonnet-5-5', '2.1.278')),
   compiled('opus-stable-cli', invocation('claude-opus-5-5', '2.1.280', [])),
   compiled('opus-old-cli', invocation('claude-opus-5-5', '2.1.279', [])),
-  compiled('fable', invocation('claude-fable-5-1', '2.1.293', [])),
+  compiled('fable', invocation('claude-fable-5-2', '2.1.321', [])),
   compiled('haiku', invocation(HAIKU, '2.1.293', [])),
   compiled('api-alias', invocation('claude-haiku-4-5', '2.1.293', [])),
   handPinned('cli-alias', 'sonnet'),
@@ -97,7 +97,7 @@ async function fixture(catalogScopes: 'all' | readonly string[] | null = 'all', 
 async function seeded(extraProfiles: readonly Profile[] = []) {
   const f = await fixture('all', extraProfiles); await f.catalog({ action: 'register', catalog: await seedCatalog() });
   await f.activation(null);
-  for (const model of ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-1', HAIKU]) await f.activation(model);
+  for (const model of ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2', HAIKU]) await f.activation(model);
   await f.catalog({ action: 'register', catalog: codexCatalog() });
   for (const model of [null, CODEX, CODEX_HELPER, CODEX_OTHER]) await f.activation(model ?? null, 'activate', 0, 's', CODEX_CHANNEL);
   return f;
@@ -139,12 +139,12 @@ describe.skipIf(process.platform === 'win32')('new worker Run admission against 
     // The declared helper model must itself be active.
     await expect(createRun(f.project, run('no-helper', 'sonnet'), f.options)).rejects.toMatchObject({ code: CLOSED });
     await expect(createRun(f.project, run('codex-no-helper', 'codex'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_ACTIVE' });
-    await f.activation(HAIKU); await f.activation('claude-fable-5-1'); await codexActivation(CODEX_HELPER!); await codexActivation(CODEX_OTHER!);
+    await f.activation(HAIKU); await f.activation('claude-fable-5-2'); await codexActivation(CODEX_HELPER!); await codexActivation(CODEX_OTHER!);
     await expect(createRun(f.project, run('ok', 'sonnet'), f.options)).rejects.toMatchObject({ code: CLOSED });
     expect((await createRun(f.project, run('codex-ok', 'codex'), f.options)).admission.run.runId).toBe('codex-ok');
     const edited = structuredClone(catalog); const models = edited.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[];
     const set = (id: string, lifecycle: Record<string, unknown>) => { const model = models.find(entry => entry.nativeId === id)!; model.lifecycle = { ...model.lifecycle, ...lifecycle }; };
-    set('claude-fable-5-1', { state: 'deprecated', deprecatedOn: '2026-09-30' }); set(HAIKU, { state: 'retired', retiredOn: '2026-10-15' });
+    set('claude-fable-5-2', { state: 'deprecated', deprecatedOn: '2026-09-30' }); set(HAIKU, { state: 'retired', retiredOn: '2026-10-15' });
     await f.catalog({ action: 'register', catalog: { ...edited, revision: 'lifecycle-update' } });
     const codexEdited = structuredClone(codex), codexModels = codexEdited.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[];
     const codexSet = (id: string, lifecycle: Record<string, unknown>) => { const model = codexModels.find(entry => entry.nativeId === id)!; model.lifecycle = { ...model.lifecycle, ...lifecycle }; };

@@ -18,6 +18,7 @@ type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 const ALL: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const EXPECT: Record<string, { adaptive: boolean; enabled: boolean; off: Off | null; offCeiling?: Effort; effort: readonly Effort[] | null; max: number }> = {
   'claude-fable-5-1': { adaptive: true, enabled: false, off: null, effort: ALL, max: 128_000 },
+  'claude-fable-5-2': { adaptive: true, enabled: false, off: null, effort: ALL, max: 128_000 },
   'claude-fable-5': { adaptive: true, enabled: false, off: null, effort: ALL, max: 128_000 },
   'claude-opus-5-5': { adaptive: true, enabled: false, off: null, effort: ALL, max: 128_000 },
   'claude-opus-5': { adaptive: true, enabled: false, off: 'disabled', offCeiling: 'high', effort: ALL, max: 128_000 },

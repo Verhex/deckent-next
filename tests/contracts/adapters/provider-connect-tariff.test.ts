@@ -83,7 +83,7 @@ it('the shipped seeds: exactly the models with a verified row (or a published An
   expect(table['deepseek-api']).toEqual({ 'deepseek-flash': true, 'deepseek-v4-pro': true });
   expect(table['zai-api']).toEqual({ 'glm-5.3': true, 'glm-4.7-flash': true });
   expect(table['zai-cn-api']).toEqual({ 'glm-5.3': false, 'glm-4.7-flash': false, 'glm-4.6': false });
-  expect(table['anthropic-api']).toEqual({ 'claude-fable-5-1': true, 'claude-opus-5-5': true, 'claude-sonnet-5-5': true,
+  expect(table['anthropic-api']).toEqual({ 'claude-fable-5-1': true, 'claude-fable-5-2': true, 'claude-opus-5-5': true, 'claude-sonnet-5-5': true,
     'claude-haiku-5-5': true, 'claude-sonnet-4-5-20250929': false });
 });
 

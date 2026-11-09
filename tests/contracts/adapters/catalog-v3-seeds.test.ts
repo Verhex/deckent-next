@@ -29,7 +29,8 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
   it('keeps Claude recommendations passive at register and includes owner retirement', async () => {
     const raw = await seed('claude-cli-subscription'); expect(raw.schemaVersion).toBe(3);
     // HAIKU55-CATALOG (owner 2026-10-08): Claude Haiku 5.5 joins the recommended active set.
-    expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5'].sort());
+    // FABLE52 (owner 2026-11-09): recommendations move to 5.2; 5.1 remains an exact selectable catalog row.
+    expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-2', 'claude-haiku-5-5'].sort());
     expect(raw.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'claude-haiku-4-5-20251001').lifecycle.retiredOn).toBe('2026-10-15');
     const doc = parseProviderCatalogDocument(raw);
     const haiku = doc.providers[0]!.models.find(m => m.nativeId === 'claude-haiku-4-5-20251001')!;
@@ -37,6 +38,15 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
     expect(haiku.lifecycle.source).toBeNull(); // Owner cutoff, not a vendor retirement announcement.
     expect(catalogModelRetired(haiku.lifecycle, '2026-11-09')).toBe(true);
     const api = parseProviderCatalogDocument(await seed('anthropic-api'));
+    for (const catalog of [doc, api]) {
+      expect(catalog.providers[0]!.models.find(m => m.nativeId === 'claude-fable-5-1')).toMatchObject({ lifecycle: { state: 'active' } });
+      expect(catalog.providers[0]!.models.find(m => m.nativeId === 'claude-fable-5-2')).toMatchObject({
+        channelModelId: 'claude-fable-5-2', canonicalModelId: 'claude-fable-5-2', contextWindow: 1_000_000,
+        lifecycle: { state: 'active', retireNotBefore: '2027-11-09', source: { observedOn: '2026-11-09' } } });
+    }
+    expect(doc.providers[0]!.models.find(m => m.nativeId === 'claude-fable-5-2')).toMatchObject({ minCliVersion: '2.1.321', minClientVersion: '2.1.321', pricing: { kind: 'subscription' } });
+    expect(api.providers[0]!.models.find(m => m.nativeId === 'claude-fable-5-2')).toMatchObject({ maxOutputTokens: 128_000,
+      pricing: { kind: 'per-token', inputPerMTok: '8', outputPerMTok: '40', cacheReadPerMTok: '0.2', cacheWritePerMTok: '10', asOf: '2026-11-09' } });
     const models = api.providers[0]!.models.map(model => ({ modelId: model.nativeId, model }));
     const sonnet = models.find(row => row.modelId === 'claude-sonnet-4-5-20250929')!;
     expect(sonnet.model.lifecycle).toMatchObject({ state: 'deprecated', deprecatedOn: '2026-09-30', retiredOn: '2026-11-30',

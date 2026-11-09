@@ -9,7 +9,7 @@ import { bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTem
 // admission check a pinned model gets; the choice is sealed with the Run. Nothing outside the list is chosen; no admissible candidate is a refusal.
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const claude = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
+const claude = { provider: 'claude', cliVersion: '2.1.321 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const codex = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const template = (id: string, invocation: object) => ({ id, version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation } });
 const registry = (workClasses?: object) => ({ schemaVersion: 1, revision: 'r1', ...(workClasses ? { workClasses } : {}),
@@ -61,8 +61,8 @@ it('takes the first admissible candidate of the WorkClass list and seals it; ear
   const execution = await resolveWorkerEffortExecution(graph('coding'), registry(), reader, validation, compiler, context());
   const task = execution.tasks[0]!, pin = readWorkerModelPin(task.profile.parameters)!;
   expect(pin.pin).toEqual({ channelId: standard.channel, modelId: standard.model, auxiliaryModelIds: [] });
-  expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'standard', version: 2 },
-    candidateIndex: 0, channelId: standard.channel, modelId: standard.model, catalogRevision: 'claude-cli-subscription-2026-10-31', modelRevision: 7, activationRevision: 5,
+  expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'work-classes-2026-11-09', candidatePolicy: { id: 'standard', version: 2 },
+    candidateIndex: 0, channelId: standard.channel, modelId: standard.model, catalogRevision: 'claude-cli-subscription-2026-11-09', modelRevision: 7, activationRevision: 5,
     // A1: the Claude catalog declares no vendor default and the list names no deviation, so the CLI's own default stays in place.
     effort: { level: null, source: 'cli-default' }, skipped: [] });
   expect(pin.reasoningEffort).toMatchObject({ level: null, source: 'cli-default' });
@@ -88,7 +88,7 @@ it('skips an inactive, an unknown-channel and a CLI-mismatched candidate with th
 it('a candidate deviation is the effort target (A1), clamped to what the model supports, and recorded as the candidate\'s', async () => {
   const { reader } = await catalog({ 's/codex-cli-subscription': ['gpt-6.1-sol'] });
   const execution = await resolveWorkerEffortExecution(graph('codex-coding', input(), 'architecture'), registry(), reader, validation, compiler, context());
-  expect(execution.tasks[0]!.assignment).toMatchObject({ candidatePolicy: { id: 'deep', version: 2 }, candidateIndex: 2, modelId: 'gpt-6.1-sol', effort: { level: 'high', source: 'candidate' } });
+  expect(execution.tasks[0]!.assignment).toMatchObject({ candidatePolicy: { id: 'deep', version: 3 }, candidateIndex: 2, modelId: 'gpt-6.1-sol', effort: { level: 'high', source: 'candidate' } });
 });
 
 it('activation is per scope: the same plan is assigned in the scope that activated the model and refused in one that did not', async () => {
@@ -152,7 +152,7 @@ it('an Enterprise overlay replaces a Core list only by compare-and-set and the a
     ceilingRules: [], decisionThresholds: { rejectBelow: 0.5, acceptAt: 1 } } }], bindings: [], evidenceExtensions: [],
     candidatePolicies: [{ id: 'standard', version: 3, override: { previousVersion: 2 }, candidates: [{ channelId: standard.channel, modelId: 'claude-sonnet-5-5', effort: 'medium' }] }] };
   const execution = await resolveWorkerEffortExecution(graph('coding'), registry(replaced), reader, validation, compiler, context());
-  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'feature', workClassRevision: JSON.stringify(['work-classes-2026-11-08', 'acme-1']),
+  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'feature', workClassRevision: JSON.stringify(['work-classes-2026-11-09', 'acme-1']),
     candidatePolicy: { id: 'standard', version: 3 }, candidateIndex: 0, modelId: 'claude-sonnet-5-5', effort: { level: 'medium', source: 'candidate' } });
   const stale = { ...replaced, candidatePolicies: [{ ...replaced.candidatePolicies[0]!, override: undefined }] };
   await expect(resolveWorkerEffortExecution(graph('coding'), registry(JSON.parse(JSON.stringify(stale))), reader, validation, compiler, context()))
@@ -169,21 +169,25 @@ it('assignTaskWorker reads only: it compiles candidates onto the template and re
 });
 
 it('the approval card shows the assigned worker, its effort and the list position, and names each skipped candidate (EN/TR)', async () => {
-  const { reader } = await catalog({ 's/claude-cli-subscription': ['claude-fable-5-1'] });
+  const { reader } = await catalog({ 's/claude-cli-subscription': ['claude-fable-5-2'] });
   const planned = graph('coding', input(), 'design'), execution = await resolveWorkerEffortExecution(planned, registry(), reader, validation, compiler, context());
+  // FABLE52: an active model still refuses an older Claude Code; the catalog's new minimum is enforced, never bypassed.
+  const oldCli = { ...registry(), profiles: [template('claude-t', { ...claude, cliVersion: '2.1.320 (Claude Code)' }), template('codex-t', codex)] };
+  await expect(resolveWorkerEffortExecution(planned, oldCli, reader, validation, compiler, context())).rejects.toMatchObject({
+    code: 'WORKER_ASSIGNMENT_NONE', detail: { skipped: expect.stringContaining('claude-fable-5-2: WORKER_MODEL_CLI_TOO_OLD') } });
   const command = { schemaVersion: 1 as const, commandId: 'create', scopeId: 's', runId: 'run-a', graph: planned as never };
   const create = { commandId: 'create', actor: { id: 'o', issuer: 'test', subject: 'o' }, graph: planned as never, identity: { scopeId: 's', runId: 'run-a', layoutRevision: 'l' }, now: 1,
     execution, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } };
   const verdict = { decision: 'require-approval', revision: 'p1', reason: 'APPROVAL_REQUIRED' } as const;
   const en = renderRunCreateApprovalSummary(command, create, verdict, 'en'), tr = renderRunCreateApprovalSummary(command, create, verdict, 'tr');
   // F2-12: the head names the worker; how it was chosen (reasoning level, list, choice) stands under the details.
-  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription)'); expect(en).toContain('chosen with reasoning level high · from the design list deep@2, choice 2');
+  expect(en).toContain('worker: claude-fable-5-2 (claude-cli-subscription)'); expect(en).toContain('chosen with reasoning level high · from the design list deep@3, choice 2');
   expect(en.indexOf('chosen with')).toBeGreaterThan(en.indexOf('Details:'));
   expect(en).toContain('skipped before it: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
-  expect(tr).toContain('işçi: claude-fable-5-1 (claude-cli-subscription)'); expect(tr).toContain('seçim: akıl yürütme düzeyi high · design listesinden (deep@2), 2. seçenek');
+  expect(tr).toContain('işçi: claude-fable-5-2 (claude-cli-subscription)'); expect(tr).toContain('seçim: akıl yürütme düzeyi high · design listesinden (deep@3), 2. seçenek');
   expect(tr).toContain('ondan önce atlananlar: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
   // A pinned task's card is byte-identical to before: no worker line.
-  const pinned = graph('coding', input({ model: { channelId: standard.channel, modelId: 'claude-fable-5-1', auxiliaryModelIds: [] } }));
+  const pinned = graph('coding', input({ model: { channelId: standard.channel, modelId: 'claude-fable-5-2', auxiliaryModelIds: [] } }));
   const pinnedExecution = await resolveWorkerEffortExecution(pinned, registry(), reader, validation, compiler, context());
   expect(renderRunCreateApprovalSummary({ ...command, graph: pinned as never }, { ...create, graph: pinned as never, execution: pinnedExecution }, verdict, 'en')).not.toContain('worker:');
 });

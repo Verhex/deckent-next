@@ -1,6 +1,6 @@
 {
   "schemaVersion": 5,
-  "revision": "work-classes-2026-11-08",
+  "revision": "work-classes-2026-11-09",
   "classes": [
     { "id": "small", "description": "A bounded change to one or a few named files whose result is obvious from the request: append, insert or replace a line or a value, rename, fix a typo, small text or config edits. No new behaviour to design.", "candidatePolicyId": "light", "defaultEffort": "high", "proposalAdmission": { "risk": "low", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
@@ -29,9 +29,9 @@
       { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" },
       { "role": "worker", "minTier": "frontier" }
     ] },
-    { "id": "deep", "version": 2, "candidates": [
+    { "id": "deep", "version": 3, "candidates": [
       { "channelId": "claude-cli-subscription", "modelId": "claude-opus-5-5", "effort": "high" },
-      { "channelId": "claude-cli-subscription", "modelId": "claude-fable-5-1", "effort": "high" },
+      { "channelId": "claude-cli-subscription", "modelId": "claude-fable-5-2", "effort": "high" },
       { "channelId": "codex-cli-subscription", "modelId": "gpt-6.1-sol", "effort": "high" },
       { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" },
       { "role": "worker", "minTier": "frontier", "effort": "high" }

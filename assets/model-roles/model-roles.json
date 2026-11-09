@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "model-roles-2026-10-31",
+  "revision": "model-roles-2026-11-09",
   "roles": [
     {"id": "brain", "minimumTier": "frontier"},
     {"id": "worker", "minimumTier": "worker"},
@@ -10,11 +10,11 @@
     {"id": "beuser-evaluator", "admits": "connected"}
   ],
   "models": [
-    {"channelId": "anthropic-api", "modelId": "claude-fable-5-1", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
+    {"channelId": "anthropic-api", "modelId": "claude-fable-5-2", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
     {"channelId": "anthropic-api", "modelId": "claude-opus-5-5", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
     {"channelId": "anthropic-api", "modelId": "claude-sonnet-5-5", "version": 1, "tier": "worker", "roles": ["worker"]},
     {"channelId": "anthropic-api", "modelId": "claude-haiku-5-5", "version": 1, "tier": "worker", "roles": ["worker"]},
-    {"channelId": "claude-cli-subscription", "modelId": "claude-fable-5-1", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
+    {"channelId": "claude-cli-subscription", "modelId": "claude-fable-5-2", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
     {"channelId": "claude-cli-subscription", "modelId": "claude-opus-5-5", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
     {"channelId": "claude-cli-subscription", "modelId": "claude-sonnet-5-5", "version": 1, "tier": "worker", "roles": ["worker"]},
     {"channelId": "claude-cli-subscription", "modelId": "claude-haiku-5-5", "version": 1, "tier": "worker", "roles": ["worker"]},

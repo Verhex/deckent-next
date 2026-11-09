@@ -112,6 +112,78 @@
           }
         },
         {
+          "id": "fable-5-2",
+          "version": 1,
+          "nativeId": "claude-fable-5-2",
+          "protocols": [
+            {
+              "family": "claude-code-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2027-11-09",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+              "observedOn": "2026-11-09"
+            }
+          },
+          "minCliVersion": "2.1.321",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": [],
+          "channelModelId": "claude-fable-5-2",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-fable-5-2",
+          "displayName": "Claude Fable 5.2",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "high"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "sourceUrl": "https://code.claude.com/docs/en/model-config",
+              "fetchedOn": "2026-11-09"
+            },
+            "asOf": "2026-11-09"
+          },
+          "minClientVersion": "2.1.321",
+          "provenance": {
+            "sourceUrl": "https://code.claude.com/docs/en/model-config",
+            "fetchedOn": "2026-11-09"
+          }
+        },
+        {
           "id": "opus-5-5",
           "version": 1,
           "nativeId": "claude-opus-5-5",
@@ -396,7 +468,7 @@
       "modelIds": [
         "claude-opus-5-5",
         "claude-sonnet-5-5",
-        "claude-fable-5-1",
+        "claude-fable-5-2",
         "claude-haiku-5-5"
       ]
     }

@@ -94,6 +94,86 @@
           }
         },
         {
+          "id": "claude-fable-5-2",
+          "version": 1,
+          "nativeId": "claude-fable-5-2",
+          "protocols": [
+            {
+              "family": "anthropic-messages",
+              "version": "2023-06-01",
+              "capabilities": [
+                {
+                  "id": "token-count",
+                  "version": 1,
+                  "state": "supported"
+                },
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2027-11-09",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+              "observedOn": "2026-11-09"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "claude-fable-5-2",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-fable-5-2",
+          "displayName": "Claude Fable 5.2",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+              "fetchedOn": "2026-11-09"
+            },
+            "asOf": "2026-11-09",
+            "inputPerMTok": "8",
+            "outputPerMTok": "40",
+            "cacheReadPerMTok": "0.2",
+            "cacheWritePerMTok": "10"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+            "fetchedOn": "2026-11-09"
+          }
+        },
+        {
           "id": "claude-opus-5-5",
           "version": 1,
           "nativeId": "claude-opus-5-5",

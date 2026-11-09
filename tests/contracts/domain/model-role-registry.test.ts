@@ -17,12 +17,14 @@ it('the Core seed names exactly the owner Brain list as frontier Brain rows, and
   expect(Object.fromEntries(policy.roles.map(row => [row.id, 'minimumTier' in row ? row.minimumTier : row.admits]))).toEqual({ brain: 'frontier', worker: 'worker',
     'recovery-decision': 'frontier', 'memory-evaluator': 'frontier', 'beuser-walker': 'connected', 'beuser-evaluator': 'connected' });
   const brain = eligibleRoleModels(policy, 'brain', { today: '2026-10-23', active: none });
-  expect(new Set(brain.map(row => row.modelId))).toEqual(new Set(['claude-opus-5-5', 'claude-fable-5-1', 'gpt-6.1-sol', 'anthropic/claude-opus-5.5',
+  expect(new Set(brain.map(row => row.modelId))).toEqual(new Set(['claude-opus-5-5', 'claude-fable-5-2', 'gpt-6.1-sol', 'anthropic/claude-opus-5.5',
     'anthropic/claude-fable-5.1', 'openai/gpt-6.1-sol']));
   expect(brain.every(row => row.tier === 'frontier' && row.basis === 'tier' && row.active === false)).toBe(true);
   // gpt-6-astra stays a reviewing worker by owner decision (ANALIZ-ATAMA-TIER :71): frontier tier, no Brain role.
   expect(policy.models.find(row => row.modelId === 'gpt-6-astra' && row.channelId === 'codex-cli-subscription')).toMatchObject({ tier: 'frontier', roles: ['worker'] });
   expect(CORE_MODEL_ROLES.exceptions).toEqual([]);
+  // FABLE52: the old id stays selectable in the catalog, but no longer receives the shipped role defaults.
+  expect(policy.models.some(row => row.modelId === 'claude-fable-5-1')).toBe(false);
   expect(policy.models.some(row => row.measured !== undefined)).toBe(false);
 });
 
