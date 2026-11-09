@@ -1,13 +1,15 @@
-import { governedHubRevocationReader } from '#adapters/core/hub-http/index.js';
+import { governedHubOperations, governedHubRevocationReader } from '#adapters/core/hub-http/index.js';
+import { Client } from '@modelcontextprotocol/client';
 import { randomUUID } from 'node:crypto';
 import { Duplex } from 'node:stream';
 import { rm } from 'node:fs/promises';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createGovernedHubFetch, type HubFetchDependencies } from '#composition/core/hub/index.js';
-import { OperationPolicyAuthorization, type EffectStore } from '#engine/index.js';
+import { HubClientApplication, OperationPolicyAuthorization, type EffectStore } from '#engine/index.js';
 import { type EffectRecord } from '#domain/index.js';
+import { hubRevocationCursorMessage } from '#engine/core/hub/index.js';
 import { HUB_LIMITS } from '#domain/index.js';
-import { fixture, source, hub } from '../../fixtures/hub-client.js';
+import { fixture, source, hub, feed } from '../../fixtures/hub-client.js';
 const roots: string[] = [];
 afterEach(async () => { for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true }); });
 async function setup(local = false) {
@@ -29,7 +31,7 @@ async function setup(local = false) {
       sourceRevision: current.revision, endpoint: current.endpoint, person: { issuer: 'test', subject: 'person' }, receiptDigest: 'a'.repeat(64) }; },
     accessToken: async () => { tokens++; return 'synthetic-test-token'; },
     transport: { resolve: async () => { dns++; return ['127.0.0.1']; }, connect: () => { throw new Error('private addresses must not connect'); } } };
-  return { ...f, deps, records, approve: () => { approved = true; }, revokeConsent: () => { consent = false; }, counts: () => ({ dns, tokens }) };
+  return { ...f, clientDependencies: f.deps, deps, records, approve: () => { approved = true; }, revokeConsent: () => { consent = false; }, counts: () => ({ dns, tokens }) };
 }
 it('sends no DNS/token/network before both the durable person card and generic effect approval (G41)', async () => {
   const f = await setup(), fetch = createGovernedHubFetch(f.deps);
@@ -70,6 +72,108 @@ it('refresh uses the governed MCP fetch and preserves both approval gates before
   f.revokeConsent();
   await expect(reader(current, 0, new AbortController().signal)).rejects.toThrow();
   expect(f.counts()).toEqual({ dns: 1, tokens: 1 });
+
+  expect(() => governedHubOperations(f.deps, 'io.modelcontextprotocol/skills')).toThrow(expect.objectContaining({ code: 'HUB_NETWORK_INVALID' }));
+  await expect(governedHubRevocationReader(f.deps, 'io.modelcontextprotocol/skills')(current, 0, new AbortController().signal)).rejects.toThrow(expect.objectContaining({ code: 'HUB_NETWORK_INVALID' }));
+  const g = await setup(true); g.approve();
+  const local = (await g.app.listSources({ schemaVersion: 1, scopeId: 's' }))[0]!;
+  const cursor = { schemaVersion: 1 as const, hubId: hub.keyId, afterSequence: 0, throughSequence: 1, position: 1, throughPosition: 2,
+    page: 1, issuedAtMs: 100, nextRefreshBy: 2000 };
+  const next = { ...cursor, signature: { keyId: hub.keyId, algorithm: 'ed25519' as const, value: hub.sign(hubRevocationCursorMessage(cursor)).toString('base64') } };
+  const first = feed({ sequence: 2, entries: [{ kind: 'package-version', id: 'acme/old@1.0.0', severity: 'yank', reason: 'old', atMs: 100 }],
+    catchup: { schemaVersion: 1, afterSequence: 0, throughSequence: 1, position: 0, throughPosition: 2, page: 0, complete: false, next } });
+  const last = feed({ sequence: 3, entries: [{ kind: 'package-version', id: 'acme/older@1.0.0', severity: 'revoke', reason: 'old', atMs: 100 }],
+    catchup: { ...first.catchup!, position: 1, page: 1, complete: true, next: null } });
+  let discoveries = 0, response: unknown = first, automatic = false;
+  const continuations: unknown[] = [];
+  const originalClose = Client.prototype.close, close = vi.spyOn(Client.prototype, 'close');
+  const pages = governedHubRevocationReader({ ...g.deps, accessToken: async () => undefined, transport: {
+    resolve: async () => ['127.0.0.1'], connect: () => {
+      let bytes = '', sent = false;
+      const socket = new Duplex({ read() {}, write(chunk, _encoding, callback) {
+        bytes += String(chunk); callback();
+        const end = bytes.indexOf('\r\n\r\n'), length = Number(/content-length: (\d+)/i.exec(bytes)?.[1] ?? 0);
+        if (sent || end < 0 || Buffer.byteLength(bytes.slice(end + 4)) < length) return;
+        sent = true;
+        const request = JSON.parse(bytes.slice(end + 4)) as { id: number; method: string; params?: { input?: { continuation?: unknown } } };
+        let result: unknown;
+        if (request.method === 'server/discover') { discoveries++; result = { supportedVersions: ['2026-07-28'], capabilities: { extensions: { 'test.invalid/hub': {} } } }; }
+        else { continuations.push(request.params?.input?.continuation); result = { value: automatic ? request.params?.input?.continuation ? last : first : response }; }
+        const body = JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { resultType: 'complete', ...result as object } });
+        queueMicrotask(() => { socket.push(`HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`); socket.push(null); });
+      } });
+      queueMicrotask(() => socket.emit('connect')); return socket;
+    },
+  } }, 'test.invalid/hub');
+  try {
+    const aborted = new AbortController();
+    expect(await pages(local, 0, aborted.signal)).toEqual(first);
+    const beforeAbort = close.mock.calls.length;
+    aborted.abort(); await new Promise(resolve => setImmediate(resolve));
+    expect.soft(close.mock.calls.length).toBe(beforeAbort + 1);
+    const fresh = new AbortController();
+    expect(await pages(local, 0, fresh.signal)).toEqual(first);
+    const beforeComplete = close.mock.calls.length, discoveryBefore = discoveries;
+    response = last;
+    expect(await pages(local, 0, fresh.signal, next)).toEqual(last);
+    expect(discoveries).toBe(discoveryBefore);
+    expect(continuations.at(-1)).toEqual(next);
+    expect(close.mock.calls.length).toBe(beforeComplete + 1);
+    response = first;
+    const held = new AbortController(), beforeHeld = discoveries;
+    await Promise.all([pages(local, 0, held.signal), pages(local, 0, held.signal)]);
+    expect(discoveries).toBe(beforeHeld + 1);
+    const beforeIndependent = close.mock.calls.length;
+    response = last;
+    await pages(local, 0, new AbortController().signal);
+    expect(close.mock.calls.length).toBe(beforeIndependent + 1);
+    held.abort(); await new Promise(resolve => setImmediate(resolve));
+    expect(close.mock.calls.length).toBe(beforeIndependent + 2);
+    response = first;
+    const failed = new AbortController();
+    await pages(local, 0, failed.signal);
+    const beforeError = close.mock.calls.length;
+    response = {};
+    await expect(pages(local, 0, failed.signal, next)).rejects.toThrow();
+    expect(close.mock.calls.length).toBe(beforeError + 1);
+    response = last;
+    expect(await pages(local, 0, new AbortController().signal)).toEqual(last);
+    const closeFailure = new Error('synthetic close failure');
+    close.mockImplementationOnce(async function (this: Client) { await originalClose.call(this); throw closeFailure; });
+    await expect(pages(local, 0, new AbortController().signal)).rejects.toBe(closeFailure);
+    expect(await pages(local, 0, new AbortController().signal)).toEqual(last);
+    const application = new HubClientApplication({ ...g.clientDependencies, fetchRevocations: pages });
+    const invalidSignature = new AbortController(), beforeInvalidSignatureClose = close.mock.calls.length;
+    response = { ...first, signature: { ...first.signature, value: Buffer.alloc(64).toString('base64') } };
+    try {
+      await expect(application.refreshRevocations({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'invalid-page-signature', force: true }, undefined, invalidSignature.signal)).rejects.toMatchObject({ code: 'HUB_SIGNATURE_INVALID' });
+      expect.soft(close.mock.calls.length, 'engine signature refusal closes the intermediate-page client').toBe(beforeInvalidSignatureClose + 1);
+      expect(invalidSignature.signal.aborted).toBe(false);
+    } finally { invalidSignature.abort(); }
+    response = first;
+    const writeFailure = new Error('synthetic feed write failure'), failedWrite = new AbortController();
+    const failingStoreApplication = new HubClientApplication({ ...g.clientDependencies, fetchRevocations: pages, openStore: async access => {
+      const store = await g.clientDependencies.openStore(access);
+      store.saveFeed = async () => { throw writeFailure; };
+      return store;
+    } });
+    const beforeFailedWriteClose = close.mock.calls.length;
+    try {
+      await expect(failingStoreApplication.refreshRevocations({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'failed-page-write', force: true }, undefined, failedWrite.signal)).rejects.toBe(writeFailure);
+      expect.soft(close.mock.calls.length, 'engine persistence refusal closes the intermediate-page client').toBe(beforeFailedWriteClose + 1);
+      expect(failedWrite.signal.aborted).toBe(false);
+    } finally { failedWrite.abort(); }
+    const beforeRetry = await g.clientDependencies.openStore('read');
+    try { expect(await beforeRetry.feed('s', hub.keyId)).toBeNull(); } finally { beforeRetry.close(); }
+    automatic = true;
+    const beforeRefresh = discoveries, beforeRefreshClose = close.mock.calls.length;
+    await application.refreshRevocations({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'two-page-refresh', force: true });
+    expect(discoveries).toBe(beforeRefresh + 1);
+    expect(close.mock.calls.length).toBe(beforeRefreshClose + 1);
+    const persisted = await g.clientDependencies.openStore('read');
+    try { expect(await persisted.feed('s', hub.keyId)).toEqual(last); } finally { persisted.close(); }
+    expect([...g.records.values()].every(row => row.state === 'settled')).toBe(true);
+  } finally { close.mockRestore(); }
 });
 
 it('H7 person Hub steps refuse MCP and missing TTY witness before inspecting a project or opening storage', async () => {

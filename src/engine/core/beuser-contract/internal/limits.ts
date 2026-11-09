@@ -27,6 +27,7 @@ export function pinBeuserLimits(input: unknown): BeuserLimits {
   if (!parsed.success) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
   return parsed.data;
 }
+export function assertBeuserLimits(input: unknown): void { pinBeuserLimits(input); }
 
 /** Versioned persisted profile invariant, not configurable business policy. */
 export const BEUSER_JOURNEY_PROFILE_VERSION = 4;

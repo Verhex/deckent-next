@@ -1,7 +1,7 @@
 import { encodeCommandProjection, SIGNATURE_LABELS, HUB_LIMITS, HubError, canonicalHubJson, hubEnvelopeSchema, hubKeyDelegationSchema, parseHubContract,
   type HubEnvelope, type HubKeyDelegation, type HubPackage, type HubPackageSignature } from '#domain/index.js';
 import { ed25519KeyId, sha256, signatureMessage, verifyEd25519 } from '#platform/index.js';
-import { canonicalHubManifest, verifyHubPackageFiles, type HubPackageFile } from './package.js';
+import { canonicalHubManifest, matchCanonicalHubPackageFiles, type HubPackageFile } from './package.js';
 import { hubSkillDocumentBody, skillContentV2Digest, skillSignatureV2Message } from './skill.js';
 
 /** The caller resolves active trust anchors in its scope, after policy/revocation/delegation checks. This verifier never discovers trust from an envelope. */
@@ -58,7 +58,7 @@ export const hubKeyRevoked = (keyId: string, entries: readonly Readonly<{ kind: 
 export function verifyHubPackage(manifest: HubPackage, input: unknown, files: readonly HubPackageFile[], keys: HubPackageVerification): HubEnvelope {
   const canonical = canonicalHubManifest(manifest), envelope = parseHubContract(hubEnvelopeSchema, input, 'HUB_ENVELOPE_INVALID', 'HUB_ENVELOPE_SCHEMA_UNSUPPORTED');
   if (sha256(canonical) !== envelope.payloadDigest) throw new HubError('HUB_DIGEST_MISMATCH');
-  verifyHubPackageFiles(manifest, files);
+  matchCanonicalHubPackageFiles(manifest, files);
   const packageBytes = files.reduce((sum, file) => sum + file.bytes.byteLength, 0) + Buffer.byteLength(canonical) + Buffer.byteLength(canonicalHubJson(envelope));
   if (packageBytes > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
   if (keys.reviewers.length > HUB_LIMITS.reviewerSignaturesMax) throw new HubError('HUB_LIMIT_EXCEEDED');

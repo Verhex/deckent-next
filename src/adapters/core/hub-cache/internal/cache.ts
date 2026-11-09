@@ -26,7 +26,8 @@ export class HubArtifactCache implements ArtifactStore {
     await mkdir(this.root, { mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
     await this.directory(this.root);
     return withConfigWriteLock(join(this.root, 'capacity'), async () => {
-      return this.transaction.run({ references, pending: new Set<string>() }, work);
+      let retained: Promise<readonly ArtifactReceipt[]> | undefined;
+      return this.transaction.run({ references: () => retained ??= references(), pending: new Set<string>() }, work);
     });
   }
   private async entries() {

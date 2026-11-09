@@ -172,26 +172,45 @@ export class HubServerApplication {
     return this.ports.store.skills(after, limit);
   }
   async search(context: HubServerContext, after = '', limit = HUB_LIMITS.searchPageMax) {
+    return (await this.searchPage(context, after, limit)).packages;
+  }
+  async searchPage(context: HubServerContext, after = '', limit = HUB_LIMITS.searchPageMax) {
     await this.authorize(context, 'read', 'packages', '');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > HUB_LIMITS.searchPageMax || after.length > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
-    const refs = await this.ports.store.packages(after, limit);
-    return Promise.all(refs.map(async ref => {
+    const refs = await this.ports.store.packages(after, limit + 1);
+    const rows = await Promise.all(refs.map(async ref => {
       const row = await this.inspect(context, ref.packageId, ref.version);
-      return { key: ref.key, manifest: row.manifest, envelope: row.envelope, revocationState: await this.revocationState(context, ref.packageId, ref.version) };
+      const revocationState = await this.stateOf(ref.packageId, ref.version, row);
+      await this.authorize(context, 'read', ref.packageId, '');
+      return { key: ref.key, manifest: row.manifest, envelope: row.envelope, revocationState };
     }));
+    await this.authorize(context, 'read', 'packages', '');
+    const packages = rows.slice(0, limit), last = packages.at(-1);
+    return { packages, ...(refs.length > limit && last ? { nextCursor: last.key } : {}) };
   }
-  async revocationState(context: HubServerContext, packageId: string, version: string) {
-    const row = await this.inspect(context, packageId, version), keys = row.envelope.signatures.map(signature => signature.keyId);
+  private async stateOf(packageId: string, version: string, row: HubStoredVersion) {
+    const keys = row.envelope.signatures.map(signature => signature.keyId);
     const entries = await this.ports.store.revocations([...keys.map(id => ({ kind: 'key' as const, id })),
       { kind: 'publisher', id: packageId.split('/')[0]! }, { kind: 'package-version', id: `${packageId}@${version}` }]);
-    return entries.some(entry => entry.severity === 'revoke') ? 'revoked' : entries.length ? 'yanked' : 'clear';
+    return entries.some(entry => entry.severity === 'revoke') ? 'revoked' as const : entries.length ? 'yanked' as const : 'clear' as const;
   }
-  async readFile(context: HubServerContext, packageId: string, version: string, path: string) {
-    const row = await this.inspect(context, packageId, version), file = row.files.find(f => f.path === path);
-    if (!file) throw new HubServerError('HUB_RESOURCE_UNKNOWN');
+  async revocationState(context: HubServerContext, packageId: string, version: string) {
+    return this.stateOf(packageId, version, await this.inspect(context, packageId, version));
+  }
+  private async bytesOf(context: HubServerContext, packageId: string, row: HubStoredVersion, file: HubStoredVersion['files'][number]) {
     const bytes = await this.ports.artifacts.read(this.ports.scopeId, file.artifact);
     await this.authorize(context, 'read', packageId, row.envelope.payloadDigest);
     if (bytes.byteLength !== file.artifact.byteLength || sha256(bytes) !== file.artifact.digest) throw new HubError('HUB_DIGEST_MISMATCH');
     return bytes;
+  }
+  async readFile(context: HubServerContext, packageId: string, version: string, path: string) {
+    const row = await this.inspect(context, packageId, version), file = row.files.find(item => item.path === path);
+    if (!file) throw new HubServerError('HUB_RESOURCE_UNKNOWN');
+    return this.bytesOf(context, packageId, row, file);
+  }
+  async packagePayload(context: HubServerContext, packageId: string, version: string) {
+    const row = await this.inspect(context, packageId, version);
+    const files = await Promise.all(row.files.map(async file => ({ path: file.path, bytes: await this.bytesOf(context, packageId, row, file) })));
+    return { manifest: row.manifest, envelope: row.envelope, files };
   }
 }

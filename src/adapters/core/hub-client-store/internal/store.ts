@@ -46,6 +46,9 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
     const row = this.db.prepare(`SELECT version,state,revision,record FROM hub_installs WHERE scope_id=? AND hub_id=? AND package_id=?${version ? ' AND version=?' : ''} ORDER BY seq DESC LIMIT 1`)
       .get(scopeId, hubId, packageId, ...(version ? [version] : []));
     if (!row) return null;
+    return this.installRow(row, scopeId, hubId, packageId);
+  }
+  private installRow(row: Record<string, unknown>, scopeId: string, hubId: string, packageId: string) {
     const parsed = hubInstallSchema.safeParse(this.open(row['record']));
     if (!parsed.success || parsed.data.scopeId !== scopeId || parsed.data.hubId !== hubId || parsed.data.packageId !== packageId || parsed.data.version !== row['version']
       || parsed.data.state !== row['state'] || parsed.data.revision !== row['revision'] || parsed.data.bundle.scopeId !== scopeId) throw corrupt();
@@ -82,9 +85,8 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
     return this.db.prepare('SELECT scope_id,hub_id,package_id,version FROM hub_installs ORDER BY scope_id,seq').all();
   }
   async retainedArtifacts() {
-    const receipts = [];
-    for (const row of this.retainedInstalls()) receipts.push((await this.install(String(row['scope_id']), String(row['hub_id']), String(row['package_id']), String(row['version'])))!.bundle);
-    return receipts;
+    return this.db.prepare('SELECT scope_id,hub_id,package_id,version,state,revision,record FROM hub_installs ORDER BY scope_id,seq').all()
+      .map(row => this.installRow(row, String(row.scope_id), String(row.hub_id), String(row.package_id)).bundle);
   }
   async skillBundle(scopeId: string, skillId: string, revision: number, digest: string) {
     for (const row of this.retainedInstalls().filter(row => row['scope_id'] === scopeId)) {

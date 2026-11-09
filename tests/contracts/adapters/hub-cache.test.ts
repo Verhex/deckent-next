@@ -41,4 +41,10 @@ it.skipIf(process.platform === 'win32')('serializes capacity reservations; aband
   release(); await firstEnd; const receipt = await second;
   expect(Buffer.from(await other.read('other', receipt)).toString()).toBe('abcdef');
   await expect(lstat(join(f.root, sha256('s'), sha256('123456')))).rejects.toMatchObject({ code: 'ENOENT' });
+  let reads = 0;
+  await other.withRetention(async () => { reads += 1; return []; }, async () => {
+    await other.put('s', Buffer.from('ab'));
+    await other.put('s', Buffer.from('cd'));
+  });
+  expect(reads).toBe(1);
 });

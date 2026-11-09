@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { beuserEvaluatorPrincipalRef, isAiPrincipal, isWorkloadPrincipalRef, verifiedPrincipalSchema } from '#domain/core/principal/index.js';
 import { aiAuthorityFloor, BEUSER_EVALUATOR_ALLOWED_PAIRS, evaluatePolicy, protectedConfigKey } from '#domain/core/policy/index.js';
 import { beuserBindingSchema } from '#domain/core/beuser/index.js';
-import { assertBeuserAccess, beuserSurfaceCommandSchema, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { assertBeuserAccess, assertBeuserLimits, sealBeuserContext, beuserSurfaceCommandSchema, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { CORE_MODEL_ROLES, mergeModelRoleRegistries, decideRoleModel, roleModelKey, independentMakerRows } from '#domain/core/provider-catalog/index.js';
 
 const owner = { issuer: 'local', subject: 'person' }, ref = beuserEvaluatorPrincipalRef(owner);
@@ -54,6 +54,13 @@ it('own resources work and every changed Attempt, scope, nonce, transcript or ca
   expect(() => { assertBeuserAccess(context, binding, principal, { kind: 'beuser-transcript', id: 'foreign' }, 'inspect'); effects++; }).toThrow('BEUSER_TARGET_NOT_SANDBOX');
   const cancelled = new AbortController(); cancelled.abort();
   expect(() => { assertBeuserAccess({ ...context, signal: cancelled.signal }, binding, principal, resource, 'evaluate'); effects++; }).toThrow();
+  const sealed = sealBeuserContext(context);
+  expect(sealed.bindingText).toBe(JSON.stringify(binding));
+  for (const changed of mutations) expect(() => { assertBeuserAccess(sealed, changed, principal, resource, 'evaluate'); effects++; }).toThrow('BEUSER_TARGET_NOT_SANDBOX');
+  expect(() => assertBeuserAccess(sealed, binding, { ...principal, assurance: 'os-user' }, resource, 'evaluate')).toThrow('BEUSER_TARGET_NOT_SANDBOX');
+  expect(() => assertBeuserAccess(sealed, binding, principal, resource, 'evaluate')).not.toThrow();
+  const lied = { ...context, bindingText: JSON.stringify({ ...binding, nonce: '32345678-1234-4234-8234-123456789abc' }) };
+  expect(() => { assertBeuserAccess(lied, binding, principal, resource, 'evaluate'); effects++; }).toThrow('BEUSER_TARGET_NOT_SANDBOX');
   expect(effects).toBe(0);
 });
 
@@ -69,6 +76,7 @@ it('wire schemas reject principal, path, verdict, argv and leaked rubric injecti
 it('limit admission has no missing, infinite or inconsistent fallback', () => {
   for (const value of [undefined, {}, { ...limits, maxCalls: Infinity }, { ...limits, maxCost: 0 }, { ...limits, maxWaitMs: 20000 }]) {
     expect(() => pinBeuserLimits(value)).toThrow('BEUSER_LIMITS_UNAVAILABLE');
+    expect(() => assertBeuserLimits(value)).toThrow('BEUSER_LIMITS_UNAVAILABLE');
   }
   expect(Object.isFrozen(pinBeuserLimits(limits))).toBe(true);
 });
