@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { planSchedulingWave } from '#engine/index.js';
 import type { TaskGraph, TaskProgress } from '#domain/index.js';
-import { diagnoseReservationWave, measureResourceOccupancy } from '#engine/core/scheduling/index.js';
+import { diagnoseReservationWave, hasCapacityRoom, measureResourceOccupancy, remainingCapacity } from '#engine/core/scheduling/index.js';
+import { derivePoolWait } from '#engine/core/runs/index.js';
 const subscription = '5d68b7c0-e5f3-4a95-8319-f97ede9d5cb3';
 const otherSubscription = '13245373-2311-4f13-bc93-e456c6abb7d4';
 function fixture(count: number) {
@@ -64,6 +65,15 @@ it('keeps dependent work closed until acceptance and retains uncertain execution
     resources: [{ resourceKey: subscription, capacity, occupancy: { execution: 1, inFlight: 1 } }],
   } });
   expect(diagnoseReservationWave(blocked, 'application-empty', 0, current.input.capacity)).toMatchObject({ reason: 'resource-capacity-exhausted', resourceWaitingCount: 3 });
+  // KG10 F3 room rule: room only while both counts sit below their slots; the pool wait and the resource wave read it alike.
+  const one = fixture(1), slots = { executionSlots: 2, inFlightSlots: 3 };
+  for (const [execution, inFlight, room, remaining] of [[1, 2, true, 1], [2, 2, false, 0], [1, 3, false, 0], [3, 4, false, -1]] as const) {
+    const occupancy = { execution, inFlight };
+    expect([hasCapacityRoom(slots, occupancy), remainingCapacity(slots, occupancy)]).toEqual([room, remaining]); // a pool's dispatch gate reads the deficit
+    expect(derivePoolWait('pool', slots, slots, occupancy, null) === null).toBe(room);
+    expect(planSchedulingWave(one.graph, { ...one.input, resourceCapacity: { bindings: [{ taskId: '0', resourceKey: subscription }],
+      resources: [{ resourceKey: subscription, capacity: slots, occupancy }] } }).selectedTaskIds.length > 0).toBe(room);
+  }
 });
 it('fails invalid orders/revisions and respects explicit not-before eligibility or reduced limits', () => {
   const { graph, input, progress } = fixture(3);

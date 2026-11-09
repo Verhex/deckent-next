@@ -1,7 +1,8 @@
-import { nativeCliIds, nativeCliIdSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort } from '#domain/index.js';
+import { realpathSync, statSync } from 'node:fs';
+import { nativeCliIds, nativeCliIdSchema, NativeCliRegistryError, NATIVE_CLI_HEADLESS_ADAPTER_ID, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort } from '#domain/index.js';
 import type { z } from 'zod';
 import asset from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
-import { parseNativeCliRegistry } from '#capabilities/index.js';
+import { nativeCliHeadlessDefinitionSchema, parseNativeCliRegistry } from '#capabilities/index.js';
 export { parseNativeCliRegistry, nativeCliCapabilitiesSchema, nativeEffortArgs, nativeCliHeadlessSchema, type NativeCliCapabilities, type NativeCliHeadless } from '#capabilities/index.js';
 export { NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, nativeCliIds, nativeCliIdSchema, type WorkerEffort };
 const registry = parseNativeCliRegistry(asset);
@@ -39,4 +40,20 @@ export const nativeCliLoginEntries = (): readonly { readonly id: string; readonl
 /** Login-context files from the CLI registry, scoped to the layout's login tree (never a blanket auth.json ban). */
 export function nativeCliLoginReadDeny(loginRoot: string): readonly string[] {
   return Object.freeze(loginEntries.flatMap(({ id, names }) => names.map(name => `**/${loginRoot}/${id}/${name}`)));
+}
+/** Private metadata locator only; no credential bytes, account inference or model identity. */
+export function headlessCapacityBinding(input: unknown) {
+  const definition = nativeCliHeadlessDefinitionSchema.parse(input);
+  return { kind: NATIVE_CLI_HEADLESS_ADAPTER_ID, id: JSON.stringify([definition.ownerUid, definition.configDir]) };
+}
+/** KG10 F3 (law 6): the adapters whose profiles hold one login's capacity resource are registry data here, never an adapter-id branch in a store. */
+const loginCapacityAdapters: ReadonlySet<string> = new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID]);
+/** The login capacity a profile holds (null: none). `firstUseSlots`: the registry slot count for a connection bound before capacity resources
+ * existed, only while its login dir is still this process's own real directory; null asks for a reconnect. */
+export function nativeCliLoginCapacity(profile: Readonly<{ adapter: Readonly<{ id: string; definition: unknown }>; protocol: Readonly<{ family: string }> }>) {
+  if (!loginCapacityAdapters.has(profile.adapter.id)) return null;
+  const definition = nativeCliHeadlessDefinitionSchema.parse(profile.adapter.definition), slots = nativeCliHeadless(profile.protocol.family)?.headless.connect.maxInFlight;
+  const owned = () => { try { const dir = statSync(definition.configDir); return dir.isDirectory() && dir.uid === definition.ownerUid
+    && definition.ownerUid === process.getuid?.() && realpathSync(definition.configDir) === definition.configDir; } catch { return false; } };
+  return Object.freeze({ binding: headlessCapacityBinding(definition), firstUseSlots: () => slots && owned() ? slots : null });
 }

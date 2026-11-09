@@ -17,6 +17,10 @@ export interface ResourceCapacityWait {
   readonly capacity: ResourceCapacityInput['resources'][number]['capacity'];
   readonly occupancy: ResourceCapacityInput['resources'][number]['occupancy'];
 }
+type Counts = Readonly<{ execution: number; inFlight: number }>;
+/** KG10 F3: the one room rule. Below zero is over capacity; a pool's dispatch gate reads that deficit, so it is never clamped here. */
+export const remainingCapacity = (capacity: Readonly<{ executionSlots: number; inFlightSlots: number }>, occupancy: Counts) => Math.min(capacity.executionSlots - occupancy.execution, capacity.inFlightSlots - occupancy.inFlight);
+export const hasCapacityRoom = (capacity: Parameters<typeof remainingCapacity>[0], occupancy: Counts) => remainingCapacity(capacity, occupancy) > 0;
 
 /** Pure dimension of the existing wave, not a reservation. The admission transaction must supply all-scope
  * occupancy and recheck/reserve it atomically. Login serialization remains a separate enforced safety bound.
@@ -29,7 +33,7 @@ export function selectResourceCapacity(candidates: readonly string[], available:
   const selected: string[] = [], deferred: string[] = [], waits: ResourceCapacityWait[] = [];
   for (const taskId of candidates) {
     const key = bindings.get(taskId), resource = key === undefined ? undefined : resources.get(key);
-    if (resource && (resource.execution >= resource.capacity.executionSlots || resource.inFlight >= resource.capacity.inFlightSlots)) {
+    if (resource && !hasCapacityRoom(resource.capacity, resource)) {
       deferred.push(taskId);
       waits.push(Object.freeze({ taskId, resourceKey: resource.resourceKey, code: 'waiting-resource-slot', capacity: resource.capacity,
         occupancy: Object.freeze({ execution: resource.execution, inFlight: resource.inFlight }) }));

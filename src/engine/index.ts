@@ -20,7 +20,7 @@ export type { AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, Age
 export type { ServicePolicyTarget, ServicePolicyGrant } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
-export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, capacityResourceKeySchema, SchedulingError } from '#engine/core/scheduling/index.js';
+export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, capacityResourceKeySchema, remainingCapacity, hasCapacityRoom, SchedulingError } from '#engine/core/scheduling/index.js';
 export type { ReservationDiagnostic, ReservationDiagnosticReason, ReservationDiagnosticSite } from '#engine/core/scheduling/index.js';
 export * from '#engine/core/runs/index.js';
 export * from '#engine/core/run-proposal/index.js';

@@ -692,7 +692,8 @@
         "src/engine/core/model-use",
         "src/engine/core/provider-catalog",
         "src/composition/core/model-use",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "EXECUTION"
     },
@@ -1929,7 +1930,8 @@
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
-        "src/adapters/core/sqlite-ledger"
+        "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "PROVIDERS"
     },
@@ -1973,9 +1975,7 @@
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
         "src/domain/core/provider-catalog",
-        "src/capabilities/core/native-agent-execution",
         "src/domain/core/run",
-        "src/engine/core/runs",
         "src/engine/core/scheduling"
       ],
       "plan": "PROVIDERS"
@@ -2291,7 +2291,6 @@
         "src/composition/core/config",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/attempt-store",
-        "src/adapters/core/sqlite-model-invocation",
         "src/composition/core/model-use",
         "src/engine/core/model-use",
         "src/adapters/core/native-cli-headless"
@@ -3294,7 +3293,8 @@
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
         "src/capabilities/core/native-agent-execution",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/model-invocation"
       ],
       "plan": "HARDCODE-P1"
     },
@@ -5301,7 +5301,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42224,
+      "adapters": 42240,
       "surfaces": 45000,
       "composition": 13687
     },

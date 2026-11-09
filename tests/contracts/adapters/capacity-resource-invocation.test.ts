@@ -68,6 +68,9 @@ it('binds an alpha.62-shaped subscription on its first claim, reuses the login r
 });
 it('reports unavailable legacy login metadata as reconnect required before allocation or invocation writes', async () => {
   const f = await fixture(false), store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+  // A login whose family no registry CLI serves has no slot count, so its first claim is refused, never left uncounted (KG10 F3).
+  const unserved = { ...f.second.profile, protocol: { ...f.second.profile.protocol, family: 'unserved-family' } };
+  await expect(store.claim({ ...f.second, profile: unserved, profileDigest: modelInvocationProfileDigest(unserved) })).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });
   await rename(f.c.configDir, join(f.c.root, 'moved-login'));
   try {
     await expect(store.claim(f.first)).rejects.toMatchObject({ code: 'NATIVE_AGENT_RECONNECT_REQUIRED' });

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { decodeLedgerRunSnapshot, requireLedgerVersion, POOL_CAPACITY_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { poolCapacityReceiptSchema, type PoolCapacityReceipt, executionPoolSchema, poolHoldRecordSchema, RunStoreError, measureTaskOccupancy, type ExecutionPool, type PoolHoldRecord } from '#engine/index.js';
+import { poolCapacityReceiptSchema, type PoolCapacityReceipt, executionPoolSchema, poolHoldRecordSchema, RunStoreError, measureTaskOccupancy, remainingCapacity, type ExecutionPool, type PoolHoldRecord } from '#engine/index.js';
 /** Called within the caller's existing write transaction. Run progress is the sole occupancy truth;
  * no expiring lease or second mutable counter can silently release uncertain work.
  */
@@ -37,8 +37,8 @@ export class SqliteExecutionPools {
     if (requested > this.available(poolId)) throw new RunStoreError('RUN_POOL_FULL');
   }
   available(poolId: string, ceiling = Infinity): number {
-    const pool = this.require(poolId), { execution, inFlight } = this.occupancy(poolId);
-    return Math.min(Math.min(pool.capacity.executionSlots, ceiling) - execution, Math.min(pool.capacity.inFlightSlots, ceiling) - inFlight);
+    const pool = this.require(poolId);
+    return remainingCapacity({ executionSlots: Math.min(pool.capacity.executionSlots, ceiling), inFlightSlots: Math.min(pool.capacity.inFlightSlots, ceiling) }, this.occupancy(poolId));
   }
   /** K5: the pool's typed hold (null = never held). A row that disagrees with its sealed record is corruption, never "open". */
   hold(poolId: string): PoolHoldRecord | null {

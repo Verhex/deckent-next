@@ -1,6 +1,6 @@
 import { persistedInteger, identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness, excludeConflicting } from '#domain/index.js';
 import { z } from 'zod';
-import { resourceCapacityInputSchema, selectResourceCapacity, capacityResourceKeySchema } from './resource-capacity.js';
+import { resourceCapacityInputSchema, selectResourceCapacity, capacityResourceKeySchema, remainingCapacity } from './resource-capacity.js';
 
 const schedulingInputSchema = z.strictObject({
   schemaVersion: z.literal(2),
@@ -27,7 +27,7 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   if (ordering.length !== graphIds.size || new Set(ordering).size !== graphIds.size || ordering.some(id => !graphIds.has(id))) throw new SchedulingError('SCHEDULING_ORDER_INVALID');
   const readiness = inspectTaskReadiness(graph, snapshot);
   const { execution: executionOccupied, inFlight: inFlightOccupied } = measureTaskOccupancy(snapshot.progress);
-  const available = Math.min(Math.max(0, capacity.executionSlots - executionOccupied), Math.max(0, capacity.inFlightSlots - inFlightOccupied));
+  const available = Math.max(0, remainingCapacity(capacity, { execution: executionOccupied, inFlight: inFlightOccupied }));
   const ready = new Set(readiness.filter(task => task.disposition === 'ready').map(task => task.taskId));
   const excluded = new Set(parsed.data.excludedTaskIds ?? []);
   if ([...excluded].some(id => !graphIds.has(id))) throw new SchedulingError('SCHEDULING_INPUT_INVALID');
