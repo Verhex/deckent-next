@@ -2,9 +2,11 @@ import { startConfiguredRuntimeService } from '#composition/core/runtime-service
 import type { ConfiguredRuntimeServiceObserver } from '#composition/core/runtime-service/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { planServiceRun } from '#composition/core/run-planner/index.js';
+import { loadProposalViews } from '#surfaces/index.js';
 
 /** Composition binds the local runtime host; the CLI owns signal handling and rendering. */
 export async function startConfiguredCliRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}) {
-  return startConfiguredRuntimeService(projectRoot, observer, options, { planWork: planServiceRun }); // alpha.64 B: a chat turn's `propose_work` plans in the service
+  return startConfiguredRuntimeService(projectRoot, observer, options, { planWork: planServiceRun, // alpha.64 B: a chat turn's `propose_work` plans in the service
+    proposalViews: () => loadProposalViews().then(([planning, config]) => ({ cardLines: planning.brainProposalCardLines, schemaChoices: config.configSchemaChoices })) });
 }

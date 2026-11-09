@@ -2,13 +2,14 @@ import { isDeepStrictEqual } from 'node:util';
 import { AI_PROPOSAL_REGISTRY, type AgentToolOutcome, type AgentToolSpec, type AgentTurnStreamEvent, type BrainPlanCommand, type BrainPlanObserver, type BrainPlanProgress } from '#domain/index.js';
 import { AI_PROPOSAL_TOOL_SPECS, aiProposalToolDecision, awaitAgentToolApproval, isRunIntentResult, planAiProposal, verifyApproval, type RunPlanningResult } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal, type LocalPeerIdentity } from '#adapters/index.js';
-import { loadProposalViews } from '#surfaces/index.js';
-import { sha256, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { CodedError, sha256, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' | 'work' }>) => void;
 type Plan = (command: BrainPlanCommand, signal: AbortSignal, observe: BrainPlanObserver) => Promise<RunPlanningResult>;
+/** The card and choice presentation the CLI host lends the service (composition never imports surfaces; the SDK entry stays surface-free). */
+export interface AgentProposalViews { readonly cardLines: (result: RunPlanningResult, locale: Locale) => readonly string[]; readonly schemaChoices: (schema: unknown) => readonly unknown[] }
 const CARD_ROUNDS = 3; // L1c, as /do: a plan whose basis changed while its card was open comes back with a fresh card, at most this often.
 const said = { deny: 'the person declined; nothing was changed', expired: 'the card expired unanswered; nothing was changed', cancelled: 'the turn ended before the person answered; nothing was changed' } as const;
 const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.code ?? 'failed');
@@ -21,7 +22,7 @@ const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.
  * submitted again after the person's yes has an effect. A no, an expired card or an ended turn changes nothing; the model reads which.
  */
 export function createAgentProposals(input: { readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly peer: LocalPeerIdentity; readonly scopeId: string;
-  readonly turnId: string; readonly signal: AbortSignal; readonly emit: Emit; readonly locale: Locale; /** Absent (no service plan port): `propose_work` is not offered. */ readonly plan?: Plan }) {
+  readonly turnId: string; readonly signal: AbortSignal; readonly emit: Emit; readonly locale: Locale; /** Absent (no service plan port): `propose_work` is not offered. */ readonly plan?: Plan; /** Absent: the proposal tools answer unavailable. */ readonly views?: () => Promise<AgentProposalViews> }) {
   const { projectRoot, options, peer, scopeId, signal } = input;
   const ai = () => withMcpPrincipal(() => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'));
   const tag = (tool: string, text: string): AgentToolOutcome => ({ status: 'error', text: `[deckent] ${tool}: ${text}` });
@@ -41,19 +42,21 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     } finally { journal.close(); if (requested) input.emit({ kind: 'approval.settled', callId, approvalId, outcome }); }
   }
   async function choices(keyPath: string, layer: 'project' | 'global') {
-    const [, config] = await loadProposalViews(), field = (await createConfiguredConfigApplication(projectRoot, options).inspect({ keyPath, layer })).fields[0]!;
-    return { keyPath, layer, current: field.value ?? null, choices: config.configSchemaChoices(field.schema) };
+    const views = await input.views?.(); if (!views) throw new CodedError('AGENT_PROPOSAL_VIEWS_UNAVAILABLE');
+    const field = (await createConfiguredConfigApplication(projectRoot, options).inspect({ keyPath, layer })).fields[0]!;
+    return { keyPath, layer, current: field.value ?? null, choices: views.schemaChoices(field.schema) };
   }
   async function work(name: string, request: string, callId: string): Promise<AgentToolOutcome> {
     const command: BrainPlanCommand = { schemaVersion: 1, commandId: `propose-work-${sha256(`propose-work:1\0${scopeId}\0${input.turnId}\0${callId}`).slice(0, 40)}`, scopeId, intent: request };
     // v31 (/do parity): the plan's progress reaches the person's terminal as `/do` shows it (planning, a Brain quota wait, the admitted Run for /tasks).
     const progress = (value: BrainPlanProgress) => { if (value.kind === 'planning') input.emit({ kind: 'work', callId, phase: 'planning', attempt: value.attempt });
       else if (value.kind === 'quota-wait') input.emit({ kind: 'work', callId, phase: 'quota-wait', untilMs: value.untilMs, attempt: value.attempt, maxAttempts: value.maxAttempts }); };
-    const [planning] = await loadProposalViews(), plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress));
+    const views = await input.views?.(); if (!views) return tag('propose_work', 'unavailable');
+    const plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress));
     progress({ kind: 'planning', attempt: 1 });
     let result = await plan();
     for (let round = 0; round < CARD_ROUNDS && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; round++) {
-      const settled = await card(callId, result.proposal.approval.approvalId, [origin, ...planning.brainProposalCardLines(result, input.locale)].join('\n'));
+      const settled = await card(callId, result.proposal.approval.approvalId, [origin, ...views.cardLines(result, input.locale)].join('\n'));
       if (settled !== 'allow') return tag(name, said[settled]);
       result = await plan();
     }

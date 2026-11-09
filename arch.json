@@ -2059,7 +2059,6 @@
         "src/engine/core/authentication",
         "src/domain/core/run",
         "src/engine/core/run-proposal",
-        "src/surfaces",
         "src/composition/core/config"
       ],
       "plan": "SURFACES"
@@ -5299,7 +5298,7 @@
       "engine": 60000,
       "adapters": 42199,
       "surfaces": 45000,
-      "composition": 13704
+      "composition": 13711
     },
     "totalSrcLines": 200000,
     "testCases": 8203,

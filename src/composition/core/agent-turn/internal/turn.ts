@@ -21,7 +21,7 @@ import type { NativeAgentExecution } from '#capabilities/index.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
-import { createAgentProposals } from './proposals.js';
+import { createAgentProposals, type AgentProposalViews } from './proposals.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -46,15 +46,15 @@ export interface RuntimeChatTurnHost {
   /** MCP-CLIENT: the owner's local MCP servers, started by the turns that need them and closed with the service. */
   readonly mcp: McpClientPool;
   /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities; readonly answers: SessionApprovalAnswers;
-  /** alpha.64 B: the service's plan application `propose_work` runs (the CLI host binds it; absent: the tool is not offered). */ readonly planWork?: PlanServiceRun;
+  /** alpha.64 B: the service's plan application `propose_work` runs (the CLI host binds it; absent: the tool is not offered). */ readonly planWork?: PlanServiceRun; /** The proposal card and choice views the CLI host lends (absent: the proposal tools answer unavailable). */ readonly proposalViews?: () => Promise<AgentProposalViews>;
 }
 /** The service's own plan call (`planServiceRun`): the same application as /do, its Brain call through the given invoke. */
 export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal,
   /** v31 (/do parity): the plan's progress (planning, a Brain quota wait), as `/do` observes it; absent: a quota refusal is the typed refusal at once. */ observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun, proposalViews?: () => Promise<AgentProposalViews>): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
-  return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), ...(planWork ? { planWork } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
+  return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), ...(planWork ? { planWork } : {}), ...(proposalViews ? { proposalViews } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
 /** v30: a running turn's steered lines; `closed` once the loop ended, so a later line is `not-running` (never accepted and lost). `room`: the
  * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */
@@ -212,7 +212,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
       proposer: `model ${reference.modelId}`, locale: language }) : null;
     // alpha.64 B + C (owner S4/S5): work and setting proposals, decided and applied as the AI actor in both loops; the person's card decides.
-    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, locale: language,
+    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, locale: language, ...(host.proposalViews ? { views: host.proposalViews } : {}),
       emit: event => event.kind === 'work' ? channel.emit(event) : emitApproval(event),
       ...(host.planWork ? { plan: (plan: BrainPlanCommand, planSignal: AbortSignal, observe: BrainPlanObserver) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
         undefined, invokeSignal ?? planSignal), planSignal, observe) } : {}) }) : null;

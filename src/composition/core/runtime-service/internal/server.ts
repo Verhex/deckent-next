@@ -22,7 +22,7 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, scratchResource, type PlanServiceRun } from '#composition/core/agent-turn/index.js';
+import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, scratchResource, type AgentProposalViews, type PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
@@ -113,7 +113,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     ...(ports.modelInvocationClock ? { clock: ports.modelInvocationClock } : {}) };
   /* Service stop cancels running turns (they close as cancelled, not interrupted). */ const turnStop = new AbortController();
   const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport, ports.shellSandboxes, config.mcp.maxServers,
-    createConfiguredNativeChatRuntime(projectRoot, options), ports.planWork);
+    createConfiguredNativeChatRuntime(projectRoot, options), ports.planWork, ports.proposalViews);
   const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, { onPage: (command, result) => observer.onModelCancellationPage?.(command, result), onError: (command, error) => observer.onModelCancellationError?.(command, error), }, options);
   const build = readBuildIdentity();
@@ -246,7 +246,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
 }
 /** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport, `shellSandboxes` to the shipped sandbox providers (S9 bubblewrap). */ export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies;
   /** One trusted clock for model tariff freshness, quote/send validation and durable invocation times (default: SystemTrustedClock). */ readonly modelInvocationClock?: TrustedClock;
-  /** Clock and wait of the idle stop (default: monotonic clock and timer). */ readonly idleClock?: Pick<RuntimeServiceIdleOptions, 'now' | 'wait'>; /** alpha.64 B: the plan a chat turn's `propose_work` runs (absent: not offered). */ readonly planWork?: PlanServiceRun }
+  /** Clock and wait of the idle stop (default: monotonic clock and timer). */ readonly idleClock?: Pick<RuntimeServiceIdleOptions, 'now' | 'wait'>; /** alpha.64 B: the plan a chat turn's `propose_work` runs (absent: not offered). */ readonly planWork?: PlanServiceRun;
+  /** alpha.64 B/C: the proposal card and choice views (the CLI host lends them; composition never imports surfaces). */ readonly proposalViews?: () => Promise<AgentProposalViews> }
 export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   try { return await startService(projectRoot, observer, options, ports); }
