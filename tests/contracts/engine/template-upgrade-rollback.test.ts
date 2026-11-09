@@ -10,7 +10,7 @@ import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationAp
   upgradePolicyTemplate, upgradeFirstRunProposalRules } from '#engine/index.js';
 import { createHmacIntegrity, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
 import { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 
 const names = { firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'],
@@ -57,7 +57,7 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
 describe.skipIf(process.platform !== 'linux')('v20 rollback through the real approval and archived authority writer', () => {
   it('approves the operation card, removes only v20 rules, preserves the only administration grants, and refuses stale replay', async () => {
     const f = await fixture(), beforeBytes = await f.bytes(), before = JSON.parse(beforeBytes);
-    expect(deltaIds).toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-setting']);
+    expect(deltaIds).toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-setting', 'first-run-mcp-propose-pool', 'first-run-mcp-propose-target']);
     expect(await f.rollback('stale')).toMatchObject({ status: 'conflict' });
     expect(f.cards).toBe(0); expect(await f.bytes()).toBe(beforeBytes);
     expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') });
@@ -121,8 +121,9 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v20 delta: a delta the
   expect(await run()).toBe('upgraded');
   const upgraded = JSON.parse(await auto.bytes());
   expect(upgraded.grants).toEqual([...v19Policy.grants, ...v20Bytes.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id))]);
-  expect(upgraded.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id)).every((rule: PolicyGrant) => rule.modeEligible === undefined && rule.effect === 'require-approval')).toBe(true);
-  expect(events.map(event => event.subject)).toMatchObject([{ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 20 } }, counts: { grantsAdded: 2, grantsRemoved: 0 },
+  // The Run and setting proposals are cards no mode lowers; the proposed Run's pool and work-target use are allow (lead 2026-11-09 option 2).
+  expect(upgraded.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id)).map((rule: PolicyGrant) => [rule.effect, rule.modeEligible])).toEqual([['require-approval', undefined], ['require-approval', undefined], ['allow', undefined], ['allow', undefined]]);
+  expect(events.map(event => event.subject)).toMatchObject([{ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 20 } }, counts: { grantsAdded: 4, grantsRemoved: 0 },
     revision: { before: 'first-run-template-v19', after: upgraded.revision }, commandId: expect.stringMatching(/^policy-template-upgrade-v20-[a-f0-9]{64}$/u) }]);
   expect(await run()).toBe('current'); expect(events).toHaveLength(1);
   expect(await auto.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') }); // the person revokes them on the card
@@ -133,7 +134,21 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v20 delta: a delta the
   // A hand-built (live-shape) policy is anchored on the configured service scope where an allow rule names the person; another person's is never touched.
   expect(await upgradeFirstRunProposalRules(auto.source, { person: { issuer: auto.principal.issuer, subject: 'someone-else' }, history: [], scopeId: 's', ...audit })).toBe('skipped');
   expect(await upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: [], scopeId: 's', ...audit })).toBe('upgraded');
-  expect(events.at(-1)!.subject).toMatchObject({ kind: 'authority-change', installer: { basis: 'named-person', template: { version: 20 } }, counts: { grantsAdded: 2 } });
+  expect(events.at(-1)!.subject).toMatchObject({ kind: 'authority-change', installer: { basis: 'named-person', template: { version: 20 } }, counts: { grantsAdded: 4 } });
+  expect(events.at(-1)!.subject).not.toHaveProperty('skipped');
+  // Lead 2026-11-09 (side effect B): an MCP actor that holds the `work` group keeps its allows. The upgrade adds only the setting rule and names the
+  // three it left to the group in the audit record; the actor's create_run stays allow (no card) and its reserve and pool use are unchanged.
+  const ai = mcpPrincipalRef(auto.principal), work = ['run', 'pool', 'work-target'].map(kind => ({ id: `mcp-cap-work-${kind}`, effect: 'allow', actions: kind === 'run' ? ['create', 'inspect', 'reserve', 'cancel'] : ['use'],
+    scopes: ['s'], principals: [ai], resource: { kind, ids: kind === 'pool' ? ['p'] : 'all' } }));
+  await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify({ ...v19Policy, revision: 'a-work-group', grants: [...v19Policy.grants, ...work] }), { mode: 0o600 });
+  // The person as the service start passes it (issuer and subject: proposal-policy.ts), so the record is checked against the sealed audit contract.
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: { issuer: auto.principal.issuer, subject: auto.principal.subject }, history: [], ...audit })).toBe('upgraded');
+  expect(events.at(-1)!.subject).toMatchObject({ counts: { grantsAdded: 1 }, skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' },
+    { ruleId: 'first-run-mcp-propose-pool', heldBy: 'mcp-cap-work-pool' }, { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }] });
+  expect(auditEventSchema.parse(events.at(-1)).subject).toMatchObject({ skipped: [{ ruleId: 'first-run-mcp-propose-work' }, {}, {}] }); // the sealed audit contract carries the reasons
+  const grouped = await auto.source.load(), actor = { id: 'mcp', ...ai, assurance: 'workload-verified' as const, scopeIds: ['s'] };
+  for (const [action, kind, id] of [['create', 'run', 'r'], ['reserve', 'run', 'r'], ['use', 'pool', 'p'], ['use', 'work-target', 't']] as const)
+    expect(evaluatePolicy(grouped, { principal: actor, scopeId: 's', action, resource: { kind, id } }).decision, `${kind}/${action}`).toBe('allow');
   for (const version of [19, 21]) {
     const other = await seed(version), before = await other.bytes();
     expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });

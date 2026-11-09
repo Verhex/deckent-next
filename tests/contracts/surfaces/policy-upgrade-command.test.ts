@@ -21,7 +21,11 @@ it('previews by default with the exact apply command, and applies only with --ap
   expect(out.join('')).toContain('deckent policy upgrade --template current --scope scope --apply --expect first-run-template-v4+b');
   expect(out.join('')).toContain('+ grant first-run-mcp-servers');
   expect(await main(['policy', 'upgrade', '--template', 'v5', '--scope', 'scope', '--apply', '--expect', 'first-run-template-v4+b'], ctx)).toBe(0);
-  expect(calls).toEqual([['scope', { mode: 'preview', reason: expect.any(String) }], ['scope', { mode: 'apply', reason: expect.any(String), expect: 'first-run-template-v4+b' }]]);
+  // alpha.64 (/policy's re-enable): `--only ai-proposals` previews or applies only the current delta; it never scopes a rollback, and no other value exists.
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--apply', '--only', 'ai-proposals'], ctx)).toBe(0);
+  for (const extra of [['--rollback', '--only', 'ai-proposals'], ['--apply', '--only', 'everything']]) expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', ...extra], ctx)).toBe(2);
+  expect(calls).toEqual([['scope', { mode: 'preview', reason: expect.any(String) }], ['scope', { mode: 'apply', reason: expect.any(String), expect: 'first-run-template-v4+b' }],
+    ['scope', { mode: 'apply', reason: expect.any(String), only: 'ai-proposals' }]]);
 });
 it.each(['en', 'tr'] as const)('uses the same current handler for current and deprecated v5 selectors in %s, preserving JSON stdout', async locale => {
   const calls: unknown[] = [], { out, errors, ctx } = context(PREVIEW, calls);

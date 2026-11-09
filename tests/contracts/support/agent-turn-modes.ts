@@ -14,6 +14,8 @@ import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
+import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 
 /**
  * Real runtime service (in process) for the permission-mode matrix (T-L4 slice 4a): a local OpenAI-chat fixture answers each round
@@ -88,6 +90,8 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
     terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 }, ...(input.shell ? { shell: input.shell } : {}) },
+    // alpha.64 B: with a plan port, a proposal admission (pool `p`, the `business` WorkClass) so `propose_work` reaches real run admission.
+    ...(input.planWork ? { admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2, ordering: 'input-order', registry: { ...fixtureDockerRegistry(['purchase']), workClasses: businessWorkClasses() } } } : {}),
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
@@ -109,6 +113,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   await writeAuthority(input.grants, input.mode);
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   await ensureConfiguredTerminalIdentity(project, 'scope', { env });
+  if (input.planWork) { const { store } = await openConfiguredAttemptStore(project, { env }); try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 } }); } finally { store.close(); } }
   const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, { ...(input.sandboxes ? { shellSandboxes: input.sandboxes } : {}), ...(input.planWork ? { planWork: input.planWork } : {}) });
   services.push(service);
   // LIVENESS-EINTR: what a failed status assertion needs to tell the turn's abort sources apart (service shutdown vs. a turn-level abort

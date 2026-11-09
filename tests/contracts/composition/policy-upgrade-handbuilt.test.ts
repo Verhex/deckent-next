@@ -209,7 +209,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       const request = { principal: owner, scopeId: SCOPE, action: action!, resource: { kind: kind!, id: 'any' } };
       expect(evaluatePolicy(policy, request).decision).toBe('allow');
       expect(evaluatePolicy(policy, { ...request, principal: { ...owner, subject: '1001', id: 'stranger' } }).decision).toBe('deny');
-      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && action === 'inspect' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card
+      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && action === 'inspect' || kind === 'pool' && action === 'use' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card (its pool use allowed)
     }
     expect(file.grants.slice(0, v9.grants.length)).toEqual(v9.grants);
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current' });

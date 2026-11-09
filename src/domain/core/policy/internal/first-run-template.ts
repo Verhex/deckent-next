@@ -218,12 +218,12 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model',
   memoryPurge: 'first-run-memory-purge', recoveryModel: 'first-run-recovery-model', signers: 'first-run-skill-signers', catalogImport: 'first-run-agent-catalog-import',
   aggregatorCatalog: 'first-run-catalog-aggregator', aggregatorRuns: 'first-run-catalog-aggregator-runs', aggregatorMemory: 'first-run-catalog-aggregator-memory', firstCommit: 'first-run-first-commit', uninstall: 'first-run-uninstall', uninstallOperations: 'first-run-uninstall-operations',
-  mcpModelInvocation: 'first-run-mcp-model-invocation', mcpReadTools: 'first-run-mcp-read-tools', mcpScratchTools: 'first-run-mcp-scratch-tools', mcpEditShellTools: 'first-run-mcp-edit-shell-tools', mcpToolOperations: 'first-run-mcp-tool-operations', mcpProposeWork: 'first-run-mcp-propose-work', mcpProposeSetting: 'first-run-mcp-propose-setting' });
+  mcpModelInvocation: 'first-run-mcp-model-invocation', mcpReadTools: 'first-run-mcp-read-tools', mcpScratchTools: 'first-run-mcp-scratch-tools', mcpEditShellTools: 'first-run-mcp-edit-shell-tools', mcpToolOperations: 'first-run-mcp-tool-operations', mcpProposeWork: 'first-run-mcp-propose-work', mcpProposeSetting: 'first-run-mcp-propose-setting', mcpProposePool: 'first-run-mcp-propose-pool', mcpProposeTarget: 'first-run-mcp-propose-target' });
 /** v16 cells (alpha.56 D1): the card's recovery actions (the stop list and the continuation) and the promotable lost-worker rules, by rule id. */
 const RECOVERY_CARD_ACTIONS = Object.freeze([...RECOVERY_ACTIONS, RECOVERY_DECISION_ACTIONS[0]]);
 const recoveryActionRuleId = (action: string) => `first-run-recovery-action-${action}`, recoveryPromoteRuleId = (rule: string) => `first-run-recovery-promote-${rule}`;
 /** v20 alone is the current rollback delta (and the automatic upgrade's, owner S6); previous authority stays installed. */
-export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze((['mcpProposeWork', 'mcpProposeSetting'] as const).map(key => FIRST_RUN_UPGRADE_RULE_IDS[key]));
+export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze((['mcpProposeWork', 'mcpProposeSetting', 'mcpProposePool', 'mcpProposeTarget'] as const).map(key => FIRST_RUN_UPGRADE_RULE_IDS[key]));
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -241,7 +241,7 @@ type AdditionNames = V19Names & { readonly proposeMcpToolName: string; readonly 
   /** v13: the execution-environment registry ids the install rule names. */
   readonly executionEnvironmentIds: readonly string[];
   /** v16: the measured lost-worker rules at their seed version (absent: no promotion cell). */
-  readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[]; readonly scopeId?: string };
+  readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[]; readonly scopeId?: string; /** alpha.64: only the current (v20) delta, /policy's re-enable. */ readonly only?: 'ai-proposals' };
 /** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
 export const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
@@ -293,7 +293,8 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     // v16 (alpha.56 D1): the recovery cells at require-approval; a person already allowed on a cell keeps it (an allow rule covers it, nothing is added).
     ...v16Rules(person, scopes, input.recoveryRules), ...v17Rules(person, firstCommitScopes, input.firstCommitOperationId), ...v18Rules(person, input.uninstallOperationIds), ...v19Rules(person, scopes, input), ...v20Rules(person, scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
-  for (const want of wanted) {
+  const skipped = firstRunProposalRules(grants, person, scopes).skipped.map(item => item.ruleId), current: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+  for (const want of wanted.filter(rule => !skipped.includes(rule.id) && (!input.only || current.includes(rule.id)))) { // side effect B: an AI allow keeps its v20 cell
     const same = grants.find(grant => grant.id === want.id);
     // A v16 cell the card raised to allow is the person's decision, not a conflict.
     if (same) { if (!sameRule(same, want) && !(same.effect === 'allow' && want.effect === 'require-approval' && sameRule({ ...same, effect: want.effect }, want))) conflicts.push(want.id); continue; }
@@ -349,7 +350,6 @@ export function namedPersonPolicyAdditions(current: unknown, input: { readonly p
   if (isMcpPrincipal(who) || !parsed.data.grants.some(grant => anchorsPerson(grant, who, scopeId.data))) return Object.freeze({ status: 'unavailable', reason: 'person-not-named' });
   return plannedAdditions(parsed.data.grants, who, [scopeId.data], input);
 }
-
 /** Add-only, named observation rules: existing owner and custom rules are untouched. */
 function mcpObservationRules(owner: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   const principal = mcpPrincipalRef(owner);
@@ -359,7 +359,6 @@ function mcpObservationRules(owner: Person, scopes: readonly string[]): readonly
     id, effect: 'allow', actions: ['inspect'], scopes: [...scopes], principals: [principal], resource: { kind, ids: 'all' },
   }));
 }
-
 /** v10 execution authority is shared by fresh installs and both add-only upgrade paths; MCP retains v9 observation only. */
 function executionRules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   if (isMcpPrincipal(person)) return [];
@@ -371,7 +370,6 @@ function executionRules(person: Person, scopes: readonly string[]): readonly Pol
     { id: ids.workTargets, kind: 'work-target', actions: ['use'] },
   ].map(({ id, kind, actions }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: 'all' } }));
 }
-
 /** v11 keeps quota release separate from pool management; integration uses the installation's existing scoped attempt/target gates. */
 function deliveryRules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   if (isMcpPrincipal(person)) return [];
@@ -383,7 +381,6 @@ function deliveryRules(person: Person, scopes: readonly string[]): readonly Poli
   ].map(({ id, kind, actions, scopes: ruleScopes }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: ruleScopes,
     principals: [person], resource: { kind, ids: 'all' } }));
 }
-
 /** v12 (owner 2026-10-16): the named person inspects the installed scope(s) and shuts down exactly this installation's runtime service, in those
  * scopes only. Never for the MCP actor (it keeps v9 observation; `serviceActorSchema` admits its peer, so policy is its only shutdown gate). */
 function ownerServiceRules(person: Person, scopes: readonly string[], serviceId: string | undefined): readonly PolicyGrant[] {
@@ -394,7 +391,6 @@ function ownerServiceRules(person: Person, scopes: readonly string[], serviceId:
     { id: ids.serviceShutdown, kind: 'service', actions: ['shutdown'], resource: [service] },
   ].map(({ id, kind, actions, resource }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: resource } }));
 }
-
 /** v13 (owner A48-D3, MON-NAMES, CA-1, C3): the named person's six rules and the MCP actor's pool observation, shared by the fresh template, both add-only
  * plans and the rollback. A person rule never names the MCP actor (AI and MCP get no authority action); the MCP rule only reads. */
 function v13Rules(person: Person, scopes: readonly string[], executionEnvironmentIds: readonly string[] | undefined): readonly PolicyGrant[] {
@@ -417,7 +413,6 @@ function v13Rules(person: Person, scopes: readonly string[], executionEnvironmen
   ].map(({ id, kind, actions, ids: resource, scopes: ruleScopes }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: ruleScopes === 'all' ? 'all' : ruleScopes,
     principals: [person], resource: { kind, ids: resource } })).concat(observePool);
 }
-
 /** v14 (S4): `memory`/`inspect` in the installed scope(s) for the named person and the MCP actor (observation; reading never verifies or changes an entry). */
 function v14Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, kind = policyResources.memory.kind;
@@ -425,7 +420,6 @@ function v14Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   const observe = rule(ids.observeMemory, mcpPrincipalRef(person));
   return isMcpPrincipal(person) ? [observe] : [rule(ids.memoryInspect, person), observe];
 }
-
 /**
  * v15 (S4B-1 + S7): the named person may propose memory candidates (their own card; the delegation bound needs it before they can grant the
  * distiller D2); the memory distiller (`<person>/memory-distiller`, a workload the composition root issues) gets D1+D2 (`memory` inspect, propose),
@@ -481,7 +475,6 @@ function evaluatorRules(evaluator: Person, rule: (id: string, principal: Person,
   return [rule(ids.evaluatorMemory, evaluator, vocabulary.memory.kind, ['inspect', 'verify', 'contest']), rule(ids.evaluatorRuns, evaluator, vocabulary.run.kind, ['inspect']),
     rule(ids.evaluatorModel, evaluator, vocabulary.modelInvocation.kind, ['invoke'])];
 }
-
 /** Latest add-only delta (v20) by content: a same-id customization (a cell the card raised to allow too) is preserved and reported, never deleted. */
 export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
   const policy = policyFileSchema.parse(current), read = policy.schemaVersion === 2 ? policy.grants.find(rule => rule.id === 'first-run-read-tools') : undefined;
@@ -496,7 +489,6 @@ export function firstRunTemplateRollback(current: unknown, person: Person, scope
   // `missing`: expected delta rules not held (review 2672: a fresh install is the whole expected set, nothing removed).
   return { rules: Object.freeze(rules), conflicts: Object.freeze(conflicts), missing: Object.freeze(missing) };
 }
-
 /** Lifecycle grants name only the owner; policies can still deny either cell, and AI has a fixed authority floor. */
 function v18Rules(person: Person, operations: readonly string[] | undefined): readonly PolicyGrant[] {
   if (isWorkloadPrincipalRef(person) || !operations?.length) return [];
@@ -518,7 +510,17 @@ function v19Rules(person: Person, scopes: readonly string[], names: V19Names): r
 /** v20 (alpha.64 B + C, owner S4–S6 2026-11-09): the MCP actor's Run and registry-setting proposals, `require-approval` WITHOUT `modeEligible` (no mode, full access included, lowers the
  * person's card; the proposal tools are offered only while these hold); config is installation-wide like the person's rule. The person holds both cells, so I2 lets them grant and revoke. */
 function v20Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
-  const ids = FIRST_RUN_UPGRADE_RULE_IDS, { run, config } = policyResources, rule = (id: string, kind: string, action: string, resource: readonly string[] | 'all', ruleScopes: readonly string[] | 'all') =>
-    policyGrantSchema.parse({ id, effect: 'require-approval', actions: [action], scopes: ruleScopes === 'all' ? 'all' : [...ruleScopes], principals: [mcpPrincipalRef(person)], resource: { kind, ids: resource === 'all' ? 'all' : [...resource] } });
-  return isMcpPrincipal(person) || isWorkloadPrincipalRef(person) ? [] : [rule(ids.mcpProposeWork, run.kind, 'create', 'all', scopes), rule(ids.mcpProposeSetting, config.kind, 'write', aiSettingResourceIds(), 'all')];
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS, { run, config, pool, workTarget } = policyResources, rule = (id: string, effect: 'allow' | 'require-approval', kind: string, action: string, resource: readonly string[] | 'all', ruleScopes: readonly string[] | 'all') =>
+    policyGrantSchema.parse({ id, effect, actions: [action], scopes: ruleScopes === 'all' ? 'all' : [...ruleScopes], principals: [mcpPrincipalRef(person)], resource: { kind, ids: resource === 'all' ? 'all' : [...resource] } });
+  // Lead 2026-11-09 (option 2): admission checks the requester's pool and work target before the Run card; these allows admit nothing without it.
+  return isMcpPrincipal(person) || isWorkloadPrincipalRef(person) ? [] : [rule(ids.mcpProposeWork, 'require-approval', run.kind, 'create', 'all', scopes), rule(ids.mcpProposeSetting, 'require-approval', config.kind, 'write',
+    aiSettingResourceIds(), 'all'), rule(ids.mcpProposePool, 'allow', pool.kind, 'use', 'all', scopes), rule(ids.mcpProposeTarget, 'allow', workTarget.kind, 'use', 'all', scopes)];
+}
+const overlaps = (held: Selection, wanted: Selection) => held === 'all' || wanted === 'all' || held.some(item => wanted.includes(item));
+/** Lead 2026-11-09 (side effect B): the v20 rules this policy can take; a rule whose cell a policy-file allow of its principal already holds (an MCP capability group, a hand-built
+ * rule) is left out and named with that rule, so the allow never becomes a card (require-approval wins over allow). Role bindings are not read here. */
+export function firstRunProposalRules(grants: readonly PolicyGrant[], person: Person, scopes: readonly string[]): { readonly wanted: readonly PolicyGrant[]; readonly skipped: readonly { readonly ruleId: string; readonly heldBy: string }[] } {
+  const skipped: { ruleId: string; heldBy: string }[] = [], wanted = v20Rules(person, scopes).filter(want => { const held = grants.some(grant => grant.id === want.id) ? undefined : grants.find(grant => grant.effect === 'allow' && want.principals !== 'all'
+    && namesPerson(grant, want.principals[0]!) && grant.resource.kind === want.resource.kind && overlaps(grant.actions, want.actions) && overlaps(grant.scopes, want.scopes) && overlaps(grant.resource.ids, want.resource.ids)); if (held) skipped.push({ ruleId: want.id, heldBy: held.id }); return !held; });
+  return { wanted, skipped };
 }

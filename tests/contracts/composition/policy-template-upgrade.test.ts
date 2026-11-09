@@ -64,8 +64,8 @@ async function project(shape: 'owner-role' | 'pure') {
     grants: shape === 'owner-role' ? [...policy.grants, ...v4Grants(), HAND_ADDED] : v4Grants() }), { mode: 0o600 });
   writeFileSync(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b-v4', modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode: 'full-auto' }],
     bindings: shape === 'owner-role' ? [{ id: 'root', principals: me, roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }] : [] }), { mode: 0o600 });
-  const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string) => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(f, 'policy-upgrade', 'scope',
-    { mode, reason: 'test upgrade', ...(expect ? { expect } : {}) });
+  const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only?: 'ai-proposals') => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(f, 'policy-upgrade', 'scope',
+    { mode, reason: 'test upgrade', ...(expect ? { expect } : {}), ...(only ? { only } : {}) });
   const grants = () => (JSON.parse(readFileSync(join(f.data, 'policy.json'), 'utf8')) as { grants: { id: string; resource: { kind: string; ids: unknown } }[] }).grants;
   return { f, upgrade, grants, bytes: () => readFileSync(join(f.data, 'policy.json'), 'utf8') };
 }
@@ -211,7 +211,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
       grants: (state.policy as { grants: { id: string }[] }).grants.filter(rule => rule.id !== 'first-run-policy-administer').map(asPersonAdmin) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom-admin');
     const before = grants(), auditCount = f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
     const customAdmin = before.find(rule => rule.id === MODIFIED);
-    expect(DELTA).toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-setting']);
+    expect(DELTA).toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-setting', 'first-run-mcp-propose-pool', 'first-run-mcp-propose-target']);
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', conflicts: [MODIFIED], reason: DELTA.slice(1).join(',') });
     expect(grants()).toEqual(before.filter(rule => !DELTA.slice(1).includes(rule.id)));
     expect(grants().find(rule => rule.id === MODIFIED)).toEqual(customAdmin);
@@ -265,9 +265,16 @@ describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(','), conflicts: [] });
     expect(grants()).toEqual(fresh.policy.grants.filter(rule => !DELTA.includes(rule.id)));
     expect(changes()).toBe(1);
-    expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
+    // alpha.64 (/policy re-enable): `only: 'ai-proposals'` restores exactly the v20 rules; an older rule the person removed by hand stays removed.
+    const handEdited = { ...JSON.parse(bytes()), revision: 'first-run-template-v20', grants: grants().filter(rule => rule.id !== 'first-run-backup') };
+    writeFileSync(join(f.data, 'policy.json'), JSON.stringify(handEdited), { mode: 0o600 }); clearConfigCache();
+    expect(await upgrade('preview', undefined, 'ai-proposals')).toMatchObject({ status: 'preview', rules: DELTA.map(id => ({ id })), held: [] });
+    expect(await upgrade('apply', undefined, 'ai-proposals')).toMatchObject({ status: 'upgraded' });
     expect(grants().filter(rule => DELTA.includes(rule.id))).toEqual(fresh.policy.grants.filter(rule => DELTA.includes(rule.id)));
-    expect(await upgrade('apply')).toMatchObject({ status: 'current' });
+    expect(grants().some(rule => rule.id === 'first-run-backup')).toBe(false);
+    expect(await upgrade('preview', undefined, 'ai-proposals')).toMatchObject({ status: 'current', held: DELTA });
+    // The scoped re-enable is the person's governed change, so the row's revoke removes it again.
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(',') });
   }, 120_000);
 });
 

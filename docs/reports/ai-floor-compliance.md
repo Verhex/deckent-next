@@ -2371,7 +2371,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/audit/index.ts`: `d9c5969bbd2bebfe163fe6af7f406622180a44bcfd3b8f0568069a40b0c3523a`
 - `src/domain/core/audit/internal/authority-decision.ts`: `b5f08e4469690230080daf67076d4031dc10d067f5caa8c3f027456cd529965d`
 - `src/domain/core/audit/internal/checkpoint.ts`: `c722e6d1c3dc88659787c02935e4e51a9017dae814d9cf3d901cabd079b3159c`
-- `src/domain/core/audit/internal/contract.ts`: `04fb01e678e8e9dd16aeaffcdcef09327fd259ba5c4da8ad55f25c78dfdb7bde`
+- `src/domain/core/audit/internal/contract.ts`: `aa103a205c7be958072c47e7e2e5a5378eed4de1f1a2162241e979eedb364ce4`
 - `src/domain/core/audit/internal/follow.ts`: `cacdcb809b11e1adbc771abb152e5370a8940c33ea51211024592d2f3b595665`
 - `src/domain/core/command/index.ts`: `720255d242c75b6e1b82cef56eda2997afccfcb429185d340bd0ce5d36159723`
 - `src/domain/core/command/internal/command.ts`: `506b6aef4f3b00b190d9328056273ca099d0751c2c3b2941585498155172bd0e`
@@ -2395,7 +2395,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/model-invocation/internal/headless-rejection.ts`: `a9f7d53e4f9ec8e51770997f288e9f497a90f8bf808dfcf26b2fb82b516c984c`
 - `src/domain/core/model-invocation/internal/plan-usage.ts`: `38fd6eb92cb63cbec1e5c5f168a0845c700c82f9a3b0cc6db97f1910f760070c`
 - `src/domain/core/model-invocation/internal/response-evidence.ts`: `d4301b490989dfa21af479b13bf5a8ee966d607a3de218bb0b97e84cd00c60d2`
-- `src/domain/core/policy/index.ts`: `1dc2a50e569e944b552fdf474935f62ae34c02bb23e6b1a9ff9080ed44519a3c`
+- `src/domain/core/policy/index.ts`: `0ceac8504a02c851369101a3e154d85a43b2ffcb03486452e12a45094da90da4`
 - `src/domain/core/policy/internal/administer.ts`: `ee739d69d7090ed64479adf55e9e7d16e3c1c86f222608e62c20adabb410c99b`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
 - `src/domain/core/policy/internal/ai-floor.ts`: `02a5bac3124c900cd3aec2a24faa80e6c22d609c75a7079f76d4cb9e337868ac`
@@ -2403,7 +2403,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/delegations.ts`: `4d25449ab3e8d129c6969c0f7a57ecab657c8e4c034b16460fb142821113db60`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `fe3a96a8833ebf599ff2cdfa408979817413f044468dfc38d98c897e7e692cbd`
-- `src/domain/core/policy/internal/first-run-template.ts`: `98669b56d01ae1d9871d6a750a0bf823316586aebfdbd25373074a946b40c052`
+- `src/domain/core/policy/internal/first-run-template.ts`: `36a73cd8f5d6e48dbd5512ba6cc753951ed094e6b0da4c85300f271b3f6a3cc1`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `4d86bea76446cf118025ed9e207e3bf6ea73163e3b9a3b153a81ec1aa411c90a`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `a8fe9c7e856e448a08c4fbfaf8faadf790457aaf53e699df43f9d7a2328fc117`

@@ -490,16 +490,22 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   (`<host>/mcp`: sohbet ajanı ve her dış MCP istemcisi) moda açık olmayan iki `require-approval` kuralı taşır: Run oluşturmak ve
   `language`, `output_mode` ya da `terminal.responseStyle` yazmak (proje ya da genel katman). Hiçbir mod, tam erişim dahil, bunları
   indiremez: `propose_setting` `/config` ile aynı önce/sonra kartını, `propose_work` `/do` ile aynı plan kartını açar ve yalnız sizin
-  "evet"iniz etki yapar; araçlar yalnız bu kurallar dururken sunulur (şirketin `agent-tool` reddi de kapatır). Modeller ve Brain modeli
-  `/model`'de, diğer her ayar kendi penceresinde kalır. Mevcut bir kurulum bu sürümdeki ilk servis başlangıcında iki kuralı kartsız,
+  "evet"iniz etki yapar; araçlar yalnız bu kurallar dururken sunulur (şirketin `agent-tool` reddi de kapatır). Run kabulü istekçinin
+  havuzunu ve iş hedefini de denetlediği için v20 AI aktörüne iki `allow` kuralı daha ekler (`pool/use`, `work-target/use`, kurulu
+  kapsam); Run kartı olmadan hiçbir şey kabul ettirmezler ve gördüğünüz tek kart yine Run kartıdır. Modeller ve Brain modeli
+  `/model`'de, diğer her ayar kendi penceresinde kalır. Mevcut bir kurulum bu sürümdeki ilk servis başlangıcında dört kuralı kartsız,
   kendiliğinden alır (owner kararı); servis politika dosyalarının sahibi olan kişi olarak çalışmalı ve bir kural o kişiyi yapılandırılmış
   servis kapsamında adlandırmalıdır (ya da bir ilk kurulum okuma kuralı): başlangıç bir `authority-change` denetim kaydı ve kurulumun
-  yükseltme anahtarıyla arşivlenmiş bir revizyon yazar, bir kez; kuralları kendi kartınızla `deckent policy upgrade --template current
-  --rollback` ile geri aldıktan sonra başlangıç onları bir daha eklemez, `--apply` geri ekler. `/policy` penceresinde bu kurallar için
-  henüz satır yok; diğer biçimler kişinin yükseltme kartını kullanır. Açık:
-  `propose_work` henüz kartına ulaşmaz; Run kabulü istekçi için `pool/use` (yapılandırılmış hedef varsa `work-target/use`) da denetler
-  ve AI aktöründe ikisi de yoktur, öneri `POLICY_DENIED` ile biter (owner kararı bekliyor); sohbetten başlayan planda kirli ağaç kartı ve
-  kota bekleme penceresi yoktur. Araç kullanamayan model yine `/do` ister. *Yol:* işi `/do` ile başlatın.
+  yükseltme anahtarıyla arşivlenmiş bir revizyon yazar, bir kez. AI aktörünün bir izninin zaten açtığı hücreye düşen kural (örneğin MCP
+  `work` ya da `dogfood-worker` grubu) eklenmez, böylece o izin karta dönmez; kayıt her böyle kuralı ve onu tutan kuralı adlandırır.
+  `/policy` dört kuralı tek satırda gösterir, **Yapay zekâ önerileri** (açık, kapalı ya da kısmen açık): kapatmak onları kendi kartınızla
+  kaldırır (`deckent policy upgrade --template current --rollback`), açmak yalnız onları geri ekler (`--apply --only ai-proposals`);
+  kapattıktan sonra başlangıç onları bir daha eklemez. Sohbetten başlayan planda kirli ağaç kartı ve kota bekleme penceresi yoktur ve
+  `/tasks` kendiliğinden açılmaz. Araç kullanamayan model yine `/do` ister. *Yol:* işi `/do` ile başlatın ya da yapay zekâ Run'ın kabul
+  edildiğini söyleyince `/tasks`'ı açın.
+- **Run kartı iş hedefini henüz bağlamaz.** Bir Run'ın kartı planına, havuzuna ve çalışma profiline bağlıdır; yapılandırılmış iş hedefinin
+  kimliğine bağlı değildir (Run onu kaydetmez; iş hedeflerinin 1. dilimi). Kart ile kabul arasında yapılandırmada değişen hedef yeniden
+  denetlenir (`work-target/use`) ama kartta adı geçmez. *Yol:* bir Run kartı açıkken `execution.workTargets`'ı değiştirmeyin.
 
 ## Bütçe ve harcama
 

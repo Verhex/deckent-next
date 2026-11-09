@@ -47,11 +47,13 @@ export function planAiProposal(name: string, args: Record<string, unknown>): AiP
   return { ok: true, tool: 'setting', keyPath, choice: args['choice'], layer };
 }
 /** Whether the AI actor may be offered (and call) one proposal tool on this policy snapshot: while its v20 rule holds (Run create for `propose_work`, a
- * listed setting's write for the other two) and no explicit `agent-tool` deny names the tool (Enterprise closes it). Never the person's grant. Fail closed. */
-export function aiProposalToolDecision(policy: unknown, principal: VerifiedPrincipal, scopeId: string, tool: string): 'allow' | 'deny' {
+ * listed setting's write for the other two) and no explicit `agent-tool` deny names the tool (Enterprise closes it). Never the person's grant. Fail closed.
+ * The revision is the snapshot's, for the turn's `policy-turn` record (`unknown`: an unreadable policy). */
+export function aiProposalToolDecision(policy: unknown, principal: VerifiedPrincipal, scopeId: string, tool: string): { readonly decision: 'allow' | 'deny'; readonly revision: string } {
   try {
     const ask = (action: string, kind: string, id: string) => evaluatePolicy(policy, { principal, scopeId, action, resource: { kind, id } });
-    if (ask('invoke', 'agent-tool', tool).reason === 'DENIED') return 'deny';
-    return (tool === tools.work ? ask('create', 'run', 'proposal').decision !== 'deny' : aiSettingResourceIds().some(id => ask('write', 'config', id).decision !== 'deny')) ? 'allow' : 'deny';
-  } catch { return 'deny'; }
+    const invoke = ask('invoke', 'agent-tool', tool), decided = (decision: 'allow' | 'deny') => ({ decision, revision: invoke.revision });
+    if (invoke.reason === 'DENIED') return decided('deny');
+    return decided((tool === tools.work ? ask('create', 'run', 'proposal').decision !== 'deny' : aiSettingResourceIds().some(id => ask('write', 'config', id).decision !== 'deny')) ? 'allow' : 'deny');
+  } catch { return { decision: 'deny', revision: 'unknown' }; }
 }

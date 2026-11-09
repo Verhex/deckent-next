@@ -94,8 +94,10 @@ beri (owner 2026-11-05) kurulu kapsamda kişinin kendi araç kurallarını verir
 karalama araçları, kartın arkasında düzenleme/kabuk araçları ve bunların üç operasyonu. Şablon v20'den
 beri (owner 2026-11-09) aktör bir Run ve üç ayardan birini (`language`, `output_mode`,
 `terminal.responseStyle`) de önerebilir; ikisi de moda açık olmayan `require-approval` kuralıdır, bu
-yüzden kişinin `/do` plan kartı ya da `/config` önce/sonra kartı her modda açılır; mevcut kurulumlar
-bu iki kuralı bir sonraki servis başlangıcında bir kez ve denetim kaydıyla alır. Yerel ajan ve
+yüzden kişinin `/do` plan kartı ya da `/config` önce/sonra kartı her modda açılır; önerilen Run'ın
+havuzu ve iş hedefi `allow`'dur (o kart olmadan etkisizdir). Mevcut kurulumlar bu dört kuralı bir sonraki
+servis başlangıcında bir kez ve denetim kaydıyla alır; aktörün bir izninin zaten açtığı hücreye düşen kural
+hariç. `/policy` onları kapatıp açmak için tek bir **Yapay zekâ önerileri** satırında gösterir. Yerel ajan ve
 dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, başka yapılandırma, sır, politika,
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 grant'lerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.

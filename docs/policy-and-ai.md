@@ -97,7 +97,9 @@ scope: model calls, read and scratch tools, edit/shell tools behind the card, an
 operations. Since template v20 (owner 2026-11-09) the actor may also propose a Run and one of three
 settings (`language`, `output_mode`, `terminal.responseStyle`), both `require-approval` with no mode
 eligibility, so the person's `/do` plan card or `/config` before/after card opens in every mode;
-existing installations get these two rules at their next service start, once and audited.
+the proposed Run's pool and work target are `allow` (inert without that card). Existing installations
+get these four rules at their next service start, once and audited, except a rule whose cell an
+allow of the actor already holds; `/policy` shows them as one **AI proposals** row to turn off or on.
 The native agent and external MCP clients share this actor. No AI decision step,
 other configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.

@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { planMcpProposal } from '#adapters/index.js';
 import { describeMcpProposal, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule } from '../support/agent-turn-modes.js';
-import { aiSettingResourceIds, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
-import { localPrincipalChannel, openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
-import { requestAgentToolApproval } from '#engine/index.js';
+import { aiSettingResourceIds, firstRunProposalRules, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
+import { openSqliteApprovalStore } from '#adapters/index.js';
+import { proposeConfiguredRun } from '#composition/core/runs/index.js';
+import { proposalFixture } from '../support/run-proposal.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 
@@ -27,29 +28,25 @@ const AI = mcpPrincipalRef(me[0]!), PERSON_CONFIG = { id: 'person-config', effec
 const AI_SETTING = { id: 'ai-setting', effect: 'require-approval', actions: ['write'], scopes: 'all', principals: [AI], resource: { kind: 'config', ids: [...aiSettingResourceIds()] } };
 // The MCP actor's scope membership comes from its scoped rules (a first-run policy's v9 observation does it; here one scope read).
 const AI_SCOPE = { id: 'ai-scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: [AI], resource: { kind: 'scope', ids: ['scope'] } };
-const AI_WORK = { id: 'ai-work', effect: 'require-approval', actions: ['create'], scopes: ['scope'], principals: [AI], resource: { kind: 'run', ids: 'all' } };
+// The first-run v9 observation the MCP actor holds (run admission reads its budget account; the plan inspects its Run).
+const AI_OBSERVE = ['run', 'approval', 'model-activation', 'model-invocation', 'provider-spend-account'].map(kind => ({ id: `ai-observe-${kind}`, effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: [AI], resource: { kind, ids: 'all' } }));
+// The template's v20 delta itself (Run create and settings at require-approval; pool and work-target use at allow, lead 2026-11-09 option 2).
+const V20 = firstRunProposalRules([], me[0]!, ['scope']).wanted as unknown as Record<string, unknown>[];
 const config = (f: { project: string }) => JSON.parse(readFileSync(join(f.project, '.deckent', 'config.json'), 'utf8')) as Record<string, unknown>;
 const cardOf = (events: readonly AgentTurnStreamEvent[]) => events.find((event): event is Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }> => event.kind === 'approval.requested');
-/** The service's plan port for `propose_work`: records the principal channel of every call and plays /do's card loop (a pending card, then the Run). */
-function planPort() {
-  const channels: (string | undefined)[] = [], state = { approvalId: null as string | null };
-  const plan: PlanServiceRun = async (root, command) => {
-    channels.push(localPrincipalChannel());
-    const context = await loadConfiguredScopeContext(root, command.scopeId, {}, 'write'), integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
-    const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
-    try {
-      const decided = state.approvalId ? journal.store.load(command.scopeId, state.approvalId) : null, now = Date.now();
-      const graph = { tasks: [], criterionDefinitions: [] }, base = { proposal: { source: { kind: 'human' }, graph }, reason: null };
-      if (decided?.status === 'decided' && decided.decision?.decision === 'allow') return { proposal: { ...base, status: 'accepted', approval: null }, run: { runId: 'run-proposed' } } as never;
-      const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id: context.principal.id, issuer: context.principal.issuer, subject: context.principal.subject },
-        subject: { kind: 'agent-tool-call', turnId: command.commandId, round: 1, index: channels.length, tool: 'run_create', toolVersion: 1, resource: 'run:proposal', argsDigest: 'a'.repeat(64) },
-        policyRevision: 'r', summary: `Run plan · ${command.intent}`, createdAt: now, expiresAt: now + 60_000 });
-      state.approvalId = record.request.approvalId;
-      return { proposal: { ...base, status: 'pending', approval: { approvalId: record.request.approvalId, expiresAt: record.request.expiresAt, decisionRecordId: 'd' } }, run: null } as never;
-    } finally { journal.close(); }
-  };
-  return { plan, channels, state };
-}
+/** The service's plan port for `propose_work` as the real Run proposal application and run admission (a fixed human-source plan instead of a Brain
+ * call): the principal is whoever calls it, i.e. the AI actor `propose_work` runs it as. */
+const realPlan: PlanServiceRun = async (root, command, options) => {
+  const { principal } = await loadConfiguredScopeContext(root, command.scopeId, options, 'write');
+  const draft = proposalFixture('business', { id: principal.id, issuer: principal.issuer, subject: principal.subject });
+  return proposeConfiguredRun(root, { ...draft, scopeId: command.scopeId, commandId: command.commandId, proposalId: command.commandId, runId: `run-${command.commandId.slice(-16)}` }, options);
+};
+type Snapshot = { readonly identity: { readonly runId: string }; readonly progress: readonly { readonly phase: string }[];
+  readonly authority?: { readonly approval?: { readonly approvalId: string } } };
+const runsOf = (f: { rows: (sql: string) => unknown[] }) => f.rows('SELECT snapshot FROM runs').map(row => JSON.parse(String((row as { snapshot: string }).snapshot)) as Snapshot);
+/** The requester each Run's create receipt recorded. */
+const requesters = (f: { rows: (sql: string) => unknown[] }) => f.rows("SELECT command FROM run_receipts").flatMap(row => { const command = JSON.parse(String((row as { command: string }).command)) as { action?: string; actor: { issuer: string; subject: string } };
+  return command.action === 'create-run' ? [{ issuer: command.actor.issuer, subject: command.actor.subject }] : []; });
 
 describe('a proposal is checked before anything is shown (pure)', () => {
   it('no secret and no reference anywhere; setting names only; a valid name; every string through the ingress check', () => {
@@ -108,15 +105,23 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
       expect(refused).toMatchObject({ card: false, status: 'error' }); expect(refused.text).toContain(words);
     }
     expect(config(s)['output_mode']).toBeUndefined();
-    // alpha.64 B: propose_work plans through the service's plan port as the AI actor (never the person), opens the plan card, and a no admits nothing.
-    const port = planPort(), w = await modeRuntime({ grants: [AI_SCOPE, AI_WORK], mode: null, planWork: port.plan });
+    // alpha.64 (S5 D1): the turn's `policy-turn` record names each proposal call the v20 rules allowed and that ran.
+    expect([...new Set(s.policyTurns().flatMap(turn => turn.allowed.calls.map(call => (call['tool'] as { name: string }).name)))]).toEqual(['list_setting_choices', 'propose_setting']);
+    // alpha.64 B: propose_work runs the real Run proposal and run admission as the AI actor (never the person): with the v20 rules the one card is
+    // the /do Run card; a no admits nothing, a yes admits a pending Run requested by the AI actor and approved by the person.
+    const w = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, ...V20], mode: null, planWork: realPlan });
     const declinedWork = await w.call('propose_work', { request: 'add a third line to notes.txt' }, 'deny');
     expect(declinedWork, w.evidence(declinedWork)).toMatchObject({ card: true, status: 'error' }); expect(declinedWork.text).toContain('the person declined');
-    expect(cardOf(declinedWork.events)?.preview).toContain('Proposed by the AI in this conversation; you decide.');
-    port.state.approvalId = null;
+    expect(declinedWork.events.filter(event => event.kind === 'approval.requested')).toHaveLength(1);
+    expect(cardOf(declinedWork.events)).toMatchObject({ summary: expect.stringContaining('Plan · tasks: 1'), preview: expect.stringContaining('Proposed by the AI in this conversation; you decide.') });
+    expect(runsOf(w)).toEqual([]);
     const admitted = await w.call('propose_work', { request: 'add a third line to notes.txt' }, 'allow');
-    expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' }); expect(admitted.text).toContain('Run run-proposed was admitted');
-    expect(port.channels).toEqual(['mcp', 'mcp', 'mcp']);
+    expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' }); expect(admitted.events.filter(event => event.kind === 'approval.requested')).toHaveLength(1);
+    const [run] = runsOf(w); expect(admitted.text).toContain(`Run ${run!.identity.runId} was admitted`);
+    expect(run).toMatchObject({ progress: [{ phase: 'pending' }] }); expect(requesters(w)).toEqual([AI]);
+    const journal = openSqliteApprovalStore(w.ledger, { busyTimeoutMs: 1_000, journalMode: 'delete', durability: 'full' });
+    try { expect(journal.store.load('scope', run!.authority!.approval!.approvalId)).toMatchObject({ status: 'decided', request: { requester: { issuer: AI.issuer, subject: AI.subject } },
+      decision: { decision: 'allow', actor: { issuer: me[0]!.issuer, subject: me[0]!.subject } } }); } finally { journal.close(); }
   }, 180_000);
 
   it('full-auto and a full-access turn still open the window; a no writes nothing in either', async () => {
@@ -129,15 +134,14 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     const open = await full.call('propose_mcp_server', proposal, 'deny', { fullAccess: true });
     expect(open.card).toBe(true); expect(open.text).toContain('nothing was written'); expect(registered(full)).toBeNull();
     // alpha.64 (owner S4/S5): full-auto and a full-access turn still open the setting and plan cards; a no changes nothing.
-    const port = planPort(), every = await modeRuntime({ grants: [AI_SCOPE, AI_SETTING, AI_WORK, PERSON_CONFIG, FULL_ACCESS], mode: 'full-auto', planWork: port.plan });
+    const every = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, ...V20, PERSON_CONFIG, FULL_ACCESS], mode: 'full-auto', planWork: realPlan });
     for (const options of [{}, { fullAccess: true }]) {
       const setting = await every.call('propose_setting', { keyPath: 'output_mode', choice: 'json' }, 'deny', options);
       expect(setting, every.evidence(setting)).toMatchObject({ card: true, status: 'error' });
-      port.state.approvalId = null;
       const work = await every.call('propose_work', { request: 'update the tests' }, 'deny', options);
       expect(work, every.evidence(work)).toMatchObject({ card: true, status: 'error' });
     }
-    expect(config(every)['output_mode']).toBeUndefined();
+    expect(config(every)['output_mode']).toBeUndefined(); expect(runsOf(every)).toEqual([]);
   }, 180_000);
 
   it('a secret or a reference is refused before any window, also in a full-access turn; without a policy grant the model cannot propose at all', async () => {
@@ -154,16 +158,16 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     expect(denied.card).toBe(false); expect(denied.status).not.toBe('ok'); expect(registered(none)).toBeNull();
     // alpha.64 (owner S6): without the AI actor's v20 rule (revoked, or never granted) or with the company's explicit tool deny, the proposal tools
     // are not offered at all: no card, no write, even though the person's own rule would allow the write.
-    const port = planPort();
-    for (const grants of [[AI_SCOPE, PERSON_CONFIG], [AI_SCOPE, AI_SETTING, AI_WORK, PERSON_CONFIG, { id: 'company-closes', effect: 'deny', actions: ['invoke'], scopes: ['scope'], principals: [AI],
+    for (const grants of [[AI_SCOPE, PERSON_CONFIG], [AI_SCOPE, ...AI_OBSERVE, ...V20, PERSON_CONFIG, { id: 'company-closes', effect: 'deny', actions: ['invoke'], scopes: ['scope'], principals: [AI],
       resource: { kind: 'agent-tool', ids: ['propose_setting', 'propose_work'] } }]]) {
-      const closed = await modeRuntime({ grants, mode: null, planWork: port.plan });
+      const closed = await modeRuntime({ grants, mode: null, planWork: realPlan });
       for (const [name, args] of [['propose_setting', { keyPath: 'language', choice: 'tr' }], ['propose_work', { request: 'update the tests' }]] as const) {
         const refused = await closed.call(name, args, 'allow');
         expect(refused, closed.evidence(refused)).toMatchObject({ card: false }); expect(refused.status).not.toBe('ok');
       }
-      expect(config(closed)['language']).toBeUndefined();
+      expect(config(closed)['language']).toBeUndefined(); expect(runsOf(closed)).toEqual([]);
+      // Revoked or closed by the company: the tools are not offered, so no proposal call ran on an allow in the turn's record.
+      expect(closed.policyTurns().flatMap(turn => turn.allowed.calls.map(call => (call['tool'] as { name: string }).name)).filter(name => name.startsWith('propose_'))).toEqual([]);
     }
-    expect(port.channels).toEqual([]);
   }, 180_000);
 });

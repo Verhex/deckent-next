@@ -168,6 +168,13 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     /** B1 card facts: the permission cell this call was planned as (null: not planned, e.g. a plan error). */ cell(tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null { const kept = stored.get(keyOf(tool, args)); return kept && 'cell' in kept ? kept.cell : null; },
     /** NATIVE-BAGLAM: one representative cell's decision on the given snapshot, described in the session context; never kept, audited or applied. */ probe: async (snapshot: unknown, tool: AgentToolSpec, cell: AgentToolCallCell, shellInput?: Shell) => (await decide(tool, cell, snapshot, undefined, shellInput))?.decision ?? null,
     /** S5 D1: the policy denied a call after its owner approval (the turn's revalidation): an effect-stage refusal. */ refusedAfterApproval(tool: AgentToolSpec, args: Record<string, unknown>, call: CallRef, revision: string) { const kept = stored.get(keyOf(tool, args)); turnRecord.note(tool, call, kept && 'cell' in kept ? kept.cell : null, { decision: 'deny', revision }, 'effect', keyOf(tool, args)); },
+    /** alpha.64 B + C: a proposal tool is decided by the AI actor's v20 rules (`aiProposalToolDecision`), not by the cells above; the turn's record still
+     * names it: a refusal now, a plain allow once it runs (`ranAllowed`). */
+    proposal(tool: AgentToolSpec, args: Record<string, unknown> | undefined, call: CallRef | undefined, decided: { readonly decision: 'allow' | 'deny'; readonly revision: string }) {
+      if (!args) return; const key = keyOf(tool, args);
+      if (decided.decision === 'deny') { stored.delete(key); turnRecord.note(tool, call, null, decided, 'policy', key); }
+      else stored.set(key, { cell: 'read', shell: undefined, decision: { ...decided, relaxation: null } });
+    },
     /** S5 D1: a read the turn runs on its own path after a plain allow here. */ ranAllowed(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string) { const key = keyOf(tool, args), kept = stored.get(key); if (kept && 'cell' in kept && kept.decision.decision === 'allow' && !kept.decision.relaxation && !kept.decision.standing && !kept.decision.fullAccess) turnRecord.allowed({ tool, call: { ...execution, callId }, cell: kept.cell, argsDigest: key, revision: kept.decision.revision }); },
     /** S5 D1: seals the turn's `policy-turn` record once per content (false: the audit refused it). Evidence after the fact: it never changes a decision or fails the turn. */ flush: async () => {
       const recorded = await turnRecord.flush(clock.sample().wallMs, event => withAudit(audit => audit.record(event)));

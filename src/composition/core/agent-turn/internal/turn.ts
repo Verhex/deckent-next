@@ -266,7 +266,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, ...(native ? { person: native.witness } : {}), standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush;
     // NATIVE-BAGLAM: the descriptive session snapshot over one fresh policy snapshot (mode, thinking, model facts, each tool's effect now); the prompt states it, `session_state` returns it fresh; a native turn's mode is the witnessed person's (R5c).
     const posture = shell ? await shell.posture() : null, sessionOf = async () => { const policy = await context.policy.load().catch(() => null); return agentSessionSnapshot({ policy, principal: native?.witness ?? context.principal, scopeId: command.scopeId, sessionId: command.sessionId ?? null, fullAccess, tools, shell: posture,
-      thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool) : decisions.probe(policy, tool, cell, shellInput) }); };
+      thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool).then(decided => decided.decision) : decisions.probe(policy, tool, cell, shellInput) }); };
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
       model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
@@ -369,7 +369,8 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         hostNote: () => cliNotices.size ? t('headless.agent.k13.cliNotices', { events: [...cliNotices].join(', ') }, language) : null,
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
-      authorize: (tool, args, call) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool) : decisions.authorize(tool, args, call),
+      // alpha.64: the proposal tools are decided by the AI actor's v20 rules; the turn's `policy-turn` record names them like every other call.
+      authorize: (tool, args, call) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool).then(decided => { decisions.proposal(tool, args, call, decided); return decided.decision; }) : decisions.authorize(tool, args, call),
       async prepare(tool, args) {
         if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool) || mcps(tool)) return decisions.prepare(tool, args);
         return { ok: true };
@@ -461,7 +462,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
         if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
         if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));
         if (proposals?.owns(tool.name)) return proposals.apply(args);
-        if (agentProposals?.owns(tool.name)) return agentProposals.apply(tool.name, args, callId);
+        if (agentProposals?.owns(tool.name)) { decisions.ranAllowed(tool, args, execution, callId); return agentProposals.apply(tool.name, args, callId); }
         decisions.ranAllowed(tool, args, execution, callId); return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
       // v30 steer: the engine takes a line only at its model-call boundary; taking is synchronous, so a line joins once or stays pending.

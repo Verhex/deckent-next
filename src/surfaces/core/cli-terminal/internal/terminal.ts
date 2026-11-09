@@ -123,7 +123,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
       theme: (control: TerminalHostContext['theme']) => themePanelPort(root, context, options, locale, {
         setting: (config as { terminal?: { theme?: TerminalThemeSetting } }).terminal?.theme ?? TERMINAL_THEME_SETTINGS[0],
         capability: colorCapability({ env, isTTY: true, argv: process.argv }), colorfgbg: env['COLORFGBG'], ...control }) } : {}),
-    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
+    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation, context.upgradePolicyTemplate) } : {}),
     ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).

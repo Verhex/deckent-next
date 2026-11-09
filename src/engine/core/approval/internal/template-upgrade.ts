@@ -1,10 +1,9 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, matchFirstRunPolicyTemplate, planPolicyChange, policySchema,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, matchFirstRunPolicyTemplate, planPolicyChange, policySchema,
   type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
 import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
-
 /** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`; owner A48-D3, D3c). */
 const FIRST_RUN_DELTA_VERSION = 20;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
@@ -20,9 +19,8 @@ export interface TemplateUpgradeResult {
   readonly summary: string | null;
   readonly missing: readonly TemplateUpgradeMissing[];
   readonly reason: string | null;
-  readonly conflicts: readonly string[];
+  readonly conflicts: readonly string[]; /** A scoped (`only`) read: the current delta's rule ids the policy holds now. */ readonly held?: readonly string[];
 }
-
 /**
  * `deckent policy upgrade --template current`: missing current first-run rules added through the governed `policy.administer@1` chain —
  * the same chain, delegation bound (I2), `authority-change` audit and authority archive (the backup of every change) as every policy change.
@@ -67,7 +65,8 @@ export class PolicyTemplateUpgrade {
     const without = (ids: readonly string[]) => plan.change.changes.filter(change => change.kind !== 'grant.add' || !ids.includes(change.grant.id));
     const variants = [without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
       .filter((changes, index, all) => changes.length > 0 && changes.length < plan.change.changes.length && all.findIndex(other => other.length === changes.length) === index);
-    return [plan.change, ...variants.map(changes => ({ ...plan.change, changes }))].some(change => {
+    const scoped = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, scopeId, ...this.names, ...(serviceId === undefined ? {} : { serviceId }), only: 'ai-proposals' });
+    return [plan.change, ...variants.map(changes => ({ ...plan.change, changes })), ...(scoped.status === 'plan' ? [scoped.change] : [])].some(change => { // scoped: /policy's re-enable (alpha.64)
       const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
       const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
       return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
@@ -75,7 +74,7 @@ export class PolicyTemplateUpgrade {
     });
   }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
-    readonly reason: string }): Promise<TemplateUpgradeResult> {
+    readonly reason: string; /** alpha.64: preview and apply only the current delta (the AI actor's v20 proposal rules); rollback removes only it anyway. */ readonly only?: 'ai-proposals' }): Promise<TemplateUpgradeResult> {
     const policy = await this.snapshot();
     const result = (status: TemplateUpgradeResult['status'], extra: Partial<TemplateUpgradeResult> = {}): TemplateUpgradeResult => Object.freeze({ schemaVersion: 1, status,
       revision: policy.revision, rules: [], summary: null, missing: [], reason: null, conflicts: [], ...extra });
@@ -134,12 +133,13 @@ export class PolicyTemplateUpgrade {
         reason: input.reason, revision: policy.revision, kind: 'policy-template-upgrade' });
       return result('rolled-back', { reason: held.join(','), conflicts });
     }
-    const plan = firstRunTemplateAdditions(files.policy, { person: input.principal, scopeId: input.scopeId, ...this.names });
-    if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason });
-    if (plan.status === 'current') return result('current');
+    const plan = firstRunTemplateAdditions(files.policy, { person: input.principal, scopeId: input.scopeId, ...this.names, ...(input.only ? { only: input.only } : {}) });
+    const held = input.only /* the delta rules held now (what a rollback removes): /policy's row and its revoke card */ ? { held: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.filter(id => policy.grants.some(rule => rule.id === id)) } : {};
+    if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason, ...held });
+    if (plan.status === 'current') return result('current', held);
     const summary = describePolicyChange(files, plan.change);
     const missing = this.missing(policy, input.principal, input.scopeId, planPolicyChange(files.policy, files.bindings, plan.change).touched);
-    if (input.mode === 'preview') return result('preview', { rules: plan.rules, summary, missing });
+    if (input.mode === 'preview') return result('preview', { rules: plan.rules, summary, missing, ...held });
     if (missing.length) return result('refused', { rules: plan.rules, summary, missing });
     await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change: plan.change, tag: `template-v5:${plan.rules.map(rule => rule.id).join(',')}`,
       reason: input.reason, revision: policy.revision, kind: 'policy-template-upgrade' });

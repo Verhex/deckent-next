@@ -75,13 +75,13 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
   return {
     owns: (name: string) => AI_PROPOSAL_TOOL_SPECS.some(spec => spec.name === name) && (input.plan !== undefined || name !== AI_PROPOSAL_REGISTRY.tools.work),
     /** Offered, and each call authorized, for the AI actor while its v20 rule holds: revoking or denying it stops the proposals (fail closed). */
-    async authorize(tool: AgentToolSpec): Promise<'allow' | 'deny' | 'require-approval'> {
+    async authorize(tool: AgentToolSpec): Promise<{ readonly decision: 'allow' | 'deny'; readonly revision: string }> {
       const context = await ai().catch(() => null), policy = context ? await context.policy.load().catch(() => null) : null;
-      return context && policy ? aiProposalToolDecision(policy, context.principal, scopeId, tool.name) : 'deny';
+      return context && policy ? aiProposalToolDecision(policy, context.principal, scopeId, tool.name) : { decision: 'deny', revision: 'unknown' };
     },
     async offered(): Promise<readonly AgentToolSpec[]> {
       const offered: AgentToolSpec[] = [];
-      for (const spec of AI_PROPOSAL_TOOL_SPECS) if ((input.plan || spec.name !== AI_PROPOSAL_REGISTRY.tools.work) && await this.authorize(spec) === 'allow') offered.push(spec);
+      for (const spec of AI_PROPOSAL_TOOL_SPECS) if ((input.plan || spec.name !== AI_PROPOSAL_REGISTRY.tools.work) && (await this.authorize(spec)).decision === 'allow') offered.push(spec);
       return offered;
     },
     async apply(name: string, args: Record<string, unknown>, callId: string): Promise<AgentToolOutcome> {

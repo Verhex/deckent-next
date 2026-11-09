@@ -496,16 +496,23 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`<host>/mcp`: the chat agent and every external MCP client) holds two `require-approval` rules with no mode eligibility: create a
   Run, and write `language`, `output_mode` or `terminal.responseStyle` (project or global layer). No mode, full access included,
   lowers them: `propose_setting` opens the same before/after card as `/config`, `propose_work` the same plan card as `/do`, and only
-  your yes has an effect; the tools are offered only while these rules hold (a company `agent-tool` deny closes them too). Models and
-  the Brain model stay in `/model`, every other setting in its own window. An existing installation gets the two rules
+  your yes has an effect; the tools are offered only while these rules hold (a company `agent-tool` deny closes them too). Run
+  admission also checks the requester's pool and work target, so v20 adds two `allow` rules for the AI actor (`pool/use`,
+  `work-target/use`, installed scope); without the Run card they admit nothing, and the Run card is still the one card you see. Models and
+  the Brain model stay in `/model`, every other setting in its own window. An existing installation gets the four rules
   automatically at its first service start on this release, with no card (owner decision), when the service runs as the person who
   owns the policy files and a rule names that person in the configured service scope (or a first-run read rule does): the start writes
-  an `authority-change` audit record and an archived revision under the installer's upgrade key, once; after you revoke them with
-  `deckent policy upgrade --template current --rollback` (your card) the start never adds them again, and `--apply` adds them back.
-  The `/policy` window has no row for these rules yet; other shapes keep the person's upgrade card. Open: `propose_work` does not reach its card yet, because Run
-  admission also checks `pool/use` (and `work-target/use` when a target is configured) for the requester and the AI actor holds
-  neither, so the proposal ends `POLICY_DENIED` (owner decision pending); a chat-started plan shows no dirty-tree card and no
-  quota-wait window. A model that cannot use tools still needs `/do`. *Workaround:* start work with `/do`.
+  an `authority-change` audit record and an archived revision under the installer's upgrade key, once. A rule whose cell an allow of
+  the AI actor already holds (for example the MCP `work` or `dogfood-worker` group) is not added, so that allow never becomes a card; the
+  record names each such rule and the rule that holds it. `/policy` shows the four rules as one row, **AI proposals** (on, off or partly
+  on): off removes them on your card (`deckent policy upgrade --template current --rollback`), on adds back only them
+  (`--apply --only ai-proposals`); after you turn them off the start never adds them again. A chat-started plan shows no dirty-tree card
+  and no quota-wait window, and does not open `/tasks` by itself. A model that cannot use tools still needs `/do`. *Workaround:* start work
+  with `/do`, or open `/tasks` after the AI says the Run was admitted.
+- **The Run card does not bind the work target yet.** A Run's card is bound to its plan, pool and execution profile, not to the
+  configured work target's id (the Run does not record it; Slice 1 of work targets). A target changed in configuration between the card and
+  admission is checked again (`work-target/use`) but is not named on the card. *Workaround:* do not change `execution.workTargets` while a
+  Run card is open.
 
 ## Budgets and spend
 
