@@ -2,13 +2,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { z } from 'zod';
-import { persistedString, RegistryError } from '#domain/index.js';
+import { persistedString } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, DeckentError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
   registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, withConfigWriteLock, writeConfig, type Environment } from '#platform/index.js';
-import { assertPublicSecretName, CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
-  type SecretGrantStoreFactory, type SecretStore, type PersonalCustodyOwner, type SecretStoreDescriptor, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
-import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory,
-  fileSecretGrantStoreFactory, personalStoreAssertion, rememberPersonalStoreInstance, type PersonalStoreContext } from '#adapters/core/secret-store/index.js';
+import { assertPublicSecretName, SECRET_STORE_ID_PATTERN, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore, type SecretStore, type PersonalCustodyOwner,
+  type SecretStoreDescriptor, type SecretStoreSelectionPort } from '#engine/index.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, personalStoreAssertion, rememberPersonalStoreInstance, type PersonalStoreContext } from '#adapters/core/secret-store/index.js';
+import { openSelectedSecretGrantStore, secretStores as registry } from '#adapters/core/extension-registry/index.js';
 
 /**
  * The `secrets` section v1 (SECRET-K1): which registered backend resolves `$DECK:NAME` references. An absent section is the environment
@@ -18,22 +18,12 @@ import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecre
 export const secretsConfigSchema = z.strictObject({ store: persistedString(z.string().max(128)).regex(SECRET_STORE_ID_PATTERN) });
 export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
 
-// Core backends at construction; Enterprise/custom backends register before the section is registered (then the registry is sealed).
-const registry = SecretStoreRegistry.create([environmentSecretStoreFactory, fileSecretStoreFactory, encryptedFileSecretStoreFactory]);
-/** Adds a backend (an Enterprise vault, a customer KMS) without editing Core; refused after `registerProviderConfig()` sealed the registry. */
-export function registerSecretStoreBackend(factory: SecretStoreFactory): void { registry.register(factory); }
 export function readSecretsConfig(config: Readonly<Record<string, unknown>>): SecretsConfig {
   return config['secrets'] === undefined ? { store: ENV_SECRET_STORE_ID } : secretsConfigSchema.parse(config['secrets']);
 }
 /** The installation root the file backend lives in, from the caller's environment (null when none resolves). */
 function installationRoot(env: Environment, platform: string): string | null {
   try { return resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env).stateDir; } catch { return null; }
-}
-// PRE-8 v2: where project grants live. Core keeps them beside the project vault; one Enterprise store may replace it before the seal.
-const grants = SecretGrantStoreRegistry.create([fileSecretGrantStoreFactory]);
-export function registerSecretGrantStore(factory: SecretGrantStoreFactory): void {
-  if (grants.ids().some(id => id !== CORE_SECRET_GRANT_STORE_ID)) throw new RegistryError('REGISTRY_ADAPTER_DUPLICATE');
-  grants.register(factory);
 }
 /** The installation (global) root of the caller's environment: the main vault's and every project vault's parent (null: none resolves). */
 export const installationSecretRoot = (env: Environment, platform: string = process.platform) => installationRoot(env, platform);
@@ -44,9 +34,8 @@ export function openProjectVaultStore(directory: string, anchor: ProjectVaultAnc
 }
 /** The project's grant store: the registered Enterprise store when there is one, else Core's file. */
 export function openSecretGrantStore(root: string, anchor: ProjectVaultAnchor, lockTimeoutMs: number): SecretGrantStore {
-  return grants.open(grants.ids().find(id => id !== CORE_SECRET_GRANT_STORE_ID) ?? CORE_SECRET_GRANT_STORE_ID, { root, anchor, lockTimeoutMs });
+  return openSelectedSecretGrantStore({ root, anchor, lockTimeoutMs });
 }
-/** Whether a backend id is registered (Core or added before the registry sealed). */
 export function isRegisteredSecretStore(id: string): boolean { return registry.has(id); }
 /** The registered backend ids, Core first, for a picker; never a value. */
 export function registeredSecretStores(): readonly string[] { return registry.ids(); }
@@ -121,10 +110,7 @@ export function openConfiguredSecretStore(config: Readonly<Record<string, unknow
   return openRegisteredSecretStore(readSecretsConfig(config).store, env, platform);
 }
 
-let registered = false;
 export function registerSecretStoreConfig(): void {
-  if (registered) return;
-  registry.seal(); grants.seal();
   registerConfigSection('secrets', secretsConfigSchema, {
     optional: true,
     // The selection is never itself a secret reference: it is read before any reference resolves.
@@ -147,5 +133,4 @@ export function registerSecretStoreConfig(): void {
     const store = openConfiguredSecretStore(context.config, context.env, context.platform);
     return async name => { assertPublicSecretName(name); return store.get(name); };
   });
-  registered = true;
 }

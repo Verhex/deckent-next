@@ -1,8 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import * as extensions from '../../../src/extensions.js';
 import * as sdk from '../../../src/index.js';
 import { composeCore } from '#composition/core/root/index.js';
-import { openConfiguredSecretStore } from '#adapters/index.js';
+import { openConfiguredSecretStore, openSecretGrantStore } from '#adapters/index.js';
 import { environmentProbeRegistry, mcpCapabilityRegistry, providerSpendNoChargeRegistry } from '#engine/index.js';
 
 // ENTERPRISE-EXT-1 (owner K7 = A): `deckent/extensions` is the one public registration entry. This file's module graph is fresh (vitest
@@ -15,11 +16,12 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 } });
 
 it('exports exactly the declared extension surface; the SDK entry exports none of its registrations', () => {
-  expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_GRANT_STORE_ID_PATTERN', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory', 'enableDeckentCompileCache',
-    'registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerProviderSpendPeriod', 'registerSecretGrantStore',
-    'registerSecretStoreBackend', 'runCli', 'runMcp']);
-  expect(['registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerProviderSpendPeriod', 'registerSecretGrantStore',
-    'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
+  // arch.json `guards.publicExtensions` is the one registration list (lint-arch G-i also checks the entry exports each one).
+  const { registrations, compositionOnly, rootOnly } = JSON.parse(readFileSync('arch.json', 'utf8')).guards.publicExtensions as
+    { registrations: string[]; compositionOnly: { name: string }[]; rootOnly: Record<string, string> };
+  expect(Object.keys(extensions).sort()).toEqual([...registrations, 'CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_GRANT_STORE_ID_PATTERN', 'SECRET_STORE_ID_PATTERN',
+    'createSecretHelperFactory', 'enableDeckentCompileCache', 'runCli', 'runMcp'].sort());
+  expect([...registrations, ...compositionOnly.map(entry => entry.name), ...Object.keys(rootOnly)].filter(name => name in sdk)).toEqual([]);
 });
 
 it('the distribution MCP runner preserves Core argument validation', async () => {
@@ -45,7 +47,12 @@ it('registers a non-Core secret backend before the composition root seals, and r
   extensions.registerEnvironmentProbeKind('overlay.connector-reachable', reachable);
   expect(() => extensions.registerEnvironmentProbeKind('overlay.connector-reachable', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_ADAPTER_DUPLICATE' }));
   extensions.registerProviderSpendPeriod({ schemaVersion: 1, id: 'overlay.quarter-local', calendarMonths: 3 });
+  // PRE-8 v2: one non-Core grant store may replace Core's; a second one is refused.
+  const grantStore = (id: string) => ({ id, create: () => ({ id }) as never });
+  extensions.registerSecretGrantStore(grantStore('overlay.secret-grant.memory@1'));
+  expect(() => extensions.registerSecretGrantStore(grantStore('overlay.secret-grant.other@1'))).toThrow(expect.objectContaining({ code: 'REGISTRY_ADAPTER_DUPLICATE' }));
   composeCore();
+  expect(openSecretGrantStore('/unused', { installationId: 'i', projectId: 'p' } as never, 1).id).toBe('overlay.secret-grant.memory@1');
   expect(environmentProbeRegistry.with(new Map([['executable', reachable]])).get('overlay.connector-reachable')).toBe(reachable);
   expect(() => extensions.registerEnvironmentProbeKind('overlay.late', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
   expect(providerSpendNoChargeRegistry.find('https://llm.erp.example/v1/chat/completions', 429)).toMatchObject({ vendor: 'overlay.erp-llm' });

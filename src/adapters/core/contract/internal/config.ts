@@ -29,9 +29,9 @@ export function registerProviderConfig(): void {
 }
 export { providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingTemplate, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
-export { openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS,
-  isRegisteredSecretStore, openRegisteredSecretStore, registeredSecretStores, registerSecretGrantStore, installationSecretRoot, openProjectVaultStore, openSecretGrantStore } from './secrets.js';
-export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
+export { openConfiguredSecretStore, readSecretsConfig, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS,
+  isRegisteredSecretStore, openRegisteredSecretStore, registeredSecretStores, installationSecretRoot, openProjectVaultStore, openSecretGrantStore } from './secrets.js';
+export { readOperationsConfig, operationsConfigSchema, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
 export { readTerminalChatConfig, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalResponseStyle, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_RESPONSE_STYLES, TERMINAL_THEMES,
   type TerminalChatConfig, type TerminalFetchConfig, type TerminalResponseStyle, type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
 export { readDecisionPolicy, registerDecisionConfig, validateDecisionPolicyLayers } from './decision.js';

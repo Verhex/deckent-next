@@ -96,3 +96,9 @@ it('every lazy edge of the CLI start path loads from the build and has a load bu
   expect(broken.stdout).toContain('LAZY_EDGE_FAILED #surfaces/core/no-such-unit/index.js');
   expect(broken.status).toBe(1);
 });
+
+// KG9 F6: `deckent/extensions` reaches the adapters only through its registry unit, never the adapters barrel (the whole adapter graph).
+it('the extension entry statically loads neither the adapters barrel nor the composition root', async () => {
+  const { files } = await staticReach(resolve(dist, 'extensions.js'));
+  expect(['adapters/index.js', 'composition/core/root/index.js'].filter(path => files.has(resolve(dist, path)))).toEqual([]);
+});
