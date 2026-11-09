@@ -1,7 +1,6 @@
 import { constants } from 'node:fs';
-import { ManagedFileError } from '#platform/index.js';
+import { EMPTY_KNOWN_SECRETS, ManagedFileError, redactBounded } from '#platform/index.js';
 import { open, rename } from 'node:fs/promises';
-import { redactText } from '#adapters/core/native-connection/index.js';
 
 export interface TerminalHistoryEntry { readonly text: string; readonly pastes: readonly never[] }
 export interface TerminalHistoryFile {
@@ -48,7 +47,7 @@ export function openTerminalHistoryFile(path: string, limits = TERMINAL_HISTORY_
       return Object.freeze(kept.map(text => Object.freeze({ text, pastes: [] as never[] })));
     },
     async append(entry) {
-      const text = redactText(entry.text, [], limits.maxEntryBytes);
+      const text = redactBounded(entry.text, EMPTY_KNOWN_SECRETS, limits.maxEntryBytes);
       if (!text.trim() || Buffer.byteLength(entry.text) > limits.maxEntryBytes) return;
       const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
       try { await handle.write(JSON.stringify({ text }) + '\n'); } finally { await handle.close(); }

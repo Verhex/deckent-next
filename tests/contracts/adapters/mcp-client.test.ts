@@ -206,6 +206,7 @@ describe('MCP client: calls, bounds and failures', () => {
     // A raw legacy peer isolates the inbound gate from a fixture SDK's own result validation.
     const replies = join(f.root, 'reply.json'), script = join(f.root, 'raw.mjs'), log = join(f.root, 'raw.jsonl');
     writeFileSync(script, `import { readFileSync, appendFileSync } from 'node:fs'; import { createInterface } from 'node:readline';
+process.stderr.write(process.env.RAW_STDERR ?? '');
 const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');
 createInterface({ input: process.stdin }).on('line', line => { const m = JSON.parse(line), config = JSON.parse(readFileSync(process.argv[2], 'utf8'));
   appendFileSync(process.argv[3], JSON.stringify({ method: m.method, pid: process.pid }) + '\\n');
@@ -243,6 +244,14 @@ createInterface({ input: process.stdin }).on('line', line => { const m = JSON.pa
       if (method === 'server/discover') expect(requests.map(row => row.method)).toEqual(['server/discover']);
       await guarded.close();
     }
+    // A6-7 (KG8 P15/P16): a stdio start failure and the stderr tail are redacted with the server's own known values (a `$DECK:` value here).
+    const canary = 'fixture-deck-canary-77', leaky = pool(), target = { ...f.server([pinOf(echo)]), args: [script, replies, log], env: { RAW_STDERR: `raw stderr ${canary}` }, secrets: [canary] };
+    writeFileSync(replies, JSON.stringify({ method: 'initialize', result: { protocolVersion: canary, capabilities: { tools: {} }, serverInfo: { name: 'raw', version: '1' } }, tool: echo }));
+    const refused = await leaky.open(target, settings([target]), context(f.root));
+    expect(refused).toMatchObject({ ok: false, reason: 'start-failed', detail: expect.stringContaining('[REDACTED]') });
+    expect(JSON.stringify(refused)).not.toContain(canary);
+    await expect.poll(() => leaky.stderr('fx'), { timeout: 5_000 }).toContain('raw stderr');
+    expect(leaky.stderr('fx')).not.toContain(canary);
   }, 30_000);
 
   it.skipIf(process.platform === 'win32')('requires POSIX launcher/private credential custody: REALM-NOTICE: a sandbox that wins after a preferred one was passed over names that fallback on the card posture (the shell\'s own line)', async () => {
@@ -653,7 +662,7 @@ describe('MCP registry: scopes, precedence, expansion and the trust record', () 
     const secret = async (name: string) => name === 'VAULT_KEY' ? 'from-vault' : undefined;
     const template = { command: '${TOOL_HOME}/bin/server', args: ['--port', '${PORT:-8080}', '--region', '${REGION:-eu}'], env: { TOKEN: '${GITHUB_TOKEN}' } };
     expect(await expandMcpEntry(template, 'local', env, secret)).toEqual({ ok: true, command: '/opt/tool/bin/server', args: ['--port', '9', '--region', 'eu'],
-      env: { TOKEN: 'ghp_realtokenvalue' }, secrets: [] });
+      env: { TOKEN: 'ghp_realtokenvalue' }, secrets: ['ghp_realtokenvalue'] }); // owner B2-10: a personal `${VAR}` value read into env is a known value
     expect(await expandMcpEntry(template, 'project', env, secret)).toMatchObject({ ok: true, env: { TOKEN: '' } });
     expect(await expandMcpEntry({ command: 'x', env: { KEY: '$DECK:VAULT_KEY' } }, 'user', env, secret)).toMatchObject({ ok: true, env: { KEY: 'from-vault' } });
     expect(await expandMcpEntry({ command: 'x', env: { KEY: '$DECK:VAULT_KEY' } }, 'project', env, secret)).toEqual({ ok: false, reason: 'secret-reference-in-project-file', refusal: { kind: 'secret-reference-in-project-file' } });

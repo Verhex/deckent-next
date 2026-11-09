@@ -13,7 +13,7 @@ export interface McpClientServerSettings {
   readonly transport?: 'http';
   readonly url?: string;
   readonly headers?: Readonly<Record<string, string>>;
-  /** The resolved secret values of the entry (`$DECK:`): cut out of every answer before it reaches the model; never shown. */
+  /** The server's known values (`expandMcpEntry`: `$DECK:` and personal `${VAR}` env/header values): cut out of every answer and failed start; never shown. */
   readonly secrets?: readonly string[];
   readonly command: string;
   readonly args: readonly string[];

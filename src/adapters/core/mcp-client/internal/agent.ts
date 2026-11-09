@@ -17,7 +17,7 @@ export interface McpOfferedTool {
   readonly posture: string;
   /** C5: the server's sandbox shows it the project read-only (a failed answer then says so and how to let it write). */
   readonly projectReadOnly: boolean;
-  /** The server's resolved secret values: cut out of its answers before the model sees them (never shown). */
+  /** The server's known values (`expandMcpEntry`): cut out of its answers before the model sees them (never shown). */
   readonly secrets: readonly string[];
   readonly timeoutMs: number;
   /** The server's scope and definition as trusted when the turn read them (MCP-REVOKE: the send re-checks them; null: never sent). */

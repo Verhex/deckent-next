@@ -3,11 +3,11 @@ import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import type { StdioServerParameters } from '@modelcontextprotocol/client/stdio';
-import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, readBuildIdentity, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
+import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, knownSecretValues, readBuildIdentity, redactBounded, PACKAGE_NAME, PACKAGE_VERSION,
+  type KnownSecretSnapshot } from '#platform/index.js';
 import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
-import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
 import { mcpEndpointRefusal } from './registry.js';
@@ -179,6 +179,8 @@ interface ServerState {
   /** The view this process belongs to (`scoped`: the scope and project; '' for the pool's own default view): never shared across views. */
   readonly namespace: string;
   readonly id: string;
+  /** The server's known values (KG8 P16): its resolved launch values, and an HTTP server's endpoint and header values; one snapshot per launch. */
+  readonly known: KnownSecretSnapshot;
   client: Client | null;
   generation: number;
   starts: number;
@@ -274,7 +276,7 @@ export class McpClientPool implements McpPoolView {
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); this.states.delete(name); state = undefined; }
     if (!state) {
       if (!this.makeRoom()) return Promise.resolve({ ok: false, reason: 'start-failed', detail: 'too many MCP servers are running (mcp.maxServers); none is idle' });
-      state = { key, namespace, id: server.id, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, validator: null,
+      state = { key, namespace, id: server.id, known: knownSecretValues([...server.transport === 'http' ? [server.url!, ...Object.values(server.headers ?? {})] : [], ...server.secrets ?? []]), client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, validator: null,
         lock: Promise.resolve(), usedAtMs: this.now(), inFlight: 0 };
       this.states.set(name, state);
     }
@@ -343,10 +345,9 @@ export class McpClientPool implements McpPoolView {
     try { this.signal.throwIfAborted(); await client.connect(transport, { timeout: settings.connectTimeoutMs, signal: this.signal }); if (state.inputRefusal) throw Object.assign(new Error(state.inputRefusal), { code: state.inputRefusal }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
-      // A failed HTTP start may name the expanded endpoint or a header value: every resolved value is cut out before anything shows it.
+      // A6-7: a failed start (stdio or HTTP) may echo a launch value; the server's known values are cut out before anything shows it.
       const detail = state.inputRefusal ?? String(errorCode(error) ?? (error as Error)?.message ?? 'failed');
-      const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(server.transport === 'http'
-        ? redactText(detail, [server.url!, ...Object.values(server.headers ?? {}), ...(server.secrets ?? [])], 400) : detail, 200) };
+      const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(redactBounded(detail, state.known, 400), 200) };
       if (this.signal.aborted) return { ...failed, detail: 'cancelled' };
       if (!launch.sandbox) return server.transport !== 'http' && errorCode(error) === 'ENOENT' ? { ...failed, detail: 'ENOENT (PATH)' } : failed;
       // MCP-SANDBOX-PATHS: a sandboxed start that failed is explained by probing the same view (what it hides, or what the command needs
@@ -423,8 +424,8 @@ export class McpClientPool implements McpPoolView {
   }
   /** The server's last stderr bytes, redacted (for `inspect`; never streamed into the service's own stderr). */
   private stderrIn(namespace: string, serverId: string): string {
-    const tail = this.states.get(`${namespace}\0${serverId}`)?.stderr;
-    return tail ? redactText(tail.toString('utf8'), [], MCP_CLIENT_STDERR_TAIL_BYTES) : '';
+    const state = this.states.get(`${namespace}\0${serverId}`);
+    return state?.stderr.length ? redactBounded(state.stderr.toString('utf8'), state.known, MCP_CLIENT_STDERR_TAIL_BYTES) : '';
   }
   /**
    * Stops one server's process (MCP-REVOKE: its trust is gone, so an untrusted process does not keep running or serving): forgotten at once
