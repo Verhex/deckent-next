@@ -3,7 +3,7 @@ import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, type WorkLedgerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
-import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
+import { useSingleFlightPoll } from '#surfaces/core/terminal-kit-ink/index.js';
 import { runStateText, type JobWindowLabels } from './job-windows.js';
 import { systemSummaryEntry } from './system-summary.js';
 

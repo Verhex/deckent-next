@@ -2,8 +2,8 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, useState, type ReactElement } from 'react';
 import { Box, render, Text, useInput } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { HumanTextContext, RenderGlyphsContext, cells, resolveRenderGlyphs, span } from '#surfaces/core/terminal-render/index.js';
+import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
+import { cells, resolveRenderGlyphs, span, HumanTextContext, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
 import { CardCopyContext, QuestionRows, cardCopyText, Window, WindowStackProvider, WINDOW_PRIORITY, layoutWindowLines, scrollBy, topWindowLayer, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 
 import { ArrowPicker, ListPicker } from '#surfaces/core/terminal-picker/index.js';

@@ -15,18 +15,19 @@ import { dist, HOST_GRAPH, staticReach } from '../../fixtures/static-graph.js';
 const INK = ['ink', 'react'], SERVER = ['@modelcontextprotocol/server'], XTERM = ['@xterm/headless', '@xterm/addon-unicode11'];
 const HEAVY = [...INK, ...SERVER, '@modelcontextprotocol/client', ...XTERM];
 // The load budget of every entry and every lazy target of the CLI start path: [heavy packages it loads by design, today's offenders].
-// The offender column is a ratchet (KG9 F1): BARREL (Ink in text families) and later cards shrink it, and it ends empty.
+// The offender column is a ratchet (KG9 F1); BARREL removed the text families' Ink edges.
 const LOAD_BUDGET: Readonly<Record<string, readonly [byDesign: readonly string[], today: readonly string[]]>> = {
   'index.js': [[], []], 'extensions.js': [[], []], 'composition/core/mcp/internal/entry.js': [SERVER, []], 'adapters/core/beuser-surface/internal/pty.js': [XTERM, []],
   ...Object.fromEntries(['entry', 'cli-main', 'host', 'git-tracked', 'model-help'].map(name => [`composition/core/cli/internal/${name}.js`, [[], []]])),
   ...Object.fromEntries(['query-errors', 'scoped-request', 'model-connect'].map(unit => [`composition/core/${unit}/index.js`, [[], []]])),
   'surfaces/core/mcp/index.js': [SERVER, []], 'surfaces/core/hub-mcp/index.js': [SERVER, []],
-  ...Object.fromEntries(['terminal', 'terminal-work', 'terminal-ledger', 'setup'].map(unit => [`surfaces/core/${unit}/index.js`, [INK, []]])),
+  ...Object.fromEntries(['terminal', 'terminal-work', 'setup'].map(unit => [`surfaces/core/${unit}/index.js`, [INK, []]])),
   'surfaces/core/cli/internal/terminal.js': [INK, []], 'surfaces/core/cli/internal/launch-shell.js': [INK, []],
-  ...Object.fromEntries(['terminal-turn', 'cli-models', 'cli-beuser', 'cli-approval', 'cli-identity', 'monitor', 'cli-decision', 'cli-memory', 'cli-agents', 'cli-task', 'run-planning']
+  ...Object.fromEntries(['terminal-turn', 'cli-models', 'cli-beuser', 'cli-approval', 'cli-identity', 'monitor', 'cli-decision', 'cli-memory', 'cli-agents', 'cli-task', 'run-planning', 'terminal-ledger', 'cli-observe', 'cli-admin', 'cli-run', 'cli-installation', 'config', 'cli-hub', 'terminal-render', 'terminal-kit', 'approval-presentation', 'mcp-presentation', 'terminal-labels']
     .map(unit => [`surfaces/core/${unit}/index.js`, [[], []]])),
-  ...Object.fromEntries(['cli-observe', 'cli-admin', 'cli-run', 'cli-installation', 'config', 'cli-hub'].map(unit => [`surfaces/core/${unit}/index.js`, [[], INK]])),
-  'surfaces/core/cli/internal/mcp.js': [[], INK], 'surfaces/core/cli/internal/setup-offer.js': [[], INK], 'surfaces/core/terminal-labels/index.js': [[], ['react']],
+  ...Object.fromEntries(['terminal-render-ink', 'approval-presentation-ink'].map(unit => [`surfaces/core/${unit}/index.js`, [INK, []]])),
+  'surfaces/core/terminal-kit-ink/index.js': [['react'], []],
+  'surfaces/core/cli/internal/mcp.js': [[], []], 'surfaces/core/cli/internal/setup-offer.js': [[], []],
 };
 
 it.each(Object.entries(LOAD_BUDGET))('%s statically reaches exactly its budgeted heavy packages', async (entry, [byDesign, today]) => {

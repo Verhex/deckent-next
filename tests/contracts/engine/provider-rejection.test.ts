@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chatTurnRoundFailureState, classifyProviderRejection } from '#engine/index.js';
-import { providerRejectionHint } from '#surfaces/core/terminal-render/index.js';
+import { providerRejectionHint } from '#surfaces/core/terminal-render-ink/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
 // SECRET-AT-REST (owner 2026-10-08): a refused key, a denied model, a reached spend limit and a rate limit are named apart, from the

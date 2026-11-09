@@ -40,7 +40,7 @@ export interface ThemePanelPort {
   readonly title: string;
   inspect(): Promise<Readonly<{ current: string; source: string; notes: readonly string[];
     choices: readonly Readonly<{ id: string; label: string; detail: string }>[] }>>;
-  palette(setting: string): ReturnType<typeof import('#surfaces/core/terminal-kit/index.js').useWorklinePalette>;
+  palette(setting: string): ReturnType<typeof import('#surfaces/core/terminal-kit-ink/index.js').useWorklinePalette>;
   readonly words: Readonly<{ hints: string; current: string; preview: string; contrast: string; inherited: string; noColor: string; sessionOnly: string;
     samples: readonly Readonly<{ text: string; role: import('#surfaces/core/terminal-render/index.js').SpanRole }>[] }>;
   background(): string | null;

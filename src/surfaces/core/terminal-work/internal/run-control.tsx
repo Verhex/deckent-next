@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { RunView } from '#engine/index.js';
 import { shortId } from '#platform/index.js';
-import { DecisionCard, approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
+import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels, DecisionCard } from '#surfaces/core/approval-presentation-ink/index.js';
 import { fillTemplate, loadRunViewsForWatch, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
+import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { runHoldText, runStateText, runTitle } from './job-windows.js';
 import RUN_CONTROL from './run-control.json' with { type: 'json' };

@@ -3,7 +3,7 @@ import { Box, Text, render, useInput, usePaste, useWindowSize } from 'ink';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cardCopyLabels, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import presentation from './presentation.json' with { type: 'json' };
-import { fillTemplate, humanRecordText, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, humanRecordText, truncateEnd, wrapCells, useSpinnerGlyph } from '#surfaces/core/terminal-render-ink/index.js';
 import { cardCopyText, isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];

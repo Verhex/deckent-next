@@ -1,7 +1,7 @@
 import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize, type DOMElement, type Key } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { SpanText, cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useHumanTextSecrets, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
+import { cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, wrapCells, wrapSpans, type Span, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
 import { DecisionArmContext, DecisionArmLabelsContext, useQuietArming } from './arming.js';

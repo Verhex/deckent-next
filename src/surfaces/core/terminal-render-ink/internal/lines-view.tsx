@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import type { InkRoleStyle, WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import type { RenderedLine, Span } from './spans.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
+import type { RenderedLine, Span } from '#surfaces/core/terminal-render/index.js';
 
 /** Maps the pure span model onto the active palette; the `none` tier resolves every role and attribute to nothing. */
 export function spanStyle(part: Span, palette: WorklineInkPalette): InkRoleStyle {

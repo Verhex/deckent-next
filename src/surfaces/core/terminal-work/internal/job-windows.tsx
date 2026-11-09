@@ -6,7 +6,7 @@ import { shortId, t, type Locale } from '#platform/index.js';
 import { heldPoolId, runStatusKey } from '#surfaces/core/cli-human/index.js';
 import { APPROVAL_SCAN_MAX_PAGES, scanPendingApprovals, loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
+import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { liveWindowLines } from './live-windows.js';
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';

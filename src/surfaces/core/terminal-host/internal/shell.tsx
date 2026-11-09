@@ -1,6 +1,6 @@
 import { createElement, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { Composer, type ComposerHistoryEntry, type ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import { FullscreenWorkline, fullscreenFrameRows, fullscreenInfoRows } from '#surfaces/core/terminal-window/index.js';
 import { openTerminalHost, type TerminalHostHandle, type TerminalHostOptions } from './host.js';

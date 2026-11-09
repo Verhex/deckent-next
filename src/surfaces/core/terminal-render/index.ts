@@ -1,12 +1,9 @@
 export * from './internal/assistant-stream.js';
-export * from './internal/assistant-view.js';
 export * from './internal/context-view.js';
 export * from './internal/glyphs.js';
 export * from './internal/highlight.js';
 export * from './internal/human-text.js';
-export * from './internal/human-text-view.js';
 export * from './internal/inline.js';
-export * from './internal/lines-view.js';
 export * from './internal/markdown.js';
 export * from './internal/spans.js';
 export * from './internal/status-row.js';
@@ -15,4 +12,3 @@ export * from './internal/table.js';
 export * from './internal/text-width.js';
 export { formatContextTokens } from './internal/token-count.js';
 export { modelProviderSpans, type ModelProviderLabel } from './internal/model-provider.js';
-export { TerminalHandoverContext, useTerminalHandover } from './internal/handover.js';

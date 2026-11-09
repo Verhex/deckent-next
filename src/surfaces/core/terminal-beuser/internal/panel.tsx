@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { t, type Locale } from '#platform/index.js';
 import type { BeuserLimits, BeuserReport } from '#engine/index.js';
 import { Window, QuestionWindow } from '#surfaces/core/terminal-window/index.js';
-import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
+import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { panelWindowLines, PickerWindow, type ConfigPanelOutcome, type PanelLabels, type PanelNotice, type PanelLine } from '#surfaces/core/terminal-panels/index.js';
 
 type Model = { readonly channelId: string; readonly modelId: string };

@@ -3,7 +3,7 @@ import { useWindowSize } from 'ink';
 import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { layoutWindowLines, Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { PickerWindow, QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
-import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import type { ScratchView } from '#domain/index.js';
 import type { SecretGrantQuestion, SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 

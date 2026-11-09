@@ -20,7 +20,7 @@ import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
-import { mcpGrantKey, mcpPanelPort } from './mcp-panel.js';
+import { mcpGrantKey, mcpPanelPort } from '#surfaces/core/mcp-presentation/index.js';
 import { secretGrantCardPort } from './secret-grant-card.js';
 import { attachedScopeLabel, modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';

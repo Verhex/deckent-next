@@ -5,10 +5,10 @@
  */
 import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
 import { useCardCopyOptions, useWindowInputGuard } from '#surfaces/core/terminal-window/index.js';
-import { truncateEnd, useRenderGlyphs, SpanText, sliceSpans, span, type Span } from '#surfaces/core/terminal-render/index.js';
+import { truncateEnd, sliceSpans, span, type Span, useRenderGlyphs, SpanText } from '#surfaces/core/terminal-render-ink/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
 const FALLBACK_COLUMNS = 80;

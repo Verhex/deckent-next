@@ -1,6 +1,6 @@
 import { useState, type Key as ReactKey } from 'react';
 import { Box, Text, useAnimation, useWindowSize } from 'ink';
-import { fillTemplate, span, useRenderGlyphs, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, span, wrapCells, type Span, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { ListPicker, LIST_PICKER_EMBEDDED_CHROME_ROWS, PICKER_INITIAL, embeddedPickerPageSize, pickerHints, pickerView, type PickerLabels, type PickerOutcome, type PickerResult,
   type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, layoutWindowLines, useWindowReserve, WINDOW_RESERVED_ROWS, type WindowLine } from '#surfaces/core/terminal-window/index.js';

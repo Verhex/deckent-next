@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { TURN_STEER_LINES, useWorklinePalette, type TurnDelta, type TurnSteer } from '#surfaces/core/terminal-kit/index.js';
+import { TURN_STEER_LINES, type TurnDelta, type TurnSteer, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { fillTemplate, notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { systemSummaryEntry } from '#surfaces/core/terminal-work/index.js';
 import type { ComposerHistoryEntry } from '#surfaces/core/terminal-composer/index.js';
 import LIMITS from './workline-queue.json' with { type: 'json' };

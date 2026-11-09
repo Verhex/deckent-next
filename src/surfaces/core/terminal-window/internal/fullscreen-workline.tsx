@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useBoxMetrics, useInput, useWindowSize, type DOMElement } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider, WINDOW_PRIORITY, useFocusOwner } from './window-stack.js';
 import { MainScreenContext } from './card-copy.js';

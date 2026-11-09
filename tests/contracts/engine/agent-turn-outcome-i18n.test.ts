@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { runAgentTurn, agentTurnTruncatedCallsNote, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import { MESSAGE_REGISTRY } from '#platform/index.js';
-import { footerText, formatContextTokens, cells } from '#surfaces/core/terminal-render/index.js';
+import { formatContextTokens, cells, footerText } from '#surfaces/core/terminal-render-ink/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
 describe('terminal turn-outcome catalog guard', () => {

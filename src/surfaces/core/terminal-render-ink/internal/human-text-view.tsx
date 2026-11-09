@@ -1,9 +1,9 @@
 import { createContext, useContext } from 'react';
 import { Box, Text } from 'ink';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { useWorklinePalette, type InkRoleStyle } from '#surfaces/core/terminal-kit/index.js';
-import { fillTemplate } from './status-row.js';
-import { modelIngressHiddenCount, projectHumanInline, projectHumanText } from './human-text.js';
+import { type InkRoleStyle, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
+import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
+import { modelIngressHiddenCount, projectHumanInline, projectHumanText } from '#surfaces/core/terminal-render/index.js';
 import { SpanText } from './lines-view.js';
 
 /** Operation-scoped opaque config provenance, never raw values or a second credential store. */

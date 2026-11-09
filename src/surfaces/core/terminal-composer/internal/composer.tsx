@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize } from 'ink';
-import { slashCommandRow, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { slashCommandRow, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cleanText, mentionText, paletteCommand, type ComposerMentionPort, type PastePolicy } from './assist.js';
 import { composerKey } from './keys.js';
 import { COMPOSER_LIMITS, composerMenu, EMPTY_COMPOSER, exitArmed, reduceComposer, searchMatches, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerKey, type ComposerMenu } from './reducer.js';

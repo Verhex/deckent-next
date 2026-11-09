@@ -8,7 +8,7 @@ export { PermissionModeKeys, runModeCommand, cyclePermissionMode, permissionMode
 export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from '#surfaces/core/terminal-session/index.js';
 export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,
   type ChatTurnMessage, type LedgerBuffer } from '#surfaces/core/terminal-ledger/index.js';
-export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';
+export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 export { resolveWorklinePalette, resolveTerminalTheme, TERMINAL_THEME_SETTINGS, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier, type TerminalThemeSetting } from '#surfaces/core/terminal-kit/index.js';
 export {
@@ -35,9 +35,8 @@ export { narrationOf, renderAssistantStream, renderCompleteReply, startAssistant
   type FooterUnit, type Narration } from '#surfaces/core/terminal-render/index.js';
 export { renderMarkdown, type MarkdownOptions } from '#surfaces/core/terminal-render/index.js';
 export { renderedText, type RenderedLine, type Span } from '#surfaces/core/terminal-render/index.js';
-export { prefersAsciiGlyphs, resolveRenderGlyphs, RenderGlyphsContext, type RenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-export { fitStatusRow, worklineStatusSegments, type StatusSegment, type StatusRowLayout, type WorklineStatusInput } from '#surfaces/core/terminal-render/index.js';
-export { AssistantLive, AssistantUnitRow, footerText, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+export { prefersAsciiGlyphs, resolveRenderGlyphs, type RenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
+export { fitStatusRow, worklineStatusSegments, type StatusSegment, type StatusRowLayout, type WorklineStatusInput, AssistantLive, AssistantUnitRow, footerText, type AssistantRenderLabels } from '#surfaces/core/terminal-render-ink/index.js';
 export { assistantLedgerEntries, streamStepEntries } from '#surfaces/core/terminal-ledger/index.js';
 export { cells, truncateEnd, truncateStart, wrapCells } from '#surfaces/core/terminal-render/index.js';
 export { Composer, type ComposerLabels, type ComposerProps } from '#surfaces/core/terminal-composer/index.js';

@@ -1,19 +1,18 @@
 import { Box, Text, useAnimation, useWindowSize } from 'ink';
 import { SystemTrustedClock, type TrustedClock } from '#platform/index.js';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import type { ToolResultSummary } from '#surfaces/core/terminal-kit/index.js';
-import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolGroupStep, ToolUnit, TurnStage, WaitingView } from './assistant-stream.js';
+import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolGroupStep, ToolUnit, TurnStage, WaitingView } from '#surfaces/core/terminal-render/index.js';
 import { useRenderGlyphs } from './glyphs.js';
 import { RenderedLines } from './lines-view.js';
-import { renderHumanMarkdown } from './human-text.js';
+import { renderHumanMarkdown } from '#surfaces/core/terminal-render/index.js';
 import { HiddenTextNotice, useHumanTextSecrets } from './human-text-view.js';
-import type { LiveTail } from './stream-segmenter.js';
-import { fillTemplate } from './status-row.js';
-import { cells, truncateEnd } from './text-width.js';
-import { formatContextTokens } from './token-count.js';
+import type { LiveTail } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
+import { cells, truncateEnd } from '#surfaces/core/terminal-render/index.js';
+import { formatContextTokens } from '#surfaces/core/terminal-render/index.js';
 import TIMING from './assistant-timing.json' with { type: 'json' };
 
-/** Catalog strings (terminal.render.*) resolved by the surface; placeholders are filled here. */
 /** The human sentence for the provider refusal token in a failed round's note (the engine's `classifyProviderRejection` names), or null. */
 export function providerRejectionHint(note: string | null | undefined, labels: AssistantRenderLabels): string | null {
   const token = note ? /\(([a-z]+(?:-[a-z]+)*)\)\)/.exec(note)?.[1] : undefined;

@@ -615,3 +615,28 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
     expect(reds[4]!.out).toContain('[composition-root] src/composition/core/b/internal/y.ts — closeThing is called only by the composition root src/composition/core/root');
   });
 });
+
+it('keeps pure unit indexes free of Ink while allowing type-only and lazy boundaries', async () => {
+  const view = {
+    'src/surfaces/core/view/index.ts': "export { View } from './internal/view.js';\n",
+    'src/surfaces/core/view/internal/view.tsx': "import { Text } from 'ink';\nexport const View = Text;\n",
+  };
+  const classify = (ink: boolean): ArchPatch => arch => {
+    arch.units['src/surfaces/core/view'].ink = ink;
+    if (arch.units['src/surfaces/core/text']) arch.units['src/surfaces/core/text'].ink = false;
+  };
+  const unmarked = await lint(await fixture(view));
+  expect(unmarked.out).toContain('[ink-boundary] src/surfaces/core/view');
+  const mixed = await lint(await fixture({ ...view,
+    'src/surfaces/core/text/index.ts': "export { View } from '#surfaces/core/view/index.js';\n",
+  }, true, true, {}, classify(true)));
+  expect(mixed.out).toContain('[ink-boundary] src/surfaces/core/text');
+  const clean = await lint(await fixture({ ...view,
+    'src/surfaces/core/text/index.ts': "export type { View } from '#surfaces/core/view/index.js';\nexport const load = () => import('#surfaces/core/view/index.js');\n",
+  }, true, true, {}, classify(true)));
+  expect(clean.out).not.toContain('[ink-boundary]');
+  const hook = await lint(await fixture({ 'src/surfaces/core/hook/index.ts': "import { createContext } from 'react';\nexport const context = createContext(null);\n" }));
+  expect(hook.out).toContain('[ink-boundary] src/surfaces/core/hook');
+  const falselyPure = await lint(await fixture(view, true, true, {}, classify(false)));
+  expect(falselyPure.out).toContain('[ink-boundary] src/surfaces/core/view');
+});
