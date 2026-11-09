@@ -483,7 +483,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   HTTP server that does not need OAuth.
 - **Provider keys live in a main vault (installation) or a project vault, and a main key is used in a project only after a grant.**
   Non-terminal `deckent secret set` needs `--main` or `--project`; project keys need a `.deck` file (references only); a main key needs
-  a grant per project (a card on a solo terminal, or `deckent secret grant NAME --scope S`). *Limits:* rolling back to alpha.50 lifts
+  a grant per project (a card on a solo terminal, or `deckent secret grant NAME --scope S`). A grant serves the whole project:
+  `--scope` names the scope the decision is made and recorded in, it does not narrow where the key is used (owner B1-6). *Limits:* rolling back to alpha.50 lifts
   the grant floor (the old binary uses main-vault keys as before and does not see project-vault keys). Native macOS and Windows have
   no terminal witness: no first-use card, and `secret grant` is refused there (a Linux terminal or an admin grants). The first-use key
   card appears only in the streamed terminal on Linux, at the person's own terminal on a solo installation. Agent turns never escape

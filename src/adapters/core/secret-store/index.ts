@@ -2,7 +2,7 @@ export { ENV_SECRET_STORE_ID, createEnvironmentSecretStore, environmentSecretSto
 export { FILE_SECRET_STORE_ID, FILE_SECRET_STORE_MAX_BYTES, FILE_SECRET_STORE_NAME, createFileSecretStore, fileSecretStoreFactory, type FileSecretStoreOptions } from './internal/file.js';
 export { ENCRYPTED_FILE_SECRET_STORE_ID, ENCRYPTED_FILE_SECRET_STORE_KEY, ENCRYPTED_FILE_SECRET_STORE_NAME, createEncryptedFileSecretStore, encryptedFileSecretStoreFactory } from './internal/encrypted.js';
 export { createSecretHelperFactory, type SecretHelperOptions } from './internal/helper.js';
-export { admitProjectVault, directoryLocation, fileSecretGrantStoreFactory, handOverProjectVault, listProjectVaults, locationPresent, observeOwnerRoot, projectRepository, projectVaultDirectory,
+export { admitProjectVault, directoryLocation, fileSecretGrantStoreFactory, handOverProjectVault, listProjectVaults, observeOwnerRoot, projectRepository, projectVaultDirectory,
   readProjectDeck, type ProjectRepository } from './internal/project-vault.js';
 
 export { personalStoreAssertion, rememberPersonalStoreInstance } from './internal/personal.js';

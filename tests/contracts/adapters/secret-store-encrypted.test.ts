@@ -1,3 +1,4 @@
+import { createCipheriv, randomBytes } from 'node:crypto';
 import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -75,6 +76,17 @@ it.skipIf(windows)('requires POSIX private file secret store — encrypted backe
   // The right key restores access.
   await writeFile(f.key, key, { mode: 0o600 });
   expect(await s.get('PROVIDER_TOKEN')).toBe(CANARY);
+  // p4 e5 (R10): the same document sealed with the right key opens only under this backend's AAD; without it or under another's it is corrupt.
+  for (const aad of ['deckent:core.secret-store.encrypted-file@1:envelope-v1', null, 'deckent:core.secret-store.file@1:envelope-v1']) {
+    const iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
+    if (aad) cipher.setAAD(Buffer.from(aad, 'utf8'));
+    const ciphertext = Buffer.concat([cipher.update(JSON.stringify({ schemaVersion: 1, secrets: { PROVIDER_TOKEN: CANARY } }), 'utf8'), cipher.final()]);
+    await writeFile(f.path, JSON.stringify({ schemaVersion: 1, algorithm: 'aes-256-gcm', iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'),
+      ciphertext: ciphertext.toString('base64') }), { mode: 0o600 });
+    const replayed = await s.get('PROVIDER_TOKEN').catch((error: unknown) => error);
+    if (aad?.includes('encrypted-file')) { expect(replayed).toBe(CANARY); continue; }
+    expect(replayed).toMatchObject({ code: 'SECRET_STORE_CORRUPT' }); expect(leaks(replayed)).toBe(false);
+  }
   // A plaintext document is not accepted as an envelope.
   await writeFile(f.path, JSON.stringify({ schemaVersion: 1, secrets: { PROVIDER_TOKEN: CANARY } }), { mode: 0o600 });
   const plain = await s.get('PROVIDER_TOKEN').catch((error: unknown) => error);

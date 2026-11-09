@@ -477,7 +477,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   OAuth gerektirmeyen bir HTTP sunucusu kullanın.
 - **Sağlayıcı anahtarları ana kasada (kurulum) ya da proje kasasındadır; ana kasa anahtarı bir projede yalnız izinle kullanılır.**
   Terminal dışı `deckent secret set` için `--main` ya da `--project` gerekir; proje anahtarları `.deck` dosyası ister (yalnız
-  referans); ana kasa anahtarı proje başına izin ister (solo terminalde kart ya da `deckent secret grant AD --scope S`). *Sınırlar:*
+  referans); ana kasa anahtarı proje başına izin ister (solo terminalde kart ya da `deckent secret grant AD --scope S`). İzin bütün
+  projede geçer: `--scope` kararın verildiği ve kaydedildiği kapsamı adlandırır, anahtarın kullanıldığı yeri daraltmaz (owner B1-6). *Sınırlar:*
   alpha.50'ye dönüşte izin tabanı kalkar (eski sürüm ana kasa anahtarlarını eskisi gibi kullanır, proje kasasını görmez). Native
   macOS'ta ve Windows'ta terminal tanığı yok: ilk kullanım kartı çıkmaz, `secret grant` orada reddedilir (Linux terminali ya da yönetici
   izin verir). İlk kullanım anahtar kartı yalnız Linux'ta, solo kurulumda, kişinin kendi terminalindeki akışlı sohbette görünür. Ajan

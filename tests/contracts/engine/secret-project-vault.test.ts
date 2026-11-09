@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { DECK_FILE, PROJECT_VAULT, SecretGrantStoreRegistry, CORE_SECRET_GRANT_STORE_ID, assessProjectVaultOwnership, buildSecretInventory, credentialSourceError,
   decideCredentialSource, deckDeclaration, emptySecretGrantFile, parseDeckDeclarations, projectVaultAnchorSchema, projectVaultHandover, projectVaultKey,
-  projectVaultRecordSchema, secretGrantFileSchema, type CredentialSourceInput, type ProjectVaultAnchor, type SecretGrantStoreFactory } from '#engine/index.js';
+  projectVaultRecordSchema, secretGrantFileSchema, decideSecretGrant, type CredentialSourceInput, type ProjectVaultAnchor, type SecretGrantStoreFactory } from '#engine/index.js';
+import type { AuthorityDecisionSubject } from '#domain/index.js';
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
 
 const code = (work: () => unknown) => { try { work(); } catch (error) { return (error as DeckentError).code; } return null; };
@@ -111,6 +112,23 @@ describe('grant record and grant store registry', () => {
     expect(secretGrantFileSchema.safeParse({ ...base, grants: [grant, grant] }).success).toBe(false);
     expect(secretGrantFileSchema.safeParse({ ...base, grants: [{ ...grant, value: 'x' }] }).success).toBe(false);
     expect(secretGrantFileSchema.safeParse({ ...base, schemaVersion: 2 }).success).toBe(false);
+  });
+  it('p4 e1 (R14): require-approval and an unrecordable decision grant nothing; revoke is decided on the same set cell', async () => {
+    const principal = { id: 'os:1000', issuer: 'local-os', subject: '1000', assurance: 'os-user' as const, scopeIds: ['local'] };
+    const policy = (effect: 'allow' | 'require-approval') => ({ schemaVersion: 1, revision: effect, restrictions: [], grants: [
+      { id: 'lend', effect, actions: ['set'], scopes: ['local'], principals: [{ issuer: 'local-os', subject: '1000' }], resource: { kind: 'secret', ids: 'all' } }] });
+    const recorded: AuthorityDecisionSubject[] = []; let updates = 0;
+    const sealed = (subject: AuthorityDecisionSubject) => { recorded.push(subject); return { event: { eventId: randomUUID() } }; };
+    const ports = (effect: 'allow' | 'require-approval', record = sealed) => ({ anchor: anchorOf(), policy: policy(effect), record, now: () => 5,
+      store: { id: CORE_SECRET_GRANT_STORE_ID, read: async () => emptySecretGrantFile(anchorOf()), update: async () => { updates++; return emptySecretGrantFile(anchorOf()); } } });
+    const request = (action: 'grant' | 'revoke') => ({ principal, scopeId: 'local', name: 'DECKENT_ANTHROPIC_KEY', action, source: 'admin' as const, commandId: randomUUID() });
+    await expect(decideSecretGrant(request('grant'), ports('require-approval'))).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+    expect(recorded).toEqual([expect.objectContaining({ action: 'secret-grant', verdict: expect.objectContaining({ decision: 'require-approval' }) })]);
+    await expect(decideSecretGrant(request('grant'), ports('allow', () => { throw new Error('LEDGER_UNAVAILABLE'); }))).rejects.toThrow('LEDGER_UNAVAILABLE');
+    expect(updates).toBe(0);
+    await decideSecretGrant(request('revoke'), ports('allow'));
+    expect(recorded[1]).toMatchObject({ action: 'secret-grant-revoke', resource: { kind: 'secret', id: 'DECKENT_ANTHROPIC_KEY' }, verdict: { decision: 'allow', ruleId: 'lend' } });
+    expect(updates).toBe(1);
   });
   it('Core owns core.*; Enterprise registers before the seal only', () => {
     const factory = (id: string): SecretGrantStoreFactory => ({ id, create: () => ({ id, read: async () => emptySecretGrantFile(anchorOf()), update: async () => emptySecretGrantFile(anchorOf()) }) });

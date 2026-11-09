@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { auditEventSchema } from '#domain/index.js';
-import { AuditApplication, SECRET_STORE_PORT_VERSION, SecretStoreAdministration, policySecretChangeAuthorization, SecretStoreRegistry, isSecretName, type SecretStore,
-  type SecretStoreFactory } from '#engine/index.js';
+import { AuditApplication, SECRET_STORE_PORT_VERSION, SecretStoreAdministration, acceptSecretChangeResult, acceptSecretStoreSwitchResult, authorizeSecretInventoryAll,
+  policySecretChangeAuthorization, SecretStoreRegistry, isSecretName, type SecretStore, type SecretStoreFactory } from '#engine/index.js';
 import { createFileSecretStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 /** The custody section as one process sees it when nothing else changes secrets: run now, the opened store is the selected one. */
@@ -126,6 +126,17 @@ it('policySecretChangeAuthorization: the policy cell is resource kind secret, ac
   // The request's principal must be the verified one: a mismatch is refused, never evaluated for someone else.
   await expect(authorize({ principal: { issuer: 'local-os', subject: '1001' }, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set' }))
     .rejects.toMatchObject({ code: 'SECRET_CHANGE_DENIED' });
+  // p4 e4 (R11): `secret list --all` needs the secret/switch cell; an answer is accepted only for the change or switch that was asked.
+  expect(() => authorizeSecretInventoryAll(policy, verified, 'installation')).toThrow(expect.objectContaining({ code: 'SECRET_CHANGE_DENIED', params: { action: 'switch', name: 'secret-store' } }));
+  expect(() => authorizeSecretInventoryAll({ ...policy, grants: [{ ...policy.grants[0]!, actions: ['switch'], resource: { kind: 'secret', ids: ['secret-store'] } }] }, verified, 'installation')).not.toThrow();
+  const asked = { schemaVersion: 1 as const, scopeId: 'installation', name: 'PROVIDER_TOKEN' };
+  const answer = { ...asked, action: 'set', backend: 'core.secret-store.file@1', removed: null };
+  expect(acceptSecretChangeResult('setSecret', asked, answer)).toEqual(answer);
+  for (const other of [{ scopeId: 'elsewhere' }, { name: 'OTHER' }, { action: 'delete', removed: true }]) expect(acceptSecretChangeResult('setSecret', asked, { ...answer, ...other })).toBeNull();
+  const switchAsked = { schemaVersion: 1 as const, scopeId: 'installation', to: 'core.secret-store.encrypted-file@1', confirmDowngrade: false };
+  const switched = { schemaVersion: 1, scopeId: 'installation', status: 'switched', from: 'core.secret-store.file@1', to: switchAsked.to, entries: 1, downgrade: false, cleaned: true };
+  expect(acceptSecretStoreSwitchResult(switchAsked, switched)).toEqual(switched);
+  for (const other of [{ scopeId: 'elsewhere' }, { to: 'core.secret-store.file@1' }]) expect(acceptSecretStoreSwitchResult(switchAsked, { ...switched, ...other })).toBeNull();
 });
 
 it('administration: input is checked before authority is asked; a read-only backend is refused before any audit', async () => {

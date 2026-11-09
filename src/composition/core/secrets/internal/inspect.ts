@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { assertActorAssurance, principalToActor, resolveLocalOsPrincipal, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, inspectPersonalStoreReadiness, installationSecretRoot, openConfiguredSecretStore, openRegisteredSecretStore, readSecretsConfig, registeredSecretStores, type PersonalStoreReadiness } from '#adapters/index.js';
-import { inspectSecretEnvironmentGuard, isSecretName, missingSecretReferenceNames, type SecretStore, type SecretStoreInspection } from '#engine/index.js';
+import { ENV_SECRET_STORE_ID, inspectSecretEnvironmentGuard, isSecretName, missingSecretReferenceNames, type SecretStore, type SecretStoreInspection } from '#engine/index.js';
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
 export interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly schemaVersion: 1; readonly backend: string; readonly writable: boolean; readonly enumerable: boolean;
@@ -27,7 +27,7 @@ export async function inspectConfiguredSecretStore(projectRoot: string, options:
   const info = root === null ? null : await lstat(root).catch(() => null);
   return Object.freeze({ schemaVersion: 1, backend: store.descriptor.id, writable: store.descriptor.writable, enumerable: store.descriptor.enumerable, ...health,
     globalRoot: root !== null && info?.isDirectory() ? Object.freeze({ path: root, mode: (info.mode & 0o777).toString(8).padStart(4, '0') }) : null,
-    ...(store.descriptor.id === 'core.secret-store.env@1' ? { envGuard: await environmentGuard(projectRoot, options) } : {}),
+    ...(store.descriptor.id === ENV_SECRET_STORE_ID ? { envGuard: await environmentGuard(projectRoot, options) } : {}),
     ...((options.platform ?? process.platform) === 'linux' ? { personalCustody: store.descriptor.id !== ENCRYPTED_FILE_SECRET_STORE_ID ? { status: 'store' as const } : await inspectPersonalStoreReadiness(root) } : {}),
     ...(leftover.entries || leftover.unverified.length ? { leftover } : {}) });
 }
@@ -60,11 +60,11 @@ export async function listConfiguredSecretNames(projectRoot: string, options: Co
 export async function listConfiguredSecretStores(projectRoot: string, options: ConfigLoadOptions = {}) {
   const { config } = await selectedStore(projectRoot, options);
   return Object.freeze({ schemaVersion: 1 as const, current: readSecretsConfig(config).store, stores: registeredSecretStores(),
-    ...(readSecretsConfig(config).store === 'core.secret-store.env@1' ? { envGuard: await environmentGuard(projectRoot, options) } : {}) });
+    ...(readSecretsConfig(config).store === ENV_SECRET_STORE_ID ? { envGuard: await environmentGuard(projectRoot, options) } : {}) });
 }
 async function environmentGuard(root: string, options: ConfigLoadOptions) {
   return inspectSecretEnvironmentGuard(await configuredEnvironmentReferenceNames(root, options), registeredSecretStores()
-    .filter(id => id !== 'core.secret-store.env@1').map(id => openRegisteredSecretStore(id, options.env ?? process.env, options.platform)));
+    .filter(id => id !== ENV_SECRET_STORE_ID).map(id => openRegisteredSecretStore(id, options.env ?? process.env, options.platform)));
 }
 /** Collect unresolved config reference names; a forced read avoids the effective-config cache. */
 export async function configuredEnvironmentReferenceNames(root: string, options: ConfigLoadOptions): Promise<readonly string[]> {

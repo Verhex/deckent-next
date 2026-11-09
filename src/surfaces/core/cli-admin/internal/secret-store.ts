@@ -1,5 +1,5 @@
 import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
-import { isSecretStoreDowngrade } from '#engine/index.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, FILE_SECRET_STORE_ID, isSecretStoreDowngrade } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
@@ -19,9 +19,9 @@ export type SecretStoreSwitchHandler = (root: string, input: { readonly schemaVe
 
 /** Core's stores by id, with a short human name and what it means for keys on disk; an extension's store keeps its id and a generic note. */
 const coreStores = (locale: Locale): Readonly<Record<string, Readonly<{ name: string; note: string }>>> => ({
-  'core.secret-store.env@1': { name: t('cli.secret.store.name.env', {}, locale), note: t('cli.secret.store.note.env', {}, locale) },
-  'core.secret-store.file@1': { name: t('cli.secret.store.name.file', {}, locale), note: t('cli.secret.store.note.file', {}, locale) },
-  'core.secret-store.encrypted-file@1': { name: t('cli.secret.store.name.encryptedFile', {}, locale), note: t('cli.secret.store.note.encryptedFile', {}, locale) } });
+  [ENV_SECRET_STORE_ID]: { name: t('cli.secret.store.name.env', {}, locale), note: t('cli.secret.store.note.env', {}, locale) },
+  [FILE_SECRET_STORE_ID]: { name: t('cli.secret.store.name.file', {}, locale), note: t('cli.secret.store.note.file', {}, locale) },
+  [ENCRYPTED_FILE_SECRET_STORE_ID]: { name: t('cli.secret.store.name.encryptedFile', {}, locale), note: t('cli.secret.store.note.encryptedFile', {}, locale) } });
 /** A store's short human name (owner CLI review 2026-10-19 `secret store`). */
 export function storeLabel(id: string, locale: Locale): string { return Object.hasOwn(coreStores(locale), id) ? coreStores(locale)[id]!.name : terminalSafeText(id); }
 const storeNote = (id: string, locale: Locale) => Object.hasOwn(coreStores(locale), id) ? coreStores(locale)[id]!.note : t('cli.secret.store.note.other', {}, locale);
@@ -74,7 +74,7 @@ export async function secretStoreCommand(argv: readonly string[], context: Admin
     if (!confirm) throw ErrorRegistry.createError('SECRET_STORE_DOWNGRADE_UNCONFIRMED', { params: { from: view.current, to: target } });
   }
   const guard = view.envGuard?.[target];
-  if (view.current === 'core.secret-store.env@1' && target !== view.current && guard) {
+  if (view.current === ENV_SECRET_STORE_ID && target !== view.current && guard) {
     if (guard.code) throw ErrorRegistry.createError(guard.code);
     if (guard.names.length && !confirmEnv) {
       const names = guard.names.join(', ');
