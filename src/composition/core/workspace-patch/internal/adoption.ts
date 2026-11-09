@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationAdoption, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore,
-  resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
+  resolveGitWorkTarget, validateExecutionSupervisorProfile } from '#adapters/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema,
   type IntegrationAdoptionCommand, type IntegrationRollbackCommand, type EffectConfirmation } from '#engine/index.js';
@@ -19,7 +19,7 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
     const git = { ...c.config.execution.git, ...target.git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateExecutionSupervisorProfile });
     try { await c.sameWorkSource(store);
       const runs = new RunPolicyAuthorization({ async load() { return c.document; } });
       return await use(new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(git), new GitIntegrationAdoption(git),

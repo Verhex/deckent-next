@@ -1,5 +1,5 @@
 import { nativeCliHeadless, nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
-import { persistedString, persistedInteger, persistedUrl } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, NATIVE_CLI_WORKER_ADAPTER_ID } from '#domain/index.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
@@ -10,7 +10,7 @@ import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/ind
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
 /** The invocation adapters a connection can be bound to (adapter ids, not vendors): Anthropic Messages and OpenAI chat completions. */
-export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless', 'native-cli-worker', 'siwc-responses'] as const;
+export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless', NATIVE_CLI_WORKER_ADAPTER_ID, 'siwc-responses'] as const;
 /** İ-12: the order kinds are offered in — no-spend paths first (subscriptions, then local servers), then metered APIs; file order within a class. */
 const PROVIDER_CONNECT_BILLING = ['subscription', 'local', 'metered'] as const;
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
@@ -84,12 +84,12 @@ const kindSchema = z.strictObject({
       routes: z.array(providerMetadataRouteSchema).min(1)
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).optional() })
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
-    .refine(connect => ['native-cli-headless', 'native-cli-worker'].includes(connect.adapter)
+    .refine(connect => ['native-cli-headless', NATIVE_CLI_WORKER_ADAPTER_ID].includes(connect.adapter)
       ? connect.chatPath === null && connect.protocolFamily !== undefined
       : connect.adapter === 'siwc-responses' ? connect.chatPath === null && connect.protocolFamily === undefined
         && connect.personOnly && connect.rawUse === 'person' && connect.preview === true && connect.seed === null
         : connect.chatPath !== null && connect.protocolFamily === undefined)
-    .refine(connect => connect.catalogOnly === (connect.adapter === 'native-cli-worker'))
+    .refine(connect => connect.catalogOnly === (connect.adapter === NATIVE_CLI_WORKER_ADAPTER_ID))
     .refine(connect => !connect.terminalTextChat || (connect.personOnly && connect.protocolFamily !== undefined && (connect.adapter === 'native-cli-headless' || connect.headless)))
     .refine(connect => !connect.headless || (connect.catalogOnly && connect.personOnly && connect.protocolFamily !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')

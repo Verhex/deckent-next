@@ -18,12 +18,12 @@ export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
 export type WorkerProvider = z.infer<typeof workerProviderSchema>;
 const pinnedSubscriptionSchema = z.looseObject({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() });
 const parametersSchema = z.looseObject({ nativeSubscription: pinnedSubscriptionSchema });
-
+/** KG7 F3: the worker execution adapter ids (data, never a route) and the one native CLI worker wrapper shape; capabilities narrows `base` and `binding`. */
+export const NATIVE_CLI_WORKER_ADAPTER_ID = 'native-cli-worker', NATIVE_CODING_TEMPLATE_ADAPTER_ID = 'native-coding-template', nativeCliWorkerWrapperSchema = z.strictObject({ schemaVersion: z.literal(1), base: z.looseObject({ parameters: z.unknown() }), binding: z.record(z.string(), z.unknown()) });
 /** Versioned task-data wrappers retain the base as the sole model-pin source. This grants no execution route. */
 export function workerTaskParameters(input: unknown): unknown {
   if (!input || typeof input !== 'object' || !Object.hasOwn(input, 'base')) return input;
-  const wrapper = z.strictObject({ schemaVersion: z.literal(1), base: z.looseObject({ parameters: z.unknown() }), binding: z.record(z.string(), z.unknown()) }).safeParse(input);
-  return wrapper.success ? wrapper.data.base.parameters : undefined;
+  return nativeCliWorkerWrapperSchema.safeParse(input).data?.base.parameters;
 }
 
 /** The exact-model pin a native worker profile carries (nativeSubscription v2 `model`), or null: not a pinned worker profile. */

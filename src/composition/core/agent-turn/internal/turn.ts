@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
+import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, ModelInvocationError, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
@@ -204,7 +204,7 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     let mcpNotices: readonly ChatTurnNotice[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
       turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}), signal, emit: emitApproval, sandboxes: host.shellSandboxes(agentShellSandboxLayout(projectRoot, context.layout, workspace.scope, fullAccess ? isWriteApprovalFloored : writeFloor, false, null, options.env ?? process.env)), cwd: workspace.scope.root }) : null;
-    const mcpTools = agentMcpToolScope(mcp, !!profile && ((profile.schemaVersion !== 1 && profile.billingAxis === 'subscription') || profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID));
+    const mcpTools = agentMcpToolScope(mcp, !!profile && isolatesAsSubscription(profile));
     mcpNotices = [...mcpNotices, ...mcpTools.notices];
     // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);

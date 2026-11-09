@@ -73,6 +73,10 @@ export const nativeDockerCredential = (provider: NativeSubscription['provider'])
  * be that owner and a non-person class needs consent; a Docker login records none, so the connect default (`DEFAULT_DELEGATED_CLASSES`) applies. */
 export const nativeLoginUseAllowed = (principal: Readonly<{ issuer: string; subject: string; assurance?: string }> | null | undefined): boolean => { if (!principal) return false;
   const owner = readLocalOsOwner(), actsFor = delegationOwner(principal), kind = delegationPrincipalClass(principal); return actsFor.issuer === owner.issuer && actsFor.subject === owner.subject && (kind === 'person' || DEFAULT_DELEGATED_CLASSES.includes(kind)); };
+/** The one Docker subscription rule admission (typed refusal) and dispatch (typed park) share: the CLI's Docker path first, then the login's owner. */
+export const nativeDockerSubscriptionRefusal = (provider: NativeSubscription['provider'], principal: Parameters<typeof nativeLoginUseAllowed>[0]) =>
+  nativeDockerCredential(provider) === 'prohibited' ? 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' as const
+    : nativeDockerCredential(provider) === 'relayed' && !nativeLoginUseAllowed(principal) ? 'NATIVE_SUBSCRIPTION_OTHER_PERSON' as const : null;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const token = (value: unknown): string => { if (typeof value !== 'string' || !value) throw new NativeConnectionError('NATIVE_CREDENTIAL_UNAVAILABLE'); return value; };
 /** Expiry metadata is only a preflight hint. Remote authentication remains the authority. */

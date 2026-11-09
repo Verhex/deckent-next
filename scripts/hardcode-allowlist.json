@@ -1,7 +1,6 @@
 [
   {"file":"src/adapters/core/approval-store/internal/store.ts","fingerprint":"031c108bb8789155a8a867979cad123e830fd5876484e855e85aefa527e74de3","rule":"G2"},
   {"file":"src/adapters/core/docker-supervisor/internal/profile.ts","fingerprint":"bb4bbdf325e4b09ade926b817a990f5d886a971dc4369b0b9518c08d90f2bb15","rule":"G1"},
-  {"file":"src/adapters/core/docker-supervisor/internal/task-profile.ts","fingerprint":"44dd0105c521b3ed375ccdb7e39da29ec97fdff4fa48b09ae536c47eb4245751","rule":"G1"},
   {"file":"src/adapters/core/host-shell/internal/git-objects.ts","fingerprint":"1701f4a317b0b3411cccdff367a222885266f68cca4d2a2039302fb8e4eeaf76","rule":"G2"},
   {"file":"src/adapters/core/host-shell/internal/git-objects.ts","fingerprint":"21766ea0d0480f8f926a391394ab69149a7c0bbe2a595d3bba6a7dcb4e3cc0cb","rule":"G2"},
   {"file":"src/adapters/core/host-shell/internal/git-objects.ts","fingerprint":"62e20cf13e66eae1716a9b3dcb8efd3aa44776773ef2c4303508dafba96baaa7","rule":"G2"},

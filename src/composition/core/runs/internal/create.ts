@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerCredential, nativeLoginUseAllowed } from '#adapters/index.js';
+import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
 import { runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -14,7 +14,7 @@ import { readWorkerInstructions } from './worker-instructions.js';
 import { prepareMemoryContext } from './memory-context.js';
 import { configuredAgentSelection, type TaskAgentUse } from '#composition/core/agent-catalog/index.js';
 import { configuredSiwcWorkerConnections } from '#composition/core/siwc/index.js';
-import { executionTaskBase, executionTaskSilenceDeadline } from '#adapters/index.js';
+import { executionTask, executionTaskSilenceDeadline } from '#adapters/index.js';
 import { nativeWorkerAdmission } from './native-worker.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
@@ -35,14 +35,13 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
       validation: { profile(value) {
         if (value.adapter.id === 'beuser' && validateProfile) return validateProfile(value);
         try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
-        let base;
-        try { base = executionTaskBase(value); validateDockerTaskProfile(base); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
-        // Owner 2026-11-08: an existing Claude Docker template (compiled here) or prepared profile is refused at admission, typed with the tokenless next step.
-        const docker = isNativeCliWorkerProfile(value) ? undefined : resolveDockerTaskProfile(base), subscription = docker?.siwcWorker ? undefined : docker?.nativeSubscription;
-        if (subscription && nativeDockerCredential(subscription.provider) === 'prohibited') throw ErrorRegistry.createError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE');
-        // Owner 2026-11-08 (lead): a relayed local login is used only by its owner and the owner's delegated classes; anyone else's Run is refused here, typed.
-        if (subscription && nativeDockerCredential(subscription.provider) === 'relayed' && !nativeLoginUseAllowed(principal)) throw ErrorRegistry.createError('NATIVE_SUBSCRIPTION_OTHER_PERSON');
-        if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(base).options, config.execution.docker); return undefined;
+        let task;
+        try { task = executionTask(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+        // Owner 2026-11-08: an existing Claude Docker template (compiled here) or prepared profile is refused at admission, typed with the tokenless next step;
+        // (lead) a relayed local login is used only by its owner and the owner's delegated classes.
+        const subscription = isNativeCliWorkerProfile(value) || task.siwcWorker ? undefined : task.nativeSubscription, refusal = subscription && nativeDockerSubscriptionRefusal(subscription.provider, principal);
+        if (refusal) throw ErrorRegistry.createError(refusal);
+        if (config.execution?.docker) assertDockerResourceCeiling(task.options, config.execution.docker); return undefined;
       }, criterion(evaluator, criterion) { try { return validateInstalledCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } }, isTemplate: isNativeCodingTemplate },
       compiler: { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
         bind(value, selection, evidence) { try { return bindNativeWorkerEffort(value, selection, evidence); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },

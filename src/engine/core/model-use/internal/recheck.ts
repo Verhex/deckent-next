@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { ModelInvocationProfile, VerifiedPrincipal } from '#domain/index.js';
+import { samePrincipalRef, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { attachmentFailure } from '#engine/core/project-attachment/index.js';
 import { modelInvocationProfileDigest } from '#engine/core/model-invocation/index.js';
 import type { inspectModelUse } from './read.js';
@@ -12,12 +12,16 @@ export interface ModelUsePin {
   readonly profileDigest: string;
   readonly lease: Readonly<{ leaseId: string; sourceProjectId: string; sourceScopeId: string; sourceDigest: string }> | null;
 }
+/** The pin's principal fields; scopes belong to the scope context, not to the person. */
+const pinPrincipal = (actor: VerifiedPrincipal) => Object.freeze({ id: actor.id, issuer: actor.issuer, subject: actor.subject, assurance: actor.assurance });
+/** X4: the strict principal compare over the pin's principal fields (the same pin owner). */
+export const sameModelUseOwner = (a: VerifiedPrincipal, b: VerifiedPrincipal) => samePrincipalRef(pinPrincipal(a), pinPrincipal(b));
 /** Pin the exact snapshot already authorized by the shared resolver; never reload an unauthorised context. */
 export function pinModelUse(profile: ModelInvocationProfile, actor: VerifiedPrincipal,
   { use, target }: NonNullable<Awaited<ReturnType<typeof inspectModelUse>>>): ModelUsePin {
   if (!target.installationId || !target.projectId) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   return Object.freeze({ schemaVersion: 1, scopeId: profile.scopeId, installationId: target.installationId, projectId: target.projectId,
-    companyId: target.config.company.id, principal: Object.freeze({ id: actor.id, issuer: actor.issuer, subject: actor.subject, assurance: actor.assurance }),
+    companyId: target.config.company.id, principal: pinPrincipal(actor),
     profileDigest: modelInvocationProfileDigest(profile), lease: use ? Object.freeze({ leaseId: use.lease.leaseId, sourceProjectId: use.source.projectId!,
       sourceScopeId: use.sourceProfile.scopeId, sourceDigest: modelInvocationProfileDigest(use.sourceProfile) }) : null });
 }

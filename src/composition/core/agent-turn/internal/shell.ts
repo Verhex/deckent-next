@@ -1,7 +1,7 @@
 import { relative, resolve, sep } from 'node:path';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
-  classifyShellAuthority, classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
+  classifyShellAuthority, classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification, isolatesAsSubscription } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentGlobalStateRoots, agentLoginIdentityPaths, createShellGlobalStateCheck, hostGlobalStateUnresolved, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
@@ -48,7 +48,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const globalRoots = input.globalStateRoots ?? agentGlobalStateRoots([process.env]);
   const globalState = createShellGlobalStateCheck(scope.root, globalRoots, process.env, agentLoginIdentityPaths(globalRoots));
-  const subscription = input.profile && ((input.profile.schemaVersion !== 1 && input.profile.billingAxis === 'subscription') || input.profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID);
+  const subscription = input.profile && isolatesAsSubscription(input.profile);
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
   /** The realm a call of this turn resolves: the configured mode against the service's (memoized) host measurement and the turn's providers. */

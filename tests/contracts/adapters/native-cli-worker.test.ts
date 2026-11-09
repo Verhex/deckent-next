@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
 import { finalReportTextInstruction, nativeProjectionDispatch, reportLanguageInstruction } from '#adapters/core/native-connection/index.js';
 import { createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker,
   validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence, recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, createNativeWorkerEvents,
-  createNativeCliWorkerDriver, type NativeCliWorkerTransport,
+  createNativeCliWorkerDriver, executionTask, executionTaskSilenceDeadline, executionTaskHiddenPaths, type NativeCliWorkerTransport,
   type NativeCliWorkerFenceReader, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type NativeCliWorkerDriver } from '#adapters/core/native-cli-worker/index.js';
 import type { NativeAgentExecution, ToolSessionPort } from '#capabilities/index.js';
 import { sandboxObservationSchema, type SandboxRequest } from '#engine/index.js';
@@ -86,6 +87,14 @@ it('K12: v2 template freezes a separate tokenless backend; legacy v1 remains unc
   expect(() => compileNativeCodingWorkInput({ ...template, adapter: { ...template.adapter, version: 1 } }, workInput)).toThrow('NATIVE_CODING_TEMPLATE_INVALID');
   expect(() => createNativeCliWorkerProfile(legacy, { ...binding, protocolFamily: 'unavailable' })).toThrow('NATIVE_CLI_WORKER_PROFILE_INVALID');
   expect(() => createNativeCliWorkerProfile({ ...legacy, adapter: { ...legacy.adapter, version: 1 } }, binding)).toThrow();
+  // R8b (owner D1b): without Docker settings the worker template has the default limits and no image; the compiled worker resolves for admission
+  // and keeps its silence deadline, its base is stored without an image (KG7 F3: no placeholder), the Docker task validator still refuses that
+  // base, and a plain Docker template without an image is refused.
+  const imageless = compileNativeCodingWorkInput(createNativeCodingTemplate(undefined, invocation, binding), workInput), base = resolveNativeCliWorkerProfile(imageless).base;
+  expect(base.parameters).not.toHaveProperty('imageId'); expect(executionTask(imageless).options).not.toHaveProperty('imageId'); expect(executionTaskSilenceDeadline(imageless)).toBe(1200000);
+  expect(() => validateDockerTaskProfile(base)).toThrow('DOCKER_TASK_PROFILE_INVALID');
+  expect(executionTaskHiddenPaths(imageless)).toEqual(executionTaskHiddenPaths(worker)); // C2: the same pinned checkout shaping as with an image
+  expect(() => createNativeCodingTemplate(undefined, invocation)).toThrow();
 });
 it('K12: new backend refuses native discovery and unprovable helper models instead of dropping capabilities', () => {
   const repository = createNativeCodingTemplate(docker, { ...invocation, discovery: { schemaVersion: 1, mode: 'repository' } }, binding);
