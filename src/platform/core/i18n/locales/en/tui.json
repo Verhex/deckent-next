@@ -870,7 +870,7 @@
   "tui.panel.provider.disconnectTitle": "Disconnect {kind} and remove its stored key?",
   "tui.panel.provider.disconnectKeys": "y remove · n keep · Esc keep",
   "tui.panel.provider.empty": "No provider kind is known.",
-  "tui.panel.provider.transparency": "Kept in this installation's secret store ({backend}) under its name only; other programs running as the same OS user can read it. (Placeholder: the secret-store lane supplies the final text.)",
+  "tui.panel.provider.transparency": "Deckent stores this key in this installation's configured secret store ({backend}) and refers to it by name. Deckent never logs the key. Other programs running as the same OS user may be able to read it.",
   "tui.provider.kind.anthropicApi": "Anthropic API",
   "tui.provider.kind.openaiApi": "OpenAI API",
   "tui.provider.kind.deepseekApi": "DeepSeek API",

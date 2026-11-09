@@ -33,7 +33,7 @@ const failure = (error: unknown) => { const code = (error as { code?: unknown } 
  */
 export function configuredSetup(host: object, witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
   // The doctor verdict (its grouped rows, read-only); in an observation a measurement that cannot run is "not run", never a guess.
-  const verdict = (env: NodeJS.ProcessEnv, root: string) => doctorVerdict(root, { ...host, env } as KernelCommandContext, { env });
+  const verdict = (env: NodeJS.ProcessEnv, root: string) => doctorVerdict(root, { ...host, env, inspectCodingRepository } as KernelCommandContext, { env });
   const observeSetup = async (root: string, options: Options) => {
     const env = options.env ?? process.env, config = await loadConfig(root, { env, heal: false }).catch(() => null);
     const credential = (id: string) => { try { return nativeProviderSpec(id as Parameters<typeof nativeProviderSpec>[0]); } catch { return null; } };
@@ -132,5 +132,9 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
   };
   const openOnboarding = (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) =>
     configuredOnboarding(host, { observeSetup, applySetupStage }, root, scopeId, folder, options);
-  return { openOnboarding, observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment, prepareWorkerImage, inspectWorkerImage: workerImagePresence };
+  const inspectCodingRepository = async (root: string, options: ConfigLoadOptions) => {
+    const decision = codingSetupFamily().stages[0]!.evaluate({ facts: await detectCodingFacts({ root, env: options.env ?? process.env }), scopeId: null, answer: undefined, states: new Map() });
+    return { state: decision.state, reason: { ...decision.reason, params: decision.reason.params ?? {} } };
+  };
+  return { openOnboarding, observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment, inspectCodingRepository, prepareWorkerImage, inspectWorkerImage: workerImagePresence };
 }

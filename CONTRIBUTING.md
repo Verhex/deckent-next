@@ -23,6 +23,11 @@ Linux sandbox tests additionally need kernel support and permission for user nam
 Landlock tests need a supported kernel. A binary on disk alone does not prove sandbox support.
 Read the test's setup and skip conditions before choosing an integration test.
 
+Install Node from the [official download page](https://nodejs.org/en/download); choose Linux inside WSL2.
+Check `node --version` and `npm --version` before installing dependencies. Ubuntu's apt package may provide Node 18.
+An `EBADENGINE` message means the active Node does not meet [package.json](package.json): upgrade to a supported
+version, open a new terminal, check it again and rerun `npm ci` in the existing clone.
+
 ## A 30-minute quickstart
 
 Use the first half hour to install, build and run one test. This is a suggested session plan,
@@ -47,6 +52,14 @@ VITEST_MAX_FORKS=2 node_modules/.bin/vitest run --configLoader runner \
 [`npm ci`](https://docs.npmjs.com/cli/v11/commands/npm-ci/) installs the dependency lockfile;
 it replaces an existing `node_modules`. Do not update dependencies just to get started.
 If installation reports a lockfile mismatch, include the error in your issue.
+An audit notice about moderate vulnerabilities is separate from the install exit code. After a successful install,
+you can continue to the build while investigating `npm audit` and reporting the affected packages; this does not
+establish that the dependencies are safe. Do not run `npm audit fix --force`: it can replace locked dependencies
+with incompatible versions. Dependency fixes need their own reviewed change.
+
+If `deckent-next` already exists, enter it and run `git status` instead of cloning over it. Rerun `npm ci` after an
+interrupted dependency install; it replaces `node_modules` and preserves source edits. Keep an incomplete clone and
+clone to a new directory. A failed bubblewrap build needs a fresh `--out` directory; stage only a completed build.
 
 The bubblewrap recipe and hashes live in [packaging/bwrap/bwrap.lock.json](packaging/bwrap/bwrap.lock.json).
 Linked license texts are committed in [packaging/bwrap/licenses](packaging/bwrap/licenses) and must match the lock hashes.

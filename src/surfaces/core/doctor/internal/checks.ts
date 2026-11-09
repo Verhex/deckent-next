@@ -20,6 +20,7 @@ export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: Doct
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
   readonly providerSpending?: ProviderSpendAccountInspection | null;
   readonly budgetPeriodText?: string | null;
   readonly catalogDiagnostics?: readonly string[] | null;
@@ -169,9 +170,9 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText));
-  // Not set up yet (no registry, or no ledger row): a warning naming the first onboarding stage the first job still needs, set up on the first open.
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
-  rows.push(f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
+  rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
+    : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
       f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
@@ -302,8 +303,7 @@ const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doc
 const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doctor.group.setup', {}, l) : group === 'security' ? t('doctor.group.security', {}, l)
   : group === 'work' ? t('doctor.group.work', {}, l) : group === 'data' ? t('doctor.group.data', {}, l) : t('doctor.group.tools', {}, l);
 
-/** "Durum: hazır · 2 uyarı": the summary line; any error row reads as needing attention. Every condition behind the JSON report's
- * `degraded` verdict is an error row, except an audit chain with no checkpoint yet (a new installation), which is "not tested". */
+/** The human summary and the JSON verdict use the same check states. */
 export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): string {
   const count = (state: DoctorCheckState) => checks.filter(check => check.state === state).length;
   const errors = count('error'), warnings = count('warning'), untested = count('untested');

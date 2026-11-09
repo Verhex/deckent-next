@@ -11,7 +11,9 @@ For the last released version's source-install path, use the README.
 
 Use Linux or WSL2 on x86_64. Native Windows is unsupported; macOS runtime support is incomplete.
 The current package requires Node.js `>=24.22.1 <25 || >=26.12.1` and npm. Recheck the artifact's `package.json` engines
-before installing; Node 25 is excluded. Docker must be installed, running and accessible for coding workers and image builds.
+before installing; Node 25 is excluded. Use the [official Node.js download page](https://nodejs.org/en/download), choosing
+Linux inside WSL2. If npm reports `EBADENGINE` (for example on Ubuntu's Node 18), upgrade Node, reopen the terminal,
+check `node --version` and `npm --version`, then retry the install. Docker must be installed, running and accessible for coding workers and image builds.
 A local-model chat does not itself need a coding worker. Do not change OS permissions or install Docker with elevated privileges
 without handing the administrator's step back to the person.
 
@@ -32,6 +34,9 @@ deckent init --yes --scope my-project --json
 deckent doctor --json
 ```
 
+For Turkish from the first screen, pass `--lang tr` to `deckent init` and `deckent`; the preference is saved with
+`deckent config set --global language tr`. English uses `en`.
+
 Read the complete JSON and the process exit status. Installation completion is separate from onboarding completion.
 Headless setup leaves authority pending; the first witnessed terminal open previews the profile and permission defaults for
 the person. Do not report “ready” just because installation returned zero. Doctor can still report missing models, worker
@@ -48,7 +53,9 @@ Ask the person to open `deckent` in that folder and complete the setup screens. 
 - Review the profile, permission mode and permission/approval cards at their real terminal. AI, MCP, pipes and JSON do not
   witness a person's decision. Never simulate a terminal, alter policy files or swap commands to bypass a refusal.
 - Decide any paid API budget. First-install budget is zero USD; no-spend paths are offered first. The API budget screen
-  offers a 10 USD preset that the person can accept or change; do not accept it for them.
+  highlights the shared [default preset](../src/surfaces/core/cli-models/internal/budget-choices.json) (10 USD), which
+  the person can accept or change; do not accept it for them. In `/provider`, the budget row follows the connections;
+  type `budget` to filter for it.
 - Apply an installation profile (`init apply --profile`, `init resume`) whose rules reach wider than the first-run template
   themselves: it needs the person at their terminal (`AUTHORITY_WITNESS_REQUIRED`). The template-bounded `init --yes` above
   stays headless.

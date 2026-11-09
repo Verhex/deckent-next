@@ -578,7 +578,7 @@ describe('stage 1 budget window (/model and /provider)', () => {
   });
 
   it('/model offers "Create budget" first (no scope step); presets, confirm, one system line; nothing is sent before the confirm', async () => {
-    const budget = budgetPort(view()), { port, pins } = modelPort(MODELS);
+    const budget = budgetPort(view({ start: 10 })), { port, pins } = modelPort(MODELS);
     const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });
     const screen = mount(element, 100, 40);
     await settle(80);
@@ -586,7 +586,11 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(ENTER);
     for (const preset of ['5 USD', '10 USD', '25 USD', '50 USD', '100 USD', 'Another amount (arrow keys)']) expect(screen.frame()).toContain(preset);
     expect(screen.frame()).not.toContain('This session only');
-    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    await screen.press(ENTER);
+    expect(screen.frame()).toContain("Set this scope's shared budget to 10 USD?");
+    expect(budget.applied).toEqual([]);
+    await screen.press(ESC);
+    await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain("Set this scope's shared budget to 25 USD?");
     expect(budget.applied).toEqual([]);
     await screen.press(ENTER, 80);
