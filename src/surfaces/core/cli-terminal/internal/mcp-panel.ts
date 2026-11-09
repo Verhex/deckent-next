@@ -1,7 +1,12 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { McpChoice, McpPanelList, McpPanelPort, McpPanelState, McpServerDraft, McpTrustAsk, PanelLine } from '#surfaces/core/terminal-panels/index.js';
-import type { SecretGrantCardPort } from '#surfaces/core/terminal-kit/index.js'; const GRANT = 'secret-refused:SECRET_GRANT_REQUIRED:';
+import type { SecretGrantCardPort } from '#surfaces/core/terminal-kit/index.js';
 type Scope = 'local' | 'project' | 'user';
+/** KER-17/D11-R1: why a `$DECK:` entry cannot launch, as the registry summary carries it (`refusal`, the adapter's typed field; `reason` is only its string form). */
+type SecretRefusal = { readonly kind: 'secret-refused'; readonly code: string; readonly key: string } | { readonly kind: 'secret-unresolved'; readonly key: string } | { readonly kind: 'secret-reference-in-project-file' };
+/** The key a person may allow on the first-use card: only a server refused for a missing grant (`/mcp` and the after-turn offer). */
+export const mcpGrantKey = (server: { readonly refusal?: SecretRefusal | undefined }): string | undefined =>
+  server.refusal?.kind === 'secret-refused' && server.refusal.code === 'SECRET_GRANT_REQUIRED' ? server.refusal.key : undefined;
 /** The registry commands the terminal's `/mcp` window runs (the same `deckent mcp` handler; this unit never imports the CLI or the adapter). */
 export type McpPanelRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
@@ -10,7 +15,7 @@ export type McpPanelRequest = { readonly verb: 'list'; readonly health?: boolean
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string };
 /** The host's MCP registry command (`McpCommandHandler`): `ask` answers one trust card (yes, no, or null: no answer, nothing recorded). */
 export type McpPanelRun = (root: string, request: McpPanelRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>, locale?: Locale, signal?: AbortSignal) => Promise<unknown>;
-type ServerSummary = { health?: 'connected' | 'not-started' | 'failed' | 'tools-changed' | 'timed-out'; failure?: string; detail?: string; name: string; scope: string; file?: string; status: string; reason?: string; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
+type ServerSummary = { health?: 'connected' | 'not-started' | 'failed' | 'tools-changed' | 'timed-out'; failure?: string; detail?: string; name: string; scope: string; file?: string; status: string; reason?: string; refusal?: SecretRefusal; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
   headerNames?: string[]; pinnedTools?: number; definitionDigest?: string; lastStart?: { text?: string; phase?: string };
   grant?: { status: 'granted'; scopes: 'all' | string[] } | { status: 'none' } };
 type TrustCard = { phase?: string; name?: string; scope?: string; file?: string; definitionDigest?: string; transport?: string; command?: string; args?: string[];
@@ -20,10 +25,11 @@ const array = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : 
 const digest12 = (value: unknown) => typeof value === 'string' ? value.slice(0, 12) : '-';
 /** A server's state in words, one renderer for `deckent mcp list|get` and the `/mcp` window (YTK-40: both read the same trust record the same way);
  * a record trusted before alpha.48 (SEC-2 D6, `trust-moved`) is approved again on its card; an unknown status stays its typed name. */
-export function mcpServerStateWord(server: { readonly status: string; readonly reason?: string | undefined }, locale: Locale): string {
-  if (server.reason?.startsWith('secret-unresolved:')) return t('terminal.mcp.status.secretUnresolved', { key: server.reason.slice(18) }, locale);
+export function mcpServerStateWord(server: { readonly status: string; readonly reason?: string | undefined; readonly refusal?: SecretRefusal | undefined }, locale: Locale): string {
+  const refusal = server.refusal;
+  if (refusal?.kind === 'secret-unresolved') return t('terminal.mcp.status.secretUnresolved', { key: refusal.key }, locale);
   if (server.reason === 'trust-moved') return t('climodels.mcp.state.moved', {}, locale);
-  if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale); if (server.reason?.startsWith('secret-refused:')) { const [code, key = ''] = server.reason.slice(15).split(':'); return code === 'SECRET_PROJECT_MISSING' ? t('terminal.mcp.status.secretProjectMissing', { key }, locale) : code === 'DECK_DECLARATION_REQUIRED' ? t('terminal.mcp.status.secretUndeclared', { key }, locale) : code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? t('terminal.mcp.status.secretNoIdentity', { key }, locale) : t('terminal.mcp.status.secretRefused', { key }, locale); } // KER-17
+  if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale); if (refusal?.kind === 'secret-refused') { const { code, key } = refusal; return code === 'SECRET_PROJECT_MISSING' ? t('terminal.mcp.status.secretProjectMissing', { key }, locale) : code === 'DECK_DECLARATION_REQUIRED' ? t('terminal.mcp.status.secretUndeclared', { key }, locale) : code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? t('terminal.mcp.status.secretNoIdentity', { key }, locale) : t('terminal.mcp.status.secretRefused', { key }, locale); } // KER-17
   switch (server.status) {
     case 'trusted': return t('terminal.mcp.status.trusted', {}, locale);
     case 'pending-approval': return t('terminal.mcp.status.pending', {}, locale);
@@ -36,9 +42,9 @@ export function mcpServerStateWord(server: { readonly status: string; readonly r
 }
 /** Health is evidence from this check, never inferred from a trust decision or a localized word. */
 function panelState(server: ServerSummary): McpPanelState {
-  if (server.reason?.startsWith('secret-unresolved:')) return 'secret-unresolved';
-  if (server.reason?.startsWith('secret-refused:')) {
-    const code = server.reason.slice(15).split(':')[0];
+  if (server.refusal?.kind === 'secret-unresolved') return 'secret-unresolved';
+  if (server.refusal?.kind === 'secret-refused') {
+    const code = server.refusal.code;
     return code === 'SECRET_PROJECT_MISSING' ? 'secret-project-missing' : code === 'DECK_DECLARATION_REQUIRED' ? 'secret-undeclared'
       : code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? 'secret-no-identity' : 'secret-refused';
   }
@@ -108,10 +114,10 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
     async list(input = {}): Promise<McpPanelList> {
       input.signal?.throwIfAborted();
       const listed = (await call({ verb: 'list', health: input.health ?? false }, undefined, input.signal)) as { servers?: unknown; problems?: unknown };
-      const servers = array<ServerSummary>(listed.servers).map(server => { const previous = panelState(server), state = input.checking && server.status === 'trusted' ? 'checking' : previous; return { state, name: server.name, scope: scopeWord(server.scope, locale), status: state === 'checking' ? `${panelWord(server, state, locale)} · ${panelWord(server, previous, locale)}` : panelWord(server, state, locale),
+      const servers = array<ServerSummary>(listed.servers).map(server => { const previous = panelState(server), state = input.checking && server.status === 'trusted' ? 'checking' : previous, grantKey = card ? mcpGrantKey(server) : undefined; return { state, name: server.name, scope: scopeWord(server.scope, locale), status: state === 'checking' ? `${panelWord(server, state, locale)} · ${panelWord(server, previous, locale)}` : panelWord(server, state, locale),
         attention: state !== 'connected', tools: server.pinnedTools ? toolsWord(server.pinnedTools, locale) : '',
         realm: realmWord(server.realm, locale).split(':')[0]!, launch: [server.command ?? '', ...array<string>(server.args)].join(' '), trusted: server.status === 'trusted',
-        ...(card && server.reason?.startsWith(GRANT) ? { grantKey: server.reason.slice(GRANT.length) } : {}) }; });
+        ...(grantKey ? { grantKey } : {}) }; });
       const problems = array<{ name: string | null; scope: string; reason: string }>(listed.problems).map(problem => problem.name === null
         ? t('terminal.mcp.problemFile', { scope: scopeWord(problem.scope, locale), reason: problem.reason }, locale)
         : t('terminal.mcp.problemServer', { name: problem.name, scope: scopeWord(problem.scope, locale), reason: problem.reason }, locale));

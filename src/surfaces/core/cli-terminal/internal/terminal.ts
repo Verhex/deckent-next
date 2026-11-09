@@ -17,10 +17,10 @@ import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#sur
 import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { reportedTerminalBackground, type TerminalHostContext, type TerminalThemeRequest } from '#surfaces/core/terminal-host/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
-import { terminalDeliveryPort } from './deliver-port.js';
+import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
-import { mcpPanelPort } from './mcp-panel.js';
+import { mcpGrantKey, mcpPanelPort } from './mcp-panel.js';
 import { secretGrantCardPort } from './secret-grant-card.js';
 import { attachedScopeLabel, modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
@@ -463,7 +463,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
         ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.reference ? { reference: turn.reference } : {}),
         ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal), locale) } : {}),
     ...(context.streamTerminalChat && context.secretGrantCard ? { secretGrant: secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, home) } : {}),
-    ...(ports.runMcp ? { mcpGrants: { given: (name: string) => t('mcp.grant.givenKey', { key: name }, locale), keys: async () => ((await ports.runMcp!(root, { verb: 'list', health: false }, options, async () => null)) as { servers?: { reason?: string }[] }).servers?.flatMap(server => server.reason?.startsWith('secret-refused:SECRET_GRANT_REQUIRED:') ? [{ name: server.reason.slice(37), project: root }] : []) ?? [] } } : {}), // KER-17 audit: offered after a turn
+    ...(ports.runMcp ? { mcpGrants: { given: (name: string) => t('mcp.grant.givenKey', { key: name }, locale), keys: async () => ((await ports.runMcp!(root, { verb: 'list', health: false }, options, async () => null)) as { servers?: Parameters<typeof mcpGrantKey>[0][] }).servers?.flatMap(server => { const name = mcpGrantKey(server); return name ? [{ name, project: root }] : []; }) ?? [] } } : {}), // KER-17 audit: offered after a turn
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

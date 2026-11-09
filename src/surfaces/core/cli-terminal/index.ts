@@ -3,8 +3,7 @@ export { createWorklineLedgerPorts } from './internal/terminal-ledger.js';
 export { patchDiffs, patchStat, resolveLatestAttempt, terminalDeliveryPort } from './internal/deliver-port.js';
 export type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler, RuntimeServiceReadinessView, TerminalLaunchContext,
   TerminalLaunchPorts, ProviderConnectHost, ProviderConnectKindView, ProviderConnectProbeView, TerminalSecretChange, TerminalSecretDeleteHandler,
-  TerminalSecretNamesHandler, TerminalSecretSetHandler, TerminalProfileCachePlan, TerminalDeliveryHandlers, TerminalIntegrationCheckHandler,
-  TerminalIntegrationPrepareHandler, TerminalPatchPreviewHandler } from './internal/context.js';
+  TerminalSecretNamesHandler, TerminalSecretSetHandler, TerminalProfileCachePlan } from './internal/context.js';
 export type { TerminalChatMessage, TerminalChatPlanHandler, TerminalChatPlanView, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler,
   TerminalMentionFindHandler, TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler,
   TerminalScratchInspectHandler } from './internal/terminal-chat.js';

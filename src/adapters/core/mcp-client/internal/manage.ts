@@ -210,7 +210,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     return failure ? { lastStart: { phase: failure.phase, atMs: failure.atMs, code: failure.code, ...(failure.detail ? { detail: failure.detail } : {}),
       ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(failure.phase === 'decision' ? mcpDecisionNotice(server.name, failure.code, failure.detail) : failure.phase === 'tools' ? { kind: 'tools-changed', name: server.name, count: Number(failure.detail) || 0 }
       : mcpStartFailedNotice(server.name, failure)) } } : {}; };
-  const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
+  const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}), ...(server.refusal ? { refusal: server.refusal } : {}),
     shadows: server.shadows, realm: isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM, ...mcpEntryDisplay(server.entry),
     definitionDigest: server.definitionDigest, pinnedTools: server.trust?.decision === 'trusted' ? server.trust.tools.length : 0, ...lastStartOf(server) });
   /** `/mcp approve|reconnect|remove` and a successful approval are the owner's explicit retry: the recorded failure goes. */

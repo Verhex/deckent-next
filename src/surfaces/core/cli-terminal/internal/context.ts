@@ -2,21 +2,18 @@ import type { ProviderPanelHost } from '#surfaces/core/terminal-provider/index.j
 export type { ProviderConnectHost, ProviderConnectKindView, ProviderConnectProbeView, TerminalSecretNamesHandler, TerminalSecretChange, TerminalSecretSetHandler, TerminalSecretDeleteHandler, ProviderSecretStepView, ProviderCustodyView } from '#surfaces/core/terminal-provider/index.js';
 import type { HubCommandContext } from '#surfaces/core/cli-hub/index.js';
 import type { PermissionMode } from '#domain/index.js';
-import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand, BrainPlanObserver } from '#domain/index.js';
 import type { RunPlanningResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
-import type { AttemptIdentity } from '#domain/index.js';
-import type { EffectConfirmationView, IntegrationAdoptionCommand, IntegrationCommand, IntegrationDeliveryCommand, PatchScope, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
-  WorkspaceIntegrationApplication, WorkspacePatch } from '#engine/index.js';
+import type { DeliveryPortHost } from '#surfaces/core/delivery-port/index.js';
 import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunQuery, RunView, SurfaceSnapshotAccess,
   TaskWorkerModel } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink, ProductLayout } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
-import type { AutonomyShadowReader, DeliverySummaryReader } from '#surfaces/core/delivery-summary/index.js';
+import type { AutonomyShadowReader } from '#surfaces/core/delivery-summary/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
@@ -39,38 +36,27 @@ export interface RuntimeServiceReadinessView {
 }
 /** What the config surface and the read-only management commands both read from a service describe. */
 type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnType<NonNullable<TerminalAdminContext['describeRuntimeService']>>>;
-/**
- * The slice of the host's command context the interactive terminal reads (TERMINAL-LAUNCH, design A); the CLI's command context extends it.
- * Commands that live in the CLI (`doctor`, `/mcp`, the cancellation text) reach the terminal as {@link TerminalLaunchPorts}, never as an import.
- */
-/** TESLIM-PENCERESI: the same handlers as `deckent task integration-check|integration-prepare|patch-preview`, read by the delivery window. */
-export type TerminalIntegrationCheckHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['check']>;
-export type TerminalIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
-export type TerminalPatchPreviewHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ patch: WorkspacePatch; scope: PatchScope }>>;
-/** The trusted composition's verified-terminal delivery and adoption (TESLIM-GUVENLIK port), bound to the answer this terminal supplies. */
-export type TerminalDeliveryHandlers = Readonly<{ assertAvailable(): Promise<void>;
-  deliver(root: string, command: IntegrationDeliveryCommand, options: ConfigLoadOptions): ReturnType<WorkspaceDeliveryApplication['deliver']>;
-  adopt(root: string, command: IntegrationAdoptionCommand, options: ConfigLoadOptions): ReturnType<WorkspaceAdoptionApplication['adopt']> }>;
 /** The engine's `ProfileCachePlan` as this unit reads it (no engine model-activation import here). */
 export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown> }>[]; shared: readonly ModelReference[] }>;
 export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
   detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
-export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommandContext, HubCommandContext, Pick<ModelCommandContext, 'inspectModelRoles' | 'inspectModelBinding' | 'inspectModelActivation' | 'manageProviderSpend'> {
+/**
+ * The slice of the host's command context the interactive terminal reads (TERMINAL-LAUNCH, design A); the CLI's command context extends it.
+ * Commands that live in the CLI (`doctor`, `/mcp`, the cancellation text) reach the terminal as {@link TerminalLaunchPorts}, never as an import.
+ * The delivery window's handlers are {@link DeliveryPortHost} (KG9 F3).
+ */
+export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommandContext, HubCommandContext, DeliveryPortHost,
+  Pick<ModelCommandContext, 'inspectModelRoles' | 'inspectModelBinding' | 'inspectModelActivation' | 'manageProviderSpend'> {
   /** BeUser DR3-02: the configured pool's hold (`deckent pool status`), read for the /do card. */
   inspectBeuserMonitor?: (options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-beuser/index.js').BeuserMonitorView | null>;
   inspectPoolHold?: (root: string, query: { schemaVersion: 1; scopeId: string; poolId?: string | undefined }, options: ConfigLoadOptions) => Promise<import('#engine/index.js').PoolHoldView>;
-  changeDeliveryDismissal?: (root: string, input: Readonly<{ scopeId: string; runId: string; taskId: string; attemptId: string; action: 'dismiss' | 'restore' }>, options: ConfigLoadOptions) => Promise<void>; /* BeUser M-33: person card */
   openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;
   admitModelActivation?: import('#surfaces/core/cli-models/index.js').ModelActivationAdmissionHandler;
   /** R9b (owner D3): the models the Brain role may use in the scope today (tier or a current exception), each with its activation; `/model` marks them. */
   inspectBrainModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<Readonly<{ models: readonly import('#domain/index.js').RoleModelRow[] }>>;
   openOnboarding?: (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-onboarding/index.js').OnboardingPort>;
-  deliveryQueue?: QueueSubmitClient;
-  confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
-  /** TESLIM-KARTI-OZET: each delivery card's summary, read under the person's grants; absent = cards show no summary. */
-  describeDeliverySummaries?: DeliverySummaryReader;
   /** OTONOM-TESLIM shadow (lane B1 store): list and inspect only, never a consent card; absent = no shadow column or line. */
   readAutonomyShadow?: AutonomyShadowReader;
   /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once. */
@@ -79,7 +65,6 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** alpha.64 (owner S6): `/policy`'s AI proposals row turns the v20 rules on (`--apply --only ai-proposals`) and off (`--rollback`) through this governed upgrade. */
   upgradePolicyTemplate?: import('./policy-panel.js').PolicyTemplateUpgradePort;
-  /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   /** CACHE-SLICE1: the scope's existing profiles offered the 5-minute prompt cache, and the per-layer profile documents that switch it on (read only). */
   planProfileCache?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileCachePlan>;
@@ -120,12 +105,6 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   inspectRun?: RunQueryHandler;
   deliverRunCancellation?: RunCancellationDeliveryHandler;
   applyRunLifecycle?: RunLifecycleHandler;
-  checkWorkspaceIntegration?: TerminalIntegrationCheckHandler;
-  prepareWorkspaceIntegration?: TerminalIntegrationPrepareHandler;
-  previewWorkspacePatch?: TerminalPatchPreviewHandler;
-  renderUnifiedDiff?: (path: string, before: string | null, after: string | null) => string;
-  /** Installed only by the trusted CLI composition (never SDK/MCP); the answer is this terminal's delivery window. */
-  interactiveDelivery?: (answer: (view: EffectConfirmationView) => Promise<boolean>) => TerminalDeliveryHandlers;
   inspectWorkerTranscript?: WorkerTranscriptHandler;
   listApprovals?: (input: unknown) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
