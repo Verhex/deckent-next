@@ -443,9 +443,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       quotaWait: (progress: Pick<Extract<BrainPlanProgress, { kind: 'quota-wait' }>, 'attempt' | 'maxAttempts' | 'untilMs'>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
       plan: async (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) => {
-        // R9b (owner D3): a chosen Brain model (`brain_planner.reference`) plans; the chat model is passed only when there is none.
         const result = await (pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal))
-          : (((await loadConfig(root, options))['brain_planner'] as { reference?: unknown } | undefined)?.reference ? Promise.resolve(undefined) : hereModel(reference)).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)));
+          : hereModel(reference).then(chatModel => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent }, options, signal, observe, chatModel)));
         await readPoolHold();
         return result;
       },

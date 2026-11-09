@@ -59,8 +59,9 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   openOnboarding?: (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-onboarding/index.js').OnboardingPort>;
   /** OTONOM-TESLIM shadow (lane B1 store): list and inspect only, never a consent card; absent = no shadow column or line. */
   readAutonomyShadow?: AutonomyShadowReader;
-  /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once. */
-  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
+  /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once.
+   * `chatModel`: this terminal's chat model; the composition plans with it only when no Brain model is chosen (R9b, owner D3). */
+  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver, chatModel?: ModelReference) => Promise<RunPlanningResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** alpha.64 (owner S6): `/policy`'s AI proposals row turns the v20 rules on (`--apply --only ai-proposals`) and off (`--rollback`) through this governed upgrade. */
