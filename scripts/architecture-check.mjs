@@ -591,6 +591,8 @@ function hardcodeInventory(sources, sourceChecker, policy) {
       const value = string || numeric ? scalar(numeric && ts.isPrefixUnaryExpression(parent) ? parent : node) : undefined;
       if (string || ts.isIdentifier(node)) {
         const slug = node.text;
+        const vendor = slugs.has(slug) ? slug : string ? [...slugs].find(id => slug.startsWith(`${id}-`) || slug.startsWith(`${id}/`))
+          ?? (policy.namespaces ?? []).find(entry => slug.startsWith(entry.prefix))?.slug : undefined;
         // Only climb the expression side: type references and registry property reads
         // are not slug literals. Keep the original node for existing fingerprints.
         let expression = node, contextParent = parent;
@@ -605,7 +607,8 @@ function hardcodeInventory(sources, sourceChecker, policy) {
           || (ts.isPropertyAssignment(contextParent) || ts.isShorthandPropertyAssignment(contextParent) || ts.isMethodDeclaration(contextParent)) && contextParent.name === expression
           || ts.isElementAccessExpression(contextParent) && contextParent.argumentExpression === expression
           || ts.isCallExpression(contextParent) && ts.isPropertyAccessExpression(contextParent.expression) && ['has', 'includes', 'indexOf'].includes(contextParent.expression.name.text);
-        if (slugs.has(slug) && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(slug))) add('G1', node, slug);
+        if (vendor && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(vendor)))
+          add('G1', node, slug, slugs.has(slug) ? '' : 'vendor-namespace');
       }
       if (string && familyPatterns.length > 0 && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent) && !ts.isExternalModuleReference(parent)) {
         const hit = familyPatterns.find(({ pattern }) => pattern.test(node.text));
@@ -668,7 +671,12 @@ function hardcodeInventory(sources, sourceChecker, policy) {
   }
   return findings.sort((a, b) => a.file.localeCompare(b.file) || a.fingerprint.localeCompare(b.fingerprint));
 }
-function lintHardcode(findings, policy) {
+function lintHardcode(findings, policy, slugCaps = arch.guards?.vendorSlugCaps ?? {}) {
+  // Owner Q15 opens a new detector scope, never the original frozen admission or its history.
+  if (policy.namespaceRatchet) {
+    lintHardcode(findings.filter(row => row.detail === 'vendor-namespace'), { ...policy, ...policy.namespaceRatchet, namespaceRatchet: undefined }, {});
+    findings = findings.filter(row => row.detail !== 'vendor-namespace');
+  }
   const identity = row => JSON.stringify({ file: row.file, fingerprint: row.fingerprint, rule: row.rule });
   const hash = row => createHash('sha256').update(identity(row)).digest('hex');
   // Fingerprints are file-independent; admission identity is not. A relocated entry names its
@@ -728,8 +736,8 @@ function lintHardcode(findings, policy) {
     const moved = unlisted.find(other => lineage(other) === lineage(row));
     fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}${moved ? ` (or relocate it to ${moved.file} with origin)` : ''}`);
   }
-  // Per-layer vendor-slug cap: G1 findings in domain/engine are frozen debt that can only shrink.
-  for (const [layer, cap] of Object.entries(arch.guards?.vendorSlugCaps ?? {})) {
+  // Original exact-slug G1 debt keeps its per-layer cap; namespaces have their own frozen admission.
+  for (const [layer, cap] of Object.entries(slugCaps)) {
     if (!packageNames.includes(layer)) continue;
     const count = findings.filter(row => row.rule === 'G1' && row.file.startsWith(`src/${layer}/`)).length;
     if (count > cap) fail('slug-cap', `src/${layer}`, `${count} vendor-slug findings > cap ${cap}; derive provider/CLI ids from the registry (commands.json, nativeCliIdSchema) instead of literals`);
@@ -783,7 +791,7 @@ if (arch.guards) {
   // KG9 F5: catalog text is read through t or messageText; only the i18n unit reads .catalogs[ directly.
   if (guards.catalogRead) wordRatchet('catalog-read', 'catalogRead', guards.catalogRead, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p) && !rel(p).startsWith('src/platform/core/i18n/')),
     (word, count) => `"${word}" reads a message catalog directly (${count} hit(s)); use messageText(key, locale) or t from #platform`);
-  // KG12 F2: containment goes through pathWithin or relativeInside; off (enforce false) until LINT-R opens it after the migrations.
+  // KG12 F2: containment goes through pathWithin or relativeInside; owner A25 retains the listed over-refusals.
   if (guards.parentPrefix?.enforce) wordRatchet('parent-prefix', 'parentPrefix', guards.parentPrefix, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p)),
     (word, count) => `"${word}" decides containment by a bare prefix (${count} hit(s)); a child named ..x is not a parent: use pathWithin or relativeInside`);
   // G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; the five legacy flows are a shrink-only list.
@@ -845,6 +853,19 @@ for (const file of srcFiles) {
   for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'markdown write from product source; documentation is not written by src');
 }
 
+// X2: derive classified codes from the error dictionary; wire enums describe a protocol, not a classifier.
+const classifiedCodes = new Set();
+const classificationAllow = (arch.guards?.errorClassification?.allow ?? []).map(entry => ({ ...entry, seen: 0 }));
+for (const file of srcFiles.filter(file => rel(file).startsWith('src/platform/core/errors/'))) {
+  const source = program.getSourceFile(file);
+  const visit = node => {
+    if (ts.isPropertyAssignment(node) && ts.isObjectLiteralExpression(node.initializer)
+      && node.initializer.properties.some(property => ts.isPropertyAssignment(property) && ['refusal', 'launch'].includes(property.name.getText(source))))
+      classifiedCodes.add(ts.isStringLiteralLike(node.name) ? node.name.text : node.name.getText(source));
+    ts.forEachChild(node, visit);
+  };
+  if (source) visit(source);
+}
 // Policy parsing and construction each have one owner; consumers receive a typed snapshot or a context source.
 for (const file of srcFiles) {
   const path = rel(file), source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -854,6 +875,15 @@ for (const file of srcFiles) {
     names.set(entry.name.text, entry.propertyName?.text ?? entry.name.text);
   const name = expression => ts.isPropertyAccessExpression(expression) ? expression.name.text : names.get(expression.getText(source)) ?? expression.getText(source);
   const visit = node => {
+    if (ts.isArrayLiteralExpression(node) && !path.startsWith('src/platform/core/errors/')
+      && !(ts.isCallExpression(node.parent) && ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'enum')
+      && new Set(node.elements.filter(ts.isStringLiteralLike).map(element => element.text).filter(code => classifiedCodes.has(code))).size > 1) {
+      let declaration = node.parent;
+      while (declaration && !ts.isVariableDeclaration(declaration) && !ts.isSourceFile(declaration)) declaration = declaration.parent;
+      const exception = classificationAllow.find(entry => entry.file === path && entry.symbol === declaration?.name?.getText(source));
+      if (exception) exception.seen++;
+      else fail('error-classification', `${path}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`, 'copied refusal/launch code set; use isAuthorizationRefusal or launchRefusal from the error registry');
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
       && name(node.expression.expression) === 'policySchema' && ['parse', 'safeParse'].includes(node.expression.name.text)
       && !path.startsWith('src/domain/core/policy/')) fail('policy-owner', path, 'raw policy parsing belongs to domain/core/policy');
@@ -867,6 +897,8 @@ for (const file of srcFiles) {
   };
   visit(source);
 }
+for (const entry of classificationAllow) if (!entry.reason || !Number.isInteger(entry.count) || entry.count < 1 || entry.seen !== entry.count)
+  fail('error-classification', entry.file, `errorClassification.allow ${entry.symbol} needs a reason and its exact positive count (observed ${entry.seen}, allowed ${entry.count}); remove stale entries or lower shrinking counts`);
 
 // ---- 6: budgets
 const { fileRoots, textExtensions, maxLinesPerFile, designTargetLines } = arch.budgets;
@@ -907,7 +939,8 @@ for (const [pkg, budget] of Object.entries(arch.budgets.packageLines)) {
   if ((perPackage[pkg] ?? 0) > budget) fail('package-budget', `src/${pkg}`, `${perPackage[pkg]} lines > budget ${budget}`);
 }
 if (total > arch.budgets.totalSrcLines) fail('total-budget', 'src', `${total} lines > budget ${arch.budgets.totalSrcLines}`);
-const TEST_CASE = /^\s*(?:it|test)(?:\.(?:each|skip|only|todo|concurrent))*\(/gm;
+// Count a conditional/parameterized declaration once, at its first call, irrespective of its rows or predicate.
+const TEST_CASE = /^\s*(?:it|test)(?:\.(?:each|skip|skipIf|runIf|only|todo|concurrent))*\(/gm;
 let testCases = 0;
 for (const file of walk(join(ROOT, 'tests'), (p) => /\.test\.tsx?$/.test(p))) testCases += (readFileSync(file, 'utf8').match(TEST_CASE) ?? []).length;
 if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCases} test cases > budget ${arch.budgets.testCases}`);

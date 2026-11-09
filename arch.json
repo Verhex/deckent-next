@@ -5304,7 +5304,7 @@
       "composition": 13629
     },
     "totalSrcLines": 200000,
-    "testCases": 8205,
+    "testCases": 8974,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
@@ -5495,6 +5495,86 @@
     ]
   },
   "hardcodeRatchet": {
+    "namespaceRatchet": {
+      "note": "Owner Q15: first admission of the expanded G1 vendor-namespace detector. Separate shrink-only history; the original frozen admission and vendorSlugCaps remain unchanged.",
+      "allowlist": "scripts/hardcode-namespace-allowlist.json",
+      "frozen": [
+        "780f4ebf25fff3be47f18eb4ea4857117b39c71fe58f408f6b4052ad95378db7",
+        "6275c435ebd707cee2ad2bb8c4dd0d2da90a7d70077fdafa9493c596731d0f49",
+        "b49feda85ceb439e9c19c737ec716b714dfd994dec2db90b9ecc4d6d6e491eca",
+        "9141cc9b9bc2e982d1cc910e3a90e4099f80269dd4ffb0fe1581f40b436a9ad2",
+        "92ace409e78ccb411a4e83955209e72ecbe2c293cf9d999182e2e66741d59a41",
+        "3730fba7e39cc9b83e04b298cbeac2634695901507c97d3b9fb5e76c0d21e880",
+        "e14e5ea7279c704e5aab88967ab9f9138111e656470ac9341e7ce1348c5e1115",
+        "c5d749a8b06f9f8c20646ac6d669c59625288ab4d280eb30c272206e06a1277a",
+        "d4d4db9c145a711a0b0a5d0a91dee17e7c4af019e46e0eb8d5dbb83508335e40",
+        "f5c346403f9566e6c95335e153cbc9c8e20dcf54630a8775998f2999346cd6e2",
+        "f37c3fcc49677e3eea022e5a74f297d28f1c521fc6a7552a18847ce3ae62d3b3",
+        "9979664589148e16e13bec4fec21cdbc3b442a4dc22a38288890aff14b8e6e83",
+        "6071d8a6d5deea2397b316fbad88ddafb8e813d56b3c2a87a881374555e1f261",
+        "324084be48a2ec95d9400a8faec600964316eb4b29804bef61aee943615d6d23",
+        "efcf373cb9b5a5693326f9a229843d006da5147517515361977e155710fc4374",
+        "52cd9abbf009f66b8d5e1f39564fef8c66d43cf180d7f2b3ef5511b02cca5a81",
+        "7ef6d357ab23e12c511c070f1e2a539925ec3ce1b7e2e2499206d545673bf2cc",
+        "4b128a1579ce829f1f5dab5d6711a0c83ccaada349382950d60688580b02926a",
+        "0e8fb0dac89a72f3b35ee0284b09a291be5cf119ab0697fa48728682196b388a",
+        "42d3e79530deb7bd3e5f1812b8078d1e5d54991d510d300eac99fc4b828792a1",
+        "66c3fb462ee9230601287689240f4f57e3d9a9916405999c3078b8ae355c01ac",
+        "7e103fb8696928857ec70f12018b3e51461b7acd1b845f54ea8e1a82fb43120c",
+        "87a498c88a19b04581b6ead842c9e0e6c2baa8d6b37f7f54d417085bbe8e97d9",
+        "fe5e0c82b55598966bae3f1090b9ad715554ad6b99d9cb16fb5a79646bd533b7",
+        "4b50ac3f4a0853716c8eb6579ad280b080174d4fc4de8534f2bdd92899c32030",
+        "17d169fff70d5fc59a282623dd160a6a6e5a040e5e21614eb25ebc8f9c7de182",
+        "b3305032562734b12b19967ffe02736fc43d07f39ccf4ec5497770b7a2fee728",
+        "2b923b29970e727a5840b2fa522fc77db866ad8f3857d5a851680ac3b708e870",
+        "b796bc899df284c764adf51542f585a69d2cc13aa483363ece266f64326dc83a",
+        "bd37c4f4023309a7e824415528f4f1fcfaaf37639851336349c67befee5471f1",
+        "622b92375e7e1f3bae283fa63f859d2cbf79ea77d243352596a48e78527f7c44",
+        "204afe69b63bd28795ff42ba540740a0adec86ece9f29f05387f11354802c101",
+        "0cabf22377101fcc6f476b3927b48dcf42012055e72d2f397a6af9c2fb4b549e",
+        "aa60a6318e8e00eb56eb1260265d776c814ada03d675d5dba13b42915c9f5ffd",
+        "5c4d7e7e3ea8da719cea0e18d0576a581c5ccb13134e85dabc8d61224e1b8308",
+        "b65a83fd2b48a435080160bc6647f98def898db57e02d6a740b9ac05de1d8bf7",
+        "a6c0509fe1485eef7dfd6aca2be450938ae271dbc6b6dd9f1b1d04e782678ccf",
+        "cd5abe46a925f5e651947ecf5cee8c4e10edf3767fcd6a9826bc6df07bd641bd",
+        "e440fa15c6ff87fb34c3e27d5131c3da3941333676d95752a496919ad3139051",
+        "1bd302d871754a5df70e5c051b47870053506b4151015fddcece4e1e711875a1",
+        "6de59cd81c1a201c73d2d584d5effaa9cfdd8de387a91c63633f5424c98a5a3f",
+        "6a538dd3245ac6813234fff47edd9ea9b048882c5fcb8b9b16a815ce15b877ff",
+        "f501520cf276def93600af2a65f828d395ae972ca9f94c85f21352b5583e9042",
+        "c1f08019fd27e891aff6b6aa20dd5e2c8a852185caa4e4e8771a711ef0a9cbae",
+        "a85437de08e3a15d919a950388933061e90fa78368896d28d42a55c549a1c8ce",
+        "c03d1900fdc6c219dc4ec69539c7d08a49af3e07159b6f469ff81e7e05a70aba",
+        "92b4648c445b56d22327b64b5d553f3cd74e31ff73b55dc485d8836f7a7e363b",
+        "812d083eb10fcf0182e3ab39468d6b6533fd4f06d806e237cbddcbdc23d0f32c",
+        "f620e380f27b8834776a8c277aebb8b09992b43abb6036bdebdf6b0532a35087",
+        "d1c9b8bacf1226a178a65c1f486048541cb2574bb485cb54a33b8cb2bfa5d918",
+        "9cd015334b12267833bd47a3ba0f11f2305aa841208b534cdfe0e772a278c285",
+        "69c8a6555509a34a9bd0989d2bbb40472f9018c5249e6bf661ac8d57a0482c6e",
+        "9ef1732d17512b86da6013665d22c5469155c50b47ac70632f7120712a7cfb8b",
+        "11819d1a4d66b52ccf229c05d1bfca9c426ee7587c11e95f140ab97b18c77019",
+        "f643520cbce90377a557ec93624506148c55f42bbd28e103664ddf086331d458",
+        "e83c5bc616f62ed5d94d935f26c1ef9cb085a5d134fc8b76e670aaaff996c7c1",
+        "a8ceedd8e6417bdf631e8a02f934b460d8552c4c1d6ce177bb207e7b2d2cd235",
+        "9f4a98e78162a7b0f5d831a9a5ef5dfb071055547a560d2ac82c042b0c504409",
+        "b562a2fef9d72f277dc60d036241fef4562e29f38e3edfe27771b2068740d0ab",
+        "7688c52bb63a2557af6d10d27a01050aebe9b2f10c4e739b193744deb02c184a",
+        "b6e9f07262312282fb6d0f0f16c13f2c5ab61c1ac79193fecb19dd843ccbe749",
+        "60f17067e793a0ca55eb34c5546efa3d627154e203ef5ca9ad286e59838ffd0c",
+        "38d0c9bd8d6594bb4b0c8a7534f074251ee86948ca42781ccd640ce36a8a5b50",
+        "91599340e254d5852594b2647968ac38033ec54262cfec1d3cb9247f9078a6a8",
+        "8fb09d3d1cb33159a715180780cf8fa81b74562965ff8701a7e50689118f739e",
+        "04417fee2da78d12546561650b3e0f7c45be1814bd08494dedda79709db89103",
+        "7b88754ea4e3edabc8b9b0eccea66fc3f0adaa549aa7976b8eba2726124cd13b",
+        "dfeb44a2025c62b7a5f6ae3642ff311e7ea300fb9313995b5cf8a44953c5184f"
+      ]
+    },
+    "namespaces": [
+      {
+        "prefix": "claudecode/",
+        "slug": "claude"
+      }
+    ],
     "slugs": [
       "claude",
       "codex",
@@ -6451,7 +6531,9 @@
         "callerEnvironment\\(",
         "personProcessEnvironment\\(",
         "\\.\\.\\.process\\.env\\b",
-        "env:\\s*process\\.env\\b"
+        "env:\\s*process\\.env\\b",
+        "getDefaultEnvironment\\(",
+        "StdioClientTransport\\("
       ],
       "allow": [
         {
@@ -6493,6 +6575,11 @@
           "file": "src/adapters/core/beuser-realm/internal/custody.ts",
           "count": 1,
           "reason": "Text of a script that runs inside the BeUser realm; its process.env is the realm's own."
+        },
+        {
+          "file": "src/adapters/core/mcp-client/internal/pool.ts",
+          "count": 2,
+          "reason": "KG8 Fix C: the sole SDK stdio construction owner supplies the explicit MCP_STDIO_BASE_ENVIRONMENT, pinned to SDK defaults by the MCP-ENV test."
         }
       ]
     },
@@ -6501,9 +6588,19 @@
       "patterns": ["\\.catalogs\\["],
       "allow": []
     },
+    "errorClassification": {
+      "allow": [
+        {
+          "file": "src/engine/core/approval/internal/policy-admin.ts",
+          "symbol": "AUDITED_REFUSALS",
+          "count": 1,
+          "reason": "KG3 F3 explicitly retains this authority-submission audit event set; it does not classify the generic authorization-refusal class."
+        }
+      ]
+    },
     "parentPrefix": {
-      "note": "KG12 F2 (alpha.64 PRIV-E): containment is decided by pathWithin or relativeInside (#platform); a bare startsWith('..') takes a child named ..x for a parent. Written now and off: PRIV-M1 migrated the fail-open rows; LINT-R sets enforce. Shrink-only once enforced.",
-      "enforce": false,
+      "note": "KG12 F2 (alpha.64 LINT-R): containment is decided by pathWithin or relativeInside (#platform); owner A25 retains the listed over-refusals for children named ..x. Shrink-only.",
+      "enforce": true,
       "patterns": [
         "\\.startsWith\\((['\"`])\\.\\.\\1\\)"
       ],

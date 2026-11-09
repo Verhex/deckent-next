@@ -94,7 +94,8 @@ describe('hardcode ratchet admission', () => {
     const admission = JSON.parse(admittedFile(list)).map(identity).sort();
     // Array equality detects missing, phantom and duplicate members, in both directions.
     expect(admission).toEqual(inventory);
-    const current: string[] = JSON.parse(result.out).map(identity);
+    // Q15 namespace debt has a separate admission; the original detector scope remains bound to its first list.
+    const current: string[] = JSON.parse(result.out).filter((row: { detail: string }) => row.detail !== 'vendor-namespace').map(identity);
     expect(current.filter(id => !admission.includes(id))).toEqual([]);
     expect(admission).toHaveLength(514);
     const frozen = JSON.parse(admittedFile('arch.json')).hardcodeRatchet.frozen;
@@ -141,6 +142,26 @@ it('delivers a complete inventory larger than a pipe buffer before exiting', asy
     const inventory = JSON.parse(output) as { symbol: string }[];
     expect(inventory.map(row => row.symbol).sort()).toEqual(declarations.map((_, i) => `check${i}`).sort());
   });
+describe('hardcode namespace ratchet', () => {
+  it('detects namespaced vendor literals with a separate frozen admission, leaving type declarations out', () => {
+    const root = fixture("kind === 'claude-mcp'; meta['claudecode/toolUseId']; type Kind = 'claude-mcp';", {
+      frozen: [], namespaces: [{ prefix: 'claudecode/', slug: 'claude' }],
+    });
+    expect(JSON.parse(run(root, true).out).filter((row: { rule: string }) => row.rule === 'G1')).toHaveLength(2);
+    expect(run(root).out).toContain('[hardcode-G1]');
+    freeze(root);
+    const arch = JSON.parse(readFileSync(join(root, 'arch.json'), 'utf8'));
+    arch.hardcodeRatchet.namespaceRatchet = { allowlist: 'baseline.json', frozen: arch.hardcodeRatchet.frozen };
+    arch.hardcodeRatchet.allowlist = 'legacy.json'; arch.hardcodeRatchet.frozen = [];
+    put(root, 'legacy.json', '[]'); put(root, 'arch.json', JSON.stringify(arch));
+    expect(run(root).code).toBe(0);
+    put(root, file, "kind === 'claude-mcp'; meta['claudecode/toolUseId']; kind === 'claude-new';");
+    expect(run(root).out).toContain('[hardcode-G1]');
+    put(root, file, 'export {};');
+    expect(run(root).out).toContain('[hardcode-allowlist-stale]');
+  });
+});
+
 describe('hardcode ratchet', () => {
   it.each(['G1', 'G2', 'G3', 'G4'])('detects %s new literals through the CLI', rule => {
     const source = readFileSync(resolve(`tests/fixtures/hardcode-ratchet/${rule}.fixture`), 'utf8');
