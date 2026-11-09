@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, DatabaseSyncOptions } from 'node:sqlite';
 import { createRequire } from 'node:module';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { CURRENT_LEDGER_VERSION, migrateLedger } from './schema.js';
@@ -12,15 +12,11 @@ import { sqliteLedgerOptionsSchema, sqliteFailure, assertSqliteEngineSupported, 
  * ever held, so it blocks no writer and no checkpoint. Installer and inventory readers retain their distinct precheck/transaction protocols. */
 export function openLedgerStore(path: string, options: SqliteLedgerOptions, mode: 'write' | 'read' | 'anchor',
   migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator, companyId?: string): DatabaseSync {
-  assertSqliteEngineSupported(process.versions.sqlite);
   const parsed = sqliteLedgerOptionsSchema.safeParse(options);
   if ((migration !== 'allow' && migration !== 'forbid') || !parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   const timeout = parsed.data.busyTimeoutMs;
   let db: DatabaseSync;
-  try {
-    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, mode === 'write' ? { timeout, enableForeignKeyConstraints: true } : { readOnly: true, timeout });
-  }
+  try { db = openLedgerDatabase(path, mode === 'write' ? { timeout, enableForeignKeyConstraints: true } : { readOnly: true, timeout }); }
   catch (error) { throw sqliteFailure(error); }
   if (mode === 'read') return db;
   try {
@@ -40,6 +36,13 @@ export function openLedgerStore(path: string, options: SqliteLedgerOptions, mode
     if (mode === 'write') try { db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
     db.close(); throw sqliteFailure(error);
   }
+}
+/** The one raw `node:sqlite` construction: the DEPS-P0 floor check, then the lazy load. Opens that keep their own protocol (installer, inventory,
+ * backup copies and checkpoints, member checks) use it directly; it maps no error and the caller owns close. */
+export function openLedgerDatabase(path: string, options: DatabaseSyncOptions = {}): DatabaseSync {
+  assertSqliteEngineSupported(process.versions.sqlite);
+  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  return new NativeDatabase(path, options);
 }
 /** Kept for the store units that SQL-M has not yet moved to `openLedgerStore`. */
 export const openSqliteLedger = (path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator,

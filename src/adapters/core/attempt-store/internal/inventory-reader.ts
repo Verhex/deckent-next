@@ -2,10 +2,10 @@ import { readRunPoolEvidence } from './run-pool-observation.js';
 import { readIntegration } from './integration.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
-  assertSqliteEngineSupported, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+  openLedgerDatabase, decodeStored, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunReceipt, readRunSnapshot } from './runs.js';
 import { attemptSnapshotSchema, identitySchema } from '#domain/index.js';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
@@ -26,8 +26,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   constructor(path: string, options: SqliteInventoryOptions) {
     const parsed = sqliteLedgerOptionsSchema.unwrap().pick({ busyTimeoutMs: true }).strict().safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-    assertSqliteEngineSupported(process.versions.sqlite);
-    try { this.db = new DatabaseSync(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
+    try { this.db = openLedgerDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
     catch (error) { throw readFailure(error); }
     try {
       requireLedgerVersion(this.db, DISPATCH_LEDGER_VERSION);
@@ -53,10 +52,9 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     try {
       const row = this.db.prepare('SELECT command,snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(identitySchema.parse(scopeId), identitySchema.parse(commandId));
       if (!row) return null;
-      let snapshot;
-      try { snapshot = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); }
-      catch { throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT'); }
-      if (snapshot.identity.scopeId !== scopeId || typeof row.command !== 'string') throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
+      const corrupt = () => new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
+      const snapshot = decodeStored(attemptSnapshotSchema, row.snapshot, corrupt, value => value.identity.scopeId === scopeId);
+      if (typeof row.command !== 'string') throw corrupt();
       return Object.freeze({ commandId, command: row.command, snapshot });
     } catch (error) { throw readFailure(error); }
   }

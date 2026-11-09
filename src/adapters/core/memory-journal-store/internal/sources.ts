@@ -1,7 +1,6 @@
-import { createRequire } from 'node:module';
 import { identitySchema } from '#domain/index.js';
 import { MemoryJournalError, memoryEvaluationSourceOf, memoryExtractionSourceOf, type MemoryEvaluationSources } from '#engine/index.js';
-import { readAcceptedTaskMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, EFFECT_OPEN_STATE_SQL, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, readAcceptedTaskMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, EFFECT_OPEN_STATE_SQL, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 
 type Describe = { workClass(classId: string | null): Parameters<typeof memoryExtractionSourceOf>[0]['workClass']; readonly workTargetId: string | null };
@@ -13,8 +12,7 @@ type Describe = { workClass(classId: string | null): Parameters<typeof memoryExt
 export async function readMemoryExtractionPage(path: string, options: Pick<SqliteLedgerOptions, 'busyTimeoutMs'>, scopeId: string, after: string | null, limit: number, describe: Describe) {
   const scope = identitySchema.parse(scopeId);
   if (after !== null && !/^\d+$/u.test(after)) throw new MemoryJournalError('MEMORY_CORRUPT');
-  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const db = new DatabaseSync(path, { readOnly: true, timeout: options.busyTimeoutMs }), runs = await openSqliteInventoryReader(path, { busyTimeoutMs: options.busyTimeoutMs });
+  const db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs }), runs = await openSqliteInventoryReader(path, { busyTimeoutMs: options.busyTimeoutMs });
   try {
     requireLedgerVersion(db, MEMORY_AUTOMATION_LEDGER_VERSION);
     const unsettled = db.prepare(`SELECT 1 FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=? AND ${EFFECT_OPEN_STATE_SQL} LIMIT 1`);
@@ -33,8 +31,7 @@ export async function readMemoryExtractionPage(path: string, options: Pick<Sqlit
  */
 export async function openMemoryEvaluationSourceReader(path: string, options: Pick<SqliteLedgerOptions, 'busyTimeoutMs'>, makerOf: (channelId: string, modelId: string) => string | null,
   mayRead: (runId: string) => boolean): Promise<MemoryEvaluationSources & { close(): void }> {
-  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const db = new DatabaseSync(path, { readOnly: true, timeout: options.busyTimeoutMs });
+  const db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
   try { requireLedgerVersion(db, MEMORY_AUTOMATION_LEDGER_VERSION); } catch (error) { db.close(); throw error; }
   const runs = await openSqliteInventoryReader(path, { busyTimeoutMs: options.busyTimeoutMs }).catch(error => { db.close(); throw error; });
   const unsettled = db.prepare(`SELECT 1 FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=? AND ${EFFECT_OPEN_STATE_SQL} LIMIT 1`);

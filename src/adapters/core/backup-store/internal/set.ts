@@ -9,6 +9,7 @@ import { type BackupResult } from '#engine/index.js';
 import { BACKUP_RESOURCES, archiveState, unpackState, type BackupConfigLayers, type BackupLimits, type BackupState } from './archive.js';
 import { decryptKey, encryptKey } from './crypto.js';
 import { ledgerFingerprint } from './fingerprint.js';
+import { openLedgerDatabase } from '#adapters/core/sqlite-ledger/index.js';
 import { digestFile, ensurePrivateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const SOURCE_BUSY_BUDGET = 1000;
 const PAYLOAD = ['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'] as const;
@@ -109,7 +110,7 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     const sourcePath = await safePath(productResourcePath(layout, 'ledger'));
     const info = await lstat(sourcePath);
     if (!privateFile(info)) return refuse('BACKUP_PATH_UNSAFE');
-    const { backup, DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite'), db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
+    const db = openLedgerDatabase(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET }), { backup } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     const ledger = join(staging, 'ledger.db');
     await writePrivate(ledger, new Uint8Array()); // 0600 before the backup API opens its output.
     const deadline = Date.now() + 60000;
@@ -117,7 +118,7 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     finally { db.close(); }
     await chmod(ledger, 0o600);
     // S1 O6: the snapshot keeps the source's WAL header; as rollback-journal file it is self-contained and no reader creates sidecars.
-    const snapshot = new DatabaseSync(ledger); try { snapshot.exec('PRAGMA journal_mode=DELETE'); } finally { snapshot.close(); }
+    const snapshot = openLedgerDatabase(ledger); try { snapshot.exec('PRAGMA journal_mode=DELETE'); } finally { snapshot.close(); }
     const ledgerHandle = await import('node:fs/promises').then(fs => fs.open(ledger, 'r')); try { await ledgerHandle.sync(); } finally { await ledgerHandle.close(); }
     await writePrivate(join(staging, 'ledger.fingerprint.json'), ledgerFingerprint(ledger));
     await writePrivate(join(staging, 'state.archive.json.gz'), await archiveState(layout, projectRoot, installationId, keyFile, limits, createdAt, config));
