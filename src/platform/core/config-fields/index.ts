@@ -1,7 +1,7 @@
 export { CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, CORE_SCHEMA, getConfigFieldDefault, MEMORY_AUTOMATION_MODES } from './internal/fields.js';
 export { mergeConfigFields } from './internal/field.js';
 export { SQLITE_STORAGE_OPTIONS } from './internal/storage.js';
-export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS, deliveryMode } from './internal/execution.js';
+export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, GIT_COPY_BYTES, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS, deliveryMode } from './internal/execution.js';
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './internal/fields.js';
 export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, configEntryAllowed } from './internal/choices.js';
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit } from './internal/choices.js';

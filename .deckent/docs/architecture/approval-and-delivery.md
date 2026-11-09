@@ -1204,16 +1204,18 @@ turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-e
 `IntegrationDeliveryTarget` (`application: 'working-tree'`): the engine stays generic and only reports the target's result
 (`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
 also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
-the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by an
-exclusive lock directory in Deckent's workspace root (bounded wait; the lock holds its owner record naming the delivery and the operation it
-runs, delivery or rollback, and only a holder proven gone by pid and start bound is taken over: the journal of that operation first enters a
-durable custody entry (`working-tree-pending/<checkout>/<journal>`, directory fsynced) before the gone record is removed, and every holder,
-before its own work, recovers and classifies each custody journal still `writing` from the files: all `before` = nothing written, all
-`after` = written, a mix = PATCH_WORKING_TREE_PARTIAL with both lists, and the entry goes only once its journal no longer reads `writing`, so
-a taker that dies too leaves the operation for the next one (Astra 3017 R2), and custody that cannot be read (anything but absent) stops the
-work (Astra 3019); an ownerless or live lock is never taken (BUSY), and a gone
-holder's record or a journal of another version (journal `schemaVersion` 2 is read) is the typed refusal
-PATCH_WORKING_TREE_RECORD_UNSUPPORTED naming the record to check and remove, nothing settled or written), and writes nothing to the person's repository: no
+the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by the
+shared kernel file lock (`withExclusiveFileLock`, owner B1-12 2026-11-09) on `working-tree-locks/<checkout>` in Deckent's workspace root
+(bounded wait, then PATCH_WORKING_TREE_BUSY; the kernel frees the lock when its holder dies, a live holder is never displaced). Before its
+journal reads `writing`, a writer enters durable custody (`working-tree-pending/<checkout>/<journal>`, directory fsynced) and leaves it once
+the journal reads `written` or `partial`; so under the lock a `writing` journal is a dead holder's, and every holder, before its own work,
+recovers and classifies each custody journal still `writing` from the files: all `before` = nothing written, all `after` = written, a mix =
+PATCH_WORKING_TREE_PARTIAL with both lists, and the entry goes only once its journal no longer reads `writing`, so a holder that dies too
+leaves the operation for the next one (Astra 3017 R2), and custody that cannot be read (anything but absent) stops the work (Astra 3019).
+A journal is read private (no group or other bits) and bounded, and every path in it must be a patch path and every token a UUID before any
+of them is walked (A6-5). A journal of another version or form (journal `schemaVersion` 2 is read) and an earlier version's lock directory
+at the lock's name are the typed refusal PATCH_WORKING_TREE_RECORD_UNSUPPORTED naming the record to check and remove, nothing settled or
+written. Delivery writes nothing to the person's repository: no
 reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
 anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
 PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
@@ -1232,7 +1234,8 @@ the state it was compared at and the time (`setAside`), and the result returns i
 stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. Deckent never deletes it (no automatic cleanup,
 Astra 3019; the note says so): it stays until the person deletes it. A removal is the same take, comparison and
 departure. Settling a crashed journal first puts a taken file back into its empty name and removes Deckent's temporary name. An existing
-file keeps its permission bits. The trace is the Deckent delivery record and that journal.
+file keeps its permission bits; one with a setuid, setgid or sticky bit is refused before anything is written (PATCH_UNSAFE, owner B2-6
+2026-11-09). The trace is the Deckent delivery record and that journal.
 
 Rollback (alpha.63 L1c): `deckent task integration-rollback --scope --run [--task]` (no `--adoption-command-id`; the delivered task, its
 attempt and delivery are found as for the light adoption) puts a written delivery's `before` contents back through the same lock and writer
@@ -1253,7 +1256,7 @@ offers a delivered result for adoption from its own Run's pinned mode, never fro
 A Run that starts in `working-tree` mode (no recorded custody yet and the config derives `working-tree`; never a queue verification Run)
 gets its base from the person's current files, not HEAD: `captureWorkingTreeBase` builds one private bare repository per Run under the
 workspace root (`run-bases/<sha256(scope, run)>`). Only the objects reachable from HEAD are streamed in (`pack-objects --revs` into
-`index-pack`; the person's unreachable objects never travel). A6-1 (alpha.64, owner 2026-11-07/08): Git never hashes the person's
+`index-pack`, at most `execution.git.copyBytes`, else the permanent launch refusal PATCH_WORKING_TREE_COPY_LIMIT (A6-6); the person's unreachable objects never travel). A6-1 (alpha.64, owner 2026-11-07/08): Git never hashes the person's
 files, so no clean, smudge or process filter driver runs in the service. Every HEAD file (`ls-tree -l`), index entry (`ls-files --stage`;
 gitlinks keep HEAD) and untracked file outside `.gitignore`/`.git/info/exclude` (`ls-files --others --exclude-standard`; the person's
 global excludes file is not read) is opened through `readTreeFile` (descriptor-relative, `O_NOFOLLOW`, owner, one link, regular file); a

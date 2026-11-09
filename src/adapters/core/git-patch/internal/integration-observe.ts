@@ -20,7 +20,7 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
   const git = async (args: string[]) => {
     budget.time();
     try { return (await exec(options.gitExecutable, localGitArgs(source, args),
-      { env: { ...GIT_LOCAL_ENV, GIT_GRAFT_FILE: '/dev/null' }, timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer: options.outputBytes, encoding: 'utf8' })).stdout; }
+      { env: GIT_LOCAL_ENV, timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer: options.outputBytes, encoding: 'utf8' })).stdout; }
     catch (error) {
       if (args[0] === 'merge-base' && (error as { code?: unknown }).code === 1) throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
       throw gitFailure(error);

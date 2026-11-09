@@ -17,8 +17,12 @@ export const DOCKER_EXECUTION_SETTINGS = z.strictObject({
   get controlTimeoutMs() { return persistedInteger().positive().max(2_147_483_647).prefault(docker.controlTimeoutMs); }, get outputBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(docker.outputBytes); },
 });
 /** outputBytes bounds one Git listing/blob read; the default fits repositories with tens of thousands of tracked paths. */
+export const GIT_COPY_BYTES = executionDefaults.git.copyBytes;
 export const GIT_EXECUTION_SETTINGS = z.strictObject({ get gitExecutable() { return persistedString(z.string().min(1)); },
   get timeoutMs() { return persistedInteger().positive().max(2_147_483_647).prefault(executionDefaults.git.timeoutMs); }, get outputBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(4_194_304); },
+  /** A6-6: the objects one copy into a Deckent-owned private repository (a Run's base: HEAD's whole history) may stream; unset, `GIT_COPY_BYTES`.
+   * Optional, so an unset value leaves every workspace fingerprint as it was. */
+  get copyBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(); },
   get deliveryIdentity() { return z.strictObject({ authorName: persistedString(z.string().trim().min(1).max(256)).refine(value => ![...value].some(char => char === '<' || char === '>' || char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)).describe('config.field.execution.git.deliveryIdentity.authorName'), authorEmail: persistedString(persistedEmail().max(256)).describe('config.field.execution.git.deliveryIdentity.authorEmail') }).optional(); }, });
 /** Branches an operator allows `integration-adopt` to move. Empty (default) refuses every adoption; a listed branch must
  * exist and must not be checked out in any worktree when adopted. Business policy data, not a grant: policy still applies. */
