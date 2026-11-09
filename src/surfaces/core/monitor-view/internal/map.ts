@@ -1,6 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import type { MonitorInstall, MonitorMap } from '#engine/index.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import { modelInvocabilityText, type MonitorInstall, type MonitorMap } from '#engine/index.js';
 import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 

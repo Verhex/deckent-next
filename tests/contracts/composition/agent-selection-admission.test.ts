@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { applyModelCatalog, createRun, proposeRun } from '../../../src/index.js';
 import { defineConfiguredAgent, defineConfiguredSkill, inspectConfiguredAgent, prepareConfiguredAgentUse, configuredAgentSelection, taskAgentUseSchema } from '#composition/core/agent-catalog/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';

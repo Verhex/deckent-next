@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { applyModelCatalog, createRun, proposeRun } from '../../../src/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { classifyConfiguredRunSpending } from '../../../src/composition/core/runs/index.js';
 import { isNativeCliWorkerProfile, openSqliteModelCatalogReader, readLocalOsIdentity } from '#adapters/index.js';
 import { readWorkerModelPin } from '#domain/index.js';

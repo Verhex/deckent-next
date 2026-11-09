@@ -13,7 +13,7 @@ import * as adapters from '#adapters/index.js';
 import * as engine from '#engine/index.js';
 import * as platform from '#platform/index.js';
 import { walkConfiguredBeuser, readConfiguredBeuserReport, admitConfiguredBeuserWalk, setupConfiguredBeuser } from '#composition/core/beuser/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { recordedExecutionSupervisor, validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
 import { formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
 import { sha256, clearConfigCache, ErrorRegistry, inspectProductFile } from '#platform/index.js';

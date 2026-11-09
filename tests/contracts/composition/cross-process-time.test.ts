@@ -9,7 +9,7 @@ import * as adapters from '#adapters/index.js';
 import { DispatchApplication } from '#engine/index.js';
 import { deliverConfiguredRunCancellation, recoverConfiguredCancellations } from '#composition/core/runs/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { formatDuration } from '#surfaces/core/terminal/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfiles, dispatchAdmission } from '../support/custody.js';

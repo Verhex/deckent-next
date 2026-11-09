@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { patchDigest, patchExclusions, type DeliverySummaryRequest } from '#engine/index.js';
 import { describeConfiguredDeliverySummaries } from '#composition/core/workspace-patch/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, prepareProductDirectory, resolveGlobalConfigPaths } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';

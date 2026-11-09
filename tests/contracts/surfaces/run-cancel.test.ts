@@ -5,7 +5,7 @@ import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { deliverRunCancellation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { clearConfigCache } from '#platform/index.js';

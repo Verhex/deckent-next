@@ -8,7 +8,7 @@ import { inPty } from '../support/pty-steps.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, installationSecretRoot, openSqliteAuditStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { PROJECT_VAULT } from '#engine/index.js';
 
 // PRE-8 v2 end to end (lead fan-in check): a proje-wsl-shaped installation (first-run policy, legacy main key in the encrypted store, no .deck)

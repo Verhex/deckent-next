@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyModelCatalog, createRun, inspectModelCatalog } from '../../../src/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingTemplateBase } from '#adapters/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';

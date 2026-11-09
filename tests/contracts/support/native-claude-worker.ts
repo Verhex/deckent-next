@@ -8,7 +8,7 @@ import { compileNativeCodingDockerProfile, createNativeCliWorkerProfile, createN
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationProfileDigest, modelInvocationTargetId } from '#engine/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from './model-catalog.js';
 

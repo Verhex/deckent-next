@@ -13,7 +13,7 @@ import { createMcpServer } from '#surfaces/core/mcp/index.js';
 // eslint-disable-next-line no-restricted-imports
 import { createConfiguredRuntimeOperations } from '#composition/core/runtime-service/internal/operations.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { FileArtifactStore, openSqliteAttemptStore, readMonitorRunResults } from '#adapters/index.js';
 import { clearConfigCache, loadConfig, prepareProductDirectory } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';

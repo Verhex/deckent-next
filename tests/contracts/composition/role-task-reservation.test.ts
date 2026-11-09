@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
 // H34 S2 follow-up (owner 2026-09-27): roles may carry a `task` rule. Before this slice `src/domain/core/policy`

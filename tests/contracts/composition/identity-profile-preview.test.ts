@@ -7,7 +7,7 @@ import { readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { main } from '#surfaces/core/cli/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

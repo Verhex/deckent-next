@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyModelCatalog, inspectModelCatalog, applyRunLifecycle, createRun, inspectConfiguredWorkerTranscript, inspectConfiguredWorkers, inspectRun } from '../../../src/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { FileArtifactStore, compileNativeCodingDockerProfile, openSqliteAttemptStore } from '#adapters/index.js';
 import * as adapters from '#adapters/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';

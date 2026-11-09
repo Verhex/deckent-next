@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { DockerSupervisor, openSqliteAuditStore, readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyConfiguredRunLifecycle, createConfiguredRun, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';

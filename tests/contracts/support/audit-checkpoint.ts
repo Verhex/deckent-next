@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { AuditApplication } from '#engine/index.js';
 import { FileInstallationIdentityStore, openLocalIntegrityAuthority, openSqliteAuditStore } from '#adapters/index.js';

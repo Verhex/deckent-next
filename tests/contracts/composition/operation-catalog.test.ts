@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { executeConfiguredOperation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main as cli } from '#surfaces/core/cli/index.js';
 import { operationsConfigSchema, registerOperationAdapterModule, registerProviderConfig, HOST_SHELL_RUN_OPERATION, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import { composeCore } from '#composition/core/root/index.js';

@@ -7,7 +7,7 @@ import { expect } from 'vitest';
 import { checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from './execution-registry.js';

@@ -7,7 +7,7 @@ import { inPty, type Step } from '../support/pty-steps.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, installationSecretRoot, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { PROJECT_VAULT } from '#engine/index.js';
 
 // Lead 2026-10-21: `/provider` must not dead-end on a fresh or migrated install. Listing a provider's models needs its main-vault key in this project:

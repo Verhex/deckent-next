@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, createRun, inspectRun } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { proposeConfiguredMemory, purgeConfiguredMemory, verifyConfiguredMemory } from '#composition/core/memory/index.js';
 import { renderBriefLines } from '#surfaces/core/monitor/index.js';
 import { clearConfigCache } from '#platform/index.js';

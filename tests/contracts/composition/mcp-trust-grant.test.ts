@@ -5,7 +5,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, registerProviderConfig, withLocalPrincipalChannel } from '#adapters/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, policySchema } from '#domain/index.js';
 import { decideAgentToolCall, McpToolGrants } from '#engine/index.js';

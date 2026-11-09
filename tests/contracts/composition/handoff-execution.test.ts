@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createConfiguredRun, reserveConfiguredRunTasks, evaluateConfiguredTask, inspectConfiguredRun } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { prepareConfiguredWorkspacePatch } from '../../../src/composition/core/workspace-patch/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { FileArtifactStore, DockerSupervisor, GitRunWorkspaceProvider, readWorkspace, SnapshotBudget } from '#adapters/index.js';
 import { RunWorkspaceAcquisitionApplication, type WorkspacePatchError } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, inspectProductDirectory } from '#platform/index.js';

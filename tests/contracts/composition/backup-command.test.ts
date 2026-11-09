@@ -17,7 +17,7 @@ import { main } from '#surfaces/core/cli/index.js';
 import { verifyAuditRecord } from '#engine/index.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { composeCore } from '#composition/core/root/index.js';
-import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
+import { openConfiguredArtifactStore } from '../support/configured-open.js';
 import { restoreHoldPath } from '#platform/index.js';
 import { startBackupSchedule } from '#composition/core/backup/index.js';
 import type { BackupScheduleEvent } from '#engine/index.js';

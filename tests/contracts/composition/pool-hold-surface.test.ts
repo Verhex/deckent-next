@@ -10,7 +10,7 @@ import { withMcpPrincipal } from '#adapters/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks, configuredLocalRunOffer } from '../../../src/composition/core/runs/index.js';
 import { PermissionDefaultsRegistry, localRunFallbackClosed, localRunOffered } from '#engine/index.js';
 import { advanceConfiguredRun } from '../../../src/composition/core/run-progression/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main } from '../../../src/surfaces/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 import { clearConfigCache } from '#platform/index.js';

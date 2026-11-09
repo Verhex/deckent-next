@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache } from '#platform/index.js';
 import { projectSkeleton } from '#surfaces/core/project-instructions/index.js';
 import { terminalApplication } from '../support/approval-terminal.js';

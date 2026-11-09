@@ -4,9 +4,9 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { transform } from 'esbuild';
 import { normalizeZodImports } from './dist-zod.mjs';
 
-// Non-literal imports into a BeUser candidate, plus the storage seams used to provision the offline distribution smoke fixture.
+// Non-literal imports into a BeUser candidate, plus the dist entries that seed the offline distribution smoke ledger.
 const RESOURCE_ENTRIES = ['platform/index.js', 'adapters/core/installation-files/index.js', 'adapters/core/local-runtime-socket/index.js',
-  'composition/core/root/index.js', 'composition/core/storage/index.js'];
+  'adapters/core/attempt-store/index.js', 'adapters/core/native-cli-worker/index.js', 'composition/core/root/index.js'];
 export function ownEntries(dist, manifest) {
   const exports = Object.values(manifest.exports).map(entry => typeof entry === 'string' ? entry : entry.import);
   return [...new Set([...Object.values(manifest.bin), ...exports].map(entry => resolve(dist, '..', entry))

@@ -9,7 +9,7 @@ import { DockerSupervisor, GitWorkspaceBroker, openSqliteAuditStore, readLocalOs
 import { AuditApplication } from '#engine/index.js';
 import { AuditError } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredRun, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';

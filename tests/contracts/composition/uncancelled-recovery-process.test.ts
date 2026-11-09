@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { createRun, executeTask, inspectRun, reserveRunTasks } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, getConfigFieldDefault } from '#platform/index.js';
 import { identifyDockerRequest, openSqliteInventoryReader } from '#adapters/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';

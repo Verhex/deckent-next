@@ -295,14 +295,6 @@
       ],
       "plan": "EXECUTION"
     },
-    "src/composition/core/artifacts": {
-      "dependencies": [
-        "src/adapters/core/file-artifacts",
-        "src/platform/core/config",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "EXECUTION"
-    },
     "src/composition/core/cli": {
       "dependencies": [
         "src/engine/core/secret-store",
@@ -785,24 +777,6 @@
         "src/engine/core/authentication"
       ],
       "plan": "EXECUTION"
-    },
-    "src/composition/core/storage": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/platform/core/config",
-        "src/platform/core/managed-files",
-        "src/adapters/core/native-cli-worker"
-      ],
-      "plan": "STORE"
-    },
-    "src/composition/core/workspaces": {
-      "dependencies": [
-        "src/adapters/core/git-workspace",
-        "src/platform/core/config",
-        "src/platform/core/managed-files",
-        "src/engine/core/workspaces"
-      ],
-      "plan": "ISOLATION"
     },
     "src/domain/core/attempt": {
       "dependencies": [
@@ -3588,13 +3562,6 @@
       ],
       "plan": "INSTALLATION"
     },
-    "src/surfaces/core/model-invocability": {
-      "dependencies": [
-        "src/engine/core/model-invocation"
-      ],
-      "plan": "SURFACES",
-      "ink": false
-    },
     "src/adapters/core/run-proposal-store": {
       "dependencies": [
         "src/adapters/core/sqlite-ledger",
@@ -3996,10 +3963,6 @@
         "src/capabilities/core/run-planner",
         "src/engine/core/model-activation"
       ],
-      "plan": "CONTRACT"
-    },
-    "src/engine/core/run-query": {
-      "dependencies": [],
       "plan": "CONTRACT"
     },
     "src/surfaces/core/cli-human": {
@@ -5433,7 +5396,7 @@
       "engine": 60000,
       "adapters": 42233,
       "surfaces": 45000,
-      "composition": 13655
+      "composition": 13612
     },
     "totalSrcLines": 200000,
     "testCases": 8976,

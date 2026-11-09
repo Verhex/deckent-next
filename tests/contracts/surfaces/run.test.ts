@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 const exec = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const sdk = resolve('dist/index.js');
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache } from '#platform/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { cliChildEnv } from '../support/child-env.js';

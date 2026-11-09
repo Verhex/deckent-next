@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import {
   checkConfiguredWorkspaceIntegration, configuredApproval, createConfiguredRuntimeClient, inspectConfiguredOperation, inspectConfiguredWorkerTranscript,
   inspectConfiguredWorkers, inspectConfiguredWorkspaceIntegration, inspectInventory, inspectModelActivation, inspectModelInvocation,

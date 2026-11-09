@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, stat, chmod, symlink, link } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, resolveProductLayout, prepareProductFile } from '#platform/index.js';
 import type { SqliteAttemptStore } from '#adapters/index.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];

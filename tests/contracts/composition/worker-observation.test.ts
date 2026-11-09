@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { inspectConfiguredWorkers } from '../../../src/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearConfigCache, productResourcePath, getConfigKnownSecrets, DeckentError, reportQueryError } from '#platform/index.js';
 import { DockerSupervisor } from '#adapters/index.js';

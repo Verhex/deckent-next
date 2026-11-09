@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, expect, it } from 'vitest';
 import { deliverRunCancellation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
 import { DockerSupervisor, FileArtifactStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { DispatchApplication } from '#engine/index.js';

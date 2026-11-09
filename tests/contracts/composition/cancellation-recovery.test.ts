@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { recoverConfiguredCancellations } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { requestRunCancellation } from '../../../src/index.js';
 import { DockerSupervisor, FileArtifactStore } from '#adapters/index.js';

@@ -8,7 +8,7 @@ import { FileInstallationIdentityStore, FileProjectIdentityStore, readLocalOsIde
 import { clearConfigCache, loadConfig, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext,
   resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { main as composedMain } from '#composition/core/cli/index.js';
 import { main as mcpMain } from '#composition/core/mcp/index.js';
