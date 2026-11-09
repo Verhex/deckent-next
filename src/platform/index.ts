@@ -7,7 +7,7 @@ export type { OutputMode } from '#platform/core/common/index.js';
 export { DECKENT_VERSION, NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 export { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 export type { Params } from '#platform/core/i18n/index.js';
-export { DeckentError } from '#platform/core/errors/index.js';
+export { DeckentError, CodedError, isCodedError } from '#platform/core/errors/index.js';
 export type { ErrorCategory } from '#platform/core/errors/index.js';
 export { ErrorRegistry, ERROR_CODES, isAuthorizationRefusal, launchRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';
@@ -43,7 +43,7 @@ export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSc
 // SEC-6 F31: the same linear-time engine matches model-chosen shell globs (no backtracking RegExp on the service thread).
 export { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern, type StepBudget } from '#platform/core/validate/index.js';
 export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
-export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
+export { formatDuration, estimateRemaining, errorCodeOf, isAbsent } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, TERMINAL_SCOPE_ID_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions, ConfigSectionSchema } from '#platform/core/config/index.js';
 export { createDefaultConfig, mergeConfigLayers } from '#platform/core/config/index.js';

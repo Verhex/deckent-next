@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, getConfigValue, unexpectedQueryFailure,
+  resolveLocale, getConfigValue, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent,
 } from '../../../src/platform/index.js';
+import { CodedError as DomainCodedError, isCodedError as isDomainCodedError } from '../../../src/domain/index.js';
 
 describe('errors, output and locale public contracts', () => {
   it('freezes registry authority, keeps no legacy numbered codes and returns defensive collections', () => {
@@ -43,6 +44,19 @@ describe('errors, output and locale public contracts', () => {
     expect(exitCodeFor(ErrorRegistry.createError('CLI_USAGE'))).toBe(2);
     expect(exitCodeFor(ErrorRegistry.createError('CONFIG_FILE_INVALID'))).toBe(78);
     expect(exitCodeFor(new DeckentError('CUSTOM', 'detail'))).toBe(1);
+  });
+  it('KG14 H1: the coded-error brand passes both twins, a subclass and a separately distributed copy; a wire or spoofed { code } does not', () => {
+    class Twin extends DomainCodedError<'TWIN_REFUSED'> {}
+    class EnterpriseCopy extends Error { readonly code = 'COPY_REFUSED'; }
+    Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+    const cause = new Error('inner'), typed = new CodedError('PLATFORM_REFUSED', { params: { id: 'a' }, cause }), twin = new Twin('TWIN_REFUSED');
+    expect([typed.message, typed.name, typed.params, typed.cause, twin.name, twin.params, 'cause' in twin]).toEqual(['PLATFORM_REFUSED', 'CodedError', { id: 'a' }, cause, 'Twin', undefined, false]);
+    expect([isCodedError(typed, 'PLATFORM_REFUSED'), isDomainCodedError(typed, 'PLATFORM_REFUSED'), isCodedError(twin, 'TWIN_REFUSED'), isCodedError(new EnterpriseCopy(), 'COPY_REFUSED')]).toEqual([true, true, true, true]);
+    const wire = JSON.parse(JSON.stringify(typed)) as unknown, spoofed = Object.assign(new Error('PLATFORM_REFUSED'), { code: 'PLATFORM_REFUSED' });
+    expect([isCodedError(typed, 'OTHER'), isCodedError(wire, 'PLATFORM_REFUSED'), isCodedError(spoofed, 'PLATFORM_REFUSED'), isCodedError(null, 'X'), isCodedError('PLATFORM_REFUSED', 'PLATFORM_REFUSED')]).toEqual([false, false, false, false, false]);
+    expect([errorCodeOf(wire), errorCodeOf(spoofed), errorCodeOf({ code: 7 }), errorCodeOf(undefined)]).toEqual(['PLATFORM_REFUSED', 'PLATFORM_REFUSED', null, null]);
+    const errno = (code: string) => Object.assign(new Error(code), { code });
+    expect([isAbsent(errno('ENOENT')), isAbsent(errno('ENOTDIR')), isAbsent(errno('ENOTDIR'), { notDir: true }), isAbsent(errno('EACCES'), { notDir: true }), isAbsent(null)]).toEqual([true, false, true, false, false]);
   });
   it('resolves locale explicit → LANGUAGE → LANG override → config → LC_ALL → LANG → en', () => {
     expect(resolveLocale('tr', { DECKENT_LANGUAGE: 'en' }, 'en')).toBe('tr');
