@@ -17,10 +17,10 @@ interface Parsed { action: Action | null; words: string[]; scope?: string; langu
   fromSuggestion?: string; id?: string; task?: string; revision?: string; json: boolean; help: boolean; schema?: true; example?: true }
 /** How many words each action takes (`optional`: at most that many) and whether it needs `--input` (null: the bare agent list); S8-5 `enrol-signer`
  * takes `--principal` and `--label`; S8-4 standing cards take `--work-class` (and optionally `--suggestion`), a define may come `--from-suggestion` with `--id`. */
-type Shape = { words: number; input: boolean; enrol?: true; optional?: true; workClass?: true; suggestion?: true; draft?: true; file?: true };
+type Shape = { words: number; input: boolean; enrol?: true; optional?: true; workClass?: true; suggestion?: true; draft?: true; file?: true; taskRevision?: true };
 const card: Shape = { words: 1, input: false, workClass: true, suggestion: true };
 const SHAPE: Readonly<Record<Action | 'list', Shape>> = { list: { words: 0, input: false }, inspect: { words: 1, input: false },
-  use: { words: 1, input: false },
+  use: { words: 1, input: false, taskRevision: true },
   skills: { words: 0, input: false }, skill: { words: 1, input: false }, define: { words: 0, input: true, draft: true, suggestion: true, file: true }, 'define-skill': { words: 0, input: true, draft: true, file: true },
   signers: { words: 0, input: false }, 'enrol-signer': { words: 0, input: false, enrol: true }, 'add-signer': { words: 0, input: true }, 'revoke-signer': { words: 1, input: false },
   'repair-signers': { words: 0, input: false }, 'import-skill': { words: 0, input: true, file: true }, stats: { words: 1, input: false, optional: true },
@@ -42,7 +42,7 @@ function parse(argv: readonly string[]): Parsed {
     else if ((key === '--schema' || key === '--example') && shape.file) result[key === '--schema' ? 'schema' : 'example'] = true;
     else if (key === '--scope' || key === '--lang' || (key === '--input' && shape.input) || ((key === '--principal' || key === '--label') && shape.enrol)
       || (key === '--work-class' && shape.workClass) || (key === '--suggestion' && shape.suggestion) || ((key === '--from-suggestion' || key === '--id') && shape.draft)
-      || ((key === '--task' || key === '--revision') && result.action === 'use')) {
+      || ((key === '--task' || key === '--revision') && shape.taskRevision)) {
       const value = argv[++index]; if (!value || (value.startsWith('-') && key !== '--input' && key !== '--label')) throw ErrorRegistry.createError('CLI_USAGE');
       if (Object.hasOwn(VALUE_FLAGS, key)) result[VALUE_FLAGS[key as keyof typeof VALUE_FLAGS]] = value;
       else result[key === '--scope' ? 'scope' : key === '--lang' ? 'language' : key === '--input' ? 'input' : key === '--principal' ? 'principal' : 'label'] = value;
@@ -53,7 +53,7 @@ function parse(argv: readonly string[]): Parsed {
   if (!result.help && !result.schema && !result.example && ((shape.optional ? result.words.length > shape.words : result.words.length !== shape.words) || (shape.input && !draft && result.input === undefined)
     || (draft && (result.input !== undefined || result.suggestion !== undefined || !result.fromSuggestion || !result.id)) || (shape.enrol && (!result.principal || !result.label))
     || (shape.workClass && !result.workClass) || (shape.draft && result.suggestion !== undefined && result.input === undefined)
-    || (result.action === 'use' && (!result.task || !/^[1-9]\d*$/u.test(result.revision ?? '') || !Number.isSafeInteger(Number(result.revision)))))) throw ErrorRegistry.createError('CLI_USAGE');
+    || (shape.taskRevision && (!result.task || !/^[1-9]\d*$/u.test(result.revision ?? '') || !Number.isSafeInteger(Number(result.revision)))))) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
 }
 

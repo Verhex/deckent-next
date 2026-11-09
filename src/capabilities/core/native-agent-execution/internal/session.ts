@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { agentToolSpecSchema, agentToolOutcomeSchema, identitySchema, persistedInteger, persistedString, type AgentToolCall } from '#domain/index.js';
+import { agentToolSpecSchema, agentToolOutcomeSchema, identitySchema, persistedString, type AgentToolCall } from '#domain/index.js';
 
-const positive = persistedInteger().positive().max(Number.MAX_SAFE_INTEGER);
+import { positive } from './schema-parts.js';
 const callId = persistedString(z.string().min(1).max(256)).refine(value => !value.includes('\0'));
 /** One turn generation; no credentials. The approval TTL is supplied by effective policy, never a CLI default. */
 export const toolSessionSchema = z.strictObject({ schemaVersion: z.literal(1), turnId: identitySchema, generation: positive,

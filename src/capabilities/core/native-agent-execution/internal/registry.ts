@@ -1,11 +1,5 @@
 import { z } from 'zod';
-import { persistedInteger, persistedString } from '#domain/index.js';
-
-const text = persistedString(z.string().min(1)).refine(value => !value.includes('\0'));
-const positive = persistedInteger().positive().max(Number.MAX_SAFE_INTEGER);
-const envName = z.string().regex(/^[A-Z][A-Z0-9_]*$/u);
-const flag = z.string().regex(/^--[a-z][a-z-]*$/u);
-const args = z.array(z.string().refine(value => !value.includes('\0'))).readonly();
+import { text, positive, envName, flag, args } from './schema-parts.js';
 export const nativeAgentLoginMethodSchema = z.enum(['claudeai', 'browser', 'device-auth']);
 export type NativeAgentLoginMethod = z.infer<typeof nativeAgentLoginMethodSchema>;
 

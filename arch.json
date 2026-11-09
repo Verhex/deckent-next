@@ -3862,7 +3862,8 @@
         "src/domain/core/work-cost",
         "src/platform/core/common",
         "src/surfaces/core/recovery-text",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -5443,7 +5444,7 @@
       "engine": 60000,
       "adapters": 42124,
       "surfaces": 45000,
-      "composition": 13666
+      "composition": 13712
     },
     "totalSrcLines": 200000,
     "testCases": 8977,

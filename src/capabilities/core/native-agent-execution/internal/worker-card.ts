@@ -1,10 +1,11 @@
+import { hexDigest } from './schema-parts.js';
 import { z } from 'zod';
 import { sha256 } from '#platform/index.js';
 import { ApprovalError, approvalSubject, approvalSummarySchema, isAiPrincipal, attemptIdentitySchema, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
 
 /** Producer-owned metadata inside the sealed request. No arguments, login material or caller-supplied approval authority. */
 const workerCardSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema,
-  tool: z.string().min(1), resource: z.string(), resourceDigest: z.string().regex(/^[a-f0-9]{64}$/u), argsDigest: z.string().regex(/^[a-f0-9]{64}$/u), turnId: z.string().min(1) });
+  tool: z.string().min(1), resource: z.string(), resourceDigest: hexDigest, argsDigest: hexDigest, turnId: z.string().min(1) });
 export type WorkerToolCard = z.infer<typeof workerCardSchema>;
 export const workerToolCardSummary = (input: Omit<WorkerToolCard, 'schemaVersion' | 'kind' | 'resourceDigest'> & { resourceDigest?: string }): string => {
   const card = workerCardSchema.parse({ schemaVersion: 1, kind: 'worker-tool-call', ...input, resourceDigest: input.resourceDigest ?? sha256(input.resource) });

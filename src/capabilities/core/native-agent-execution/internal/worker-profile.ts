@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { executionProfileDefinitionSchema, identitySchema, persistedUuid, immutableJsonObjectSchema, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { hexDigest } from './schema-parts.js';
 import { nativeCliHeadlessDefinitionSchema } from './contract.js';
 
 export const NATIVE_CLI_WORKER_ADAPTER = Object.freeze({ id: NATIVE_CLI_WORKER_ADAPTER_ID, version: 1 });
 /** Nonsecret connection identity, frozen at witnessed connection/admission; a capability is checked again at dispatch. */
 export const nativeCliWorkerBindingSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(),
-  protocolFamily: identitySchema, profileDigest: z.string().regex(/^[a-f0-9]{64}$/u), resourceKey: identitySchema,
+  protocolFamily: identitySchema, profileDigest: hexDigest, resourceKey: identitySchema,
   definition: nativeCliHeadlessDefinitionSchema,
   /** K5 admission snapshot; only trusted composition writes it, fresh resolution checks it at every spawn/tool. */
   modelUsePin: immutableJsonObjectSchema.optional() }).readonly();

@@ -72,12 +72,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const runPrincipal = await store.loadRunEvaluationPrincipal(identity);
       const dockerRefusal = !native && !relayed && profile.nativeSubscription ? nativeDockerSubscriptionRefusal(profile.nativeSubscription.provider, runPrincipal) : null;
       if (dockerRefusal) return await waiting(dockerRefusal);
-      if (native) {
-        if (!nativePorts) return await waiting('NATIVE_AGENT_BRIDGE_UNAVAILABLE');
-        const refusal = await nativePorts.prepare?.(native.binding); if (refusal) return await waiting(refusal);
-        const ready = await inspectNativeCliWorker(native.binding, nativePorts);
-        if (ready.state !== 'ready') return await waiting(ready.reason);
-      }
+      const backend = native ? prepareNativeWorkerBackend() : prepareDockerWorkerBackend();
+      const backendRefusal = await backend.prepare(); if (backendRefusal) return await waiting(backendRefusal);
       // U9-7: a relay worker passes the launch gate before any workspace, probe, connection or container; held/unprovable is a typed refusal, never another route.
       if (profile.siwcWorker) assertSiwcWorkerLaunchable({ platform: process.platform, imageCodexVersion: relayed ? relayed.preflight?.cliVersion ?? null : null });
       if (profile.options.outputFiles && profile.options.outputFiles.maxBytes > config.artifacts.maxBytes) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
@@ -117,76 +113,112 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       // PRE-7: Deckent's own preflight of the declared environment on the worker's floor, without its connection (no credential, no model); an unmet
       // requirement refuses the launch typed below (the Run parks naming it) and releases the checkout, as the secret gate does.
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv }, release = () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit });
-      if (native) {
-        if (profile.environment?.requirements.length) {
-          if (!nativePorts?.checkEnvironment) { await release(); return await waiting('NATIVE_AGENT_ENVIRONMENT_REFUSED'); }
-          const stop = new AbortController(), probeSignal = AbortSignal.any([signal, stop.signal]);
-          const watched = (async () => {
-            try {
-              while (!probeSignal.aborted) {
-                if (!await nativeCliWorkerFence(store, identity)) { stop.abort(); return; }
-                await wait(config.runRuntime.pollIntervalMs, undefined, { signal: probeSignal });
-              }
-            } catch (error) { if (!probeSignal.aborted) stop.abort(error); }
-          })();
-          try {
-            await nativePorts.checkEnvironment(request, native.binding, profile.environment,
-              { ...(readOnlyMounts ? { readOnlyMounts } : {}), inputs: start.inputs, handoffInputs: start.handoffInputs }, probeSignal);
-            if (probeSignal.aborted) throw ErrorRegistry.createError('DISPATCH_FENCED');
-          } catch (error) {
-            if (!probeSignal.aborted || queryFailure(error).code === 'NATIVE_WORKER_CUSTODY_UNKNOWN') throw error;
-            await release(); await preparation.settle(); throw ErrorRegistry.createError('DISPATCH_FENCED');
-          } finally { stop.abort(); await watched; }
-        }
-      } else if (docker) {
-      const probeOptions = { ...docker.options, executable: executable!, workspaceRoot, uid: os.uid, gid: os.gid, ...(readOnlyMounts ? { readOnlyMounts } : {}) }, probe = new DockerSupervisor(probeOptions);
-      // REVISE 2695: durable custody before the first probe container can start, naming every probe this attempt can start (deterministic names).
-      if (profile.environment !== undefined) {
-        const names: string[] = [], collect = nativeCodingEnvironmentProbes(async argv => { names.push(probe.probeIdentity(request, argv).name); return 'met' as const; });
-        for (const requirement of environmentRequirementsSchema.parse(profile.environment).requirements) await collect.get(requirement.kind)?.(requirement);
-        await store.holdEnvironmentProbes(identity, names); custody = true;
-      }
-      // A probe failure that is not an answer is gone only once its container is proven removed; otherwise it is uncertain (held), never gone.
-      const ended = await assertTaskEnvironment(profile.environment, environmentProbeRegistry.with(nativeCodingEnvironmentProbes((argv, timeoutMs) => probe.probe(request, argv, timeoutMs)
-        .catch(async (error: unknown) => { const { name } = probe.probeIdentity(request, argv); if (await DockerSupervisor.removePreflightProbe(probeOptions, name)) throw error; return { uncertain: name }; }))))
-        .then(() => null, (error: unknown) => ({ error })), refusal = ended && classifyLaunchRefusal(ended.error), answered = refusal?.disposition === 'permanent' && refusal.requirement !== undefined;
-      if (refusal?.disposition === 'permanent') await release();
-      // An environment answer is projected from the custody by its closure (below); any other end of the probe path releases it here, once.
-      if (custody && !answered && await store.releaseEnvironmentProbes(identity) === 'cancelled') {
-        if (refusal?.disposition !== 'permanent') await release();
-        return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: 'prevented' as const, terminal: null, outputRecorded: false }) });
-      }
-      custody = false; if (ended) throw ended.error;
-      }
+      const environment = await backend.checkEnvironment();
+      if (environment === 'prevented') return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: 'prevented' as const, terminal: null, outputRecorded: false }) });
+      if (environment) return await waiting(environment);
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome, events: Awaited<ReturnType<typeof openWorkerEventSink>> | undefined, connection: Awaited<ReturnType<typeof openNativeConnection>> | undefined;
       let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
       let worker: Extract<Awaited<ReturnType<typeof prepareNativeCliWorker>>, { state: 'ready' }> | undefined;
       let nativeEvents: ReturnType<typeof createNativeWorkerEvents> | undefined;
+      function prepareNativeWorkerBackend() {
+        return {
+          async prepare() {
+            if (!nativePorts) return 'NATIVE_AGENT_BRIDGE_UNAVAILABLE';
+            const refusal = await nativePorts.prepare?.(native!.binding); if (refusal) return refusal;
+            const ready = await inspectNativeCliWorker(native!.binding, nativePorts);
+            return ready.state === 'ready' ? null : ready.reason;
+          },
+          async checkEnvironment() {
+            if (profile.environment?.requirements.length) {
+              if (!nativePorts?.checkEnvironment) { await release(); return 'NATIVE_AGENT_ENVIRONMENT_REFUSED' as const; }
+              const stop = new AbortController(), probeSignal = AbortSignal.any([signal, stop.signal]);
+              const watched = (async () => {
+                try {
+                  while (!probeSignal.aborted) {
+                    if (!await nativeCliWorkerFence(store, identity)) { stop.abort(); return; }
+                    await wait(config.runRuntime.pollIntervalMs, undefined, { signal: probeSignal });
+                  }
+                } catch (error) { if (!probeSignal.aborted) stop.abort(error); }
+              })();
+              try {
+                await nativePorts.checkEnvironment(request, native!.binding, profile.environment,
+                  { ...(readOnlyMounts ? { readOnlyMounts } : {}), inputs: start.inputs, handoffInputs: start.handoffInputs }, probeSignal);
+                if (probeSignal.aborted) throw ErrorRegistry.createError('DISPATCH_FENCED');
+              } catch (error) {
+                if (!probeSignal.aborted || queryFailure(error).code === 'NATIVE_WORKER_CUSTODY_UNKNOWN') throw error;
+                await release(); await preparation.settle(); throw ErrorRegistry.createError('DISPATCH_FENCED');
+              } finally { stop.abort(); await watched; }
+            }
+            return null;
+          },
+          async open() {
+            nativeEvents = createNativeWorkerEvents(native!.nativeSubscription!, batch => events?.accept(batch));
+            await preparation.enter('dispatch');
+            const prepared = await prepareNativeCliWorker({
+              profile: selected, request, ports: nativePorts!, custody: nativeWorkerCustodyFile(request),
+              onEvents: batch => nativeEvents!.accept(batch),
+              ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), language, knownSecrets: getConfigKnownSecrets(config),
+              toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
+              fence: () => nativeCliWorkerFence(store, identity)
+            });
+            if (prepared.state !== 'ready') { await release(); return { reason: prepared.reason }; }
+            worker = prepared;
+            return { supervisor: worker!.supervisor };
+          },
+        };
+      }
+      function prepareDockerWorkerBackend() {
+        return {
+          async prepare() { return null; },
+          async checkEnvironment() {
+            const probeOptions = { ...docker!.options, executable: executable!, workspaceRoot, uid: os.uid, gid: os.gid, ...(readOnlyMounts ? { readOnlyMounts } : {}) }, probe = new DockerSupervisor(probeOptions);
+            // REVISE 2695: durable custody before the first probe container can start, naming every probe this attempt can start (deterministic names).
+            if (profile.environment !== undefined) {
+              const names: string[] = [], collect = nativeCodingEnvironmentProbes(async argv => { names.push(probe.probeIdentity(request, argv).name); return 'met' as const; });
+              for (const requirement of environmentRequirementsSchema.parse(profile.environment).requirements) await collect.get(requirement.kind)?.(requirement);
+              await store.holdEnvironmentProbes(identity, names); custody = true;
+            }
+            // A probe failure that is not an answer is gone only once its container is proven removed; otherwise it is uncertain (held), never gone.
+            const ended = await assertTaskEnvironment(profile.environment, environmentProbeRegistry.with(nativeCodingEnvironmentProbes((argv, timeoutMs) => probe.probe(request, argv, timeoutMs)
+              .catch(async (error: unknown) => { const { name } = probe.probeIdentity(request, argv); if (await DockerSupervisor.removePreflightProbe(probeOptions, name)) throw error; return { uncertain: name }; }))))
+              .then(() => null, (error: unknown) => ({ error })), refusal = ended && classifyLaunchRefusal(ended.error), answered = refusal?.disposition === 'permanent' && refusal.requirement !== undefined;
+            if (refusal?.disposition === 'permanent') await release();
+            // An environment answer is projected from the custody by its closure (below); any other end of the probe path releases it here, once.
+            if (custody && !answered && await store.releaseEnvironmentProbes(identity) === 'cancelled') {
+              if (refusal?.disposition !== 'permanent') await release();
+              return 'prevented' as const;
+            }
+            custody = false; if (ended) throw ended.error;
+            return null;
+          },
+          async open() {
+            // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
+            connection = profile.nativeSubscription && !relayed ? await openNativeConnection({
+              binding: profile.nativeSubscription,
+              directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
+              deadlineMs: profile.options.deadlineMs, principal: runPrincipal, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}), language
+            }) : undefined; await preparation.enter('dispatch');
+            relay = relayed && docker ? await openConfiguredSiwcWorker(projectRoot, options, {
+              identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: docker.options.imageId,
+              codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext, relayed.finalReport ? language : undefined), finalReport: !!relayed.finalReport },
+              deadlineMs: profile.options.deadlineMs, directory: workspaceRoot, policyRevision: document.revision, audit,
+              fence: async () => { const current = await store.loadRun(identity.scopeId, identity.runId); return current?.state.kind === 'running' && !current.cancelRequested; }
+            }) : undefined;
+            const dockerOptions = docker && {
+              ...docker.options, executable: executable!, workspaceRoot, uid: os.uid, gid: os.gid,
+              ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {})
+            };
+            return { supervisor: relay ? new SiwcWorkerSupervisor(dockerOptions!, relay) : new DockerSupervisor(dockerOptions!) };
+          },
+        };
+      }
       try { // D-05: the sink's file handle and the connection open inside the try whose finally closes both (Node 26 ends the service for a collected unclosed FileHandle).
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
       events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
-      if (native) nativeEvents = createNativeWorkerEvents(native.nativeSubscription!, batch => events?.accept(batch));
-      // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
-      connection = profile.nativeSubscription && !relayed && !native ? await openNativeConnection({ binding: profile.nativeSubscription,
-        directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
-        deadlineMs: profile.options.deadlineMs, principal: runPrincipal, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}), language }) : undefined; await preparation.enter('dispatch');
-      relay = relayed && docker ? await openConfiguredSiwcWorker(projectRoot, options, { identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: docker.options.imageId,
-        codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext, relayed.finalReport ? language : undefined), finalReport: !!relayed.finalReport },
-        deadlineMs: profile.options.deadlineMs, directory: workspaceRoot, policyRevision: document.revision, audit,
-        fence: async () => { const current = await store.loadRun(identity.scopeId, identity.runId); return current?.state.kind === 'running' && !current.cancelRequested; } }) : undefined;
-      const dockerOptions = docker && { ...docker.options, executable: executable!, workspaceRoot, uid: os.uid, gid: os.gid,
-        ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) };
-      if (native) {
-        const prepared = await prepareNativeCliWorker({ profile: selected, request, ports: nativePorts!, custody: nativeWorkerCustodyFile(request),
-          onEvents: batch => nativeEvents!.accept(batch),
-          ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), language, knownSecrets: getConfigKnownSecrets(config),
-          toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
-          fence: () => nativeCliWorkerFence(store, identity) });
-        if (prepared.state !== 'ready') { await release(); return await waiting(prepared.reason); }
-        worker = prepared;
-      }
-      const supervisor = worker?.supervisor ?? (relay ? new SiwcWorkerSupervisor(dockerOptions!, relay) : new DockerSupervisor(dockerOptions!));
+      const preparedBackend = await backend.open();
+      if ('reason' in preparedBackend) return await waiting(preparedBackend.reason);
+      const { supervisor } = preparedBackend;
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const observation = await startConfiguredWorkerObservation({ store, app, supervisor, request, backend: native ? NATIVE_CLI_WORKER_ADAPTER.id : 'docker',

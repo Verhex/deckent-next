@@ -1,3 +1,4 @@
+import { runControlActions } from '#surfaces/core/terminal-ledger/index.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
@@ -9,18 +10,9 @@ import REGISTRY from './run.json' with { type: 'json' };
 
 export type RunControl = 'cancel' | 'hold' | 'resume' | 'close';
 
-/**
- * The controls a Run's observed state offers — display only, the service re-checks state and policy at the confirmed revision. The same rule as
- * the terminal's `/runs` keys (`runControlActions` in terminal-work, not importable here: that barrel carries Ink and the CLI start must not reach
- * it; `cli-run-human.test.ts` keeps the two equal over every state) plus `/cancel`: cancel any Run that has not finished (again when a request
- * is already recorded: confirming retries delivery to its workers).
- */
+/** Cancel remains available until terminal, including repeated delivery to workers. */
 export function runControls(run: RunView): readonly RunControl[] {
-  if (run.state.kind === 'terminal') return [];
-  if (run.cancellationRequested) return ['cancel'];
-  if (run.state.kind !== 'parked') return ['cancel', 'hold'];
-  const held = run.state.reason === 'operator-hold' || run.state.operatorHold !== undefined;
-  return ['cancel', ...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' || run.state.reason === 'environment-not-ready' ? ['resume' as const] : []), 'close'];
+  return run.state.kind === 'terminal' ? [] : ['cancel', ...runControlActions(run)];
 }
 
 /** The card of one control in the terminal's own words (`terminal.runControl.*`, `terminal.cancel.*`; the hold consequence names the CLI resume, not the window's `r` key): what it does, the scope, the Run's state at its revision, its identity. */
