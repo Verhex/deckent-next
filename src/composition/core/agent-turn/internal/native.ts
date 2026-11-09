@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelUseProfiles, type ModelInvocationNativePort } from '#engine/index.js';
-import { nativeCliAgent, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
+import { nativeCliAgent, nativeAgentCorrelationKind, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import type { NativeAgentExecution, NativeAgentReadinessReason, ToolSessionPort } from '#capabilities/index.js';
 import { t, type Locale, type KnownSecretSnapshot, type DeckentConfig } from '#platform/index.js';
@@ -46,7 +46,7 @@ export async function withNativeChatInvocation<T>(input: { readonly runtime: Nat
   try {
     if (!isDeepStrictEqual(driver.port.session, input.session.session)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     bridge = await createNativeToolBridge({ port: driver.port, bridge: entry.bridge, limits: input.runtime.limits,
-      correlationKind: entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp', signal: input.signal, knownSecrets: input.knownSecrets });
+      correlationKind: nativeAgentCorrelationKind(entry), signal: input.signal, knownSecrets: input.knownSecrets });
     const port = driver.native(bridge, { configured: input.knownSecrets, turn: bridge.known });
     return await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
       recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });

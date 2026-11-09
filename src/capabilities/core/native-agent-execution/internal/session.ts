@@ -16,6 +16,9 @@ export const nativeAgentCorrelationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('codex-mcp'), callId, itemId: callId, deckentCallId: callId }).readonly(),
 ]);
 export type NativeAgentCorrelation = z.infer<typeof nativeAgentCorrelationSchema>;
+/** One tool call's correlation as its kind's CLI sends it in the MCP request `_meta` (unvalidated: the bridge parses it with the schema). */
+export const nativeAgentCorrelationMeta = (kind: NativeAgentCorrelation['kind'], meta: Readonly<Record<string, unknown>>, deckentCallId: string) => kind === 'claude-tool-use'
+  ? { kind, toolUseId: meta['claudecode/toolUseId'], deckentCallId } : { kind, callId: meta['callId'], itemId: meta['itemId'], deckentCallId };
 /** The facade stamps this envelope into EVERY tool result, including errors; Codex correlates by this id, never arrival order. */
 export const nativeAgentToolResultSchema = z.strictObject({ schemaVersion: z.literal(1), turnId: identitySchema, generation: positive,
   deckentCallId: callId, outcome: agentToolOutcomeSchema,
