@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, projectNativeCredential, nativeLoginUseAllowed, type NativeSubscription } from './credential.js';
 import { scrubWorkerEvent } from './event-guard.js';
-import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
+import { EMPTY_KNOWN_SECRETS, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit, knownSecretValues } from '#platform/index.js';
 import { secretValues, type QuotaPolicy } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { privateSocketDirectory, tunnelNativeConnect } from './egress.js';
@@ -18,9 +18,9 @@ export function nativeWorkerEventRetentionBytes(): number { return catalog.limit
 /** The one quota classification of native CLI evidence (`providers.json` quotaPolicy), shared by workers and the headless model port. */
 export function nativeQuotaPolicy(): QuotaPolicy { return catalog.quotaPolicy; }
 export { isPublicNativeAddress } from './egress.js';
-/** One per-attempt capability. No TCP listener, TLS interception, redirects, refresh or host writeback. */
 /** Receives validated worker events (untrusted, worker-reported evidence) for live observation and retention. */
 export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
+/** One per-attempt capability. No TCP listener, TLS interception, redirects, refresh or host writeback. */
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
   onEvents?: WorkerEventSink; dependencyContext?: Readonly<{ text: string; sha256: string }>; /** D4: the person's report language (ISO 639-1). */ language?: string;
   /** Test seam for a `relayed` CLI's provider origin (default: fresh TLS to the registry origin, public addresses only). */ relayUpstream?: NativeRelayUpstream;
@@ -57,7 +57,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   const count = (bytes: number) => { transferred += bytes; statistics.bytes = transferred; return transferred <= limits.trafficBytes; };
   const relay = relaySpec ? createNativeRelay({ spec: relaySpec, credential: () => closed ? undefined : relayCredential, capability: () => closed ? undefined : relayCapability,
     model: binding.model?.modelId ?? null, count, statistics: relayStatistics, ...(input.relayUpstream ? { upstream: input.relayUpstream } : {}) }) : undefined;
-  let secrets: string[] = [...secretValues(projected), capability];
+  let secrets: string[] = [...secretValues(projected), capability], known = knownSecretValues(secrets);
   let lastSequence = 0;
   const reported: { startSeen: boolean; started: string | null; used: readonly string[] | null; ended: boolean } = { startSeen: false, started: null, used: null, ended: false };
   const receiveEvents = (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
@@ -75,7 +75,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
       const accepted: WorkerEvent[] = []; let dropped = 0;
       for (const value of packet) {
         const parsed = workerEventSchema.safeParse(value);
-        const event = parsed?.success ? scrubWorkerEvent(parsed.data, secrets) : null;
+        const event = parsed?.success ? scrubWorkerEvent(parsed.data, known) : null;
         const bytes = event ? Buffer.byteLength(JSON.stringify(event) + '\n') : 0;
         if (!parsed?.success || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
         lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(event!);
@@ -106,7 +106,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
       statistics.rejected++; response.writeHead(403).end(); return;
     }
     statistics.bootstrapReads++;
-    if (relaySpec) { relayCapability = randomBytes(relaySpec.capabilityBytes).toString('base64url'); secrets.push(relayCapability); }
+    if (relaySpec) { relayCapability = randomBytes(relaySpec.capabilityBytes).toString('base64url'); secrets.push(relayCapability); known = knownSecretValues(secrets); }
     response.setHeader('Cache-Control', 'no-store');
     response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, capabilities, home: spec.home, file: spec.file,
       ...(relaySpec ? { relay: { capability: relayCapability, placeholder: relaySpec.placeholder, basePath: relaySpec.basePath, routes: relaySpec.routes, config: relaySpec.config } } : { credential }), quotaPolicy: catalog.quotaPolicy, preflight: binding.preflight, promptDelivery: binding.promptDelivery, dependencyContext: input.dependencyContext ? { ...input.dependencyContext, maxBytes: workerReportLimits.promptBytes } : undefined, finalReport: binding.finalReport ? { ...binding.finalReport, limits: workerReportLimits, ...(input.language ? { language: input.language } : {}) } : undefined,
@@ -125,7 +125,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     count,
     connected: () => { statistics.connected++; }, rejected: () => { statistics.rejected++; } }); });
   const close = async () => {
-    if (closed) return; closed = true; credential = undefined; relayCredential = undefined; relayCapability = undefined; secrets = []; clearTimeout(timer);
+    if (closed) return; closed = true; credential = undefined; relayCredential = undefined; relayCapability = undefined; secrets = []; known = EMPTY_KNOWN_SECRETS; clearTimeout(timer);
     for (const socket of sockets) socket.destroy();
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });

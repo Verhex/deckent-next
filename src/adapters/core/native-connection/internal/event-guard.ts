@@ -1,13 +1,13 @@
 import type { WorkerEvent } from '#domain/index.js';
-import { redactText } from './worker.js';
+import { redactBounded, type KnownSecretSnapshot } from '#platform/index.js';
 
 /**
  * Host-side export guard for worker events (Astra 2044). The container bridge scrubs best-effort, but a hostile worker
  * can POST schema-valid text directly; the gateway therefore re-applies redaction to every free-text field with the
- * credential values it projected itself plus the generic secret patterns, within the schema's own length bounds.
+ * snapshot of the credential values it projected itself plus the generic secret patterns, within the schema's own length bounds.
  */
-export function scrubWorkerEvent(event: WorkerEvent, secrets: readonly string[]): WorkerEvent {
-  const red = (value: string, max: number) => redactText(value, secrets, max);
+export function scrubWorkerEvent(event: WorkerEvent, known: KnownSecretSnapshot): WorkerEvent {
+  const red = (value: string, max: number) => redactBounded(value, known, max);
   const nullable = (value: string | null, max: number) => value === null ? null : red(value, max);
   switch (event.kind) {
     case 'session.started': return { ...event, model: nullable(event.model, 128), cliVersion: nullable(event.cliVersion, 64) };

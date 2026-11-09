@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { createCodexState, createNativeLineObserver, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, redactText, secretValues } from '#adapters/index.js';
+import { createCodexState, createNativeLineObserver, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, secretValues, workerRedactText } from '#adapters/index.js';
 import { summarizeWorkerEvents, workerActivityPhase, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const fixture = new URL('../../fixtures/worker-events/claude-stream.jsonl', import.meta.url);
@@ -58,7 +58,7 @@ it('never lets credentials, bearer tokens, key-shaped strings, proxy credentials
   expect(serialized).toContain('[REDACTED]');
   expect(events.find(event => event.kind === 'tool.call' && event.name === 'Read')).toMatchObject({ target: '(outside-workspace)/.credentials.json' });
   expect(events.find(event => event.kind === 'tool.result')).toMatchObject({ status: 'error' });
-  expect(redactText('x'.repeat(500), [], 240)).toHaveLength(240);
+  expect(workerRedactText('x'.repeat(500), [], 240)).toHaveLength(240);
 });
 
 it('counts unknown native events instead of dropping them and rejects events outside the current schema', async () => {

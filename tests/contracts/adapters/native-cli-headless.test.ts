@@ -326,7 +326,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
         expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: event.type === 'turn.failed' ? 'turn.failed' : 'error' });
       }
       // F14: other errors remain fatal; only the private evidence carries the bounded diagnostic. No message or secret becomes a delta.
-      const diagnostic = `network failure ${knownValue} sk-fixtureCredential1234567890 Bearer tiny-token Basic dXNlcjpwYXNz {"refresh_token":"short-refresh"} {"password":"aa\\"tailsecret"} password='short-pass' https://user:pass@example.test/path?q=private-query#private-fragment person@example.test kişi@örnek.test abcdefghijklmnopqrstuvwxyz0123456789 {"api_key":"open\\\\\\"halfsecret {"token":"lone space tailtoken\\`;
+      const diagnostic = `network failure ${knownValue} sk-fixtureCredential1234567890 Bearer tiny-token Basic dXNlcjpwYXNz {"refresh_token":"short-refresh"} {"password":"aa\\"tailsecret"} password='short-pass' https://user:pass@example.test/path?q=private-query#private-fragment person@example.test kişi@örnek.test abcdefghijklmnopqrstuvwxyz0123456789 {"api_key":"open\\\\\\"halfsecret {"token":"lone space tailtoken\\ -----BEGIN TEST PRIVATE KEY-----\nfixture-key-body`;
       const beforeErrors = deltas.length;
       for (const event of [{ type: 'error', message: diagnostic }, { type: 'item.completed', item: { type: 'error', message: diagnostic } },
         { type: 'turn.failed', error: { message: diagnostic } }]) {
@@ -334,7 +334,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
         const refused = await call(), parsed = body(refused);
         expect(refused).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response', body: { complete: true } } });
         expect(parsed).toMatchObject({ schemaVersion: 5, refusal: 'invalid-output', subtype: event.type === 'turn.failed' ? 'turn.failed' : 'error', errorClass: 'network', egress: { connected: 0, refused: 0 } });
-        expect(parsed.errorText).toContain('network failure');
+        expect(parsed.errorText).toBe('network failure [REDACTED] [REDACTED] [REDACTED] [REDACTED] {"refresh_token":[REDACTED]} {"password":[REDACTED]} password=[REDACTED] https://[REDACTED]@example.test/path?[REDACTED] [REDACTED] [REDACTED] [REDACTED] {"api_key":[REDACTED]token":[REDACTED]');
         for (const secret of [knownValue, 'fixtureCredential', 'tiny-token', 'dXNlcjpwYXNz', 'kişi@örnek.test', 'short-refresh', 'short-pass', 'tailsecret', 'halfsecret', 'tailtoken', 'user:pass', 'private-query', 'private-fragment', 'person@example.test', 'abcdefghijklmnopqrstuvwxyz']) expect(parsed.errorText).not.toContain(secret);
         expect(readHeadlessRejection((refused as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 5, errorClass: 'network', errorText: parsed.errorText });
         expect(Buffer.byteLength(parsed.errorText)).toBeLessThanOrEqual(1024);

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { backtrackingSteps, calibratedBudgetMs, modelMatches } from '../../fixtures/regex-cost.js';
 import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret, knownSecretValues, redactBounded, REDACTION_PATTERNS } from '#platform/index.js';
-import { workerRedactForRecord as workerRecord, workerRedactForDecision as workerDecision, workerSnapshotKnownSecrets as workerSnapshot, redactText } from '#adapters/core/native-connection/index.js';
+import { workerRedactForRecord as workerRecord, workerRedactForDecision as workerDecision, workerSnapshotKnownSecrets as workerSnapshot, workerRedactText } from '#adapters/core/native-connection/index.js';
 // @ts-expect-error Host generation tooling has no declaration file.
 import { syncWorkerRedactor, workerRedactorBlock } from '../../../scripts/sync-worker-redactor.mjs';
 
@@ -72,7 +72,7 @@ describe('B7 canonical producer and standalone mirror', () => {
     expect(workerDecision(text, workerSnapshot(input))).toEqual(redactForDecision(text, known));
     const anonymous = input.map(entry => ({ ...entry, name: null }));
     expect(redactForRecord(text, snapshotKnownSecrets(anonymous))).toBe('echo [REDACTED];printf done');
-    expect(redactText(text, anonymous.map(entry => entry.value))).toBe('echo [REDACTED];printf done');
+    expect(workerRedactText(text, anonymous.map(entry => entry.value))).toBe('echo [REDACTED];printf done');
     const repeated = snapshotKnownSecrets([{ name: 'REPEAT', value: 'abcabc' }]);
     expect(redactForDecision('abcabcabc', repeated)).toEqual({ text: '‹secret:REPEAT›', knownMatches: 2, patternMatches: [] });
     expect(redactForRecord('abcabcabc', repeated)).toBe('‹secret:REPEAT›');
@@ -118,10 +118,10 @@ describe('B7 canonical producer and standalone mirror', () => {
     expect(workerRedactorBlock(source, table+'\n')).not.toBe(workerRedactorBlock(source, table));
     const literalTable = JSON.stringify({ ...JSON.parse(table), literalReplacementCanary: '$& $1 $\u0060 $\u0027' });
     expect(workerRedactorBlock(source, literalTable)).toContain(`const REDACTION_TABLE = ${JSON.stringify(JSON.parse(literalTable))};\n`);
-    expect(redactText('a\u0000b'+'x'.repeat(500), [], 240)).toHaveLength(240);
-    expect(redactText('a\u0000b', [], 240)).toBe('a b');
+    expect(redactBounded('a\u0000b'+'x'.repeat(500), knownSecretValues([]), 240)).toHaveLength(240);
+    expect(redactBounded('a\u0000b', knownSecretValues([]), 240)).toBe('a b');
     // KG8 P9: the platform's bounded display (outside the mirrored block) equals the worker wrapper, known values and the bound included.
-    for (const text of [...corpus, 'a\u0000b'+'x'.repeat(500)]) expect(redactBounded(text, knownSecretValues(['fictitious-value-123']), 240)).toBe(redactText(text, ['fictitious-value-123'], 240));
+    for (const text of [...corpus, 'a\u0000b'+'x'.repeat(500)]) expect(redactBounded(text, knownSecretValues(['fictitious-value-123']), 240)).toBe(workerRedactText(text, ['fictitious-value-123'], 240));
     const text = 'x'.repeat(160_000); expect(redactForRecord(text)).toBe(text);
   });
 });

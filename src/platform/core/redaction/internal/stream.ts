@@ -7,16 +7,18 @@ export type RecordStreamState = Readonly<{ held: string; withheld: boolean }>;
 export const EMPTY_RECORD_STREAM: RecordStreamState = Object.freeze({ held: '', withheld: false });
 const MASK = REDACTION_TABLE.knownLabel.anonymous;
 const identity = (text: string) => text;
+const optional = (source: unknown, flags: string) => typeof source === 'string' ? new RegExp(source, flags) : null;
+/** The table's stream rows compiled once (KG8 P11); matchAll and a global replace work from lastIndex 0 on their own. */
+const ROWS = REDACTION_PATTERNS.map(row => Object.freeze({ record: new RegExp(row.recordSource ?? row.source, row.flags), replacement: row.replacement,
+  stream: optional('streamSource' in row ? row.streamSource : null, row.flags), preview: optional('streamPreviewSource' in row ? row.streamPreviewSource : null, row.flags) }));
 /** Only a whitespace-terminated atom can be committed: credential patterns may extend a token on the next delta.
  * Bearer and assignment headers may cross whitespace/newlines. These potential starts are part of the canonical table. */
 function pendingStart(text: string, known: KnownSecretSnapshot): number {
   let cut = Math.min(known.pendingStart(text), text.search(/\S*$/u));
-  for (const row of REDACTION_PATTERNS) if ('streamSource' in row && typeof row.streamSource === 'string') {
-    for (const match of text.matchAll(new RegExp(row.streamSource, row.flags))) cut = Math.min(cut, match.index);
-  }
+  for (const { stream } of ROWS) if (stream) for (const match of text.matchAll(stream)) cut = Math.min(cut, match.index);
   // Keep pattern context (e.g. Bearer + whitespace) with a still-open value; detaching it would bypass the next match.
   const spans = [...known.recordSpans(text)];
-  for (const row of REDACTION_PATTERNS) for (const match of text.matchAll(new RegExp(row.recordSource ?? row.source, row.flags))) {
+  for (const { record } of ROWS) for (const match of text.matchAll(record)) {
     spans.push({ start: match.index, end: match.index + match[0].length, label: '' });
   }
   for (const span of spans.sort((a, b) => b.start - a.start)) if (span.start < cut && span.end > cut) cut = span.start;
@@ -60,9 +62,7 @@ export function previewRecordStream(state: RecordStreamState, known: KnownSecret
     return redactForRecord(text.slice(0, cut), known) + (cut < text.length ? MASK : '');
   };
   let out = protect(prepare(protect(state.held)));
-  for (const row of REDACTION_PATTERNS) if ('streamPreviewSource' in row && typeof row.streamPreviewSource === 'string') {
-    out = out.replace(new RegExp(row.streamPreviewSource, row.flags), row.replacement);
-  }
+  for (const { preview, replacement } of ROWS) if (preview) out = out.replace(preview, replacement);
   return out;
 }
 /** A field end (including cancellation) masks incomplete known prefixes rather than exposing a credential fragment. */
