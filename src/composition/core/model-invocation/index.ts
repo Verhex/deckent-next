@@ -11,3 +11,4 @@ export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';
 export { createCatalogTariffLookup } from './internal/catalog-tariff.js';
 export { prepareConfiguredSiwcContinuation, siwcLimitContinuation, configuredContinuationPin, carryContinuationPin } from './internal/continuation.js';
 export { invokePeerConfiguredAgentModel } from './internal/invoke.js';
+export { configuredBubblewrap } from './internal/native.js';

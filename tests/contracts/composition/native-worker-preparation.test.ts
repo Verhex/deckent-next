@@ -69,6 +69,8 @@ it('K26: a preflight failure returns its typed wait without starting a model or 
     expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_LOGIN_REQUIRED');
     expect(preflight).toHaveBeenCalledTimes(1); expect(driver).not.toHaveBeenCalled();
     expect(await h.runtime.readiness.read(h.query)).toBeNull(); expect(h.f.posts).toBe(0);
+    // An unmapped code, even an inherited property name, is the environment refusal.
+    preflight.mockRejectedValue({ code: 'constructor' }); expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   } finally { await h.f.close(); }
 });
 

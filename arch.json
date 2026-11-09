@@ -425,7 +425,8 @@
         "src/adapters/core/approval-store",
         "src/composition/core/agent-turn",
         "src/composition/core/root",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/composition/core/model-invocation"
       ],
       "plan": "EXECUTION"
     },
@@ -1878,7 +1879,6 @@
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-connect",
         "src/adapters/core/provider-openai-chat",
-        "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/workspace-read",
         "src/composition/core/config",
         "src/composition/core/model-activation",
@@ -2037,7 +2037,6 @@
         "src/composition/core/subscription-readiness",
         "src/capabilities/core/native-agent-execution",
         "src/adapters/core/native-cli-headless",
-        "src/adapters/core/native-connection",
         "src/composition/core/model-use",
         "src/engine/core/model-use",
         "src/engine/core/authentication",
@@ -5280,7 +5279,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42180,
+      "adapters": 42189,
       "surfaces": 45000,
       "composition": 13702
     },
