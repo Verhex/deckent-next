@@ -1,6 +1,8 @@
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { NativeWorkerEvidenceFile } from './worker-verification.js';
 
+/** The preflight refusals the readiness names; every other failure is an environment refusal. */
+const PREFLIGHT_REASONS: Readonly<Record<string, NativeAgentReadinessReason>> = { HEADLESS_LOGIN_REQUIRED: 'NATIVE_AGENT_LOGIN_REQUIRED', HEADLESS_CLI_UNAVAILABLE: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
 /** The execution owner prepares only unknown observations. A refusal is never refreshed into a pass. */
 export async function prepareNativeWorkerObservation(ports: {
   read(): Promise<unknown | null | undefined>;
@@ -16,7 +18,6 @@ export async function prepareNativeWorkerObservation(ports: {
     return null;
   } catch (error) {
     const code = (error as { code?: unknown } | null)?.code;
-    return code === 'HEADLESS_LOGIN_REQUIRED' ? 'NATIVE_AGENT_LOGIN_REQUIRED'
-      : code === 'HEADLESS_CLI_UNAVAILABLE' ? 'NATIVE_AGENT_CLI_UNAVAILABLE' : 'NATIVE_AGENT_ENVIRONMENT_REFUSED';
+    return typeof code === 'string' && Object.hasOwn(PREFLIGHT_REASONS, code) ? PREFLIGHT_REASONS[code]! : 'NATIVE_AGENT_ENVIRONMENT_REFUSED';
   }
 }

@@ -1,7 +1,8 @@
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { NativeAgentCorrelation, ToolSession } from '#capabilities/index.js';
-import type { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import { nativeCliAgentBridge, type nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { prepareClaudeAgentRun } from './claude-agent.js';
 import { codexAgentArgv } from './codex-agent.js';
 import { buildHeadlessEnv } from './env.js';
@@ -33,4 +34,10 @@ export async function nativeAgentLaunch(entry: Entry, input: NativeAgentLaunchIn
   return Object.freeze({ dispose, spawn: { ...run, env: Object.freeze({ ...buildHeadlessEnv(entry.headless, input.runDir, input.configDir), ...env }), runDir: input.runDir,
     configDir: input.configDir, promptFile }, bounds: { timeoutMs: input.timeoutMs, outputBytes: 2 * input.outputMaxBytes + limits.responseFramingBytes, stderrBytes: limits.stderrMaxBytes,
     maxLineBytes: limits.maxLineBytes, interruptGraceMs: limits.killGraceMs, stdinBase64: Buffer.from(input.user).toString('base64') } });
+}
+/** KG7 F6: the agent bridge's limits for chat and worker alike; undefined (the feature is off) unless the registry bridge is complete and below the egress connection bound. */
+export function nativeBridgeLimits() {
+  const bridge = nativeCliAgentBridge(), egress = nativeEgressLimits();
+  if (!bridge?.maxConnections || !bridge.replayMaxEntries || !bridge.replayMaxBytes || bridge.maxConnections >= egress.connections) return undefined;
+  return Object.freeze({ idleMs: egress.idleMs, maxConnections: bridge.maxConnections, replayMaxEntries: bridge.replayMaxEntries, replayMaxBytes: bridge.replayMaxBytes });
 }

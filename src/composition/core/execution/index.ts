@@ -7,4 +7,4 @@ export { nativeWorkerAdmission } from '#composition/core/runs/index.js';
 export { createConfiguredNativeCliWorkerPorts } from './internal/native-runtime.js';
 export type { NativeCliWorkerRuntime } from './internal/native-runtime.js';
 export { recordedTaskSupervisor, inspectRecordedTaskActivity, taskProfileObservesWorker } from '#adapters/index.js';
-export { createConfiguredNativeCliWorkerRuntime } from './internal/worker-runtime.js';
+export { createConfiguredNativeCliWorkerRuntime, withNativeCliWorkerOptions } from './internal/worker-runtime.js';

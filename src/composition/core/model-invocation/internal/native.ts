@@ -23,13 +23,13 @@ const tariffCache = createOpenRouterTariffCache((options, now, signal) => fetchO
   throw error instanceof OpenRouterPricingError && error.code === 'PRIVACY_UNAVAILABLE' ? new ProviderSpendError('PROVIDER_SPEND_DATA_POLICY_REFUSED') : error;
 }));
 type InvocationNativeContext = Awaited<ReturnType<typeof loadInvocationContext>>;
+/** S3-5: a headless CLI runs in the bubblewrap realm this environment's service measured (launcher under its global state root). */
+export const configuredBubblewrap = (options: ConfigLoadOptions = {}) => async () => (await shellSandboxCapabilities(globalStateRoot(options.env ?? process.env))).bubblewrap;
 /** VLLM-CACHE-SALT: the installation's own salt secret (created on first use in an older installation), never the integrity key. */
 const installationCacheSalt = (context: InvocationNativeContext, scopeId: string) => localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, true);
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
 export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false, agent?: ModelInvocationNativeBinding) {
-  const now = () => clock.sample().wallMs;
-  // S3-5: the headless CLI runs in the bubblewrap realm this environment's service measured (launcher under its global state root).
-  const isolation = async () => (await shellSandboxCapabilities(globalStateRoot(options.env ?? process.env))).bubblewrap;
+  const now = () => clock.sample().wallMs, isolation = configuredBubblewrap(options);
   const catalogTariff = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
   const budgetFor = async (scopeId: string) => {

@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { HeadlessEgress } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
 import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
-import { codexAgentTurn, nativeAgentLaunch, type prepareClaudeAgentRun } from '#adapters/core/native-cli-headless/index.js';
+import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
 import { nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
@@ -23,8 +23,6 @@ export interface NativeCliWorkerTransport {
   readonly profile: Prepared['profile'];
   preflight(signal: AbortSignal): Promise<{ execution: NativeAgentExecution; preflight: Preflight }>;
   claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number }): ClaudeDriver;
-  /** @deprecated Unused since KG7 F1 (the worker launches through `nativeAgentLaunch`); AG-6 drops it with its composition binding. */
-  readonly claudeRun?: typeof prepareClaudeAgentRun;
   runIsolated(entry: Entry, spawn: { executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
     promptFile: string; mcpConfigFile?: string; mcp: Bridge; now: () => number }, bounds: Bounds, signal: AbortSignal,
     line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null }>;

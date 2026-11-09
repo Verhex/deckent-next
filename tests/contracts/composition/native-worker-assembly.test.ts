@@ -61,7 +61,7 @@ it('K21: production driver binds the fresh K5 profile to K16 public transport, r
   expect(await runtime.driver(input, signal)).toBe(driver);
   expect(current).toHaveBeenCalledWith(fixture.root, profile.scopeId, binding, {});
   expect(create).toHaveBeenCalledWith(input, expect.any(Object), signal);
-  expect(transport.profile).toBe(profile); expect(transport.claudeDriver).toBe(adapters.createClaudeAgentDriver); expect(transport.claudeRun).toBe(adapters.prepareClaudeAgentRun);
+  expect(transport.profile).toBe(profile); expect(transport.claudeDriver).toBe(adapters.createClaudeAgentDriver);
   const preflight = vi.spyOn(adapters, 'preflightNativeAgent').mockResolvedValue({} as never);
   await transport.preflight(signal); expect(preflight).toHaveBeenCalledWith(profile, Date.now, expect.any(Function), signal);
   const isolated = vi.spyOn(adapters, 'runHeadlessIsolated').mockResolvedValue({} as never), entry = adapters.nativeCliAgent(binding.protocolFamily)!;

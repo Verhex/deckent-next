@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort } from '#adapters/core/native-cli-headless/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort, headlessConnectionAdapter } from '#adapters/core/native-cli-headless/index.js';
 import { ErrorRegistry, snapshotKnownSecrets } from '#platform/index.js';
 import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, writeFakeCli, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -230,6 +230,10 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
     // N5: an alias as the bound native id never reaches the argv.
     const alias = registry.adapters.claude.modelAliases[0]!, aliased = parseModelBindingDefinition({ ...binding, model: { ...binding.model, nativeId: alias } });
     await expect(c.port.prepare(c.profile, aliased, request({ model: alias }))).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'model-alias' } });
+    const definition = c.profile.adapter.definition as Parameters<typeof headlessConnectionAdapter>[0];
+    expect(headlessConnectionAdapter(definition, c.profile.protocol).maxInFlight).toBe(registry.adapters.claude.headless.connect.maxInFlight);
+    // B2-12: no registry bound for the family is a refusal, never one assumed slot.
+    expect(() => headlessConnectionAdapter(definition, { family: 'unregistered', version: 'v1' })).toThrow(expect.objectContaining({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'definition' } }));
   });
 });
 

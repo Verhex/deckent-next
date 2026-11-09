@@ -4,14 +4,13 @@ import { configuredApproval } from '#composition/core/approvals/index.js';
 import { attestLocalInteractiveTerminal, type LocalPeerIdentity } from '#adapters/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { executeConfiguredTask, createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
+import { executeConfiguredTask, withNativeCliWorkerOptions } from '#composition/core/execution/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 import { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
   reconcileConfiguredAttempt, recoverConfiguredCancellations, requestConfiguredRunCancellation,
   reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 export function createConfiguredRuntimeOperations(projectRoot: string, options: ConfigLoadOptions = {}) {
-  const runtime = createConfiguredNativeCliWorkerRuntime(projectRoot, options);
-  const executionOptions = { ...options, ...(runtime ? { nativeCliWorker: { runtime, projectionRetired: false } } : {}) };
+  const executionOptions = withNativeCliWorkerOptions(projectRoot, options);
   return Object.freeze({
     renewApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'renew', input, options, undefined, delivery?.maxResultBytes); },
     listApprovals(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'list', input, options, undefined, delivery?.maxResultBytes); },
