@@ -6,9 +6,9 @@ import presentation from './presentation.json' with { type: 'json' };
 
 const unknown = (): NativeAgentReadiness => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
 export function subscriptionReadinessText(value: NativeAgentReadiness, locale: Locale): string {
-  if (value.state === 'ready') return t('headless.agent.k13.readiness.ready', {}, locale);
+  if (value.state === 'ready') return t('headless.agent.readiness.ready', {}, locale);
   const reason = nativeAgentReasonText(value.reason, locale, value.state === 'unknown');
-  return value.state === 'unknown' ? t('headless.agent.k13.readiness.unknown', { reason }, locale) : t('headless.agent.k13.readiness.unavailable', { reason }, locale);
+  return value.state === 'unknown' ? t('headless.agent.readiness.unknown', { reason }, locale) : t('headless.agent.readiness.unavailable', { reason }, locale);
 }
 /** The host owns K7's scoped observation read. No inspection can mint a seal or refresh a login. */
 export function subscriptionReadinessPort(root: string, scopeId: string, host: ProviderPanelHost, options: ConfigLoadOptions): SubscriptionReadinessPort {

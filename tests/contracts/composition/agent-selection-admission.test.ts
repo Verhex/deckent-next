@@ -95,8 +95,8 @@ it('K8: use-for-work previews exact catalog pins, then the admission port rechec
   const select = configuredAgentSelection(c.path, c.config.storage.sqlite, integrity, [pin]);
   expect((await select(graph, registry, 's')).get('t')!.seal).toMatchObject({ agentId: 'z-invoice', revision: 1, standing: 'candidate', skills: content.skills });
   await expect(select(graph, registry, 'foreign')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
-  await expect(select({ ...graph, tasks: [] }, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
-  await expect(select(graph, undefined, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
+  await expect(select({ ...graph, tasks: [] }, registry, 's')).rejects.toMatchObject({ code: 'AGENT_USE_TASK_UNAVAILABLE' });
+  await expect(select(graph, undefined, 's')).rejects.toMatchObject({ code: 'AGENT_USE_CATALOG_UNAVAILABLE' });
   await expect(configuredAgentSelection(c.path, c.config.storage.sqlite, integrity, [pin, pin])(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
   await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'alternative', scopeId: 's', agentId: 'a-alternative', expectedRevision: null,
     content: { ...content, name: 'Alternative' } }, f.options, witness);
@@ -109,9 +109,9 @@ it('K8: use-for-work previews exact catalog pins, then the admission port rechec
   await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'denied-run', grants: policy.grants.filter((row: { id: string }) => row.id !== 'run') }));
   await expect(createRun(f.project, { schemaVersion: 1, commandId: 'no-authority', scopeId: 's', runId: 'denied', graph }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'a2', scopeId: 's', agentId: 'z-invoice', expectedRevision: 1, content: { ...content, persona: 'New revision' } }, f.options, witness);
-  await expect(select(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(select(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
   await expect(prepareConfiguredAgentUse(f.project, request, f.options)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
   await writeFile(policyPath, JSON.stringify(policy));
   await withConfiguredRunAdmission(f.project, c, f.options, app => expect(app.create({ schemaVersion: 1, commandId: 'stale-pin', scopeId: 's', runId: 'stale', graph }))
-    .rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' }), undefined, [pin]);
+    .rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' }), undefined, [pin]);
 });

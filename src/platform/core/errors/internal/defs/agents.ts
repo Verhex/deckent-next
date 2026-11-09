@@ -3,6 +3,7 @@ import { errorTable, plainErrors, type ErrorDefinitions } from '../definition.js
 /** Error codes owned by the `agents` family (S7 agent/skill catalog core; i18n `locales/<locale>/agents.json`); texts live in that family. */
 export const agentsErrors: ErrorDefinitions = errorTable('agents', plainErrors('error.', {
   AGENT_CATALOG_UNAVAILABLE: 'error', AGENT_CATALOG_CORRUPT: 'error', AGENT_CATALOG_COMMAND_CONFLICT: 'error', AGENT_CATALOG_REVISION_CONFLICT: 'error',
+  AGENT_USE_PIN_MISMATCH: 'error', AGENT_USE_TASK_UNAVAILABLE: 'error', AGENT_USE_WORK_CLASS_REQUIRED: 'error', AGENT_USE_CATALOG_UNAVAILABLE: 'error',
   AGENT_CATALOG_NOT_FOUND: 'error', AGENT_CATALOG_EXISTS: 'error', AGENT_CATALOG_OUTCOME_UNKNOWN: 'error', AGENT_CATALOG_LIMIT: 'error',
   AGENT_DEFINITION_INVALID: 'usage', SKILL_DEFINITION_INVALID: 'usage', AGENT_ORG_CYCLE: 'error', AGENT_ORG_DEPTH: 'error', AGENT_PARENT_NOT_FOUND: 'error',
   AGENT_SKILL_NOT_PINNED: 'error',

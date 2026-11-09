@@ -69,13 +69,13 @@ type Scoped = Readonly<{ scopes: readonly StandingScope[]; pattern: string; labe
 export function approvalDecisionCardLines(approval: ApprovalCardPresentation, work: WorkSurfaceLabels, preview: string | undefined, standing: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null,
   known?: KnownSecretSnapshot, context: ApprovalWindowContext = {}, now = Date.now()) {
   const p = (text: string) => projectApprovalDecisionText(text, known), card = work.approvalCard, required = approval.requiredAssurance;
-  const assurance = approval.displayAttempt !== null && required === 'turn-bound' ? approvalTemplateLine(t('terminal.approval.k23.assurance', {}, work.jobs?.locale), {})
+  const assurance = approval.displayAttempt !== null && required === 'turn-bound' ? approvalTemplateLine(t('terminal.approval.background.assurance', {}, work.jobs?.locale), {})
     : required === undefined ? null : required === 'peer-session' ? approvalTemplateLine(card.assurancePeer, {}) : required === 'turn-bound'
     ? approvalTemplateLine(approval.hasDecisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere, {}) : approvalTemplateLine(card.assuranceOther, { level: p(required) });
   const lines = approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
     expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview: preview ?? approval.preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
     standing, project: context.project, home: context.home, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config }, work.approvalWindow, now, known);
-  return approval.displayAttempt === null ? lines : [...lines, { ...approvalTemplateLine(t('terminal.approval.k23.call', {}, work.jobs?.locale),
+  return approval.displayAttempt === null ? lines : [...lines, { ...approvalTemplateLine(t('terminal.approval.background.call', {}, work.jobs?.locale),
     { attempt: p(approval.displayAttempt), digest: p(approval.displayArgsDigest ?? '') }), exact: true }];
 }
 /** The live clock of a window: re-renders once a second until `until`, then stops. */

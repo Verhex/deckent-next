@@ -61,7 +61,7 @@ function parse(argv: readonly string[]): Parsed {
  * signer cards and the S8-3/S8-4 suggestions and standing cards (`suggestions`, `promote|demote|restore|retire <id> --work-class`, `dismiss`, `standing reset`). */
 export async function agentsCommand(argv: readonly string[], context: AgentsCommandContext = {}): Promise<void | ExitCode> {
   const args = parse(argv), locale = commandLocale(context, args.language), sinks = sinksOf(context);
-  if (args.help) { emit(`${t('agents.help.detail', {}, locale)}\n${t('headless.agent.k13.agents.help', {}, locale)}\n${t('agentsign.help.detail', {}, locale)}\n${t('agentstats.help', {}, locale)}\n${t('agentsevo.help', {}, locale)}`, sinks); return; }
+  if (args.help) { emit(`${t('agents.help.detail', {}, locale)}\n${t('headless.agent.agents.help', {}, locale)}\n${t('agentsign.help.detail', {}, locale)}\n${t('agentstats.help', {}, locale)}\n${t('agentsevo.help', {}, locale)}`, sinks); return; }
   // BeUser E-02: the input file's contract or a filled example, without a project, card or terminal.
   if (args.schema || args.example) return agentsInputHelp(args.action as InputAction, args.schema === true, context, locale);
   const writing = args.action !== null && !['inspect', 'skills', 'skill', 'use', 'signers', 'stats', 'suggestions'].includes(args.action);

@@ -472,8 +472,8 @@
   "terminal.shell.dropped": "Deckent hazırlanırken yalnız ilk {count} gönderilen satır tutulur; sonrakiler alınmadı.",
   "terminal.info.doctor.poolSetup": "İşçi havuzu kurulmadan iş başlayamaz. Eksik işçi ve havuz adımlarını tamamlamak için /setup açın; terminal dışında deckent doctor adımları listeler.",
   "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır.",
-  "terminal.approval.k23.assurance": "Bu arka plan çağrısı terminalde kişi tanığıyla karar ister; servis kartı şu an kullandığınız terminale bağlar.",
-  "terminal.approval.k23.call": "İşçi denemesi (Attempt): {attempt} · argsDigest: {digest}",
-  "terminal.approval.k23.wait": "Onayınız bekleniyor · İş {run} · Görev {task} · Deneme {attempt} · {tool} → {target} · {reason} · {seconds} sn kaldı. /approvals açın.",
-  "terminal.approval.k23.expired": "Onay süresi doldu; görev tamamlanmadı."
+  "terminal.approval.background.assurance": "Bu arka plan çağrısı terminalde kişi tanığıyla karar ister; servis kartı şu an kullandığınız terminale bağlar.",
+  "terminal.approval.background.call": "İşçi denemesi (Attempt): {attempt} · argsDigest: {digest}",
+  "terminal.approval.background.wait": "Onayınız bekleniyor · İş {run} · Görev {task} · Deneme {attempt} · {tool} → {target} · {reason} · {seconds} sn kaldı. /approvals açın.",
+  "terminal.approval.background.expired": "Onay süresi doldu; görev tamamlanmadı."
 }

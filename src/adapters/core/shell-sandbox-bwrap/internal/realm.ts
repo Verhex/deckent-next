@@ -114,7 +114,7 @@ async function sealedRoots(project: string, roots: readonly string[], environmen
     catch { return { ok: false, reason: `a Deckent state root could not be prepared (${root})` }; }
   }
   if (contained && (open || !roots.includes(contained) || !real.includes(contained) || contained === project || !under(project, contained) || under(home ?? '/', contained)))
-    return { ok: false, reason: t('headless.agent.k27.containedWorkspaceRefused', undefined, resolveLocale(undefined, environment)) };
+    return { ok: false, reason: t('headless.agent.workspace.containedWorkspaceRefused', undefined, resolveLocale(undefined, environment)) };
   const holdsAll = [project, '/', ...(home && isAbsolute(home) ? [home] : [])], sealed = real.filter(root => root !== contained);
   for (const root of sealed) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the Deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
   const outer = [...new Set(sealed)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));

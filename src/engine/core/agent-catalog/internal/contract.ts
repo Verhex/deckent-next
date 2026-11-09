@@ -156,6 +156,7 @@ export interface AgentCatalogDependencies {
   readonly eventId: () => string;
 }
 export type AgentCatalogStoreErrorCode = 'AGENT_CATALOG_UNAVAILABLE' | 'AGENT_CATALOG_CORRUPT' | 'AGENT_CATALOG_COMMAND_CONFLICT' | 'AGENT_CATALOG_REVISION_CONFLICT'
+  | 'AGENT_USE_PIN_MISMATCH' | 'AGENT_USE_TASK_UNAVAILABLE' | 'AGENT_USE_WORK_CLASS_REQUIRED' | 'AGENT_USE_CATALOG_UNAVAILABLE'
   | 'AGENT_CATALOG_NOT_FOUND' | 'AGENT_CATALOG_EXISTS' | 'AGENT_CATALOG_OUTCOME_UNKNOWN' | 'AGENT_CATALOG_LIMIT' | 'SIGNER_REVOCATION_LOG_BROKEN' | 'SIGNER_KEY_UNAVAILABLE';
 export class AgentCatalogStoreError extends Error {
   constructor(readonly code: AgentCatalogStoreErrorCode) { super(code); this.name = 'AgentCatalogStoreError'; }

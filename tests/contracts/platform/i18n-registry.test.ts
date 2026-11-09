@@ -62,6 +62,15 @@ describe('K2 catalog registry contract', () => {
     expect(t('cli.help', {}, 'tr')).not.toBe(t('cli.help', {}, 'en'));
   });
   it('preserves missing placeholders and substitutes literal values without regex replacement expansion', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const values = { name: '$& {other}', version: 1, node: 'v26', platform: 'linux' };
+      expect(messageText('cli.version', locale, values)).toBe(t('cli.version', values, locale));
+      expect(messageText('cli.help', locale)).toContain('{name}');
+      expect(messageText('cli.help', locale, {})).toContain('{name}');
+      expect(messageText('error.node_version_low', locale, {})).toBe(t('error.node_version_low', {}, locale));
+      expect(messageText('missing.{name}', locale, values)).toBeUndefined();
+    }
+
     expect(t('cli.help', {}, 'en')).toContain('{name}');
     expect(t('cli.help', { name: '$&{unknown}' }, 'en')).toContain('$&{unknown}');
     expect(t('cli.version', { name: 'x', version: 0, node: 'n', platform: 'p' }, 'en')).toContain('v0');

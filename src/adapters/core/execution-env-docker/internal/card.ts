@@ -39,8 +39,8 @@ const RESULT: Readonly<Record<DockerInstallResult['status'], (params: Readonly<R
   succeeded: (p, l) => t('setup.docker.result.succeeded', p, l), failed: (p, l) => t('setup.docker.result.failed', p, l), uncertain: (p, l) => t('setup.docker.result.uncertain', p, l) });
 /** After the effect: what ran, then the re-detected state in the setup family's own words (its reason key; relogin, stopped, ready …). */
 export function dockerResultLines(result: DockerInstallResult, steps: number, next: Readonly<{ code: string; params?: Readonly<Record<string, string | number>> | undefined }>, locale: Locale): readonly string[] {
-  const text = messageText(next.code, locale) ?? next.code, params = next.params ?? {};
+  const params = Object.fromEntries(Object.entries(next.params ?? {}).map(([name, value]) => [name, terminalSafeText(String(value))]));
   return [result.mismatch ? t('setup.docker.result.mismatch', { keyring: DOCKER_APT.keyring, sources: DOCKER_APT.sourcesFile }, locale)
     : RESULT[result.status]({ step: result.step ?? 0, steps, code: result.exitCode ?? '-', version: result.version ?? '-' }, locale),
-    text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? terminalSafeText(String(params[name])) : whole)];
+    messageText(next.code, locale, params) ?? next.code];
 }

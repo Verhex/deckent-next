@@ -472,8 +472,8 @@
   "terminal.shell.dropped": "While Deckent prepares, only the first {count} sent lines are kept; later ones were not taken.",
   "terminal.info.doctor.poolSetup": "Work cannot start until the worker pool is set up. Open /setup to complete the missing worker and pool steps; deckent doctor lists them outside the terminal.",
   "terminal.info.doctor.sandbox.selection": "This is the current selection, checked again for each command. Starting the runtime can prepare bundled bubblewrap, which then takes precedence over Landlock.",
-  "terminal.approval.k23.assurance": "This background call needs your witnessed terminal decision; the service binds this card to your current terminal.",
-  "terminal.approval.k23.call": "Attempt: {attempt} · argsDigest: {digest}",
-  "terminal.approval.k23.wait": "Waiting for your approval · Run {run} · Task {task} · Attempt {attempt} · {tool} → {target} · {reason} · {seconds}s left. Open /approvals.",
-  "terminal.approval.k23.expired": "Approval expired; the task did not complete."
+  "terminal.approval.background.assurance": "This background call needs your witnessed terminal decision; the service binds this card to your current terminal.",
+  "terminal.approval.background.call": "Attempt: {attempt} · argsDigest: {digest}",
+  "terminal.approval.background.wait": "Waiting for your approval · Run {run} · Task {task} · Attempt {attempt} · {tool} → {target} · {reason} · {seconds}s left. Open /approvals.",
+  "terminal.approval.background.expired": "Approval expired; the task did not complete."
 }

@@ -37,12 +37,12 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
     consentConfirm: t('tui.provider.login.consentConfirm', {}, locale), configPolicy: t('tui.provider.login.configPolicy', {}, locale), onlyYou: t('tui.provider.login.onlyYou', {}, locale), youAnd: t('tui.provider.login.youAnd', {}, locale),
     system: t('tui.provider.login.system', {}, locale), ai: t('tui.provider.login.ai', {}, locale), aiShared: t('tui.provider.login.aiShared', {}, locale), mcp: t('tui.provider.login.mcp', {}, locale),
     mcpBlocked: t('tui.provider.login.mcpBlocked', {}, locale), question: t('tui.provider.login.question', {}, locale), questionKeys: t('tui.provider.login.questionKeys', {}, locale),
-    methodTitle: t('headless.agent.k13.login.methodTitle', {}, locale), methodHint: t('headless.agent.k13.login.methodHint', {}, locale) };
+    methodTitle: t('headless.agent.login.methodTitle', {}, locale), methodHint: t('headless.agent.login.methodHint', {}, locale) };
   const twin = (kind: string, configDir: string | null) => ['deckent', 'models', 'login', '--connection', kind, ...(configDir ? ['--config-dir', configDir] : [])].map(quoted).join(' ');
   return {
     kinds: connect.kinds.filter(kind => kind.headlessLogin && kind.available).map(kind => kind.id), words,
-    methods: (kind, configDir) => (connect.loginMethods?.(kind) ?? []).map(id => ({ id, label: id === 'browser' ? t('headless.agent.k13.login.method.browser', {}, locale)
-      : id === 'device-auth' ? t('headless.agent.k13.login.method.device-auth', {}, locale) : t('headless.agent.k13.login.method.claudeai', {}, locale),
+    methods: (kind, configDir) => (connect.loginMethods?.(kind) ?? []).map(id => ({ id, label: id === 'browser' ? t('headless.agent.login.method.browser', {}, locale)
+      : id === 'device-auth' ? t('headless.agent.login.method.device-auth', {}, locale) : t('headless.agent.login.method.claudeai', {}, locale),
       command: `${twin(kind, configDir ?? null)} --login-method ${quoted(id)}` })),
     refusal(kind, usable) {
       return { title: t('tui.provider.isolation.title', { kind: input.kindLabel(kind) }, locale), lines: [

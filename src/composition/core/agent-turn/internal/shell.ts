@@ -81,7 +81,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     if (subscription && realm.containment === 'host') return { ok: false, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` };
-    const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots, scan) ? t('headless.agent.k15c.hostUnresolved', {}, input.language) : null;
+    const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots, scan) ? t('headless.agent.host.chatWarning', {}, input.language) : null;
     if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths, 'posix', scan);
