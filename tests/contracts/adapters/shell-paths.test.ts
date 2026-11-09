@@ -2,7 +2,7 @@ import { link, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { agentLoginIdentityPaths, createShellGlobalStateCheck, createShellPathContext, createWorkspaceScope, hostGlobalStateUnresolved } from '#adapters/index.js';
+import { agentLoginIdentityPaths, createShellGlobalStateCheck, createShellPathContext, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, hostGlobalStateUnresolved } from '#adapters/index.js';
 import { classifyReadOnlyShellCommand, type ShellReasonCode } from '#engine/index.js';
 
 const roots: string[] = [];
@@ -136,6 +136,11 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
 
 it('K15B: shell hard-link protection follows registry login inode identities, including glob aliases and late login creation', async () => {
   const { root } = await workspace(), global = join(root, '..', 'custom-global'), credential = join(global, 'headless/logins/codex/auth.json');
+  // AG-4 (KG7 F4): the login read deny and the shell's identity paths name the same registry files, today's list.
+  const logins = ['codex/auth.json', 'codex/config.toml', 'codex/installation_id', 'claude/.claude.json', 'claude/.claude.json.backup', 'claude/.credentials.json',
+    'claude/.oauth_refresh.lock', 'claude/.oauth_refresh.lock.owner'].map(name => `headless/logins/${name}`);
+  expect(DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.includes('headless/logins/'))).toEqual(logins.map(name => `**/${name}`));
+  expect(agentLoginIdentityPaths([global, root])).toEqual([global, root].flatMap(each => logins.map(name => join(each, name))));
   const check = await createShellGlobalStateCheck(root, [global], {}, agentLoginIdentityPaths([global]));
   await mkdir(join(credential, '..'), { recursive: true }); await writeFile(credential, 'SYNTHETIC-IDENTITY');
   await link(credential, join(root, 'identity-alias'));

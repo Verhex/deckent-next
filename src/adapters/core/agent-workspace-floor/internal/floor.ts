@@ -5,6 +5,7 @@ import { createGlobMatcher, createWorkspaceScope, CREDENTIAL_WORKSPACE_DENY, DEF
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { type mcpTurnTools, MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
+import { nativeCliLoginEntries } from '#adapters/core/native-cli-registry/index.js';
 import { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { DECK_FILE } from '#engine/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject } from './self-source.js';
@@ -62,8 +63,7 @@ export function agentGlobalStateRoots(environments: readonly Environment[]): str
 }
 /** Registry-derived login identity names only; shell checks their metadata, never their contents. */
 export function agentLoginIdentityPaths(roots: readonly string[]): string[] {
-  const prefix = `**/${PRODUCT_LAYOUT_REGISTRY.resources.headlessLogins}/`;
-  const names = CREDENTIAL_WORKSPACE_DENY.filter(pattern => pattern.startsWith(prefix)).map(pattern => pattern.slice('**/'.length));
+  const names = nativeCliLoginEntries().flatMap(({ id, names }) => names.map(name => join(PRODUCT_LAYOUT_REGISTRY.resources.headlessLogins, id, name)));
   return roots.flatMap(root => names.map(name => join(root, name)));
 }
 const globalLayout = (root: string) => resolveProductLayout({ projectRoot: root, root, bootstrapConfigPath: join(root, PRODUCT_LAYOUT_REGISTRY.resources.config) });
