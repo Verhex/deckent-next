@@ -317,7 +317,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   enjeksiyonunun çalıştırdığı her şey) Attempt boyunca bu ara katmana hâlâ ulaşabilir ve aynı iki yoldan aboneliği harcayabilir; token'a asla
   ulaşamaz: yer tutucu CLI sürecine bağlı değildir, çünkü Codex'in `auth.command`'ı alt sürecine özel bir kanal sunmaz (yalnız komut, argümanlar ve
   çalışma dizini; stdin kapalı) ve istemci başına bir kez, tek bir `codex exec` içinde iki kez çalışır. Host aktarıcısı bu harcamayı sınırlar:
-  Attempt başına aynı anda tek model çağrısı (`POST responses`) ve en çok `maxRequests` aktarılmış istek (kayıt verisi); fazlası
+  Attempt başına aynı anda tek model çağrısı (`POST responses`) ve en çok `maxRequests` aktarılmış istek (kayıt verisi). İstemcinin yanıt bitmeden kestiği model çağrıları `maxAbandoned` (4) sınırına sayılır; sınır dolunca Attempt'in model çağrıları da aynı biçimde reddedilir. Fazlası
   `NATIVE_RELAY_LIMIT` ile reddedilir. Tek model çağrısını meşgul tutan bir süreç CLI'yı durdurabilir; CLI bu durumda Attempt'ini görünür biçimde
   başarısız eder. Aktarıcı yalnızca girişin sahibi olan kişinin (runtime'ın çalıştığı hesap) ya da varsayılan devredilmiş kullanımla (`ai`, `models connect`
   çıktısındaki gibi) o kişinin AI'ının kabul ettirdiği Run'lara hizmet eder; başka bir kişinin Run'ı ya da onayı olmayan bir sınıf (sistem iş

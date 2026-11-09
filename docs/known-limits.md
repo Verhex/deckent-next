@@ -322,7 +322,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Attempt's lifetime and spend the subscription through the same two routes, never the token: the placeholder is not bound to the CLI process,
   because Codex's `auth.command` has no private channel to its child (only command, args and working directory; stdin closed) and runs once per
   client, twice in one `codex exec`. The host relay bounds that spend: one model call (`POST responses`) in flight per Attempt and at most
-  `maxRequests` relayed requests per Attempt (registry data); more are refused with `NATIVE_RELAY_LIMIT`. A process that keeps the one model call busy
+  `maxRequests` relayed requests per Attempt (registry data); more are refused with `NATIVE_RELAY_LIMIT`. A model call the client drops before its answer ends counts against `maxAbandoned` (4); after that, the Attempt's model calls are refused the same way. A process that keeps the one model call busy
   can stall the CLI, which then fails its Attempt visibly. The relay serves only Runs admitted by the person whose login it is (the account the runtime runs as) or by that person's AI under the default
   delegated use (`ai`, as `models connect` prints it); another person's Run, or a class without consent (a system workload), is refused at
   admission and again before dispatch with `NATIVE_SUBSCRIPTION_OTHER_PERSON` and can use an API-key connection instead. Subscription logins are not shared across people; widening this is an owner decision. Proven with codex-cli 0.167.0

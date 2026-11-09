@@ -114,7 +114,16 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
   expect(await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId })).toEqual({ status: 429, body: limitRefusal });
   const beside = relayCall(a.descriptor.socketPath, '/backend-api/codex/models', capabilityA); while (origin.calls.length < 4) await sleep(5);
   release(); expect((await held).status).toBe(200); expect((await beside).status).toBe(200);
-  const { maxRequests } = JSON.parse(await readFile(new URL('../../../src/adapters/core/native-connection/internal/providers.json', import.meta.url), 'utf8')).providers.codex.relay;
+  const { maxRequests, maxAbandoned } = JSON.parse(await readFile(new URL('../../../src/adapters/core/native-connection/internal/providers.json', import.meta.url), 'utf8')).providers.codex.relay;
+  // A model call the client drops frees the slot but counts against maxAbandoned; past it model calls are refused (start-and-drop review finding).
+  for (let n = 0; n < maxAbandoned; n++) {
+    const hold = origin.hold(), seen = origin.calls.length, call = request({ socketPath: a.descriptor.socketPath, path: '/backend-api/codex/responses', method: 'POST',
+      headers: { authorization: `Bearer ${capabilityA}`, 'content-type': 'application/json' } });
+    call.on('error', () => undefined); call.end(JSON.stringify({ model: modelId }));
+    while (origin.calls.length <= seen) await sleep(5);
+    call.destroy(); await sleep(50); hold(); await sleep(50);
+  }
+  expect(await relayCall(a.descriptor.socketPath, '/backend-api/codex/responses', capabilityA, { model: modelId })).toEqual({ status: 429, body: limitRefusal });
   let last; do last = await relayCall(a.descriptor.socketPath, '/backend-api/codex/models', capabilityA); while (last.status === 200 && origin.calls.length <= maxRequests);
   expect(last).toEqual({ status: 429, body: limitRefusal }); expect(origin.calls).toHaveLength(maxRequests - 1); // the other-model request counted, never reached the origin
   await new Promise<void>((resolve, reject) => { // a relayed CLI gets no CONNECT tunnel

@@ -53,6 +53,7 @@
         "requestBytes": 8388608,
         "responseBytes": 67108864,
         "maxRequests": 1024,
+        "maxAbandoned": 4,
         "config": {
           "model_provider": "deckent_relay",
           "model_providers.deckent_relay.name": "Deckent relay",

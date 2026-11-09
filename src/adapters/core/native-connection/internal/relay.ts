@@ -44,7 +44,7 @@ export type NativeRelayStatistics = { relayed: number; refused: number };
 export function createNativeRelay(input: Readonly<{ spec: NativeRelaySpec; credential: () => NativeRelayCredential | undefined; capability: () => string | undefined;
   model: string | null; count: (bytes: number) => boolean; statistics: NativeRelayStatistics; upstream?: NativeRelayUpstream }>) {
   const { spec } = input, upstream = input.upstream ?? httpsRelayUpstream;
-  let busy = false, served = 0;
+  let busy = false, served = 0, abandoned = 0;
   const route = (request: IncomingMessage) => {
     const [path, query] = (request.url ?? '').split(/\?(.*)/su);
     return spec.routes.find(row => request.method === row.method && path === spec.basePath + row.path && (row.query || query === undefined)) ?? null;
@@ -68,9 +68,12 @@ export function createNativeRelay(input: Readonly<{ spec: NativeRelaySpec; crede
       if (!row) { request.resume(); refuse(response, 404, 'endpoint'); return; }
       // One metered (`exclusive`) request at a time and a bounded total per Attempt: whatever else reaches the shim cannot multiply the spend. The CLI
       // itself fetches models twice in parallel at start and overlaps them with its first model call (codex-cli 0.166.0 probe 2026-11-09).
-      if ((row.exclusive && busy) || served >= spec.maxRequests) { request.resume(); refuse(response, 429, 'NATIVE_RELAY_LIMIT'); return; }
+      if ((row.exclusive && (busy || abandoned >= spec.maxAbandoned)) || served >= spec.maxRequests) { request.resume(); refuse(response, 429, 'NATIVE_RELAY_LIMIT'); return; }
       served++; if (!row.exclusive) { await forward(request, response, row, capability, credential); return; }
-      busy = true; try { await forward(request, response, row, capability, credential); } finally { busy = false; }
+      // A model call the client dropped frees the slot, but the provider may still be generating it: such calls count against a small budget of
+      // their own, so start-and-drop cannot run many generations at once (security review of d57464963).
+      let dropped = false; response.on('close', () => { if (!response.writableEnded) dropped = true; });
+      busy = true; try { await forward(request, response, row, capability, credential); } finally { busy = false; if (dropped) abandoned++; }
     },
   });
   async function forward(request: IncomingMessage, response: ServerResponse, row: NativeRelaySpec['routes'][number], capability: string, credential: NativeRelayCredential) {
