@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { identitySchema } from '#domain/index.js';
 import { MemoryJournalError, memoryEvaluationSourceOf, memoryExtractionSourceOf, type MemoryEvaluationSources } from '#engine/index.js';
-import { readAcceptedTaskMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { readAcceptedTaskMetrics, readRunAcceptanceEvaluations, requireLedgerVersion, EFFECT_OPEN_STATE_SQL, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 
 type Describe = { workClass(classId: string | null): Parameters<typeof memoryExtractionSourceOf>[0]['workClass']; readonly workTargetId: string | null };
@@ -17,7 +17,7 @@ export async function readMemoryExtractionPage(path: string, options: Pick<Sqlit
   const db = new DatabaseSync(path, { readOnly: true, timeout: options.busyTimeoutMs }), runs = await openSqliteInventoryReader(path, { busyTimeoutMs: options.busyTimeoutMs });
   try {
     requireLedgerVersion(db, MEMORY_AUTOMATION_LEDGER_VERSION);
-    const unsettled = db.prepare(`SELECT 1 FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=? AND state IN('claimed','unknown') LIMIT 1`);
+    const unsettled = db.prepare(`SELECT 1 FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=? AND ${EFFECT_OPEN_STATE_SQL} LIMIT 1`);
     const out: { position: string; source: ReturnType<typeof memoryExtractionSourceOf> }[] = [];
     for (const row of readAcceptedTaskMetrics(db, scope, after === null ? 0 : Number(after), limit)) {
       const run = await runs.loadRun(scope, row.metric.identity.runId), attemptId = row.metric.identity.attemptId;
@@ -37,7 +37,7 @@ export async function openMemoryEvaluationSourceReader(path: string, options: Pi
   const db = new DatabaseSync(path, { readOnly: true, timeout: options.busyTimeoutMs });
   try { requireLedgerVersion(db, MEMORY_AUTOMATION_LEDGER_VERSION); } catch (error) { db.close(); throw error; }
   const runs = await openSqliteInventoryReader(path, { busyTimeoutMs: options.busyTimeoutMs }).catch(error => { db.close(); throw error; });
-  const unsettled = db.prepare(`SELECT 1 FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=? AND state IN('claimed','unknown') LIMIT 1`);
+  const unsettled = db.prepare(`SELECT 1 FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=? AND ${EFFECT_OPEN_STATE_SQL} LIMIT 1`);
   return Object.freeze({ async source(scopeId: string, attempt: { readonly runId: string; readonly attemptId: string }) {
     const run = mayRead(attempt.runId) ? await runs.loadRun(scopeId, attempt.runId) : null;
     return run && memoryEvaluationSourceOf({ run, attemptId: attempt.attemptId, evaluations: readRunAcceptanceEvaluations(db, run),

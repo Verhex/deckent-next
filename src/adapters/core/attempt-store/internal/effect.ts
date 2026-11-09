@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { effectIntentSchema, effectRecordSchema, EffectError, type EffectIntent, type EffectRecord } from '#domain/index.js';
+import { assertEffectTransition, effectIntentSchema, effectRecordSchema, EffectError, type EffectIntent, type EffectRecord } from '#domain/index.js';
+import { EFFECT_OPEN_STATE_SQL } from '#adapters/core/sqlite-ledger/index.js';
 
-/** Generic effect intents (ledger v34; producer from S6R-1). Intent is durable before the effect; state moves only by compare-and-swap on the stored record. */
+/** Generic effect intents (ledger v34; producer from S6R-1). Intent is durable before the effect; state moves only by the domain rule and CAS on the stored record. */
 export class SqliteEffectJournal {
   constructor(private readonly db: DatabaseSync) {}
   read(scopeId: string, commandId: string): EffectRecord | null {
@@ -43,7 +44,7 @@ export class SqliteEffectJournal {
       if (this.db.prepare('SELECT 1 FROM effect_intents WHERE scope_id=? AND idempotency_key_hash=?').get(scopeId, intent.idempotencyKeyHash)) {
         throw new EffectError('EFFECT_CONFLICT');
       }
-      if (this.db.prepare("SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND state IN('claimed','unknown')").get(target.kind, target.id)) {
+      if (this.db.prepare(`SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND ${EFFECT_OPEN_STATE_SQL}`).get(target.kind, target.id)) {
         throw new EffectError('EFFECT_TARGET_BUSY');
       }
       const latest = this.db.prepare('SELECT MAX(sequence) AS sequence FROM effect_intents WHERE target_kind=? AND target_id=?').get(target.kind, target.id);
@@ -57,7 +58,7 @@ export class SqliteEffectJournal {
   }
   async saveEffect(previousInput: EffectRecord, nextInput: EffectRecord): Promise<EffectRecord> {
     const previous = effectRecordSchema.parse(previousInput), next = effectRecordSchema.parse(nextInput);
-    if (JSON.stringify(previous.intent) !== JSON.stringify(next.intent) || previous.sequence !== next.sequence) throw new EffectError('EFFECT_CONFLICT');
+    assertEffectTransition(previous, next);
     const { scopeId, commandId } = next.intent.command;
     this.db.exec('BEGIN IMMEDIATE');
     try {

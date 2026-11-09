@@ -1,9 +1,13 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import ts from 'typescript';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
-import { effectIntentSchema, markEffectUnknown, settleEffect } from '#domain/core/effect/index.js';
+import { openSqliteAttemptStore } from '#adapters/index.js';
+import { effectIntentSchema, effectRecordSchema, markEffectUnknown, refuseEffect, settleEffect, type EffectRecord } from '#domain/core/effect/index.js';
+import type { EffectStore } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/core/integrity/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 
@@ -47,4 +51,43 @@ it('keeps a generic unknown intent outside a deleted ledger, fences CAS/replay a
     await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' });
     await expect(store().assertUnclaimed()).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' });
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('S3-e1: both EffectStores refuse the same transitions the domain refuses and keep the stored record; no effect_intents statement spells the open set', async () => {
+  // Contract step (KG10 F1): only the domain set and the sqlite-ledger fragment name the states; versioned DDL and migrations are history.
+  const sources = readdirSync('src', { recursive: true, encoding: 'utf8' }).filter(file => file.endsWith('.ts') && !file.startsWith('domain/core/effect/')
+    && file !== 'adapters/core/sqlite-ledger/internal/schema.ts' && !file.startsWith('adapters/core/sqlite-ledger-migrations/'));
+  const statements: string[] = [];
+  for (const file of sources) {
+    const text = readFileSync(join('src', file), 'utf8');
+    if (!text.includes('effect_intents')) continue;
+    const visit = (node: ts.Node): void => {
+      if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) { if (node.getText().includes('effect_intents')) statements.push(`${file}: ${node.getText()}`); return; }
+      ts.forEachChild(node, visit);
+    };
+    visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true));
+  }
+  expect(statements.length).toBeGreaterThan(5);
+  expect(statements.filter(text => /'(claimed|unknown)'|'settled'\s*,\s*'refused'/.test(text))).toEqual([]);
+  if (process.platform !== 'linux') { console.info('verify-not-run: file-effect-store positive requires Linux kernel custody'); return; }
+  const root = await mkdtemp(join(tmpdir(), 'deckent-effect-transitions-'));
+  const sqlite = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => 1, timeoutMs: 1000 }, 'allow');
+  try {
+    const file = new FileEffectStore(join(root, 'effects'), createHmacIntegrity('fixture', new Uint8Array(32).fill(7)), { maxBytes: 262144, maxRecords: 16 });
+    await file.initialize();
+    const descriptor = { schemaVersion: 1, operation: { id: 'record.write', version: 1 }, targetKind: 'record', effectClass: 'write', approval: 'policy', precondition: 'none', compensation: null, inputMaxBytes: 4096 };
+    const evidence = { kind: 'fence', version: null, observedAt: 2 } as const;
+    const to = (record: EffectRecord, state: EffectRecord['state']) => effectRecordSchema.parse({ ...record, state, evidence: state === 'settled' ? evidence : null, refusal: state === 'refused' ? 'EFFECT_REJECTED' : null });
+    const cases = [['settled', 'unknown'], ['refused', 'settled'], ['unknown', 'refused'], ['claimed', 'claimed']] as const;
+    for (const [name, store] of [['file', file], ['sqlite', sqlite]] as [string, EffectStore][]) {
+      for (const [index, [from, next]] of cases.entries()) {
+        const id = `${name}-${index}`, claimed = await store.claimEffect(effectIntentSchema.parse({ schemaVersion: 1, descriptor, actor: { id: 'author', issuer: 'fixture', subject: 'person' },
+          command: { schemaVersion: 1, commandId: id, scopeId: 's', operation: descriptor.operation, target: { kind: 'record', id }, idempotencyKey: id, input: null, expectedVersion: null },
+          idempotencyKeyHash: String(index).repeat(64), inputDigest: 'b'.repeat(64), producer: { kind: 'principal' } }));
+        const source = from === 'claimed' ? claimed : await store.saveEffect(claimed, from === 'settled' ? settleEffect(claimed, evidence) : from === 'refused' ? refuseEffect(claimed, 'EFFECT_REJECTED') : markEffectUnknown(claimed));
+        await expect(store.saveEffect(source, to(source, next)), `${name} ${from}->${next}`).rejects.toMatchObject({ code: 'EFFECT_CONFLICT' });
+        expect(await store.loadEffect('s', id)).toEqual(source);
+      }
+    }
+  } finally { sqlite.close(); await rm(root, { recursive: true, force: true }); }
 });

@@ -62,6 +62,9 @@ export const PRINCIPAL_EFFECT_PRODUCER: EffectProducer = Object.freeze({ kind: '
 /** claimed: intent recorded, effect may be pending; settled: target evidence of the effect; unknown: outcome cannot be
  * established from the target (never retried blindly); refused: the target refused before any effect (terminal, no effect). */
 export const effectStateSchema = z.enum(['claimed', 'settled', 'unknown', 'refused']);
+/** The one open-state set: an effect that may still exist or happen. Stores and every `effect_intents` reader take it from here (KG10 F1). */
+export const EFFECT_OPEN_STATES = Object.freeze(['claimed', 'unknown'] as const);
+export const isEffectOpen = (state: string | null | undefined) => (EFFECT_OPEN_STATES as readonly unknown[]).includes(state);
 export const effectRefusalSchema = z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']);
 export type EffectState = z.infer<typeof effectStateSchema>;
 /** Durable intent recorded before any effect; `inputDigest` binds the canonical payload and `idempotencyKeyHash` the scoped key. */
@@ -98,20 +101,24 @@ export class EffectError extends Error {
     options?: ErrorOptions) { super(code, options); this.name = 'EffectError'; }
 }
 
-const open = (record: EffectRecord) => { if (record.state === 'settled' || record.state === 'refused') throw new EffectError('EFFECT_CONFLICT'); };
-/** Pure settlement of a claimed/unknown record from target evidence. Terminal records never change. */
+type TransitionSide = Pick<EffectRecord, 'intent' | 'sequence' | 'state'>;
+/** The one effect transition rule, for the pure transitions and every `EffectStore.saveEffect`: same intent and sequence, terminal records never
+ * change, nothing returns to claimed, and an unknown effect is never refused (it might already exist). */
+export function assertEffectTransition(previous: TransitionSide, next: TransitionSide) {
+  if (!isEffectOpen(previous.state) || next.state === 'claimed' || (previous.state === 'unknown' && next.state === 'refused') || previous.sequence !== next.sequence
+    || (previous.intent !== next.intent && JSON.stringify(previous.intent) !== JSON.stringify(next.intent))) throw new EffectError('EFFECT_CONFLICT');
+}
+/** Pure settlement of a claimed/unknown record from target evidence. */
 export function settleEffect(record: EffectRecord, evidence: EffectEvidence): EffectRecord {
-  open(record); return effectRecordSchema.parse({ ...record, state: 'settled', evidence, refusal: null });
+  assertEffectTransition(record, { ...record, state: 'settled' }); return effectRecordSchema.parse({ ...record, state: 'settled', evidence, refusal: null });
 }
 /** Pure transition to unknown: the effect may or may not have happened and the target offers no evidence either way. */
 export function markEffectUnknown(record: EffectRecord): EffectRecord {
-  open(record); return effectRecordSchema.parse({ ...record, state: 'unknown', evidence: null, refusal: null });
+  assertEffectTransition(record, { ...record, state: 'unknown' }); return effectRecordSchema.parse({ ...record, state: 'unknown', evidence: null, refusal: null });
 }
-/** Pure terminal refusal: the target refused before any effect (changed precondition or rejected request). Only a claimed record,
- * never an unknown one, may be refused: an unknown effect might already exist. */
+/** Pure terminal refusal: the target refused before any effect (changed precondition or rejected request). */
 export function refuseEffect(record: EffectRecord, refusal: z.infer<typeof effectRefusalSchema>): EffectRecord {
-  if (record.state !== 'claimed') throw new EffectError('EFFECT_CONFLICT');
-  return effectRecordSchema.parse({ ...record, state: 'refused', evidence: null, refusal });
+  assertEffectTransition(record, { ...record, state: 'refused' }); return effectRecordSchema.parse({ ...record, state: 'refused', evidence: null, refusal });
 }
 /** A compensation command must name a settled, compensable original on the same target with the catalog's compensation operation. */
 export function assertCompensation(original: EffectRecord, command: EffectCommand) {

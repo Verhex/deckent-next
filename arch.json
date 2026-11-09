@@ -1766,7 +1766,8 @@
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
         "src/adapters/core/sqlite-read-view",
-        "src/engine/core/scheduling"
+        "src/engine/core/scheduling",
+        "src/domain/core/effect"
       ],
       "plan": "STORE"
     },
@@ -3682,7 +3683,8 @@
         "src/domain/core/effect",
         "src/domain/core/command",
         "src/engine/core/effect",
-        "src/adapters/core/audit-store"
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger"
       ],
       "plan": "STORE"
     },
@@ -5206,12 +5208,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42359,
+      "adapters": 42364,
       "surfaces": 45000,
       "composition": 13558
     },
     "totalSrcLines": 200000,
-    "testCases": 8218,
+    "testCases": 8219,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

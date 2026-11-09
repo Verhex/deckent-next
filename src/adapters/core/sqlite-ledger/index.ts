@@ -30,3 +30,4 @@ export { migrateCapacityResources, revertCapacityResources } from '#adapters/cor
 export { withRunCapacityBindings } from './internal/run-capacity-bindings.js';
 
 export { decodeLedgerRunSnapshot } from './internal/run-snapshot.js';
+export { EFFECT_OPEN_STATE_SQL } from './internal/schema.js';

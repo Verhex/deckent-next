@@ -4,7 +4,7 @@ import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { EffectError, effectIntentSchema, effectRecordSchema, type EffectIntent, type EffectRecord } from '#domain/index.js';
+import { assertEffectTransition, EffectError, effectIntentSchema, effectRecordSchema, isEffectOpen, type EffectIntent, type EffectRecord } from '#domain/index.js';
 import type { EffectStore } from '#engine/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
@@ -92,7 +92,7 @@ export class FileEffectStore implements EffectStore {
       if (!intent.producer) throw new EffectError('EFFECT_INVALID');
       if (body.records.some(record => record.intent.command.scopeId === scopeId && record.intent.idempotencyKeyHash === intent.idempotencyKeyHash)) throw new EffectError('EFFECT_CONFLICT');
       const targetRecords = body.records.filter(record => same(record.intent.command.target, target));
-      if (targetRecords.some(record => record.state === 'claimed' || record.state === 'unknown')) throw new EffectError('EFFECT_TARGET_BUSY');
+      if (targetRecords.some(record => isEffectOpen(record.state))) throw new EffectError('EFFECT_TARGET_BUSY');
       const sequence = Math.max(0, ...targetRecords.map(record => record.sequence)) + 1;
       const record = effectRecordSchema.parse({ intent, sequence, state: 'claimed', evidence: null, refusal: null });
       await this.write({ ...body, revision: body.revision + 1, records: [...body.records, record] }); return record;
@@ -100,8 +100,7 @@ export class FileEffectStore implements EffectStore {
   }
   async saveEffect(previousInput: EffectRecord, nextInput: EffectRecord): Promise<EffectRecord> {
     const previous = effectRecordSchema.parse(previousInput), next = effectRecordSchema.parse(nextInput);
-    if (!same(previous.intent, next.intent) || previous.sequence !== next.sequence || previous.state === 'settled' || previous.state === 'refused'
-      || next.state === 'claimed' || (previous.state === 'unknown' && next.state === 'refused')) throw new EffectError('EFFECT_CONFLICT');
+    assertEffectTransition(previous, next);
     return this.transaction(async body => {
       const index = body.records.findIndex(record => same(record, previous));
       if (index < 0) throw new EffectError('EFFECT_CONFLICT');

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { effectCommandSchema, queueNextState, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
+import { effectCommandSchema, queueNextState, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, isEffectOpen, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
@@ -238,7 +238,7 @@ export class UninstallApplication {
               // Never fabricate failure/settlement after a lost result: the generic store remains the only truth. A store that can no longer
               // be read (the final tail already removed its policy or key) leaves the outcome unknown, never a policy error.
               state.state = (await admission.effects.inspect(admission.scopeId, commands.get(item.resourceId)!.commandId).catch(() => ({ state: 'unknown' as const })))?.state ?? null;
-              if (state.state === 'claimed' || state.state === 'unknown') {
+              if (isEffectOpen(state.state)) {
                 const unknown = result('unknown', admission.recoveryLocation, 'EFFECT_OUTCOME_UNKNOWN'); await admission.finish(unknown); return unknown;
               }
               if (states.some(item => item.state === 'settled')) {

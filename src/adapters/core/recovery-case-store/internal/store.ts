@@ -4,7 +4,7 @@ import { RecoveryError, assessRecoveryEffectGate, attemptIdentitySchema, closeRe
   runSnapshotSchema, type AttemptIdentity, type EffectRecord, type RecoveryCase, type RunSnapshot } from '#domain/index.js';
 import type { RecoveryAudit, RecoveryContinuationWrite, RecoveryStore, RecoveryTermination } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { EFFECT_OPEN_STATE_SQL, ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 const corrupt = () => new RecoveryError('RECOVERY_CORRUPT');
 const parse = <T>(work: () => T): T => { try { return work(); } catch { throw corrupt(); } };
@@ -34,7 +34,7 @@ export class SqliteRecoveryStore implements RecoveryStore {
   private readGateEffects(identity: AttemptIdentity, limit: number): EffectRecord[] {
     // The v63 producer index serves the Attempt's own intents; older rows (no producer) join only while open (fail-closed window rule).
     return this.db.prepare(`SELECT command_id,state,record FROM effect_intents WHERE scope_id=? AND (json_extract(record,'$.intent.producer.identity.attemptId')=?
-      OR (json_extract(record,'$.intent.producer') IS NULL AND state IN('claimed','unknown'))) ORDER BY rowid LIMIT ?`).all(identity.scopeId, identity.attemptId, limit).map(row => {
+      OR (json_extract(record,'$.intent.producer') IS NULL AND ${EFFECT_OPEN_STATE_SQL})) ORDER BY rowid LIMIT ?`).all(identity.scopeId, identity.attemptId, limit).map(row => {
       const record = parse(() => effectRecordSchema.parse(JSON.parse(String(row['record']))));
       if (record.intent.command.commandId !== row['command_id'] || record.state !== row['state'] || record.intent.command.scopeId !== identity.scopeId) throw corrupt();
       return record;

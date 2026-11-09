@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
-import { effectRecordSchema, effectStateSchema, effectTargetRefSchema, operationRefSchema, type EffectRecord } from '#domain/core/effect/index.js';
+import { effectRecordSchema, effectStateSchema, effectTargetRefSchema, isEffectOpen, operationRefSchema, type EffectRecord } from '#domain/core/effect/index.js';
 import type { RunRecoveryPolicy } from './policy.js';
 
 export const RECOVERY_ERROR_CODES = ['RECOVERY_INVALID', 'RECOVERY_OFF', 'RECOVERY_NOT_FOUND', 'RECOVERY_NOT_READY', 'RECOVERY_RUN_CLOSED', 'RECOVERY_EFFECTS_OPEN',
@@ -25,7 +25,6 @@ export const recoveryEffectGateSchema = z.strictObject({ schemaVersion: z.litera
   facts: z.array(z.strictObject({ commandId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema, version: persistedString(z.string().min(1).max(256)).nullable(),
     observedAt: counterSchema }).readonly()).max(256).readonly() }).readonly();
 export type RecoveryEffectGate = z.infer<typeof recoveryEffectGateSchema>;
-const OPEN = new Set(['claimed', 'unknown']);
 
 /** Pure: the gate over the records a store read for one lost Attempt (its own, plus older producer-less rows of the scope). Another scope's record is refused. */
 export function assessRecoveryEffectGate(identity: AttemptIdentity, input: readonly unknown[], policy: Pick<RunRecoveryPolicy, 'maxGateIntents' | 'settledFacts'>): RecoveryEffectGate {
@@ -33,9 +32,9 @@ export function assessRecoveryEffectGate(identity: AttemptIdentity, input: reado
   if (records.some(record => record.intent.command.scopeId !== identity.scopeId)) throw new RecoveryError('RECOVERY_INVALID');
   // Fail-closed window rule without a claim time (S6R-DESIGN §7 step 4): a producer-less row can only predate S6R-1, so it joins while still open.
   const members = records.filter(record => record.intent.producer ? record.intent.producer.kind === 'attempt' && sameAttemptIdentity(record.intent.producer.identity, identity)
-    : OPEN.has(record.state));
+    : isEffectOpen(record.state));
   const complete = members.length <= policy.maxGateIntents, kept = members.slice(0, policy.maxGateIntents);
-  const result = !complete || kept.some(record => OPEN.has(record.state)) ? 'open' : kept.length ? 'reconciled' : 'clear';
+  const result = !complete || kept.some(record => isEffectOpen(record.state)) ? 'open' : kept.length ? 'reconciled' : 'clear';
   const settledRows = kept.filter(record => record.state === 'settled');
   const facts = settledRows.map(record => ({ commandId: record.intent.command.commandId, operation: record.intent.command.operation, target: record.intent.command.target,
     version: record.evidence?.version ?? null, observedAt: record.evidence?.observedAt ?? 0 }));

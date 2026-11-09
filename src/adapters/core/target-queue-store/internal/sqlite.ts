@@ -3,6 +3,7 @@ import { encodeCommandProjection, targetQueueRequestSchema, targetQueueRecordSch
   type TargetQueueRequest, type TargetQueueRecord } from '#domain/index.js';
 import { targetQueueKey, decodeTargetQueueRow, assertTargetQueueBounds, newQueueRecord, assertQueueChange, type TargetQueueStore, type TargetQueueBounds, type TargetQueueAudit } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
+import { EFFECT_OPEN_STATE_SQL } from '#adapters/core/sqlite-ledger/index.js';
 const open = "state NOT IN('settled','cancelled','expired','parked')";
 /** Short ledger transactions only; audit and queue CAS commit together. The service owns this writer, never the public client. */
 export class SqliteTargetQueue implements TargetQueueStore {
@@ -98,7 +99,7 @@ export class SqliteTargetQueue implements TargetQueueStore {
       if (all >= bounds.capacity || count >= bounds.perTarget) throw new TargetQueueError('QUEUE_CAPACITY');
       // Historical records have no proven source binding: conservatively hold matching addresses for explicit reconciliation.
       if (this.db.prepare('SELECT 1 FROM workspace_adoptions WHERE target_ref=? AND settled=0 LIMIT 1').get(request.target.target.id)
-        || this.db.prepare("SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND state IN('claimed','unknown') LIMIT 1")
+        || this.db.prepare(`SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND ${EFFECT_OPEN_STATE_SQL} LIMIT 1`)
           .get(request.target.target.kind, request.target.target.id)) throw new TargetQueueError('QUEUE_RECOVERY_REQUIRED');
       const ordinal = Number(this.db.prepare('SELECT coalesce(max(ordinal),0)+1 AS n FROM target_queue WHERE target_key=?').get(key)?.n);
       const record = newQueueRecord(request, ordinal);

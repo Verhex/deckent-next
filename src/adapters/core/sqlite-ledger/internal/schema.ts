@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { migrateProviderSpendPeriods, migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
+import { effectStateSchema, isEffectOpen } from '#domain/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
@@ -52,6 +53,8 @@ export const AGENT_CATALOG_LEDGER_VERSION = 64;
 // S6R-1 effect producer (v63 after s1's v62): every new effect intent records its producer (Attempt | principal) in the record; the step adds
 // only the producer-Attempt index (migration-v63.ts). Older intents stay as written. Downgrade = restore the pre-switch backup.
 export const EFFECT_PRODUCER_LEDGER_VERSION = 63;
+/** KG10 F1: the one `effect_intents` open-state filter, from the domain set; "not terminal", so a state outside the enum counts as open (fail closed). */
+export const EFFECT_OPEN_STATE_SQL = `state NOT IN(${effectStateSchema.options.filter(state => !isEffectOpen(state)).map(state => `'${state}'`).join(',')})`;
 // ATAMA-1 system assignment (lane v62; the lead renumbers at landing): Run graphs may hold work input v2 (no model), Run execution snapshots a
 // sealed `assignment` per task, and metric rows its summary. Additive: every v61 record parses unchanged, nothing is read or rewritten; the
 // version step alone keeps an older build (which refuses a newer ledger) from reading the new records. Downgrade = restore the pre-switch backup.

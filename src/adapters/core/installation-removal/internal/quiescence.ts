@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { requireLedgerVersion, EFFECT_PRODUCER_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { requireLedgerVersion, EFFECT_OPEN_STATE_SQL, EFFECT_PRODUCER_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { targetQueueRecordSchema } from '#domain/index.js';
 import type { UninstallWork } from '#engine/index.js';
@@ -31,7 +31,7 @@ export function observeUninstallWork(path: string, limits: { readonly busyTimeou
         const pin = db.prepare('SELECT company_id FROM scope_registry WHERE scope_id=?').get(ref.scopeId)?.['company_id'];
         return { scopeId: ref.scopeId, id: ref.id, revision: ref.revision, identity: record.request.identity, state: record.state,
           ...(limits.companyId ? { company: pin == null ? 'unregistered' as const : pin === limits.companyId ? 'current' as const : 'foreign' as const } : {}) }; }),
-      uncertain: [...uncertain('effect', `SELECT scope_id s,command_id i,target_kind||'/'||target_id t FROM effect_intents WHERE state NOT IN ('settled','refused')`),
+      uncertain: [...uncertain('effect', `SELECT scope_id s,command_id i,target_kind||'/'||target_id t FROM effect_intents WHERE ${EFFECT_OPEN_STATE_SQL}`),
         ...uncertain('invocation', `SELECT scope_id s,invocation_id i,NULL t FROM model_invocations WHERE state IN ('claimed','unknown')`),
         ...uncertain('reservation', `SELECT scope_id s,invocation_id i,NULL t FROM model_invocation_spend_reservations WHERE CASE WHEN json_valid(record)=0 THEN 1
           ELSE json_extract(record,'$.disposition.state')='held' AND json_extract(record,'$.reconciliation') IS NULL END`)], complete };
