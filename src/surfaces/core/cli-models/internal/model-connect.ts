@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, EXIT_CODES, MESSAGE_REGISTRY, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, messageText, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { askModelsCard, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
@@ -123,22 +123,21 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
   const scope = await resolveCommandScope({ command: 'deckent models connect', locale, explicit: picked.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: true, interactive: true, listScopes: () => scopeLister(context as never, root, options)().catch(() => []), pick: request => askModelsCard(context, locale, request) });
   if (!scope) return cancelled();
-  const catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
   const kinds = host.kinds.filter(kind => kind.available && kind.seeded && kind.connectFamily);
   if (!kinds.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const kindId = await askModelsCard(context, locale, { title: t('climodels.models.pick.connection', {}, locale), body: [t('climodels.models.pick.connectionBody', {}, locale)],
-    options: kinds.map(kind => ({ id: kind.id, label: catalog[kind.labelKey] ?? kind.id })), initial: kinds[0]!.id }); // M-27: the cursor starts on a row, so the first Down moves
+    options: kinds.map(kind => ({ id: kind.id, label: messageText(kind.labelKey, locale) ?? kind.id })), initial: kinds[0]!.id }); // M-27: the cursor starts on a row, so the first Down moves
   const kind = kinds.find(entry => entry.id === kindId);
   if (!kind) return cancelled();
   const models = await host.seedModels(kind.id);
   if (!models.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const pull = kind.pull === 'available';
-  const nativeId = pull ? '' : await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: catalog[kind.labelKey] ?? kind.id }, locale), initial: models[0]!.nativeId,
+  const nativeId = pull ? '' : await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: messageText(kind.labelKey, locale) ?? kind.id }, locale), initial: models[0]!.nativeId,
     options: models.map(model => ({ id: model.nativeId, label: model.displayName && model.displayName !== model.nativeId
       ? `${terminalSafeText(model.nativeId)} · ${terminalSafeText(model.displayName)}` : terminalSafeText(model.nativeId) })) });
   if (nativeId === null || !pull && !models.some(model => model.nativeId === nativeId)) return cancelled();
   const answer = await askModelsCard(context, locale, { title: pull ? kind.billing === 'subscription' ? t('climodels.models.card.connectAllSubscription', {}, locale) : t('climodels.models.card.connectAll', {}, locale) : t('climodels.models.card.connect', { model: terminalSafeText(nativeId) }, locale), // M-27: no "Connect Connect"
-    body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: catalog[kind.labelKey] ?? kind.id }, locale), t('climodels.models.card.connectWhat', {}, locale)],
+    body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: messageText(kind.labelKey, locale) ?? kind.id }, locale), t('climodels.models.card.connectWhat', {}, locale)],
     options: modelsConfirmOptions(locale) });
   if (answer !== 'apply') return cancelled();
   const command = modelConnectCommandSchema.parse({ schemaVersion: 1, commandId: `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: kind.id, endpoint: null, model: pull ? { pull: 'available' } : { nativeId } });

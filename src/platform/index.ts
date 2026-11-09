@@ -67,6 +67,7 @@ export { formatValue, formatTable, formatStatus, readMemoryKnowledge } from '#pl
 export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
 export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
+export { messageText } from '#platform/core/i18n/index.js';
 export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.js';
 export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, MEMORY_AUTOMATION_MODES } from '#platform/core/config-fields/index.js';
 export { mergeConfigFields } from '#platform/core/config-fields/index.js';

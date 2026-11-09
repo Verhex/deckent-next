@@ -1,9 +1,9 @@
 import preview from './preview.json' with { type: 'json' };
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
-import { ErrorRegistry, getConfigFieldDefault, redactForRecord, shortId, t, type Locale, MESSAGE_REGISTRY } from '#platform/index.js';
+import { ErrorRegistry, getConfigFieldDefault, redactForRecord, shortId, t, type Locale, messageText } from '#platform/index.js';
 import type { EffectConfirmationView, QueueConsent, TargetQueueView } from '#engine/index.js';
-const word = (key: string, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[key] ?? key;
+const word = (key: string, locale: Locale) => messageText(key, locale) ?? key;
 const text = (value: string) => redactForRecord(value).replace(/[\p{Cc}\p{Cf}]/gu, ' ');
 /** The card's operation words: a working-tree rollback puts files back, an adoption rollback moves a branch back (F2-9: no "adoption" jargon). */
 export function deliveryOperationLabel(operation: EffectConfirmationView['operation'], locale: Locale): string {

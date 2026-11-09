@@ -2,7 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
-import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, redactSensitive, resolveLocale, t, LOCALES,
+import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, messageText, redactSensitive, resolveLocale, t, LOCALES,
   type Locale, type MessageKey, type MessageFamily } from '../../../src/platform/index.js';
 
 const unit = new URL('../../../src/platform/core/i18n/', import.meta.url);
@@ -57,8 +57,9 @@ describe('K2 catalog registry contract', () => {
     expect(Object.isFrozen(MESSAGE_REGISTRY.catalogs.en)).toBe(true); expect(Object.isFrozen(LOCALES)).toBe(true);
   });
   it('preserves unknown keys without prototype lookup and unsupported locales fall back to English', () => {
-    for (const key of ['not.a.key', '__proto__', 'constructor', 'toString']) expect(t(key as MessageKey, {}, 'en')).toBe(key);
+    for (const key of ['not.a.key', '__proto__', 'constructor', 'toString']) { expect(t(key as MessageKey, {}, 'en')).toBe(key); expect(messageText(key, 'tr')).toBeUndefined(); }
     expect(t('cli.help', {}, 'de' as Locale)).toBe(t('cli.help', {}, 'en'));
+    expect([messageText('cli.help', 'de' as Locale), messageText('cli.help', 'tr')]).toEqual([MESSAGE_REGISTRY.catalogs.en['cli.help'], MESSAGE_REGISTRY.catalogs.tr['cli.help']]);
     expect(t('cli.help', {}, 'tr')).not.toBe(t('cli.help', {}, 'en'));
   });
   it('preserves missing placeholders and substitutes literal values without regex replacement expansion', () => {
