@@ -1,9 +1,10 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import history from '../../fixtures/policy/first-run-history.json' with { type: 'json' };
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,
-  namedPersonPolicyAdditions, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, firstRunTemplateRollback, firstRunProposalRules, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
+import { POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, type PolicyGrant } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, namedPersonPolicyAdditions, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, upgradeFirstRunPolicy } from '#domain/core/policy-template/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
@@ -29,6 +30,8 @@ const decide = (policy: unknown, tool: string, cell: AgentToolCallCell, operatio
 describe('firstRunPolicyTemplate (domain, pure)', () => {
   it('is deterministic in (scopeId, principal): two calls with the same input produce byte-identical documents', () => {
     expect(firstRunPolicyTemplate(input)).toEqual(firstRunPolicyTemplate(input));
+    expect(createHash('sha256').update(JSON.stringify(firstRunPolicyTemplate(history.input))).digest('hex'))
+      .toBe('0491511dffb072f488d801c365746e7b8576b30bfb08a987946c4ad1fbd6b900');
   });
   it('produces a valid v2 policy and v1 bindings document, versioned in the revision', () => {
     const template = firstRunPolicyTemplate(input);

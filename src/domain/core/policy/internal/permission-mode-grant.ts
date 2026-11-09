@@ -1,7 +1,7 @@
 import { isMcpPrincipal } from '#domain/core/principal/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { evaluatePolicy, matchingRuleIds, type PolicyDecision } from './evaluate.js';
-import { anchorsPerson, namesPerson, policyNamedPeople } from './first-run-template.js';
+import { anchorsPerson, namesPerson, policyNamedPeople } from './people.js';
 import { PERMISSION_MODES, policyFileSchema, policyGrantSchema, resolvePolicyBindings, type PermissionMode, type PolicyGrant } from './schema.js';
 import { policyResources } from './vocabulary.js';
 

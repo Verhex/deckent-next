@@ -3,10 +3,7 @@ export { INSTALLER_PERMISSION_MODE_RULE_PREFIX, INSTALLER_PERMISSION_MODES_COMMA
   type OpenablePermissionMode, type PermissionModeGrantPlan, type PermissionModeGrantState } from './internal/permission-mode-grant.js';
 export { bindingsFileSchema, PERMISSION_MODES, policyFileSchema, policyHasResourceRules, principalPermissionMode, resolvePolicyBindings, separationOfDutiesViolation,
   upgradeBindingsDocument } from './internal/schema.js';
-export { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, HARD_FLOOR_CARD_CELLS, firstRunPolicyTemplate, firstRunServiceId, matchFirstRunPolicyTemplate, upgradeFirstRunPolicy, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, proposalCoverageGrants, type FirstRunProposalCover, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, firstRunBindingsRevision, type FirstRunTemplateUpgrade,
-  namedPersonPolicyAdditions, policyNamedPeople, type NamedPersonAdditions,
-  type FirstRunTemplateAdditions } from './internal/first-run-template.js';
-export type { FirstRunPolicyTemplate, FirstRunPolicyTemplateInput } from './internal/first-run-template.js';
+export { anchorsPerson, namesPerson, policyNamedPeople } from './internal/people.js';
 export { companyIdSchema, policyDeclaredScopes, policyNamedScopes, policyScopeGrants, policyScopeMembership } from './internal/scope.js';
 export type { Policy, PolicyRequest, PolicyDecision } from './internal/evaluate.js';
 export type { ApprovalAssuranceRule, BindingsFile, BindingsV3, PermissionMode, PermissionModeEntry, PolicyFile, PrincipalPermissionMode } from './internal/schema.js';

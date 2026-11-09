@@ -1,6 +1,6 @@
 import { isAiPrincipal } from '#domain/core/principal/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { anchorsPerson, namesPerson, policyNamedPeople } from './first-run-template.js';
+import { anchorsPerson, namesPerson, policyNamedPeople } from './people.js';
 import { aiAuthorityFloor } from './ai-floor.js';
 import { evaluatePolicy } from './evaluate.js';
 import { POLICY_CHANGE_MAX } from './administer.js';
