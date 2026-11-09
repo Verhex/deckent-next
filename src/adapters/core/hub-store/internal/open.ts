@@ -6,7 +6,7 @@ import { HUB_LIMITS, identitySchema } from '#domain/index.js';
 import { HubServerError } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { SqliteHubStore } from './store.js';
-import { backupHubV1, migrateHubV1, migrateHubV2, HUB_STORE_SCHEMA_VERSION } from './migration.js';
+import { backupHubStore, migrateHubStore, createHubIndexes, HUB_STORE_SCHEMA_VERSION } from './migration.js';
 import { createHubService } from './service.js';
 import { createHubRevocations } from './revocations.js';
 
@@ -43,12 +43,13 @@ export function openHubStore(input: { readonly root: string; readonly scopeId: s
   try {
     db = openLedgerDatabase(path, { timeout: input.busyTimeoutMs, enableForeignKeyConstraints: true, allowExtension: false });
     const app = Number(db.prepare('PRAGMA application_id').get()?.application_id), version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
-    if (app !== 0 && app !== APPLICATION_ID || version !== 0 && version !== 1 && version !== 2 && version !== HUB_STORE_SCHEMA_VERSION) throw new HubServerError('HUB_STORE_UNSAFE');
-    if (version === 1 || version === 2) {
+    if (app !== 0 && app !== APPLICATION_ID || version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== HUB_STORE_SCHEMA_VERSION) throw new HubServerError('HUB_STORE_UNSAFE');
+    const migrating = version > 0 && version < HUB_STORE_SCHEMA_VERSION;
+    if (migrating) {
       const identity = db.prepare('SELECT hub_id,scope_id FROM hub_identity').all();
       if (app !== APPLICATION_ID || identity.length !== 1 || identity[0]?.hub_id !== input.hubId || identity[0]?.scope_id !== scopeId) throw new HubServerError('HUB_STORE_UNSAFE');
     }
-    const backupTail = version === 1 || version === 2 ? backupHubV1(db, path, version) : null;
+    const backupTail = migrating ? backupHubStore(db, path, version) : null;
     const opened = db;
     ledgerTransaction(opened, () => {
       if (app === 0 && version === 0 && opened.prepare("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1").get() === undefined) {
@@ -63,9 +64,9 @@ export function openHubStore(input: { readonly root: string; readonly scopeId: s
           PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${HUB_STORE_SCHEMA_VERSION};`);
         createHubRevocations(opened);
         createHubService(opened);
+        createHubIndexes(opened);
         opened.prepare('INSERT INTO hub_identity VALUES(?,?)').run(input.hubId, scopeId);
-      } else if (app === APPLICATION_ID && version === 1) migrateHubV1(opened, backupTail);
-      else if (app === APPLICATION_ID && version === 2) migrateHubV2(opened, backupTail);
+      } else if (app === APPLICATION_ID && migrating) migrateHubStore(opened, version, backupTail);
       else if (app !== APPLICATION_ID || version !== HUB_STORE_SCHEMA_VERSION) throw new HubServerError('HUB_STORE_UNSAFE');
       const identity = opened.prepare('SELECT hub_id,scope_id FROM hub_identity').all();
       if (identity.length !== 1 || identity[0]?.hub_id !== input.hubId || identity[0]?.scope_id !== scopeId) throw new HubServerError('HUB_STORE_UNSAFE');
