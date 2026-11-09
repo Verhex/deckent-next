@@ -69,6 +69,9 @@ it('K21: production driver binds the fresh K5 profile to K16 public transport, r
   await transport.runIsolated(entry, spawn, bounds, signal, line); expect(isolated).toHaveBeenCalledWith(entry, expect.any(Function), spawn, bounds, signal, line);
   await expect(runtime.driver({ ...input, binding: { ...binding, modelUsePin: undefined } } as never, signal)).rejects.toMatchObject({ code: 'DISPATCH_FENCED' });
   expect(create).toHaveBeenCalledOnce();
+  // B2-11: an evidence target without a registry entry is the typed F08 refusal the readiness reader names, not an untyped error.
+  await expect(runtime.verification!.acquire({ identity: { scopeId: profile.scopeId, attemptId: 'a' } }, { ...binding, protocolFamily: 'unregistered' }, {} as never))
+    .rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
 });
 
 it('K21: K1 tools use the exact Attempt tree with an MCP workload session and durable effects, never the project tree', async () => {

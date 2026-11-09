@@ -3,7 +3,7 @@ import { NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
 import { nativeCliHeadlessDefinitionSchema, nativeCliWorkerBindingSchema, type NativeCliHeadlessDefinition, type NativeCliWorkerBinding } from '#capabilities/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { ErrorRegistry, type DeckentConfig } from '#platform/index.js';
-import { modelUseProfiles, resolveModelUse } from './read.js';
+import { modelUseProfiles, pinCurrentModelUse } from './read.js';
 import type { ModelUseReadPorts, ModelUseContext } from './ports.js';
 import { modelInvocationProfileDigest } from '#engine/core/model-invocation/index.js';
 
@@ -21,7 +21,7 @@ export async function resolveNativeTemplateConnection(root: string, config: Deck
   const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
   if (profile.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || !definition.success || !definition.data.sourceBinding) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
   const context = await reads.context(root, profile.scopeId);
-  await resolveModelUse(reads, root, profile, context.principal, { action: 'pin' });
+  await pinCurrentModelUse(reads, root, profile, context.principal, context);
   const capacity = await resource(context, definition.data);
   if (!capacity) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
   // K6b's persisted UUID identifies this login connection across profiles; it is not a new random identity or a credential.
