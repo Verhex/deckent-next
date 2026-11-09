@@ -58,6 +58,12 @@ export const userBusEnvironment = (env: Environment, extra: readonly string[]): 
   inheritedEnvironment(env, [...extra, 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']);
 /** What a Deckent tool child (git, a package query, a probe) needs; NODE_ENV is the caller's own (`callerEnvironment`), never this entry's production mode. */
 export const CHILD_BASE_ENVIRONMENT: readonly string[] = Object.freeze(['PATH', 'HOME', 'XDG_CONFIG_HOME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'TZ', 'TMPDIR', 'NODE_ENV']);
+/** KG8 Fix C: what a stdio MCP server inherits, pinned EQUAL to the MCP SDK's posix `DEFAULT_INHERITED_ENV_VARS` by a test (the SDK merges its
+ * default under every launch); a name added here goes to the owner (LAW-AUDIT-2). */
+export const MCP_STDIO_BASE_ENVIRONMENT: readonly string[] = Object.freeze(['HOME', 'LOGNAME', 'PATH', 'SHELL', 'TERM', 'USER']);
+/** The SDK's own skip of an exported shell function (a value starting `()`) is kept, so the explicit base never passes what the SDK would drop. */
+export const mcpStdioEnvironment = (env: Environment): Record<string, string> =>
+  Object.fromEntries(Object.entries(inheritedEnvironment(env, MCP_STDIO_BASE_ENVIRONMENT)).filter(([, value]) => !value.startsWith('()')));
 /** The runtime service's environment: the child base, the documented call-time inputs, the user and session bus, Node's CA file, the CI markers and
  * every DECKENT_ name; the launcher adds what its configuration names (agent markers, referenced secret names, tool home overrides). */
 export function serviceEnvironment(env: Environment, extra: Iterable<string>): Record<string, string> {

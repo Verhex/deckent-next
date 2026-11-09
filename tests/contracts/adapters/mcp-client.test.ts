@@ -3,8 +3,10 @@ import { createServer, type Server } from 'node:net';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { DEFAULT_INHERITED_ENV_VARS } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
+import { MCP_STDIO_BASE_ENVIRONMENT } from '#platform/core/host/index.js';
 import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
 import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, inspectShellRealmSelection, isWriteApprovalFloored, McpClientPool,
   mcpDefinitionDigest, mcpToolPinDigest, mcpToolWireName, readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, shippedShellSandboxes, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX,
@@ -186,11 +188,19 @@ describe('MCP client: calls, bounds and failures', () => {
     expect(calls).toEqual(['slow', 'crash', 'crash']);
   }, 60_000);
 
-  it('a server that cannot start is a typed failure with its redacted stderr tail; require-sandbox without a sandbox never starts it', async () => {
+  it('a server that cannot start is a typed failure with its redacted stderr tail; require-sandbox without a sandbox never starts it; a stdio server inherits only the SDK-default names', async () => {
     const f = fixture('dual'), p = pool();
     const broken = { ...f.server([]), args: [join(f.root, 'missing.mjs')] };
     const failed = await p.open(broken, settings([broken], { connectTimeoutMs: 3_000 }), context(f.root));
     expect(failed).toMatchObject({ ok: false });
+    // KG8 Fix C: the SDK merges its default under every launch (stdio.mjs `{ ...getDefaultEnvironment(), ...env }`), so the base is pinned EQUAL to it.
+    const seen = join(f.root, 'env.json'), dump = { ...f.server([], 'env-dump'), args: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.env))`], env: { OWN: '1' } };
+    await p.open(dump, settings([dump], { connectTimeoutMs: 3_000 }), { ...context(f.root), environment: { ...process.env, HOME: join(f.root, 'home'), LANG: 'C.UTF-8', TERM: '() { :; }' } });
+    const reached = JSON.parse(readFileSync(seen, 'utf8')) as Record<string, string>;
+    expect(Object.keys(reached).sort()).toEqual([...DEFAULT_INHERITED_ENV_VARS.filter(name => process.env[name] !== undefined), 'OWN'].sort());
+    expect(MCP_STDIO_BASE_ENVIRONMENT).toEqual(DEFAULT_INHERITED_ENV_VARS);
+    expect(reached['HOME']).toBe(join(f.root, 'home'));
+    expect(reached['TERM']).toBe(process.env['TERM']);
     const absent = { ...f.server([]), command: 'no-such-mcp-server-command' };
     expect(await p.open(absent, settings([absent], { connectTimeoutMs: 3_000 }), context(f.root)))
       .toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
