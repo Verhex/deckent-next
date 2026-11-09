@@ -2403,7 +2403,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `4d25449ab3e8d129c6969c0f7a57ecab657c8e4c034b16460fb142821113db60`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
-- `src/domain/core/policy/internal/evaluate.ts`: `fe3a96a8833ebf599ff2cdfa408979817413f044468dfc38d98c897e7e692cbd`
+- `src/domain/core/policy/internal/evaluate.ts`: `12485f923f42a1b8f616af5371761303eafd3f885c3afc77929f290aec1b8dac`
 - `src/domain/core/policy/internal/first-run-template.ts`: `08085195a14d860ac477623bc128e30f8dc8bf0fa9349dcf74ec6048cc15e9ef`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `4d86bea76446cf118025ed9e207e3bf6ea73163e3b9a3b153a81ec1aa411c90a`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`

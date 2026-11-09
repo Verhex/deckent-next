@@ -1,6 +1,7 @@
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { productResourcePath, withConfigWriteLock, type ProductLayout } from '#platform/index.js';
+import type { Policy } from '#domain/index.js';
 import { FilePolicySource, PolicyFileError } from '#adapters/index.js';
 import { DispatchPolicyAuthorization } from '#engine/index.js';
 /** Trusted layout/owner/budget, never wire paths. Local POSIX custody, not remote policy distribution.
@@ -13,5 +14,5 @@ export function createLayoutPolicySource(layout: ProductLayout, ownerUid: number
 /** The file a policy read refused (unsafe, damaged, missing bindings) and why, for the caller's own typed refusal; null for any other failure. */
 export const policyFileRefusal = (layout: ProductLayout, error: unknown) => error instanceof PolicyFileError && error.resource !== 'archive' ? { path: productResourcePath(layout, error.resource), reason: error.code } : null;
 /** The attempt-level policy decision (read-output, …) of one scope context: the one construction workers list, transcript and monitor share. */
-export const contextDispatchAuthorization = (c: { readonly layout: ProductLayout; readonly config: { readonly inspection: { readonly policyMaxBytes: number } } }, document?: unknown) =>
+export const contextDispatchAuthorization = (c: { readonly layout: ProductLayout; readonly config: { readonly inspection: { readonly policyMaxBytes: number } } }, document?: Policy) =>
   new DispatchPolicyAuthorization(document === undefined ? createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes) : { load: async () => document });

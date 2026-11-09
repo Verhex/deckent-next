@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { effectCommandSchema, queueNextState, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, isEffectOpen, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
+import { effectCommandSchema, queueNextState, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, isEffectOpen, type Policy, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
@@ -258,7 +258,7 @@ export class UninstallApplication {
 }
 
 /** M14, R8, F6: the owners' decisions of a plan's steps from one policy, writing nothing: force's cancels and rejections, each removal's operation and approval. */
-export async function authorizeUninstallSteps(policy: unknown, plan: UninstallPlan, principal: VerifiedPrincipal, scopeId: string) {
+export async function authorizeUninstallSteps(policy: Policy, plan: UninstallPlan, principal: VerifiedPrincipal, scopeId: string) {
   const source = { load: async () => policy }, runs = new RunPolicyAuthorization(source), operations = new OperationPolicyAuthorization(source);
   for (const ref of plan.steps.cancelRuns) await runs.authorize('cancel', { scopeId: ref.scopeId, runId: ref.id }, principal);
   for (const ref of plan.steps.rejectApprovals) authorizeApproval(policy, 'decide', ref.scopeId, ref.id, principal);

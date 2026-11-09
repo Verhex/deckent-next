@@ -486,7 +486,8 @@
         "src/adapters/core/file-policy",
         "src/platform/core/host",
         "src/platform/core/config",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/domain/core/policy"
       ],
       "plan": "SECURITY"
     },
@@ -2313,7 +2314,8 @@
         "src/capabilities/core/evaluation-evidence",
         "src/engine/core/audit",
         "src/engine/core/delivery-summary",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/policy"
       ],
       "plan": "ISOLATION"
     },
@@ -5271,7 +5273,7 @@
       "engine": 60000,
       "adapters": 42376,
       "surfaces": 45000,
-      "composition": 13731
+      "composition": 13732
     },
     "totalSrcLines": 200000,
     "testCases": 8196,

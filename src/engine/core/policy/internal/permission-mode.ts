@@ -1,7 +1,6 @@
-import { isAiPrincipal, mcpPrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
+import { AI_NON_DELEGABLE_CARD_CELLS, isAiPrincipal, mcpPrincipalRef, samePrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
-const sameActor = (a: { issuer: string; subject: string }, b: { issuer: string; subject: string }) => a.issuer === b.issuer && a.subject === b.subject;
 
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
@@ -147,7 +146,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
     return Object.freeze({ decision: 'deny' as const, revision, relaxation: null });
   const done = (decision: AgentToolCallDecision['decision'], relaxation: PermissionModeRelaxation | null = null, standing?: StandingApproval, fullAccess?: FullAccessDecision) =>
     Object.freeze({ decision, revision, relaxation, ...(standing ? { standing } : {}), ...(fullAccess ? { fullAccess: Object.freeze(fullAccess) } : {}) });
-  if (isAiPrincipal(request.principal) && ['edit-authority', 'edit-floor', 'mcp-floor'].includes(request.cell)) return done('deny');
+  if (isAiPrincipal(request.principal) && AI_NON_DELEGABLE_CARD_CELLS.some(cell => cell === request.cell)) return done('deny');
   // A deny is never lowered, in any mode (full access included).
   if (decided.some(entry => entry.decision.decision === 'deny')) return done('deny');
   const strict = decided.every(entry => entry.decision.decision === 'allow') ? 'allow' : 'require-approval';
@@ -157,7 +156,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   const access = grant?.decision === 'allow' && grant.ruleId !== undefined ? grant.ruleId : null;
   // PRE-9 (b): a stored full-auto counts only while its grant allows it on this very snapshot (like full access): revoked, the call is standart's.
   // R4a: an AI actor follows only the person whose MCP actor it is; without that person no mode relaxes anything (fail closed).
-  const owner = request.person && !isAiPrincipal(request.person) && sameActor(mcpPrincipalRef(request.person), request.principal) ? request.person : null;
+  const owner = request.person && !isAiPrincipal(request.person) && samePrincipalRef(mcpPrincipalRef(request.person), { issuer: request.principal.issuer, subject: request.principal.subject }) ? request.person : null;
   const modeActor = isAiPrincipal(request.principal) ? owner : request.principal;
   const plan = request.origin?.ceiling, now = access || !modeActor ? null : plan ? workerPermissionMode(policy, modeActor, request.scopeId) : effectivePermissionMode(policy, modeActor, request.scopeId);
   const person = now && plan ? { ...now, mode: plan.mode === 'full-auto' ? now.mode : 'standart' as const, askEdits: now.askEdits || plan.askEdits } : now;
