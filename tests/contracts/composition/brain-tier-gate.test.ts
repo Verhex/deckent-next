@@ -51,6 +51,16 @@ describe.skipIf(process.platform === 'win32')('Brain tier gate in the planner co
     // Lead 2026-11-06: the person's own `models roles assign` overlay (here a worker row for this model) is not a binding Brain policy.
     const owned = await fixture({ modelRoles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'installation-roles:1', roles: [], models: [{ channelId, modelId, version: 1, tier: 'worker', roles: ['worker'] }], exceptions: [] }] } });
     expect(await planRun(owned.project, command, owned.options)).toMatchObject({ brainBelowRecommended: true });
+    const personOverlay = { schemaVersion: 1, revision: 'person-edited', origin: 'person-assignment', roles: [],
+      models: [{ channelId, modelId, version: 1, tier: 'worker', roles: ['worker'] }], exceptions: [] };
+    const typedPerson = await fixture({ modelRoles: { schemaVersion: 1, overlays: [personOverlay] } });
+    expect(await planRun(typedPerson.project, command, typedPerson.options)).toMatchObject({ brainBelowRecommended: true });
+    expect(typedPerson.posts).toBe(1);
+    const typedPolicy = await fixture({ modelRoles: { schemaVersion: 1, overlays: [{ ...personOverlay, revision: 'installation-roles:1', origin: 'policy' }] },
+      tokenCount: { count: 10, max_model_len: 1000 } });
+    await expect(planRun(typedPolicy.project, command, typedPolicy.options)).rejects.toMatchObject({ code: 'BRAIN_TIER_REFUSED', params: { channelId, modelId, reason: 'tier' } });
+    expect(typedPolicy.posts).toBe(0); expect(typedPolicy.counterBodies).toHaveLength(0);
+    expect(counts(typedPolicy.path)).toEqual({ runs: 0, proposals: 0 });
   });
   it('plans with a dated exception while it is current, and keeps the inactive-model refusal for an eligible Brain', async () => {
     const exception = { id: 'interim', version: 1, role: 'brain', channelId, modelId, source: 'owner-a3', declaredOn: shift(-1), expiresOn: shift(10) };

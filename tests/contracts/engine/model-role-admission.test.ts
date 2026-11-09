@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CORE_MODEL_ROLES, decideRoleModel, mergeModelRoleRegistries, modelRoleConfigSchema, roleModelKey } from '#domain/index.js';
-import { ModelRoleAdmissionApplication, modelRoleCoverage, catalogRoleFacts, planModelRoleAssignment, type ModelCatalogInspection,
+import { ModelRoleAdmissionApplication, isOwnedRoleOverlay, modelRoleCoverage, catalogRoleFacts, planModelRoleAssignment, type ModelCatalogInspection,
   type ModelRoleAdmissionPorts } from '#engine/index.js';
 
 // M2 (owner 2026-10-23: a new model works through a data update, never a release or a model literal; fail-closed until a person assigns
@@ -63,6 +63,12 @@ describe('model role admission (M2)', () => {
     expect(fake.submitted).toHaveLength(1); expect(fake.submitted[0]).toMatchObject({ expect: DIGEST, commandId: 'c1' });
     const section = modelRoleConfigSchema.parse(fake.submitted[0]!.value);
     expect(section.overlays).toHaveLength(1);
+    expect(section.overlays[0]).not.toHaveProperty('origin');
+    expect(isOwnedRoleOverlay(section.overlays[0]!)).toBe(true);
+    expect(isOwnedRoleOverlay({ revision: 'unrelated', origin: 'person-assignment' })).toBe(true);
+    expect(isOwnedRoleOverlay({ revision: 'installation-roles:1', origin: 'policy' })).toBe(false);
+    for (const revision of ['acme-1', 'installation-roles:0', 'installation-roles:01', 'installation-roles:9007199254740992'])
+      expect(isOwnedRoleOverlay({ revision })).toBe(false);
     expect(section.overlays[0]!.models).toEqual([{ ...next, version: 1, tier: 'frontier', roles: ['brain', 'worker'] }]);
     const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, section.overlays);
     expect(decideRoleModel(policy, 'brain', next, { today: '2026-10-23', active: new Set([roleModelKey(next)]) })).toMatchObject({ state: 'eligible', basis: 'tier', tier: 'frontier' });
@@ -78,6 +84,12 @@ describe('model role admission (M2)', () => {
     expect(second.section.overlays).toHaveLength(1);
     expect(second.row).toEqual({ ...sonnet, version: 3, tier: 'worker', roles: ['worker'], override: { previousVersion: 1 } });
     expect(second.section.overlays[0]!.revision).not.toBe(first.section.overlays[0]!.revision);
+    expect(second.section.overlays[0]).not.toHaveProperty('origin');
+    const typed = { ...first.section, overlays: [{ ...first.section.overlays[0]!, revision: 'person-edited', origin: 'person-assignment' }] };
+    const migrated = planModelRoleAssignment(typed, { ...sonnet, tier: 'worker', roles: ['worker'] });
+    expect(migrated.section.overlays).toHaveLength(1);
+    expect(migrated.row).toEqual(second.row);
+    expect(migrated.section.overlays[0]).not.toHaveProperty('origin');
     expect(() => mergeModelRoleRegistries(CORE_MODEL_ROLES, second.section.overlays)).not.toThrow();
     // The same tier and roles again: nothing to write.
     expect(planModelRoleAssignment(second.section, { ...sonnet, tier: 'worker', roles: ['worker'] }).changed).toBe(false);
@@ -89,6 +101,11 @@ describe('model role admission (M2)', () => {
     expect(plan.section.overlays[0]).toEqual(acme);
     expect(plan.section.overlays).toHaveLength(2);
     expect(plan.row).toEqual({ ...next, version: 5, tier: 'frontier', roles: ['brain'], override: { previousVersion: 4 } });
+    const typedPolicy = { ...acme, revision: 'installation-roles:7', origin: 'policy' };
+    const typedPlan = planModelRoleAssignment({ schemaVersion: 1, overlays: [typedPolicy] }, { ...next, tier: 'frontier', roles: ['brain'] });
+    expect(typedPlan.section.overlays[0]).toEqual(typedPolicy);
+    expect(typedPlan.section.overlays).toHaveLength(2);
+    expect(typedPlan.row).toEqual(plan.row);
   });
 
   it('refuses a new overlay past the registry bound, typed, and forwards a pending approval without claiming a write', async () => {

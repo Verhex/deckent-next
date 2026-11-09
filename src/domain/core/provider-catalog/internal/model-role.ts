@@ -40,7 +40,7 @@ const exceptionSchema = z.strictObject({ id: identitySchema, version, role: iden
 }).refine(row => dayNumber(row.declaredOn) <= dayNumber(row.expiresOn) && dayNumber(row.expiresOn) - dayNumber(row.declaredOn) <= limits.exceptionMaxDays
   && (row.override === undefined || row.override.previousVersion < row.version)).readonly();
 export const roleModelKey = (target: Readonly<{ channelId: string; modelId: string }>) => JSON.stringify([target.channelId, target.modelId]);
-export const modelRoleRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema,
+export const modelRoleRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, origin: z.enum(['person-assignment', 'policy']).optional(),
   roles: z.array(roleSchema).max(limits.roles).readonly(),
   models: z.array(modelRowSchema).max(limits.models).readonly(),
   exceptions: z.array(exceptionSchema).max(limits.exceptions).readonly(),
