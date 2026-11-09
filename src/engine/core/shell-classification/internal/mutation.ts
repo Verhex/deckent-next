@@ -1,4 +1,5 @@
-import { scanPosixCommand, type ShellReasonCode, type ShellStage, type ShellWord } from './scanner.js';
+import type { ShellReasonCode, ShellStage, ShellWord } from './scanner.js';
+import { strictShellScan, type ShellCommandScan } from './scan.js';
 import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PROGRAM_ALIASES, TEE_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
 import type { ShellDialect, ShellReadOnlyVerdict } from './classify.js';
 import type { ShellPathContext, ShellPathVerdict } from './grammar.js';
@@ -96,10 +97,10 @@ async function classifyStage(stage: ShellStage, reads: ShellPathContext, writes:
  * floor that no mode lowers (decided over every part of any command first); `unrecognized` is any other modifying command (it asks).
  */
 export async function classifyShellMutation(command: string, reads: ShellPathContext, writes: ShellWritePathContext,
-  dialect: ShellDialect = 'posix'): Promise<ShellMutationVerdict> {
+  dialect: ShellDialect = 'posix', shared?: ShellCommandScan): Promise<ShellMutationVerdict> {
   if (dialect !== 'posix') return verdict('always-ask', 'UNSUPPORTED_DIALECT', dialect);
   if (typeof command !== 'string' || command.trim().length === 0) return verdict('always-ask', 'EMPTY_COMMAND');
-  const scan = scanPosixCommand(command);
+  const scan = strictShellScan(command, shared);
   if (!scan.ok) return verdict('always-ask', scan.reasonCode, scan.detail);
   if (scan.pipelines.length === 0) return verdict('always-ask', 'EMPTY_COMMAND');
   // The floor is decided over every stage first, so a narrow stage never hides an always-ask one.

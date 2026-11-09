@@ -1,6 +1,8 @@
 import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PROGRAM_ALIASES, XARGS_PROGRAMS } from './programs.js';
 import { NETWORK_PROGRAMS, PACKAGE_PROGRAMS } from './mutation.js';
-import { scanShell, shellWords } from './risk.js';
+import { posix } from 'node:path';
+import { lenientShellScan, type ShellCommandScan } from './scan.js';
+import { FIND_ACTIONS, SHELL_PROGRAM_CONTEXT } from './tables.js';
 import { readsOnlyModelled } from './floor-read.js';
 import type { ShellDialect } from './classify.js';
 
@@ -31,7 +33,6 @@ const KEYWORDS: ReadonlySet<string> = new Set(['if', 'then', 'else', 'elif', 'fi
 const TEST_PROGRAMS: ReadonlySet<string> = new Set(['[', '[[', ':']);
 const PLAIN_PROGRAM = /^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/u;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
-const FIND_ACTIONS: ReadonlySet<string> = new Set(['-exec', '-execdir', '-ok', '-okdir']);
 const REDIRECTION = /^(?:\d*|&|\{[A-Za-z_][A-Za-z0-9_]*\})(?:>>|>\||>&|<>|>|<)/u;
 /** Security re-reviews of 03d82341/6f987adf (fail closed): the floor-read tolerance holds only in a fully modelled read segment
  * (`readsOnlyModelled`: an allowlist per program) and never in a command that may change what a program name resolves to or how the shell
@@ -44,17 +45,16 @@ const onProgramFloor = (name: string) => PRIVILEGE_PROGRAMS.has(name) || INTERPR
   || PACKAGE_PROGRAMS.has(name) || NETWORK_PROGRAMS.has(name);
 
 export function classifyShellContainment(command: string, protectedName: (path: string) => boolean, dialect: ShellDialect = 'posix',
-  readOnlyFloor?: (path: string) => boolean): ShellContainmentVerdict {
+  readOnlyFloor?: (path: string) => boolean, shared?: ShellCommandScan): ShellContainmentVerdict {
   if (dialect !== 'posix') return verdict(false, 'UNSUPPORTED_DIALECT', dialect);
   if (typeof command !== 'string' || command.trim().length === 0) return verdict(false, 'EMPTY_COMMAND');
-  const scan = scanShell(command);
+  const scan = lenientShellScan(command, shared);
   if (scan.malformed) return verdict(false, 'UNPARSEABLE');
   if (scan.segments.length === 0) return verdict(false, 'EMPTY_COMMAND');
-  const changes = scan.segments.some(segment => (shellWords(segment) ?? ['(']).some((word, at, all) => ASSIGNMENT.test(word) || /[($`]/u.test(word) || word.includes(SUBSTITUTION)
+  const changes = scan.words.some(words => (words ?? ['(']).some((word, at, all) => ASSIGNMENT.test(word) || /[($`]/u.test(word) || word.includes(SUBSTITUTION)
     || (RESOLUTION_CHANGERS.has(word) && all.slice(0, at).every(prior => KEYWORDS.has(prior)))));
   const floorRead = changes ? undefined : readOnlyFloor;
-  for (const segment of scan.segments) {
-    const words = shellWords(segment);
+  for (const words of scan.words) {
     if (!words) return verdict(false, 'UNPARSEABLE');
     const substitution = words.find(word => word.includes('<(') || word.includes('>('));
     if (substitution !== undefined) return verdict(false, 'PROCESS_SUBSTITUTION', substitution);
@@ -69,9 +69,9 @@ export function classifyShellContainment(command: string, protectedName: (path: 
       if (!TEST_PROGRAMS.has(head) && (head.includes(SUBSTITUTION) || !PLAIN_PROGRAM.test(head))) return verdict(false, 'PROGRAM_UNKNOWN', head);
       const name = (PROGRAM_ALIASES[head] ?? head).toLowerCase();
       // `hash -p`/`enable -f` point a program name at any file (security re-review 2026-10-18): on the floor like the eval wrappers.
-      if (onProgramFloor(name) || name === 'hash' || name === 'enable') return verdict(false, 'PROGRAM_FLOOR', name);
+      if (onProgramFloor(name) || SHELL_PROGRAM_CONTEXT[name]?.containmentFloor) return verdict(false, 'PROGRAM_FLOOR', name);
       if (name === 'env' && args.some(arg => !arg.startsWith('-') && !ASSIGNMENT.test(arg))) return verdict(false, 'PROGRAM_FLOOR', 'env');
-      if (name === 'find' && args.some(arg => FIND_ACTIONS.has(arg))) return verdict(false, 'PROGRAM_FLOOR', 'find');
+      if (name === 'find' && args.some(arg => FIND_ACTIONS[arg]?.programFloor)) return verdict(false, 'PROGRAM_FLOOR', 'find');
       reader = floorRead !== undefined && head === raw && readsOnlyModelled(raw, args);
     }
     for (const [position, word] of words.entries()) {
@@ -96,13 +96,20 @@ function pathOfWord(word: string): string | null {
  * same reading as the containment check's protected names. B3 (owner test 2026-10-07): a sandboxed command that failed on a read-only
  * protected path is explained by name. Words only: what a variable or glob expands to is not seen.
  */
-export function shellNamedPaths(command: string, matches: (path: string) => boolean): readonly string[] {
+export function shellNamedPaths(command: string, matches: (path: string) => boolean, shared?: ShellCommandScan): readonly string[] {
   const named: string[] = [];
-  for (const segment of scanShell(command).segments) {
-    for (const word of shellWords(segment) ?? []) {
+  for (const words of lenientShellScan(command, shared).words) {
+    for (const word of words ?? []) {
       const value = pathOfWord(word);
       if (value !== null && !named.includes(value) && matches(value)) named.push(value);
     }
   }
   return Object.freeze(named);
+}
+
+/** Unresolved host names need a warning when global state exists; this is never confinement. */
+export function shellGlobalStateUnresolved(command: string, shared?: ShellCommandScan): boolean {
+  return /[$`{}]/u.test(command) || shellNamedPaths(command, () => true, shared).flatMap(word => word.split(/[<>]/u))
+    .some(word => /^~[^/]/u.test(word) || SHELL_PROGRAM_CONTEXT[posix.basename(word.replace(/^[({]+|[)}]+$/gu, ''))]?.changesDirectory === true)
+    || ['UNPARSEABLE', 'PROCESS_SUBSTITUTION'].includes(classifyShellContainment(command, () => false, 'posix', undefined, shared).reasonCode);
 }

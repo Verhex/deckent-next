@@ -38,6 +38,7 @@ export type PositionalKind =
 
 export interface ProgramSpec {
   readonly id: string;
+  readonly legacyRiskRead?: true;
   readonly risk: ShellReadRisk;
   readonly readsContent: boolean;
   readonly grammar: OptionGrammar;
@@ -56,19 +57,19 @@ const COMMON_LONG_HELP = ['--help', '--version'];
 
 export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
   cat: {
-    id: 'cat', risk: 'none', readsContent: true, positional: 'paths',
+    id: 'cat', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'paths',
     grammar: { shortSwitches: 'AbeEnstTuv', longSwitches: ['--show-all', '--number-nonblank', '--show-ends', '--number', '--squeeze-blank', '--show-tabs', '--show-nonprinting', ...COMMON_LONG_HELP] },
   },
   tac: { id: 'tac', risk: 'none', readsContent: true, positional: 'paths', grammar: { shortSwitches: 'brs', shortValues: { s: 'any' }, longSwitches: ['--before', '--regex'], longValues: { '--separator': 'any' } } },
   head: {
-    id: 'head', risk: 'none', readsContent: true, positional: 'paths',
+    id: 'head', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'paths',
     grammar: { shortSwitches: 'qvz', shortValues: { n: 'number', c: 'number' }, numericShort: true, longSwitches: ['--quiet', '--silent', '--verbose', '--zero-terminated', ...COMMON_LONG_HELP], longValues: { '--lines': 'number', '--bytes': 'number' } },
   },
   tail: {
-    id: 'tail', risk: 'none', readsContent: true, positional: 'paths',
+    id: 'tail', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'paths',
     grammar: { shortSwitches: 'qvzfF', shortValues: { n: 'number', c: 'number', s: 'number' }, numericShort: true, longSwitches: ['--quiet', '--silent', '--verbose', '--zero-terminated', '--follow', '--retry', ...COMMON_LONG_HELP], longValues: { '--lines': 'number', '--bytes': 'number', '--sleep-interval': 'number', '--pid': 'number', '--max-unchanged-stats': 'number', '--follow': 'any' } },
   },
-  less: { id: 'less', risk: 'none', readsContent: true, positional: 'paths', grammar: { shortSwitches: 'NnSFXRrEeMmqQsiIgGwJ', longSwitches: ['--LINE-NUMBERS', '--quit-if-one-screen', '--no-init', '--RAW-CONTROL-CHARS', '--chop-long-lines', ...COMMON_LONG_HELP] } },
+  less: { id: 'less', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'paths', grammar: { shortSwitches: 'NnSFXRrEeMmqQsiIgGwJ', longSwitches: ['--LINE-NUMBERS', '--quit-if-one-screen', '--no-init', '--RAW-CONTROL-CHARS', '--chop-long-lines', ...COMMON_LONG_HELP] } },
   more: { id: 'more', risk: 'none', readsContent: true, positional: 'paths', grammar: { shortSwitches: 'dlfpcsu', numericShort: true } },
   sed: {
     id: 'sed', risk: 'none', readsContent: true, positional: 'first-script-then-paths',
@@ -91,7 +92,7 @@ export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
     },
   },
   grep: {
-    id: 'grep', risk: 'none', readsContent: true, positional: 'first-pattern-then-paths',
+    id: 'grep', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'first-pattern-then-paths',
     scriptOptions: ['-e', '--regexp', '-f', '--file'], traversalFlags: ['-r', '-R', '--recursive', '--dereference-recursive'],
     grammar: {
       shortSwitches: 'EFGPiyvwxclLoqsbHhnTZzaIUurR', shortValues: { e: 'any', f: 'path', m: 'number', A: 'number', B: 'number', C: 'number', d: 'any', D: 'any' }, numericShort: true,
@@ -100,7 +101,7 @@ export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
     },
   },
   rg: {
-    id: 'rg', risk: 'low', readsContent: true, positional: 'first-pattern-then-paths',
+    id: 'rg', legacyRiskRead: true, risk: 'low', readsContent: true, positional: 'first-pattern-then-paths',
     scriptOptions: ['-e', '--regexp', '-f', '--file', '--files', '--type-list'],
     grammar: {
       shortSwitches: 'iSsvwxclLoqnNHUzaFPpu', shortValues: { e: 'any', f: 'path', m: 'number', A: 'number', B: 'number', C: 'number', t: 'any', T: 'any', g: 'any', r: 'any', E: 'any', M: 'number', j: 'number', d: 'number' },
@@ -110,24 +111,24 @@ export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
     },
   },
   wc: {
-    id: 'wc', risk: 'none', readsContent: true, positional: 'paths',
+    id: 'wc', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'paths',
     grammar: { shortSwitches: 'cmlLw', longSwitches: ['--bytes', '--chars', '--lines', '--max-line-length', '--words', ...COMMON_LONG_HELP], longValues: { '--total': 'any' }, deniedLong: ['--files0-from'] },
   },
   ls: {
-    id: 'ls', risk: 'none', readsContent: false, positional: 'paths', traversalFlags: ['-R', '--recursive'],
+    id: 'ls', legacyRiskRead: true, risk: 'none', readsContent: false, positional: 'paths', traversalFlags: ['-R', '--recursive'],
     grammar: { shortSwitches: 'aAbBcCdDfFgGhHiklLmnNopqQrRsStTuUvxXZ1', shortValues: { I: 'any', T: 'number', w: 'number' }, permissiveLong: true, longValues: { '--block-size': 'any', '--color': 'any', '--format': 'any', '--hide': 'any', '--ignore': 'any', '--indicator-style': 'any', '--quoting-style': 'any', '--sort': 'any', '--time': 'any', '--time-style': 'any', '--width': 'number', '--tabsize': 'number', '--hyperlink': 'any' } },
   },
   find: { id: 'find', risk: 'low', readsContent: false, positional: 'paths', grammar: {} },
   stat: {
-    id: 'stat', risk: 'none', readsContent: false, positional: 'paths',
+    id: 'stat', legacyRiskRead: true, risk: 'none', readsContent: false, positional: 'paths',
     grammar: { shortSwitches: 'Lft', shortValues: { c: 'any' }, longSwitches: ['--dereference', '--file-system', '--terse', '--cached', ...COMMON_LONG_HELP], longValues: { '--format': 'any', '--printf': 'any', '--cached': 'any' } },
   },
   file: {
-    id: 'file', risk: 'none', readsContent: true, positional: 'paths',
+    id: 'file', legacyRiskRead: true, risk: 'none', readsContent: true, positional: 'paths',
     grammar: { shortSwitches: 'bihLkNnprz0', shortValues: { e: 'any', F: 'any', P: 'any' }, deniedShort: 'Cmfs', longSwitches: ['--brief', '--mime', '--mime-type', '--mime-encoding', '--dereference', '--keep-going', '--no-pad', '--no-buffer', '--preserve-date', '--raw', '--uncompress', '--print0', ...COMMON_LONG_HELP], longValues: { '--exclude': 'any', '--separator': 'any', '--parameter': 'any' }, deniedLong: ['--compile', '--magic-file', '--files-from', '--special-files'] },
   },
   du: {
-    id: 'du', risk: 'low', readsContent: false, positional: 'paths',
+    id: 'du', legacyRiskRead: true, risk: 'low', readsContent: false, positional: 'paths',
     grammar: { shortSwitches: 'abchkmsxLPDH0S', shortValues: { d: 'number', B: 'any', t: 'any', X: 'path' }, longSwitches: ['--all', '--apparent-size', '--bytes', '--total', '--dereference', '--dereference-args', '--human-readable', '--inodes', '--si', '--summarize', '--one-file-system', '--separate-dirs', '--count-links', '--null', '--time', ...COMMON_LONG_HELP], longValues: { '--max-depth': 'number', '--block-size': 'any', '--exclude': 'any', '--exclude-from': 'path', '--threshold': 'any', '--time': 'any', '--time-style': 'any' }, deniedLong: ['--files0-from'] },
   },
   tr: { id: 'tr', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'cCdst', longSwitches: ['--complement', '--delete', '--squeeze-repeats', '--truncate-set1', ...COMMON_LONG_HELP] } },
@@ -154,19 +155,19 @@ export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
       '--slurpfile': ['any', 'path'], '--rawfile': ['any', 'path'] } },
   },
   git: { id: 'git', risk: 'low', readsContent: true, positional: 'any', grammar: {} },
-  pwd: { id: 'pwd', risk: 'none', readsContent: false, positional: 'none', grammar: { shortSwitches: 'LP', longSwitches: ['--logical', '--physical', ...COMMON_LONG_HELP] } },
-  whoami: { id: 'whoami', risk: 'none', readsContent: false, positional: 'none', grammar: { longSwitches: COMMON_LONG_HELP } },
+  pwd: { id: 'pwd', legacyRiskRead: true, risk: 'none', readsContent: false, positional: 'none', grammar: { shortSwitches: 'LP', longSwitches: ['--logical', '--physical', ...COMMON_LONG_HELP] } },
+  whoami: { id: 'whoami', legacyRiskRead: true, risk: 'none', readsContent: false, positional: 'none', grammar: { longSwitches: COMMON_LONG_HELP } },
   id: { id: 'id', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'aZgGnruz', longSwitches: ['--context', '--group', '--groups', '--name', '--real', '--user', '--zero', ...COMMON_LONG_HELP] } },
   uname: { id: 'uname', risk: 'none', readsContent: false, positional: 'none', grammar: { shortSwitches: 'asnrvmpio', longSwitches: ['--all', '--kernel-name', '--nodename', '--kernel-release', '--kernel-version', '--machine', '--processor', '--hardware-platform', '--operating-system', ...COMMON_LONG_HELP] } },
   hostname: { id: 'hostname', risk: 'none', readsContent: false, positional: 'none', grammar: { shortSwitches: 'sfdiIaAy', longSwitches: ['--short', '--fqdn', '--long', '--domain', '--ip-address', '--all-ip-addresses', ...COMMON_LONG_HELP] } },
-  which: { id: 'which', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'as', longSwitches: ['--all', '--silent', '--skip-alias', '--skip-functions', ...COMMON_LONG_HELP] } },
-  ps: { id: 'ps', risk: 'low', readsContent: false, positional: 'any', grammar: { permissiveLong: true, shortSwitches: 'aAdefFgGhHjlLmMnNopPqrRsStTuUvVwxXyZcCTe', shortValues: { o: 'any', p: 'any', u: 'any', U: 'any', g: 'any', G: 'any', s: 'any', t: 'any', C: 'any', q: 'any', w: 'any' } } },
-  df: { id: 'df', risk: 'low', readsContent: false, positional: 'paths', grammar: { shortSwitches: 'aBhHiklPTvx', shortValues: { B: 'any', t: 'any', x: 'any' }, permissiveLong: true, longValues: { '--block-size': 'any', '--type': 'any', '--exclude-type': 'any', '--output': 'any' } } },
-  echo: { id: 'echo', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'neE' } },
+  which: { id: 'which', legacyRiskRead: true, risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'as', longSwitches: ['--all', '--silent', '--skip-alias', '--skip-functions', ...COMMON_LONG_HELP] } },
+  ps: { id: 'ps', legacyRiskRead: true, risk: 'low', readsContent: false, positional: 'any', grammar: { permissiveLong: true, shortSwitches: 'aAdefFgGhHjlLmMnNopPqrRsStTuUvVwxXyZcCTe', shortValues: { o: 'any', p: 'any', u: 'any', U: 'any', g: 'any', G: 'any', s: 'any', t: 'any', C: 'any', q: 'any', w: 'any' } } },
+  df: { id: 'df', legacyRiskRead: true, risk: 'low', readsContent: false, positional: 'paths', grammar: { shortSwitches: 'aBhHiklPTvx', shortValues: { B: 'any', t: 'any', x: 'any' }, permissiveLong: true, longValues: { '--block-size': 'any', '--type': 'any', '--exclude-type': 'any', '--output': 'any' } } },
+  echo: { id: 'echo', legacyRiskRead: true, risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'neE' } },
   printf: { id: 'printf', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'v', longSwitches: COMMON_LONG_HELP } },
   date: { id: 'date', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'uRI', shortValues: { d: 'any', r: 'path', I: 'any' }, deniedShort: 's', longSwitches: ['--utc', '--universal', '--rfc-email', '--rfc-2822', '--debug', ...COMMON_LONG_HELP], longValues: { '--date': 'any', '--reference': 'path', '--iso-8601': 'any', '--rfc-3339': 'any', '--resolution': 'any' }, deniedLong: ['--set', '--file'] } },
   env: { id: 'env', risk: 'low', readsContent: false, positional: 'none', grammar: { shortSwitches: '0', longSwitches: ['--null', ...COMMON_LONG_HELP] } },
-  printenv: { id: 'printenv', risk: 'low', readsContent: false, positional: 'any', grammar: { shortSwitches: '0', longSwitches: ['--null', ...COMMON_LONG_HELP] } },
+  printenv: { id: 'printenv', legacyRiskRead: true, risk: 'low', readsContent: false, positional: 'any', grammar: { shortSwitches: '0', longSwitches: ['--null', ...COMMON_LONG_HELP] } },
   basename: { id: 'basename', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'az', shortValues: { s: 'any' }, longSwitches: ['--multiple', '--zero', ...COMMON_LONG_HELP], longValues: { '--suffix': 'any' } } },
   dirname: { id: 'dirname', risk: 'none', readsContent: false, positional: 'any', grammar: { shortSwitches: 'z', longSwitches: ['--zero', ...COMMON_LONG_HELP] } },
   realpath: { id: 'realpath', risk: 'none', readsContent: false, positional: 'paths', grammar: { shortSwitches: 'eEmLPqsz', longSwitches: ['--canonicalize-existing', '--canonicalize-missing', '--logical', '--physical', '--quiet', '--strip', '--no-symlinks', '--zero', ...COMMON_LONG_HELP], longValues: { '--relative-to': 'path', '--relative-base': 'path' } } },

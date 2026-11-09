@@ -1,7 +1,7 @@
 import { relative, resolve, sep } from 'node:path';
 import { PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
-  classifyShellAuthority, classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification, isolatesAsSubscription } from '#engine/index.js';
+  classifyShellAuthority, classifyShellRisk, scanShellCommand, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification, isolatesAsSubscription } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentGlobalStateRoots, agentLoginIdentityPaths, createShellGlobalStateCheck, hostGlobalStateUnresolved, agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
@@ -73,27 +73,28 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
+    const scan = scanShellCommand(command);
     const globalName = await globalState;
-    for (const name of shellNamedPaths(command, () => true).flatMap(word => word.split(/[<>]/u))) {
+    for (const name of shellNamedPaths(command, () => true, scan).flatMap(word => word.split(/[<>]/u))) {
       if (await globalName(name)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED; ${t('agent.shell.productStateProtected', {}, input.language)}` };
     }
     const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     if (subscription && realm.containment === 'host') return { ok: false, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` };
-    const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots) ? t('headless.agent.k15c.hostUnresolved', {}, input.language) : null;
+    const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots, scan) ? t('headless.agent.k15c.hostUnresolved', {}, input.language) : null;
     if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
-    const readOnly = await classifyReadOnlyShellCommand(command, paths);
-    const risk = classifyShellRisk(command, readOnly, input.worker === true);
+    const readOnly = await classifyReadOnlyShellCommand(command, paths, 'posix', scan);
+    const risk = classifyShellRisk(command, readOnly, input.worker === true, scan);
     // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
     const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
-      : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor));
+      : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor), 'posix', scan);
     // A protected path that is the product's own state is a hard floor: refused here, never turned into a risk tier for approval.
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
     }
-    const tier = shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command));
-    const planned: ShellPlan = { ok: true, realm, command, risk, warning, tier: warning !== null && tier !== 'destructive' && tier !== 'authority' ? 'always-ask' : tier, contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
+    const tier = shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command, scan));
+    const planned: ShellPlan = { ok: true, realm, command, risk, warning, tier: warning !== null && tier !== 'destructive' && tier !== 'authority' ? 'always-ask' : tier, contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined, scan).contained };
     plans.set(key(tool, args), planned);
     return planned;
   };
@@ -111,7 +112,6 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       return open && realm.opens === true ? { kind: 'sandbox', realm: realm.realm.kind, open: true, configuration: approved.writeFloorReadOnly ? 'read-only' : 'owner-approved' }
         : { kind: 'sandbox', realm: realm.realm.kind, open: false };
     },
-    /** The planned command's permission tier (the mode decision's cell), or null when it was not planned. */
     tier(tool: string, args: Record<string, unknown>): ShellPermissionTier | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.tier : null; },
     /** SHELL-AUTONOMY: the planned realm's containment and whether the command is contained (the decision's `shell` input). */
     containment(tool: string, args: Record<string, unknown>) { const planned = plans.get(key(tool, args)); return planned?.ok ? { realm: planned.realm.containment, contained: planned.contained } : undefined; },

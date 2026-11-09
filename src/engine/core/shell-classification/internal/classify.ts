@@ -1,4 +1,5 @@
-import { scanPosixCommand, type ShellReasonCode, type ShellStage } from './scanner.js';
+import type { ShellReasonCode, ShellStage } from './scanner.js';
+import { strictShellScan, type ShellCommandScan } from './scan.js';
 import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PROGRAM_ALIASES, PROGRAMS, TEE_PROGRAMS, VERSION_FLAGS, VERSION_ONLY_PROGRAMS,
   XARGS_PROGRAMS, type ShellReadRisk } from './programs.js';
 import { checkFind, checkGit, checkPositionals, stageFail, walkOptions, type ShellPathContext, type StageVerdict } from './grammar.js';
@@ -55,12 +56,12 @@ async function classifyStage(stage: ShellStage, paths: ShellPathContext): Promis
  * every path argument passes the workspace check, and no construct can run code or write bytes. The PowerShell dialect is not
  * ported: every PowerShell command is `UNSUPPORTED_DIALECT` (not read-only, so the owner is asked).
  */
-export async function classifyReadOnlyShellCommand(command: string, paths: ShellPathContext, dialect: ShellDialect = 'posix'): Promise<ShellReadOnlyVerdict> {
+export async function classifyReadOnlyShellCommand(command: string, paths: ShellPathContext, dialect: ShellDialect = 'posix', shared?: ShellCommandScan): Promise<ShellReadOnlyVerdict> {
   const refuse = (reasonCode: ShellReasonCode, detail?: string, programs: readonly string[] = [], stageCount = 0): ShellReadOnlyVerdict =>
     Object.freeze({ readOnly: false, risk: null, reasonCode, programs, stageCount, ...(detail === undefined ? {} : { detail }) });
   if (dialect !== 'posix') return refuse('UNSUPPORTED_DIALECT', dialect);
   if (typeof command !== 'string' || command.trim().length === 0) return refuse('EMPTY_COMMAND');
-  const scan = scanPosixCommand(command);
+  const scan = strictShellScan(command, shared);
   if (!scan.ok) return refuse(scan.reasonCode, scan.detail);
   if (scan.pipelines.length === 0) return refuse('EMPTY_COMMAND');
   const programs: string[] = [];

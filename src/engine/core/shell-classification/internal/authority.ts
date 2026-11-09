@@ -1,4 +1,4 @@
-import { scanPosixCommand } from './scanner.js';
+import { strictShellScan, type ShellCommandScan } from './scan.js';
 import { AWK_PROGRAMS, EVAL_PROGRAMS, INLINE_PROGRAM_FLAGS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PRODUCT_PROGRAM_NAMES, PROGRAM_ALIASES, PTY_WRAPPER_PROGRAMS,
   SHELL_PROGRAMS, TRANSPARENT_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
 import { PACKAGE_PROGRAMS } from './mutation.js';
@@ -59,8 +59,8 @@ const productArgvRunsAuthority = (words: readonly string[]) => words.some((word,
  * full access. Text that only mentions the words (`echo`, a commit message) does not count. Defense in depth (lead 2026-10-26, AUDIT-3DEC D3): `false`
  * means not recognised, never safe; the boundary is semantic policy/approval plus enforced sandbox and socket custody.
  */
-export function classifyShellAuthority(command: string): boolean {
-  return typeof command === 'string' && command.length > 0 && runsAuthority(command, 0);
+export function classifyShellAuthority(command: string, shared?: ShellCommandScan): boolean {
+  return typeof command === 'string' && command.length > 0 && runsAuthority(command, 0, shared);
 }
 /**
  * Astra REVISE 2706 (lead decision): an interpreter's inline program is not a shell argv. It keeps the floor when, normalised to lower-case
@@ -131,8 +131,8 @@ function launchesProgram(command: string): boolean {
  * cannot decode exactly as the shell would — an expansion or a substitution (the scanner refuses it), `$'…'`, brace expansion, a glob, or nesting
  * past `PAYLOAD_DEPTH` — keeps the card when a launcher or the product runs it.
  */
-function runsAuthority(command: string, depth: number): boolean {
-  const scan = scanPosixCommand(command);
+function runsAuthority(command: string, depth: number, shared?: ShellCommandScan): boolean {
+  const scan = strictShellScan(command, shared);
   if (!scan.ok) return launchesProgram(command) || names(command) || PTY_WORD.test(command);
   for (const [index, stage] of scan.pipelines.flatMap(pipeline => pipeline.map((each, at) => [at, each] as const))) {
     const head = stage.words[0];

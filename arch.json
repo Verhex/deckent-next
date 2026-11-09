@@ -2474,7 +2474,8 @@
         "src/engine/core/shell-classification",
         "src/adapters/core/workspace-write",
         "src/platform/core/validate",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -5431,7 +5432,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42233,
+      "adapters": 42231,
       "surfaces": 45000,
       "composition": 13655
     },

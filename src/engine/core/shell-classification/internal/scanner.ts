@@ -1,3 +1,5 @@
+import { DEV_NULL } from './tables.js';
+
 /**
  * POSIX `sh -c` scanner for read-only classification (T-L4 slice 3a; legacy `shell-readonly-classifier.ts` @a8b67e2a1, MASTER 7111).
  * It splits a command into pipelines of stages of words and rejects, with a typed reason, every construct that could run code or
@@ -18,7 +20,6 @@ export type ShellScan = { readonly ok: true; readonly pipelines: readonly (reado
   | { readonly ok: false; readonly reasonCode: ShellReasonCode; readonly detail?: string };
 
 const EXPANSION_START = /[A-Za-z_{(0-9@*#?!$-]/u;
-const DEV_NULL = '/dev/null';
 const isMeta = (char: string) => /\s/u.test(char) || '|;&<>()'.includes(char);
 const reject = (reasonCode: ShellReasonCode, detail?: string): ShellScan => detail === undefined ? { ok: false, reasonCode } : { ok: false, reasonCode, detail };
 
