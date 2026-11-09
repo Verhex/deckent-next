@@ -1593,6 +1593,7 @@
         "src/domain/core/run",
         "src/engine/core/runs",
         "src/platform/core/bootstrap-state",
+        "src/platform/core/utils",
         "src/domain/core/audit",
         "src/engine/core/audit",
         "src/domain/core/recovery",
@@ -5253,7 +5254,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42379,
+      "adapters": 42378,
       "surfaces": 45000,
       "composition": 13577
     },

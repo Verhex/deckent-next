@@ -176,6 +176,11 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');
   const {symlink}=await import('node:fs/promises');const link=join(f.base,'link');await symlink(f.root,link);
   await expect(call(f,'restore',phrase,{target:link,confirmTarget:link})).rejects.toMatchObject({code:'BACKUP_PATH_UNSAFE'});
+  // KG11 F5: the target `/` holds every set; a set below a target folder named `..x` is inside it too (a name, not a parent step).
+  await expect(call(f,'restore',phrase,{target:'/',confirmTarget:'/'})).rejects.toMatchObject({code:'BACKUP_PATH_UNSAFE'});
+  const dotted=join(f.base,'..x');await mkdir(dotted,{mode:0o700});await rename(f.set,join(dotted,'set'));
+  await expect(call(f,'restore',phrase,{set:join(dotted,'set'),target:dotted,confirmTarget:dotted})).rejects.toMatchObject({code:'BACKUP_PATH_UNSAFE'});
+  await rename(join(dotted,'set'),f.set);
   // S5-e4: another valid ledger in the set is caught by the manifest before any fingerprint (a recomputed manifest fails the AEAD, below).
   const setLedger=join(f.set,'ledger.db'),other=join(f.base,'other.db'),saved=await readFile(setLedger);const db=new DatabaseSync(other);db.exec('CREATE TABLE forged(value TEXT)');db.close();
   await writeFile(setLedger,await readFile(other));await expect(call(f,'verify')).rejects.toMatchObject({code:'BACKUP_MANIFEST_INVALID'});await writeFile(setLedger,saved);

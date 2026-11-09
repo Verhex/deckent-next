@@ -4,12 +4,12 @@ import { createRequire } from 'node:module';
 import { chmod, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { PRODUCT_LAYOUT_REGISTRY, createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, type ProductLayout } from '#platform/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, pathWithin, privateFile, privateDirectory, type ProductLayout } from '#platform/index.js';
 import { type BackupResult } from '#engine/index.js';
 import { BACKUP_RESOURCES, archiveState, unpackState, type BackupConfigLayers, type BackupLimits, type BackupState } from './archive.js';
 import { decryptKey, encryptKey } from './crypto.js';
 import { ledgerFingerprint } from './fingerprint.js';
-import { digestFile, inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
+import { digestFile, ensurePrivateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const SOURCE_BUSY_BUDGET = 1000;
 const PAYLOAD = ['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'] as const;
 const FILES = [...PAYLOAD, 'authority.key.enc'] as const;
@@ -35,8 +35,9 @@ const fsCode = (error: unknown) => error && typeof error === 'object' && 'code' 
 const unreadable = (path: string) => (error: unknown): never => { if (['EACCES', 'EPERM'].includes(fsCode(error))) refuse('BACKUP_SET_UNREADABLE', { path }); throw error; };
 /** Owner CLI review 2026-10-19: before any decryption a missing or unreadable set is its own typed cause, never a passphrase failure. */
 export async function locateBackupSet(set: string): Promise<void> {
-  const info = await safePath(set).then(path => lstat(path)).catch(error => ['ENOENT', 'ENOTDIR'].includes(fsCode(error)) ? refuse('BACKUP_SET_NOT_FOUND', { path: set }) : unreadable(set)(error));
-  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+  const found = await safePath(set).then(privateDirectory).catch(error => ['ENOENT', 'ENOTDIR'].includes(fsCode(error)) ? null : unreadable(set)(error));
+  if (found === null) return refuse('BACKUP_SET_NOT_FOUND', { path: set });
+  if (!found) return refuse('BACKUP_PATH_UNSAFE');
   const names = await readdir(set).catch(unreadable(set));
   // A folder of sets (or anything else) is no set; a set that lost only its manifest was modified.
   if (!names.includes('MANIFEST.sha256')) return refuse(names.some(name => (FILES as readonly string[]).includes(name)) ? 'BACKUP_MANIFEST_INVALID' : 'BACKUP_SET_NOT_FOUND', { path: set });
@@ -84,7 +85,7 @@ async function readManifest(set: string, limits: BackupLimits) {
   const payload: string[] = [];
   for (const name of FILES) {
     const file = join(set, name), info = await lstat(file);
-    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+    if (!privateFile(info)) return refuse('BACKUP_PATH_UNSAFE');
     if (info.size > limits.maxTotalBytes * 2) return refuse('BACKUP_LIMIT');
     const digest = await digestFile(file);
     if (digest !== expected.get(name)) return refuse('BACKUP_MANIFEST_INVALID');
@@ -98,16 +99,16 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
   destination: string, passphrase: string, limits: BackupLimits, config?: BackupConfigLayers): Promise<BackupResult> {
   await FileInstallationIdentityStore.assertTransferAllowed(layout);
   const set = await safePath(destination);
-  for (const resource of BACKUP_RESOURCES) if (inside(productResourcePath(layout, resource), set)) return refuse('BACKUP_PATH_UNSAFE');
-  if ((inside(layout.root, set) && !inside(productResourcePath(layout, 'ledgerBackups'), set)) || (inside(join(projectRoot, '.deckent'), set) && !inside(productResourcePath(layout, 'ledgerBackups'), set))) return refuse('BACKUP_PATH_UNSAFE');
+  for (const resource of BACKUP_RESOURCES) if (pathWithin(productResourcePath(layout, resource), set)) return refuse('BACKUP_PATH_UNSAFE');
+  if ((pathWithin(layout.root, set) || pathWithin(join(projectRoot, '.deckent'), set)) && !pathWithin(productResourcePath(layout, 'ledgerBackups'), set)) return refuse('BACKUP_PATH_UNSAFE');
   if (await lstat(set).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SET_EXISTS');
-  await privateDirectory(dirname(set));
+  await ensurePrivateDirectory(dirname(set));
   const staging = join(dirname(set), `.backup-staging-${randomUUID()}`); await mkdir(staging, { mode: 0o700 });
   const createdAt = new Date().toISOString();
   try {
     const sourcePath = await safePath(productResourcePath(layout, 'ledger'));
     const info = await lstat(sourcePath);
-    if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+    if (!privateFile(info)) return refuse('BACKUP_PATH_UNSAFE');
     const { backup, DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite'), db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
     const ledger = join(staging, 'ledger.db');
     await writePrivate(ledger, new Uint8Array()); // 0600 before the backup API opens its output.

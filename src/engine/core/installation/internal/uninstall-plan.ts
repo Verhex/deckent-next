@@ -1,7 +1,7 @@
 import { persistedInteger, operationDescriptorSchema, type OperationDescriptor } from '#domain/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, pathWithin } from '#platform/index.js';
 import { createHash } from 'node:crypto';
-import { dirname, isAbsolute, relative, resolve, parse, sep } from 'node:path';
+import { dirname, isAbsolute, resolve, parse } from 'node:path';
 import { z } from 'zod';
 import data from './uninstall-resources.json' with { type: 'json' };
 import { UninstallError, UNINSTALL_TIERS, uninstallInstallationSchema, uninstallPlanQuerySchema, uninstallResourceSchema, uninstallWorkSchema, uninstallServiceSchema,
@@ -12,7 +12,6 @@ export type UninstallContribution = z.infer<typeof contribution>;
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 const freeze = <T>(value: T): T => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
-const within = (parent: string, child: string) => { const path = relative(parent, child); return !path || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path)); };
 /** Contributions are sealed once; an extension cannot replace a Core owner's retention policy. */
 export function uninstallRegistry(extensions: readonly UninstallContribution[] = []) {
   const base = z.strictObject({ schemaVersion: z.literal(1), inputMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), waitPollMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), contributions: z.array(contribution) }).parse(data);
@@ -75,8 +74,8 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     if (action === 'remove' && entry.kind === 'path') {
       if ((resource.members ?? [resource.locator]).some(locator => {
         const path = resolve(locator);
-        return !isAbsolute(locator) || path === parse(path).root || !inventory.deletionRoots.some(root => within(root, path) && root !== path)
-          || inventory.protectedPaths.some(kept => within(path, kept) || within(kept, path));
+        return !isAbsolute(locator) || path === parse(path).root || !inventory.deletionRoots.some(root => pathWithin(root, path) && root !== path)
+          || inventory.protectedPaths.some(kept => pathWithin(path, kept) || pathWithin(kept, path));
       })) { action = 'blocked'; reason = 'unsafe-path'; }
     }
     if (entry.kind === 'service' && resource.present !== false && action === 'keep') reason = 'service-unresolved';
@@ -89,7 +88,7 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     const entry = registry.entries.find(entry => entry.id === item.contribution)!;
     if (entry.kind === 'path' && items.some(kept => kept.action !== 'remove' && kept.present !== false
       && registry.entries.find(entry => entry.id === kept.contribution)!.kind === 'path'
-      && (item.members ?? [item.locator]).some(path => (kept.members ?? [kept.locator]).some(other => within(path, other) || within(other, path))))) {
+      && (item.members ?? [item.locator]).some(path => (kept.members ?? [kept.locator]).some(other => pathWithin(path, other) || pathWithin(other, path))))) {
       Object.assign(item, { action: 'blocked', reason: 'retained-overlap' }); blockers.push(`${item.resourceId}:retained-overlap`);
     }
   }
@@ -119,7 +118,7 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     cancelRuns: force ? [...work.running, ...(purge ? work.parked : [])] : [], rejectApprovals: force && purge ? [...work.approvals] : [], withdrawDeliveries: force && purge ? [...work.deliveries] : [] };
   // M6, R14: whatever the plan does writes custody, receipts or backups there: private, canonical, outside every deletion root and removed path.
   if ((removing.length || Object.values(steps).some(step => step === true || Array.isArray(step) && step.length)) && (!recovery || !isAbsolute(recovery) || inventory.recoveryUnsafe
-    || [...inventory.deletionRoots, ...inventory.recoveryForbidden ?? [], ...removing.flatMap(item => item.members ?? [item.locator])].some(root => within(root, recovery) || within(recovery, root)))) blockers.push('backup-destination');
+    || [...inventory.deletionRoots, ...inventory.recoveryForbidden ?? [], ...removing.flatMap(item => item.members ?? [item.locator])].some(root => pathWithin(root, recovery) || pathWithin(recovery, root)))) blockers.push('backup-destination');
   return { items, blockers: [...new Set(blockers)].sort(), steps, archived };
 }
 /** Pure plan over owner observations. No healing, filesystem writes, service starts or identity creation. */
