@@ -62,7 +62,9 @@ const run = (args, timeout, build = false) => {
   }
   return result.stdout?.trim();
 };
-const endpointOf = () => JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], 20_000));
+// Only a local unix socket is pinned, as choices.ts does: the --host calls drop the TLS selectors, which a tcp endpoint would need.
+const endpointOf = () => { const host = JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], 20_000));
+  if (typeof host !== 'string' || !host.startsWith('unix:///') || host.includes('\0')) throw new Error('WORKER_IMAGE_DOCKER_WAITING'); return host; };
 const rawReceiptBounds = () => { const bounds = { files: Number(existingImage), bytes: Number(extra[0]) }; if (![bounds.files, bounds.bytes].every(value => Number.isSafeInteger(value) && value > 0)) throw new Error('WORKER_HISTORY_IDS'); return bounds; };
 const tagsOf = (command, repository) => command(['image', 'ls', repository, '--format', '{{.Tag}}'], 20_000).split('\n');
 // Read-only preflight from the installed assets (no plan, no context): the highest revision the daemon holds over both repositories, so the

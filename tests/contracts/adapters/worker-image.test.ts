@@ -104,6 +104,10 @@ esac
     expect(calls).toHaveLength(11);
     expect(calls.every(args => args.startsWith('context inspect ') || args.startsWith('--host unix:///fixture-daemon image ls '))).toBe(true);
     expect((await readdir(parent)).sort()).toEqual(['bin', 'docker-calls.jsonl', 'docker-calls.jsonl.env']);
+    // A tcp context endpoint is never pinned: the --host calls drop the TLS selectors it would need (security review of the ENV card, as choices.ts).
+    await writeFile(join(bin, 'docker'), `#!/bin/sh\nprintf '%s\\n' "$*" >> ${shellQuote(log)}\n[ "$1" = context ] && printf '%s\\n' '"tcp://daemon.example:2376"'\nexit 0\n`, { mode: 0o700 });
+    await expect(readWorkerImageHeldVersion(input)).rejects.toMatchObject({ code: 'WORKER_IMAGE_VERSION_CHECK_FAILED' });
+    expect((await readFile(log, 'utf8')).trim().split('\n').slice(11)).toEqual(['context inspect --format {{json .Endpoints.docker.Host}}']);
   });
   it('retains timeout precedence and refuses arbitrary builder codes, with bounded sanitized diagnostics', async () => {
     const input = { packageRoot, timeoutMs: 1_200_000, outputBytes: 4096, env: { PATH: '/usr/bin', SECRET_TOKEN: 'never' } };

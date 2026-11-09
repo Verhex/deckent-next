@@ -14,6 +14,8 @@ const run = args => {
   if (result.error || result.status !== 0) fail(); return result.stdout.trim();
 };
 const endpoint = JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}']));
+// Only a local unix socket is pinned (choices.ts): the --host calls drop the TLS selectors, which a tcp endpoint would need.
+if (typeof endpoint !== 'string' || !endpoint.startsWith('unix:///') || endpoint.includes('\0')) fail();
 const docker = args => run(['--host', endpoint, ...args]);
 if (docker(['info', '--format', '{{.ID}}']) !== daemonId) fail();
 for (const name of readdirSync(context).filter(name => /^probe-\d+\.cid$/.test(name))) {
