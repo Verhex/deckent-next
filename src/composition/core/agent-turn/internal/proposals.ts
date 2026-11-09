@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { AI_PROPOSAL_REGISTRY, type AgentToolOutcome, type AgentToolSpec, type AgentTurnStreamEvent, type BrainPlanCommand } from '#domain/index.js';
+import { AI_PROPOSAL_REGISTRY, type AgentToolOutcome, type AgentToolSpec, type AgentTurnStreamEvent, type BrainPlanCommand, type BrainPlanObserver, type BrainPlanProgress } from '#domain/index.js';
 import { AI_PROPOSAL_TOOL_SPECS, aiProposalToolDecision, awaitAgentToolApproval, isRunIntentResult, planAiProposal, verifyApproval, type RunPlanningResult } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal, type LocalPeerIdentity } from '#adapters/index.js';
 import { loadProposalViews } from '#surfaces/index.js';
@@ -7,8 +7,8 @@ import { sha256, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } fr
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
-type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' }>) => void;
-type Plan = (command: BrainPlanCommand, signal: AbortSignal) => Promise<RunPlanningResult>;
+type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' | 'work' }>) => void;
+type Plan = (command: BrainPlanCommand, signal: AbortSignal, observe: BrainPlanObserver) => Promise<RunPlanningResult>;
 const CARD_ROUNDS = 3; // L1c, as /do: a plan whose basis changed while its card was open comes back with a fresh card, at most this often.
 const said = { deny: 'the person declined; nothing was changed', expired: 'the card expired unanswered; nothing was changed', cancelled: 'the turn ended before the person answered; nothing was changed' } as const;
 const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.code ?? 'failed');
@@ -46,14 +46,21 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
   }
   async function work(name: string, request: string, callId: string): Promise<AgentToolOutcome> {
     const command: BrainPlanCommand = { schemaVersion: 1, commandId: `propose-work-${sha256(`propose-work:1\0${scopeId}\0${input.turnId}\0${callId}`).slice(0, 40)}`, scopeId, intent: request };
-    const [planning] = await loadProposalViews(), plan = () => withMcpPrincipal(() => input.plan!(command, signal));
+    // v31 (/do parity): the plan's progress reaches the person's terminal as `/do` shows it (planning, a Brain quota wait, the admitted Run for /tasks).
+    const progress = (value: BrainPlanProgress) => { if (value.kind === 'planning') input.emit({ kind: 'work', callId, phase: 'planning', attempt: value.attempt });
+      else if (value.kind === 'quota-wait') input.emit({ kind: 'work', callId, phase: 'quota-wait', untilMs: value.untilMs, attempt: value.attempt, maxAttempts: value.maxAttempts }); };
+    const [planning] = await loadProposalViews(), plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress));
+    progress({ kind: 'planning', attempt: 1 });
     let result = await plan();
     for (let round = 0; round < CARD_ROUNDS && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; round++) {
       const settled = await card(callId, result.proposal.approval.approvalId, [origin, ...planning.brainProposalCardLines(result, input.locale)].join('\n'));
       if (settled !== 'allow') return tag(name, said[settled]);
       result = await plan();
     }
-    if (result.run) return { status: 'ok', text: `[deckent] ${name}: the person approved; Run ${result.run.runId} was admitted and is listed in /tasks.` };
+    if (result.run) {
+      input.emit({ kind: 'work', callId, phase: 'admitted', runId: result.run.runId });
+      return { status: 'ok', text: `[deckent] ${name}: the person approved; Run ${result.run.runId} was admitted and is listed in /tasks.` };
+    }
     const reason = isRunIntentResult(result) ? 'work-parked' : result.proposal.reason ?? result.proposal.status;
     return tag(name, `error=${reason}; no Run was admitted (the person can start the work with /do)`);
   }

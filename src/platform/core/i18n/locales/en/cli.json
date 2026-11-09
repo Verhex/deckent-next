@@ -427,6 +427,7 @@
   "policy.aiProposals.state.off": "off",
   "policy.aiProposals.state.partial": "partly on",
   "policy.aiProposals.state.unavailable": "not on this policy",
+  "policy.aiProposals.covered": "covered by an existing grant: {grants}",
   "policy.aiProposals.note": "The AI in a conversation may propose work (the /do card) and three settings: language, output_mode, terminal.responseStyle (a before/after card). You decide each proposal on its card, in every mode.",
   "policy.aiProposals.onCard": "Turn on: adds only these rules through the governed policy change (audited): {ids}",
   "policy.aiProposals.offCard": "Turn off: removes these rules through the governed policy change (audited; the earlier policy stays archived): {ids}",

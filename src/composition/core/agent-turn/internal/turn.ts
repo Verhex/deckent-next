@@ -3,7 +3,7 @@ import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chat
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, ModelInvocationError, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
-  type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
+  type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type BrainPlanObserver, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
@@ -49,7 +49,8 @@ export interface RuntimeChatTurnHost {
   /** alpha.64 B: the service's plan application `propose_work` runs (the CLI host binds it; absent: the tool is not offered). */ readonly planWork?: PlanServiceRun;
 }
 /** The service's own plan call (`planServiceRun`): the same application as /do, its Brain call through the given invoke. */
-export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal) => Promise<RunPlanningResult>;
+export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal,
+  /** v31 (/do parity): the plan's progress (planning, a Brain quota wait), as `/do` observes it; absent: a quota refusal is the typed refusal at once. */ observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
   fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
@@ -211,9 +212,10 @@ async function runChatTurn(projectRoot: string, input: unknown, peer: LocalPeerI
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
       proposer: `model ${reference.modelId}`, locale: language }) : null;
     // alpha.64 B + C (owner S4/S5): work and setting proposals, decided and applied as the AI actor in both loops; the person's card decides.
-    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval, locale: language,
-      ...(host.planWork ? { plan: (plan: BrainPlanCommand, planSignal: AbortSignal) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
-        undefined, invokeSignal ?? planSignal), planSignal) } : {}) }) : null;
+    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, locale: language,
+      emit: event => event.kind === 'work' ? channel.emit(event) : emitApproval(event),
+      ...(host.planWork ? { plan: (plan: BrainPlanCommand, planSignal: AbortSignal, observe: BrainPlanObserver) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
+        undefined, invokeSignal ?? planSignal), planSignal, observe) } : {}) }) : null;
     // NATIVE-BAGLAM: `session_state` is offered only where policy allows it now (decided like every call; never a default grant).
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy), tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...mcpTools.specs, PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await agentProposals?.offered() ?? []), ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];

@@ -96,8 +96,9 @@ beri (owner 2026-11-09) aktör bir Run ve üç ayardan birini (`language`, `outp
 `terminal.responseStyle`) de önerebilir; ikisi de moda açık olmayan `require-approval` kuralıdır, bu
 yüzden kişinin `/do` plan kartı ya da `/config` önce/sonra kartı her modda açılır; önerilen Run'ın
 havuzu ve iş hedefi `allow`'dur (o kart olmadan etkisizdir). Mevcut kurulumlar bu dört kuralı bir sonraki
-servis başlangıcında bir kez ve denetim kaydıyla alır; aktörün bir izninin zaten açtığı hücreye düşen kural
-hariç. `/policy` onları kapatıp açmak için tek bir **Yapay zekâ önerileri** satırında gösterir. Yerel ajan ve
+servis başlangıcında bir kez ve denetim kaydıyla alır; hücresinin tamamını aktörün tek bir izninin (rol
+bağlaması da) zaten kapsadığı kural hariç. `/policy` onları kapatıp açmak için tek bir **Yapay zekâ önerileri**
+satırında gösterir ve onları kapsayan mevcut izni adlandırır. Yerel ajan ve
 dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, başka yapılandırma, sır, politika,
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 grant'lerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.

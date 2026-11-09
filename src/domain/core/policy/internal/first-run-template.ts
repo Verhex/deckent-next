@@ -1,6 +1,6 @@
 import { catalogAggregatorPrincipalRef, isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, recoveryPrincipalRef } from '#domain/core/principal/index.js';
 import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
-import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
+import { bindingsFileSchema, policyFileSchema, policyGrantSchema, principalGrants, resolvePolicyBindings, type PolicyFile, type PolicyGrant } from './schema.js';
 import { policyResources } from './vocabulary.js';
 import { POLICY_CHANGE_MAX, policyChangeSchema, type PolicyChange } from './administer.js';
 import { RECOVERY_ACTIONS } from '#domain/core/audit/index.js';
@@ -230,8 +230,8 @@ const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cance
 /** v7 actions (SPEND-SETTLEMENT): read, audit and the two governed management commands (held reconcile, budget revision). */
 const PROVIDER_SPEND_ACCOUNT_ACTIONS = ['inspect', 'audit', 'reconcile', 'budget-revision'] as const;
 export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[];
-    /** Rules still missing after this batch (only when the plan exceeds POLICY_CHANGE_MAX); a second run plans them. */ readonly remaining?: number }
-  | { readonly status: 'current'; readonly conflicts: readonly string[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
+    /** Rules still missing after this batch (only when the plan exceeds POLICY_CHANGE_MAX); a second run plans them. `covered`: v20 rules an allow covers (never added). */ readonly remaining?: number; readonly covered?: readonly FirstRunProposalCover[] }
+  | { readonly status: 'current'; readonly conflicts: readonly string[]; readonly covered?: readonly FirstRunProposalCover[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
 type Selection = 'all' | readonly string[];
 const coversAll = (held: Selection, wanted: Selection) => held === 'all' || (wanted !== 'all' && wanted.every(item => held.includes(item)));
 const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.parse(a)) === JSON.stringify(policyGrantSchema.parse(b));
@@ -241,7 +241,7 @@ type AdditionNames = V19Names & { readonly proposeMcpToolName: string; readonly 
   /** v13: the execution-environment registry ids the install rule names. */
   readonly executionEnvironmentIds: readonly string[];
   /** v16: the measured lost-worker rules at their seed version (absent: no promotion cell). */
-  readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[]; readonly scopeId?: string; /** alpha.64: only the current (v20) delta, /policy's re-enable. */ readonly only?: 'ai-proposals' };
+  readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[]; readonly scopeId?: string; /** alpha.64: only the current (v20) delta, /policy's re-enable. */ readonly only?: 'ai-proposals'; /** alpha.64: the AI actor's effective grants the v20 skip reads (absent: the file's rules). */ readonly aiGrants?: readonly PolicyGrant[] };
 /** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
 export const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
@@ -261,10 +261,10 @@ export function firstRunTemplateAdditions(current: unknown, input: { readonly pe
   const person = { issuer: identitySchema.parse(input.person.issuer), subject: identitySchema.parse(input.person.subject) };
   // Security (lead 2026-10-07): the read rule must NAME this person; a rule for `all` principals proves no installation owner (fail closed).
   if (isMcpPrincipal(person) || !namesPerson(read, person)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
-  return plannedAdditions(grants, person, read.scopes, input);
+  return plannedAdditions(grants, person, read.scopes, input, input.aiGrants ?? grants);
 }
 /** The v5 rules this person lacks over `grants` (shared by the first-run and the named-person upgrade, so both add exactly the same rules). */
-function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes: readonly string[], input: AdditionNames) {
+function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes: readonly string[], input: AdditionNames, aiHeld: readonly PolicyGrant[]) {
   // Coverage may count a rule for `all` principals (it only means less is added); every added rule names this person alone (never another one).
   const mine = (grant: PolicyGrant) => grant.principals === 'all' || namesPerson(grant, person);
   const rule = (id: string, kind: string, actions: readonly string[], ids: Selection, ruleScopes: Selection): PolicyGrant => policyGrantSchema.parse({
@@ -293,7 +293,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     // v16 (alpha.56 D1): the recovery cells at require-approval; a person already allowed on a cell keeps it (an allow rule covers it, nothing is added).
     ...v16Rules(person, scopes, input.recoveryRules), ...v17Rules(person, firstCommitScopes, input.firstCommitOperationId), ...v18Rules(person, input.uninstallOperationIds), ...v19Rules(person, scopes, input), ...v20Rules(person, scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
-  const skipped = firstRunProposalRules(grants, person, scopes).skipped.map(item => item.ruleId), current: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+  const covered = firstRunProposalRules(aiHeld, person, scopes).skipped, skipped = covered.map(item => item.ruleId), current: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
   for (const want of wanted.filter(rule => !skipped.includes(rule.id) && (!input.only || current.includes(rule.id)))) { // side effect B: an AI allow keeps its v20 cell
     const same = grants.find(grant => grant.id === want.id);
     // A v16 cell the card raised to allow is the person's decision, not a conflict.
@@ -304,11 +304,11 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
       && coversAll(grant.resource.ids, want.resource.ids) && coversAll(grant.scopes, want.scopes));
     if (!covered) rules.push(want);
   }
-  if (!rules.length) return Object.freeze({ status: 'current' as const, conflicts: Object.freeze(conflicts) });
+  const cover = covered.length ? { covered: Object.freeze(covered) } : {}; if (!rules.length) return Object.freeze({ status: 'current' as const, conflicts: Object.freeze(conflicts), ...cover });
   // One `policy.administer@1` change holds at most POLICY_CHANGE_MAX rules (v14 made a v4-era plan 33): the plan takes the first batch in version
   // order and names how many remain; the same add-only upgrade run again adds the rest (each run is idempotent).
   const batch = rules.slice(0, POLICY_CHANGE_MAX), remaining = rules.length - batch.length;
-  return Object.freeze({ status: 'plan' as const, rules: Object.freeze(batch), conflicts: Object.freeze(conflicts), ...(remaining ? { remaining } : {}),
+  return Object.freeze({ status: 'plan' as const, rules: Object.freeze(batch), conflicts: Object.freeze(conflicts), ...(remaining ? { remaining } : {}), ...cover,
     change: policyChangeSchema.parse({ schemaVersion: 1, changes: batch.map(grant => ({ kind: 'grant.add', grant })) }) });
 }
 
@@ -348,7 +348,7 @@ export function namedPersonPolicyAdditions(current: unknown, input: { readonly p
   if (!parsed.success || parsed.data.schemaVersion !== 2 || !person.issuer.success || !person.subject.success || !scopeId.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const who = { issuer: person.issuer.data, subject: person.subject.data };
   if (isMcpPrincipal(who) || !parsed.data.grants.some(grant => anchorsPerson(grant, who, scopeId.data))) return Object.freeze({ status: 'unavailable', reason: 'person-not-named' });
-  return plannedAdditions(parsed.data.grants, who, [scopeId.data], input);
+  return plannedAdditions(parsed.data.grants, who, [scopeId.data], input, input.aiGrants ?? parsed.data.grants);
 }
 /** Add-only, named observation rules: existing owner and custom rules are untouched. */
 function mcpObservationRules(owner: Person, scopes: readonly string[]): readonly PolicyGrant[] {
@@ -516,11 +516,11 @@ function v20Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   return isMcpPrincipal(person) || isWorkloadPrincipalRef(person) ? [] : [rule(ids.mcpProposeWork, 'require-approval', run.kind, 'create', 'all', scopes), rule(ids.mcpProposeSetting, 'require-approval', config.kind, 'write',
     aiSettingResourceIds(), 'all'), rule(ids.mcpProposePool, 'allow', pool.kind, 'use', 'all', scopes), rule(ids.mcpProposeTarget, 'allow', workTarget.kind, 'use', 'all', scopes)];
 }
-const overlaps = (held: Selection, wanted: Selection) => held === 'all' || wanted === 'all' || held.some(item => wanted.includes(item));
-/** Lead 2026-11-09 (side effect B): the v20 rules this policy can take; a rule whose cell a policy-file allow of its principal already holds (an MCP capability group, a hand-built
- * rule) is left out and named with that rule, so the allow never becomes a card (require-approval wins over allow). Role bindings are not read here. */
-export function firstRunProposalRules(grants: readonly PolicyGrant[], person: Person, scopes: readonly string[]): { readonly wanted: readonly PolicyGrant[]; readonly skipped: readonly { readonly ruleId: string; readonly heldBy: string }[] } {
-  const skipped: { ruleId: string; heldBy: string }[] = [], wanted = v20Rules(person, scopes).filter(want => { const held = grants.some(grant => grant.id === want.id) ? undefined : grants.find(grant => grant.effect === 'allow' && want.principals !== 'all'
-    && namesPerson(grant, want.principals[0]!) && grant.resource.kind === want.resource.kind && overlaps(grant.actions, want.actions) && overlaps(grant.scopes, want.scopes) && overlaps(grant.resource.ids, want.resource.ids)); if (held) skipped.push({ ruleId: want.id, heldBy: held.id }); return !held; });
-  return { wanted, skipped };
-}
+/** A v20 rule left to the allow that covers its whole cell (`heldBy`: its rule id, or `binding/role/permission` for a role grant). */ export type FirstRunProposalCover = { readonly ruleId: string; readonly heldBy: string };
+/** Lead 2026-11-09 (side effects A, B): the v20 rules over the AI actor's EFFECTIVE grants `held`; one whose whole cell an allow covers is left out and named (never a card); a partial allow (another pool) covers nothing. */
+export function firstRunProposalRules(held: readonly PolicyGrant[], person: Person, scopes: readonly string[]): { readonly wanted: readonly PolicyGrant[]; readonly skipped: readonly FirstRunProposalCover[] } {
+  const skipped: FirstRunProposalCover[] = [], wanted = v20Rules(person, scopes).filter(want => { const cover = held.some(grant => grant.id === want.id) ? undefined : held.find(grant => grant.effect === 'allow' && want.principals !== 'all'
+    && namesPerson(grant, want.principals[0]!) && grant.resource.kind === want.resource.kind && coversAll(grant.actions, want.actions) && coversAll(grant.scopes, want.scopes) && coversAll(grant.resource.ids, want.resource.ids)); if (cover) skipped.push({ ruleId: want.id, heldBy: cover.id }); return !cover; });
+  return { wanted, skipped }; }
+/** The AI actor's effective grants (`principalGrants`: explicit rules and its role bindings); an unresolvable policy and bindings pair gives its file's rules. */ export function proposalCoverageGrants(policyFile: unknown, bindings: unknown, person: Person): readonly PolicyGrant[] {
+  try { return principalGrants(resolvePolicyBindings(policyFile, bindings), mcpPrincipalRef(person)); } catch { const file = policyFileSchema.safeParse(policyFile); return file.success && file.data.schemaVersion === 2 ? file.data.grants : []; } }

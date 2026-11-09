@@ -136,19 +136,29 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v20 delta: a delta the
   expect(await upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: [], scopeId: 's', ...audit })).toBe('upgraded');
   expect(events.at(-1)!.subject).toMatchObject({ kind: 'authority-change', installer: { basis: 'named-person', template: { version: 20 } }, counts: { grantsAdded: 4 } });
   expect(events.at(-1)!.subject).not.toHaveProperty('skipped');
-  // Lead 2026-11-09 (side effect B): an MCP actor that holds the `work` group keeps its allows. The upgrade adds only the setting rule and names the
-  // three it left to the group in the audit record; the actor's create_run stays allow (no card) and its reserve and pool use are unchanged.
+  // Lead 2026-11-09 (side effects A, B): an MCP actor that holds the `work` group keeps its allows. A rule is skipped only when one allow covers its
+  // whole cell: the group's run and every-target rules do (named in the audit record), its pool `p` does not cover v20's every pool, so the pool
+  // allow is added beside the setting card. The actor's create_run stays allow (no card) and its reserve and pool use are unchanged.
   const ai = mcpPrincipalRef(auto.principal), work = ['run', 'pool', 'work-target'].map(kind => ({ id: `mcp-cap-work-${kind}`, effect: 'allow', actions: kind === 'run' ? ['create', 'inspect', 'reserve', 'cancel'] : ['use'],
     scopes: ['s'], principals: [ai], resource: { kind, ids: kind === 'pool' ? ['p'] : 'all' } }));
   await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify({ ...v19Policy, revision: 'a-work-group', grants: [...v19Policy.grants, ...work] }), { mode: 0o600 });
   // The person as the service start passes it (issuer and subject: proposal-policy.ts), so the record is checked against the sealed audit contract.
   expect(await upgradeFirstRunProposalRules(auto.source, { person: { issuer: auto.principal.issuer, subject: auto.principal.subject }, history: [], ...audit })).toBe('upgraded');
-  expect(events.at(-1)!.subject).toMatchObject({ counts: { grantsAdded: 1 }, skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' },
-    { ruleId: 'first-run-mcp-propose-pool', heldBy: 'mcp-cap-work-pool' }, { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }] });
-  expect(auditEventSchema.parse(events.at(-1)).subject).toMatchObject({ skipped: [{ ruleId: 'first-run-mcp-propose-work' }, {}, {}] }); // the sealed audit contract carries the reasons
+  expect(events.at(-1)!.subject).toMatchObject({ counts: { grantsAdded: 2 }, skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' },
+    { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }] });
+  expect(auditEventSchema.parse(events.at(-1)).subject).toMatchObject({ skipped: [{ ruleId: 'first-run-mcp-propose-work' }, {}] }); // the sealed audit contract carries the reasons
   const grouped = await auto.source.load(), actor = { id: 'mcp', ...ai, assurance: 'workload-verified' as const, scopeIds: ['s'] };
-  for (const [action, kind, id] of [['create', 'run', 'r'], ['reserve', 'run', 'r'], ['use', 'pool', 'p'], ['use', 'work-target', 't']] as const)
-    expect(evaluatePolicy(grouped, { principal: actor, scopeId: 's', action, resource: { kind, id } }).decision, `${kind}/${action}`).toBe('allow');
+  expect(policySchema.parse(grouped).grants.map(rule => rule.id).filter(id => deltaIds.includes(id))).toEqual(['first-run-mcp-propose-setting', 'first-run-mcp-propose-pool']);
+  for (const [action, kind, id] of [['create', 'run', 'r'], ['reserve', 'run', 'r'], ['use', 'pool', 'p'], ['use', 'pool', 'q'], ['use', 'work-target', 't']] as const)
+    expect(evaluatePolicy(grouped, { principal: actor, scopeId: 's', action, resource: { kind, id } }).decision, `${kind}/${action}/${id}`).toBe('allow');
+  // Side effect B: a role binding is an effective grant too. A role-bound Run create allow of the AI actor skips the Run card rule (named with its
+  // derived `binding/role/permission` id), so the binding's create_run is never lowered to a card; the other three rules are added.
+  const bindingsPath = join(dirname(auto.archive), 'bindings.json'), bound = JSON.parse(await readFile(bindingsPath, 'utf8'));
+  await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify({ ...v19Policy, revision: 'a-role', roles: [...v19Policy.roles, { id: 'ai-work', permissions: [{ id: 'create', effect: 'allow', actions: ['create'], resource: { kind: 'run', ids: 'all' } }] }] }), { mode: 0o600 });
+  await writeFile(bindingsPath, JSON.stringify({ ...bound, revision: 'b-role', bindings: [...bound.bindings, { id: 'ai-bound', principals: [ai], roles: ['ai-work'], scopes: ['s'] }] }), { mode: 0o600 });
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: [], ...audit })).toBe('upgraded');
+  expect(events.at(-1)!.subject).toMatchObject({ counts: { grantsAdded: 3 }, skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'ai-bound/ai-work/create' }] });
+  expect(evaluatePolicy(await auto.source.load(), { principal: actor, scopeId: 's', action: 'create', resource: { kind: 'run', id: 'r' } }).decision).toBe('allow');
   for (const version of [19, 21]) {
     const other = await seed(version), before = await other.bytes();
     expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });

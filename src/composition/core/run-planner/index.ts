@@ -2,7 +2,7 @@ import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_AD
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
 import { listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
-import { SIWC_INFERENCE, FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
+import { SIWC_INFERENCE, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
@@ -23,7 +23,7 @@ export function planConfiguredRun(root: string, input: BrainPlanCommand, options
 }
 /** alpha.64 B: the runtime service's own plan (a chat turn's `propose_work`): the same application, its Brain call on the service's model host. */
 export const planServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>,
-  signal?: AbortSignal) => plan(root, input, options, invoke, signal);
+  signal?: AbortSignal, observe?: BrainPlanObserver) => plan(root, input, options, invoke, signal, undefined, observe);
 export function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
   const client = createConfiguredRuntimeClient(root, options);
   return plan(root, input, options, async (command, signal) => {
@@ -67,9 +67,10 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       stoppedAtLength: openAiChatStoppedAtLength,
       // f4: an active quota wait is host state the standalone monitor and MCP inspect_monitor read (state/brain-waits); not evidence.
       quotaWaits: new FileBrainQuotaWaitStore(() => prepareProductDirectory(context.layout, 'brainWaits')),
-      // S3-4: the adapter's typed refusal body of a rejected planning call (the subscription CLI names quota, login, credits, guard there).
-      async rejectionBody(result) { const content = (await inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: result.receipt.request.scopeId,
-        invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, options)).responseContent;
+      // S3-4: the adapter's typed refusal body of a rejected planning call (the subscription CLI names quota, login, credits, guard there). Read only to
+      // classify it (a typed refusal, never its text) as the system's check under the person's channel, so an AI actor's plan (`propose_work`) waits too.
+      async rejectionBody(result) { const content = (await withLocalPrincipalChannel(undefined, () => inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: result.receipt.request.scopeId,
+        invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, options), localPrincipalPeer())).responseContent;
       return content?.kind === 'response-body' ? content.data : null; },
       async prepare(command) {
         const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;

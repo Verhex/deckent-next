@@ -186,7 +186,7 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     // Owner step 4: the person adds a line by hand before /do (working-tree delivery starts from it).
     await writeFile(join(project, 'notes.txt'), 'first line\nperson line\n');
     const t = open(), from = t.mark();
-    await walk('j2', t, [[/Ready/, '/do JOURNEY-A append the line "second line" to notes.txt'], [800, '\r'], ...card('This folder has uncommitted changes'),
+    await walk('j2', t, [[/Ready/, '/do JOURNEY-A append the line "second line" to notes.txt'], [800, '\r'],
       ['Approval needed', ''], [2500, 'y'], ['admitted. Follow', ''], [1500, CTRL_O], [800, ESC], ['awaiting delivery', ''], [2000, '/deliver'], [1500, '\r'],
       ['y check, prepare and deliver', ''], [2500, 'y'], ['Written into your files (no commit)', ''], [1500, '\r'], [1500, '/tasks'], [1500, '\r'], ['Background work', ''],
       [2500, CTRL_O], [800, DOWN], [800, 'x'], [/already finished|nothing to cancel/u, ''], [1500, ESC], [1500, '/exit\r']]);
@@ -196,8 +196,8 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     expect(plan).not.toMatch(/\$\s?\d|APPROVAL_REQUIRED|[0-9a-f]{64}/u);
     expect(seen.slice(seen.indexOf('admitted. Follow'))).not.toContain('Approval needed');
     expect(seen).toContain('the change is written into your files (no commit');
-    // NF-4: the uncommitted-changes card says the true start for working-tree delivery (the current files, not the last commit).
-    expect(seen).toContain('The worker starts from your current files'); expect(seen).not.toContain('starts from the last commit');
+    // NF-4, lead 2026-11-09: the uncommitted-changes line sits on the one plan card and says the true start for working-tree delivery (the current files).
+    expect(plan.replace(/\s+/gu, ' ')).toContain('This folder has uncommitted changes'); expect(seen).toContain('The worker starts from your current files'); expect(seen).not.toContain('starts from the last commit');
     expect(await readFile(join(project, 'notes.txt'), 'utf8')).toBe('first line\nperson line\nsecond line\n');
     expect(git(project, 'rev-list', '--count', 'HEAD')).toBe('1');
     // /tasks: the task is named "Task 1" and its text shows once.
@@ -213,7 +213,7 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     // Conflict while the worker RUNS (it holds 10 s before writing): the person edits the file then. The delivery writes nothing and r prepares
     // the same /do again.
     const c = open(), cFrom = c.mark();
-    await walk('j2-conflict', c, [[/Ready/, '/do JOURNEY-C append the line "third line" to notes.txt'], [800, '\r'], ...card('This folder has uncommitted changes'),
+    await walk('j2-conflict', c, [[/Ready/, '/do JOURNEY-C append the line "third line" to notes.txt'], [800, '\r'],
       ['Approval needed', ''], [2500, 'y'], ['admitted. Follow', '']]);
     for (const until = Date.now() + within(); !workerRunning(root);) { if (Date.now() > until) throw new Error(`the JOURNEY-C worker never started\n${c.flat(cFrom).slice(-3000)}`); await pause(200); }
     await writeFile(join(project, 'notes.txt'), 'first line\nperson line\nperson edit\n');
@@ -231,7 +231,7 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
       expect(await step.closed, step.text()).toBe(0);
     }
     const d = open(), dFrom = d.mark();
-    await walk('j4', d, [[/Ready/, '/do JOURNEY-D append the line "agent line" to notes.txt'], [800, '\r'], ...card('This folder has uncommitted changes'), ['Approval needed', ''],
+    await walk('j4', d, [[/Ready/, '/do JOURNEY-D append the line "agent line" to notes.txt'], [800, '\r'], ['Approval needed', ''],
       [2500, ESC], ['Rejected', ''], [1500, ESC], [2000, '/exit\r']]);
     await d.closed;
     const bound = d.flat(dFrom); expect(bound).toMatch(/agent: (?:note-writer|Note writer)/u); expect(bound).toMatch(/skills: note-style/u);

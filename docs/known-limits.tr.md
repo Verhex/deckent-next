@@ -496,13 +496,23 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   `/model`'de, diğer her ayar kendi penceresinde kalır. Mevcut bir kurulum bu sürümdeki ilk servis başlangıcında dört kuralı kartsız,
   kendiliğinden alır (owner kararı); servis politika dosyalarının sahibi olan kişi olarak çalışmalı ve bir kural o kişiyi yapılandırılmış
   servis kapsamında adlandırmalıdır (ya da bir ilk kurulum okuma kuralı): başlangıç bir `authority-change` denetim kaydı ve kurulumun
-  yükseltme anahtarıyla arşivlenmiş bir revizyon yazar, bir kez. AI aktörünün bir izninin zaten açtığı hücreye düşen kural (örneğin MCP
-  `work` ya da `dogfood-worker` grubu) eklenmez, böylece o izin karta dönmez; kayıt her böyle kuralı ve onu tutan kuralı adlandırır.
-  `/policy` dört kuralı tek satırda gösterir, **Yapay zekâ önerileri** (açık, kapalı ya da kısmen açık): kapatmak onları kendi kartınızla
-  kaldırır (`deckent policy upgrade --template current --rollback`), açmak yalnız onları geri ekler (`--apply --only ai-proposals`);
-  kapattıktan sonra başlangıç onları bir daha eklemez. Sohbetten başlayan planda kirli ağaç kartı ve kota bekleme penceresi yoktur ve
-  `/tasks` kendiliğinden açılmaz. Araç kullanamayan model yine `/do` ister. *Yol:* işi `/do` ile başlatın ya da yapay zekâ Run'ın kabul
-  edildiğini söyleyince `/tasks`'ı açın.
+  yükseltme anahtarıyla arşivlenmiş bir revizyon yazar, bir kez. Hücresinin tamamını AI aktörünün tek bir izni zaten kapsayan kural
+  (aynı ya da daha geniş eylem, kapsam ve kaynak seçimi; aktörün rol bağlaması da sayılır; örneğin MCP `work` grubunun Run kuralı)
+  eklenmez, böylece o izin karta dönmez; kayıt her böyle kuralı ve onu tutan kuralı adlandırır. Hücrenin bir kısmını açan izin (örneğin tek
+  bir havuz) hiçbir şeyi kapsamaz, kural eklenir. `/policy` dört kuralı tek satırda gösterir, **Yapay zekâ önerileri** (açık, kapalı, kısmen
+  açık ya da adını verdiği mevcut bir izinle karşılanıyor): kapatmak onları kendi kartınızla kaldırır (`deckent policy upgrade --template
+  current --rollback`), açmak yalnız onları geri ekler (`--apply --only ai-proposals`); kapattıktan sonra başlangıç onları bir daha
+  eklemez. Sohbetten başlayan plan `/do`'nun kota bekleme penceresini gösterir, Run kartı `/do`'nun kaydedilmemiş değişiklikler satırını
+  taşır ve kabul edilen Run tur bitince `/tasks`'ı açar. Araç kullanamayan model yine `/do` ister. *Yol:* işi `/do` ile başlatın.
+- **AI öneri kurallarındaki bir kapsama boşluğu mevcut dar bir izni yine karta indirebilir.** Başlangıç yükseltmesi bir v20 kuralını yalnız
+  tek bir izin hücresinin tamamını kapsıyorsa atlar. AI aktörünün bir izni Run oluşturma ya da ayar hücresinin bir kısmını açıyorsa (tek bir
+  Run kimliği, tek bir ayar) `require-approval` kuralı eklenir ve `require-approval` `allow`'dan üstün geldiği için o kısım da artık kartta
+  sorar. *Yol:* yükseltmeden önce izni hücrenin tamamına genişletin ya da `/policy`'de satırı kapatın.
+- **Brain planının kaynak denetimi planlama yanıtını kurulum kişisi olarak okur.** AI aktörünün `inspect-content` hakkı yoktur; iş
+  önerdiğinde (`propose_work`) Run önerisinin kaynak denetimi ve reddedilen planlama çağrısının tipli reddi (kota bekleme), saklanan
+  planlama yanıtını kişinin kendi model çağrısı politikasıyla okur ve yapay zekâya yalnız denetimin sonucu ulaşır. Bu yüzden kişiye
+  `inspect-content`'i kapatan bir şirket kuralı sohbetten önerilen Brain planlarını da reddeder. *Yol:* `/do` kullanın ya da kişiye
+  `model-invocation/inspect-content` izni verin.
 - **Run kartı iş hedefini henüz bağlamaz.** Bir Run'ın kartı planına, havuzuna ve çalışma profiline bağlıdır; yapılandırılmış iş hedefinin
   kimliğine bağlı değildir (Run onu kaydetmez; iş hedeflerinin 1. dilimi). Kart ile kabul arasında yapılandırmada değişen hedef yeniden
   denetlenir (`work-target/use`) ama kartta adı geçmez. *Yol:* bir Run kartı açıkken `execution.workTargets`'ı değiştirmeyin.

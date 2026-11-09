@@ -3,7 +3,7 @@ import { withPlanningSpending } from './planning-spending.js';
 import { userInfo } from 'node:os';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
+import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation, withLocalPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
 import { agentSelectionSummary, assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -29,11 +29,13 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
           },
           async verifySource(value) {
             if (value.source.kind === 'human') return;
-            const reference = value.source.receipt;
-            const inspected = await inspectConfiguredModelInvocation(projectRoot,
-              { schemaVersion: 2, scopeId: value.scopeId, invocationId: reference.invocationId, reference: reference.reference,
-                ...(value.source.contribution ? { includeResponseContent: true } : {}) }, options);
-            const content = inspected.responseContent;
+            const reference = value.source.receipt, query = { schemaVersion: 2 as const, scopeId: value.scopeId, invocationId: reference.invocationId, reference: reference.reference };
+            // The receipt under the caller's own inspect authority; a Brain contribution's retained answer is read as the system's integrity check
+            // (alpha.64, lead option b: the installation person's channel, as turn.ts classifies retained content): it never reaches the caller
+            // (the AI actor holds no inspect-content), only this check's verdict does.
+            const inspected = await inspectConfiguredModelInvocation(projectRoot, query, options);
+            const content = value.source.contribution ? (await withLocalPrincipalChannel(undefined, () => inspectConfiguredModelInvocation(projectRoot,
+              { ...query, includeResponseContent: true }, options), localPrincipalPeer())).responseContent : undefined;
             const text = content?.kind === 'native-response' && inspected.invocation ? extractOpenAiChatTextFromInvocation({ replayed: true,
               receipt: inspected.invocation, response: content.response, contentStatus: 'retained', purge: null }) : null;
             assertRunProposalSource(value, inspected.invocation, text, getConfigKnownSecrets(context.config));

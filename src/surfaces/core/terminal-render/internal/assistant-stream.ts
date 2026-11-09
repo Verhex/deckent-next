@@ -204,6 +204,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     return step(Object.freeze({ ...state, outputRecord: Object.freeze({ ...state.outputRecord, [delta.stream]: fed.state }), activeTool: Object.freeze({ ...active, output }) }), []);
   }
   if (delta.kind === 'message') return step(noteToolLine(state, delta.message), []);
+  // v31: a `propose_work` plan's progress is the workline's /do wait and /tasks handoff, never a scrollback row here.
+  if (delta.kind === 'work') return step(state, []);
   // DENY-WORDING: the card's settlement says who refused a call; the line then says "you declined", not a policy refusal.
   // alpha.59 L6: a call that asks for approval is never grouped; the open group settles before its card.
   if (delta.kind === 'approval' && delta.phase === 'requested') {

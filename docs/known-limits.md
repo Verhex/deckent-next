@@ -502,13 +502,24 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   the Brain model stay in `/model`, every other setting in its own window. An existing installation gets the four rules
   automatically at its first service start on this release, with no card (owner decision), when the service runs as the person who
   owns the policy files and a rule names that person in the configured service scope (or a first-run read rule does): the start writes
-  an `authority-change` audit record and an archived revision under the installer's upgrade key, once. A rule whose cell an allow of
-  the AI actor already holds (for example the MCP `work` or `dogfood-worker` group) is not added, so that allow never becomes a card; the
-  record names each such rule and the rule that holds it. `/policy` shows the four rules as one row, **AI proposals** (on, off or partly
-  on): off removes them on your card (`deckent policy upgrade --template current --rollback`), on adds back only them
-  (`--apply --only ai-proposals`); after you turn them off the start never adds them again. A chat-started plan shows no dirty-tree card
-  and no quota-wait window, and does not open `/tasks` by itself. A model that cannot use tools still needs `/do`. *Workaround:* start work
-  with `/do`, or open `/tasks` after the AI says the Run was admitted.
+  an `authority-change` audit record and an archived revision under the installer's upgrade key, once. A rule whose whole cell one
+  allow of the AI actor already covers (the same or a wider action, scope and resource selection, a role binding of the actor included;
+  for example the MCP `work` group's run rule) is not added, so that allow never becomes a card; the record names each such rule and the
+  rule that holds it. An allow on part of the cell (one pool, for example) covers nothing, so the rule is added. `/policy` shows the four
+  rules as one row, **AI proposals** (on, off, partly on, or covered by an existing grant, which it names): off removes them on your card
+  (`deckent policy upgrade --template current --rollback`), on adds back only them (`--apply --only ai-proposals`); after you turn them
+  off the start never adds them again. A chat-started plan shows `/do`'s quota-wait window, its Run card carries `/do`'s uncommitted-changes
+  line, and its admitted Run opens `/tasks` when the turn ends. A model that cannot use tools still needs `/do`. *Workaround:* start
+  work with `/do`.
+- **A coverage gap of the AI proposal rules can still lower an existing narrower allow to a card.** The start upgrade skips a v20 rule only
+  when one allow covers its whole cell. When an allow of the AI actor covers part of the Run-create or setting cell (one Run id, one
+  setting), the `require-approval` rule is added and, because `require-approval` wins over `allow`, that part now asks on the card too.
+  *Workaround:* widen the allow to the whole cell before the upgrade, or turn the row off in `/policy`.
+- **A Brain plan's source check reads the planning answer as the installation person.** The AI actor holds no `inspect-content`; when it
+  proposes work (`propose_work`) the Run proposal's source check, and a refused planning call's typed refusal (the quota wait), read the
+  retained planning answer through the person's own model-invocation policy, and only the check's verdict reaches the AI. A company rule
+  that denies the person `inspect-content` therefore refuses chat-proposed Brain plans too. *Workaround:* use `/do`, or allow the person
+  `model-invocation/inspect-content`.
 - **The Run card does not bind the work target yet.** A Run's card is bound to its plan, pool and execution profile, not to the
   configured work target's id (the Run does not record it; Slice 1 of work targets). A target changed in configuration between the card and
   admission is checked again (`work-target/use`) but is not named on the card. *Workaround:* do not change `execution.workTargets` while a

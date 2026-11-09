@@ -516,16 +516,16 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
   expect(firstRunTemplateRollback(current.policy, me, 'installation')).toEqual({ rules: proposals, conflicts: [], missing: [] });
   const changed = { ...current.policy, grants: current.policy.grants.map(grant => grant.id === proposals[0]!.id ? { ...grant, resource: { ...grant.resource, ids: ['one-run'] } } : grant) };
   expect(firstRunTemplateRollback(changed, me, 'installation')).toMatchObject({ rules: proposals.slice(1), conflicts: [proposals[0]!.id] });
-  // Lead 2026-11-09 (side effect B): an allow the AI actor already holds (here the MCP `work` group's run, pool and target cells) is never turned into a card
-  // or repeated: those v20 rules are left out of both upgrade paths and named with the holding rule; the setting rule still comes.
+  // Lead 2026-11-09 (side effects A, B): an allow the AI actor already holds over a v20 rule's WHOLE cell (here the MCP `work` group's run and every-target
+  // cells) is never turned into a card or repeated: those rules are left out of both upgrade paths and named with the holding rule. The group's pool `p`
+  // covers only part of v20's every-pool cell, so the pool allow still comes, with the setting rule.
   const work = ['run', 'pool', 'work-target'].map(kind => ({ id: `mcp-cap-work-${kind}`, effect: 'allow' as const, actions: kind === 'run' ? ['create', 'inspect', 'reserve', 'cancel'] : ['use'], scopes: ['installation'], principals: [ai],
     resource: { kind, ids: kind === 'pool' ? ['p'] : 'all' as const } }));
-  const grouped = { ...v19, revision: 'a-grouped', grants: [...v19.grants, ...work] };
-  expect(firstRunProposalRules(grouped.grants as never, me, ['installation'])).toEqual({ wanted: [proposals[1]], skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' },
-    { ruleId: 'first-run-mcp-propose-pool', heldBy: 'mcp-cap-work-pool' }, { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }] });
+  const grouped = { ...v19, revision: 'a-grouped', grants: [...v19.grants, ...work] }, covered = [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' }, { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }];
+  expect(firstRunProposalRules(grouped.grants as never, me, ['installation'])).toEqual({ wanted: [proposals[1], proposals[2]], skipped: covered });
   const groupedPlan = firstRunTemplateAdditions(grouped, { ...input, person: me });
-  expect(groupedPlan.status === 'plan' ? groupedPlan.rules : groupedPlan).toEqual([proposals[1]]);
-  const after = resolvePolicyBindings({ ...grouped, grants: [...grouped.grants, proposals[1]] }, current.bindings);
+  expect(groupedPlan).toMatchObject({ status: 'plan', rules: [proposals[1], proposals[2]], covered });
+  const after = resolvePolicyBindings({ ...grouped, grants: [...grouped.grants, proposals[1]!, proposals[2]!] }, current.bindings);
   for (const [action, kind] of [['create', 'run'], ['reserve', 'run'], ['use', 'pool']] as const)
     expect(evaluatePolicy(after, { principal: { ...mcp, scopeIds: ['installation'] }, scopeId: 'installation', action, resource: { kind, id: kind === 'pool' ? 'p' : 'r' } }).decision, `${kind}/${action}`).toBe('allow');
   // The live and N1 policies of 2026-10-19 give the MCP actor no such allow: they take all four v20 rules (nothing left out).
@@ -534,6 +534,6 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
     const host = { issuer: 'host', subject: '1000' };
     expect(firstRunProposalRules(shape.grants, host, ['live']).skipped, name).toEqual([]);
     expect(firstRunProposalRules([...shape.grants, ...work.map(rule => ({ ...rule, scopes: ['live'], principals: [mcpPrincipalRef(host)] }))] as never, host, ['live']).skipped.map(item => item.ruleId), name)
-      .toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-pool', 'first-run-mcp-propose-target']);
+      .toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-target']);
   }
 });

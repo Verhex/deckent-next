@@ -88,18 +88,22 @@ export interface WorklineLabels extends WorklineActionLabels {
   /** R4b: a subscription CLI's tools are not verified yet; its first turn verifies them (an information line, not "no tools"). */
   readonly toolsUnverified?: string;
 }
+/** What a quota wait shows (/do's Brain progress and a chat turn's `work` event, v31): until when, and the next attempt of how many. */
+export type QuotaWaitView = Pick<Extract<BrainPlanProgress, { kind: 'quota-wait' }>, 'attempt' | 'maxAttempts' | 'untilMs'>;
+type AdmittedRun = NonNullable<Awaited<ReturnType<WorklineLedgerPorts['inspectRun']>>>;
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
-    /** `check`: the card body when the folder has uncommitted changes (worded for the delivery mode), null when no card applies. */
-    readonly dirty?: Readonly<{ check: () => Promise<string | null>; title: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => Promise<boolean>; readonly chatReady?: () => Promise<boolean>; readonly tree?: () => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>;
+    /** `check`: the Run card's line when the folder has uncommitted changes (worded for the delivery mode), null when none applies (lead 2026-11-09:
+     * one line on the one Run card, for /do and a chat turn's `propose_work` alike; no card of its own). */
+    readonly dirty?: Readonly<{ check: () => Promise<string | null>; title: string }>; readonly offerHere?: (code: unknown) => Promise<boolean>; readonly chatReady?: () => Promise<boolean>; readonly tree?: () => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>;
     readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; noModel: string; prompt: string; cancelled: string; changed: string; unchanged: string; unread: string; canSetup?: () => Promise<boolean> }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
-    readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
+    readonly quotaWait?: (progress: QuotaWaitView) => Readonly<{ body: string; hint: string; untilText: string }>;
     readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference, observe?: (progress: BrainPlanProgress) => void, pending?: import('#engine/index.js').RunIntentRecord) => Promise<RunPlanningResult>;
     readonly lines: (result: RunPlanningResult) => readonly string[];
     /** R9f: the approval card's preview (only what its summary does not say); absent: `lines`. */
@@ -360,6 +364,19 @@ export function WorklineApp(props: WorklineProps) {
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, picker: labels.windows?.picker, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
+  // alpha.64 B (/do parity): /do and a chat turn's `propose_work` share one plan view — the Run card's uncommitted-changes line, the quota wait and
+  // the /tasks handoff of an admitted Run (the turn's `work` events, v31, map onto exactly these).
+  const doPlan = props.doPlan;
+  const dirtyLine = useCallback(async () => { const body = doPlan?.dirty ? await doPlan.dirty.check().catch(() => null) : null; return body ? `${doPlan!.dirty!.title}. ${body}` : null; }, [doPlan]);
+  const planProgress = useCallback((progress: Readonly<{ kind: 'planning' }> | (QuotaWaitView & { readonly kind: 'quota-wait' })) => {
+    if (progress.kind === 'planning' || !doPlan?.quotaWait) { setPlanWait(null); setActiveDo(current => current && { ...current, phase: 'planning', untilText: undefined }); return; }
+    const shown = doPlan.quotaWait(progress);
+    setPlanWait({ body: shown.body, hint: shown.hint }); setActiveDo(current => current && { ...current, phase: 'quota-wait', untilText: shown.untilText });
+  }, [doPlan]);
+  const handOff = useCallback(async (runs: readonly AdmittedRun[], execution: LocalExecution) => {
+    for (const run of runs) completion.register(run);
+    if (runs.length && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
+  }, [completion.register]);
   const opening = useRef(props.openingNotices), later = useRef(props.opening?.notices), tools = useRef(props.modelTools);
   useEffect(() => {
     const said = (notices: WorklineProps['openingNotices']) => { if (notices?.length) push(notices.map(item => notice(item.level, item.text))); };
@@ -413,7 +430,22 @@ export function WorklineApp(props: WorklineProps) {
         // While the card waits the turn waits for the person, not the model: the open tail is hidden and comes back for the restarted turn.
         const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => {
           setLive(null); return askGrantWindow(slot, position, question, cancel).finally(() => setLive({ step: opened, lead: true })); };
-        for await (const delta of props.secretGrant ? secretGrantTurn(start, props.secretGrant, ask, signal, () => bound) : start()) {
+        // v31 (/do parity): a `propose_work` call's plan shows /do's quota wait, its Run card carries /do's uncommitted-changes line, and its admitted
+        // Run is handed to /tasks once the turn ends (the same three steps /do takes).
+        const proposed = new Map<string, Promise<string | null>>(), admitted: string[] = [];
+        for await (const streamed of props.secretGrant ? secretGrantTurn(start, props.secretGrant, ask, signal, () => bound) : start()) {
+          let delta = streamed;
+          if (delta.kind === 'work') {
+            if (!proposed.has(delta.callId)) proposed.set(delta.callId, dirtyLine());
+            if (delta.phase === 'quota-wait' && delta.untilMs !== undefined && delta.attempt !== undefined && delta.maxAttempts !== undefined) {
+              setPlanning(true); planProgress({ kind: 'quota-wait', untilMs: delta.untilMs, attempt: delta.attempt, maxAttempts: delta.maxAttempts });
+            } else if (delta.phase === 'planning') planProgress({ kind: 'planning' });
+            else { setPlanning(false); setPlanWait(null); if (delta.runId) admitted.push(delta.runId); }
+          }
+          if (delta.kind === 'approval' && delta.phase === 'requested' && proposed.has(delta.callId)) {
+            setPlanning(false); setPlanWait(null);
+            const line = await proposed.get(delta.callId); if (line) delta = { ...delta, preview: `${delta.preview}\n${line}` };
+          }
           if (delta.kind === 'text') answer += delta.text; if (delta.kind === 'done' && delta.note) noted = true;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
@@ -435,6 +467,7 @@ export function WorklineApp(props: WorklineProps) {
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
         history.current = next.length || base !== messages ? agentHistory(base[0]!, [...base, ...next]) : messages;
         push(await session.save(history.current));
+        if (admitted.length && ledger) await handOff((await Promise.all(admitted.map(runId => ledger.inspectRun(runId).catch(() => null)))).filter((run): run is AdmittedRun => run !== null), execution);
         if (props.secretGrant && props.mcpGrants && noted) for (const message of await offerMcpGrants(props.mcpGrants.keys, props.secretGrant, question => askGrantWindow(slot, position, question, signal), offeredGrants.current, props.mcpGrants.given)) push([notice('info', message)]);
       } else {
         const reply = await completeTurn(plainChatHistory(messages), signal);
@@ -459,11 +492,11 @@ export function WorklineApp(props: WorklineProps) {
       }
       throw error;
     } finally {
-      setLive(null); setTurnRunning(false); setChatting(false); turnSteer.bind(null, true); // a line no result settled goes back into the input
+      setLive(null); setTurnRunning(false); setChatting(false); setPlanning(false); setPlanWait(null); turnSteer.bind(null, true); // a line no result settled goes back into the input
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.onboarding, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.onboarding, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel, dirtyLine, planProgress, handOff, ledger]);
 
   const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
   const [draft, setDraft] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(() => props.initialDraft ? { seq: 1, entry: props.initialDraft } : null);
@@ -493,13 +526,12 @@ export function WorklineApp(props: WorklineProps) {
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
       const observe = (progress: BrainPlanProgress) => {
         if (progress.kind === 'billing-switch') { push([notice('info', fillTemplate(props.doPlan!.billingSwitch, { model: progress.reference.modelId }))]); return; }
-        if (progress.kind === 'planning' || !props.doPlan!.quotaWait) { setPlanWait(null); setActiveDo(current => current && { ...current, phase: 'planning', untilText: undefined }); return; }
-        const shown = props.doPlan!.quotaWait(progress);
-        setPlanWait({ body: shown.body, hint: shown.hint }); setActiveDo(current => current && { ...current, phase: 'quota-wait', untilText: shown.untilText });
+        planProgress(progress);
       };
       const selectedIntent = onboarding.intent(execution.input.inputId), commandId = selectedIntent?.commandId ?? globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
         props.doPlan!.quotaWait ? observe : undefined, selectedIntent?.pending);
-      const dirtyBody = props.doPlan.dirty && !selectedIntent?.pending ? await props.doPlan.dirty.check().catch(() => null) : null, dirty = dirtyBody ? props.doPlan.dirty! : null; if (dirty && dirtyBody && await windows.ask({ title: dirty.title, hints: dirty.prompt, body: () => [{ spans: [span(dirtyBody)] }], bodyRows: 3, tree: { title: dirty.title, items: [{ id: 'continue', label: dirty.go }, { id: 'cancel', label: dirty.cancel }] } }) !== 'continue') { push([notice('info', dirty.cancelled)]); return true; } // BeUser M-32 / NF-4: the card says where the worker starts (the last commit, or the current files in working-tree delivery)
+      // BeUser M-32 / NF-4, lead 2026-11-09: the Run card says where the worker starts (the last commit, or the current files in working-tree delivery); one card.
+      const dirty = selectedIntent?.pending ? null : await dirtyLine();
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
@@ -511,14 +543,14 @@ export function WorklineApp(props: WorklineProps) {
         for (let cards = 0; cards < 3 && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; cards++) {
           const expiresAtMs = result.proposal.approval.expiresAt;
           setActiveDo(current => current && { ...current, phase: 'waiting', expiresAtMs });
-          await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, (props.doPlan.cardLines ?? props.doPlan.lines)(result).join('\n'));
+          await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, [...(props.doPlan.cardLines ?? props.doPlan.lines)(result), ...(dirty ? [dirty] : [])].join('\n'));
           if (execution.signal.aborted) return true;
           result = await plan();
           if (result.run) completion.register(result.run);
         }
         setActiveDo(null);
         await show(props.doPlan.lines(result));
-        if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
+        await handOff(result.run ? [result.run] : [], execution);
       } catch (error) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
         if (!execution.signal.aborted && props.doPlan.localFallback && props.doPlan.here && await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { // owner option A: K1 data, K4 card, K5 every time
@@ -658,7 +690,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel, completion.register, completion.tracked, deliveries, props.knownSecrets]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel, completion.register, completion.tracked, deliveries, props.knownSecrets, dirtyLine, planProgress, handOff]);
   // SLASH-WINDOWS I-1 (owner 2026-10-08, Jev b1e8286f): with window words a slash command typed with an argument runs bare — every host
   // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.

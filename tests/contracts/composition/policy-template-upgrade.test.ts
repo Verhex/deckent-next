@@ -6,13 +6,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, withMcpPrincipal } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { openPermissionModesInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { closeModeRuntimes, me, modeRuntime } from '../support/agent-turn-modes.js';
 import { clearConfigCache } from '#platform/index.js';
+import { policyPanelPort, type PolicyTemplateUpgradePort } from '#surfaces/core/cli-terminal/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
@@ -275,6 +276,19 @@ describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner
     expect(await upgrade('preview', undefined, 'ai-proposals')).toMatchObject({ status: 'current', held: DELTA });
     // The scoped re-enable is the person's governed change, so the row's revoke removes it again.
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(',') });
+    // Lead 2026-11-09 (side effects B, C): a role binding of the AI actor that allows every v20 cell covers the delta (its effective grants), so the
+    // re-enable adds nothing, and /policy's row names the covering grants instead of saying "not on this policy" (en and tr).
+    const ai = mcpPrincipalRef(me[0]!), cells = [['run', 'create'], ['config', 'write'], ['pool', 'use'], ['work-target', 'use']] as const;
+    writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...JSON.parse(bytes()), revision: 'a-role', roles: [{ id: 'ai-all', permissions: cells.map(([kind, action]) => ({ id: kind, effect: 'allow', actions: [action], resource: { kind, ids: 'all' } })) }] }), { mode: 0o600 });
+    const bindings = JSON.parse(readFileSync(join(f.data, 'bindings.json'), 'utf8')) as { bindings: unknown[] };
+    writeFileSync(join(f.data, 'bindings.json'), JSON.stringify({ ...bindings, revision: 'b-role', bindings: [...bindings.bindings, { id: 'ai-bound', principals: [ai], roles: ['ai-all'], scopes: 'all' }] }), { mode: 0o600 }); clearConfigCache();
+    const covered = cells.map(([kind]) => `ai-bound/ai-all/${kind}`);
+    expect(await upgrade('preview', undefined, 'ai-proposals')).toMatchObject({ status: 'current', held: [], covered: DELTA.map((ruleId, index) => ({ ruleId, heldBy: covered[index] })) });
+    const port: PolicyTemplateUpgradePort = (_root, _scope, input) => upgrade(input.mode, input.expect, input.only);
+    for (const [locale, words] of [['en', 'covered by an existing grant: '], ['tr', 'mevcut bir izinle karşılanıyor: ']] as const) {
+      const panel = policyPanelPort(f.project, { inspectMcpCapabilities: async () => ({ groups: [] }) } as never, { env: f.env }, locale, undefined, undefined, port);
+      expect((await panel.inspect('scope')).groups.find(row => row.id === ':ai-proposals')?.detail).toBe(`${words}${covered.join(', ')}`);
+    }
   }, 120_000);
 });
 

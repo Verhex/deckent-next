@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 30 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 31 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -153,6 +153,7 @@ export const RUNTIME_SERVICE_EVENT_FRAME_EVENTS = 256;
 /**
  * v30 (tema L6 + owner S5, one bump): the `chatTurn` result carries typed MCP `notices` (no MCP text in `note`) and `steer`; `steerChatTurn` queues
  * a person line for the caller's own running turn, joined only at the engine's model-call boundary. Both current-only; window [30, 29].
+ * v31 (alpha.64 B, /do parity): the `work` event (a `propose_work` call's planning, quota wait and admitted Run); window [31, 30].
  * `chatTurn` (v12; v13 adds `context` and `compacted`; v14 adds `approval.requested`, `approval.settled` and `tool.output`; v15
  * adds `tool.finished`'s optional `cleanup`, host shell calls only, added within v15 without a further version bump — CLEANUP-MARK)
  * answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
@@ -180,11 +181,12 @@ export class RuntimeServiceProtocolError extends Error {
  * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
  * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) kept [25, 24]; v26 (MCP actor) kept [26, 25];
  * v27 (Run-create approval subject) kept [27, 26]; v28 (RunProposal) kept [28, 27]; v29 (target queue) kept [29, 28]; v30 (typed notices, steer)
- * keeps [30, 29]: v28 is outside, and a v29 terminal's `chatTurn` is closed unanswered (reopen the terminal after the switch).
+ * kept [30, 29]; v31 (alpha.64 B: the `work` turn event of `propose_work`) keeps [31, 30]: v29 is outside, and a v30 terminal's `chatTurn` is closed
+ * unanswered (reopen the terminal after the switch).
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 29] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 30] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(29)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(30)]);
 export const runtimeServiceLifecycleRequestSchema = z.strictObject({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, get channel() { return z.literal('mcp').optional(); },
   get operation() { return z.enum(['describeService', 'shutdownService']); }, get input() { return z.unknown().optional(); } })
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

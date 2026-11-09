@@ -427,6 +427,7 @@
   "policy.aiProposals.state.off": "kapalı",
   "policy.aiProposals.state.partial": "kısmen açık",
   "policy.aiProposals.state.unavailable": "bu politikada yok",
+  "policy.aiProposals.covered": "mevcut bir izinle karşılanıyor: {grants}",
   "policy.aiProposals.note": "Sohbetteki yapay zekâ iş (/do kartı) ve üç ayar önerebilir: language, output_mode, terminal.responseStyle (önce/sonra kartı). Her öneriye her modda kartında sen karar verirsin.",
   "policy.aiProposals.onCard": "Aç: yalnız şu kuralları yönetilen politika değişikliğiyle ekler (audit'li): {ids}",
   "policy.aiProposals.offCard": "Kapat: şu kuralları yönetilen politika değişikliğiyle kaldırır (audit'li; önceki politika arşivde kalır): {ids}",

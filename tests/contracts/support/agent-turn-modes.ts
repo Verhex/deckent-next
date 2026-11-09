@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
@@ -12,7 +12,7 @@ import { ModelActivationApplication, ModelBindingApplication, modelInvocationTar
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
-import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveGlobalConfigReadPath, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
@@ -52,7 +52,8 @@ const baseGrants = [
 
 export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null;
   /** SHELL-AUTONOMY: the `terminal.shell` section (realm) and the sandbox providers (code-only port) when a test pins them. */
-  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string; /** alpha.64 B: the service's plan port `propose_work` runs. */ planWork?: PlanServiceRun }) {
+  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string; /** alpha.64 B: the service's plan port `propose_work` runs. */ planWork?: PlanServiceRun;
+  /** alpha.64 B: the fixture model is also the Brain (a `brain` role row); every non-streamed request (a planning call) is answered with this content. */ brain?: string }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-modes-')); roots.push(root);
   const project = join(root, 'project'), data = input.dataRoot ? join(project, input.dataRoot) : join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
@@ -68,7 +69,13 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body: Buffer[] = []; req.on('data', (part: Buffer) => body.push(part));
     req.on('end', () => {
-      state.sent.push(JSON.parse(Buffer.concat(body).toString('utf8')) as (typeof state.sent)[number]);
+      const sent = JSON.parse(Buffer.concat(body).toString('utf8')) as (typeof state.sent)[number] & { stream?: boolean };
+      state.sent.push(sent);
+      if (input.brain !== undefined && sent.stream !== true) { // a planning call is one JSON answer, never a turn round
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'chatcmpl-brain', object: 'chat.completion', created: 1, model: 'native-chat', choices: [{ index: 0, finish_reason: 'stop',
+          message: { role: 'assistant', content: input.brain } }], usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 } })); return;
+      }
       // Odd requests are the call round of a turn, even ones its closing round.
       const call = state.requests++ % 2 === 0 ? state.script.shift() : undefined;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -112,6 +119,9 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   };
   await writeAuthority(input.grants, input.mode);
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  if (input.brain !== undefined) { const global = await resolveGlobalConfigReadPath(env); await mkdir(dirname(global), { recursive: true });
+    await writeFile(global, JSON.stringify({ model_roles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture-roles', roles: [],
+      models: [{ channelId: reference.providerId, modelId: model.nativeId, version: 1, tier: 'frontier', roles: ['brain'] }], exceptions: [] }] } })); }
   await ensureConfiguredTerminalIdentity(project, 'scope', { env });
   if (input.planWork) { const { store } = await openConfiguredAttemptStore(project, { env }); try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 } }); } finally { store.close(); } }
   const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, { ...(input.sandboxes ? { shellSandboxes: input.sandboxes } : {}), ...(input.planWork ? { planWork: input.planWork } : {}) });
