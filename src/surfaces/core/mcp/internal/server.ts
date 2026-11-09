@@ -211,7 +211,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (reserveRunTasks) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'reserve_run_tasks', description: t('mcp.tool.reserveRunTasks', {}, locale),
     schema: runReservationCommandSchema, invoke: (input: unknown) => reserveRunTasks.call(applications, runReservationCommandSchema.parse(input)) });
   const requestCancellation = applications.requestRunCancellation;
-  // Destructive but idempotent: adapters/core/attempt-store/internal/runs.ts:123 returns the commandId-keyed receipt on replay before any new mutation.
+  // Destructive but idempotent: adapters/core/run-store/internal/runs.ts cancelRun returns the commandId-keyed receipt on replay before any new mutation.
   if (requestCancellation) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'request_run_cancellation', description: t('mcp.tool.requestRunCancellation', {}, locale),
     schema: runCommandSchema, invoke: (input: unknown) => requestCancellation.call(applications, runCommandSchema.parse(input)) });
   const deliverCancellation = applications.deliverRunCancellation;
@@ -222,7 +222,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (reconcile) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'reconcile_attempt', description: t('mcp.tool.reconcileAttempt', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => reconcile.call(applications, attemptIdentitySchema.parse(input)) });
   const executeTask = applications.executeTask;
-  // Destructive but idempotent: composition/core/execution/internal/task.ts:24-27 returns the existing bound dispatch for the identity instead of relaunching a second container/process.
+  // Destructive but idempotent: composition/core/execution/internal/task.ts:56-59 returns the existing bound dispatch for the identity instead of relaunching a second container/process.
   if (executeTask) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: true, name: 'execute_task', description: t('mcp.tool.executeTask', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => executeTask.call(applications, attemptIdentitySchema.parse(input)) });
   const evaluateTask = applications.evaluateTask;

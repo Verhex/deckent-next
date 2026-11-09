@@ -32,7 +32,6 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
   return {
     line(raw) {
       const line = parseCodexExecLine(raw);
-      // The completed turn is final: no further line (parsed or not; a blank one is no line) may follow it.
       if (usage && !(line.kind === 'invalid' && line.reason === 'blank')) return reject('invalid-response', { refusal: 'guard', field: 'after-turn' });
       if (line.kind === 'invalid') return null;
       const { type, item } = line;
@@ -66,7 +65,6 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
     },
     end(exit, egress) {
       if (!usage || !exit.exited || exit.exitCode !== 0) return null;
-      // A completed turn without an answer is no answer.
       if (answer === null) return { refusal: reject('invalid-response', { refusal: 'invalid-output', subtype: 'no-answer' }) };
       // The response counts cache reads and writes apart from the input, as for Claude.
       const cacheRead = usage.cached_input_tokens, cacheWrite = usage.cache_write_input_tokens, input = usage.input_tokens - cacheRead - cacheWrite, output = usage.output_tokens;

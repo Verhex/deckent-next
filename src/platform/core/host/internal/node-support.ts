@@ -29,7 +29,6 @@ export function assessNodeSupport(version: string, range: string): NodeSupport {
   if (!sorted || !have) return { version, floor: sorted?.[0]?.floor ?? null, status: 'unknown' };
   const satisfied = sorted.find(clause => compare(have, clause.min) >= 0 && (clause.belowMajor === null || have[0] < clause.belowMajor));
   if (satisfied) return { version, floor: satisfied.floor, status: 'supported' };
-  // Name the same major's floor, else the next higher major's, else the highest.
   const named = sorted.find(clause => clause.min[0] === have[0]) ?? sorted.find(clause => clause.min[0] > have[0]) ?? sorted[sorted.length - 1]!;
   return { version, floor: named.floor, status: 'unsupported' };
 }

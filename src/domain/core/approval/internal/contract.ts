@@ -73,12 +73,12 @@ const requestShape = { approvalId: identitySchema, scopeId: identitySchema, subj
   policyRevision: identitySchema, summary: approvalSummarySchema, createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional() };
 /** Operation-keyed approval request (v2, C12): agent tool calls and catalog operation commands; task admission keeps v1. */
 const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, ...requestShape }).refine(r => r.expiresAt > r.createdAt).readonly();
-/** Card-facts approval request (v3, B1/APPROVAL-SURFACE): the v2 shape plus the producer's `facts`; v1/v2 records stay readable as written. */
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Versioned display expansion: sealed with the request and bound to the exact tool arguments. Older v3 records retain their bytes. */
 export const approvalPreviewSchema = z.strictObject({ schemaVersion: z.literal(1), argsDigest: digest,
   text: persistedString(z.string().max(16_384)), cut: approvalPreviewCutSchema.nullable() }).readonly();
 /** KG4 F3: sealed worker origin; alpha.64 writes it (owner 2026-11-09: no alpha.63.3 rollback). Older v3 records keep their bytes. */
 const workerOriginSchema = z.strictObject({ kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema, turnId: identitySchema, resourceDigest: digest, argsDigest: digest }).readonly();
+/** Card-facts approval request (v3, B1/APPROVAL-SURFACE): the v2 shape plus the producer's `facts`; v1/v2 records stay readable as written. */
 const factualApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(3); }, ...requestShape, facts: approvalFactsSchema,
   preview: approvalPreviewSchema.optional(), origin: workerOriginSchema.optional() }).refine(r => r.expiresAt > r.createdAt).readonly();
 export const approvalRequestSchema = z.union([taskApprovalRequestSchema, operationApprovalRequestSchema, factualApprovalRequestSchema]);
