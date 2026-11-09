@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, getConfigValue, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent,
+  resolveLocale, getConfigValue, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent, t,
 } from '../../../src/platform/index.js';
 import { CodedError as DomainCodedError, isCodedError as isDomainCodedError } from '../../../src/domain/index.js';
 
@@ -21,6 +21,9 @@ describe('errors, output and locale public contracts', () => {
     expect(ErrorRegistry.get('constructor')).toBeUndefined();
     expect(Object.isFrozen(ErrorRegistry.get('CONFIG_FILE_INVALID')?.howToFix)).toBe(true);
     expect(formatHumanError(ErrorRegistry.createError('CONFIG_FILE_INVALID'), { noColor: true, locale: 'tr' })).toContain('eksik veya hatalı alanlar');
+    // KG14 F-H2c: a plain code renders its own catalog sentence (any family prefix) with the caller's params and keeps its exit category.
+    for (const locale of ['en', 'tr'] as const) expect([ErrorRegistry.get('AGENT_CATALOG_UNAVAILABLE', locale, { id: 'a' })?.message, ErrorRegistry.get('NATIVE_WORKER_F08_INVALID', locale)?.message,
+      ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND').category]).toEqual([t('error.AGENT_CATALOG_UNAVAILABLE', { id: 'a' }, locale), t('headless.agent.k22.worker.NATIVE_WORKER_F08_INVALID', {}, locale), 'usage']);
   });
   it('rejects a legacy numbered code and a lowercase code at the registry lint pattern (negative proof)', () => {
     expect(lintErrorRegistry()).toEqual([]);

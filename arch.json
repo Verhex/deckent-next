@@ -5240,7 +5240,8 @@
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
         "src/platform/core/utils",
-        "src/adapters/core/file-lock"
+        "src/adapters/core/file-lock",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
@@ -5301,9 +5302,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42240,
+      "adapters": 42241,
       "surfaces": 45000,
-      "composition": 13687
+      "composition": 13686
     },
     "totalSrcLines": 200000,
     "testCases": 8203,

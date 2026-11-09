@@ -3,7 +3,7 @@ import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import type { StdioServerParameters } from '@modelcontextprotocol/client/stdio';
-import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, knownSecretValues, mcpStdioEnvironment, readBuildIdentity, redactBounded, PACKAGE_NAME,
+import { CodedError, DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, knownSecretValues, mcpStdioEnvironment, readBuildIdentity, redactBounded, PACKAGE_NAME,
   PACKAGE_VERSION, type KnownSecretSnapshot } from '#platform/index.js';
 import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
@@ -72,7 +72,7 @@ export function createMcpRedirectFetch(approvedServerUrl: string, fetchImplement
       if (response.status < 300 || response.status >= 400) {
         if (!response.body) return response;
         const reader = response.body.getReader(); let received = 0;
-        const tooLarge = () => Object.assign(new Error('MCP_HTTP_RESPONSE_TOO_LARGE'), { code: 'MCP_HTTP_RESPONSE_TOO_LARGE', maxBytes });
+        const tooLarge = () => new CodedError('MCP_HTTP_RESPONSE_TOO_LARGE', { params: { maxBytes } });
         if (Number(response.headers.get('content-length')) > maxBytes) { void reader.cancel().catch(() => undefined); throw tooLarge(); }
         return new Response(new ReadableStream<Uint8Array>({ async pull(controller) {
           try { const chunk = await reader.read();
@@ -342,7 +342,7 @@ export class McpClientPool implements McpPoolView {
     // SDK negotiation probes precede Client's handlers; close the transport explicitly on cancellation too.
     const abortStart = () => { void transport.close().catch(() => undefined); };
     this.signal.addEventListener('abort', abortStart, { once: true });
-    try { this.signal.throwIfAborted(); await client.connect(transport, { timeout: settings.connectTimeoutMs, signal: this.signal }); if (state.inputRefusal) throw Object.assign(new Error(state.inputRefusal), { code: state.inputRefusal }); }
+    try { this.signal.throwIfAborted(); await client.connect(transport, { timeout: settings.connectTimeoutMs, signal: this.signal }); if (state.inputRefusal) throw new CodedError(state.inputRefusal); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
       // A6-7: a failed start (stdio or HTTP) may echo a launch value; the server's known values are cut out before anything shows it.

@@ -468,6 +468,8 @@ if (existsSync(identicalPath)) for (const key of JSON.parse(readFileSync(identic
   if (!knownKeys.has(key)) fail('i18n-identical-stale', rel(identicalPath), `identical-text exemption "${key}" names no catalog key`);
 }
 const T_CALL = new RegExp(`(?<![\\w.])${arch.i18n.callee}\\(\\s*([^)]*?)\\s*[,)]`, 'g');
+// KG14 F-H2c: plainErrors() builds `<prefix><CODE>` in its one t() call; the keys of each plainErrors('<prefix>', { CODE: ... }) call are checked instead.
+const PLAIN_ERRORS_FILE = 'src/platform/core/errors/internal/definition.ts', PLAIN_ERRORS_CALL = /plainErrors\(\s*'([^']*)',\s*\{([^}]*)\}\)/g;
 const OUTPUT_CALL = /(?:console\.(?:log|error|warn|info)|process\.(?:stdout|stderr)\.write)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
 for (const file of srcFiles) {
   if (rel(file).startsWith(`${arch.i18n.catalogDir}/`)) continue; // the t() implementation itself
@@ -476,8 +478,13 @@ for (const file of srcFiles) {
     const arg = m[1].trim();
     const lit = arg.match(/^(['"])([^'"]+)\1$/);
     const line = src.slice(0, m.index).split('\n').length;
+    if (!lit && rel(file) === PLAIN_ERRORS_FILE && arg === 'key') continue;
     if (!lit) { fail('i18n-dynamic', `${rel(file)}:${line}`, `t() key must be a string literal (got ${arg || 'empty'})`); continue; }
     if (!knownKeys.has(lit[2])) fail('i18n-key', `${rel(file)}:${line}`, `unknown i18n key "${lit[2]}"`);
+  }
+  const uncommented = src.replace(/\/\/.*$/gm, ''); // a comment inside a call may hold '}'; newlines stay, so line numbers hold
+  for (const m of uncommented.matchAll(PLAIN_ERRORS_CALL)) for (const code of m[2].matchAll(/\b([A-Z][A-Z0-9_]+):/g)) {
+    if (!knownKeys.has(m[1] + code[1])) fail('i18n-key', `${rel(file)}:${uncommented.slice(0, m.index).split('\n').length}`, `unknown i18n key "${m[1] + code[1]}"`);
   }
   if (rel(file).startsWith('src/surfaces/')) {
     for (const m of src.matchAll(OUTPUT_CALL)) {
