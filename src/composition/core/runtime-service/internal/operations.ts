@@ -9,7 +9,7 @@ import { inspectConfiguredInventory } from '#composition/core/inventory/index.js
 import { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
   reconcileConfiguredAttempt, recoverConfiguredCancellations, requestConfiguredRunCancellation,
   reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-export function createConfiguredRuntimeOperations(projectRoot: string, options: ConfigLoadOptions = {}) {
+export function createConfiguredRuntimeOperations(projectRoot: string, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   const executionOptions = withNativeCliWorkerOptions(projectRoot, options);
   return Object.freeze({
     renewApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'renew', input, options, undefined, delivery?.maxResultBytes); },
@@ -17,14 +17,14 @@ export function createConfiguredRuntimeOperations(projectRoot: string, options: 
     inspectApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'inspect', input, options, undefined, delivery?.maxResultBytes); },
     decideApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'decide', input, options, undefined, delivery?.maxResultBytes); },
     ...bindRuntimeApplicationMethods(projectRoot, options, { proposeRun: proposeConfiguredRun, inspectRunProposal: inspectConfiguredRunProposal, createRun: createConfiguredRun,
-      reserveRunTasks: reserveConfiguredRunTasks, executeTask: (root: string, input: Parameters<typeof executeConfiguredTask>[1]) => executeConfiguredTask(root, input, executionOptions), evaluateTask: evaluateConfiguredTask, inspectRun: inspectConfiguredRun,
+      reserveRunTasks: reserveConfiguredRunTasks, executeTask: (root: string, input: Parameters<typeof executeConfiguredTask>[1]) => executeConfiguredTask(root, input, executionOptions, signal), evaluateTask: evaluateConfiguredTask, inspectRun: inspectConfiguredRun,
       inspectInventory: inspectConfiguredInventory, requestRunCancellation: requestConfiguredRunCancellation, deliverRunCancellation: deliverConfiguredRunCancellation,
       reconcileAttempt: reconcileConfiguredAttempt, recoverCancellations: recoverConfiguredCancellations }),
   });
 }
 export type ConfiguredRuntimeOperations = ReturnType<typeof createConfiguredRuntimeOperations>;
-export const executeConfiguredRuntimeOperation = (projectRoot: string, request: RuntimeServiceRequest, options: ConfigLoadOptions = {}) =>
-  executeRuntimeApplicationOperation(createConfiguredRuntimeOperations(projectRoot, options), request);
+export const executeConfiguredRuntimeOperation = (projectRoot: string, request: RuntimeServiceRequest, options: ConfigLoadOptions = {}, signal?: AbortSignal) =>
+  executeRuntimeApplicationOperation(createConfiguredRuntimeOperations(projectRoot, options, signal), request);
 
 /** Background cards have no initiating terminal. Bind the fresh witnessed deciding peer, then use the existing application unchanged. */
 export async function attendedWorkerApprovalInput(root: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,

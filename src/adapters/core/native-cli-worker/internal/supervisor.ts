@@ -87,8 +87,10 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       const ready = await inspectNativeCliWorker(this.resolved.binding, this.input.ports);
       if (ready.state !== 'ready') { outcome = this.unknown(ready.reason); break work; }
       const guard = async () => {
-        if (combined.aborted || !await this.input.fence()) throw new SupervisorError('SUPERVISOR_CANCELLED');
-        await this.input.ports.recheck(this.input.request, this.resolved.binding, combined);
+        try {
+          if (combined.aborted || !await this.input.fence()) throw new SupervisorError('SUPERVISOR_CANCELLED');
+          await this.input.ports.recheck(this.input.request, this.resolved.binding, combined);
+        } catch (error) { if (tools) { try { await tools.revoke(); } finally { this.lifetime.abort(); } } throw error; }
       };
       await guard();
       tools = await this.input.ports.openTools(this.input.request, this.resolved.binding, combined, this.input.toolContext ?? {});
@@ -134,7 +136,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
     } } catch { outcome = this.unknown(combined.aborted ? 'NATIVE_WORKER_STOP_UNCONFIRMED' : 'NATIVE_CLI_WORKER_UNAVAILABLE'); }
     finally {
       combined.removeEventListener('abort', stop);
-      // Close the facade first. Cleanup is evidence: failed/unverified tool settlement cannot become a successful process result.
+      // Failed/unverified tool settlement cannot become a successful process result.
       const [closed, cancelled, disposed] = await Promise.allSettled([this.bridge?.close(), tools?.cancel(), this.driver?.close()]);
       if ([closed, cancelled, disposed].some(result => result.status === 'rejected')) outcome = this.unknown('NATIVE_WORKER_STOP_UNCONFIRMED');
       else if (cancelled.status === 'fulfilled') {

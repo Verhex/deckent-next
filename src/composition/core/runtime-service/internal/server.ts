@@ -172,7 +172,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           : isRuntimeServiceSecretOperation(request.operation)
           ? executeConfiguredRuntimeSecretOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
           : isRuntimeServiceQueueOperation(request.operation) ? targetQueue.execute(request, peer, config.service.responseMaxBytes)
-          : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
+          : executeConfiguredRuntimeOperation(projectRoot, request, options, controller.signal), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error), report = reportFailure(failure).catch(() => undefined); reports.add(report); void report.then(() => reports.delete(report));
