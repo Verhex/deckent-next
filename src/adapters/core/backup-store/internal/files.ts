@@ -38,15 +38,13 @@ async function privateDirectoryParent(path: string) {
   if (!await lstat(parent).catch(() => null)) await ensurePrivateDirectory(parent);
 }
 const PRIVATE_REFUSAL = { unsafe: 'BACKUP_PATH_UNSAFE', 'too-large': 'BACKUP_LIMIT', changed: 'BACKUP_STATE_CHANGED' } as const;
-/** The platform private-file read (KG12 F1) bounded by the size seen first, so no buffer is larger than the file: growth past it is a change. An
- * absent file keeps its ENOENT (a vanished set member is a modified set). */
+/** The platform private-file read (KG12 F1). An absent file keeps its ENOENT (a vanished set member is a modified set). */
 export async function readPrivate(path: string, maxBytes: number): Promise<Buffer> {
-  const file = await safePath(path), seen = await lstat(file);
-  const bytes = await readPrivateFile(file, Math.min(seen.size, maxBytes), { mode: 'mask' }).catch((error: unknown) => {
+  const file = await safePath(path), bytes = await readPrivateFile(file, maxBytes, { mode: 'mask' }).catch((error: unknown) => {
     if (!(error instanceof PrivateFileError)) throw error;
-    return refuse(error.reason === 'too-large' && seen.size < maxBytes ? 'BACKUP_STATE_CHANGED' : PRIVATE_REFUSAL[error.reason]);
+    return refuse(PRIVATE_REFUSAL[error.reason]);
   });
-  return bytes ?? refuse('BACKUP_STATE_CHANGED');
+  return bytes ?? lstat(file).then(() => refuse('BACKUP_STATE_CHANGED'));
 }
 export async function writePrivate(path: string, value: string | Uint8Array): Promise<void> {
   await ensurePrivateDirectory(dirname(path));
@@ -60,7 +58,7 @@ export async function syncDirectory(path: string) {
 }
 export async function digestFile(path: string): Promise<string> {
   await safePath(path); const hash = createHash('sha256');
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = await handle.stat();
     if (!privateFile(before)) return refuse('BACKUP_PATH_UNSAFE');

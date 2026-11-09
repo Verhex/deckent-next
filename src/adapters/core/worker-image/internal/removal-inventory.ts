@@ -1,6 +1,5 @@
-import { persistedString } from '#platform/index.js';
-import { constants } from 'node:fs';
-import { lstat, open, opendir, realpath } from 'node:fs/promises';
+import { persistedString, PRIVATE_PERMISSION_MASK, readPrivateFile } from '#platform/index.js';
+import { lstat, opendir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -9,19 +8,14 @@ import { WorkerImageRemovalTarget, workerRemovalGuard, type WorkerRemovalResourc
 import { nativeWorkerRemovalDriver, workerImageManualCommand, type WorkerReferenceOwner } from './removal-driver.js';
 import { workerLeaseReferences } from './references.js';
 import limits from './limits.json' with { type: 'json' };
-const PRIVATE_PERMISSION_MASK = 0o077;
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const schema = z.looseObject({ schemaVersion: z.literal(3), imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u), daemonId: persistedString(z.string().min(1)), endpoint: z.string(),
   recipeSha256: z.string(), images: z.array(z.looseObject({ imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), tag: z.string().nullable().optional() })).nonempty() });
+/** A receipt or build context file: canonical path, then the platform private-file read (KG12 F1); anything else refuses. */
 async function read(path: string) {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const info = await file.stat();
-    if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || info.mode & PRIVATE_PERMISSION_MASK || info.size > limits.receiptBytes || await realpath(path) !== path) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
-    const bytes = Buffer.alloc(info.size + 1), result = await file.read(bytes, 0, bytes.length, 0), after = await file.stat();
-    if (result.bytesRead !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs || after.size !== info.size) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
-    return bytes.subarray(0, result.bytesRead);
-  } finally { await file.close(); }
+  const bytes = await realpath(path) === path ? await readPrivateFile(path, limits.receiptBytes, { mode: 'mask' }).catch(() => null) : null;
+  if (!bytes) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
+  return bytes;
 }
 /** Every image a retained receipt names: its exact manual removal step (bound to the receipt's pinned daemon) is always reported;
  * daemon observation and a removal target exist only when the lease owner proves complete references for that daemon. */

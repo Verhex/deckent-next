@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -116,13 +116,21 @@ describe.skipIf(process.platform !== 'linux')('SEC-2 F29: project MCP trust is n
     expect(existsSync(join(w.project, 'vendor'))).toBe(false);
   });
 
-  it.skipIf(process.platform === 'win32')('a hard-linked, unparsable, invalid or oversized trust file is refused (fail closed)', async () => {
+  it.skipIf(process.platform === 'win32')('a hard-linked, symlinked, foreign, unparsable, invalid or oversized trust file is refused (fail closed)', async () => {
     const base = mkdtempSync(join(tmpdir(), 'deckent-mcp-sec2-link-')); roots.push(base);
-    const store = join(base, 'store'), other = join(base, 'other.json'), fresh = join(base, 'fresh');
-    mkdirSync(store, { mode: 0o700 }); mkdirSync(fresh, { mode: 0o700 });
+    const store = join(base, 'store'), other = join(base, 'other.json'), fresh = join(base, 'fresh'), linked = join(base, 'linked');
+    mkdirSync(store, { mode: 0o700 }); mkdirSync(fresh, { mode: 0o700 }); mkdirSync(linked, { mode: 0o700 });
     writeFileSync(other, JSON.stringify({ schemaVersion: 1, revision: 0, servers: [] }), { mode: 0o600 });
     linkSync(other, join(store, 'mcp-trust.json'));
     expect(await readMcpTrust(store)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
+    // KG12 F1: a symlink is never followed; without getuid (owner decision A23) no file is this user's.
+    symlinkSync(other, join(linked, 'mcp-trust.json'));
+    expect(await readMcpTrust(linked)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
+    rmSync(join(linked, 'mcp-trust.json')); writeFileSync(join(linked, 'mcp-trust.json'), readFileSync(other), { mode: 0o600 });
+    const getuid = Object.getOwnPropertyDescriptor(process, 'getuid')!;
+    Object.defineProperty(process, 'getuid', { value: undefined, configurable: true });
+    try { expect(await readMcpTrust(linked)).toEqual({ ok: false, reason: 'trust-store-unsafe' }); }
+    finally { Object.defineProperty(process, 'getuid', getuid); }
     // p6 e5: unparsable JSON reads as unreadable, a wrong shape as invalid, a file over `trustMaxBytes` (8 MiB) is refused unread.
     for (const [text, reason] of [['{', 'trust-store-unreadable'], ['{"schemaVersion":2}', 'trust-store-invalid'], [' '.repeat(8_388_609), 'trust-store-too-large']] as const) {
       writeFileSync(join(fresh, 'mcp-trust.json'), text, { mode: 0o600 });

@@ -1,4 +1,4 @@
-import { persistedInteger } from '#platform/index.js';
+import { persistedInteger, PRIVATE_PERMISSION_MASK } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -9,7 +9,6 @@ import type { EffectStore } from '#engine/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 export interface FileEffectStoreBounds { readonly maxBytes: number; readonly maxRecords: number }
-const PRIVATE_PERMISSION_MASK = 0o077;
 const bodySchema = z.strictObject({ schemaVersion: z.literal(1), revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), records: z.array(effectRecordSchema) });
 type Body = z.infer<typeof bodySchema>;
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);

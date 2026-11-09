@@ -2,20 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
+import { ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, withConfigWriteLock } from '#platform/index.js';
 import { CORE_SECRET_GRANT_STORE_ID, DECK_FILE, PROJECT_VAULT, assessProjectVaultOwnership, emptySecretGrantFile, projectVaultClaimed, projectVaultHandover,
   projectVaultKey, projectVaultRecordSchema, secretGrantFileSchema, type ProjectVaultAnchor, type ProjectVaultLocation, type ProjectVaultRecord,
   type SecretGrant, type SecretGrantFile, type SecretGrantStoreContext, type SecretGrantStoreFactory } from '#engine/index.js';
 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
-const uid = () => process.getuid?.();
-const privateFile = (info: { isFile(): boolean; mode: number; nlink: number; uid: number }) => {
-  const owner = uid();
-  return info.isFile() && (info.mode & 0o077) === 0 && info.nlink === 1 && (owner === undefined || info.uid === owner);
-};
 const unsafe = (path: string) => ErrorRegistry.createError('SECRET_STORE_UNSAFE', { params: { path } });
 
-/** A directory's identity now (canonical path, device, inode), or null when it does not exist as a directory. */
 export async function directoryLocation(path: string): Promise<ProjectVaultLocation | null> {
   try {
     const canonicalRoot = await realpath(path), info = await stat(canonicalRoot, { bigint: true });
@@ -70,7 +64,8 @@ export async function projectRepository(projectRoot: string): Promise<ProjectRep
 }
 
 /** `<global root>/project-secrets/<key>/`: the project vault, its ownership record and its grants. `prepare` creates it (0700) for a writer;
- * a reader never creates anything (absent: null). Not a private directory of this user → `SECRET_STORE_UNSAFE`, nothing read. */
+ * a reader never creates anything (absent: null). Not a directory of this user without group or other bits (no getuid: never, owner decision
+ * A23) → `SECRET_STORE_UNSAFE`, nothing read. Its real path is not compared (owner B2-18: a linked home folder is accepted as today). */
 export async function projectVaultDirectory(globalRoot: string, anchor: ProjectVaultAnchor, prepare: boolean): Promise<string | null> {
   const parent = join(globalRoot, PROJECT_VAULT.directory), directory = join(parent, projectVaultKey(anchor));
   if (prepare) {
@@ -79,30 +74,29 @@ export async function projectVaultDirectory(globalRoot: string, anchor: ProjectV
   }
   const info = await lstat(directory).catch((error: unknown) => { if (missing(error)) return null; throw unsafe(directory); });
   if (!info) return null;
-  const owner = uid();
-  if (!info.isDirectory() || (info.mode & 0o077) !== 0 || (owner !== undefined && info.uid !== owner)) throw unsafe(directory);
+  if (!info.isDirectory() || (info.mode & PRIVATE_PERMISSION_MASK) !== 0 || info.uid !== process.getuid?.()) throw unsafe(directory);
   return directory;
 }
 
-/** One private JSON record of the vault directory: absent → null; not a private single-link file, too large or unreadable → `reason`. */
+/** One private JSON record of the vault directory (KG12 F1): absent → null; not a private single-link file, too large, changed while read or
+ * unreadable → `reason`. */
 async function readRecord(path: string, maxBytes: number): Promise<{ readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly reason: string }> {
-  let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const info = await handle.stat();
-    if (!privateFile(info)) return { ok: false, reason: 'not-private' };
-    if (info.size > maxBytes) return { ok: false, reason: 'too-large' };
-    return { ok: true, value: JSON.parse(await handle.readFile('utf8')) as unknown };
+    const bytes = await readPrivateFile(path, maxBytes, { mode: 'mask' });
+    return { ok: true, value: bytes === null ? null : JSON.parse(bytes.toString('utf8')) as unknown };
   } catch (error) {
-    if (missing(error)) return { ok: true, value: null };
-    return { ok: false, reason: (error as NodeJS.ErrnoException).code === 'ELOOP' ? 'not-private' : error instanceof SyntaxError ? 'invalid' : 'unreadable' };
-  } finally { await handle?.close().catch(() => undefined); }
+    const reason = error instanceof PrivateFileError ? error.reason : null;
+    return { ok: false, reason: reason === 'unsafe' ? 'not-private' : reason === 'too-large' ? reason : error instanceof SyntaxError ? 'invalid' : 'unreadable' };
+  }
 }
+/** Owner decision A27: the checked vault folder is kept (no `writeTextAtomic` mkdir); the rename is made durable by the folder's fsync. */
 async function writeRecord(path: string, value: unknown): Promise<void> {
   const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
   const handle = await open(temporary, 'wx', 0o600);
   try { await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }
   try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
+  const directory = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
+  try { await directory.sync(); } finally { await directory.close(); }
 }
 
 const recordPath = (directory: string) => join(directory, PROJECT_VAULT.projectFile);
@@ -183,8 +177,9 @@ async function readGrants(path: string, anchor: ProjectVaultAnchor): Promise<Sec
   if (!parsed.success || parsed.data.installationId !== anchor.installationId || parsed.data.projectId !== anchor.projectId) throw grantFailure('invalid');
   return parsed.data;
 }
-/** `core.secret-grant.file@1`: `grants.json` beside the project vault, private (0600, owner, one link), replaced atomically under the config
- * write lock; an unreadable record is never overwritten. The caller admitted the vault (ownership) before. */
+/** `core.secret-grant.file@1`: `grants.json` beside the project vault, private (this user's single-link file without group or other bits),
+ * replaced atomically under the config write lock; an unreadable record is never overwritten. The caller admitted the vault (ownership and
+ * private folder) before; the folder is not checked again here (owner B2-18: inventory lists its grants as today). */
 export const fileSecretGrantStoreFactory: SecretGrantStoreFactory = Object.freeze({ id: CORE_SECRET_GRANT_STORE_ID, create: ({ root, anchor, lockTimeoutMs }: SecretGrantStoreContext) => {
   const path = join(root, PROJECT_VAULT.directory, projectVaultKey(anchor), PROJECT_VAULT.grantsFile);
   return Object.freeze({ id: CORE_SECRET_GRANT_STORE_ID, read: () => readGrants(path, anchor),

@@ -1,8 +1,9 @@
-import { constants, type Stats } from 'node:fs';
-import { lstat, mkdir, open } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
+import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { persistedString, DeckentError, ErrorRegistry, serializeJsonDocument, withConfigWriteLock, writeTextAtomic } from '#platform/index.js';
+import { persistedString, DeckentError, ErrorRegistry, PRIVATE_PERMISSION_MASK, PrivateFileError, readPrivateFile, serializeJsonDocument, withConfigWriteLock,
+  writeTextAtomic } from '#platform/index.js';
 import { FILE_SECRET_STORE_ID, SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue, type SecretStore, type SecretStoreErrorCode, type SecretStoreFactory,
   type SecretStoreContext, type SecretStoreInspection } from '#engine/index.js';
 import { assertSecretStorageProtection } from '#engine/index.js';
@@ -24,7 +25,6 @@ export interface FileSecretStoreOptions {
 }
 /** How a private-document backend turns its file text into the store document text and back (identity for the plaintext backend). */
 export interface SecretDocumentCodec {
-  /** Bound on the file's bytes, checked before it is read. */
   readonly maxFileBytes: number;
   /** File text → document text. Any refusal is typed by the caller as `SECRET_STORE_CORRUPT` unless it is already a `DeckentError`. */
   decode(fileText: string): Promise<string>;
@@ -49,10 +49,11 @@ export async function initializePrivateSecretDocument(store: SecretStore): Promi
 }
 
 /**
- * `core.secret-store.file@1` (SECRET-K1): `<global root>/secrets.json`, owner-only. Custody (the local-keyring and managed-file rules):
- * the directory is a real directory of this user with no group/other access (created 0700 on the first write); the file is opened without
- * following links and must be a single-linked regular file of this user with no group/other permission — anything else is
- * `SECRET_STORE_UNSAFE` and nothing is read or repaired. Writes hold the config writer lock of this path, re-read under it, and replace the
+ * `core.secret-store.file@1` (SECRET-K1): `<global root>/secrets.json`, owner-only. Custody (the platform private-file rule, KG12 F1):
+ * the directory is a real directory of this user with no group/other access (created 0700 on the first write; its real path is not compared,
+ * owner B2-18); the file is read through `readPrivateFile` (mask mode: a single-linked regular file of this user with no group/other permission,
+ * never through a link or a FIFO) — anything else is `SECRET_STORE_UNSAFE` and nothing is read or repaired; a file changed while read is
+ * `SECRET_STORE_UNAVAILABLE`. Writes hold the config writer lock of this path, re-read under it, and replace the
  * file atomically (0600 temporary file, fsync, rename, directory fsync) only when the whole new document fits `FILE_SECRET_STORE_MAX_BYTES`, the
  * bound the reader enforces (else `SECRET_STORE_FULL`, nothing written). Content never enters an error: a JSON parse message can quote the
  * text, so a corrupt store is `SECRET_STORE_CORRUPT` without a cause. POSIX only (Windows is later in the accepted OS order).
@@ -74,9 +75,8 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
   };
   const unsafe = () => fail('SECRET_STORE_UNSAFE', { path: root ?? '' });
   const privateDirectory = (info: Stats, owner: number) => {
-    if (info.isSymbolicLink() || !info.isDirectory() || info.uid !== owner || (info.mode & 0o077) !== 0) throw unsafe();
+    if (info.isSymbolicLink() || !info.isDirectory() || info.uid !== owner || (info.mode & PRIVATE_PERMISSION_MASK) !== 0) throw unsafe();
   };
-  /** false: the directory does not exist (an empty store); it is created only for a write. */
   async function directory(owner: number, create: boolean): Promise<boolean> {
     let info: Stats | null;
     try { info = await lstat(root!); } catch (error) { if (!missing(error)) throw fail('SECRET_STORE_UNAVAILABLE'); info = null; }
@@ -90,19 +90,13 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
   async function read(owner: number): Promise<Record<string, string>> {
     const empty = Object.create(null) as Record<string, string>;
     if (!await directory(owner, false)) return empty;
-    let handle;
-    try { handle = await open(path!, constants.O_RDONLY | constants.O_NOFOLLOW); }
-    catch (error) {
-      if (missing(error)) return empty;
-      if ((error as NodeJS.ErrnoException).code === 'ELOOP') throw unsafe();
-      throw fail('SECRET_STORE_UNAVAILABLE');
-    }
+    const bytes = await readPrivateFile(path!, maxFileBytes, { mode: 'mask' }).catch((error: unknown) => {
+      if (!(error instanceof PrivateFileError)) throw fail('SECRET_STORE_UNAVAILABLE');
+      throw error.reason === 'unsafe' ? unsafe() : fail(error.reason === 'too-large' ? 'SECRET_STORE_CORRUPT' : 'SECRET_STORE_UNAVAILABLE');
+    });
+    if (!bytes) return empty;
     try {
-      const info = await handle.stat(), linked = await lstat(path!);
-      if (!info.isFile() || info.uid !== owner || info.nlink !== 1 || (info.mode & 0o077) !== 0
-        || linked.isSymbolicLink() || linked.ino !== info.ino || linked.dev !== info.dev) throw unsafe();
-      if (info.size > maxFileBytes) throw fail('SECRET_STORE_CORRUPT');
-      let text = await handle.readFile('utf8');
+      let text = bytes.toString('utf8');
       if (codec) {
         try { text = await codec.decode(text); } catch (error) { if (error instanceof DeckentError) throw error; throw fail('SECRET_STORE_CORRUPT'); }
         if (Buffer.byteLength(text, 'utf8') > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_CORRUPT');
@@ -115,7 +109,7 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
     } catch (error) {
       if (error instanceof DeckentError) throw error;
       throw fail('SECRET_STORE_UNAVAILABLE');
-    } finally { await handle.close(); }
+    }
   }
   async function write<T>(change: (secrets: Record<string, string>) => { readonly write: boolean; readonly result: T }): Promise<T> {
     const owner = uid();
@@ -171,6 +165,5 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
   initializers.set(store, async () => { await write(() => ({ write: true, result: undefined })); });
   return store;
 }
-/** The registered factory: the store lives in the installation root the caller's environment resolves (null → unavailable). */
 export const fileSecretStoreFactory: SecretStoreFactory = Object.freeze({ id: FILE_SECRET_STORE_ID,
   create: (context: SecretStoreContext) => createFileSecretStore({ root: context.root, platform: context.platform }) });

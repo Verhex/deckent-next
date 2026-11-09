@@ -3,13 +3,12 @@ import { lstat, open, readdir, readlink, realpath, statfs } from 'node:fs/promis
 import { dirname, join, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PersonalCustodyError } from '#engine/index.js';
+import { privateFile } from '#platform/index.js';
 import { PERSONAL_CUSTODY_REGISTRY as registry } from './personal-registry.js';
 import { ENCRYPTED_FILE_SECRET_STORE_KEY, ENCRYPTED_FILE_SECRET_STORE_NAME } from './encrypted.js';
 
 export const custodyDigest = (input: unknown) => createHash('sha256').update(JSON.stringify(input)).digest('hex');
 const absent = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
-/** POSIX private-file invariants, independent of mutable business policy. */
-const PRIVATE_FILE_MODE = 0o600, POSIX_PERMISSION_BITS = 0o777;
 const unsafe = () => new PersonalCustodyError('unsafe-root');
 const identity = (info: Stats) => [info.dev, info.ino, info.uid, info.mode, info.nlink];
 /** Reads only bounded host metadata; never a key or envelope's bytes. */
@@ -22,15 +21,14 @@ export async function custodyHostText(path: string, maxBytes = registry.hostMaxB
     return bytes.subarray(0, offset).toString('utf8');
   } finally { await file.close(); }
 }
-/** Private POSIX document, final handle/path identity checked; no automatic permission repairs. */
+/** KG12 F1 `exact0600` custody of `uid`'s file; with `read` its bounded bytes, else metadata only. Nothing is repaired. */
 export async function personalPrivateFile(path: string, uid: number, maxBytes: number, read = false): Promise<{ identity: string; text: string } | null> {
   let handle;
   try { handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) { if (absent(error)) return null; throw unsafe(); }
   try {
     const [info, linked] = await Promise.all([handle.stat(), lstat(path)]);
-    if (!info.isFile() || linked.isSymbolicLink() || info.dev !== linked.dev || info.ino !== linked.ino || info.uid !== uid
-      || info.nlink !== 1 || (info.mode & POSIX_PERMISSION_BITS) !== PRIVATE_FILE_MODE || info.size > maxBytes) throw unsafe();
+    if (!privateFile(info, 'exact0600') || info.uid !== uid || linked.isSymbolicLink() || info.dev !== linked.dev || info.ino !== linked.ino || info.size > maxBytes) throw unsafe();
     let text = '';
     if (read) {
       const bytes = Buffer.alloc(maxBytes + 1), result = await handle.read(bytes, 0, bytes.length, 0);

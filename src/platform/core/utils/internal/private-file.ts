@@ -19,8 +19,9 @@ export async function privateDirectory(path: string): Promise<boolean | null> {
 }
 /**
  * At most `maxBytes` of one private file, null when absent. Opened without following a link and without blocking (a FIFO never hangs); the
- * open descriptor and the path name the same inode before and after the read, and the read stops one byte past the bound (a file that grows
- * after its size check is never read whole); a path gone after the open is `changed`, never absent. Other I/O errors are raw.
+ * open descriptor and the path name the same inode before and after the read. The buffer is the size seen plus one byte, never the bound: a
+ * file that changed while read is `changed`, or `too-large` once it is over the bound, and is never read whole; the buffer of a refused read
+ * is zeroed. A path gone after the open is `changed`, never absent. Other I/O errors are raw.
  */
 export async function readPrivateFile(path: string, maxBytes: number, options: { readonly mode: PrivateFileMode }): Promise<Buffer | null> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error: unknown) => {
@@ -34,12 +35,14 @@ export async function readPrivateFile(path: string, maxBytes: number, options: {
     const info = await handle.stat(), linked = await named();
     if (!privateFile(info, options.mode) || linked.isSymbolicLink() || linked.dev !== info.dev || linked.ino !== info.ino) throw new PrivateFileError('unsafe');
     if (info.size > maxBytes) throw new PrivateFileError('too-large');
-    const bytes = Buffer.alloc(maxBytes + 1);
-    let length = 0;
-    for (let read = 1; read && length < bytes.length;) { read = (await handle.read(bytes, length, bytes.length - length, length)).bytesRead; length += read; }
-    if (length > maxBytes) throw new PrivateFileError('too-large');
-    const after = await handle.stat(), still = await named();
-    if (after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs || length !== info.size || still.dev !== info.dev || still.ino !== info.ino) throw new PrivateFileError('changed');
-    return bytes.subarray(0, length);
+    const bytes = Buffer.alloc(info.size + 1);
+    try {
+      let length = 0;
+      for (let read = 1; read && length < bytes.length;) { read = (await handle.read(bytes, length, bytes.length - length, length)).bytesRead; length += read; }
+      const after = await handle.stat(), still = await named();
+      if (after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs || length !== info.size || still.dev !== info.dev || still.ino !== info.ino)
+        throw new PrivateFileError(after.size > maxBytes ? 'too-large' : 'changed');
+      return bytes.subarray(0, length);
+    } catch (error) { bytes.fill(0); throw error; }
   } finally { await handle.close(); }
 }

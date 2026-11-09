@@ -1,6 +1,7 @@
-import { persistedString, persistedInteger, ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
+import { persistedString, persistedInteger, ErrorRegistry, PrivateFileError, readPrivateFile, withConfigWriteLock } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
-import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import REGISTRY from './registry.json' with { type: 'json' };
@@ -9,8 +10,9 @@ import REGISTRY from './registry.json' with { type: 'json' };
  * MCP trust and tool pins as product state (MCP-CLIENT): the registry files say which servers exist; this record says which exact server
  * definitions the owner trusted (or declined) and which tool definitions were pinned then. SEC-2 (F29): every record lives outside the project
  * tree — user trust beside the personal registry in the Deckent global root (owner 2026-09-28), project and local trust in that root's
- * per-project directory (`location.ts`); a file inside the project is never read as trust. Private (0600, owner, one link), bounded, replaced
- * atomically under the cross-process config write lock; the agent tools and both sandboxes never reach the global root (hard floor).
+ * per-project directory (`location.ts`); a file inside the project is never read as trust. Read through the platform private-file rule (this
+ * user's single-link file without group or other bits, never through a link), bounded, replaced atomically under the cross-process config
+ * write lock; the agent tools and both sandboxes never reach the global root (hard floor).
  */
 export const MCP_TRUST_FILE = 'mcp-trust.json';
 /** The config write lock wait of all MCP state, and the most tools one record pins (the client pool enforces the same bound). */
@@ -36,17 +38,15 @@ export type McpTrustState = z.infer<typeof fileSchema>;
 const EMPTY: McpTrustState = Object.freeze({ schemaVersion: 1, revision: 0, servers: [] });
 
 type TrustRead<T> = { readonly ok: true } & T | { readonly ok: false; readonly reason: string };
-/** The trust record's bytes (null: absent → nothing is trusted); not a private single-link file of this user, too large or unreadable → `ok: false`
- * (callers trust nothing: fail closed). X8: the send check keys its parse on these bytes; it never skips this read. */
+/** The trust record's bytes (null: absent → nothing is trusted); not a private single-link file of this user, too large, changed while read or
+ * unreadable → `ok: false` (callers trust nothing: fail closed). X8: the send check keys its parse on these bytes; it never skips this read. */
 export async function readMcpTrustText(directory: string): Promise<TrustRead<{ readonly text: string | null }>> {
-  const path = join(directory, MCP_TRUST_FILE);
   try {
-    const info = await lstat(path), uid = process.getuid?.();
-    if (!info.isFile() || (info.mode & 0o077) !== 0 || info.nlink !== 1 || (uid !== undefined && info.uid !== uid)) return { ok: false, reason: 'trust-store-unsafe' };
-    if (info.size > REGISTRY.trustMaxBytes) return { ok: false, reason: 'trust-store-too-large' };
-    return { ok: true, text: await readFile(path, 'utf8') };
+    const bytes = await readPrivateFile(join(directory, MCP_TRUST_FILE), REGISTRY.trustMaxBytes, { mode: 'mask' });
+    return { ok: true, text: bytes && bytes.toString('utf8') };
   } catch (error) {
-    return (error as { code?: unknown })?.code === 'ENOENT' ? { ok: true, text: null } : { ok: false, reason: 'trust-store-unreadable' };
+    const reason = error instanceof PrivateFileError ? error.reason : null;
+    return { ok: false, reason: reason === 'unsafe' ? 'trust-store-unsafe' : reason === 'too-large' ? 'trust-store-too-large' : 'trust-store-unreadable' };
   }
 }
 export function parseMcpTrust(read: TrustRead<{ readonly text: string | null }>): TrustRead<{ readonly state: McpTrustState }> {
@@ -68,6 +68,9 @@ export async function updateMcpTrust(directory: string, change: (state: McpTrust
     const handle = await open(temporary, 'wx', 0o600);
     try { await handle.writeFile(`${JSON.stringify(next, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }
     try { await rename(temporary, join(directory, MCP_TRUST_FILE)); } catch (error) { await rm(temporary, { force: true }); throw error; }
+    // Owner decision A27: the checked trust folder is kept (no `writeTextAtomic` mkdir); the rename is made durable by the folder's fsync.
+    const folder = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY);
+    try { await folder.sync(); } finally { await folder.close(); }
     return next;
   }, MCP_STATE_LOCK_MS);
 }
