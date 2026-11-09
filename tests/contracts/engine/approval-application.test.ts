@@ -182,7 +182,8 @@ describe('durable verified approval application', () => {
       await expect(f.make('mcp').renew({ ...command, commandId: 'second-renew' }, 100)).rejects.toThrow('APPROVAL_CONFLICT');
       await f.make('cli').decide({ ...f.command, approvalId: next.request.approvalId, commandId: 'allow-renewed' });
       // S1-e3 (S1-R16, S1-D5): renewal refuses a changed policy, a decided allow and a non-task subject, and stores nothing for any of them.
-      const requester = next.request.requester, stale = requestTaskApproval(f.journal.store, f.integrity, { scopeId: 'scope', runId: 'run', taskId: 'task-2', requester,
+      // S1-D5: the engine refuses them before the store; a store without the adapter's own check (Enterprise) cannot skip the rule.
+      const renewed = vi.spyOn(f.journal.store, 'renew'), requester = next.request.requester, stale = requestTaskApproval(f.journal.store, f.integrity, { scopeId: 'scope', runId: 'run', taskId: 'task-2', requester,
         actionDigest: 'b'.repeat(64), policyRevision: 'policy', summary: 'Execute task', createdAt: 1000, expiresAt: 1100 });
       f.policy.revision = 'changed';
       await expect(f.make('cli').renew({ ...base, approvalId: stale.request.approvalId, commandId: 'renew-stale', expectedRevision: 0 }, 100)).rejects.toThrow('APPROVAL_STALE');
@@ -192,6 +193,7 @@ describe('durable verified approval application', () => {
         subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'read_file', toolVersion: 1, resource: 'src/a.ts', argsDigest: 'c'.repeat(64) } });
       await expect(f.make('cli').renew({ ...base, approvalId: tool.request.approvalId, commandId: 'renew-tool', expectedRevision: 0 }, 100)).rejects.toThrow('APPROVAL_INVALID');
       for (const id of ['renew-stale', 'renew-allowed', 'renew-tool']) expect(f.journal.store.receipt('scope', id)).toBeNull();
+      expect(renewed).not.toHaveBeenCalled();
       expect(f.journal.store.find('scope', 'run', 'task-2', 'b'.repeat(64))?.request.approvalId).toBe(stale.request.approvalId);
     } finally { await f.close(); }
   });

@@ -2,12 +2,13 @@ import { readWorkerToolCard, workerToolPreviewComplete } from '#capabilities/ind
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { aiAuthorityFloor, approvalFacts, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
-  separationOfDutiesViolation, principalGrants, APPROVAL_ASSURANCE, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type OperationDescriptor, type VerifiedPrincipal } from '#domain/index.js';
+import { aiAuthorityFloor, aiMayNotAllow, approvalFacts, approvalRenewalRefusal, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema,
+  encodeCommandProjection, evaluatePolicy, samePrincipalRef, separationOfDutiesViolation, principalGrants, APPROVAL_ASSURANCE, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type OperationDescriptor,
+  type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABILITY_PATTERN, type ApprovalAssuranceProducer, type PrincipalVerifier, type SessionVerifier,
   type SessionAuthority } from '#engine/core/authentication/index.js';
-import { PolicyAuthorizationError, authorityRefusalAuditEvent, type PolicySource } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, authorityRefusalAuditEvent, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
@@ -25,19 +26,18 @@ const onceApprovalCommandSchema = approvalQuerySchema.extend({ commandId: client
 export const approvalCommandSchema = z.union([onceApprovalCommandSchema, onceApprovalCommandSchema.extend({ decision: z.literal('allow'), standing: z.literal('session') }).strict()]);
 export const approvalRenewalSchema = onceApprovalCommandSchema.omit({ decision: true, channel: true, decisionCapability: true, approverNote: true });
 export type ApprovalCommand = z.infer<typeof approvalCommandSchema>;
-export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
-  const decision = evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: 'approval', id } }).decision;
-  // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-  if (decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-  if (decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
+export function authorizeApproval(policy: Policy, action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
+  const refusal = policyVerdictRefusal(evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: 'approval', id } }).decision, { deny: 'APPROVAL_DENIED' });
+  if (refusal === 'POLICY_APPROVAL_UNSUPPORTED') throw new PolicyAuthorizationError(refusal);
+  if (refusal) throw new ApprovalError(refusal);
 }
 /** F6: the decider's own refusals (`decide` below) of the same person's allow of an operation approval the broker has not opened yet, taken before any
  * card: the `decide` grant covers every approval id (the broker's id is unknown until then, a fresh id stands for it), no four-eyes rule applies to the
  * requester deciding, and the minimum is Core's peer level (the card attests no turn capability). Writes nothing; throws the decider's code. */
-export function authorizeOwnApproval(policy: unknown, scopeId: string, principal: VerifiedPrincipal, descriptor: OperationDescriptor) {
+export function authorizeOwnApproval(policy: Policy, scopeId: string, principal: VerifiedPrincipal, descriptor: OperationDescriptor) {
   const id = randomUUID(); authorizeApproval(policy, 'decide', scopeId, id, principal);
   const rule = evaluatePolicy(policy, { principal, scopeId, action: 'decide', resource: { kind: 'approval', id } }).ruleId;
-  if (!principalGrants(policySchema.parse(policy), principal).some(grant => grant.id === rule && grant.effect === 'allow' && grant.resource.ids === 'all')
+  if (!principalGrants(policy, principal).some(grant => grant.id === rule && grant.effect === 'allow' && grant.resource.ids === 'all')
     || separationOfDutiesViolation(policy, { scopeId, requester: principal, decider: principal }) !== null) throw new ApprovalError('APPROVAL_DENIED');
   if (operationApprovalFacts(policy, scopeId, descriptor).requiredAssurance !== APPROVAL_ASSURANCE.peerSession) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
 }
@@ -77,9 +77,7 @@ export class ApprovalApplication {
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
     if (!interactive) {
       const risk = facts?.risk;
-      // A legacy request (no facts) cannot prove its risk: it is never read as an ordinary card, only a witnessed human allows it.
-      if (decision === 'allow' && (facts === null || risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(risk.cell)
-        || risk?.source === 'effect-class' && risk.authority || subject.kind === 'agent-tool-call' && !risk
+      if (decision === 'allow' && (aiMayNotAllow(facts, subject)
         || subject.kind === 'config-change' && aiAuthorityFloor({ ...principal, assurance: 'workload-verified' }, { kind: 'config', id: `${subject.layer}:${subject.keyPath}` }, 'write')))
         throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
       const step = subject.kind === 'task' && risk?.source === 'cell' && ['task-accept', 'task-reject'].includes(risk.cell) ? risk.cell.slice(5) : null;
@@ -90,7 +88,7 @@ export class ApprovalApplication {
     return interactive;
   }
   private async authorize(action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
-    const policy = policySchema.parse(await this.policy.load());
+    const policy = await this.policy.load();
     authorizeApproval(policy, action, scopeId, id, principal);
     return policy;
   }
@@ -145,7 +143,8 @@ export class ApprovalApplication {
     if (previous.revision !== command.expectedRevision) throw new ApprovalError('APPROVAL_CONFLICT');
     const next = sealApproval({ request: { ...previous.request, approvalId: randomUUID(), createdAt: now, expiresAt: now + ttlMs,
       renewal: { previousApprovalId: previous.request.approvalId, commandId: command.commandId, commandDigest: fingerprint, actor, reason: command.reason } },
-      revision: 0, status: 'pending', decision: null }, this.integrity);
+      revision: 0, status: 'pending', decision: null }, this.integrity), refused = approvalRenewalRefusal(previous, next);
+    if (refused) throw new ApprovalError(refused);
     this.beforeCommit(next);
     return this.store.renew(previous, next, { operation: 'renew', scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
   }
@@ -163,12 +162,8 @@ export class ApprovalApplication {
     let record = verifyApproval(loaded, this.integrity);
     if ('standing' in command && approvalSubject(record.request).kind !== 'agent-tool-call') throw new ApprovalError('APPROVAL_INVALID');
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
-    const ai = isAiPrincipal(principal);
-    const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
-    // AI never answers "this session" (a standing approval widens its own authority) and never allows a legacy card of unknown risk.
-    if (ai && ('standing' in command || command.decision === 'allow' && facts === null)) throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
-    if (ai && command.decision === 'allow' && (facts?.risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(facts.risk.cell)
-      || facts?.risk?.source === 'effect-class' && facts.risk.authority || subject.kind === 'agent-tool-call' && facts?.risk === null))
+    // AI never answers "this session" (a standing approval widens its own authority).
+    if (isAiPrincipal(principal) && ('standing' in command || command.decision === 'allow' && aiMayNotAllow(approvalFacts(record.request), approvalSubject(record.request))))
       throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
     if (command.decision === 'allow') await this.assertDecidableHere(record, actor);
     const fingerprint = approvalCommandFingerprint('approval-command:1', command, actor);
@@ -177,7 +172,7 @@ export class ApprovalApplication {
     if (replay) {
       if (replay.operation !== 'decide' || replay.fingerprint !== fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
       const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
-      if (JSON.stringify(verified.session.principalRef) !== JSON.stringify(actor)) throw new ApprovalError('APPROVAL_DENIED');
+      if (!samePrincipalRef(verified.session.principalRef, actor)) throw new ApprovalError('APPROVAL_DENIED');
       await this.assertDecisionAuthority(record, verified.principal, await this.authorize('decide', command.scopeId, command.approvalId, verified.principal), command.decision);
       return { record: verifyApproval(replay.record, this.integrity), commit: 'replay' };
     }
@@ -185,7 +180,7 @@ export class ApprovalApplication {
     if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
     if (record.status !== 'pending' || record.revision !== command.expectedRevision) throw new ApprovalError('APPROVAL_CONFLICT');
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
-    if (JSON.stringify(verified.session.principalRef) !== JSON.stringify(actor)) throw new ApprovalError('APPROVAL_DENIED');
+    if (!samePrincipalRef(verified.session.principalRef, actor)) throw new ApprovalError('APPROVAL_DENIED');
     const policy = await this.authorize('decide', command.scopeId, command.approvalId, verified.principal);
     const interactive = await this.assertDecisionAuthority(record, verified.principal, policy, command.decision);
     // Four-eyes (policy v2 data, C12 Q6): the session-verified decider may not approve a request it made; withdrawing it grants nothing.

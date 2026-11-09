@@ -1,6 +1,7 @@
 import { persistedString, persistedInteger, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { approvalPreviewCutSchema } from '#domain/core/agent-turn/index.js';
+import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const approvalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 const renewalSchema = z.strictObject({ previousApprovalId: identitySchema, commandId: identitySchema, commandDigest: digest, actor: approvalActorSchema,
@@ -76,8 +77,11 @@ const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { re
 /** Versioned display expansion: sealed with the request and bound to the exact tool arguments. Older v3 records retain their bytes. */
 export const approvalPreviewSchema = z.strictObject({ schemaVersion: z.literal(1), argsDigest: digest,
   text: persistedString(z.string().max(16_384)), cut: approvalPreviewCutSchema.nullable() }).readonly();
+/** KG4 F3 expand: the worker fact as a sealed, typed field instead of the display summary. Nothing writes it yet: an earlier build's strict schema
+ * refuses a record carrying it, so the writer lands one release after this reader (APPR-4, with its rollback proof). */
+const workerOriginSchema = z.strictObject({ kind: z.literal('worker-tool-call'), identity: attemptIdentitySchema, turnId: identitySchema, resourceDigest: digest, argsDigest: digest }).readonly();
 const factualApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(3); }, ...requestShape, facts: approvalFactsSchema,
-  preview: approvalPreviewSchema.optional() }).refine(r => r.expiresAt > r.createdAt).readonly();
+  preview: approvalPreviewSchema.optional(), origin: workerOriginSchema.optional() }).refine(r => r.expiresAt > r.createdAt).readonly();
 export const approvalRequestSchema = z.union([taskApprovalRequestSchema, operationApprovalRequestSchema, factualApprovalRequestSchema]);
 export type ApprovalSubject = z.infer<typeof approvalSubjectSchema>;
 export type ApprovalFacts = z.infer<typeof approvalFactsSchema>;
@@ -126,6 +130,13 @@ export const approvalRecordSchema = z.strictObject({ request: approvalRequestSch
   }
 }).readonly();
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
+/** S1-D5: only an expired or denied task approval is renewed, into a pending request bound to it (a tool-call or operation approval is single use
+ * for its exact call or command; the next one opens its own). The engine refuses before any store; a store keeps it as defense. */
+export function approvalRenewalRefusal(previous: ApprovalRecord, next: ApprovalRecord): 'APPROVAL_INVALID' | 'APPROVAL_CONFLICT' | null {
+  if (approvalSubject(previous.request).kind !== 'task' || approvalSubject(next.request).kind !== 'task') return 'APPROVAL_INVALID';
+  return next.status !== 'pending' || next.request.renewal?.previousApprovalId !== previous.request.approvalId || next.request.scopeId !== previous.request.scopeId
+    || next.request.actionDigest !== previous.request.actionDigest || !(previous.status === 'expired' || previous.status === 'decided' && previous.decision?.decision === 'deny') ? 'APPROVAL_CONFLICT' : null;
+}
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
 export type ApprovalActor = z.infer<typeof approvalActorSchema>;

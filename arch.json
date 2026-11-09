@@ -2531,7 +2531,8 @@
     "src/domain/core/approval": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/domain/core/attempt"
       ],
       "plan": "SECURITY"
     },
@@ -5278,7 +5279,7 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42254,
+      "adapters": 42250,
       "surfaces": 45000,
       "composition": 13703
     },

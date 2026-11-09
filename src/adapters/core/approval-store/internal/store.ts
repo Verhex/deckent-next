@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { approvalRecordSchema, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
+import { approvalRecordSchema, approvalRenewalRefusal, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
 import type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from '#engine/index.js';
 import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
@@ -93,11 +93,7 @@ export class SqliteApprovalStore implements ApprovalStore {
   }
   renew(previous: ApprovalRecord, next: ApprovalRecord, receipt: ApprovalReceipt): ApprovalRecord {
     approvalRecordSchema.parse(next);
-    // A tool-call or operation approval is single use for its exact call/command: it is never renewed; the next one opens its own.
-    if (approvalSubject(previous.request).kind !== 'task' || approvalSubject(next.request).kind !== 'task') throw new ApprovalError('APPROVAL_INVALID');
-    if (next.status !== 'pending' || next.request.renewal?.previousApprovalId !== previous.request.approvalId
-      || next.request.scopeId !== previous.request.scopeId || next.request.actionDigest !== previous.request.actionDigest
-      || !(previous.status === 'expired' || (previous.status === 'decided' && previous.decision?.decision === 'deny'))) throw new ApprovalError('APPROVAL_CONFLICT');
+    const refused = approvalRenewalRefusal(previous, next); if (refused) throw new ApprovalError(refused);
     return this.transaction(() => {
       const replay = this.receipt(receipt.scopeId, receipt.commandId);
       if (replay) {

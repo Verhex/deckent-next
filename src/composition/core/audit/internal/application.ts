@@ -71,7 +71,7 @@ export async function rebaselineConfiguredAudit(root: string, input: unknown, op
       const app = new AuditCheckpointApplication(store, integrity, context.config.audit);
       for (let left = attempts; ; ) {
         // Authority is decided again on every policy this flow reads (REVIEW2561 R2): each card's, the write's, and inside the write.
-        const shown = await scoped(), current = app.verify(command.scopeId, shown.value), authorize = (document: unknown) => authorizeApproval(document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
+        const shown = await scoped(), current = app.verify(command.scopeId, shown.value), authorize = (document: Parameters<typeof authorizeApproval>[0]) => authorizeApproval(document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
         authorize(shown.document);
         if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(current.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
         if (!await confirm({ ...current, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest })) return null;
