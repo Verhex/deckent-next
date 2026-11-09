@@ -43,12 +43,12 @@ export function createWorkspaceQueuePreparation(c: QueuePreparationContext, stor
       const target = await ports.target(predecessor);
       const integrations = new WorkspaceIntegrationApplication(patches, target, verifier, c.authorization, c.artifacts, c.maxBytes);
       const checked = await integrations.check(record.request.identity), ids = queueCommandIds(record), proof = await expected(record);
-      const preview = await patches.preview(record.request.identity);
+      const preview = await patches.preview(record.request.identity, undefined, true);
       if (checked.observation.head !== preview.patch.baseCommit && c.bounds.revalidations === 0) throw new CandidateBindingError('CANDIDATE_MISMATCH');
       const prepared = await integrations.prepare({ schemaVersion: 1, identity: record.request.identity, commandId: ids.candidate, proposal: checked.proposal, ...(record.request.replacesCommandId ? { replacesCommandId: record.request.replacesCommandId } : {}) }, store);
       const plan = await ports.delivery.plan({ schemaVersion: 1, commandId: ids.delivery, identity: record.request.identity, integrationCommandId: ids.candidate },
-        prepared.manifest, (await patches.preview(record.request.identity)).patch, queueCommitMetadata(record, proof.original));
-      return bindIntegrationCandidate(record.request.target, (await patches.preview(record.request.identity)).patch, prepared.manifest, prepared.receipt, plan, proof.criteria, proof.profileFingerprint);
+        prepared.manifest, (await patches.preview(record.request.identity, undefined, true)).patch, queueCommitMetadata(record, proof.original));
+      return bindIntegrationCandidate(record.request.target, (await patches.preview(record.request.identity, undefined, true)).patch, prepared.manifest, prepared.receipt, plan, proof.criteria, proof.profileFingerprint);
     },
     async admitVerification(record) {
       const proof = await expected(record), ids = queueCommandIds(record), candidate = record.candidate!;

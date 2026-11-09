@@ -78,6 +78,14 @@ describe.skipIf(process.platform !== 'linux')('workspace write (T-L4 slice 2)', 
     expect((await readWritableFile(scope, { ok: true, rel: 'src/created.ts', parentRel: 'src', name: 'created.ts' }))).toMatchObject({ ok: true, version: fileContentVersion(Buffer.from('created\n')) });
     await expect(target.apply({ target: ref('.env'), operation: { id: 'workspace.file.write', version: 1 }, idempotencyKey: 'e'.repeat(64),
       expectedVersion: ABSENT_FILE_VERSION, input: { content: 'x' } })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+    // One apply resolves the parent once; the pre-rename read stays the fence that refuses a file changed during the write.
+    let resolves = 0;
+    const counting = { ...scope, resolve: async (requested: unknown, allowRoot = false) => { resolves++; return scope.resolve(requested, allowRoot); } };
+    const once = new WorkspaceFileTarget(counting, journal);
+    const current = (await once.observe(ref('src/a.ts'))).version;
+    resolves = 0;
+    await once.apply({ target: ref('src/a.ts'), operation: { id: 'workspace.file.write', version: 1 }, idempotencyKey: '1'.repeat(64), expectedVersion: current, input: { content: 'once\n' } });
+    expect(resolves).toBe(1);
   });
 
   // Astra 2094 R1 (inverted repro): an applied write whose file an external writer restored is still applied — the journal of this
