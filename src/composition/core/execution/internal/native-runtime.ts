@@ -2,12 +2,13 @@ import type { NativeAgentExecution } from '#capabilities/index.js';
 import { nativeCliWorkerFence, withMcpPrincipal, nativeAgentFlagSetDigest, nativeCliAgent, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
 import { inspectSubscriptionReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { recheckNativeWorkerUse, resolveNativeWorkerUse, assertNativeWorkerReservation } from '#composition/core/runs/index.js';
+import { recheckNativeWorkerUse, resolveNativeWorkerUse, assertNativeWorkerReservation, type NativeWorkerUse } from '#composition/core/runs/index.js';
 /** K16 owns the shared isolated driver/readiness; K1 owns the tool session. No invocation claim is opened for this Run worker. */
 export interface NativeCliWorkerRuntime {
   prepare?(profile: import('#domain/index.js').ModelInvocationProfile): Promise<import('#capabilities/index.js').NativeAgentReadinessReason | null>;
   readonly readiness: SubscriptionReadinessReader;
-  f08(query: Readonly<{ scopeId: string; reference: import('#domain/index.js').ModelReference; binding: NativeCliWorkerBinding }>): Promise<NativeAgentExecution | null>;
+  /** `use`: the F08 point's fresh K5 resolution, reused by its evidence target (one snapshot per point). */
+  f08(query: Readonly<{ scopeId: string; reference: import('#domain/index.js').ModelReference; binding: NativeCliWorkerBinding; use?: NativeWorkerUse }>): Promise<NativeAgentExecution | null>;
   readonly verification?: NativeCliWorkerPorts['verification'];
   readonly driver: NativeCliWorkerPorts['driver'];
   /** `plan`: the Run's recorded worker ceiling (R9; null: none recorded). */ readonly openTools: (...args: [...Parameters<NativeCliWorkerPorts['openTools']>, plan?: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null]) => ReturnType<NativeCliWorkerPorts['openTools']>;
@@ -33,7 +34,7 @@ export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: stri
     },
     async f08(binding) {
       const current = await resolveNativeWorkerUse(root, scopeId, binding, options);
-      return runtime.f08({ scopeId, reference: current.profile.reference, binding });
+      return runtime.f08({ scopeId, reference: current.profile.reference, binding, use: current });
     },
     ...(runtime.verification ? { verification: runtime.verification } : {}),
     recheck,

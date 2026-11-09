@@ -6,6 +6,7 @@ import { brainProviderFixture } from '../support/brain-provider.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
   resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, executionTaskBase, executionTaskSilenceDeadline, executionTaskHiddenPaths, validateDockerTaskProfile, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
@@ -85,6 +86,9 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
     await expect(ports.openTools(request, frozen, signal, {})).rejects.toBeTruthy(); expect(runtime.openTools).toHaveBeenCalledOnce(); expect(runtime.driver).not.toHaveBeenCalled();
     await expect(ports.prepare!(frozen)).rejects.toBeTruthy(); expect(runtime.prepare).toHaveBeenCalledOnce();
+    // KG6 OQ1: the guard that passed before the change and the execute recheck after it each read a fresh snapshot, as does every readiness point.
+    for (const point of [() => ports.recheck(request, frozen, signal), () => recheckNativeWorkerUse(f.project, 's', frozen, f.options), () => ports.readiness(frozen), () => ports.f08(frozen)])
+      await expect(point()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     const check = new DatabaseSync(f.path, { readOnly: true });
     try { expect(check.prepare('SELECT count(*) AS n FROM model_invocations').get()).toEqual({ n: 0 }); } finally { check.close(); }
     expect(f.posts).toBe(0);

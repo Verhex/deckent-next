@@ -1,5 +1,5 @@
 import { ModelInvocationError, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
-import { resolveModelUse } from '#engine/index.js';
+import { pinCurrentModelUse, recheckCurrentModelUse } from '#engine/index.js';
 import { createNativeAgentDriver, preflightNativeAgent, nativeCliAgentBridge, nativeEgressLimits, shellSandboxCapabilities } from '#adapters/index.js';
 import { modelUseReadPorts } from '#composition/core/model-use/index.js';
 import { configuredNativeChatReadiness } from '#composition/core/subscription-readiness/index.js';
@@ -11,7 +11,7 @@ export function createConfiguredNativeChatRuntime(projectRoot: string, options: 
   const bridge = nativeCliAgentBridge(), egress = nativeEgressLimits();
   if (!bridge?.maxConnections || !bridge.replayMaxEntries || !bridge.replayMaxBytes || bridge.maxConnections >= egress.connections) return undefined;
   const ports = modelUseReadPorts(options);
-  const pinModel = (profile: ModelInvocationProfile, actor: VerifiedPrincipal) => resolveModelUse(ports, projectRoot, profile, actor, { action: 'pin' });
+  const pinModel = (profile: ModelInvocationProfile, actor: VerifiedPrincipal) => pinCurrentModelUse(ports, projectRoot, profile, actor);
   const pins = new WeakMap<object, NonNullable<Awaited<ReturnType<typeof pinModel>>>>();
   const runtime: NativeChatRuntime = { readiness: configuredNativeChatReadiness(projectRoot, options),
     limits: { idleMs: egress.idleMs, maxConnections: bridge.maxConnections, replayMaxEntries: bridge.replayMaxEntries, replayMaxBytes: bridge.replayMaxBytes },
@@ -23,7 +23,7 @@ export function createConfiguredNativeChatRuntime(projectRoot: string, options: 
       }
       const pin = pins.get(check.pin);
       if (!pin) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
-      await resolveModelUse(ports, projectRoot, profile, actor, { action: 'recheck', pin });
+      await recheckCurrentModelUse(ports, projectRoot, profile, actor, pin);
     },
     async preflight(profile, signal) {
       await preflightNativeAgent(profile, Date.now,

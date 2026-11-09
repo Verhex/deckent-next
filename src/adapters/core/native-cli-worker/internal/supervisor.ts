@@ -37,13 +37,12 @@ export async function prepareNativeCliWorker(input: Readonly<{ profile: Executio
   if (frozen.ports.verification && !input.custody) { await slot.release(); return { state: 'waiting' as const, reason: 'NATIVE_WORKER_F08_REQUIRED' as const }; }
   const verification = frozen.ports.verification ? await frozen.ports.verification!.acquire(frozen.request, resolved.binding, ready.execution).catch(async (error: unknown) => { await slot.release(); throw error; }) : undefined;
   if (verification === null) { await slot.release(); return { state: 'waiting' as const, reason: 'NATIVE_WORKER_VERIFICATION_WAIT' as const }; }
-  const supervisor = new NativeCliWorkerSupervisor(frozen, slot.release.bind(slot), verification);
+  const supervisor = new NativeCliWorkerSupervisor(frozen, resolved, slot.release.bind(slot), verification);
   return Object.freeze({ state: 'ready' as const, supervisor });
 }
 
 class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfileSource {
   private readonly lifetime = new AbortController();
-  private readonly resolved;
   private readonly handle;
   private started = false;
   private released = false;
@@ -53,9 +52,8 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   private bridge: Awaited<ReturnType<typeof createNativeToolBridge>> | undefined;
   private verdict: import('#capabilities/index.js').NativeWorkerEvidenceVerdict | undefined;
   private forget: (() => void) | undefined;
-  constructor(private readonly input: Parameters<typeof prepareNativeCliWorker>[0], private readonly releaseCapacity: () => Promise<void>,
-    private readonly verification?: Awaited<ReturnType<NonNullable<NativeCliWorkerPorts['verification']>['acquire']>>) {
-    this.resolved = resolveNativeCliWorkerProfile(input.profile);
+  constructor(private readonly input: Parameters<typeof prepareNativeCliWorker>[0], private readonly resolved: ReturnType<typeof resolveNativeCliWorkerProfile>,
+    private readonly releaseCapacity: () => Promise<void>, private readonly verification?: Awaited<ReturnType<NonNullable<NativeCliWorkerPorts['verification']>['acquire']>>) {
     this.handle = `native-cli-worker-${createHash('sha256').update(JSON.stringify(input.request.identity)).digest('hex')}`;
   }
   async captureProfile() { return supervisorProfileSchema.parse({ schemaVersion: 1, adapterId: 'native-cli-worker', adapterVersion: 1, parameters: { task: this.input.profile } }); }

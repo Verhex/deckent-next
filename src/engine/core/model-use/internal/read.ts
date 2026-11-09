@@ -32,17 +32,23 @@ export function resolveModelUse(ports: ModelUseReadPorts, root: string, profile:
 export function resolveModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, check: { action: 'inspect' }): Promise<NonNullable<Awaited<ReturnType<typeof inspectModelUse>>>['use']>;
 export function resolveModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal): Promise<NonNullable<Awaited<ReturnType<typeof inspectModelUse>>>['use']>;
 export async function resolveModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, check?: { action: 'pin' | 'inspect' } | { action: 'recheck'; pin: ModelUsePin }) {
-  const resolved = await inspectModelUse(ports, root, profile, actor, check?.action !== 'inspect');
-  if (!check || check.action === 'inspect') return resolved?.use ?? null;
-  const pin = resolved && (profile.schemaVersion === 3 || modelInvocationBillingAxis(profile) === 'subscription') ? pinModelUse(profile, actor, resolved) : null;
-  if (check.action === 'recheck') return recheckModelUse(pin, check.pin);
-  return pin;
+  if (check?.action === 'pin') return pinCurrentModelUse(ports, root, profile, actor);
+  if (check?.action === 'recheck') return recheckCurrentModelUse(ports, root, profile, actor, check.pin);
+  return (await inspectModelUse(ports, root, profile, actor, check?.action !== 'inspect'))?.use ?? null;
+}
+/** K5 pin of one fresh snapshot; `target` is the caller's own fresh context for (root, profile.scopeId), so one chain loads it once. */
+export async function pinCurrentModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, target?: ModelUseContext): Promise<ModelUsePin | null> {
+  const resolved = await inspectModelUse(ports, root, profile, actor, true, target);
+  return resolved && (profile.schemaVersion === 3 || modelInvocationBillingAxis(profile) === 'subscription') ? pinModelUse(profile, actor, resolved) : null;
+}
+export async function recheckCurrentModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, pin: ModelUsePin, target?: ModelUseContext) {
+  recheckModelUse(await pinCurrentModelUse(ports, root, profile, actor, target), pin);
 }
 /** Internal snapshot shared by resolution and admission pins: authorize exactly the context being pinned. */
-export async function inspectModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive = true) {
+export async function inspectModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive = true, loaded?: ModelUseContext) {
   const subscription = modelInvocationBillingAxis(profile) === 'subscription';
-  if (profile.schemaVersion !== 3 && !subscription && !(await ports.config(root)).installation.sharedRegistrationId) return null;
-  const target = await ports.context(root, profile.scopeId);
+  if (profile.schemaVersion !== 3 && !subscription && !(loaded?.config ?? await ports.config(root)).installation.sharedRegistrationId) return null;
+  const target = loaded ?? await ports.context(root, profile.scopeId);
   if (!target.config.installation.sharedRegistrationId) {
     if (profile.schemaVersion === 3) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     if (subscription) await assertFreshModelUse(ports, target, profile, actor, requireActive);
