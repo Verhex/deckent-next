@@ -1,8 +1,7 @@
 import type { SupervisorProfileValidator } from '#engine/index.js';
 import type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
-import { MODEL_CATALOG_LEDGER_VERSION, assertSqliteEngineSupported, openSqliteLedger, requireLedgerVersion, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, MODEL_CATALOG_LEDGER_VERSION, openSqliteLedger, requireLedgerVersion, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteModelActivationStore } from './store.js';
 import { SqliteModelCatalogReader, SqliteModelCatalogStore } from './catalog.js';
 
@@ -18,9 +17,7 @@ export function openSqliteModelCatalogStore(path: string, options: SqliteLedgerO
 export function openSqliteModelCatalogReader(path: string, options: { readonly busyTimeoutMs: number }) {
   let db: DatabaseSync | undefined;
   try {
-    assertSqliteEngineSupported(process.versions.sqlite);
-    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
+    db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_CATALOG_LEDGER_VERSION);
     return new SqliteModelCatalogReader(db);
   } catch (error) {

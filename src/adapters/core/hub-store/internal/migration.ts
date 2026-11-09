@@ -1,5 +1,5 @@
+import { openLedgerDatabase } from '#adapters/core/sqlite-ledger/index.js';
 import { constants, closeSync, fsyncSync, openSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { hubRevocationFeedSchema } from '#domain/index.js';
@@ -14,8 +14,7 @@ export function backupHubV1(db: DatabaseSync, path: string, version = 1) {
   try { db.prepare('VACUUM INTO ?').run(backup); fsyncSync(fd); } finally { closeSync(fd); }
   const parent = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { fsyncSync(parent); } finally { closeSync(parent); }
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const copy = new NativeDatabase(backup, { readOnly: true });
+  const copy = openLedgerDatabase(backup, { readOnly: true });
   try { return copy.prepare('SELECT digest FROM hub_receipts ORDER BY sequence DESC LIMIT 1').get()?.digest ?? null; }
   finally { copy.close(); }
 }

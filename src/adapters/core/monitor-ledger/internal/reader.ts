@@ -1,6 +1,5 @@
 import { persistedInteger } from '#platform/index.js';
-import { readQuotaHolds, readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { createRequire } from 'node:module';
+import { ledgerTransaction, openLedgerDatabase, readQuotaHolds, readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, RUN_OPEN_PHASES, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
@@ -45,20 +44,16 @@ export function scanMonitorLedger(path: string, input: MonitorLedgerOptions, ret
   if (typeof path !== 'string' || !path || !options.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   const pinned = retained ? runSnapshotSchema.parse(retained) : undefined;
   if (pinned && (pinned.identity.scopeId !== options.data.run?.scopeId || pinned.identity.runId !== options.data.run.runId)) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-  assertSqliteEngineSupported(process.versions.sqlite);
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let db: DatabaseSync;
-  try { db = new NativeDatabase(path, { readOnly: true, timeout: options.data.busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
-  try {
-    db.exec('BEGIN');
+  try { db = openLedgerDatabase(path, { readOnly: true, timeout: options.data.busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
+  try { return ledgerTransaction(db, () => {
     const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
     if (!Number.isSafeInteger(version) || version < RUN_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) {
       return { reading: Object.freeze({ ledgerVersion: version, scopeIds: [], runs: [], approvals: [], pools: [], diagnostics: ['ledger-version-unsupported:' + version] }), files: [] };
     }
     const files: MonitorAttemptFiles[] = [];
     return { reading: read(db, version, options.data.maxRuns, files, options.data.run, pinned, options.data.scope), files };
-  } catch (error) { throw sqliteFailure(error); }
-  finally { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
+  }, { mode: 'read' }); } finally { db.close(); }
 }
 
 function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[], selected?: { scopeId: string; runId: string }, pinned?: RunSnapshot, scope?: Scope): MonitorLedgerReading {
@@ -227,18 +222,14 @@ function scopedEvaluationRows(db: DatabaseSync, scopeIds: readonly string[]): Re
 export function indexMonitorLedger(path: string, input: { busyTimeoutMs: number }): MonitorLedgerIndex {
   const options = optionsSchema.pick({ busyTimeoutMs: true }).safeParse(input);
   if (typeof path !== 'string' || !path || !options.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-  assertSqliteEngineSupported(process.versions.sqlite);
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let db: DatabaseSync;
-  try { db = new NativeDatabase(path, { readOnly: true, timeout: options.data.busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
-  try {
-    db.exec('BEGIN');
+  try { db = openLedgerDatabase(path, { readOnly: true, timeout: options.data.busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
+  try { return ledgerTransaction(db, () => {
     const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
     if (!Number.isSafeInteger(version) || version < RUN_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return Object.freeze({ ledgerVersion: version, scopeIds: [], poolIds: [] });
     const ids = (sql: string, column: string) => db.prepare(sql).all().map(row => String(row[column]));
     const scopes = new Set(ids('SELECT DISTINCT scope_id FROM runs', 'scope_id'));
     if (version >= APPROVAL_LEDGER_VERSION) for (const id of ids('SELECT DISTINCT scope_id FROM approvals WHERE current=1', 'scope_id')) scopes.add(id);
     return Object.freeze({ ledgerVersion: version, scopeIds: Object.freeze([...scopes].sort()), poolIds: Object.freeze(ids('SELECT pool_id FROM execution_pools ORDER BY pool_id', 'pool_id')) });
-  } catch (error) { throw sqliteFailure(error); }
-  finally { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
+  }, { mode: 'read' }); } finally { db.close(); }
 }

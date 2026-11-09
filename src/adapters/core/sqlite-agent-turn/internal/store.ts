@@ -1,8 +1,9 @@
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { persistedString, persistedInteger } from '#platform/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { agentToolDiagnosticSchema } from '#domain/index.js';
-import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, agentTurnSteerRecordSchema, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
+import { AttemptStoreError, AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, agentTurnSteerRecordSchema, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
 const id = persistedString(z.string().min(1).max(256)), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -26,9 +27,7 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
   constructor(private readonly db: DatabaseSync) {}
   close() { this.db.close(); }
   private transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const value = work(); this.db.exec('COMMIT'); return value; }
-    catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* already rolled back */ } throw error; }
+    return ledgerTransaction(this.db, work, { failure: error => error });
   }
   private load(scopeId: string, turnId: string): Turn | null {
     const row = this.db.prepare('SELECT scope_id,turn_id,principal_key,request_digest,state,record FROM agent_turns WHERE scope_id=? AND turn_id=?')
@@ -44,7 +43,7 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
   private guard<T>(work: () => T): T {
     try { return work(); }
     catch (error) {
-      if (error instanceof AgentTurnStoreError) throw error;
+      if (error instanceof AgentTurnStoreError || error instanceof AttemptStoreError && error.code === 'ATTEMPT_STORE_OUTCOME_UNKNOWN') throw error;
       // A record that fails its schema on write is the caller's invalid input, not an unavailable store.
       throw new AgentTurnStoreError(error instanceof z.ZodError ? 'AGENT_TURN_INVALID' : 'AGENT_TURN_UNAVAILABLE');
     }

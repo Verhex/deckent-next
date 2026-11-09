@@ -39,7 +39,7 @@ export function openLedgerStore(path: string, options: SqliteLedgerOptions, mode
 }
 /** The one raw `node:sqlite` construction: the DEPS-P0 floor check, then the lazy load. Opens that keep their own protocol (installer, inventory,
  * backup copies and checkpoints, member checks) use it directly; it maps no error and the caller owns close. */
-export function openLedgerDatabase(path: string, options: DatabaseSyncOptions = {}): DatabaseSync {
+export function openLedgerDatabase(path: ConstructorParameters<typeof DatabaseSync>[0], options: DatabaseSyncOptions = {}): DatabaseSync {
   assertSqliteEngineSupported(process.versions.sqlite);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   return new NativeDatabase(path, options);

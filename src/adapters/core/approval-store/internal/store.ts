@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { approvalRecordSchema, approvalRenewalRefusal, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
 import type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from '#engine/index.js';
-import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Uses the shared ledger; callers may supply the current reservation transaction's connection. */
 export class SqliteApprovalStore implements ApprovalStore {
@@ -10,9 +10,7 @@ export class SqliteApprovalStore implements ApprovalStore {
     try { return approvalRecordSchema.parse(JSON.parse(String(input))); } catch { throw new ApprovalError('APPROVAL_INTEGRITY'); }
   }
   private transaction<T>(fn: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const result = fn(); this.db.exec('COMMIT'); return result; }
-    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    return ledgerTransaction(this.db, fn, { failure: error => error });
   }
   private event(record: ApprovalRecord) {
     this.db.prepare('INSERT INTO approval_outbox(scope_id,approval_id,revision,snapshot) VALUES(?,?,?,?)')
@@ -52,7 +50,6 @@ export class SqliteApprovalStore implements ApprovalStore {
     if (record && (subject?.kind !== 'run-create' || subject.commandId !== commandId)) throw new ApprovalError('APPROVAL_INTEGRITY');
     return record;
   }
-  /** Row columns of a request: the subject kind and, for a task, its run and task. */
   private columns(record: ApprovalRecord) {
     const subject = approvalSubject(record.request);
     return subject.kind === 'task' ? ['task', subject.runId, subject.taskId] as const : [subject.kind, null, null] as const;

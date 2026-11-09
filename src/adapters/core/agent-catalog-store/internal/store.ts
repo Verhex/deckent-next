@@ -1,6 +1,5 @@
 import { catalogHubUpstream } from './upstream.js';
 import { skillSignatureV2Message, type HubVerificationKey } from '#engine/index.js';
-import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, catalogActionSchema, checkAgentOrgTree, encodeCommandProjection, requireActionSigner, signerKeySchema, AgentCatalogError,
@@ -8,7 +7,7 @@ import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, catalog
 import { AuditApplication, AgentCatalogStoreError, catalogEvolutionActions, catalogSuggestionIdOf, catalogSuggestionSchema, catalogSuggestionStateSchema, requireCatalogSuggestionDecidable, skillSignatureMessage, type AgentCatalogChange,
   type AgentCatalogReceipt, type AgentCatalogStore, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionState, type SignerChange, type StoredCatalogSuggestion } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, CATALOG_SUGGESTION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, ledgerTransaction, openSqliteLedger, requireLedgerVersion, CATALOG_SUGGESTION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { sha256, signatureMessage, verifyEd25519, type IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'agent-catalog-store:1';
@@ -168,15 +167,9 @@ export class SqliteAgentCatalogStore implements AgentCatalogStore {
       || !verifyEd25519(b64(key.publicKey), signatureMessage(SIGNATURE_LABELS.catalogAction, catalogActionBytes(a)), b64(signed.signature))) throw new AgentCatalogError('CATALOG_SIGNATURE_INVALID');
   }
   private transaction<T>(work: () => T): T {
-    return this.read(() => {
-      if (this.db.isTransaction) return work(); // H2 owns the outer all-or-nothing catalog transaction.
-      this.db.exec('BEGIN IMMEDIATE');
-      try {
-        const result = work();
-        try { this.db.exec('COMMIT'); } catch { throw new AgentCatalogStoreError('AGENT_CATALOG_OUTCOME_UNKNOWN'); }
-        return result;
-      } catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* A lost commit result is resolved by the same command receipt on retry. */ } throw error; }
-    });
+    // H2 owns the outer all-or-nothing catalog transaction; its receipt resolves a lost commit result.
+    return this.read(() => ledgerTransaction(this.db, work, { join: true,
+      unknown: () => new AgentCatalogStoreError('AGENT_CATALOG_OUTCOME_UNKNOWN'), failure: error => error }));
   }
   async commit(change: AgentCatalogChange) {
     const next = change.kind === 'agent' ? agentDefinitionSchema.parse(change.next) : readableSkillDefinitionSchema.parse(change.next), { receipt } = change;
@@ -345,7 +338,6 @@ export class SqliteAgentCatalogStore implements AgentCatalogStore {
 /** `write` opens the current ledger without migrating (the service owns backed-up upgrades); `read` opens it read-only and requires the catalog version. */
 export function openSqliteAgentCatalogStore(path: string, options: SqliteLedgerOptions, integrity: IntegrityAuthority, access: 'read' | 'write'): AgentCatalogStore {
   if (access === 'write') return new SqliteAgentCatalogStore(openSqliteLedger(path, options, 'forbid'), integrity);
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
+  const db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
   try { requireLedgerVersion(db, CATALOG_SUGGESTION_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
 }

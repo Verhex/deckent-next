@@ -1,5 +1,5 @@
 import { readInvocationPlanUsage } from './plan-usage.js';
-import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationControl, invocationControlSelect } from './control.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema } from '#domain/index.js';
@@ -59,10 +59,8 @@ export function visitAllocationInvocations(db: DatabaseSync, scopeId: string, al
 }
 /** A receipt and its additive usage record must come from one snapshot, including during concurrent settlement/purge. */
 function readSnapshot<T>(db: DatabaseSync, read: () => T): T {
-  if (db.isTransaction) return read();
-  db.exec('BEGIN');
-  try { const value = read(); db.exec('COMMIT'); return value; }
-  catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }
+  return ledgerTransaction(db, read, { mode: 'read', join: true,
+    unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
 }
 export function loadInvocationRecord(db: DatabaseSync, scopeInput: unknown, invocationInput: unknown): ModelInvocationRecord | null {
   return readSnapshot(db, () => {

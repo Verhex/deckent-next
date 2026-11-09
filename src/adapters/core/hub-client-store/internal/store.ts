@@ -1,22 +1,17 @@
-import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import { hubRevocationFeedSchema, HubError, HUB_LIMITS, type AuditEvent, type HubRevocationFeed } from '#domain/index.js';
 import type { HubVerificationKey } from '#engine/index.js';
 import { AuditApplication, HubClientError, hubInstallSchema, hubSourceSchema, hubRefreshResultSchema, type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from '#engine/index.js';
 import { SqliteAgentCatalogStore } from '#adapters/core/agent-catalog-store/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, HUB_CLIENT_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, ledgerTransaction, openSqliteLedger, requireLedgerVersion, HUB_CLIENT_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 const corrupt = () => new HubClientError('HUB_STORE_CORRUPT');
 class Store extends SqliteAgentCatalogStore implements HubClientStore {
   async atomic<T>(work: () => Promise<T>): Promise<T> {
     if (this.db.isTransaction) throw new HubClientError('HUB_INSTALL_CONFLICT');
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      const result = await work();
-      try { this.db.exec('COMMIT'); } catch { throw new HubClientError('HUB_OUTCOME_UNKNOWN'); }
-      return result;
-    } catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* Receipt resolves a lost commit acknowledgement. */ } throw error; }
+    // The receipt resolves a lost commit acknowledgement.
+    return ledgerTransaction(this.db, work, { unknown: () => new HubClientError('HUB_OUTCOME_UNKNOWN'), failure: error => error });
   }
   borrowCatalog(anchor?: { readonly scopeId: string; readonly key: HubVerificationKey }) {
     class Borrowed extends SqliteAgentCatalogStore { override close() { /* Outer Hub owner closes. */ } }
@@ -138,7 +133,6 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
 }
 export function openSqliteHubClientStore(path: string, options: SqliteLedgerOptions, integrity: IntegrityAuthority, access: 'read' | 'write'): HubClientStore {
   if (access === 'write') return new Store(openSqliteLedger(path, options, 'forbid'), integrity);
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
+  const db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
   try { requireLedgerVersion(db, HUB_CLIENT_LEDGER_VERSION); return new Store(db, integrity); } catch (error) { db.close(); throw error; }
 }

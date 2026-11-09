@@ -5,7 +5,7 @@ import { ModelCatalogError, identitySchema, parseModelCatalogActivationRecord, p
   type ModelCatalogReceipt } from '#domain/index.js';
 import { refuseRetiredModelActivation, sameModelCatalogRequest, type ModelCatalogAdmission, type ModelCatalogReader, type ModelCatalogResult,
   type ModelCatalogStore } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 type Row = Readonly<Record<string, unknown>>;
 const CHANNEL_ROW = ''; // SQLite keys cannot hold NULL: the channel-level activation row uses the empty model id.
@@ -68,59 +68,54 @@ export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalog
     return decode(row, parseModelCatalogReceipt, value => value.command.scopeId === scopeId && value.command.commandId === commandId);
   }
   async apply(admission: ModelCatalogAdmission): Promise<ModelCatalogResult> {
-    let active = false;
     try {
       const { command, actor } = admission;
-      this.db.exec('BEGIN IMMEDIATE'); active = true;
-      const prior = this.receipt(command.scopeId, command.commandId);
-      if (prior) {
-        if (!sameModelCatalogRequest(prior, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_COMMAND_CONFLICT');
-        this.db.exec('COMMIT'); active = false; return Object.freeze({ replayed: true, receipt: prior });
-      }
-      const changes: ModelCatalogChange[] = [];
-      if (command.action === 'register') {
-        // Planned (and its merged channel invariants checked) inside this IMMEDIATE transaction, against the rows it will replace.
-        const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId), models: channelId => this.modelRows(channelId) });
-        for (const record of plan.channels) {
-          const written = this.db.prepare(`INSERT INTO model_catalog_channels(channel_id,revision,record) VALUES(?,?,?)
-            ON CONFLICT(channel_id) DO UPDATE SET revision=excluded.revision,record=excluded.record WHERE revision=excluded.revision-1`)
-            .run(record.channelId, record.revision, JSON.stringify(record));
-          if (written.changes !== 1) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
-          changes.push({ kind: 'channel', channelId: record.channelId, modelId: null, revision: record.revision });
+      return ledgerTransaction(this.db, () => {
+        const prior = this.receipt(command.scopeId, command.commandId);
+        if (prior) {
+          if (!sameModelCatalogRequest(prior, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_COMMAND_CONFLICT');
+          return Object.freeze({ replayed: true, receipt: prior });
         }
-        for (const record of plan.models) {
-          const written = this.db.prepare(`INSERT INTO model_catalog_models(channel_id,model_id,revision,lifecycle,record) VALUES(?,?,?,?,?)
-            ON CONFLICT(channel_id,model_id) DO UPDATE SET revision=excluded.revision,lifecycle=excluded.lifecycle,record=excluded.record
-            WHERE revision=excluded.revision-1`).run(record.channelId, record.modelId, record.revision, record.model.lifecycle.state, JSON.stringify(record));
+        const changes: ModelCatalogChange[] = [];
+        if (command.action === 'register') {
+          // Planned (and its merged channel invariants checked) inside this IMMEDIATE transaction, against the rows it will replace.
+          const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId), models: channelId => this.modelRows(channelId) });
+          for (const record of plan.channels) {
+            const written = this.db.prepare(`INSERT INTO model_catalog_channels(channel_id,revision,record) VALUES(?,?,?)
+              ON CONFLICT(channel_id) DO UPDATE SET revision=excluded.revision,record=excluded.record WHERE revision=excluded.revision-1`)
+              .run(record.channelId, record.revision, JSON.stringify(record));
+            if (written.changes !== 1) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+            changes.push({ kind: 'channel', channelId: record.channelId, modelId: null, revision: record.revision });
+          }
+          for (const record of plan.models) {
+            const written = this.db.prepare(`INSERT INTO model_catalog_models(channel_id,model_id,revision,lifecycle,record) VALUES(?,?,?,?,?)
+              ON CONFLICT(channel_id,model_id) DO UPDATE SET revision=excluded.revision,lifecycle=excluded.lifecycle,record=excluded.record
+              WHERE revision=excluded.revision-1`).run(record.channelId, record.modelId, record.revision, record.model.lifecycle.state, JSON.stringify(record));
+            if (written.changes !== 1) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+            changes.push({ kind: 'model', channelId: record.channelId, modelId: record.modelId, revision: record.revision });
+          }
+        } else {
+          // Hierarchy: an activation row exists only for a registered channel and, for a model row, a registered model of that channel.
+          if (!this.channelRow(command.channelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
+          const models = command.modelId === null ? [] : this.modelRows(command.channelId);
+          if (command.modelId !== null && !models.some(entry => entry.modelId === command.modelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
+          // A retired model is never turned on, read inside this transaction against the lifecycle the catalog holds now.
+          if (command.action === 'activate' && command.modelId !== null) refuseRetiredModelActivation(models, command.modelId, admission.admittedAtMs);
+          const current = this.activationRow(command.scopeId, command.channelId, command.modelId);
+          const record = transitionModelCatalogActivation(current, command);
+          const written = this.db.prepare(`INSERT INTO model_catalog_activations(scope_id,channel_id,model_id,revision,state,record) VALUES(?,?,?,?,?,?)
+            ON CONFLICT(scope_id,channel_id,model_id) DO UPDATE SET revision=excluded.revision,state=excluded.state,record=excluded.record
+            WHERE revision=excluded.revision-1`).run(record.scopeId, record.channelId, record.modelId ?? CHANNEL_ROW, record.revision, record.state, JSON.stringify(record));
           if (written.changes !== 1) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
-          changes.push({ kind: 'model', channelId: record.channelId, modelId: record.modelId, revision: record.revision });
+          changes.push({ kind: 'activation', channelId: record.channelId, modelId: record.modelId, revision: record.revision });
         }
-      } else {
-        // Hierarchy: an activation row exists only for a registered channel and, for a model row, a registered model of that channel.
-        if (!this.channelRow(command.channelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
-        const models = command.modelId === null ? [] : this.modelRows(command.channelId);
-        if (command.modelId !== null && !models.some(entry => entry.modelId === command.modelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
-        // A retired model is never turned on, read inside this transaction against the lifecycle the catalog holds now.
-        if (command.action === 'activate' && command.modelId !== null) refuseRetiredModelActivation(models, command.modelId, admission.admittedAtMs);
-        const current = this.activationRow(command.scopeId, command.channelId, command.modelId);
-        const record = transitionModelCatalogActivation(current, command);
-        const written = this.db.prepare(`INSERT INTO model_catalog_activations(scope_id,channel_id,model_id,revision,state,record) VALUES(?,?,?,?,?,?)
-          ON CONFLICT(scope_id,channel_id,model_id) DO UPDATE SET revision=excluded.revision,state=excluded.state,record=excluded.record
-          WHERE revision=excluded.revision-1`).run(record.scopeId, record.channelId, record.modelId ?? CHANNEL_ROW, record.revision, record.state, JSON.stringify(record));
-        if (written.changes !== 1) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
-        changes.push({ kind: 'activation', channelId: record.channelId, modelId: record.modelId, revision: record.revision });
-      }
-      const receipt = parseModelCatalogReceipt({ schemaVersion: 1, command, actor, authorizations: admission.authorizations,
-        changes, admittedAtMs: admission.admittedAtMs });
-      this.db.prepare('INSERT INTO model_catalog_receipts(scope_id,command_id,record) VALUES(?,?,?)').run(command.scopeId, command.commandId, JSON.stringify(receipt));
-      this.db.exec('COMMIT'); active = false;
-      return Object.freeze({ replayed: false, receipt });
-    } catch (error) {
-      if (active) {
-        try { this.db.exec('ROLLBACK'); } catch { throw new ModelCatalogError('MODEL_CATALOG_OUTCOME_UNKNOWN'); }
-      }
-      return failure(error);
-    }
+        const receipt = parseModelCatalogReceipt({ schemaVersion: 1, command, actor, authorizations: admission.authorizations,
+          changes, admittedAtMs: admission.admittedAtMs });
+        this.db.prepare('INSERT INTO model_catalog_receipts(scope_id,command_id,record) VALUES(?,?,?)').run(command.scopeId, command.commandId, JSON.stringify(receipt));
+        return Object.freeze({ replayed: false, receipt });
+      }, { unknown: () => new ModelCatalogError('MODEL_CATALOG_OUTCOME_UNKNOWN'), failure: error => failure(error) });
+    } catch (error) { return failure(error); }
   }
+
   close(): void { this.db.close(); }
 }

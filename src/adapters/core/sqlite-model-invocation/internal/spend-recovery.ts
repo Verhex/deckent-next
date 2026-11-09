@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-import { recoverProviderSpendHold, providerSpendReservationDigest, ProviderSpendError, providerSpendHasZeroTariff,
+import { ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { ModelInvocationStoreError, recoverProviderSpendHold, providerSpendReservationDigest, ProviderSpendError, providerSpendHasZeroTariff,
   type ProviderSpendRecoveryStore, type ProviderSpendRecoveryResult } from '#engine/index.js';
 import { readSpendCheckpoint, writeSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 import { loadInvocationRecord } from './read.js';
@@ -18,24 +18,25 @@ class SqliteProviderSpendRecoveryStore implements ProviderSpendRecoveryStore {
         const scopeId = String(key.scope_id), invocationId = String(key.invocation_id);
         scopeCursor = scopeId; invocationCursor = invocationId;
         try {
-          this.db.exec('BEGIN IMMEDIATE');
-          const row = this.db.prepare('SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?').get(scopeId, invocationId);
-          const checkpoint = readSpendCheckpoint(this.db, scopeId), record = loadInvocationRecord(this.db, scopeId, invocationId);
-          if (!row || !checkpoint || !record) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-          const reservation = decodeSpendReservation(row, record.receipt, checkpoint, this.db);
-          // A complete summary without retained, verified body bytes cannot certify a historical HTTP release.
-          const retained = record.receipt.outcome?.state === 'rejected' && (record.receipt.outcome.evidence.reason === 'not-sent'
-            || record.content?.kind === 'response-body');
-          const result = retained || providerSpendHasZeroTariff(reservation.descriptor.quote) ? recoverProviderSpendHold(checkpoint.account, reservation, record.receipt, recordedAtMs) : null;
-          if (result) {
-            const updated = this.db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=? AND digest=?').run(JSON.stringify(result.reservation), providerSpendReservationDigest(result.reservation), scopeId, invocationId, row.digest!);
-            if (updated.changes !== 1) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-            writeSpendCheckpoint(this.db, checkpoint, result.account, false);
-          }
-          this.db.exec('COMMIT');
+          const result = ledgerTransaction(this.db, () => {
+            const row = this.db.prepare('SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?').get(scopeId, invocationId);
+            const checkpoint = readSpendCheckpoint(this.db, scopeId), record = loadInvocationRecord(this.db, scopeId, invocationId);
+            if (!row || !checkpoint || !record) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+            const reservation = decodeSpendReservation(row, record.receipt, checkpoint, this.db);
+            // A complete summary without retained, verified body bytes cannot certify a historical HTTP release.
+            const retained = record.receipt.outcome?.state === 'rejected' && (record.receipt.outcome.evidence.reason === 'not-sent'
+              || record.content?.kind === 'response-body');
+            const result = retained || providerSpendHasZeroTariff(reservation.descriptor.quote) ? recoverProviderSpendHold(checkpoint.account, reservation, record.receipt, recordedAtMs) : null;
+            if (result) {
+              const updated = this.db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=? AND digest=?').run(JSON.stringify(result.reservation), providerSpendReservationDigest(result.reservation), scopeId, invocationId, row.digest!);
+              if (updated.changes !== 1) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+              writeSpendCheckpoint(this.db, checkpoint, result.account, false);
+            }
+            return result;
+          }, { unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
           if (result) { released++; if (result.zeroTariff) zeroTariff++; }
         } catch (error) {
-          if (this.db.isTransaction) this.db.exec('ROLLBACK');
+          if (error instanceof ModelInvocationStoreError) throw error;
           if (!(error instanceof ProviderSpendError)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
           inconsistent.push({ scopeId, invocationId });
         }
