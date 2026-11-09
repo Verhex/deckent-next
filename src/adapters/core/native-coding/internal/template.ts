@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
-import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
+import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
+import { validateDockerTaskProfile, resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, nativeDiscoverySupported, NativeCodingProfileError } from './command.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, promptPartSchema } from './composition.js';
 import { nativeCodingTemplateEnvironment } from './environment.js';
-import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, nativeCliWorkerTaskBase, nativeCliWorkerStoredBase, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
+import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { assertNativeDockerSubscription } from '#adapters/core/native-connection/index.js';
 
@@ -21,7 +21,7 @@ function dockerSubscription(provider: Parameters<typeof assertNativeDockerSubscr
  * without model, prompt or task text. The Docker resolver refuses this adapter identity, so a template can never run by itself;
  * Run admission compiles it with a task's typed work input through the same pure compiler `coding prepare` uses.
  */
-export const NATIVE_CODING_TEMPLATE_ADAPTER = Object.freeze({ id: 'native-coding-template', version: 1 });
+export const NATIVE_CODING_TEMPLATE_ADAPTER = Object.freeze({ id: NATIVE_CODING_TEMPLATE_ADAPTER_ID, version: 1 });
 const TEMPLATE_ARGV = '__DECKENT_TEMPLATE__';
 const templateParametersSchema = z.strictObject({ schemaVersion: z.literal(1), docker: immutableJsonObjectSchema,
   worker: nativeCliWorkerBindingSchema.optional(),
@@ -42,9 +42,9 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   if (maxTurns !== undefined && !command.capabilities.maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
   if (Number(parameters.data.docker['outputBytes']) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   // The compiler replaces argv; the placeholder only lets the Docker validator check every other parameter now.
-  const parsed = executionProfileDefinitionSchema.parse({ id: profile.id, version: profile.version, adapter: { id: 'docker', version: 2 },
-    parameters: { argv: [TEMPLATE_ARGV], ...parameters.data.docker } }), docker = parameters.data.worker ? nativeCliWorkerTaskBase(parsed) : parsed;
-  try { validateDockerTaskProfile(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
+  const docker = executionProfileDefinitionSchema.parse({ id: profile.id, version: profile.version, adapter: { id: 'docker', version: 2 },
+    parameters: { argv: [TEMPLATE_ARGV], ...parameters.data.docker } });
+  try { (parameters.data.worker ? resolveHostSandboxTaskProfile : validateDockerTaskProfile)(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   return { docker, invocation: parameters.data.invocation, worker: parameters.data.worker };
 }
 /** Only invocation identity for planning; never task prompts, composition or Docker parameters. */
@@ -58,7 +58,7 @@ export function nativeCodingTemplateTurnLimit(profile: ExecutionProfileDefinitio
 }
 
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
-export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return nativeCliWorkerStoredBase(parseTemplate(profile).docker); }
+export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }
 
 /** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. PRE-7: a template
  * that declares no environment gets the adapter's default requirements (registry data), so they are part of its content identity. */
@@ -98,8 +98,8 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   if (context.length && nativePromptCompositionSchema.safeParse(base).success && !nativePromptCompositionSchema.safeParse(admitted).success) throw new NativeCodingProfileError('NATIVE_CODING_CONTEXT_OVERFLOW');
   const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
-    model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence);
-  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(nativeCliWorkerStoredBase(compiled), worker), id: template.id, version: template.version }) : compiled;
+    model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence, !!worker);
+  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(compiled, worker), id: template.id, version: template.version }) : compiled;
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */

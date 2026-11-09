@@ -38,7 +38,7 @@ export { providerSpendLocalZeroTariffProfile } from './internal/no-charge.js';
 export { recoverProviderSpendHold } from './internal/recovery.js';
 export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './internal/recovery.js';
 
-export { modelInvocationBillingAxis } from './internal/work-spending.js';
+export { modelInvocationBillingAxis, isolatesAsSubscription } from './internal/work-spending.js';
 export { workerBillingAxis } from './internal/work-spending.js';
 
 export { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from './internal/period.js';

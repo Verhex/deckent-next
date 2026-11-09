@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { vi } from 'vitest';
 import { encodeModelBindingDefinition, mcpPrincipalRef, type ExecutionProfileDefinition } from '#domain/index.js';
-import { compileNativeCodingDockerProfile, createNativeCliWorkerProfile, createNativeCodingTemplate, nativeCliWorkerStoredBase, openSqliteModelActivationStore, readLocalOsIdentity,
+import { compileNativeCodingDockerProfile, createNativeCliWorkerProfile, createNativeCodingTemplate, openSqliteModelActivationStore, readLocalOsIdentity,
   type NativeCliWorkerBinding } from '#adapters/index.js';
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
@@ -67,6 +67,6 @@ export async function nativeClaudeWorkers(project: string, scopeId: string, opti
   const template = (id: string, limits?: unknown, extra: object = {}) => ({ ...createNativeCodingTemplate(limits, { ...invocation, ...extra }, binding), id });
   /** A prepared worker profile on this login: the Docker task base compiled with the exact pin, then bound to the connection; keeps `base`'s id. */
   const prepared = (base: ExecutionProfileDefinition, fields: object, effort?: Parameters<typeof compileNativeCodingDockerProfile>[2]) => ({ ...createNativeCliWorkerProfile(
-    nativeCliWorkerStoredBase(compileNativeCodingDockerProfile(base, { schemaVersion: 4, ...invocation, ...fields }, effort)), binding), id: base.id, version: base.version });
+    compileNativeCodingDockerProfile(base, { schemaVersion: 4, ...invocation, ...fields }, effort, undefined, true), binding), id: base.id, version: base.version });
   return { binding, invocation, template, prepared, profiles };
 }

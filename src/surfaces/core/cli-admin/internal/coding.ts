@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { affectedToolchainProfiles, configWriteOperation, modelUseProfiles, modelInvocationProfileDigest } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardOption } from '#surfaces/core/cli-human/index.js';
@@ -69,6 +69,9 @@ function preparationShape(input: unknown, locale: Locale): void {
   if (!document['invocation'] || typeof document['invocation'] !== 'object' || Array.isArray(document['invocation'])) fail('invocation');
 }
 
+/** The connection binding a coding profile names (a v2 template's `worker`, a connected worker's wrapper `binding`): one reader for list and template. */
+const workerBinding = (profile: ExecutionProfileDefinition | undefined) => (profile?.adapter.id === NATIVE_CLI_WORKER_ADAPTER_ID
+  ? nativeCliWorkerWrapperSchema.safeParse(profile.parameters).data?.binding : profile?.parameters['worker']) as { profileDigest?: string; connectionId?: string } | undefined;
 /** The coding profiles task kinds run on: kind, profile, provider and CLI pin, image. Read from the admission registry only. */
 function codingProfiles(config: DeckentConfig, pins: Pins) {
   const registry = executionRegistrySchema.safeParse(config.admission?.registry);
@@ -76,7 +79,7 @@ function codingProfiles(config: DeckentConfig, pins: Pins) {
   const connections = modelUseProfiles(config);
   return registry.data.kinds.map(kind => {
     const profile = registry.data.profiles.find(row => row.id === kind.profile.id && row.version === kind.profile.version);
-    const worker = (profile?.parameters['worker'] ?? (profile?.adapter.id === 'native-cli-worker' ? profile.parameters['binding'] : undefined)) as { profileDigest?: string; connectionId?: string } | undefined;
+    const worker = workerBinding(profile);
     const connection = worker ? connections.find(row => modelInvocationProfileDigest(row) === worker.profileDigest)?.id ?? worker.connectionId ?? null : null;
     const pin = pins.find(item => item.profile.id === kind.profile.id && item.profile.version === kind.profile.version);
     return { kind: kind.kind, profile: { id: kind.profile.id, version: kind.profile.version }, provider: pin?.provider ?? null, cliVersion: pin?.cliVersion ?? null,
@@ -186,7 +189,7 @@ const output = (result: TemplateResult) => ({ schemaVersion: 1 as const, status:
   registryRevision: result.registry.revision, connection: result.connection ?? null, expect: result.expect, write: result.write });
 function templateLines(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf): string[] {
   const parameters = value.profile.parameters as { docker?: { imageId?: string }; invocation?: { provider?: string; cliVersion?: string; discovery?: { mode?: string } } };
-  const worker = value.profile.parameters['worker'] as { connectionId?: string; profileDigest?: string } | undefined;
+  const worker = workerBinding(value.profile);
   const discovery = parameters.invocation?.discovery?.mode;
   const connection = modelUseProfiles(config).find(row => row.id === value.connection || !!worker && modelInvocationProfileDigest(row) === worker.profileDigest);
   return [t('k29.coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(cli, connection) : '-' }, locale),

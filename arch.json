@@ -88,7 +88,8 @@
         "src/domain/core/attempt",
         "src/domain/core/approval",
         "src/domain/core/principal",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/worker-event"
       ],
       "plan": "PROVIDERS"
     },
@@ -763,16 +764,17 @@
         "src/engine/core/workspace-patch",
         "src/adapters/core/autonomy-shadow",
         "src/capabilities/core/native-agent-execution",
-        "src/engine/core/proposal-upgrade"
+        "src/engine/core/proposal-upgrade",
+        "src/adapters/core/native-cli-worker"
       ],
       "plan": "EXECUTION"
     },
     "src/composition/core/storage": {
       "dependencies": [
         "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/adapters/core/native-cli-worker"
       ],
       "plan": "STORE"
     },
@@ -1607,7 +1609,8 @@
         "src/domain/core/attempt",
         "src/engine/core/bootstrap-identity",
         "src/engine/core/system-policy-rows",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/domain/core/worker-event"
       ],
       "plan": "INSTALLATION"
     },
@@ -2044,7 +2047,8 @@
         "src/domain/core/run",
         "src/engine/core/run-proposal",
         "src/surfaces",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/engine/core/provider-spend"
       ],
       "plan": "SURFACES"
     },
@@ -2149,7 +2153,8 @@
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-siwc",
-        "src/adapters/core/native-cli-registry"
+        "src/adapters/core/native-cli-registry",
+        "src/domain/core/worker-event"
       ],
       "plan": "PROVIDERS"
     },
@@ -2352,7 +2357,6 @@
         "src/adapters/core/file-artifacts",
         "src/adapters/core/git-patch",
         "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
         "src/engine/core/policy",
         "src/engine/core/workspace-patch",
         "src/composition/core/policy",
@@ -3860,7 +3864,8 @@
         "src/engine/core/project-instructions",
         "src/engine/core/model-use",
         "src/engine/core/model-invocation",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/domain/core/worker-event"
       ],
       "plan": "SURFACES"
     },
@@ -4984,7 +4989,6 @@
         "src/capabilities/core/artifacts",
         "src/capabilities/core/evaluation-evidence",
         "src/adapters/core/beuser-realm",
-        "src/adapters/core/docker-supervisor",
         "src/engine/core/beuser",
         "src/engine/core/beuser-contract",
         "src/engine/core/beuser-realm",
@@ -5276,9 +5280,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42209,
+      "adapters": 42234,
       "surfaces": 45000,
-      "composition": 13702
+      "composition": 13700
     },
     "totalSrcLines": 200000,
     "testCases": 8198,
@@ -5490,7 +5494,9 @@
       "local-llama",
       "deepseek",
       "zai",
-      "zhipu"
+      "zhipu",
+      "native-cli-worker",
+      "native-coding-template"
     ],
     "modelFamilies": [
       "opus",

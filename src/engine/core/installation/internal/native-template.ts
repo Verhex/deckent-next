@@ -1,4 +1,4 @@
-import { persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
+import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -73,7 +73,7 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const kind = { kind: request.kind, profile: { id: candidate.id, version: candidate.version } };
   const replacing = bound && (bound.profile.id !== kind.profile.id || bound.profile.version !== kind.profile.version);
   if (bound && replacing && (!(request.connection || request.detach) || !registry.data.profiles.some(profile => profile.id === bound.profile.id
-    && profile.version === bound.profile.version && profile.adapter.id === 'native-coding-template'))) refuse('CODING_TEMPLATE_KIND_CONFLICT');
+    && profile.version === bound.profile.version && profile.adapter.id === NATIVE_CODING_TEMPLATE_ADAPTER_ID))) refuse('CODING_TEMPLATE_KIND_CONFLICT');
   if (bound && !replacing) return { profile: candidate, kind: bound, registry: registry.data, changed: false };
   const next = { ...registry.data, profiles: existing ? registry.data.profiles : [...registry.data.profiles, candidate], kinds: bound ? registry.data.kinds.map(row => row.kind === request.kind ? kind : row) : [...registry.data.kinds, kind] };
   return { profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };

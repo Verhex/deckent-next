@@ -1,6 +1,6 @@
 import { persistedString, persistedInteger, executionProfileDefinitionSchema, INSTRUCTION_SURFACE_PATHS, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { z } from 'zod';
-import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
+import { validateDockerTaskProfile, resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
 import { assertNativeWorkerBinding } from './binding.js';
@@ -52,11 +52,14 @@ export class NativeCodingProfileError extends Error {
  * Prompts are ordinary task data persisted in argv; never put credentials in this field.
  * Structured composition carries explicit selected content; it never discovers repository instructions.
  * `evidence` (owner K1/K2 2026-10-22): the catalog's session-start names / provider-choice flag, frozen into a pinned model only when present.
+ * `hostSandbox` (R8b, owner D1b): a connected CLI worker's base, which runs in the host sandbox, so its image is optional.
  */
-export function compileNativeCodingDockerProfile(template: ExecutionProfileDefinition, input: unknown, selectedEffort?: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition {
+export function compileNativeCodingDockerProfile(template: ExecutionProfileDefinition, input: unknown, selectedEffort?: WorkerEffort, evidence?: CatalogPinModelEvidence,
+  hostSandbox = false): ExecutionProfileDefinition {
   const parsed = nativeCodingInvocationSchema.safeParse(input);
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
-  try { validateDockerTaskProfile(template); }
+  const validate = hostSandbox ? resolveHostSandboxTaskProfile : validateDockerTaskProfile;
+  try { validate(template); }
   catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   const invocation = parsed.data;
   const command = nativeCliCommand(invocation.provider);
@@ -95,7 +98,7 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
         ...(mode === 'disabled' ? command.capabilities.discovery!.requiredFlags : []),
         ...(settings ? [command.capabilities.settings!.flag] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
     } } } });
-  validateDockerTaskProfile(profile);
+  validate(profile);
   assertNativeWorkerBinding(profile); // the compiler's own output always satisfies the admission binding check
   return profile;
 }

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, removeRunBase, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
+import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, removeRunBase, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateExecutionSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { assertAuthorityWitness, workingTreeDeliveryAuthorization, workingTreeSource, deliveryDismissalEvent, deliveryRollbackEvent, workingTreeRollbackCommandSchema, WorkingTreeRollbackApplication, WorkspacePatchError, type WorkingTreeRollbackCommand, dismissedDeliveries, WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -69,7 +69,7 @@ async function withDelivery<T>(root: string, identity: AttemptIdentity, options:
   const limits = { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, target = new GitIntegrationTarget(git, limits);
   const clock = new SystemTrustedClock();
   const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
-  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
+  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateExecutionSupervisorProfile });
   try { await c.sameWorkSource(store);
     const patches = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
     const inspection = new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes);

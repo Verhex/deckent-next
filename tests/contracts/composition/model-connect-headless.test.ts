@@ -137,6 +137,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
     output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(JSON.parse(output)).toMatchObject({ status: 'unchanged', connection: profile.id });
+    // KG7 F3: `coding template` names the connection from the same worker binding `coding` lists.
+    output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
+    expect(output).toContain(`claude · ${profile.reference.modelId}`);
     // Owner 2026-11-08: the kind no longer returns to a Claude Docker template; the refusal is typed and names the tokenless binding.
     for (const back of [{ apply: false }, { discovery: 'repository', apply: true }]) await expect(configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, ...back }, options, person))
       .rejects.toMatchObject({ code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', message: expect.stringContaining('--connection') });

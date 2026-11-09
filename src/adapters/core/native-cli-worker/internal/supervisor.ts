@@ -1,22 +1,23 @@
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { KnownSecretSnapshot, JsonRecordFile } from '#platform/index.js';
 import { nativeWorkerGuardRefusal, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition, type WorkerEvent } from '#domain/index.js';
 import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError,
-  type ExecutionSupervisor, type SandboxRequest, type SandboxResult, type SupervisorProfileSource } from '#engine/index.js';
+  type ExecutionSupervisor, type SandboxRequest, type SandboxResult, type SupervisorProfile, type SupervisorProfileSource } from '#engine/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeAgentCorrelationKind } from '#adapters/core/native-cli-headless/index.js';
 import { finalReportTextInstruction, readFinalReportText } from '#adapters/core/native-connection/index.js';
 import { collectDockerOutputFiles } from '#adapters/core/docker-supervisor/index.js';
-import { resolveNativeCliWorkerProfile } from './profile.js';
+import { NATIVE_CLI_WORKER_ADAPTER, resolveNativeCliWorkerProfile } from './profile.js';
 import { inspectNativeCliWorker } from './readiness.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver, NativeCliWorkerToolContext } from './ports.js';
-import { retainActiveNativeWorker, retainNativeWorkerResult } from './recorded.js';
+import { nativeCliWorkerHandle, retainActiveNativeWorker, retainNativeWorkerResult } from './recorded.js';
 
+/** Only the recorded adapter identity selects native management; its version is checked by its own validator, never by Docker's. */
+export const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) => profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id;
 export function validateNativeCliWorkerSupervisorProfile(input: unknown): undefined {
   const profile = supervisorProfileSchema.parse(input);
-  if (profile.adapterId !== 'native-cli-worker' || profile.adapterVersion !== 1) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
+  if (!isNativeCliWorkerSupervisorProfile(profile) || profile.adapterVersion !== NATIVE_CLI_WORKER_ADAPTER.version) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
   resolveNativeCliWorkerProfile(profile.parameters['task'] as ExecutionProfileDefinition);
   return undefined;
 }
@@ -55,9 +56,9 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   private forget: (() => void) | undefined;
   constructor(private readonly input: Parameters<typeof prepareNativeCliWorker>[0], private readonly resolved: ReturnType<typeof resolveNativeCliWorkerProfile>,
     private readonly releaseCapacity: () => Promise<void>, private readonly verification?: Awaited<ReturnType<NonNullable<NativeCliWorkerPorts['verification']>['acquire']>>) {
-    this.handle = `native-cli-worker-${createHash('sha256').update(JSON.stringify(input.request.identity)).digest('hex')}`;
+    this.handle = nativeCliWorkerHandle(input.request.identity);
   }
-  async captureProfile() { return supervisorProfileSchema.parse({ schemaVersion: 1, adapterId: 'native-cli-worker', adapterVersion: 1, parameters: { task: this.input.profile } }); }
+  async captureProfile() { return supervisorProfileSchema.parse({ schemaVersion: 1, adapterId: NATIVE_CLI_WORKER_ADAPTER.id, adapterVersion: NATIVE_CLI_WORKER_ADAPTER.version, parameters: { task: this.input.profile } }); }
   private check(request: SandboxRequest) { if (!sameSandboxRequest(request, this.input.request)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT'); }
   private unknown(reasonCode: string): SandboxResult { return { handle: this.handle, result: { kind: 'unknown', reasonCode }, stdout: '', stderr: '', outputCompleteness: 'unavailable', interrupted: this.lifetime.signal.aborted }; }
   async execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult> {
@@ -108,8 +109,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
             : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, child]) => [project(key), redact(child)])) : value;
           this.input.onEvents!(redact(batch) as readonly WorkerEvent[]);
         } } : {}),
-        ...(this.resolved.entry.command.capabilities.maxTurns && this.resolved.argv.includes(this.resolved.entry.command.capabilities.maxTurns.flag)
-          ? { maxTurns: Number(this.resolved.argv[this.resolved.argv.indexOf(this.resolved.entry.command.capabilities.maxTurns.flag) + 1]) } : {}) }, combined);
+        ...(this.resolved.maxTurns === undefined ? {} : { maxTurns: this.resolved.maxTurns }) }, combined);
       if (!isDeepStrictEqual(this.driver.tools.session, session)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
       this.bridge = await createNativeToolBridge({ port: this.driver.tools, bridge: this.resolved.entry.bridge, limits: this.input.ports.bridgeLimits,
         correlationKind: nativeAgentCorrelationKind(this.resolved.entry), signal: combined,

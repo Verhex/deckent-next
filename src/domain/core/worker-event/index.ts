@@ -3,7 +3,7 @@ export type { WorkerEvent, WorkerToolClass, WorkerTokens, WorkerPhase, WorkerAct
 export { workerFinalReportSchema, workerReportLessonSchema, workerFinalReportResultSchema, readWorkerFinalReport, workerHandoffNoteSchema, workerReportLimits,
   workerReportEvidenceSchema, workerReportEvidence, workerReportRefusal } from './internal/report.js';
 export type { WorkerFinalReportResult, WorkerFinalReport, WorkerHandoffNote, WorkerReportLesson, WorkerReportLimits, WorkerReportEvidence } from './internal/report.js';
-export { workerModelPinSchema, workerTaskParameters, readWorkerModelPin, viewWorkerModels } from './internal/models.js';
+export { workerModelPinSchema, NATIVE_CLI_WORKER_ADAPTER_ID, NATIVE_CODING_TEMPLATE_ADAPTER_ID, nativeCliWorkerWrapperSchema, workerTaskParameters, readWorkerModelPin, viewWorkerModels } from './internal/models.js';
 export type { WorkerModelPin, WorkerProvider, WorkerModelEvidence, WorkerModelVerdict, WorkerModelView } from './internal/models.js';
 export { quotaExhaustedSchema } from './internal/quota.js';
 export type { QuotaExhausted } from './internal/quota.js';

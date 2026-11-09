@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { immutableJsonObjectSchema, type RunExecutionSnapshot, type VerifiedPrincipal } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelUseProfiles, pinCurrentModelUse, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
+import { modelInvocationProfileDigest, modelUseProfiles, pinCurrentModelUse, sameModelUseOwner, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
 import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile, withMcpPrincipal,
   headlessCapacityBinding, openSqliteInventoryReader, type SqliteAttemptStore, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -41,8 +41,7 @@ export async function recheckNativeWorkerUse(root: string, scopeId: string, bind
 export function nativeWorkerAdmission(root: string, scopeId: string, options: ConfigLoadOptions) {
   const owner = async (principal: VerifiedPrincipal) => {
     const context = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read');
-    if (principal.id !== context.principal.id || principal.issuer !== context.principal.issuer || principal.subject !== context.principal.subject
-      || principal.assurance !== context.principal.assurance) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
+    if (!sameModelUseOwner(principal, context.principal)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
   };
   return {
     modelUse: {
