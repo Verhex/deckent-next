@@ -8,7 +8,7 @@ import { patchDigest, WorkspacePatchError, type WorkspacePatch } from './contrac
 export const integrationCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, replacesCommandId: identitySchema.optional(), proposal: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/) }).readonly();
 export type IntegrationCommand = z.infer<typeof integrationCommandSchema>;
-export interface IntegrationObservation { readonly digest: string; readonly source: string; readonly head: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface IntegrationObservation { readonly digest: string; readonly source: string; readonly head: string }
 const manifestFields = { kind: z.literal('integration-candidate'),
   command: integrationCommandSchema, patch: artifactReceiptSchema, observation: z.string().regex(/^[a-f0-9]{64}$/),
   workspace: persistedString(z.string().min(1)), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/),

@@ -36,7 +36,7 @@ export interface RunAnswerLabels {
   readonly empty: string; readonly none: string; readonly reread: string;
 }
 /** A row key of the Runs window: the three Y1 controls and the answer to a worker's question. */
-export type RunRowAction = RunControlAction | 'answer';
+type RunRowAction = RunControlAction | 'answer';
 export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ spans: readonly Span[]; actions: readonly RunRowAction[] }>[]; status: string;
   empty: string; selected: number }>;
 export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunView; action: RunControlAction }>;
@@ -44,12 +44,12 @@ export type RunAnswerPresentation = Readonly<{ kind: 'run-answer'; run: RunView;
 
 const KEYS: Readonly<Record<string, RunRowAction>> = Object.freeze({ h: 'hold', r: 'resume', c: 'close', a: 'answer' });
 /** The question a needs-input task asks, or null (`a` answers it). */
-export function needsInputTask(run: RunView): Readonly<{ taskId: string; question: string }> | null {
+function needsInputTask(run: RunView): Readonly<{ taskId: string; question: string }> | null {
   for (const task of run.tasks ?? []) if (task.decision?.reason === 'needs-input' && task.decision.question) return { taskId: task.id, question: task.decision.question };
   return null;
 }
 /** One typed letter selects a key; Ctrl/Alt chords, pasted or coalesced text never do (the decision-key rule for an opening key). */
-export function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunRowAction | null {
+function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunRowAction | null {
   return key.ctrl || key.meta || input.length !== 1 ? null : KEYS[input] ?? null;
 }
 function runsHints(labels: RunControlLabels, actions: readonly RunRowAction[]): string {

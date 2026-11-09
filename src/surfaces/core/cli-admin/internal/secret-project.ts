@@ -5,9 +5,9 @@ import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions } from './io.js';
 
 /** PRE-8 v2: the one inventory (`secret list [--all]`, the terminal provider panel): names and metadata only, never a value. */
-export interface SecretInventoryView extends SecretInventory { readonly schemaVersion: 1; readonly project: string | null; readonly mainStore: string; readonly all: boolean }
+interface SecretInventoryView extends SecretInventory { readonly schemaVersion: 1; readonly project: string | null; readonly mainStore: string; readonly all: boolean }
 export type SecretInventoryHandler = (root: string, input: { readonly scopeId: string; readonly all: boolean }, options: ConfigLoadOptions) => Promise<SecretInventoryView>;
-export interface SecretGrantView { readonly name: string; readonly project: string; readonly granted: boolean; readonly revision: number }
+interface SecretGrantView { readonly name: string; readonly project: string; readonly granted: boolean; readonly revision: number }
 /** `secret grant|revoke` in this process at the person's terminal (witnessed, decided on `secret`/`set`, sealed before the grant record). */
 export type SecretGrantHandler = (root: string, input: { readonly scopeId: string; readonly name: string; readonly action: 'grant' | 'revoke' }, options: ConfigLoadOptions) => Promise<SecretGrantView>;
 /** `secret set|delete --project`: the project's own vault, in this process at the person's terminal (value null: delete). */
@@ -22,7 +22,7 @@ export function requirePersonTerminal(context: AdminCommandContext, operation: s
 }
 
 /** KER-17: one user of a key in words: `mcp:<server>` is a personal-file MCP server naming it as `$DECK:`, anything else a provider profile. */
-export const secretUserText = (user: string, locale: Locale): string => user.startsWith('mcp:')
+const secretUserText = (user: string, locale: Locale): string => user.startsWith('mcp:')
   ? t('cli.secret.usedBy.mcp', { server: terminalSafeText(user.slice(4)) }, locale) : t('cli.secret.usedBy.profile', { profile: terminalSafeText(user) }, locale);
 /** KER-17: who uses main key NAME in this project (provider profiles, MCP servers), from the one inventory; empty when it cannot be read. */
 export async function projectKeyUsers(context: AdminCommandContext, root: string, scopeId: string, name: string, options: ConfigLoadOptions, locale: Locale): Promise<string[]> {

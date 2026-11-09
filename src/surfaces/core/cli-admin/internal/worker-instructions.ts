@@ -27,7 +27,7 @@ function stateLine(row: WorkerInstructionStatus, locale: Locale): string {
   return row.state === 'trusted' ? t('cli.coding.instructions.state.trusted', params, locale) : t('cli.coding.instructions.state.untrusted', params, locale);
 }
 /** Target · file (path, bytes, sha256) · whether workers get it now, and the next command when they do not. */
-export function renderWorkerInstructionStatus(rows: readonly WorkerInstructionStatus[], locale: Locale): string {
+function renderWorkerInstructionStatus(rows: readonly WorkerInstructionStatus[], locale: Locale): string {
   return rows.flatMap(row => [where(row, locale), ...(row.digest ? [`  ${fileLine(row, locale)}`] : []), ...revisionLines(row, locale).map(line => `  ${line}`), `  ${stateLine(row, locale)}`,
     ...(row.state === 'untrusted' ? [`  ${t('cli.coding.instructions.next', {}, locale)}`] : [])]).join('\n');
 }

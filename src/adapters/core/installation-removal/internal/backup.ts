@@ -31,7 +31,7 @@ export function uninstallBackupSet(plan: UninstallPlan, kind: 'initial' | 'final
   return join(plan.backup.destination, `${paths[`${kind}BackupPrefix`]}${randomUUID()}`);
 }
 /** What an uninstall set must hold: the members of the data resources the approved plan removes. */
-export interface UninstallSetMembers { readonly config: ResolvedConfig; readonly plan: UninstallPlan; readonly approved: string; readonly members: readonly DataRemovalMember[];
+interface UninstallSetMembers { readonly config: ResolvedConfig; readonly plan: UninstallPlan; readonly approved: string; readonly members: readonly DataRemovalMember[];
   readonly globalPath: string; readonly env: ConfigLoadOptions['env'] }
 /** M5: the archived members go into a verified archive bound to the verified set, so a member that cannot be archived stops the plan before anything goes. */
 export async function archiveUninstallMembers(verified: VerifiedBackup, input: UninstallSetMembers, passphrase: string) {

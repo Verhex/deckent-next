@@ -8,15 +8,15 @@ import { z } from 'zod';
 import { counterSchema, brainQuotaWaitRecordSchema, encodeCommandProjection, type BrainQuotaWaitRecord, type BrainQuotaWaitStore } from '#domain/index.js';
 import limits from './limits.json' with { type: 'json' };
 
-/** Store bounds (data, not code): how many waits are kept, how large one file may be, and how long past its planned end a left-behind record is shown. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Store bounds (data, not code): how many waits are kept, how large one file may be, and how long past its planned end a left-behind record is shown. */
 export const brainQuotaWaitStoreLimitsSchema = z.strictObject({ maxEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   staleAfterMs: counterSchema }).readonly();
-export type BrainQuotaWaitStoreLimits = z.infer<typeof brainQuotaWaitStoreLimitsSchema>;
+type BrainQuotaWaitStoreLimits = z.infer<typeof brainQuotaWaitStoreLimitsSchema>;
 export const BRAIN_QUOTA_WAIT_STORE_LIMITS: BrainQuotaWaitStoreLimits = brainQuotaWaitStoreLimitsSchema.parse(limits);
 const fileSchema = z.strictObject({ schemaVersion: z.literal(1), record: z.unknown().optional(), expiresAtMs: counterSchema,
   writer: z.strictObject({ pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), host: persistedString(z.string().min(1).max(255)) }) });
 const RECORD_FILE = /^[a-f0-9]{64}\.json$/u, TEMPORARY_FILE = /^\.[a-f0-9]{64}\.json\.[0-9a-f-]{36}\.tmp$/u;
-/** What a reader sees: the live waits (oldest first) and whether the directory held more files than the bound lets it read. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What a reader sees: the live waits (oldest first) and whether the directory held more files than the bound lets it read. */
 export type BrainQuotaWaitListing = Readonly<{ records: readonly BrainQuotaWaitRecord[]; truncated: boolean }>;
 type Stored = Readonly<{ record: BrainQuotaWaitRecord; expiresAtMs: number; writer: Readonly<{ pid: number; host: string }> }>;
 

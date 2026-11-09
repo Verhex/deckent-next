@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ExecutionPool } from '#engine/core/runs/index.js';
 import { hashInstallationProfilePayload, installationProfileSchema, profilePayload, type InstallationProfile } from './profile.js';
-export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INSTALLATION_PROFILE_DIGEST'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INSTALLATION_PROFILE_DIGEST'
   | 'INSTALLATION_PROFILE_CONFIG' | 'INSTALLATION_PROFILE_REGISTRY' | 'INSTALLATION_PROFILE_ADAPTER'
   | 'INSTALLATION_PROFILE_EVALUATOR' | 'INSTALLATION_PROFILE_POOL' | 'INSTALLATION_PROFILE_POLICY'
   | 'INSTALLATION_PROFILE_SHUTDOWN' | 'INSTALLATION_PROFILE_PATHS'
@@ -60,7 +60,7 @@ export interface InstallationPreview {
   readonly blockers: readonly ['INSTALL_PACKAGE_TRUST_UNVERIFIED', 'INSTALL_IMAGE_PROVENANCE_UNVERIFIED', 'INSTALL_IMAGE_AVAILABILITY_UNCHECKED'];
 }
 
-/** Private recovery material. Never render this configuration snapshot through a surface. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Private recovery material. Never render this configuration snapshot through a surface. */
 export interface InstallationMaterial {
   readonly schemaVersion: 1;
   readonly authoredProfile: InstallationProfile;

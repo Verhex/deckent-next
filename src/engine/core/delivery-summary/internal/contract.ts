@@ -16,7 +16,7 @@ const count = counterSchema;
 const withheld = z.strictObject({ state: z.literal('withheld') });
 const unavailable = z.strictObject({ state: z.literal('unavailable') });
 
-export const DELIVERY_SUMMARY_OPERATIONS = ['deliver', 'adopt', 'rollback'] as const;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const DELIVERY_SUMMARY_OPERATIONS = ['deliver', 'adopt', 'rollback'] as const;
 export const deliverySummaryOperationSchema = z.enum(DELIVERY_SUMMARY_OPERATIONS);
 export type DeliverySummaryOperation = z.infer<typeof deliverySummaryOperationSchema>;
 /** Typed keys of what yes / no will do; surfaces render the words. */
@@ -38,7 +38,7 @@ const evidenceSchema = z.strictObject({ evaluator: z.strictObject({ id: identity
   kind: deliveryEvidenceKindSchema, independent: z.boolean().nullable() });
 export const DELIVERY_RISK_FLAGS = ['acceptance-unverified', 'evidence-not-independent', 'model-not-verified', 'worker-checks-failed',
   'verification-missing', 'verification-not-accepted', 'out-of-scope', 'scope-undeclared', 'protected-target', 'instruction-surface'] as const;
-export const deliveryRiskFlagSchema = z.enum(DELIVERY_RISK_FLAGS);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const deliveryRiskFlagSchema = z.enum(DELIVERY_RISK_FLAGS);
 export type DeliveryRiskFlag = z.infer<typeof deliveryRiskFlagSchema>;
 
 /** Adapter-filled change facts, bounded by the projector. `adapter` names the filler (e.g. `workspace-patch`), never a vendor. */

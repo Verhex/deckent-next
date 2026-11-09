@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { CodedError, t, type Locale } from '#platform/index.js';
 import { chatTurnSteerOutcomeSchema, type AgentToolCallStatus, type AgentToolDiagnostic, type AgentTurnFinish, type ChatTurnSteerOutcome } from '#domain/index.js';
 
-export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
 export class AgentTurnStoreError extends CodedError {
   constructor(override readonly code: AgentTurnStoreErrorCode) { super(code); this.name = 'AgentTurnStoreError'; }
 }

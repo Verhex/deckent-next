@@ -29,7 +29,7 @@ export interface ModelInvocationPurgeStore { purgeContent(input: ModelInvocation
 export interface ModelInvocationCancellationAdmission { readonly command: ModelInvocationCancellationCommand;
   readonly actor: ModelInvocationActor; readonly authorization: ModelInvocationAuthorization; readonly requestedAtMs: number }
 export interface ModelInvocationCancellationResult { readonly replayed: boolean; readonly receipt: ModelInvocationCancellationReceipt }
-export interface ModelInvocationSendPermission { readonly granted: boolean; readonly control: ModelInvocationControlRecord; readonly record: ModelInvocationRecord }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationSendPermission { readonly granted: boolean; readonly control: ModelInvocationControlRecord; readonly record: ModelInvocationRecord }
 export interface ModelInvocationCancellationStore {
   loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   loadControl(scopeId: string, invocationId: string): Promise<ModelInvocationControlRecord | null>;
@@ -48,7 +48,7 @@ export interface ModelInvocationStore {
   loadInvocation(scopeId: string, invocationId: string): Promise<ModelInvocationRecord | null>;
   close(): void;
 }
-export type ModelInvocationStoreErrorCode = 'MODEL_INVOCATION_COMMAND_CONFLICT' | 'MODEL_INVOCATION_CORRUPT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationStoreErrorCode = 'MODEL_INVOCATION_COMMAND_CONFLICT' | 'MODEL_INVOCATION_CORRUPT'
   | 'MODEL_INVOCATION_UNAVAILABLE' | 'MODEL_INVOCATION_OUTCOME_UNKNOWN' | 'MODEL_INVOCATION_ACTIVATION_CONFLICT' | 'MODEL_NOT_ACTIVATED' | 'MODEL_INVOCATION_REASONING_UNSUPPORTED'
   | 'MODEL_INVOCATION_ALLOCATION_CONFLICT' | 'MODEL_INVOCATION_QUOTA_EXHAUSTED' | 'MODEL_INVOCATION_CAPACITY_EXHAUSTED'
   | 'NATIVE_AGENT_RECONNECT_REQUIRED' | 'MODEL_INVOCATION_DELIVERY_UNAVAILABLE' | 'MODEL_INVOCATION_RESULT_LIMIT';

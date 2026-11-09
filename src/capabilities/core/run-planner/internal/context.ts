@@ -6,7 +6,7 @@ export const brainContextLimitsSchema = z.strictObject({ maxKinds: persistedInte
   maxEvaluators: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   requestMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), tokenFramingAllowance: counterSchema,
 }).prefault(templates.context);
-/** S4B-6 (§7.2): one verified memory entry as the Brain reads it (data; redacted and projected by the memory engine). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). S4B-6 (§7.2): one verified memory entry as the Brain reads it (data; redacted and projected by the memory engine). */
 export interface BrainMemoryEntry { readonly entryId: string; readonly revision: number; readonly kind: 'fact' | 'lesson'; readonly title: string; readonly body: string }
 /** The memory block of context v3: the selected entries and how many eligible entries the memory registry bounds left out. */
 export interface BrainMemoryContext { readonly entries: readonly BrainMemoryEntry[]; readonly omitted: number }

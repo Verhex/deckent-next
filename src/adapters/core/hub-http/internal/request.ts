@@ -12,7 +12,7 @@ export interface HubHttpTransport {
   connect(address: string, port: number): Duplex;
   readonly ca?: readonly string[];
 }
-export const SYSTEM_HUB_HTTP_TRANSPORT: HubHttpTransport = Object.freeze({
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const SYSTEM_HUB_HTTP_TRANSPORT: HubHttpTransport = Object.freeze({
   async resolve(host: string) { return (await lookup(host, { all: true, verbatim: true })).map(row => row.address); },
   connect(address: string, port: number) { return connect({ host: address, port }); },
 });

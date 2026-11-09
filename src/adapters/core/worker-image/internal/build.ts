@@ -21,7 +21,7 @@ const BUILDER_REASONS = [
   'WORKER_VERSION_INVALID', 'WORKER_PLAN_INVALID', 'WORKER_IMAGE_VERSIONS_UNRESOLVABLE', 'WORKER_IMAGE_INSTALLER_CHANGED',
   'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED', 'WORKER_IMAGE_SOURCE_INSECURE', 'WORKER_LINEAGE_INVALID', 'WORKER_IMAGE_BUILDKIT_REQUIRED',
 ] as const;
-export type WorkerImageBuildErrorCode = typeof BUILDER_REASONS[number] | 'WORKER_IMAGE_VERSION_CHECK_FAILED' | 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT' | 'WORKER_IMAGE_SOURCE_INVALID' | 'WORKER_IMAGE_CONTEXT_EXISTS' | 'WORKER_IMAGE_CONTEXT_UNSAFE'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerImageBuildErrorCode = typeof BUILDER_REASONS[number] | 'WORKER_IMAGE_VERSION_CHECK_FAILED' | 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT' | 'WORKER_IMAGE_SOURCE_INVALID' | 'WORKER_IMAGE_CONTEXT_EXISTS' | 'WORKER_IMAGE_CONTEXT_UNSAFE'
   | 'WORKER_IMAGE_BUILD_FAILED' | 'WORKER_IMAGE_BUILD_TIMEOUT' | 'WORKER_IMAGE_RECEIPT_MISSING';
 /** Raw process evidence is retained for custody; the surface receives only a bounded redacted detail. */
 export class WorkerImageBuildError extends DeckentError {
@@ -61,9 +61,9 @@ export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: 
   if (!answer) throw new WorkerImageBuildError('WORKER_IMAGE_VERSION_CHECK_FAILED', evidence);
   return JSON.parse(answer[1]!) as string | null;
 }
-/** The builder reads its inputs from its own directory, so a build context is a private copy of exactly these files. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The builder reads its inputs from its own directory, so a build context is a private copy of exactly these files. */
 export const WORKER_IMAGE_BUILDER_FILES = Object.freeze(['build.mjs', 'history.mjs', 'receipts.mjs', 'recover.mjs', 'layers.mjs', 'install.mjs', 'inspect.mjs', 'lineage.json', 'lineage.lock.json'] as const);
-export const WORKER_IMAGE_ASSET_DIRECTORY = 'assets/worker-image';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORKER_IMAGE_ASSET_DIRECTORY = 'assets/worker-image';
 
 export async function privateDirectory(path: string) {
   const stat = await lstat(path);

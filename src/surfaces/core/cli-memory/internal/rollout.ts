@@ -42,7 +42,7 @@ const stepBack = (status: MemoryRolloutStatus, phase: MemoryRolloutPhaseView) =>
   status.view.phases.filter(row => row.section === phase.section && row.phase < phase.phase).at(-1)?.set ?? 'off';
 
 /** `deckent memory rollout` lines (S4B-7, read-only): phase, switches, every gated phase's criteria with numbers, the next person action. */
-export function rolloutLines(status: MemoryRolloutStatus, locale: Locale): string[] {
+function rolloutLines(status: MemoryRolloutStatus, locale: Locale): string[] {
   const { view } = status, scope = safeCell(status.scopeId), current = view.phases.find(phase => phase.phase === view.phase);
   const lines = [current ? t('memory.rollout.title', { scope, phase: current.phase, name: stepName(current, locale) }, locale) : t('memory.rollout.title.none', { scope }, locale),
     t('memory.rollout.modes', { ...status.modes }, locale)];

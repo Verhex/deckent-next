@@ -1,19 +1,7 @@
-import { Box, Text } from 'ink';
-import { fillTemplate, plainText, SpanText } from '#surfaces/core/terminal-render-ink/index.js';
+import { fillTemplate, plainText } from '#surfaces/core/terminal-render-ink/index.js';
 import { ArrowPicker } from '#surfaces/core/terminal-picker/index.js';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
-import { ApprovalDecisionWarnings, approvalRawPatternCount } from './card.js';
+import { approvalRawPatternCount } from './card.js';
 import type { ApprovalDecisionLabels, ApprovalDecisionLine, ApprovalDecisionProjection } from '#surfaces/core/approval-presentation/index.js';
-
-/** Only completed projection spans/counters cross the renderer boundary. No context-selected mode or raw UI props. */
-export function ApprovalProjectedNotice({ line, labels, error }: {
-  readonly line: ApprovalDecisionLine; readonly labels: ApprovalDecisionLabels; readonly error: boolean;
-}) {
-  const palette = useWorklinePalette();
-  return <Box flexDirection="column"><Text {...(error ? palette.error : palette.muted)}><SpanText spans={line.spans} /></Text>
-    <ApprovalDecisionWarnings fields={line.fields} labels={labels} /></Box>;
-}
-
 function pickerDetails(fields: readonly ApprovalDecisionProjection[], labels: ApprovalDecisionLabels): string | undefined {
   const lines: string[] = [];
   for (const field of fields) {

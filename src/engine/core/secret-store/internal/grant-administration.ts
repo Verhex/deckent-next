@@ -8,7 +8,7 @@ import { isSecretName } from './port.js';
 import { SECRET_STORE_SWITCH_RESOURCE_ID } from './switch.js';
 import { PROJECT_VAULT, type ProjectVaultAnchor, type SecretGrantFile } from './project.js';
 
-export interface SecretGrantRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SecretGrantRequest {
   /** The verified caller (the CLI's own OS identity at a witnessed terminal), never an input field. */
   readonly principal: VerifiedPrincipal;
   readonly scopeId: string;
@@ -18,7 +18,7 @@ export interface SecretGrantRequest {
   /** A fresh id per request: one sealed decision per attempt. */
   readonly commandId: string;
 }
-export interface SecretGrantPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SecretGrantPorts {
   readonly anchor: ProjectVaultAnchor;
   /** The trusted policy snapshot (policy + bindings) of the scope. */
   readonly policy: unknown;
@@ -73,7 +73,7 @@ export function authorizeSecretInventoryAll(policy: unknown, principal: Verified
   if (evaluateSecretCell(policy, principal, scopeId, 'switch', SECRET_STORE_SWITCH_RESOURCE_ID).decision !== 'allow') throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: 'switch', name: SECRET_STORE_SWITCH_RESOURCE_ID } });
 }
 
-export interface ProjectVaultHandoverPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ProjectVaultHandoverPorts {
   /** The vault's recorded owner and the anchor that takes it over. */
   readonly from: ProjectVaultAnchor; readonly to: ProjectVaultAnchor;
   readonly policy: unknown;

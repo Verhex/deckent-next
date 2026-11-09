@@ -20,7 +20,7 @@ export interface MonitorColumn {
 }
 export type MonitorSortKey = 'age' | 'state' | 'name';
 /** What the `/` filter prefixes match: `s:` state or blocker words, `i:` install, `t:` task kind, `r:` Run id (lower-case text). */
-export interface MonitorFacets { readonly state?: string; readonly install?: string; readonly kind?: string; readonly run?: string;
+interface MonitorFacets { readonly state?: string; readonly install?: string; readonly kind?: string; readonly run?: string;
   /** The human state word a `g` state grouping heads its group with. */
   readonly stateLabel?: string }
 export interface MonitorRow {

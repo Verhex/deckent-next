@@ -10,7 +10,7 @@ export async function observationDirectory(path: string) {
   if (!isAbsolute(path) || !stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.()
     || (stat.mode & 0o022) || await realpath(path) !== path) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
 }
-export async function readObservationFile(path: string, maxBytes: number, tail = false) {
+async function readObservationFile(path: string, maxBytes: number, tail = false) {
   try {
     const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {

@@ -14,7 +14,7 @@ import { modelTextPrefix } from '#domain/index.js';
  * `integrations` directory beside the trust record (no layout or ledger change; the agent's floors already close that directory). Every
  * value is display-safe: a diagnosis path written with `${VAR}` is kept as written, never expanded.
  */
-export const MCP_START_FAILURES_FILE = 'mcp-start-failures.json';
+const MCP_START_FAILURES_FILE = 'mcp-start-failures.json';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const text = (max: number) => persistedString(z.string().max(max));
 const diagnosisSchema = z.union([
@@ -22,7 +22,7 @@ const diagnosisSchema = z.union([
     target: text(4_096).optional() }),
   z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }),
 ]);
-export const mcpStartFailureSchema = z.strictObject({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest, clientIdentity: digest.optional(),
+const mcpStartFailureSchema = z.strictObject({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest, clientIdentity: digest.optional(),
   /** `launch`: the first-use card's yes could not start it; `trusted`: a trusted server did not start; `tools` (MCP-VISIBILITY): it started but pinned
    * tools were withheld (drifted, missing or unmappable); `detail` is their count. `decision`: a trust/secret refusal, never a trust decision. */
   phase: z.enum(['launch', 'trusted', 'tools', 'decision']), atMs: persistedInteger().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() });

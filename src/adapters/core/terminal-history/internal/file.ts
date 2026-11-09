@@ -2,12 +2,12 @@ import { constants } from 'node:fs';
 import { EMPTY_KNOWN_SECRETS, ManagedFileError, redactBounded } from '#platform/index.js';
 import { open, rename } from 'node:fs/promises';
 
-export interface TerminalHistoryEntry { readonly text: string; readonly pastes: readonly never[] }
-export interface TerminalHistoryFile {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TerminalHistoryEntry { readonly text: string; readonly pastes: readonly never[] }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TerminalHistoryFile {
   load(): Promise<readonly TerminalHistoryEntry[]>;
   append(entry: { readonly text: string }): Promise<void>;
 }
-export const TERMINAL_HISTORY_LIMITS = Object.freeze({ maxEntries: 500, maxEntryBytes: 4096 });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const TERMINAL_HISTORY_LIMITS = Object.freeze({ maxEntries: 500, maxEntryBytes: 4096 });
 
 /**
  * Private per-project composer history (0600, no-follow, append-only JSONL). Only the visible line is kept: pasted

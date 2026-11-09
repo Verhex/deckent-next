@@ -8,7 +8,7 @@ const DAY_MS = 86_400_000;
 export type CatalogEntry = Readonly<{ position: number; digest: string; atMs: number | null; task: string; sequence: number; workClass: string | null; agent: Readonly<{ agentId: string; revision: number }> | null;
   status: 'accepted' | 'failed' | 'awaiting-decision'; cause: string | undefined; legacy: boolean; durationMs: number | null; cost: string | null;
   model: Readonly<{ channelId: string; modelId: string }> | null; effort: string | null; human: boolean; assigned: boolean; kinds: readonly string[] }>;
-export type CatalogEvent = Readonly<{ position: number; atMs: number | null; workClass: string | null; agent: CatalogEntry['agent']; kind: 'quota-park' | 'run-incomplete' }>;
+type CatalogEvent = Readonly<{ position: number; atMs: number | null; workClass: string | null; agent: CatalogEntry['agent']; kind: 'quota-park' | 'run-incomplete' }>;
 export type CatalogEntries = Readonly<{ tasks: readonly CatalogEntry[]; events: readonly CatalogEvent[] }>;
 type Match = (row: Pick<CatalogEntry, 'workClass' | 'agent'>) => boolean;
 

@@ -4,7 +4,7 @@ import type { PanelContext, PanelController } from '#surfaces/core/terminal-kit/
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
 
 /** T4: why the draft stayed as it was (the adapter's own words; never the command, path or text). */
-export type ExternalEditorRefusal = 'no-editor' | 'not-started' | 'exit' | 'too-large' | 'unsafe' | 'failed';
+type ExternalEditorRefusal = 'no-editor' | 'not-started' | 'exit' | 'too-large' | 'unsafe' | 'failed';
 export type ExternalEditorOutcome =
   | Readonly<{ kind: 'edited'; text: string }> | Readonly<{ kind: 'unchanged' }> | Readonly<{ kind: 'refused'; reason: ExternalEditorRefusal }>;
 /** The person's `$VISUAL`/`$EDITOR` behind an adapter: this surface spawns no process and writes no file. */
@@ -17,7 +17,7 @@ export interface DraftHandoffLabels {
   readonly editor: Readonly<Record<ExternalEditorRefusal, string>>;
 }
 type Say = (level: 'info' | 'warning' | 'error', text: string) => void;
-export interface DraftHandoffOptions<C extends PanelContext> {
+interface DraftHandoffOptions<C extends PanelContext> {
   readonly controller: PanelController<C>;
   readonly say: Say;
   readonly labels?: DraftHandoffLabels | undefined;

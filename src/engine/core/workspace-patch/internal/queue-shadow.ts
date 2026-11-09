@@ -8,7 +8,7 @@ import { queueCommandIds } from './queue-git.js';
 import { classifyPatchScope, type PatchScopeMode } from './scope.js';
 import { workspacePatchChangeFacts } from './effect-summary.js';
 
-export interface WorkspaceQueueShadowPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspaceQueueShadowPorts {
   readonly shadow: AutonomyShadowStore; readonly artifacts: ArtifactStore; readonly maxBytes: number; readonly scopeMode: PatchScopeMode;
   readonly known?: KnownSecretSnapshot; now(): number;
 }

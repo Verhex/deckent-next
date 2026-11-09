@@ -12,7 +12,7 @@ export interface DispatchAuthorization {
 export interface DispatchIdentityAuthorization {
   authorizeIdentity(action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal, policy?: Policy): Promise<void>;
 }
-export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord } | { kind: 'prevented'; record: DispatchRecord }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord } | { kind: 'prevented'; record: DispatchRecord }>;
 /** Internal application execution entry. Composition supplies a trusted broker workspace, verifier,
  * policy, supervisor and process-owner identity. It does not expose arbitrary paths to public callers.
  */

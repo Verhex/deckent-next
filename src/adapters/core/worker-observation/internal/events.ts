@@ -31,8 +31,8 @@ export async function openWorkerEventSink(directory: string, openFile: EventFile
 }
 
 /** The file surface the sink needs; injectable so a short write or close fault is provable without a faulty disk. */
-export interface EventFile { write(bytes: Buffer, offset: number, length: number): Promise<{ readonly bytesWritten: number }>; close(): Promise<void> }
-export type EventFileOpener = (path: string, flags: number, mode: number) => Promise<EventFile>;
+interface EventFile { write(bytes: Buffer, offset: number, length: number): Promise<{ readonly bytesWritten: number }>; close(): Promise<void> }
+type EventFileOpener = (path: string, flags: number, mode: number) => Promise<EventFile>;
 
 /** A successful write may be short (a full disk, a signal); continue from the written offset, bounded so a stalled file cannot hold the queue. */
 const writeAttempts = 8;

@@ -3,7 +3,7 @@ export { proposeTaskEvaluationCommit, assertTaskEvaluationReady } from './intern
 export { taskEvaluationCommitSchema, assertTaskEvaluationCustody } from './internal/commit.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from './internal/commit.js';
 export { TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from './internal/application.js';
-export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, TaskCriterionResult, UnknownEvaluationPolicy } from './internal/application.js';
+export type { TaskEvaluationCommand, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TaskEvaluationAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TaskTerminalEvaluator, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ UnknownEvaluationPolicy } from './internal/application.js';
 
 export { deriveAcceptanceMetrics, selectRunAcceptanceEvaluations } from './internal/metrics.js';
 export { criterionEvidenceDigest } from './internal/recovery.js';

@@ -6,13 +6,13 @@ export function formatValue(value: unknown): string {
   if (typeof value === 'string') return value;
   return JSON.stringify(value, null, 2) ?? 'null';
 }
-export function formatTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function formatTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
   const widths = headers.map((h, i) => Math.max(stripAnsi(h).length, ...rows.map(row => stripAnsi(row[i] ?? '').length)));
   return [headers, ...rows].map(row => headers.map((_, i) => {
     const cell = row[i] ?? ''; return cell + ' '.repeat(widths[i]! - stripAnsi(cell).length);
   }).join('  ').trimEnd()).join('\n');
 }
-export interface StatusData { status?: string; phase?: string; completedTasks?: number; totalTasks?: number; activeWorkers?: number; liveRows?: readonly string[]; memory?: { state: 'known'; count: number } | { state: 'unknown' } }
+interface StatusData { status?: string; phase?: string; completedTasks?: number; totalTasks?: number; activeWorkers?: number; liveRows?: readonly string[]; memory?: { state: 'known'; count: number } | { state: 'unknown' } }
 export function formatStatus(data: StatusData, mode: OutputMode = getConfigFieldDefault('output_mode'), locale: Locale = resolveLocale()): string {
   const terminal = data.status === 'COMPLETE' || data.phase === 'COMPLETE';
   const safe = { ...data, activeWorkers: terminal ? 0 : data.activeWorkers ?? 0, liveRows: terminal ? [] : data.liveRows ?? [] };

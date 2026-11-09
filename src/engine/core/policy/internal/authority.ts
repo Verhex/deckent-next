@@ -31,7 +31,7 @@ export interface AuthorityDocumentStore {
  * decider is the only person it names. They choose the refusal text's hint only; the bound decided before they were read. `detail` stays the raw
  * `ruleId:reason` (audit and callers compare it).
  */
-export interface DelegationRefusalFacts {
+interface DelegationRefusalFacts {
   readonly cell: DelegationCell; readonly reason: Extract<DelegationVerdict, { ok: false }>['reason'];
   readonly sole: boolean; readonly people: readonly { readonly issuer: string; readonly subject: string }[];
 }

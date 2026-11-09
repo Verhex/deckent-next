@@ -5,7 +5,7 @@ import type { BeuserController } from './controller.js';
 
 const ranSchema = z.strictObject({ exitCode: persistedInteger().nullable(), stdoutBytes: counterSchema,
   stdoutDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
-/** Retained as an `arrange` transcript row: harness setup values only, never target output, a persona action or acceptance evidence. A `check` runs nothing. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Retained as an `arrange` transcript row: harness setup values only, never target output, a persona action or acceptance evidence. A `check` runs nothing. */
 export interface BeuserArrangeReceipt { readonly id: string; readonly version: number; readonly ran: z.infer<typeof ranSchema> | null;
   readonly readback: BeuserArrangeStep['readback'] & { readonly met: boolean } }
 export interface BeuserArrangement {

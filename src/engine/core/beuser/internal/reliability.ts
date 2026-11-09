@@ -8,7 +8,7 @@ export const beuserCalibrationSchema = z.strictObject({ revision: identitySchema
   bad: count.positive(), hits: count, good: count.positive(), falseReds: count })
   .refine(row => row.hits <= row.bad && row.falseReds <= row.good).readonly();
 export const beuserReliabilityPolicySchema = z.strictObject({ revision: identitySchema, minHitRate: rate, maxFalseRedRate: rate }).readonly();
-export type BeuserCalibration = z.infer<typeof beuserCalibrationSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BeuserCalibration = z.infer<typeof beuserCalibrationSchema>;
 export interface BeuserReliabilitySample {
   readonly verdict: BeuserVerdict;
   readonly calibration: BeuserCalibration;
@@ -18,7 +18,7 @@ export interface BeuserReliabilitySample {
   readonly unresolvedEffects: boolean;
   readonly choice: BeuserRerunChoice;
 }
-export interface BeuserRerunChoice {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserRerunChoice {
   readonly modelKey: string; readonly personaDigest: string;
 }
 /** Deterministic authorization/safety failures survive every experience rerun and reduced-maker label. */

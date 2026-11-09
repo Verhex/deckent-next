@@ -21,7 +21,7 @@ export function nativeWorkerTemplateEnvironment(defaults: { requirements: readon
     ...(heap ? [{ ...defaults.nodeHeap, expect: String(heap) }] : [])] };
 }
 /** Explicit result type: the published declaration never references the JSON policy module. */
-export type NativeWorkerToolBounds = Readonly<{ limiter: string; dataBytes: number; heapBytes: number; fixedEnv: Readonly<Record<string, string>> }>;
+type NativeWorkerToolBounds = Readonly<{ limiter: string; dataBytes: number; heapBytes: number; fixedEnv: Readonly<Record<string, string>> }>;
 export function nativeWorkerToolBounds(limits: { limiter: string; dataBytes: number } | undefined): NativeWorkerToolBounds {
   if (!limits) throw ErrorRegistry.createError('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   const units = Math.floor(limits.dataBytes * policy.memoryFraction / policy.bytesPerUnit);

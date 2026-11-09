@@ -14,7 +14,7 @@ import { installationPublicationPorts } from './publication.js';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 const choicesSchema = z.strictObject({ allowShutdown: z.boolean(), dockerExecutable: persistedString(z.string().min(1)).refine(isAbsolute),
   proposalDigest: z.string().regex(/^[a-f0-9]{64}$/), acceptCustom: z.literal(true) }).readonly();
-export type InstallationApplyChoices = z.infer<typeof choicesSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationApplyChoices = z.infer<typeof choicesSchema>;
 function choices(input: unknown): InstallationApplyChoices {
   const safe = immutableJsonObjectSchema.safeParse(input), parsed = safe.success ? choicesSchema.safeParse(safe.data) : null;
   if (!parsed?.success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');

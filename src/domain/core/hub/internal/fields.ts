@@ -14,7 +14,7 @@ export const hubVersionSchema = persistedString(z.string().max(50)).regex(/^(0|[
 /** Portable, relative, exact path. Reject encoded aliases, drives, traversal, Windows devices and trailing-dot/space aliases. */
 export const hubFilePathSchema = persistedString(z.string().min(1).max(1024)).refine(path => !/[\\:%<>"|?*]/.test(path) && ![...path].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) && path.split('/').every(segment =>
   segment !== '' && segment !== '.' && segment !== '..' && !/[. ]$/.test(segment) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment)));
-export const hubFileSchema = z.strictObject({ path: hubFilePathSchema, mediaType: z.string().refine(type => HUB_FILE_TYPES.mediaTypes.includes(type)),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubFileSchema = z.strictObject({ path: hubFilePathSchema, mediaType: z.string().refine(type => HUB_FILE_TYPES.mediaTypes.includes(type)),
   size: hubTimeSchema.max(HUB_LIMITS.skillReadMaxBytes), digest: hubDigestSchema }).readonly();
 export type HubFile = z.infer<typeof hubFileSchema>;
 export const hubFilesSchema = z.array(hubFileSchema).min(1).max(HUB_LIMITS.skillReadMaxFiles)

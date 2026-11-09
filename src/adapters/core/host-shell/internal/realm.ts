@@ -52,7 +52,7 @@ export function sandboxWriteView(layout: Pick<ShellSandboxLayout, 'repositoryWri
     repositoryWritable: layout.repositoryWritable === true && write.projectReadOnly !== true && write.writeSet !== true,
     ...(write.writeSet && !write.projectReadOnly ? { writeSet: true } : {}), ...(write.open && !write.projectReadOnly && !write.writeSet ? { open: true } : {}) };
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The write posture of sandboxed work no card approves call by call (Astra 2170 R1): the write floor's existing paths are read-only (the
  * floor's matcher is required — a view without it is refused, fail closed), and the whole project is read-only (the scratch area and
  * bubblewrap's private `/tmp` stay writable) unless the work is the shell's narrow mutating set, whose literal targets passed the write
@@ -134,7 +134,7 @@ export function shellPostureFacts(resolution: Extract<ShellRealmResolution, { ok
   return Object.freeze({ realm: resolution.realm.kind, containment: resolution.containment, project, git: host || view.repositoryWritable ? 'writable' : 'read-only',
     network: host || (view.open === true && resolution.opens === true) ? 'reachable' : 'closed', passedOver: Object.freeze((resolution.rejected ?? []).map(item => item.kind).slice(0, 8)) });
 }
-/** A provider the resolver passed over, and why (its own `usable()` reason; `restricted` when the host restricts it, S3). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A provider the resolver passed over, and why (its own `usable()` reason; `restricted` when the host restricts it, S3). */
 export interface ShellSandboxRejection { readonly kind: string; readonly reason: string; readonly restricted?: boolean }
 /** The longest rejection reason a notice carries (the AppArmor fix, the longest shipped reason, is ~300 characters). */
 export const SANDBOX_REASON_MAX_CHARS = 480;
@@ -211,7 +211,7 @@ export interface ShellSandbox {
     readonly launch?: ShellSandboxLaunch; readonly writeSets?: boolean; readonly opens?: boolean }
     | { readonly ok: false; readonly reason: string; readonly restricted?: boolean };
 }
-/** A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
  * the view resolved now (always `longLivedWritePosture`); the caller appends `--`, the command and its arguments. `view` is the write view
  * that launch enforces and `posture` the mechanism's words for it (the cards read these, never a fixed text). Absent: the mechanism only
  * runs one command at a time. */

@@ -12,13 +12,13 @@ import { createHash } from 'node:crypto';
 // so the shapes are mirrored and the host re-validates every event. Redaction happens before any byte leaves the container.
 type BridgeEvent = Record<string, unknown> & { kind: string };
 // B7 GENERATED REDACTOR BEGIN
-// Canonical source+table sha256: 7214ed7daebaee1aa692cac6dbc9b99a3287135a0cb1a2cf941af736bd08de7a; scripts/sync-worker-redactor.mjs --check
+// Canonical source+table sha256: 44d1973a79de3e732cb6cbeb3827748f12928a0b9dc66b241160fe84b70692d3; scripts/sync-worker-redactor.mjs --check
 const REDACTION_TABLE = {"knownLabel":{"prefix":"‹secret:","suffix":"›","anonymous":"[REDACTED]"},"patterns":[{"id":"provider-token","gate":true,"source":"\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b","flags":"g","replacement":"[REDACTED]","streamPreviewSource":"\\b(?:sk-(?:ant-)?[\\w-]*|gh[pousr]_\\w*|github_pat_\\w*|AKIA[A-Z0-9]*|xox[abp]-[A-Za-z0-9_-]*|npm_[A-Za-z0-9]*|AIza[A-Za-z0-9_-]*)$"},{"id":"bearer-token","gate":true,"source":"(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}","recordSource":"(Bearer\\s+)\\S+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"\\bBearer\\s*$"},{"id":"url-userinfo","gate":true,"source":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)","flags":"gi","replacement":"$1[REDACTED]$2","streamPreviewSource":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]*(@?)$"},{"id":"key-value","gate":false,"source":"((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"(?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*(?:=\\s*)?$"},{"id":"jwt","gate":true,"source":"((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b","flags":"g","replacement":"$1[REDACTED]","streamPreviewSource":"((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]*(?:\\.[\\w-]*){0,2}$"}],"gatePatterns":[{"id":"private-key-block","source":"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----","distributionSource":"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[ \\t\\r\\n]+(?:[A-Za-z0-9-]+:[^\\r\\n]*[\\r\\n]+)*(?:[A-Za-z0-9+/][ \\t\\r\\n]*){32}","flags":""},{"id":"gitlab-token","source":"\\bglpat-[A-Za-z0-9_-]{20,}","flags":""},{"id":"aws-temporary-key","source":"\\bASIA[A-Z0-9]{16}\\b","flags":""},{"id":"aws-secret-key","source":"aws_?secret_?access_?key[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])","flags":"i"},{"id":"stripe-key","source":"\\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}","flags":""},{"id":"slack-token","source":"\\b(?:xox[a-z]|xapp)-[A-Za-z0-9-]{8,}","flags":""},{"id":"pypi-token","source":"\\bpypi-[A-Za-z0-9_-]{50,}","flags":""},{"id":"azure-account-key","source":"\\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}={0,2}","flags":"i"}],"diagnosticPatterns":[{"id":"basic-bearer","source":"\\b(?:Basic|Bearer)\\s+\\S+","flags":"giu","replacement":"[REDACTED]"},{"id":"private-key-block","source":"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\\s\\S]*","flags":"gu","replacement":"[REDACTED]"},{"id":"key-value","source":"(?<![\\w-])((?:[\"']?[\\w-]*(?:password|passwd|pwd|token|secret|api[_-]?key|private[_-]?key|credentials?)[\"']?|[\"']?(?:authorization|cookie)[\"']?)\\s*[:=]\\s*)(?:\"(?:[^\"\\\\\\r\\n]|\\\\.?)*(?:\"|$)|'(?:[^'\\\\\\r\\n]|\\\\.?)*(?:'|$)|[^\\s,;}]+)","flags":"gimu","replacement":"$1[REDACTED]"},{"id":"url","source":"\\b[a-z][a-z0-9+.-]*:\\/\\/[^\\s<>\"'`]+","flags":"giu","parts":[{"source":"(\\/\\/)[^/?#]*@","flags":"u","replacement":"$1[REDACTED]@"},{"source":"[?#].*$","flags":"u","replacement":"?[REDACTED]"}]},{"id":"email","source":"(?<![\\p{L}\\p{N}.!#$%&'*+/=?^_`{|}~-])[\\p{L}\\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\\p{L}\\p{N}.-]+","flags":"giu","replacement":"[REDACTED]"},{"id":"long-run","source":"[A-Za-z0-9_+/.=-]{24,}","flags":"gu","replacement":"[REDACTED]"}],"configSecret":{"id":"config-secret","note":"S6 pre-dispatch gate only (redaction ignores it): the key-value vocabulary narrowed to config-like files and non-placeholder literal values. key-value itself stays gate:false (it matches ordinary code).","files":[".env",".env.*","*.json","*.yaml","*.yml","*.toml","*.ini","*.properties","*.conf","*.cfg","*.xml","docker-compose*","*.config"],"keys":["password","passwd","pwd","secret","token","api[_-]?key","private[_-]?key","access[_-]?key","account[_-]?key","shared[_-]?access[_-]?key","credentials?","connection[_-]?string","authorization","cookie"],"assignmentSource":"(?<![\\w.-])[\"']?([\\w.-]*(?:{keys}))[\"']?[ \\t]*[:=](?:[ \\t]*|\\s*(?=[\"']))(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|(\\$\\{\\{[^}\\r\\n]*\\}\\}(?=(?:[ \\t]+#[^\\r\\n]*)?[ \\t]*(?:\\r\\n|\\r|\\n|$))|\\$\\{[^}\\r\\n]*\\}|<[^>\\r\\n]*>|[^\\s\"',;#}\\]<]+))","elementSource":"<(?:[\\w.-]+:)?([\\w.-]*(?:{keys}))(?:\\s[^<>]*)?>([^<\\r\\n]*)</","flags":"gi","placeholders":["^\\$\\{[A-Za-z_][A-Za-z0-9_]*(?::?\\?[^}]*)?\\}$","^\\$\\(?[A-Za-z_][A-Za-z0-9_]*\\)?$","^%[A-Za-z_][A-Za-z0-9_]*%$","^<[^<>]*>$","^\\{\\{[^'\"{}]*\\}\\}$","^\\$\\{\\{[ \\t]*(?:github|secrets|env|vars|inputs|steps|needs|matrix|runner|job|strategy)\\.[A-Za-z0-9_.\\-]+[ \\t]*\\}\\}$","^\\*+$","^[xX]+$","^(?:changeme|change[_-]?me|change[_-]?it|example|dummy|redacted|placeholder|null|none|nil|true|false|todo|tbd|fixme|secret|password|your[_-][\\w-]*|xxx[\\w-]*|\\.\\.\\.)$"],"minValueLength":6,"envDefaultSource":"^\\$\\{[A-Za-z_][A-Za-z0-9_]*:?[-=](.*)\\}$"}};
 
-export interface NamedKnownSecret { readonly name: string | null; readonly value: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface NamedKnownSecret { readonly name: string | null; readonly value: string }
 export interface RedactionMatch { readonly kind: string; readonly count: number }
-export interface RedactionResult { readonly text: string; readonly knownMatches: number; readonly patternMatches: readonly RedactionMatch[] }
-/** Opaque, per-operation snapshot of values already resolved by an authorized producer. JSON never exposes the values. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RedactionResult { readonly text: string; readonly knownMatches: number; readonly patternMatches: readonly RedactionMatch[] }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Opaque, per-operation snapshot of values already resolved by an authorized producer. JSON never exposes the values. */
 export interface KnownSecretSpan { readonly start: number; readonly end: number; readonly label: string }
 export interface KnownSecretSnapshot {
   readonly spans: (text: string) => readonly KnownSecretSpan[];
@@ -305,7 +305,7 @@ const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookR
 const IGNORED_SYSTEM = new Set(['thinking_tokens', 'hook_started', 'hook_response', 'hook_progress', 'compact_boundary', 'informational', 'status']);
 const NATIVE_TIMESTAMP_SCALE = 1000; // Native protocol reset timestamps are Unix seconds; contract uses milliseconds.
 export interface QuotaPolicy { readonly claudeRejectedStatuses: readonly string[]; readonly codexPatterns: readonly string[] }
-/** `bridgeTools` (F2-7): the class of each Deckent tool the worker reaches through the tool bridge, keyed by its Claude wire name
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `bridgeTools` (F2-7): the class of each Deckent tool the worker reaches through the tool bridge, keyed by its Claude wire name
  * (`mcp__<server>__<tool>`); without it every MCP tool reads as `network` (a fetch with no target). */
 export interface NormalizerState { readonly quotaPolicy?: QuotaPolicy; sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[];
   readonly bridgeTools?: ReadonlyMap<string, string> }
@@ -313,7 +313,7 @@ export function createNormalizerState(secrets: readonly string[], startMs = Date
   return { ...(quotaPolicy ? { quotaPolicy } : {}), ...(bridgeTools ? { bridgeTools } : {}), sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
 }
 /** Unmapped native type names are worker text too: redacted and bounded before they become counts (Astra 2066 R1). */
-export function countUnmapped(state: NormalizerState, raw: string, count = 1): void {
+function countUnmapped(state: NormalizerState, raw: string, count = 1): void {
   const key = redactText(raw, state.secrets, 64) || 'empty';
   state.unmapped.set(key, (state.unmapped.get(key) ?? 0) + count);
 }
@@ -444,7 +444,7 @@ const CODEX_CHANGE_KINDS: Readonly<Record<string, 'write' | 'edit'>> = { add: 'w
 /** Changes attributed per file_change item; the rest are counted as unmapped, never silently dropped (Astra 2066 R3). */
 const CODEX_MAX_CHANGES = 512;
 /** Codex state beyond the shared normalizer state: seen tool items (by native id) and running token totals for the summary. */
-export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number | null };
+interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number | null };
   /** The first `thread.started.thread_id`, untrusted: the client-model reader validates it before it names a file. */
   threadId: string | null }
 export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null }, threadId: null }; }
@@ -461,7 +461,7 @@ export function normalizeCodexLine(line: string, state: NormalizerState, codex: 
   catch { countUnmapped(state, 'codex-invalid'); }
   return events;
 }
-/** One `codex exec --json` line as typed fields: the one parser of this wire, shared by the worker normalizer and the headless model port (Codex
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One `codex exec --json` line as typed fields: the one parser of this wire, shared by the worker normalizer and the headless model port (Codex
  * headless 2026-10-31). Pure and total: `item` is the line's item object (item.* lines), `errorText` the failure text of turn.failed, error and an
  * error item; a missing or mistyped field is null. */
 export type CodexExecLine = { readonly kind: 'invalid'; readonly reason: 'non-json' | 'non-object' | 'blank' }
@@ -560,9 +560,9 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
       apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens }, permissionDenials: 0 });
   } else if (!CODEX_KNOWN.has(type)) miss(type);
 }
-/** Mirrored `providers.json` `limits.clientModelReport`: bounds for reading the model a client resolved from its own session log (owner Q4 2026-10-23). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Mirrored `providers.json` `limits.clientModelReport`: bounds for reading the model a client resolved from its own session log (owner Q4 2026-10-23). */
 export interface ClientModelReportLimits { readonly pollMs: number; readonly waitMs: number; readonly maxFileBytes: number; readonly maxLineBytes: number; readonly maxEntries: number }
-export type ClientModelRead = Readonly<{ status: 'found'; model: string; cliVersion: string | null; contexts: number }> | Readonly<{ status: 'absent' | 'unsafe' | 'oversized' | 'invalid' }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClientModelRead = Readonly<{ status: 'found'; model: string; cliVersion: string | null; contexts: number }> | Readonly<{ status: 'absent' | 'unsafe' | 'oversized' | 'invalid' }>;
 const CODEX_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /**
  * The model the Codex client resolved for `threadId`: the first `turn_context.payload.model` of its rollout log
@@ -648,7 +648,7 @@ export function createClientModelReport(stream: string, provider: string, client
 /** Cursor `tool_call` keys (cursor-agent stream-json: documented readToolCall/writeToolCall/function, observed editToolCall). Unknown keys stay
  * visible as `other` calls and are also counted as unmapped, so a new native tool is never silently misclassified. */
 const CURSOR_TOOLS: Readonly<Record<string, string>> = { readToolCall: 'read', editToolCall: 'edit', writeToolCall: 'write', function: 'other' };
-/** Cursor state beyond the shared normalizer state: seen tool calls, derived turns, the byte size of the thinking segment in progress and whether the terminal `result` was seen. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Cursor state beyond the shared normalizer state: seen tool calls, derived turns, the byte size of the thinking segment in progress and whether the terminal `result` was seen. */
 export interface CursorNormalizerState { readonly calls: Set<string>; turns: number; thinkingBytes: number; ended: boolean }
 export function createCursorState(): CursorNormalizerState { return { calls: new Set(), turns: 0, thinkingBytes: 0, ended: false }; }
 /** A Cursor usage counter is measured only as a safe non-negative integer (strict, Cursor-only: the shared `num` keeps Claude/Codex bytes unchanged). */
@@ -790,7 +790,7 @@ function eventChannel(socketPath: string, capability: string, maxQueued = 4000, 
   };
 }
 
-/** Mirrored registry capability payload: the mounted bootstrap cannot import host packages. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Mirrored registry capability payload: the mounted bootstrap cannot import host packages. */
 export interface NativeWorkerCapabilities {
   readonly maxTurns: { readonly flag: string; readonly hiddenHelpProbe: { readonly args: readonly string[]; readonly refusal: string } | null } | null;
   readonly settings: { readonly flag: string } | null;

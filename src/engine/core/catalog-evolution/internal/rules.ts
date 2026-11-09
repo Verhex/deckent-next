@@ -13,9 +13,9 @@ import type { KeyStats, ModelFacts } from './contract.js';
  * or restored window the same key re-opens only with `cooldownTasks` new counted Tasks. Statistics are associations ("ilişki, nedensellik değil").
  */
 const DAY_MS = 86_400_000;
-export const catalogDraftTemplatesSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.strictObject({ id: identitySchema, version: persistedInteger().positive(),
+const catalogDraftTemplatesSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.strictObject({ id: identitySchema, version: persistedInteger().positive(),
   kind: z.enum(['propose-agent', 'propose-skill']), name: persistedString(z.string().min(1)), text: persistedString(z.string().min(1)), item: persistedString(z.string().min(1)).optional() })).min(1) }).readonly();
-/** The versioned draft templates (`agent-draft@1`, `skill-draft@1`): Core seed data, never literals; the latest version of a kind is the one used. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The versioned draft templates (`agent-draft@1`, `skill-draft@1`): Core seed data, never literals; the latest version of a kind is the one used. */
 export const CATALOG_DRAFT_TEMPLATES = catalogDraftTemplatesSchema.parse(templatesSeed);
 export const catalogDraftTemplate = (kind: 'propose-agent' | 'propose-skill', ref?: string) => {
   const rows = CATALOG_DRAFT_TEMPLATES.templates.filter(row => row.kind === kind && (ref === undefined || `${row.id}@${row.version}` === ref));
@@ -31,7 +31,7 @@ const windowOf = (stats: KeyStats, after: number) => ({ after, firstPosition: st
   inputDigest: stats.window.inputDigest });
 const json = (stats: KeyStats) => JSON.parse(JSON.stringify(stats)) as Record<string, unknown>;
 
-export interface AgentRuleInput {
+interface AgentRuleInput {
   readonly registry: CatalogEvolutionRegistry; readonly asOfMs: number; readonly facts?: ModelFacts | undefined;
   readonly key: Extract<CatalogSuggestionKey, { kind: 'agent' }>; readonly standing: AgentStanding | null;
   /** The key's own window entries, the WorkClass's (baseline: the same window without this agent's Tasks) and, when another agent is `active` there, its own. */

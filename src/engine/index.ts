@@ -5,35 +5,33 @@ export * from '#engine/core/workspaces/index.js';
 export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, assertDispatchFenceCommand, assertDispatchFenceReceipt, assertDispatchNotFenced, dispatchFenceReceiptId, dispatchReleaseReceiptId, lostDispatchWriteSchema, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, assertLostDispatchAudit, assertLostDispatchReplay, attemptDispatchWriteToken, LostDispatchApplication, type LostDispatchRelease, type LostDispatchWrite, type LostDispatchStore, type LostDispatchAudit, type LostDispatchReceipt, type LostDispatchObserver } from '#engine/core/dispatch/index.js';
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 export { decideDispatchLaunch, validateLaunchRequest } from '#engine/core/dispatch/index.js';
-export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, EnvironmentProbeRegistry, type EnvironmentProbe, type EnvironmentProbes } from '#engine/core/dispatch/index.js';
-export type { DispatchLaunchState, DispatchLaunchTransition } from '#engine/core/dispatch/index.js';
-export { DispatchApplication, dispatchNeedsObservation, inactivityVerdict, inactivityWatch, type InactivityVerdict, type GatewayActivityCounters, DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, readDispatchPreparationRecord, removeDispatchLaunchRecord, type DispatchLauncherEvidence, type DispatchPreparationContext, type DispatchPreparationInstance, type DispatchPreparationPark, type DispatchPreparationPhase, type DispatchPreparationRecord } from '#engine/core/dispatch/index.js';
-export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
+export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EnvironmentProbeRegistry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type EnvironmentProbe, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type EnvironmentProbes } from '#engine/core/dispatch/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchLaunchState, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchLaunchTransition } from '#engine/core/dispatch/index.js';
+export { DispatchApplication, dispatchNeedsObservation, inactivityVerdict, inactivityWatch, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type InactivityVerdict, type GatewayActivityCounters, DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, readDispatchPreparationRecord, removeDispatchLaunchRecord, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type DispatchLauncherEvidence, type DispatchPreparationContext, type DispatchPreparationInstance, type DispatchPreparationPark, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type DispatchPreparationPhase, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type DispatchPreparationRecord } from '#engine/core/dispatch/index.js';
+export type { DispatchAuthorization, DispatchIdentityAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DispatchOutcome } from '#engine/core/dispatch/index.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
 export { PoolPolicyAuthorization, PoolControlPolicyAuthorization, assertPoolControlAllowed, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, policyVerdictRefusal, assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError } from '#engine/core/policy/index.js';
-export type { PoolAuthorization, PolicyRefusalReason, PolicySource, ScopeAccess, ScopeRegistry } from '#engine/core/policy/index.js';
+export type { PoolAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ PolicyRefusalReason, PolicySource, ScopeAccess, ScopeRegistry } from '#engine/core/policy/index.js';
 export { ServicePolicyAuthorization, admitFullAccessTurn, agentCallPermissionMode, agentCallAuditEvent, approvedWriteEntryAuditEvent, decideAgentToolCall, isAuditedDecision, standingWouldLower, trackedFilesAuditEvent, type TrackedFilesAuditList, PermissionModeApplication, PermissionModeError, inspectPermissionMode } from '#engine/core/policy/index.js';
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from '#engine/core/policy/index.js';
 export { AuthorityChangeError, authorityChangeAuditEvent, chainAuthorityRevision } from '#engine/core/policy/index.js';
 export type { AuthorityDocumentStore, AuthorityLookup, AuthorityWrite } from '#engine/core/policy/index.js';
-export type { AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, FullAccessDecision, PermissionModeRelaxation, StandingApproval } from '#engine/core/policy/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FullAccessDecision, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ PermissionModeRelaxation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ StandingApproval } from '#engine/core/policy/index.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
-export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, capacityResourceKeySchema, remainingCapacity, hasCapacityRoom, SchedulingError } from '#engine/core/scheduling/index.js';
-export type { ReservationDiagnostic, ReservationDiagnosticReason, ReservationDiagnosticSite } from '#engine/core/scheduling/index.js';
+export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, capacityResourceKeySchema, remainingCapacity, hasCapacityRoom, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SchedulingError } from '#engine/core/scheduling/index.js';
+export type { ReservationDiagnostic, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ReservationDiagnosticReason, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ReservationDiagnosticSite } from '#engine/core/scheduling/index.js';
 export * from '#engine/core/runs/index.js';
 export * from '#engine/core/run-proposal/index.js';
 export * from '#engine/core/runtime/index.js';
 export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, readBeuserDispatchEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
-export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
-export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/supervisor/index.js';
 export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody, criterionEvidenceDigest, bindUsedOperationEvidence } from '#engine/core/task-evaluation/index.js';
 export { selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';
 export { deriveAcceptanceMetrics, selectRunAcceptanceEvaluations, TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from '#engine/core/task-evaluation/index.js';
-export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, UnknownEvaluationPolicy } from '#engine/core/task-evaluation/index.js';
+export type { TaskEvaluationCommand, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TaskEvaluationAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TaskTerminalEvaluator, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ UnknownEvaluationPolicy } from '#engine/core/task-evaluation/index.js';
 
 export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 
@@ -45,21 +43,16 @@ export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } f
 export { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ProviderSpendAccountPolicyAuthorization, AgentToolPolicyAuthorization } from '#engine/core/policy/index.js';
 export { WorkTargetPolicyAuthorization, executionResourceAuthorization, workTargetAttemptAuthorization, authorizeWorkTargetUse, workingTreeDeliveryAuthorization } from '#engine/core/policy/index.js';
-export type { WorkTargetAction } from '#engine/core/policy/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkTargetAction } from '#engine/core/policy/index.js';
 export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';
 export * from '#engine/core/inference-serving/index.js';
 
 export { RunLifecycleRuntimeLoop, RunProgressionTurn, RunProgressionFailure, reservationRefusalOutcome } from '#engine/core/run-progression/index.js';
-export type { RunProgressionOperations, RunProgressionRuntime } from '#engine/core/run-progression/index.js';
+export type { RunProgressionOperations, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RunProgressionRuntime } from '#engine/core/run-progression/index.js';
 export { progressionQuerySchema, progressionCursorSchema } from '#engine/core/run-progression/index.js';
-export type { ProgressionQuery, ProgressionCursor, RunProgressionJournal } from '#engine/core/run-progression/index.js';
+export type { ProgressionQuery, ProgressionCursor, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RunProgressionJournal } from '#engine/core/run-progression/index.js';
 export * from '#engine/core/task-inputs/index.js';
-export type { TaskInputBinding } from '#engine/core/task-inputs/index.js';
-
-export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchema } from '#engine/core/supervisor/index.js';
-export type { CollectedOutputFile } from '#engine/core/supervisor/index.js';
-
 export * from '#engine/core/workspace-patch/index.js';
 export * from '#engine/core/working-tree-rollback/index.js';
 export * from '#engine/core/delivery-summary/index.js';
@@ -83,8 +76,6 @@ export * from '#engine/core/memory/index.js';
 export * from '#engine/core/agent-catalog/index.js';
 export * from '#engine/core/catalog-evolution/index.js';
 
-export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js';
-export type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 export * from '#engine/core/identity-profile/index.js';
 export * from '#engine/core/setup/index.js';
 export * from '#engine/core/worker-setup/index.js';
@@ -100,9 +91,6 @@ export type { AuthorityHistorySource, AuthorityRevision } from '#engine/core/pol
 export * from '#engine/core/oauth-connection/index.js';
 export * from '#engine/core/hub/index.js';
 
-export { workerImageBudget, workerConsentBinding, matchingWorkerConsent, interruptedWorkerImage, workerImageStateSchema, consentProviders, type WorkerImageState, type WorkerConsentBinding } from '#engine/core/worker-setup/index.js';
-
-export { hasWorkerKind } from '#engine/core/worker-setup/index.js';
 export * from '#engine/core/hub-server/index.js';
 export * from '#engine/core/hub-client/index.js';
 

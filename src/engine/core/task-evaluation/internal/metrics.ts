@@ -13,7 +13,7 @@ const UNREACHABLE = new Set(['OPERATION_EVIDENCE_UNAVAILABLE', 'OPERATION_COMPEN
  * source → infra; a model substitution or mismatch → model; an invalid handoff → dependency; an installed evaluator's fail → criteria-failed; the
  * worker's own report (not passed, missing, invalid, oversized) → worker-report-failed, its acceptance checks not run → infra; else unattributed.
  */
-export function deriveFailureCause(evaluation: TaskEvaluation, dispatch: TaskEvaluationCommit['dispatch']): FailureCause {
+function deriveFailureCause(evaluation: TaskEvaluation, dispatch: TaskEvaluationCommit['dispatch']): FailureCause {
   const end = dispatch.terminal, report = evaluation.report;
   if (dispatch.cancellation) return 'operator';
   if (evaluation.stall || !end || end.signal !== undefined || end.interrupted === true || end.exitCode !== 0) return 'infra';

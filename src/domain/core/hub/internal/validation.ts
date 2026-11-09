@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { encodeCommandProjection } from '#domain/core/command/index.js';
 import { HUB_LIMITS } from './registry.js';
 import { CodedError } from '#domain/core/primitives/index.js';
-export const HUB_ERROR_CODES = ['HUB_PACKAGE_SCHEMA_UNSUPPORTED', 'HUB_ENVELOPE_SCHEMA_UNSUPPORTED', 'HUB_FEED_SCHEMA_UNSUPPORTED',
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const HUB_ERROR_CODES = ['HUB_PACKAGE_SCHEMA_UNSUPPORTED', 'HUB_ENVELOPE_SCHEMA_UNSUPPORTED', 'HUB_FEED_SCHEMA_UNSUPPORTED',
   'HUB_PACKAGE_INVALID', 'HUB_ENVELOPE_INVALID', 'HUB_FEED_INVALID', 'HUB_LIMIT_EXCEEDED', 'HUB_DIGEST_MISMATCH', 'HUB_SIGNATURE_INVALID',
   'HUB_SIGNER_UNTRUSTED', 'HUB_IDENTITY_MISMATCH', 'HUB_FOREIGN_PACKAGE', 'HUB_FEED_REPLAYED', 'HUB_FEED_STALE', 'HUB_SKILL_INVALID'] as const;
-export type HubErrorCode = typeof HUB_ERROR_CODES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubErrorCode = typeof HUB_ERROR_CODES[number];
 export class HubError extends CodedError {
   constructor(override readonly code: HubErrorCode) { super(code); this.name = 'HubError'; }
 }

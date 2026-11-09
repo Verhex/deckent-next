@@ -10,7 +10,7 @@ import { openConfiguredLedger, loadConfiguredPeerScopeContext, loadConfiguredSco
 type ScopeAccess = Parameters<typeof loadConfiguredScopeContext>[3];
 /** Optional wait for a pending operation approval (SDK/terminal): the core never blocks; the wait polls the stored request and, on
  * `allow`, resubmits the same command once. A timed-out or cancelled wait returns the pending outcome and closes nothing. */
-export interface OperationSubmitOptions { readonly awaitApproval?: { readonly timeoutMs: number; readonly pollMs?: number; readonly signal?: AbortSignal } }
+interface OperationSubmitOptions { readonly awaitApproval?: { readonly timeoutMs: number; readonly pollMs?: number; readonly signal?: AbortSignal } }
 type Wait = (scopeId: string, approvalId: string, wait: NonNullable<OperationSubmitOptions['awaitApproval']>) => Promise<'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled'>;
 /** The one producer of catalog operations for every surface (SDK/CLI locally, the runtime service for its socket peers — MCP and runtime
  * clients, C12 G4). The principal is the local OS identity, or the kernel-verified socket peer supplied only by the trusted transport

@@ -4,7 +4,7 @@ import type { PanelLine, ProviderModelOutcome, ProviderPanelPort } from '#surfac
 import type { ModelReference } from '#domain/index.js';
 import type { NativeAgentReadiness, NativeAgentLoginMethod } from '#capabilities/index.js';
 
-export type SubscriptionSurface = 'chat' | 'worker' | 'brain' | 'agent' | 'skill';
+type SubscriptionSurface = 'chat' | 'worker' | 'brain' | 'agent' | 'skill';
 /** Existing scoped observations only; inspecting never signs in, refreshes a seal or admits work. */
 export interface SubscriptionReadinessPort {
   recognizes(reference: ModelReference): boolean;
@@ -52,14 +52,14 @@ export interface ProviderConnectHost {
   login?(command: Readonly<{ connection: string; configDir?: string; loginMethod?: NativeAgentLoginMethod }>, options: ConfigLoadOptions): Promise<import('#surfaces/core/cli-models/index.js').HeadlessLoginView | null>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
-export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
-export type TerminalSecretChange = Readonly<{ schemaVersion: 1; scopeId: string; name: string; action: 'set' | 'delete'; backend: string; removed: boolean | null }>;
-export type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
-export type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
-export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
-export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
+type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
+type TerminalSecretChange = Readonly<{ schemaVersion: 1; scopeId: string; name: string; action: 'set' | 'delete'; backend: string; removed: boolean | null }>;
+type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
+type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
+type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
+type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 /** Display-only policy facts. No config writer or principal resolver crosses this port. */
-export type ProviderDelegationPermission = Readonly<{ layers: readonly ('global' | 'project')[]; decisions: readonly Readonly<{
+type ProviderDelegationPermission = Readonly<{ layers: readonly ('global' | 'project')[]; decisions: readonly Readonly<{
   layer: 'global' | 'project'; decision: 'allow' | 'require-approval' | 'deny' | 'refused'; ruleId: string | null }>[] }>;
 export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels' | 'connectModel' | 'siwc'> {
   inspectSubscriptionReadiness?: (root: string, query: Readonly<{ scopeId: string; surface: SubscriptionSurface; references: readonly ModelReference[] }>, options: ConfigLoadOptions) => Promise<readonly NativeAgentReadiness[]>;

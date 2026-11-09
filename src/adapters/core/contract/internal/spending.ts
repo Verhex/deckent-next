@@ -5,7 +5,7 @@ import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } f
 import { ProviderSpendError, providerSpendPeriodRegistry } from '#engine/index.js';
 const templateSchema = z.strictObject({ budgetId: identitySchema, currency: z.string().regex(/^[A-Z]{3}$/),
   limitMinorUnits: counterSchema, period: identitySchema.optional() }).readonly();
-export const providerSpendingSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const providerSpendingSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   budgets: z.array(providerSpendBudgetSchema).readonly(), template: templateSchema.optional() }).refine(value => !value.template || value.schemaVersion === 3);
 
 function invalid(): never {

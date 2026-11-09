@@ -8,7 +8,7 @@ export type HumanState = { readonly state: Exclude<HumanStateCode, 'held'> } | {
   readonly state: 'held'; readonly waitingOn: 'you' | 'operator' | 'system'; readonly reason: MonitorBlockerCode;
   readonly detail: string | null; readonly since: number | null; readonly deadline: number | null; readonly nextAction: HumanNextAction;
 };
-export type HumanStateSubject = { readonly kind: 'run'; readonly value: MonitorRun }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HumanStateSubject = { readonly kind: 'run'; readonly value: MonitorRun }
   | { readonly kind: 'task'; readonly value: MonitorTask; readonly blocker?: MonitorBlocker | null; readonly worker?: MonitorWorker }
   | { readonly kind: 'attempt'; readonly value: MonitorAttempt; readonly worker?: MonitorWorker }
   | { readonly kind: 'worker'; readonly value: MonitorWorker; readonly task?: MonitorTask; readonly blocker?: MonitorBlocker | null }

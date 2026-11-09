@@ -1,6 +1,6 @@
 import type { OperationDescriptor } from '#domain/core/effect/index.js';
 import { CodedError } from '#domain/core/primitives/index.js';
-/** Where a catalog operation comes from. `core`: a module the Core composition passed at registry construction (its ids are Core's);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where a catalog operation comes from. `core`: a module the Core composition passed at registry construction (its ids are Core's);
  * `module`: a registered overlay (owns only its namespace); `config`: the installation's `operations.catalog`. Provenance is data for
  * conflict decisions and inspection; it grants nothing (policy still decides every operation). */
 export type OperationProvenance = { readonly source: 'core' | 'module'; readonly module: string } | { readonly source: 'config' };

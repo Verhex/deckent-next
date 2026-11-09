@@ -28,7 +28,7 @@ export const signerKeySchema = z.strictObject({ schemaVersion: z.literal(1), sco
   .refine(row => (row.purpose === 'action') === (row.boundPrincipal !== null) && (row.custody === 'external' || row.purpose === 'action')
     && (row.state === 'revoked') === (row.revoked !== undefined) && row.revision === (row.revoked ? 2 : 1)).readonly();
 export type SignerKey = z.infer<typeof signerKeySchema>;
-export type SignerPurpose = typeof SIGNER_PURPOSES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SignerPurpose = typeof SIGNER_PURPOSES[number];
 type Actor = { readonly issuer: string; readonly subject: string; readonly ai: boolean };
 const refuse = (actor: Actor) => { if (actor.ai) throw new AgentCatalogError('SKILL_SIGNER_REFUSED'); return { issuer: actor.issuer, subject: actor.subject, ai: false as const }; };
 
@@ -56,7 +56,7 @@ export function requireActionSigner(row: SignerKey | null, scopeId: string, prin
   return row;
 }
 
-export const CATALOG_ACTIONS = ['define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow'] as const;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CATALOG_ACTIONS = ['define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow'] as const;
 /** `catalog-action:1`: the exact command a signature covers — built by the application from the typed command, never by the model (S8-3: a WorkClass or
  * lesson-audience suggestion names its `work-class` target). */
 export const catalogActionSchema = z.strictObject({ scopeId: identitySchema, action: z.enum(CATALOG_ACTIONS),

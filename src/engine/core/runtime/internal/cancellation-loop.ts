@@ -6,16 +6,16 @@ import { ScopedRuntimeLoop } from './scoped-loop.js';
 
 const loopOptionsSchema = z.strictObject({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   failureBackoffMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
-export type CancellationRuntimeLoopOptions = Readonly<z.infer<typeof loopOptionsSchema>>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CancellationRuntimeLoopOptions = Readonly<z.infer<typeof loopOptionsSchema>>;
 export type CancellationRecoveryPageResult = Readonly<{ nextAfterAttemptId: string | null;
   outcomes?: readonly Readonly<{ outcome: Readonly<{ status: string }> }>[] }>;
-export type CancellationRecoveryDrain = (command: CancellationRecoveryCommand) => Promise<CancellationRecoveryPageResult>;
-export interface CancellationRuntimeLoopObserver {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CancellationRecoveryDrain = (command: CancellationRecoveryCommand) => Promise<CancellationRecoveryPageResult>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface CancellationRuntimeLoopObserver {
   onPage(command: CancellationRecoveryCommand, result: CancellationRecoveryPageResult): void | Promise<void>;
   onError(command: CancellationRecoveryCommand, error: unknown): void | Promise<void>;
 }
-export type CancellationRuntimeWait = (milliseconds: number, signal: AbortSignal) => Promise<void>;
-export interface CancellationRuntimeClock { now(): number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CancellationRuntimeWait = (milliseconds: number, signal: AbortSignal) => Promise<void>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface CancellationRuntimeClock { now(): number }
 export class CancellationRuntimeLoopError extends CodedError {
   constructor(override readonly code: 'CANCELLATION_RUNTIME_LOOP_OPTIONS' | 'CANCELLATION_RUNTIME_LOOP_RUNNING') { super(code); this.name = 'CancellationRuntimeLoopError'; }
 }

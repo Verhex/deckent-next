@@ -35,10 +35,10 @@ export type WorkspacePathError = 'path-invalid' | 'path-outside-workspace' | 'pa
 /** B4 diagnosis (owner terminal test 2026-10-07): the step a `not-found` / `path-changed` came from and its system error code — never a path. */
 export interface WorkspacePathDiagnostic { readonly step: string; readonly errno?: string }
 type Refused = { readonly ok: false; readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic };
-export type ResolvedPath = { readonly ok: true; readonly rel: string } | Refused;
-export type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | Refused;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ResolvedPath = { readonly ok: true; readonly rel: string } | Refused;
+type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | Refused;
 /** Why a walk did not cover everything: never reported as "not there" (Astra 2072 R4). */
-export interface WalkIncomplete { depthLimited: number; unreadable: number; changed: number; special: number }
+interface WalkIncomplete { depthLimited: number; unreadable: number; changed: number; special: number }
 
 export interface WorkspaceScope {
   readonly root: string;

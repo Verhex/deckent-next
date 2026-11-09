@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * New-Run worker model admission (WORKER-CURRENCY-1, owner 2026-09-30): a native coding task is admitted only when its profile pins an
  * exact model of an active catalog channel matching the profile's CLI, the model (and each declared auxiliary model) is registered,
  * current (lifecycle active, not past its retirement day), active in the Run's scope, and the profile's pinned CLI version — the one the
@@ -15,7 +15,7 @@ export type WorkerModelAdmissionCode = 'WORKER_MODEL_UNPINNED' | 'WORKER_MODEL_A
   | 'WORKER_CHANNEL_MISMATCH' | 'WORKER_MODEL_UNKNOWN' | 'WORKER_MODEL_RETIRED' | 'WORKER_MODEL_NOT_CURRENT' | 'WORKER_MODEL_NOT_ACTIVE'
   | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED'
   | 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE' | 'WORKER_ASSIGNMENT_EXPANSION_LIMIT';
-export interface WorkerModelAdmissionDetail {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
   /** ATAMA-1 refusals: the WorkClass whose candidate list was read and each skipped candidate with its typed reason (bounded by the list). */
@@ -23,21 +23,21 @@ export interface WorkerModelAdmissionDetail {
 }
 /** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
  * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */
-export interface WorkerImageRefreshingWarning {
+interface WorkerImageRefreshingWarning {
   readonly code: 'WORKER_IMAGE_REFRESHING'; readonly taskId: string; readonly modelId: string; readonly minCliVersion: string; readonly cliVersion: string | null;
 }
 /** DECKENT-MD-WORKERS: the project's selected worker instruction file was left out of the compiled prompts, with its reason. */
-export interface WorkerInstructionsWithheldWarning {
+interface WorkerInstructionsWithheldWarning {
   readonly code: 'WORKER_INSTRUCTIONS_WITHHELD'; readonly source: string; readonly reason: 'absent' | 'untrusted' | 'unsafe' | 'unreadable'; readonly digest: string | null;
 }
 /** S4B-5 (§7.3): memory left out of one task's worker prompt, the Run admitted without it. `policy`: the admitting principal may not inspect the
  * scope's memory; `sources`: `count` eligible entries come from work it may not read (a count only); `budget`: the prompt had no room for the part;
  * `contests`: more contests are open than one bounded read shows. */
-export interface MemoryContextWithheldWarning {
+interface MemoryContextWithheldWarning {
   readonly code: 'MEMORY_CONTEXT_WITHHELD'; readonly taskId: string | null; readonly reason: 'policy' | 'sources' | 'budget' | 'contests'; readonly count: number;
 }
 export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning | MemoryContextWithheldWarning;
-export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
 export class WorkerModelAdmissionError extends CodedError {
   constructor(override readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
 }
@@ -77,7 +77,7 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
   return entry;
 }
 /** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
-export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model?: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }> | undefined; effort?: string | undefined }> | undefined }>;
+type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model?: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }> | undefined; effort?: string | undefined }> | undefined }>;
 
 /** The (channel, model) keys that hold the worker `role` (the WorkClass worker role id, registry data) in a scope today (tier/role registry; a dated exception counts only while its measured row is active).
  * The one gate for system assignment and for the Brain's worker-model list, so the two cannot disagree. */
@@ -86,7 +86,7 @@ export async function workerRoleKeys(roles: ModelRolePolicy, role: string, scope
   for (const row of roles.models) if (row.measured !== undefined && row.roles.includes(role) && (await reader.activation(scopeId, row.channelId, row.modelId))?.state === 'active') measured.add(roleModelKey(row));
   return new Set(eligibleRoleModels(roles, role, { today: today(nowMs), active: measured }).map(roleModelKey));
 }
-export interface WorkerPlanningTemplate { readonly profile: { id: string; version: number }; readonly provider: string; readonly cliVersion: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkerPlanningTemplate { readonly profile: { id: string; version: number }; readonly provider: string; readonly cliVersion: string }
 /** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor, and the assignment's
  * `worker` role gate (`roles` is required: a model without the role is skipped, fail closed). */
 export async function inspectAdmissibleWorkerModels(templates: readonly WorkerPlanningTemplate[], scopeId: string, reader: ModelCatalogReader,

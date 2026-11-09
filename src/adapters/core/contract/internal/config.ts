@@ -27,12 +27,12 @@ export function registerProviderConfig(): void {
   registerIdentityProfileConfig();
   registered = true;
 }
-export { providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingTemplate, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
+export { providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingTemplate, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
-export { openConfiguredSecretStore, readSecretsConfig, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS,
+export { openConfiguredSecretStore, readSecretsConfig, secretsConfigSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SECRET_CUSTODY_WAIT_MS,
   isRegisteredSecretStore, openRegisteredSecretStore, registeredSecretStores, installationSecretRoot, openProjectVaultStore, openSecretGrantStore } from './secrets.js';
-export { readOperationsConfig, operationsConfigSchema, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
+export { readOperationsConfig, operationsConfigSchema, resolveOperationCatalog, resolveOperationTargets, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type OperationsConfig } from './operations.js';
 export { readTerminalChatConfig, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalResponseStyle, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_RESPONSE_STYLES, TERMINAL_THEMES,
-  type TerminalChatConfig, type TerminalFetchConfig, type TerminalResponseStyle, type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalChatConfig, type TerminalFetchConfig, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalResponseStyle, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
 export { readDecisionPolicy, registerDecisionConfig, validateDecisionPolicyLayers } from './decision.js';
 export { readIdentityProfileConfig, registerIdentityProfileConfig } from './identity-profile.js';

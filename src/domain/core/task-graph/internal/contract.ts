@@ -11,9 +11,9 @@ export const TASK_GRAPH_SCHEMA_VERSION = 4;
 /** v5 (alpha.47 R4, owner D7a), additive: the system's `origin: 'scope-conflict'` order edge and a task's declared record `resources`.
  * v2–v4 read unchanged; authors write v4 (v5 only to declare `resources`); the system raises a graph to v5 only when it inserts an edge. */
 export const TASK_GRAPH_RESOURCE_SCHEMA_VERSION = 5;
-export const taskDependencySchema = z.union([identity, z.strictObject({ taskId: identity, get startFrom() { return z.literal('accepted-patch').optional(); },
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const taskDependencySchema = z.union([identity, z.strictObject({ taskId: identity, get startFrom() { return z.literal('accepted-patch').optional(); },
   get origin() { return z.literal('scope-conflict').optional(); } }).refine(edge => !edge.origin || edge.startFrom === 'accepted-patch').readonly()]);
-export type TaskDependency = z.infer<typeof taskDependencySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TaskDependency = z.infer<typeof taskDependencySchema>;
 export function dependencyTaskId(edge: TaskDependency): string { return typeof edge === 'string' ? edge : edge.taskId; }
 export function taskDependencyIds(task: { readonly dependencies: readonly TaskDependency[] }): readonly string[] { return task.dependencies.map(dependencyTaskId); }
 /** A system scope-conflict edge orders work only: a failed, cancelled or skipped predecessor releases the dependent (it starts from base). */
@@ -51,7 +51,7 @@ export const taskGraphSchema = z.strictObject({
     if (graph.schemaVersion === 2 && task.workInput !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'workInput'], message: 'TASK_GRAPH_VERSION' });
   });
 }).readonly();
-export const taskEligibilitySchema = z.discriminatedUnion('kind', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const taskEligibilitySchema = z.discriminatedUnion('kind', [
   z.strictObject({ get kind() { return z.literal('immediate'); } }),
   z.strictObject({ get kind() { return z.literal('not-before'); }, at: counterSchema }),
 ]).readonly();
@@ -94,9 +94,9 @@ export const readinessInputSchema = z.strictObject({
 export type TaskDefinition = z.infer<typeof taskDefinitionSchema>;
 export type TaskGraph = z.infer<typeof taskGraphSchema>;
 export type TaskProgress = z.infer<typeof taskProgressSchema>;
-export type TaskEligibility = z.infer<typeof taskEligibilitySchema>;
-export type ReadinessInput = z.infer<typeof readinessInputSchema>;
-export type TaskGraphErrorCode = 'TASK_GRAPH_INVALID' | 'TASK_DUPLICATE' | 'TASK_DEPENDENCY_DUPLICATE'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TaskEligibility = z.infer<typeof taskEligibilitySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ReadinessInput = z.infer<typeof readinessInputSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TaskGraphErrorCode = 'TASK_GRAPH_INVALID' | 'TASK_DUPLICATE' | 'TASK_DEPENDENCY_DUPLICATE'
   | 'TASK_DEPENDENCY_MISSING' | 'TASK_GRAPH_CYCLE' | 'TASK_ACCEPTANCE_DUPLICATE'
   | 'TASK_CRITERION_DEFINITION_MISSING' | 'TASK_CRITERION_DEFINITION_UNUSED' | 'TASK_CRITERION_DEFINITION_DUPLICATE'
   | 'TASK_PROGRESS_INVALID' | 'TASK_PROGRESS_DUPLICATE' | 'TASK_PROGRESS_INCOMPLETE' | 'TASK_GRAPH_REVISION_MISMATCH';

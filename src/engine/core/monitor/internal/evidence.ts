@@ -6,7 +6,7 @@ import type { MonitorMap, MonitorWorkerContent } from './contract.js';
 import type { RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * MONITOR-DATA read model: what a read-only ledger reader proves about one installation. Every time field is epoch ms copied from a
  * durable ledger record (never sampled, never guessed); null when the record carries none or the ledger version predates it.
  */
@@ -86,7 +86,7 @@ export interface MonitorLedgerIndex { readonly ledgerVersion: number; readonly s
 export interface MonitorReadScope { readonly scopeIds: readonly string[]; readonly poolIds: readonly string[] }
 /** One observed installation: `current` or a configured `next-project` observation source. */
 export interface MonitorTarget { readonly id: string; readonly path: string }
-export interface MonitorScopeObservation {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface MonitorScopeObservation {
   /** The scope `inspect` decision of the target's own policy; only admitted scopes contribute Runs, approvals and workers. */
   readonly access: 'admitted' | 'denied' | 'unavailable';
   /** The refusal's typed code (e.g. `POLICY_DENIED`); shown only to a viewer holding the scope-diagnostics grant (MON-NAMES). */

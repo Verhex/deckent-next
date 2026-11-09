@@ -16,7 +16,7 @@ import { openSelectedSecretGrantStore, secretStores as registry } from '#adapter
  * a healed or default-filled project file can never carry a selection that would override the installation's choice.
  */
 export const secretsConfigSchema = z.strictObject({ store: persistedString(z.string().max(128)).regex(SECRET_STORE_ID_PATTERN) });
-export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
 
 export function readSecretsConfig(config: Readonly<Record<string, unknown>>): SecretsConfig {
   return config['secrets'] === undefined ? { store: ENV_SECRET_STORE_ID } : secretsConfigSchema.parse(config['secrets']);
@@ -73,7 +73,7 @@ export function createInstallationSecretStoreSelection(env: Environment, platfor
     },
   });
 }
-/** How long a secret change waits for the custody section before it is refused `SECRET_STORE_BUSY` (a switch of a full store takes far less). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). How long a secret change waits for the custody section before it is refused `SECRET_STORE_BUSY` (a switch of a full store takes far less). */
 export const SECRET_CUSTODY_WAIT_MS = 5_000;
 /**
  * The installation's secret custody section (Astra 2456 P1-1, Jev ddfbc6b4): the existing cross-process config writer lock on its own path

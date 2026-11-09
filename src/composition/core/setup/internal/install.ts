@@ -9,7 +9,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 
 /** `preview`: the dry run: detect and plan, print the exact card (or the print-only next step), stage and run nothing, ask nothing. */
 export type ExecutionInstallDeps = Readonly<{ witness?: AuthorityWitness; detect?: ExecutionDetectPorts; host?: DockerHostPorts; install?: Partial<DockerInstallPorts>; preview?: boolean }>;
-export type ExecutionInstallStatus = 'present' | 'printed' | 'declined' | 'succeeded' | 'failed' | 'uncertain';
+type ExecutionInstallStatus = 'present' | 'printed' | 'declined' | 'succeeded' | 'failed' | 'uncertain';
 /**
  * The person's foreground install of the registry's execution environment (INIT-D2), outside any window: terminal gate + SEC-1 witness first
  * (the MCP actor, SDK, agent shells, pipes and CI never reach anything else) → detect (found: nothing to do; unknown: refuse) → plan or print

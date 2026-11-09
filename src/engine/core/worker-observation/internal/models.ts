@@ -41,7 +41,7 @@ export async function describeAttemptWorkerModels(run: PinnedRun, identity: Atte
   return projectAttemptWorkerModels(run, identity.taskId, sealed, live);
 }
 /** Model row and usage summary of an observed attempt, from one read of the sealed log. */
-export type AttemptWorkerEvidence = Readonly<{ model: WorkerModelView | null; usage: WorkerEventSummary | null; usageEvidence: WorkerUsageEvidence }>;
+type AttemptWorkerEvidence = Readonly<{ model: WorkerModelView | null; usage: WorkerEventSummary | null; usageEvidence: WorkerUsageEvidence }>;
 /** Model row of an observed attempt from the ledger (the Run's pin; sealed verdict, else live `pending`) plus its usage (sealed summary, else live): model null when not a
  * pinned worker task; unavailable when evidence could not be read. An invalid sealed log gives model evidence 'invalid', no usage. */
 export async function observeAttemptWorkerModels(ledger: SealedLogs & { loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null> },

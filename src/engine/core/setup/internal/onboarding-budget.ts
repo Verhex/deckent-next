@@ -1,6 +1,6 @@
 import type { ModelReference } from '#domain/index.js';
 
-/** Projection of profiles already validated by the configuration owner, not a send-admission contract. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Projection of profiles already validated by the configuration owner, not a send-admission contract. */
 export type OnboardingBillingProfile = Readonly<{ schemaVersion: number; scopeId: string;
   reference: ModelReference; billingAxis?: string }>;
 

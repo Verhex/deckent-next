@@ -5,11 +5,11 @@ import { redactForRecord } from '#platform/index.js';
 import { projectModelIngressField } from '#engine/core/agent-turn/index.js';
 import { MemoryJournalError, type MemoryHeld, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
 
-/** The versioned header of the part (`memory-templates`); its `id@version` is the part version, so the frozen profile names the wording it used. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The versioned header of the part (`memory-templates`); its `id@version` is the part version, so the frozen profile names the wording it used. */
 export const MEMORY_CONTEXT_HEADER = Object.freeze({ id: 'context-header', version: 1 } as const);
 /** One admission's question (trusted composition builds it from the admitted graph; never a wire field). */
 export interface MemoryContextRequest { readonly scopeId: string; readonly runId: string; readonly workTargetId: string | null; readonly tasks: readonly MemoryContextTask[] }
-export interface MemoryContextEntryRef { readonly entryId: string; readonly revision: number; readonly contentDigest: string; readonly basis: 'human-review' | 'independent-evaluation' }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface MemoryContextEntryRef { readonly entryId: string; readonly revision: number; readonly contentDigest: string; readonly basis: 'human-review' | 'independent-evaluation' }
 /** One task's frozen memory: the prompt part (null: nothing selected), its keyed digest, the entries it names (keyed content digests) and how many
  * otherwise eligible entries the admitting principal may not read (a count only). */
 export interface MemoryContextTaskPart { readonly taskId: string; readonly part: { readonly id: string; readonly version: number; readonly text: string } | null;

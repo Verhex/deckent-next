@@ -13,18 +13,18 @@ export const taskBriefSchema = z.strictObject({ schemaVersion: z.literal(1), tas
   profile: profileSchema.nullable(), model: workerModelPinSchema.nullable(), effort: text.nullable(), contextRefs: z.array(contextRefSchema).readonly(),
 }).readonly();
 export type TaskBrief = z.infer<typeof taskBriefSchema>;
-export const briefEvaluationSchema = z.strictObject({ verdict: z.enum(['accepted', 'accepted-unverified', 'rejected', 'unknown', 'pending']).nullable(),
+const briefEvaluationSchema = z.strictObject({ verdict: z.enum(['accepted', 'accepted-unverified', 'rejected', 'unknown', 'pending']).nullable(),
   reason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional() }).readonly();
 const deliveryReceiptFields = { state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
   commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional() };
 const deliveryModes = { schemaVersion: z.literal(2), application: z.enum(['working-tree', 'reference-only']) }; // Expand only; writers keep alpha.63.3's shape.
 const deliveryReceipts = [z.strictObject(deliveryReceiptFields), z.strictObject({ ...deliveryReceiptFields, ...deliveryModes })] as const;
 const history = { receipts: z.array(z.union(deliveryReceipts).readonly()).readonly().optional() };
-export const briefDeliverySchema = z.union([deliveryReceipts[0].extend(history), deliveryReceipts[1].extend(history)]).readonly();
+const briefDeliverySchema = z.union([deliveryReceipts[0].extend(history), deliveryReceipts[1].extend(history)]).readonly();
 /** Failed tests of a failed verification attempt, read from its retained output under the read-output decision: the true count and the first names only. */
-export const briefFailedTestsSchema = z.strictObject({ count: persistedInteger().nonnegative(), names: z.array(text).readonly(), truncated: z.boolean() }).readonly();
+const briefFailedTestsSchema = z.strictObject({ count: persistedInteger().nonnegative(), names: z.array(text).readonly(), truncated: z.boolean() }).readonly();
 /** What a terminal accepted Run still owes its delivery when no integration/delivery/adoption receipt exists: no patch needed, a patch that was never prepared, or a prepared patch awaiting delivery. */
-export const briefDeliveryOutlookSchema = z.enum(['none', 'patch-not-prepared', 'awaiting-delivery']);
+const briefDeliveryOutlookSchema = z.enum(['none', 'patch-not-prepared', 'awaiting-delivery']);
 export const resultBriefSchema = z.strictObject({ schemaVersion: z.literal(1), attemptId: text.nullable(), claimLabel: z.literal('CLAIM'),
   report: workerFinalReportResultSchema.nullable(), evaluation: briefEvaluationSchema,
   /** This receipt belongs to the Run; it does not prove this individual worker patch landed. */

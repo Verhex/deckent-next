@@ -22,7 +22,7 @@ export interface TargetQueueStore {
   ahead?(record: TargetQueueRecord, limit: number): readonly TargetQueueRecord[];
   change(previous: TargetQueueRecord, next: TargetQueueRecord, bounds: TargetQueueBounds, audit: (store: AuditStore, record: TargetQueueRecord) => void): TargetQueueRecord;
 }
-export interface TargetQueueAuthority {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TargetQueueAuthority {
   authorize(request: TargetQueueRequest, principal: VerifiedPrincipal, action: 'submit' | 'inspect' | 'cancel'): Promise<void>;
   /** Checks exact accepted Attempt/output, physical source binding and target protection before durable admission. */
   validate(request: TargetQueueRequest): Promise<void>;
@@ -167,7 +167,7 @@ export function assertQueueChange(previous: TargetQueueRecord, next: TargetQueue
 }
 const sameActor = (a: { id: string; issuer: string; subject: string }, b: { id: string; issuer: string; subject: string }) =>
   a.id === b.id && a.issuer === b.issuer && a.subject === b.subject;
-export function sameQueueTarget(a: TargetBinding, b: TargetBinding): boolean { return targetQueueKey(a) === targetQueueKey(b); }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function sameQueueTarget(a: TargetBinding, b: TargetBinding): boolean { return targetQueueKey(a) === targetQueueKey(b); }
 
 /** No implicit worker counts or mutable policy literals: the caller supplies the complete effective configuration. */
 export function assertTargetQueueBounds(bounds: TargetQueueBounds): void {

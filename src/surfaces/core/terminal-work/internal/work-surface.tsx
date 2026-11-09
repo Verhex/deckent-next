@@ -14,7 +14,7 @@ import { RunAnswerDecisionCard, RunControlDecisionCard, RunsControlWindow, runRu
 import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { useSingleFlightPoll } from '#surfaces/core/terminal-kit-ink/index.js';
-export interface WorkSurfaceInput {
+interface WorkSurfaceInput {
   readonly panel: WorklinePanel;
   readonly state: PanelSnapshot<TerminalLocalContext>;
   readonly ledger: WorklineLedgerPorts | undefined;
@@ -40,7 +40,7 @@ export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: numbe
  * Worker observation, approval notifications and the y/N cards for approvals and run cancellation. Every decision goes
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
-export const APPROVAL_NOTIFY_MIN_MS = 10_000;
+const APPROVAL_NOTIFY_MIN_MS = 10_000;
 export function useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, pushLive, context }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);

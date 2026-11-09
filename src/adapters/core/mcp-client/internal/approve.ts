@@ -11,12 +11,12 @@ import { MCP_CLIENT_DEFAULTS, mcpToolWireName, type McpClientServerSettings } fr
 import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, MCP_VARIABLE_NAME, type McpScope, type McpServerEntry } from './registry.js';
 import { mcpCardLine, MCP_PROJECT_VARIABLES, readMcpTrust, updateMcpTrust, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 
-/** One trust change as the audit port records it (subject `mcp-trust`): never the command's values, only the definition and tool digests. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One trust change as the audit port records it (subject `mcp-trust`): never the command's values, only the definition and tool digests. */
 export interface McpTrustChange { readonly action: 'trust' | 'decline' | 'reset' | 'revoke' | 'reconnect'; readonly scope: McpScope; readonly name: string;
   readonly definitionDigest: string; readonly toolsDigest: string | null }
 export type McpTrustAudit = (change: McpTrustChange) => Promise<void>;
 /** What became of the approver's policy grant for a server's tools (K1): written, removed, nothing to do, or refused with its reason. */
-export type McpToolGrantResult = { readonly status: 'granted' | 'revoked' | 'none' } | { readonly status: 'refused'; readonly reason: string };
+type McpToolGrantResult = { readonly status: 'granted' | 'revoked' | 'none' } | { readonly status: 'refused'; readonly reason: string };
 /** The host's grant port (K1): the approver's own `policy.administer` grant for exactly the pinned tools' wire names, and its removal. */
 export interface McpToolGrantPort {
   grant(server: { readonly scope: McpScope; readonly name: string }, tools: readonly string[]): Promise<McpToolGrantResult>;
@@ -24,7 +24,7 @@ export interface McpToolGrantPort {
   /** Reads (never writes) whether this person holds the server's trust grant, and in which scopes (`all`: a user-scope server). */
   inspect?(server: { readonly scope: McpScope; readonly name: string }): Promise<McpToolGrantView>;
 }
-export type McpToolGrantView = { readonly status: 'granted'; readonly scopes: 'all' | readonly string[] } | { readonly status: 'none' };
+type McpToolGrantView = { readonly status: 'granted'; readonly scopes: 'all' | readonly string[] } | { readonly status: 'none' };
 
 /**
  * The card of a trust decision, in two phases so a command is never run before the owner saw it (owner 2026-09-28): `launch` names the server,
@@ -44,7 +44,7 @@ export interface McpTrustCard {
   readonly tools?: readonly { readonly name: string; readonly digest: string; readonly description: string | null; readonly annotations: unknown; readonly alwaysAsk: boolean }[];
 }
 export type McpTrustAsk = (card: McpTrustCard) => Promise<boolean | null>;
-export interface McpTrustServer { readonly name: string; readonly scope: McpScope; readonly file: string; readonly definitionDigest: string; readonly entry: McpServerEntry;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpTrustServer { readonly name: string; readonly scope: McpScope; readonly file: string; readonly definitionDigest: string; readonly entry: McpServerEntry;
   readonly trust: McpTrustRecord | null }
 export interface McpTrustContext {
   readonly environment: Readonly<Record<string, string | undefined>>;
@@ -70,7 +70,7 @@ const toolsDigest = (tools: readonly { readonly name: string; readonly digest: s
   createHash('sha256').update(`mcp-tools:1\0${JSON.stringify(tools.map(tool => [tool.name, tool.digest]))}`).digest('hex');
 /** The card's note (canonical English on the card; `describeMcpTrustCard` renders it in the reader's locale): what a project file may read
  * (F30), and (D6) that a trust record left in the project's data folder no longer decides anything. */
-export const mcpTrustNote = (scope: McpScope, moved: boolean, locale: Locale) => [...scope === 'project' ? [t('security.mcp.note.project', {
+const mcpTrustNote = (scope: McpScope, moved: boolean, locale: Locale) => [...scope === 'project' ? [t('security.mcp.note.project', {
   names: [...MCP_PROJECT_VARIABLES].join(', ') }, locale)] : [], ...moved ? [t('security.mcp.note.moved', {}, locale)] : []].join('; ') || null;
 
 /** Writes one decision: the audit event first (no event, no change), then the record under the file's write lock (recomputed on what is there).
@@ -254,7 +254,7 @@ export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number
     } finally { journal.close(); }
   };
 }
-/** The pseudo tool of a first-use trust card on the turn's approval path (no approval schema change: an agent-tool-call subject named `mcp_trust`). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The pseudo tool of a first-use trust card on the turn's approval path (no approval schema change: an agent-tool-call subject named `mcp_trust`). */
 export const MCP_TRUST_CARD_TOOL = 'mcp_trust';
 /** The turn's first-use trust question (owner 2026-09-28): each card one single-use approval of the turn (`mcpCardApprovalAsker`, tool `mcp_trust`). */
 export function mcpTrustApprovalAsker(input: McpCardAskerInput): McpTrustAsk {

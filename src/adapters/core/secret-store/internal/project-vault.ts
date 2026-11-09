@@ -15,7 +15,7 @@ export async function directoryLocation(path: string): Promise<ProjectVaultLocat
     return info.isDirectory() && info.ino !== 0n ? { canonicalRoot, device: String(info.dev), inode: String(info.ino) } : null;
   } catch { return null; }
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Astra REVISE 2706 P2-2: the handover's strict observation of the recorded owner's data root. `gone` only when proven: the path does not resolve
  * (ENOENT, ENOTDIR) or it resolves to another directory identity; `present` for the recorded identity; `unknown` for any other error (EACCES, EIO,
  * ELOOP, …) — never read as gone. Other consumers keep `directoryLocation`.
@@ -28,7 +28,7 @@ export async function observeOwnerRoot(location: ProjectVaultLocation): Promise<
   } catch (error) { return absent(error) ? 'gone' : 'unknown'; }
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The Git repository a project root belongs to, read from its `.git` (no Git process, no inherited Git environment):
  * - `none`: no `.git` at the root; `main`: `.git` is the repository directory (the main working tree);
  * - `linked`: a worktree whose `.git` file names `<common>/worktrees/<name>`, whose `commondir` names `<common>` and whose `gitdir` back-link

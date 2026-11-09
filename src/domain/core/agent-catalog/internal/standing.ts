@@ -3,7 +3,7 @@ import { counterSchema, identitySchema } from '#domain/core/primitives/index.js'
 import { AgentCatalogError, agentContentSchema, catalogIdSchema, skillRefSchema, type AgentDefinition } from './contract.js';
 import limits from './limits.json' with { type: 'json' };
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S8-1a (S8-DESIGN §7; owner Q-S2/Q-S3/Q-S6): one agent revision's standing for one WorkClass. Only the system's agent selection and the
  * standing-admission gate read it: `active` may run card-less on low-risk work, `candidate` only on a Run card, `redesign-required` and `retired`
  * never. It grants no authority, names no model and writes no tier (A4). Rows are kept; a change is a new `standingRevision` (compare-and-set).
@@ -29,7 +29,7 @@ export const taskAgentSealSchema = z.strictObject({ schemaVersion: z.literal(1),
   /** a64 (owner walk): the revision's own name, for the plan card's words; absent on seals frozen before it (the card then shows the id). */
   name: agentContentSchema.unwrap().shape.name.optional() }).readonly();
 export type TaskAgentSeal = z.infer<typeof taskAgentSealSchema>;
-export type AgentPromptPart = Readonly<{ id: string; version: number; text: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AgentPromptPart = Readonly<{ id: string; version: number; text: string }>;
 /** The prompt parts an agent revision contributes: its persona (part id = agent id, version = revision) and each pinned skill (skill id @ revision). */
 export type AgentPromptParts = Readonly<{ persona: AgentPromptPart; skills: readonly AgentPromptPart[] }>;
 /** One task's system selection: the seal frozen with the Run and the parts its native prompt carries. */

@@ -14,8 +14,8 @@ import { policyResources } from './vocabulary.js';
  * installer (file owner + authority witness) writes it through the authority documents' one conditional writer.
  */
 export type OpenablePermissionMode = Exclude<PermissionMode, 'standart'>;
-export const OPENABLE_PERMISSION_MODES: readonly OpenablePermissionMode[] = Object.freeze(PERMISSION_MODES.filter((mode): mode is OpenablePermissionMode => mode !== 'standart'));
-/** Not a template rule id (the first-run template never writes it): the installer's managed rule for one mode. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const OPENABLE_PERMISSION_MODES: readonly OpenablePermissionMode[] = Object.freeze(PERMISSION_MODES.filter((mode): mode is OpenablePermissionMode => mode !== 'standart'));
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Not a template rule id (the first-run template never writes it): the installer's managed rule for one mode. */
 export const INSTALLER_PERMISSION_MODE_RULE_PREFIX = 'installer-permission-mode-';
 /** Version 1 of the installer's permission-mode change: the authority write key and the `authority-change` audit `commandId` start with it. */
 export const INSTALLER_PERMISSION_MODES_COMMAND_PREFIX = 'installer-permission-modes-v1-';
@@ -29,7 +29,7 @@ export interface PermissionModeGrantState {
   readonly mode: OpenablePermissionMode; readonly wanted: boolean; readonly before: Effect; readonly after: Effect;
   readonly managed: 'added' | 'removed' | 'held' | 'none' | 'conflict'; readonly others: readonly string[]; readonly blockedBy: string | null;
 }
-export type PermissionModeGrantPlan =
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type PermissionModeGrantPlan =
   | { readonly status: 'plan' | 'current'; readonly basis: 'first-run' | 'named-person'; readonly modes: readonly PermissionModeGrantState[]; readonly added: readonly PolicyGrant[];
     readonly removed: readonly string[]; readonly conflicts: readonly string[]; readonly policy: unknown }
   | { readonly status: 'refused'; readonly reason: 'policy-refused' | 'rule-conflict'; readonly basis: 'first-run' | 'named-person'; readonly modes: readonly PermissionModeGrantState[];

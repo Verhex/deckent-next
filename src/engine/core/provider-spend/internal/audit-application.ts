@@ -22,7 +22,7 @@ export interface ProviderSpendAuditStore {
 export const providerSpendAuditWorkLimitsSchema = z.strictObject({ pageSize: persistedInteger().positive().max(PROVIDER_SPEND_INTEGRITY_PAGE_MAX),
   maxReservations: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), timeoutMs: persistedInteger().positive().max(2_147_483_647) });
 const limitsSchema = providerSpendAuditWorkLimitsSchema.extend({ maxResultBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).strict().readonly();
-export type ProviderSpendAuditLimits = z.infer<typeof limitsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderSpendAuditLimits = z.infer<typeof limitsSchema>;
 function correlated(receiptInput: unknown, command: ProviderSpendAuditCommand, principal: VerifiedPrincipal) {
   const receipt = parseProviderSpendAuditReceipt(receiptInput), actor = receipt.actor;
   if (JSON.stringify(receipt.command) !== JSON.stringify(command) || actor.id !== principal.id || actor.issuer !== principal.issuer

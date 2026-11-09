@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { text, positive, envName, flag, args } from './schema-parts.js';
-export const nativeAgentLoginMethodSchema = z.enum(['claudeai', 'browser', 'device-auth']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const nativeAgentLoginMethodSchema = z.enum(['claudeai', 'browser', 'device-auth']);
 export type NativeAgentLoginMethod = z.infer<typeof nativeAgentLoginMethodSchema>;
 
 /** R is the only active topology. P describes flags only; enabling a fallback needs a new explicit decision. */

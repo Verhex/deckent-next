@@ -46,7 +46,7 @@ export function approvalCommandFingerprint(tag: string, command: z.infer<typeof 
     ...('decision' in command ? { decision: command.decision } : {}), ...('standing' in command ? { standing: command.standing } : {}),
     ...('approverNote' in command && command.approverNote ? { approverNote: true } : {}) }));
 }
-/** POLICY-HARDEN K3: operations with descriptor `surface: 'authority'` (`policy.administer@1`) are decided only where composition
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). POLICY-HARDEN K3: operations with descriptor `surface: 'authority'` (`policy.administer@1`) are decided only where composition
  * names the authority surface (`/policy`, later). SDK, CLI and terminal y/N otherwise refuse `APPROVAL_SURFACE_RESTRICTED`, keeping
  * the request pending; a deny only withdraws a request and stays open. `refused` records the refusal best-effort, never changes it. */
 export interface ApprovalDecisionRestriction { readonly catalog: OperationCatalog; readonly surface?: 'authority'; readonly refused?: (event: AuditEvent) => void | Promise<void> }

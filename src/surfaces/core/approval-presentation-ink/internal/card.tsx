@@ -19,7 +19,7 @@ export function ApprovalDecisionWarnings({ fields, labels }: { readonly fields: 
 }
 
 /** The same counters as window rows: they follow the field they belong to, in the warning role (the text carries the meaning). */
-export function decisionWarningLines(fields: readonly ApprovalDecisionProjection[], labels: ApprovalDecisionLabels): WindowLine[] {
+function decisionWarningLines(fields: readonly ApprovalDecisionProjection[], labels: ApprovalDecisionLabels): WindowLine[] {
   const lines: WindowLine[] = [];
   for (const field of fields) {
     if (labels.hiddenCount && field.hiddenCount > 0) lines.push({ spans: [span(fillTemplate(labels.hiddenCount, { count: field.hiddenCount }), { role: 'warning' })] });
@@ -35,11 +35,11 @@ export function decisionWindowLines(lines: readonly ApprovalDecisionLine[], labe
 }
 
 /** Tab opens a one-line reason the decision carries to the audit record; labels absent = no reason field. */
-export type DecisionReasonLabels = Readonly<{ label: string; hint: string; empty: string }>;
+type DecisionReasonLabels = Readonly<{ label: string; hint: string; empty: string }>;
 /** TERMINAL-SABIT-DUZEN slice 2: the card's answers as a list (↑↓ choose, Enter confirms); `session`/`always` only where offered. */
-export type DecisionChoiceLabels = Readonly<{ once: string; session: string; always: string; no: string }>;
+type DecisionChoiceLabels = Readonly<{ once: string; session: string; always: string; no: string }>;
 
-export interface DecisionCardProps {
+interface DecisionCardProps {
   readonly title: ApprovalDecisionLine;
   readonly projectedLines: readonly ApprovalDecisionLine[];
   readonly decisionLabels?: ApprovalDecisionLabels;

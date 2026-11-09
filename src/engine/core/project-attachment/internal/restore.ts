@@ -1,8 +1,8 @@
 import { projectAttachmentSchema, type InstallationRegistration, type AttachmentPerson } from '#domain/index.js';
 import { attachmentFailure, sameAttachmentPerson, sameProjectAttachmentAuthority } from './context.js';
-export interface SharedBackupState { readonly schemaVersion: number; readonly sharedRegistrationId?: string; readonly installationId: string;
+interface SharedBackupState { readonly schemaVersion: number; readonly sharedRegistrationId?: string; readonly installationId: string;
   readonly entries: readonly { resource: string; path: string; content: string }[] }
-export interface AttachmentRestorePorts { readonly actor: AttachmentPerson; registration(): Promise<InstallationRegistration | null>;
+interface AttachmentRestorePorts { readonly actor: AttachmentPerson; registration(): Promise<InstallationRegistration | null>;
   exists(path: string): Promise<boolean>; projectId(path: string): Promise<string | null> }
 /** The authenticated set restores one recorded project, never an authority copied from a surviving folder. */
 export async function verifySharedAttachmentRestore(config: { company: { id: string } }, state: SharedBackupState, destination: string, scopeId: string, ports: AttachmentRestorePorts) {

@@ -2,7 +2,7 @@ import { sameAttemptIdentity, deriveAcceptanceView, readWorkerModelPin, workerTa
   type RunSnapshot, type AttemptIdentity, type VerifiedPrincipal, type DeckentMetrics, type WorkerEvent, type WorkerEventSummary, type WorkCost } from '#domain/index.js';
 import type { ResourceView } from './contract.js';
 import { recommendRunWorkCosts } from './recommendations.js';
-export interface WorkCostDispatch { readonly request: { readonly identity: AttemptIdentity };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkCostDispatch { readonly request: { readonly identity: AttemptIdentity };
   readonly terminal: { readonly container?: { readonly startedAt: string | null; readonly finishedAt: string | null } | undefined } | null }
 export interface WorkCostEvidence {
   readonly comparison?: { readonly registry: unknown; readonly policy: import('#domain/index.js').CostRecommendationPolicy };

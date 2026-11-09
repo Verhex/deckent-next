@@ -3,7 +3,7 @@ import { z } from 'zod';
 import seed from '../../../../../assets/recovery/rollout.json' with { type: 'json' };
 
 const positive = counterSchema.positive(), criterion = (extra: z.ZodRawShape) => z.strictObject({ id: identitySchema, minSample: counterSchema, ...extra }).readonly();
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * alpha.56 G4 (owner Q-A2/Q-A4/Q-A5; S6R-DESIGN §11): the recovery rollout registry, versioned Core data (`assets/recovery/rollout.json`,
  * provisional until measured). `rules`: the Nervous rules a person may promote in this release (the lost-worker rules); `detection`: per
  * rule@version, the shadow cases since its last false positive; `decision`: the model-decided cases a person reviewed blind and how many agreed
@@ -22,7 +22,7 @@ export type RecoveryRolloutRecords = Readonly<{
   decisions: readonly Readonly<{ caseId: string; eventId: string; action: 'continue-new-attempt' | 'escalate-human' }>[];
   verdicts: readonly Readonly<{ caseId: string; decisionEventId: string; detection: 'lost' | 'not-lost'; choice: 'continue-new-attempt' | 'escalate-human' | null }>[];
   contradicted: readonly string[]; complete: boolean }>;
-export type RecoveryRolloutRuleView = Readonly<{ id: string; version: number; shadowCases: number; sinceFalsePositive: number; falsePositives: number; met: boolean }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryRolloutRuleView = Readonly<{ id: string; version: number; shadowCases: number; sinceFalsePositive: number; falsePositives: number; met: boolean }>;
 /** Counts only (blind, owner Q-A5): a model's choice of an unreviewed case is never part of the view, so no surface can show it. */
 export type RecoveryRolloutView = Readonly<{ registry: Readonly<{ revision: string; status: 'provisional' | 'measured' }>; complete: boolean;
   rules: readonly RecoveryRolloutRuleView[]; decisions: Readonly<{ decided: number; agreements: number; perMille: number | null; waiting: number; met: boolean }> }>;

@@ -4,7 +4,7 @@ import { insertHistoryLine, nextImageVersion, workerImageRecipeSchema } from '#e
 /** What the person confirms before anything runs (the surface words it): build `imageVersion` from the installed package's recipe (`held`: the
  * newest revision the daemon already holds, which a build advances past), or adopt `imageId` (the builder's short check container, no network). */
 export type WorkerImageCard = Readonly<{ mode: 'build'; imageVersion: string; held: string | null } | { mode: 'adopt'; imageVersion: string; imageId: string }>;
-/** `present`: this installation already holds a receipt whose image the daemon has; nothing ran. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `present`: this installation already holds a receipt whose image the daemon has; nothing ran. */
 export type WorkerImageStatus = 'present' | 'declined' | 'built' | 'adopted';
 export type WorkerImageBuildInput = Readonly<{ imageVersion: string; recipe: unknown; dockerfile: string; imageId?: string }>;
 /** The effects the first worker image needs; adapters hold the receipts, the installed builder and the daemon, the surface holds the card. */

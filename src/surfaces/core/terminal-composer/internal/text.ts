@@ -19,7 +19,7 @@ const ZERO: readonly Range[] = [[0x0300, 0x036f], [0x0483, 0x0489], [0x0591, 0x0
 const within = (point: number, ranges: readonly Range[]) => ranges.some(([low, high]) => point >= low && point <= high);
 
 /** Cells one cluster occupies: 2 for wide or emoji-presentation (VS16), 0 for marks only, otherwise 1. */
-export function clusterWidth(cluster: string): 0 | 1 | 2 {
+function clusterWidth(cluster: string): 0 | 1 | 2 {
   let narrow = false;
   for (const char of cluster) {
     const point = char.codePointAt(0)!;
@@ -93,7 +93,7 @@ export function verticalOffset(text: string, offset: number, direction: -1 | 1):
   return at;
 }
 
-export interface DraftRow {
+interface DraftRow {
   readonly text: string;
   /** UTF-16 offset of this row's first character in the draft. */
   readonly start: number;

@@ -5,7 +5,7 @@ import { nativeCliHeadlessSchema } from './headless.js';
 const argument = persistedString(z.string().min(1)).refine(value => !value.includes('\0'));
 const flag = z.string().regex(/^--[a-z][a-z-]*$/);
 const argumentsSchema = z.array(argument).readonly();
-export const nativeCliCapabilitiesSchema = z.strictObject({
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const nativeCliCapabilitiesSchema = z.strictObject({
   reasoningEffort: z.strictObject({ mode: z.enum(['arguments', 'model-id']), levels: z.array(z.enum(REASONING_EFFORTS)).min(1).readonly(),
     args: argumentsSchema, requiredFlags: z.array(flag).readonly() }).refine(value => new Set(value.levels).size === value.levels.length
       && (value.mode === 'model-id' ? value.args.length === 0 : value.args.some(arg => arg.includes('{effort}')))).readonly().nullable(),
@@ -25,7 +25,7 @@ export const nativeCliCapabilitiesSchema = z.strictObject({
   /** Native stdout event format the mounted worker normalizes; selects the normalizer by data, never by adapter id. */
   eventStream: z.enum(['claude-code-stream-json', 'codex-exec-json', 'cursor-agent-stream-json']),
 }).readonly();
-export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
 const commandSchema = z.strictObject({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,
   disabledArgs: argumentsSchema.nullable(), coreArgs: argumentsSchema, modelAliases: argumentsSchema,
   capabilities: nativeCliCapabilitiesSchema, headless: nativeCliHeadlessSchema.optional(), agent: nativeCliAgentSchema.optional(),

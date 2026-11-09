@@ -10,7 +10,7 @@ import { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmRepor
 import { DECK_FILE } from '#engine/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject } from './self-source.js';
 
-/** The only product resources the agent tools may read (TERM-FEEDBACK-1): the installation's configuration, which the model is told about and which names credentials only by reference (the keys live under `approvals`). Details: agent-turn-engine module note. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The only product resources the agent tools may read (TERM-FEEDBACK-1): the installation's configuration, which the model is told about and which names credentials only by reference (the keys live under `approvals`). Details: agent-turn-engine module note. */
 export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Object.freeze(['config']);
 /** The Core read floor plus every product resource of this layout inside the project except the readable ones (TL-C D4, TERM-FEEDBACK-1): the resource, anything under it, its sidecars (`ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary beside it (`.policy.json.<id>.tmp`). Details: agent-turn-engine module note. */
 export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, fullAccess = false, env?: Environment): readonly string[] {

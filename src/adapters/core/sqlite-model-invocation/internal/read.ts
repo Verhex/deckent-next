@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema } from '#domain/index.js';
 import { ModelInvocationStoreError, verifyModelInvocationReceipt, verifyModelInvocationRecord, type ModelInvocationRecord } from '#engine/index.js';
 
-export type InvocationRow = Readonly<Record<string, unknown>>;
+type InvocationRow = Readonly<Record<string, unknown>>;
 export function invocationIdentity(input: unknown): string {
   const parsed = identitySchema.safeParse(input);
   if (!parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');

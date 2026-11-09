@@ -4,11 +4,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { link, lstat, mkdir, open, readdir, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, normalize } from 'node:path';
 import { pathWithin as inside } from './tree.js';
-/** The exact file a removal was bound to: inode identity, size, modification time and content digest (ctime is not compared: a move changes it). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The exact file a removal was bound to: inode identity, size, modification time and content digest (ctime is not compared: a move changes it). */
 export interface PinnedFileIdentity { readonly dev: number; readonly ino: number; readonly size: number; readonly mtimeMs: number; readonly digest: string }
-/** `cut`: remove only the bytes [start, end) and expect `after` as the result's digest; without it the whole file goes. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `cut`: remove only the bytes [start, end) and expect `after` as the result's digest; without it the whole file goes. */
 export interface PinnedRemoval { readonly cut?: readonly [number, number] | undefined; readonly after?: string | undefined }
-/** `changed`: the file is not the bound one (kept); `unsafe`: a link, a foreign or shared file, or a path that is not canonical. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `changed`: the file is not the bound one (kept); `unsafe`: a link, a foreign or shared file, or a path that is not canonical. */
 export class PinnedFileError extends CodedError { constructor(readonly reason: 'changed' | 'unsafe') { super(reason); } }
 const at = (dir: FileHandle, name: string) => `/proc/self/fd/${dir.fd}/${name}`;
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';

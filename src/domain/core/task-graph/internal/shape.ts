@@ -3,7 +3,7 @@ import { counterSchema, identitySchema } from '#domain/core/primitives/index.js'
 import { taskDependencyIds, TaskGraphError, type TaskGraph, type TaskProgress } from './contract.js';
 import { validateTaskGraphStructure } from './graph.js';
 
-/** Measured size of a task graph: tasks, dependency edges (inputs are not edges) and depth (tasks on the longest dependency chain). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Measured size of a task graph: tasks, dependency edges (inputs are not edges) and depth (tasks on the longest dependency chain). */
 export const taskGraphShapeSchema = z.strictObject({ tasks: counterSchema, edges: counterSchema, depth: counterSchema }).readonly();
 export type TaskGraphShape = z.infer<typeof taskGraphShapeSchema>;
 /** PARALLEL-S3: one typed DAG summary for every surface (run inspect, monitor). `pending` = pending; `running` = active + evaluating;

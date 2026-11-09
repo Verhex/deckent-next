@@ -25,12 +25,12 @@ export type StandingCell = 'edit' | 'shell-read-low' | 'shell-narrow-mutating';
 const STANDING_CELLS: ReadonlySet<string> = new Set<StandingCell>(['edit', 'shell-read-low', 'shell-narrow-mutating']);
 export const standingCell = (cell: string): cell is StandingCell => STANDING_CELLS.has(cell);
 
-export type StandingRefusal = 'cell-not-standing' | 'no-target' | 'unsafe-target' | 'pattern-too-long';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type StandingRefusal = 'cell-not-standing' | 'no-target' | 'unsafe-target' | 'pattern-too-long';
 export type SessionCell = StandingCell | 'edit-self-source';
-export interface SessionPattern { readonly key: string; readonly kind: 'command' | 'directory'; readonly text: string; readonly tool: string; readonly cell: SessionCell }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SessionPattern { readonly key: string; readonly kind: 'command' | 'directory'; readonly text: string; readonly tool: string; readonly cell: SessionCell }
 export interface StandingPattern extends SessionPattern { readonly cell: StandingCell }
-export type StandingPatternResult = { readonly ok: true; readonly pattern: StandingPattern } | { readonly ok: false; readonly reason: StandingRefusal };
-export type SessionPatternResult = { readonly ok: true; readonly pattern: SessionPattern } | { readonly ok: false; readonly reason: StandingRefusal };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type StandingPatternResult = { readonly ok: true; readonly pattern: StandingPattern } | { readonly ok: false; readonly reason: StandingRefusal };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SessionPatternResult = { readonly ok: true; readonly pattern: SessionPattern } | { readonly ok: false; readonly reason: StandingRefusal };
 
 const hasControl = (text: string) => [...text].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const GLOB = /[*?[\]{}\\]/u;

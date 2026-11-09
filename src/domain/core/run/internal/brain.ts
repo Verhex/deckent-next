@@ -48,4 +48,4 @@ export const brainContributionSchema = z.discriminatedUnion('schemaVersion', [
   z.strictObject({ schemaVersion: z.literal(1), ...contributionShape.unwrap().shape }),
   contributionShape.unwrap().extend({ schemaVersion: z.literal(2), billingAxis: modelInvocationBillingAxisSchema }).strict(),
 ]).readonly();
-export type BrainContribution = z.infer<typeof brainContributionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BrainContribution = z.infer<typeof brainContributionSchema>;

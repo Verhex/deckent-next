@@ -1,2 +1,2 @@
-export { composeCatalogEvolutionRegistry, catalogEvolutionOverlaySchema, CatalogEvolutionError, type CatalogEvolutionRegistry, type CatalogEvolutionRule } from './internal/registry.js';
+export { composeCatalogEvolutionRegistry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ catalogEvolutionOverlaySchema, CatalogEvolutionError, type CatalogEvolutionRegistry, type CatalogEvolutionRule } from './internal/registry.js';
 export { wilsonIntervalMicro, nearestRankMicro, attributableFailure, ATTRIBUTABLE_FAILURE_CAUSES, NON_ATTRIBUTABLE_FAILURE_CAUSES, STATS_MICRO } from './internal/stats.js';

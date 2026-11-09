@@ -8,7 +8,7 @@ import { bubblewrapShellSandbox } from './realm.js';
  * starts and doctor all take this one list. */
 export const shippedShellSandboxes = (layout: ShellSandboxLayout): readonly ShellSandbox[] => [bubblewrapShellSandbox(layout), landlockShellSandbox(layout)];
 
-/** One resolution as doctor reports it: the realm that runs (`null` = refused, `code` says why) and every provider passed over, and why. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One resolution as doctor reports it: the realm that runs (`null` = refused, `code` says why) and every provider passed over, and why. */
 export interface ShellRealmSelectionView {
   readonly selected: 'bubblewrap' | 'landlock' | 'host' | null;
   readonly marker: string | null;

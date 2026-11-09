@@ -8,7 +8,7 @@ export const PRODUCT_LAYOUT_REGISTRY = Object.freeze({ ...layoutResources, resou
 export const DECKENT_DIR = PRODUCT_LAYOUT_REGISTRY.rootName;
 /** Owner decision Y (2026-09-30): the one `.deckent` subtree an agent may create and write; the write floors read this, never a literal. */
 export const DOCS_DIR = `${DECKENT_DIR}/docs`;
-export const CONFIG_FILE = PRODUCT_LAYOUT_REGISTRY.resources.config;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CONFIG_FILE = PRODUCT_LAYOUT_REGISTRY.resources.config;
 export const PROJECT_CONFIG_PATH = `${DECKENT_DIR}/${CONFIG_FILE}`;
 export const CONFIG_SCHEMA_VERSION = 4;
 export const OUTPUT_MODES = ['standard', 'explanatory', 'verbose', 'json'] as const;

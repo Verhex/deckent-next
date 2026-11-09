@@ -4,7 +4,7 @@ import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/
 import { effectRecordSchema, effectStateSchema, effectTargetRefSchema, isEffectOpen, operationRefSchema, type EffectRecord } from '#domain/core/effect/index.js';
 import type { RunRecoveryPolicy } from './policy.js';
 
-export const RECOVERY_ERROR_CODES = ['RECOVERY_INVALID', 'RECOVERY_OFF', 'RECOVERY_NOT_FOUND', 'RECOVERY_NOT_READY', 'RECOVERY_RUN_CLOSED', 'RECOVERY_EFFECTS_OPEN',
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const RECOVERY_ERROR_CODES = ['RECOVERY_INVALID', 'RECOVERY_OFF', 'RECOVERY_NOT_FOUND', 'RECOVERY_NOT_READY', 'RECOVERY_RUN_CLOSED', 'RECOVERY_EFFECTS_OPEN',
   'RECOVERY_SETTLED_NOT_IDEMPOTENT', 'RECOVERY_SETTLED_OVER_BOUND', 'RECOVERY_CONTINUATION_BOUND', 'RECOVERY_ATTEMPT_CEILING', 'RECOVERY_RUN_BOUND', 'RECOVERY_SAME_EVIDENCE',
   'RECOVERY_STALE', 'RECOVERY_CONFLICT', 'RECOVERY_PRINCIPAL_REQUIRED', 'RECOVERY_NOT_APPROVED', 'RECOVERY_CORRUPT', 'RECOVERY_UNAVAILABLE', 'RECOVERY_RISK_NOT_LOW',
   'RECOVERY_ISOLATION_UNPROVEN'] as const;
@@ -24,7 +24,7 @@ export const recoveryEffectGateSchema = z.strictObject({ schemaVersion: z.litera
   intents: z.array(z.strictObject({ commandId: identitySchema, state: effectStateSchema, producer: z.enum(['attempt', 'legacy']) }).readonly()).max(1024).readonly(),
   facts: z.array(z.strictObject({ commandId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema, version: persistedString(z.string().min(1).max(256)).nullable(),
     observedAt: counterSchema }).readonly()).max(256).readonly() }).readonly();
-export type RecoveryEffectGate = z.infer<typeof recoveryEffectGateSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryEffectGate = z.infer<typeof recoveryEffectGateSchema>;
 
 /** Pure: the gate over the records a store read for one lost Attempt (its own, plus older producer-less rows of the scope). Another scope's record is refused. */
 export function assessRecoveryEffectGate(identity: AttemptIdentity, input: readonly unknown[], policy: Pick<RunRecoveryPolicy, 'maxGateIntents' | 'settledFacts'>): RecoveryEffectGate {

@@ -12,15 +12,15 @@ import type { LedgerRow } from '#surfaces/core/terminal-ledger/index.js';
  * shows now (a read group collapsed or expanded by a click), part of its cache key so a click lays out that row alone; `exit` asks for the form
  * written to the main screen when the view closes (every read group open, so its calls reach the scrollback without a click).
  */
-export type TranscriptRender = (row: LedgerRow, exit?: boolean) => ReactElement;
-export type TranscriptVariant = (row: LedgerRow, exit?: boolean) => string;
-export type TranscriptBlocks = SearchableBlocks & Readonly<{ text: () => string }>;
+type TranscriptRender = (row: LedgerRow, exit?: boolean) => ReactElement;
+type TranscriptVariant = (row: LedgerRow, exit?: boolean) => string;
+type TranscriptBlocks = SearchableBlocks & Readonly<{ text: () => string }>;
 
 type Laid = Readonly<{ columns: number; style: unknown; variant: string; lines: readonly string[] }>;
 const NO_VARIANT: TranscriptVariant = () => '';
 const BANNER_KEY = 'banner', BANNER_SEQ = -1, PLACEHOLDER: readonly string[] = Object.freeze(['']);
 
-export function splitRendered(text: string): readonly string[] {
+function splitRendered(text: string): readonly string[] {
   const lines = text.split('\n');
   while (lines.length > 1 && lines.at(-1) === '') lines.pop();
   return Object.freeze(lines);

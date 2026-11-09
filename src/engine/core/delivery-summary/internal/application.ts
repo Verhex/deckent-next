@@ -14,7 +14,7 @@ export const deliverySummaryRequestSchema = z.strictObject({ schemaVersion: z.li
   /** A queue ticket's command id: the host derives its verification Run id (surfaces never load the queue naming code). */
   ticketCommandId: identitySchema.optional() }).readonly();
 export type DeliverySummaryRequest = z.infer<typeof deliverySummaryRequestSchema>;
-/** The target adapter's change filler; null = no change evidence. A person-facing authorization refusal it throws becomes `withheld`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The target adapter's change filler; null = no change evidence. A person-facing authorization refusal it throws becomes `withheld`. */
 export type DeliveryChangeSource = (identity: AttemptIdentity, principal: VerifiedPrincipal) => Promise<DeliveryChangeFacts | null>;
 export interface DeliverySummaryPorts {
   readonly store: Pick<RunStore, 'loadRun'> & Pick<RunBoundDispatchStore, 'loadBoundDispatch'> & Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
@@ -79,7 +79,7 @@ export class DeliverySummaryApplication {
   }
 }
 
-/** What the queue service already holds for its own ticket: the operation, its target, its verification Run and the adapter's change facts. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the queue service already holds for its own ticket: the operation, its target, its verification Run and the adapter's change facts. */
 export type SystemDeliverySummaryRequest = Readonly<{ identity: AttemptIdentity; operation: DeliverySummaryRequest['operation'];
   target: Readonly<{ id: string; protected: boolean | null }> | null; verificationRunId: string | null; change: DeliveryChangeFacts | null }>;
 /**

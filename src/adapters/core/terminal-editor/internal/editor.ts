@@ -7,14 +7,14 @@ import LIMITS from './editor.json' with { type: 'json' };
 import { personProcessEnvironment } from '#platform/index.js';
 
 export const TERMINAL_EDITOR_LIMITS = Object.freeze({ maxBytes: LIMITS.maxBytes, directoryPrefix: LIMITS.directoryPrefix, fileName: LIMITS.fileName });
-/** Why the draft stayed as it was. Never carries the editor command, the file path or the text. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Why the draft stayed as it was. Never carries the editor command, the file path or the text. */
 export type ExternalEditorRefusal = 'no-editor' | 'not-started' | 'exit' | 'too-large' | 'unsafe' | 'failed';
 export type ExternalEditorOutcome = Readonly<{ kind: 'edited'; text: string }> | Readonly<{ kind: 'unchanged' }> | Readonly<{ kind: 'refused'; reason: ExternalEditorRefusal }>;
-/** `edit` runs the person's editor on `text` with the terminal handed over (the caller suspends its own screen and input first). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `edit` runs the person's editor on `text` with the terminal handed over (the caller suspends its own screen and input first). */
 export interface ExternalEditor { edit(text: string, signal?: AbortSignal): Promise<ExternalEditorOutcome> }
-/** `env`: the person's environment: `VISUAL`, then `EDITOR` (as Git, Claude Code and Codex read them); the editor runs with it. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `env`: the person's environment: `VISUAL`, then `EDITOR` (as Git, Claude Code and Codex read them); the editor runs with it. */
 export interface ExternalEditorOptions { readonly env: NodeJS.ProcessEnv; readonly tmpdir?: string }
-/** `VISUAL`/`EDITOR` split into argv: whitespace separates, single or double quotes keep a path with spaces whole. No shell runs. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `VISUAL`/`EDITOR` split into argv: whitespace separates, single or double quotes keep a path with spaces whole. No shell runs. */
 export function editorCommand(env: NodeJS.ProcessEnv): readonly string[] | 'unset' | 'malformed' {
   const value = [env['VISUAL'], env['EDITOR']].find(item => typeof item === 'string' && item.trim() !== '')?.trim();
   if (!value) return 'unset';

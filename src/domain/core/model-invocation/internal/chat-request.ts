@@ -11,8 +11,8 @@ export class OpenAiChatHttpError extends CodedError {
   constructor(override readonly code: OpenAiChatHttpErrorCode, readonly status?: number) { super(code); this.name = 'OpenAiChatHttpError'; }
 }
 
-export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type OpenAiChatToolCall = Readonly<{ id: string; type: 'function'; function: Readonly<{ name: string; arguments: string }> }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OpenAiChatToolCall = Readonly<{ id: string; type: 'function'; function: Readonly<{ name: string; arguments: string }> }>;
 export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'user'; content: string }>
   | Readonly<{ role: 'assistant'; content: string | null; tool_calls?: readonly OpenAiChatToolCall[]; reasoning_content?: string | null; reasoning_details?: readonly JsonObject[] }>
   | Readonly<{ role: 'tool'; tool_call_id: string; content: string }>;
@@ -28,9 +28,9 @@ export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly
   service_tier?: 'auto' | 'default' | 'flex' | 'priority' }>;
 /** Tool names follow the agent tool contract; ids are the provider's opaque correlation strings. */
 export const OPENAI_CHAT_TOOL_NAME = /^[a-z][a-z0-9_]{1,63}$/;
-export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-export const openAiReasoningEffortSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const openAiReasoningEffortSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 const reasoningEffortSchema = openAiReasoningEffortSchema;
 const toolCallSchema = z.strictObject({ id: persistedString(z.string().min(1).max(256)), type: z.literal('function'),
   function: z.strictObject({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME), arguments: z.string() }) });

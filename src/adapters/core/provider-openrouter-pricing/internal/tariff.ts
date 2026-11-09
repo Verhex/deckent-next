@@ -5,7 +5,7 @@ import { maxRate } from './decimal.js';
 import { chargeDimensions, endpointRates, type TariffRates } from './rates.js';
 import { OpenRouterPricingError } from './error.js';
 import PRIVACY_LIMITS from './privacy-limits.json' with { type: 'json' };
-export const OPENROUTER_TARIFF_VERSION = 2 as const;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const OPENROUTER_TARIFF_VERSION = 2 as const;
 const boundedMetadata = createImmutableJsonObjectSchema({ maxDepth: 16, maxNodes: 65_536, maxCodeUnits: 1_048_576 });
 const identity = persistedString(z.string().min(1).max(1024)), integer = counterSchema;
 const selectionSchema = z.strictObject({ modelId: identity, endpointTag: identity,
@@ -20,7 +20,7 @@ const endpointSchema = z.looseObject({ model_id: identity, tag: identity, provid
   // prototype-named keys before the pricing allowlist sees them.
   pricing: z.custom<JsonObject>(value => value !== null && typeof value === 'object' && !Array.isArray(value)) });
 const metadataSchema = z.looseObject({ data: z.looseObject({ id: identity, endpoints: z.array(endpointSchema) }) });
-export interface OpenRouterTariffSelection {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface OpenRouterTariffSelection {
   readonly modelId: string; readonly endpointTag: string; readonly fetchedAtMs: number; readonly expiresAtMs: number;
 }
 export interface OpenRouterTariff {

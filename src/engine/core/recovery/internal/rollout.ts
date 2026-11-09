@@ -22,7 +22,7 @@ export function recoveryReportAccepted(run: RunSnapshot | null, target: Readonly
     && run.bindings.some(row => row.identity.taskId === target.taskId && row.identity.attemptId === target.attemptId);
 }
 
-/** The sealed records of one scope's rollout, read within the registry scan bounds (`complete` false when any source hit its bound). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The sealed records of one scope's rollout, read within the registry scan bounds (`complete` false when any source hit its bound). */
 export async function readRecoveryRolloutRecords(ports: RecoveryRolloutPorts, scopeId: string, rules: RecoveryRolloutRecords['rules'],
   registry: RecoveryRolloutRegistry = RECOVERY_ROLLOUT): Promise<RecoveryRolloutRecords> {
   const { scan } = registry, detected = await ports.listRecentKind(scopeId, 'recovery-detection', 0, scan.detections);

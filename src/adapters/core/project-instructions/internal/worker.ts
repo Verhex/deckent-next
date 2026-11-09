@@ -21,9 +21,9 @@ export async function openWorkerInstructionTrust(root: string, env: NodeJS.Proce
   return openProjectInstructionReader(root, await trustDirectory(env), known, [file], committed);
 }
 
-/** The file-backed sources of the config enum (published declarations must not reference the JSON module; `none` has no file). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The file-backed sources of the config enum (published declarations must not reference the JSON module; `none` has no file). */
 export type WorkerInstructionSource = Exclude<NonNullable<NonNullable<NonNullable<CoreConfig['execution']>['workerInstructions']>['source']>, 'none'>;
-export type WorkerInstructionWithheld = Readonly<{ source: WorkerInstructionSource; reason: 'absent' | 'untrusted' | 'size' | 'unsafe' | 'unreadable'; digest: string | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerInstructionWithheld = Readonly<{ source: WorkerInstructionSource; reason: 'absent' | 'untrusted' | 'size' | 'unsafe' | 'unreadable'; digest: string | null }>;
 /** Registry data maps a per-project selection to exactly one workspace-root file; CLAUDE.md is never a worker source. */
 export const workerInstructionFile = (source: WorkerInstructionSource) => REGISTRY.workerSources[source];
 

@@ -10,7 +10,7 @@
  * length), so nothing shown is ever taken back.
  */
 const OPEN = '<think>', CLOSE = '</think>';
-export type InlineReasoningDelta = { readonly kind: 'text' | 'reasoning'; readonly text: string };
+type InlineReasoningDelta = { readonly kind: 'text' | 'reasoning'; readonly text: string };
 
 /** The settled split of a whole answer text. Without a leading block the text is unchanged; an unclosed block is all reasoning. */
 export function splitInlineReasoning(text: string): { readonly content: string; readonly reasoning: string } {

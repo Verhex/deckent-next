@@ -33,7 +33,7 @@ export type IntegrationRollbackCommand = z.infer<typeof integrationRollbackComma
 const actorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema });
 /** Evidence basis of an adoption. `task-acceptance` = the attempt's recorded Task acceptance (process-exit criteria today);
  * it is not a verification run of the adopted commit. Verification is the separate, optional `verification` binding (v2). */
-export const adoptionBasisSchema = z.literal('task-acceptance');
+const adoptionBasisSchema = z.literal('task-acceptance');
 const move = { targetRef: adoptionTargetRefSchema, fromCommit: oid, toCommit: oid };
 export const integrationAdoptionIntentSchema = z.discriminatedUnion('kind', [
   z.strictObject({ schemaVersion: z.literal(2), kind: z.literal('adopt'), command: integrationAdoptionCommandSchema, ...move,

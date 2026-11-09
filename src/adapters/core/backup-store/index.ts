@@ -8,5 +8,5 @@ export { inspectScheduledSets, pruneScheduledSets } from './internal/scheduled.j
 export { listBackupSets, lastBackupVerifications, type BackupSetEntry } from './internal/list.js';
 
 export { createBackupCoverage, verifyBackupCoverage } from './internal/coverage.js';
-export type { BackupCoverageRequest } from './internal/coverage.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BackupCoverageRequest } from './internal/coverage.js';
 export { digestFile } from './internal/files.js';

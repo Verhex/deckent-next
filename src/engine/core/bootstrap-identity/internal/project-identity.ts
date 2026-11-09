@@ -8,7 +8,7 @@ export interface ProjectIdentityStore {
   read(): Promise<IdentityRead<ProjectIdentity>>;
   loadOrCreate(): Promise<ProjectIdentity>;
 }
-export type ProjectIdentityErrorCode = 'PROJECT_IDENTITY_INVALID' | 'PROJECT_IDENTITY_INCOMPLETE' | 'PROJECT_IDENTITY_UNAVAILABLE' | 'PROJECT_IDENTITY_LOCKED' | 'PROJECT_IDENTITY_MASKED';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProjectIdentityErrorCode = 'PROJECT_IDENTITY_INVALID' | 'PROJECT_IDENTITY_INCOMPLETE' | 'PROJECT_IDENTITY_UNAVAILABLE' | 'PROJECT_IDENTITY_LOCKED' | 'PROJECT_IDENTITY_MASKED';
 export class ProjectIdentityError extends CodedError {
   constructor(override readonly code: ProjectIdentityErrorCode) { super(code); this.name = 'ProjectIdentityError'; }
 }

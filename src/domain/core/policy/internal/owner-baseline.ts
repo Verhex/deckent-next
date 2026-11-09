@@ -27,7 +27,7 @@ function pick<T extends string>(vocabulary: readonly T[], wanted: readonly T[]):
   if (wanted.some(action => !vocabulary.includes(action))) throw new Error('OWNER_BASELINE_FAMILY_INVALID');
   return Object.freeze([...wanted]);
 }
-export type OwnerBaselineFamily = typeof OWNER_BASELINE_FAMILY_REGISTRY[number]['id'];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OwnerBaselineFamily = typeof OWNER_BASELINE_FAMILY_REGISTRY[number]['id'];
 export const OWNER_BASELINE_FAMILIES: readonly OwnerBaselineFamily[] = Object.freeze(OWNER_BASELINE_FAMILY_REGISTRY.map(family => family.id));
 export const OWNER_BASELINE_DEFAULT_FAMILIES: readonly OwnerBaselineFamily[] = Object.freeze(OWNER_BASELINE_FAMILY_REGISTRY.filter(family => family.default).map(family => family.id));
 const personOnlyFamily = (id: string) => OWNER_BASELINE_FAMILY_REGISTRY.some(family => family.id === id && family.personOnly);
@@ -35,14 +35,14 @@ const personOnlyFamily = (id: string) => OWNER_BASELINE_FAMILY_REGISTRY.some(fam
 export function personOnlyBaselineCells(): readonly OwnerBaselineCell[] {
   return OWNER_BASELINE_FAMILY_REGISTRY.flatMap(family => 'cells' in family ? family.cells.map(cell => ({ family: family.id, kind: cell.kind, actions: [...cell.actions], ids: 'scope' as const, scope: 'selected' as const })) : []);
 }
-export const OWNER_BASELINE_PREFIX = 'owner-baseline-';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const OWNER_BASELINE_PREFIX = 'owner-baseline-';
 type Person = { readonly issuer: string; readonly subject: string };
 /** `ids: 'scope'` names the selected scope itself as the resource id (a Hub source set is the scope's). */
 export interface OwnerBaselineCell { readonly family: OwnerBaselineFamily; readonly kind: string; readonly actions: readonly string[];
   readonly ids: 'all' | 'scope' | readonly string[]; readonly scope: 'selected' | 'installation' }
 export interface OwnerBaselineState { readonly id: string; readonly kind: string; readonly actions: readonly string[]; readonly ids: 'all' | readonly string[];
   readonly scopes: 'all' | readonly string[]; readonly before: string; readonly after: string }
-export interface OwnerBaselinePlan {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface OwnerBaselinePlan {
   readonly status: 'plan' | 'current' | 'unavailable' | 'refused'; readonly reason?: 'not-first-run' | 'not-this-person' | 'person-not-named' | 'invalid' | 'rule-conflict' | 'policy-refused';
   readonly basis: 'first-run' | 'named-person' | null; readonly people: readonly Person[]; readonly cells: readonly OwnerBaselineState[];
   readonly added: readonly PolicyGrant[]; readonly removed: readonly string[]; readonly conflicts: readonly string[]; readonly remaining: number; readonly policy: unknown;

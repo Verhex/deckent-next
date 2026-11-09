@@ -10,7 +10,7 @@ import { projectRunView } from './view.js';
 
 export const runReservationCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema }).strict();
 export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
-export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
   loadRunResourceCapacity?(run: RunSnapshot): Promise<ResourceCapacityInput>;
   quotaHeldTasks?(run: RunSnapshot, now: number): Promise<readonly string[]>;
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;

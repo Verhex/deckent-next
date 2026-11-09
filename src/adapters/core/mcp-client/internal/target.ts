@@ -67,7 +67,7 @@ function contentText(item: Record<string, unknown>): string {
   return `[${String(type)} content not shown]`;
 }
 /** Added to a failed answer of a server whose sandbox shows it the project read-only (C5): why a write there fails, and the owner's way out. */
-export const MCP_PROJECT_READ_ONLY_NOTE = `[deckent] this server runs in a sandbox where the project is read-only (.git included): a write to the project fails there by design; ${MCP_HOST_REALM_HINT}, which the owner sets and its card shows — change project files with the edit tools instead.`;
+const MCP_PROJECT_READ_ONLY_NOTE = `[deckent] this server runs in a sandbox where the project is read-only (.git included): a write to the project fails there by design; ${MCP_HOST_REALM_HINT}, which the owner sets and its card shows — change project files with the edit tools instead.`;
 /**
  * The model's result of one MCP call: what happened, and the answer's text cut at `maxBytes` and passed through the secret-shape filter.
  * `server.projectReadOnly` (the typed view the server was started with, never the answer's text): a failed answer carries

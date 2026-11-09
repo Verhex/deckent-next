@@ -11,7 +11,7 @@ type Launch = { schemaVersion: 1; executable: string; args: string[]; instructio
   limits: { requestMaxBytes: number; controlLineBytes: number; connections: number; idleMs: number; helperTimeoutMs: number; drainMs: number; controlConnectMs: number; controlPollMs: number } };
 
 /** Socket inode of the client end of one loopback TCP connection (container network namespace). */
-export function loopbackInode(tables: readonly string[], clientPort: number, serverPort: number): string | null {
+function loopbackInode(tables: readonly string[], clientPort: number, serverPort: number): string | null {
   const port = (address: string | undefined) => parseInt(address?.split(':')[1] ?? '', 16);
   for (const table of tables) for (const line of table.split('\n').slice(1)) {
     const cols = line.trim().split(/\s+/u);

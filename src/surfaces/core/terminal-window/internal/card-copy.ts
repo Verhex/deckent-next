@@ -9,7 +9,7 @@ import { sliceCells } from './selection.js';
  * and Ctrl+O switches focus, so the copy key is the one control key no card, entry or the composer reads. It is never an answer, a witness or
  * an arming event. The write is the host's one clipboard writer (`terminal-host` `clipboardRequest`: byte-capped, TTY-only, tmux-wrapped).
  */
-export type CardCopyResult = Readonly<{ ok: true; bytes: number }> | Readonly<{ ok: false; reason: 'empty' | 'too-large' | 'unavailable'; bytes: number }>;
+type CardCopyResult = Readonly<{ ok: true; bytes: number }> | Readonly<{ ok: false; reason: 'empty' | 'too-large' | 'unavailable'; bytes: number }>;
 /** Catalog `tuicopy.card.*`: `{count}` characters sent, `{bytes}`/`{max}` of a refused request. */
 export type CardCopyLabels = Readonly<{ hint: string; sent: string; tooLarge: string; unavailable: string }>;
 export type CardCopy = Readonly<{ write: (text: string) => CardCopyResult; labels: CardCopyLabels; maxBytes: number }>;
@@ -44,10 +44,10 @@ export function cardCopyText(title: readonly Span[], body: readonly Readonly<{ l
 }
 
 /** A point of a mouse selection inside a card's body: display row (of all its rows, scrolled-out ones included) and display cell. */
-export type CardPoint = Readonly<{ row: number; cell: number }>;
+type CardPoint = Readonly<{ row: number; cell: number }>;
 export type CardSelection = Readonly<{ anchor: CardPoint; focus: CardPoint; dragging: boolean }>;
 /** The selection in reading order. */
-export const orderedPoints = (a: CardPoint, b: CardPoint): readonly [CardPoint, CardPoint] => a.row < b.row || a.row === b.row && a.cell <= b.cell ? [a, b] : [b, a];
+const orderedPoints = (a: CardPoint, b: CardPoint): readonly [CardPoint, CardPoint] => a.row < b.row || a.row === b.row && a.cell <= b.cell ? [a, b] : [b, a];
 /** The cells of display row `row` a selection covers (inclusive), or null. */
 export function cardRowRange(selection: CardSelection, row: number): Readonly<{ start: number; end: number }> | null {
   const [from, to] = orderedPoints(selection.anchor, selection.focus);

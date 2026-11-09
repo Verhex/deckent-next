@@ -4,7 +4,7 @@ import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { DISPATCH_PREPARATION_PHASES, NERVOUS_ACTIVITY_STATES } from '#domain/core/audit/index.js';
 import { RecoveryError, recoveryEffectGateSchema, type RecoveryErrorCode } from './gate.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-/** S6R-DESIGN §12: a recovery case moves only forward — `open` (reserved for S6R-5's model call in flight), `gated` (gate computed), `decided`
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). S6R-DESIGN §12: a recovery case moves only forward — `open` (reserved for S6R-5's model call in flight), `gated` (gate computed), `decided`
  * (reserved: S6R-5's sealed model decision before its apply), then one final state, `applied` or `escalated`. */
 export const RECOVERY_CASE_STATES = Object.freeze(['open', 'gated', 'decided', 'applied', 'escalated'] as const);
 /** S6R-DESIGN §6 output enum (shared with S6R-5's chooser). */
@@ -29,7 +29,7 @@ const ESCALATIONS: Readonly<Partial<Record<RecoveryErrorCode, RecoveryEscalation
 /** The escalation a typed refusal means (null: a caller error, which writes nothing). */
 export function recoveryEscalationCode(error: unknown): RecoveryEscalationCode | null { return error instanceof RecoveryError ? ESCALATIONS[error.code] ?? null : null; }
 
-export const recoveryDecisionSchema = z.discriminatedUnion('action', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const recoveryDecisionSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('continue-new-attempt'), decisionId: digest, causeClass: z.enum(RECOVERY_CAUSE_CLASSES), signature: digest, standingRef: identitySchema,
     /** S6R-5: the registry note code the decision passes to the next Attempt (absent: none). */
     note: recoveryNoteCodeSchema.optional() }),

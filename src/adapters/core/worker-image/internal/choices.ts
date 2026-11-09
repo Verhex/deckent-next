@@ -9,7 +9,7 @@ import { dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.
 import type { WorkerImageBuildRunner } from './build.js';
 import { readWorkerImageSources, privateDirectory } from './build.js';
 import limits from './limits.json' with { type: 'json' };
-export type WorkerImageChoice = Readonly<{ imageId: string; tag: string; ready: boolean }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerImageChoice = Readonly<{ imageId: string; tag: string; ready: boolean }>;
 const lineageSchema = z.object({ recipes: z.array(z.object({ sha256: z.string(), version: z.string(), providers: z.array(z.string()) })) });
 const imageSchema = z.object({ Id: z.string().regex(/^sha256:[a-f0-9]{64}$/u), Config: z.object({ Labels: z.record(z.string(), z.string()).nullable() }) });
 /** Daemon-pinned, bounded choice discovery. A ready label requires shipped lineage and a fresh no-network flags probe. */

@@ -2,7 +2,7 @@ import { counterSchema, persistedInteger, TargetQueueError, targetQueueRecordSch
 import { z } from 'zod';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-/** `waiting-base`: no re-attempt Run yet; the service starts it once the live target base moved past the original output (a conflict against
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `waiting-base`: no re-attempt Run yet; the service starts it once the live target base moved past the original output (a conflict against
  * an earlier candidate of the same batch waits for that candidate's adoption); `awaiting-approval`: policy asks a human to approve the
  * re-attempt Run (its normal Run-create card); `running`: the re-attempt Run works on the current base; `enqueued`: its ticket waits in the
  * queue for the same two cards; `refused`/`failed`/`exhausted`: final, a human decides. */
@@ -22,7 +22,7 @@ export const targetQueueViewSchema = z.strictObject({ schemaVersion: z.literal(1
   /** D2b: submitted by the service for this human under the Run's delivery intent; `requeues` used so far of the bound. */
   delegation: z.strictObject({ grantedBy: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }), runId: identitySchema,
     requeues: counterSchema }).optional() }).readonly();
-export type QueueNextAction = 'wait-service' | 'confirm-batch' | 'watch-reconciliation' | 'new-attempt' | 'select-target' | 'prepare-current' | 'inspect-receipt' | 'approve-run';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type QueueNextAction = 'wait-service' | 'confirm-batch' | 'watch-reconciliation' | 'new-attempt' | 'select-target' | 'prepare-current' | 'inspect-receipt' | 'approve-run';
 /** The authorized own-ticket projection never leaks physical ordinals, other scopes or an installation-wide backlog count. */
 export function projectTargetQueue(input: TargetQueueRecord, descriptor: TargetDisplay, observedAt: number, position: number | null = null, live?: QueueReattemptView, requeueMax?: number) {
   const record = targetQueueRecordSchema.parse(input), display = targetDisplaySchema.parse(descriptor);

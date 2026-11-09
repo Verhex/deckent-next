@@ -2,12 +2,12 @@ import { persistedString, persistedNumber, persistedInteger, persistedUrl, count
 import { z } from 'zod';
 
 
-export const INFERENCE_SERVING_SCHEMA_VERSION = 1;
-export const inferenceTopologySchema = z.enum(['single', 'tp', 'dp']);
-export const inferenceBackendSchema = z.enum(['vllm', 'sglang', 'openai-compatible']);
-export const inferenceKvDtypeSchema = z.enum(['bf16', 'fp8']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const INFERENCE_SERVING_SCHEMA_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const inferenceTopologySchema = z.enum(['single', 'tp', 'dp']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const inferenceBackendSchema = z.enum(['vllm', 'sglang', 'openai-compatible']);
+const inferenceKvDtypeSchema = z.enum(['bf16', 'fp8']);
 
-export const inferenceServingProfileSchema = z.strictObject({
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const inferenceServingProfileSchema = z.strictObject({
   schemaVersion: z.literal(INFERENCE_SERVING_SCHEMA_VERSION),
   id: identitySchema,
   scopeId: identitySchema,

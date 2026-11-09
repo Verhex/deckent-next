@@ -28,7 +28,7 @@ export function providerModelTree(kind: ProviderPanelKind, labels: ProviderPanel
 
 const OTHER = ':other';
 /** The address list of a kind (owner 2026-10-08, D3): the known addresses, then "a new address…" as the last row (the narrow typed exception). */
-export function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPanelLabels): PickerTree {
+function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPanelLabels): PickerTree {
   return { title: `${kind.label} · ${labels.endpointTitle}`, items: [...kind.endpointChoices.map(choice => ({ id: choice.id, label: choice.label, detail: choice.url })),
     { id: OTHER, label: labels.endpointOther }] };
 }

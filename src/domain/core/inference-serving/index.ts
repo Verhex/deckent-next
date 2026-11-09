@@ -1,9 +1,9 @@
 export {
-  INFERENCE_SERVING_SCHEMA_VERSION,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ INFERENCE_SERVING_SCHEMA_VERSION,
   inferenceServingConfigSchema,
-  inferenceServingProfileSchema,
-  inferenceBackendSchema,
-  inferenceTopologySchema,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ inferenceServingProfileSchema,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ inferenceBackendSchema,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ inferenceTopologySchema,
   parseInferenceServingConfig,
   resolveActiveInferenceProfile,
   type InferenceServingConfig,

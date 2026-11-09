@@ -15,7 +15,7 @@ export const stageFail = (reasonCode: ShellReasonCode, detail?: string): StageVe
  * Option grammars of the allowlisted programs, `find` and `git` (legacy @a8b67e2a1, kept as is). Argv semantics: any word whose
  * resolved text starts with `-` is an option, whatever its quoting; the word `--` ends options.
  */
-export interface WalkResult {
+interface WalkResult {
   readonly verdict: StageVerdict | null;
   readonly positionals: ShellWord[];
   readonly scriptSeen: boolean;

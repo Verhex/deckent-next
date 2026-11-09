@@ -2,7 +2,7 @@ import { constants, crc32, inflateRawSync } from 'node:zlib';
 import BINARIES from './dependency-binaries.json' with { type: 'json' };
 
 /** Reads `length` bytes of the open file at `offset`; fewer bytes than asked (inside the file) means it changed. */
-export type EmbeddedArchiveRead = (offset: number, length: number) => Promise<Buffer>;
+type EmbeddedArchiveRead = (offset: number, length: number) => Promise<Buffer>;
 const ARCHIVES = BINARIES.embeddedArchives, methods = new Set(ARCHIVES.zipMethods);
 const flush = { finishFlush: constants.Z_SYNC_FLUSH, info: true } as const;
 /** A raw deflate prefix: output length and whether the stream ended inside the input; null when it errors. */

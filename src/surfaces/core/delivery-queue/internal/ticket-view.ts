@@ -5,7 +5,7 @@ import { ticketSummaryBlock, type AutonomyShadowView } from '#surfaces/core/deli
 const word = (key: string, locale: Locale) => messageText(key, locale) ?? key;
 const cell = (value: string) => redactForRecord(value).replace(/[\p{Cc}\p{Cf}]/gu, ' ');
 /** TESLIM-KARTI-OZET: a ticket's summary (undefined = not read) and, on inspect only, the rule-off shadow line. */
-export type TicketExtras = Readonly<{ summary?: DeliverySummary | null; shadow?: AutonomyShadowView | null }>;
+type TicketExtras = Readonly<{ summary?: DeliverySummary | null; shadow?: AutonomyShadowView | null }>;
 const verificationWord = (phase: NonNullable<TargetQueueView['verification']>['phase'], locale: Locale) => ({ accepted: () => t('queue.cli.ticket.verification.accepted', {}, locale),
   failed: () => t('queue.cli.ticket.verification.failed', {}, locale), pending: () => t('queue.cli.ticket.verification.pending', {}, locale),
   cancelled: () => t('queue.cli.ticket.verification.cancelled', {}, locale), unknown: () => t('queue.cli.ticket.verification.unknown', {}, locale) })[phase]();

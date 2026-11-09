@@ -9,7 +9,7 @@ import { terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
-export type ProviderSecretStep = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
+type ProviderSecretStep = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
 export type ProviderCustodyResult = ProviderSecretStep & Readonly<{ backend: string | null }>;
 export type ProviderSecretResult = Readonly<{ name: string; backend: string | null; custody: ProviderSecretStep; key: ProviderSecretStep; grant: ProviderSecretStep }>;
 const witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() };

@@ -20,7 +20,7 @@ export const SYSTEM_FETCH_TRANSPORT: HttpFetchTransport = Object.freeze({
   connect(address: string) { return netConnect({ host: address, port: 443 }); },
 });
 
-export const FETCH_USER_AGENT = 'Deckent-Fetch/1';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const FETCH_USER_AGENT = 'Deckent-Fetch/1';
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 /**
  * `response`: the final response was read (any HTTP status). `refused`: nothing was sent (bad URL, name not resolved, a non-public

@@ -4,7 +4,7 @@ import { ErrorRegistry } from '#platform/index.js';
 import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import type { ProjectInstructionView } from './contract.js';
 
-export interface WorkerInstructionTrustRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkerInstructionTrustRequest {
   /** The verified caller (the CLI's own OS identity at a witnessed terminal), never an input field. */
   readonly principal: VerifiedPrincipal;
   readonly scopeId: string;
@@ -26,7 +26,7 @@ export interface WorkerInstructionBinding {
   readonly source: string; readonly file: string; readonly ref: string | null; readonly path: string; readonly commit: string | null; readonly blobOid: string | null;
   readonly fileDev: number | null; readonly fileIno: number | null; readonly digest: string;
 }
-/** The reader's canonical root and its identity, pinned when the reader opened. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The reader's canonical root and its identity, pinned when the reader opened. */
 export interface WorkerInstructionRoot { readonly root: string; readonly identity: Readonly<{ dev: number; ino: number }> }
 export function workerInstructionBinding(place: WorkerInstructionPlace, located: WorkerInstructionRoot, view: ProjectInstructionView): WorkerInstructionBinding | null {
   if (place.file === null || (view.status !== 'ready' && view.status !== 'trust-required')) return null;
@@ -41,7 +41,7 @@ export function workerInstructionBindingChange(shown: WorkerInstructionBinding, 
   if (current === null || BINDING_PLACE.some(key => shown[key] !== current[key])) return 'place';
   return shown.digest === current.digest ? null : 'content';
 }
-export interface WorkerInstructionTrustPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkerInstructionTrustPorts {
   /** The trusted policy snapshot (policy + bindings) of the scope. */
   readonly policy: unknown;
   /** Seals one `authority-decision` in the project's ledger; throws when it cannot (nothing is trusted then). */
@@ -76,7 +76,7 @@ export async function decideWorkerInstructionTrust(request: WorkerInstructionTru
   return record.event.eventId;
 }
 
-/** Where and which file a worker reads, resolved once from configuration (admission, status and trust use the same answer). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where and which file a worker reads, resolved once from configuration (admission, status and trust use the same answer). */
 export interface WorkerInstructionPlace {
   /** The configured work target id (null: the project root) and the folder workers read the file from. */
   readonly target: string | null; readonly root: string;

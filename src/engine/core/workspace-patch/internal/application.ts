@@ -9,7 +9,7 @@ import type { AttemptCustodyReleaseApplication } from './custody.js';
 export interface RunBoundTaskStore { loadBoundTask(identity: AttemptIdentity): Promise<TaskDefinition>;
   /** G1: the bound Run, read for its task's frozen execution profile (the instruction-surface set; immutable since admission). */
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null> }
-export interface WorkspacePatchStore extends RunBoundDispatchStore { retainDispatchPatch(claim: DispatchClaim, receipt: ArtifactReceipt): Promise<DispatchRecord> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspacePatchStore extends RunBoundDispatchStore { retainDispatchPatch(claim: DispatchClaim, receipt: ArtifactReceipt): Promise<DispatchRecord> }
 export interface WorkspacePatchSource {
   /** Check exact stopped worker custody both before and after bounded snapshot reads. */
   capture(record: DispatchRecord): Promise<WorkspacePatch>;

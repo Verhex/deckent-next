@@ -1,5 +1,5 @@
 import type { TaskStallPolicy } from '#domain/index.js';
-export type InactivityVerdict = 'active' | 'warn' | 'stop';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InactivityVerdict = 'active' | 'warn' | 'stop';
 type Policy = Pick<TaskStallPolicy, 'warnAfterMs' | 'stopAfterMs'>;
 /**
  * R3 (owner D4a), pure: silence counts from host-observed facts only: the dispatch start, the host receipt time of the last worker event and

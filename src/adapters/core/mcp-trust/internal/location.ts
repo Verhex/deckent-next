@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { ErrorRegistry, PRIVATE_PERMISSION_MASK, relativeInside } from '#platform/index.js';
-/** The directory of the Deckent global root that holds one trust directory per project (SEC-2, F29). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The directory of the Deckent global root that holds one trust directory per project (SEC-2, F29). */
 export const MCP_PROJECT_TRUST_DIR = 'mcp-project-trust';
 const unavailable = (reason: string) => ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason } });
 const exists = (error: unknown) => { if ((error as { code?: unknown })?.code !== 'EEXIST') throw error; };

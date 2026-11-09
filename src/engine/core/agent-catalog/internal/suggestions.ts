@@ -10,16 +10,16 @@ import { z } from 'zod';
  * and bytes (N10) and any changed input is a new id. Statistics are associations and acceptance rates; their labels travel on every view.
  */
 const digest = z.string().regex(/^[a-f0-9]{64}$/), positive = counterSchema.positive();
-export const CATALOG_SUGGESTION_KINDS = ['promote-agent', 'redesign-agent', 'revise-agent', 'propose-agent', 'propose-skill'] as const;
-export const CATALOG_SUGGESTION_STATES = ['open', 'decided', 'dismissed', 'superseded'] as const;
-/** The aggregator modes that write a suggestion (`catalogEvolution.mode` off writes nothing); `shadow` rows are records only, never a card. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CATALOG_SUGGESTION_KINDS = ['promote-agent', 'redesign-agent', 'revise-agent', 'propose-agent', 'propose-skill'] as const;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CATALOG_SUGGESTION_STATES = ['open', 'decided', 'dismissed', 'superseded'] as const;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The aggregator modes that write a suggestion (`catalogEvolution.mode` off writes nothing); `shadow` rows are records only, never a card. */
 export const CATALOG_SUGGESTION_MODES = Object.freeze(['shadow', 'on'] as const);
-export const catalogSuggestionKeySchema = z.discriminatedUnion('kind', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const catalogSuggestionKeySchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('agent'), agentId: catalogIdSchema, revision: positive, workClass: identitySchema }),
   z.strictObject({ kind: z.literal('work-class'), workClass: identitySchema }),
   /** A lesson audience (S4B §4.3): the WorkClass family and work target; `null` family = a person's scope-wide entries. */
   z.strictObject({ kind: z.literal('audience'), workClassFamily: identitySchema.nullable(), workTargetId: identitySchema.nullable() })]);
-export const catalogLessonRefSchema = z.strictObject({ entryId: identitySchema, revision: positive, contentDigest: digest });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const catalogLessonRefSchema = z.strictObject({ entryId: identitySchema, revision: positive, contentDigest: digest });
 const stats = z.record(z.string(), z.unknown().optional());
 export const catalogSuggestionSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, suggestionId: digest, kind: z.enum(CATALOG_SUGGESTION_KINDS),
   mode: z.enum(CATALOG_SUGGESTION_MODES), key: catalogSuggestionKeySchema, keyDigest: digest, rule: z.strictObject({ id: identitySchema, version: positive, status: z.enum(['provisional', 'calibrated']) }),

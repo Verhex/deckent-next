@@ -6,7 +6,7 @@ import type { KernelCommandContext } from './context.js';
 type DoctorConfig = Awaited<ReturnType<typeof loadConfig>>;
 /** One fix the person may apply now: what the card says and the existing product operation that applies it. */
 type Offer = Readonly<{ id: string; title: string; body: readonly string[]; apply: () => Promise<string> }>;
-export interface DoctorFixInput {
+interface DoctorFixInput {
   readonly checks: () => readonly DoctorCheck[]; readonly locale: Locale; readonly root: string; readonly options: ConfigLoadOptions;
   readonly config: DoctorConfig; readonly context: KernelCommandContext; readonly remeasure: () => Promise<void>;
 }
@@ -32,7 +32,7 @@ function bind(port: string, input: DoctorFixInput): Readonly<{ title: string; ef
 }
 
 /** The fixes the current rows allow: registry order, never a hard-floor item, only with a bound operation, at most once per call. */
-export function doctorFixOffers(input: DoctorFixInput, offered: ReadonlySet<string>): Offer[] {
+function doctorFixOffers(input: DoctorFixInput, offered: ReadonlySet<string>): Offer[] {
   const checks = input.checks(), offers: Offer[] = [];
   for (const fix of DOCTOR_FIXES) {
     if (fix.hardFloor || offered.has(fix.id)) continue;

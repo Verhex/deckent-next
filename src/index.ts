@@ -1,27 +1,27 @@
 // Platform part of the SDK: an explicit list (DEPS-TYPES, owner 2026-09-29, DEPS-SCHEMA C2-b). Live zod schema objects (CORE_SCHEMA, the storage and
 // execution settings, bootstrapJournalSchema) stay Core-internal; the data types derived from them are exported. Inventory: tests/contracts/composition/sdk-public-exports.json.
-export { PACKAGE_NAME, PACKAGE_VERSION, resolveLocale, t, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION,
+export { PACKAGE_NAME, PACKAGE_VERSION, resolveLocale, t, DECKENT_DIR, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION,
   CONFIG_CONTRACT_SINCE, OUTPUT_MODES, DECKENT_VERSION, NODE_ENGINE_RANGE, SUPPORTED_LANGUAGES, DeckentError, ErrorRegistry, ERROR_CODES,
   EXIT_CODES, exitCodeFor,
   lintErrorRegistry, assertErrorRegistry, redactSensitive, formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal, ENVIRONMENT_KEYS,
   envValue, isMainModule, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath,
   resolveProductPaths, detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile,
   detectEnvironment, readBuildIdentity, validatePath, validateExistingPath, validateTaskId, isStandardSchemaV1, validateStandardSchemaSync,
-  deepMerge, readJsonFile, writeJsonAtomic, formatDuration, estimateRemaining, registerConfigSection, createDefaultConfig, ConfigValidationError,
+  deepMerge, readJsonFile, writeJsonAtomic, formatDuration, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ estimateRemaining, registerConfigSection, createDefaultConfig, ConfigValidationError,
   validateConfig, versionedConfig, resolveConfigSecrets, configDisplayView, loadConfig, loadGlobalConfig, clearConfigCache, saveGlobalConfig,
   writeConfig, withConfigWriteLock, pruneConfigBackups, healCorruptProjectConfig, getConfigMetadata, getConfigValue, resolveLocalOsActorId,
-  resolveLocalOsPrincipal, principalToActor, assessActorAssurance, assertActorAssurance, colorTier, shouldUseColor, stripAnsi, formatValue,
-  formatTable, formatStatus, readMemoryKnowledge, emit, createEmitter, LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry,
+  resolveLocalOsPrincipal, principalToActor, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ assessActorAssurance, assertActorAssurance, colorTier, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ shouldUseColor, stripAnsi, formatValue,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ formatTable, formatStatus, readMemoryKnowledge, emit, createEmitter, LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry,
   getConfigFieldDefault, resolveProductLayout, productResourcePath, LayoutError, inspectProductLayout, inspectProductPaths, prepareProductFile,
   prepareProductCompanionPath, prepareProductSocket, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError,
-  SystemTrustedClock, MAX_WALL_SKEW_MS, sha256, constantTimeDigestEqual, createHmacIntegrity, GLOB_WILDCARD, globLiteralHead, hasGlobWildcard,
-  BOOTSTRAP_JOURNAL_MAX_BYTES, BootstrapStateError, assertBootstrapUnchanged, assertBootstrapUsable, encodeBootstrapJournal, hashBootstrapJournal,
+  SystemTrustedClock, MAX_WALL_SKEW_MS, sha256, constantTimeDigestEqual, createHmacIntegrity, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GLOB_WILDCARD, globLiteralHead, hasGlobWildcard,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BOOTSTRAP_JOURNAL_MAX_BYTES, BootstrapStateError, assertBootstrapUnchanged, assertBootstrapUsable, encodeBootstrapJournal, hashBootstrapJournal,
   observeBootstrapState } from '#platform/index.js';
-export type { Locale, MessageKey, OutputMode, Params, ErrorCategory, ExitCode, CrashArtifactV1, Environment, GlobalScopePlatform, GlobalScopePaths,
-  BuildIdentity, StandardTypedV1, StandardSchemaV1, StandardJSONSchemaV1, StandardSyncValidation, DeckentConfig, CoreConfig, ConfigSectionOptions,
-  ConfigWarning, ResolvedConfig, ConfigLoadOptions, PrincipalEvidence, ActorContext, OutputSink, EmitOptions, MessageFamily, MessageRegistry,
-  ProductLayout, ProductLayoutInput, ProductResource, SecretResolver, SecretResolution, ProductPathInspection, TrustedClock, ClockSample,
-  IntegrityAuthority, BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, BootstrapStateErrorCode } from '#platform/index.js';
+export type { Locale, MessageKey, OutputMode, Params, ErrorCategory, ExitCode, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CrashArtifactV1, Environment, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GlobalScopePlatform, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GlobalScopePaths,
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BuildIdentity, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ StandardTypedV1, StandardSchemaV1, StandardJSONSchemaV1, StandardSyncValidation, DeckentConfig, CoreConfig, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ConfigSectionOptions,
+  ConfigWarning, ResolvedConfig, ConfigLoadOptions, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ PrincipalEvidence, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ActorContext, OutputSink, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EmitOptions, MessageFamily, MessageRegistry,
+  ProductLayout, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProductLayoutInput, ProductResource, SecretResolver, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SecretResolution, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProductPathInspection, TrustedClock, ClockSample,
+  IntegrityAuthority, BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BootstrapStateErrorCode } from '#platform/index.js';
 export { prepareNativeCodingProfile } from '#composition/index.js';
 
 export { verifyConfiguredAudit as verifyAudit } from '#composition/index.js';
@@ -47,7 +47,7 @@ export type { RunReservationCommand } from '#engine/index.js';
 export { recoverConfiguredCancellations as recoverCancellations } from '#composition/index.js';
 export type { CancellationRecoveryCommand } from '#engine/index.js';
 export { runConfiguredCancellationRuntime } from '#composition/index.js';
-export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/index.js';
 
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/index.js';
 
@@ -56,7 +56,7 @@ export type { ShutdownCommand, RuntimeServiceDescriptor, ServiceShutdownAdmissio
 export { previewSuppliedInstallation as previewInstallation } from '#composition/index.js';
 export { inspectSuppliedInstallation as inspectInstallation } from '#composition/index.js';
 export { applySuppliedInstallation as applyInstallation, resumeInstallation } from '#composition/index.js';
-export type { InstallationApplyChoices } from '#composition/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationApplyChoices } from '#composition/index.js';
 export { previewConfiguredUninstall as previewUninstall, applyConfiguredUninstall as applyUninstall } from '#composition/index.js';
 export type { UninstallPlan, UninstallResult, UninstallInteraction } from '#engine/index.js';
 export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from '#engine/index.js';
@@ -81,7 +81,7 @@ export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecor
 export { applyConfiguredPoolHold as applyPoolHold, inspectConfiguredPoolHold as inspectPoolHold } from '#composition/index.js';
 export { applyConfiguredPoolCapacity as applyPoolCapacity, inspectConfiguredPoolCapacity as inspectPoolCapacity } from '#composition/index.js';
 export type { PoolCapacity, PoolCapacityCommand, PoolCapacityReceipt, PoolCapacityView, PoolWait, PoolDrift } from '#engine/index.js';
-export type { PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldRecord, PoolHoldView, PoolOccupancy } from '#engine/index.js';
+export type { PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldRecord, PoolHoldView, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ PoolOccupancy } from '#engine/index.js';
 export type { ModelActivationResult, ModelActivationInspection } from '#engine/index.js';
 export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as inspectModelInvocation, purgeRuntimeModelInvocationContent as purgeModelInvocationContent,
   cancelRuntimeModelInvocation as cancelModelInvocation } from '#composition/index.js';
@@ -103,9 +103,9 @@ export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, ch
 export { inspectConfiguredDecisionDelegations } from '#composition/index.js';
 export type { McpCapabilityGroup, McpCapabilityRequest, McpCapabilityView, McpCapabilityPreview } from '#domain/index.js';
 export { inspectConfiguredToolchainCurrency as inspectToolchainCurrency, updateConfiguredToolchains as updateToolchains } from '#composition/index.js';
-export type { ToolchainUpdateResult } from '#composition/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolchainUpdateResult } from '#composition/index.js';
 export type { ToolchainUpdatePlan, ProfileRevisionProposal } from '#engine/index.js';
-export type { ToolchainCurrencyReport, ToolchainCurrencyEntry, ToolchainStatus } from '#engine/index.js';
+export type { ToolchainCurrencyReport, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolchainCurrencyEntry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolchainStatus } from '#engine/index.js';
 export type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
 
 export { configuredApproval } from '#composition/index.js';
@@ -124,8 +124,8 @@ export type { BackupCommand, BackupResult } from '#engine/index.js';
 export { proposeConfiguredRun as proposeRun, inspectConfiguredRunProposal as inspectRunProposal } from '#composition/index.js';
 export type { RunProposal } from '#domain/index.js';
 export type { RunProposalQuery, RunProposalResult, RunProposalRecord, RunIntentRecord, RunIntentResult, RunPlanningResult, SetupIntentFact } from '#engine/index.js';
-export { startConfiguredRunIntent as startRunIntent, transitionConfiguredRunIntent as transitionRunIntent, planConfiguredRun as planRun } from '#composition/index.js';
-export type { BrainPlanCommand, BrainContribution } from '#domain/index.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ startConfiguredRunIntent as startRunIntent, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ transitionConfiguredRunIntent as transitionRunIntent, planConfiguredRun as planRun } from '#composition/index.js';
+export type { BrainPlanCommand, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BrainContribution } from '#domain/index.js';
 
 export { releaseConfiguredQuota as releaseQuota } from '#composition/index.js';
 export type { QuotaReleaseCommand, QuotaReleaseReceipt } from '#engine/index.js';

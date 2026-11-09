@@ -12,7 +12,7 @@ import type { WorklinePermissionModePort } from './workline-mode.js';
  * (the session pin is the workline's own) and the `/provider` port. */
 export type WorklinePanels = Readonly<{ ports: Omit<PanelPorts, 'mode' | 'model' | 'theme'> & { readonly model?: ModelPanelSource; readonly theme?: ThemePanelPort | ((control: TerminalHostContext['theme']) => ThemePanelPort) }; labels: PanelLabels }>;
 /** T4 MODEL-SWITCH: the session's pinned model, read when a turn starts (the next turn carries it). */
-export type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference | null; pin: (choice: ModelPanelChoice, fresh?: boolean) => void;
+type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference | null; pin: (choice: ModelPanelChoice, fresh?: boolean) => void;
   /** CACHE-SLICE1: the conversation's measured context at or above the registry threshold, else null. */
   largeContext?: () => number | null; reasoning?: () => 'off' | undefined }>;
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;

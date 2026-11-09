@@ -5,7 +5,7 @@ import { assertSafeKeys, type JsonRecord } from '#platform/core/utils/index.js';
 import { ConfigValidationError, type ConfigWarning } from './issues.js';
 
 /** Versioned compatibility law, never selectable product policy. */
-export const RETIRED_CONFIG_FIELDS = Object.freeze(['mode', 'spawn_backend', 'auth_mode', 'providers', 'live_trace'] as const);
+const RETIRED_CONFIG_FIELDS = Object.freeze(['mode', 'spawn_backend', 'auth_mode', 'providers', 'live_trace'] as const);
 export function assertNoRetiredConfigFields(input: JsonRecord, locale: Locale = resolveLocale()): void {
   const issues = RETIRED_CONFIG_FIELDS.filter(key => Object.hasOwn(input, key)).map(path => ({ path, reason: 'CONFIG_FIELD_RETIRED' }));
   if (issues.length) throw new ConfigValidationError(issues, locale);

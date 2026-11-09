@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema, immutableJsonObjectSchema, sanitizeIssues } from '#domain/core/primitives/index.js';
 import { parseProviderCatalog, PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, type ProviderCatalog } from './catalog.js';
 
-export const MODEL_BINDING_ENCODING_VERSION = 1;
-export const MODEL_BINDING_PREFIX = 'deckent.model-binding.v1\n';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_BINDING_ENCODING_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_BINDING_PREFIX = 'deckent.model-binding.v1\n';
 
 export const modelReferenceSchema = z.strictObject({
   providerId: identitySchema,

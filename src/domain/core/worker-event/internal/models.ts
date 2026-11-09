@@ -14,8 +14,8 @@ const modelText = persistedString(z.string().min(1).max(256));
 /** The frozen pin may carry the catalog's session-start evidence (`workerModelPinEvidenceShape`, owner K1/K2 2026-10-22). */
 export const workerModelPinSchema = z.strictObject({ channelId: modelText, modelId: modelText,
   auxiliaryModelIds: z.array(modelText).max(16).readonly(), ...workerModelPinEvidenceShape }).readonly();
-export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
-export type WorkerProvider = z.infer<typeof workerProviderSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerProvider = z.infer<typeof workerProviderSchema>;
 const pinnedSubscriptionSchema = z.looseObject({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() });
 const parametersSchema = z.looseObject({ nativeSubscription: pinnedSubscriptionSchema });
 /** KG7 F3: the worker execution adapter ids (data, never a route) and the one native CLI worker wrapper shape; capabilities narrows `base` and `binding`. */

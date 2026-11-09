@@ -2,7 +2,7 @@ import { ErrorRegistry, terminalSafeText, type ConfigLoadOptions } from '#platfo
 import registry from './human.json' with { type: 'json' };
 
 /** What a typed identifier prefix matched among the known ids (git-like: an exact id always wins). */
-export type IdMatch = Readonly<{ kind: 'unique'; id: string }> | Readonly<{ kind: 'ambiguous'; candidates: readonly string[] }>
+type IdMatch = Readonly<{ kind: 'unique'; id: string }> | Readonly<{ kind: 'ambiguous'; candidates: readonly string[] }>
   | Readonly<{ kind: 'none' }> | Readonly<{ kind: 'short'; min: number }>;
 
 export function matchIdPrefix(prefix: string, ids: readonly string[], minPrefix: number = registry.shortId.minPrefix): IdMatch {

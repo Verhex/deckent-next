@@ -13,7 +13,7 @@ const schedulingInputSchema = z.strictObject({
   resourceCapacity: resourceCapacityInputSchema.optional(),
   snapshot: readinessInputSchema,
 });
-export class SchedulingError extends CodedError {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class SchedulingError extends CodedError {
   constructor(override readonly code: 'SCHEDULING_INPUT_INVALID' | 'SCHEDULING_ORDER_INVALID') { super(code); this.name = 'SchedulingError'; }
 }
 /** Deterministic planning only. A durable admission transaction must recheck this snapshot and

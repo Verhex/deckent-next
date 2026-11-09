@@ -6,7 +6,7 @@ import riskAsset from '../../../../../assets/delivery-summary/risk.json' with { 
 import { DELIVERY_SUMMARY_ACTIONS, DELIVERY_SUMMARY_LIMITS as LIMITS, deliveryChangeFactsSchema, deliverySummarySchema,
   type DeliveryChangeFacts, type DeliveryRiskFlag, type DeliverySummary, type DeliverySummaryOperation } from './contract.js';
 
-/** Risk classification data (versioned asset): which frozen work classes count as `small` and the adapter size buckets, smallest first. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Risk classification data (versioned asset): which frozen work classes count as `small` and the adapter size buckets, smallest first. */
 export const deliveryRiskDataSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, smallWorkClasses: z.array(identitySchema).readonly(),
   sizeBuckets: z.array(z.strictObject({ id: identitySchema, maxFiles: counterSchema, maxLines: counterSchema }).readonly()).min(1).readonly(),
   overflowBucket: identitySchema }).refine(value => new Set([...value.sizeBuckets.map(row => row.id), value.overflowBucket]).size === value.sizeBuckets.length + 1).readonly();

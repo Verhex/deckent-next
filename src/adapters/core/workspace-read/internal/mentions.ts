@@ -1,10 +1,10 @@
 import type { FileHandle } from 'node:fs/promises';
 import { createWorkspaceFileIndexCache, type RuntimeWorkspaceFileHost, type WorkspaceFileIndex } from '#engine/index.js';
-export { rankWorkspacePaths, workspacePathRank, type RuntimeWorkspaceFileHost, type WorkspaceFileIndex } from '#engine/index.js';
+export { rankWorkspacePaths, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ workspacePathRank, type RuntimeWorkspaceFileHost, type WorkspaceFileIndex } from '#engine/index.js';
 import { sliceUtf8 } from './bounded.js';
 import { createWorkspaceScope, walkWorkspaceFiles, type WorkspacePathError, type WorkspaceScope } from './scope.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Composer `@file` support (T-L5): a bounded file index over the same descriptor walk as the read tools (Core deny floor, ignored
  * directories, no symlink followed), a fuzzy ranking, and one file's content as a bounded UTF-8 prefix through `scope.open`
  * (no-follow per component, regular single-link files only). Nothing here decides authority; the service authorizes the caller.
@@ -22,7 +22,7 @@ export async function indexWorkspaceFiles(scope: WorkspaceScope, maxFiles = WORK
     incomplete: incomplete.depthLimited + incomplete.unreadable + incomplete.changed + incomplete.special > 0 });
 }
 
-export type WorkspaceAttachmentRead =
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkspaceAttachmentRead =
   | { readonly status: 'attached'; readonly path: string; readonly content: string; readonly bytes: number; readonly totalBytes: number; readonly truncated: boolean }
   | { readonly status: 'refused'; readonly path: string; readonly reason: WorkspacePathError | 'binary' | 'read-error' | 'cancelled' };
 const BINARY_PROBE_BYTES = 8192;

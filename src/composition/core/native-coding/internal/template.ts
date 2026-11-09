@@ -27,4 +27,4 @@ export function initializeNativeCodingRegistry(root: string, input: unknown, opt
 export function addNativeCodingProfile(root: string, input: unknown, options: ConfigLoadOptions = {}, dependencies: Dependencies = {}) {
   return addNativeProfile(input, ports(root, options, dependencies));
 }
-export type { CodingTemplateRequest, CodingTemplateResult } from '#engine/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CodingTemplateRequest, CodingTemplateResult } from '#engine/index.js';

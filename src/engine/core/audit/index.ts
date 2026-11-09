@@ -1,7 +1,7 @@
-export { AuditCheckpointCycleError, AuditCheckpointMonitor, auditServiceStatus } from './internal/service.js';
+export { AuditCheckpointCycleError, AuditCheckpointMonitor, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ auditServiceStatus } from './internal/service.js';
 export type { AuditServiceStatus } from './internal/service.js';
-export { AuditCheckpointApplication, auditScopeRecorded, auditCheckpointDigest, exportAuditCheckpoint, auditPolicyDigest, auditProducersDigest } from './internal/checkpoint.js';
-export type { AuditCheckpointContext, AuditCheckpointWriter, AuditRebaselineExpectation, AuditVerificationLimits } from './internal/checkpoint.js';
+export { AuditCheckpointApplication, auditScopeRecorded, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ auditCheckpointDigest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ exportAuditCheckpoint, auditPolicyDigest, auditProducersDigest } from './internal/checkpoint.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AuditCheckpointContext, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AuditCheckpointWriter, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AuditRebaselineExpectation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AuditVerificationLimits } from './internal/checkpoint.js';
 export type { AuditCheckpointStore } from './internal/checkpoint-store.js';
 export type { AuditStore } from './internal/store.js';
 export { sealAuditRecord, verifyAuditRecord } from './internal/integrity.js';
@@ -10,4 +10,4 @@ export { recordAuditSummary } from './internal/record-text.js';
 export { AuthorityDecisionRecords } from './internal/authority-decision.js';
 export { AuditFollow } from './internal/follow.js';
 export { PolicyTurnRecord } from './internal/policy-turn.js';
-export { runRequestRefusedEvent, listRefusedRunRequests, deliveryDismissalEvent, deliveryRollbackEvent, dismissedDeliveries, type RefusedRunRequest } from './internal/refused-request.js';
+export { runRequestRefusedEvent, listRefusedRunRequests, deliveryDismissalEvent, deliveryRollbackEvent, dismissedDeliveries, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type RefusedRunRequest } from './internal/refused-request.js';

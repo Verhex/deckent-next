@@ -23,19 +23,19 @@ import type { ReattemptEffects } from '#engine/core/workspace-patch/index.js';
 import { BEUSER_EVALUATOR, type BeuserEvidence } from '#capabilities/index.js';
 const RETAINED_OUTPUT_EVIDENCE = coreEvidenceTypeSchema.enum['retained-artifact'];
 /** R3 retry inputs: the installation backoff and the one adapter effect classifier (shared with the delivery re-attempt). */
-export interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
+interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
 
 export const taskEvaluationCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema });
 export type TaskEvaluationCommand = z.infer<typeof taskEvaluationCommandSchema>;
-export interface TaskEvaluationAuthorization {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TaskEvaluationAuthorization {
   authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void>;
 }
-export interface UnknownEvaluationPolicy {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface UnknownEvaluationPolicy {
   decide(evaluation: TaskEvaluation, principal: VerifiedPrincipal): Promise<'wait' | 'fail'>;
 }
-export type TaskCriterionResult = 'pass' | 'fail' | 'unknown' | Omit<TaskEvaluation['criteria'][number], 'criterionId' | 'evidenceIds'>;
-export interface TaskTerminalEvaluator {
+type TaskCriterionResult = 'pass' | 'fail' | 'unknown' | Omit<TaskEvaluation['criteria'][number], 'criterionId' | 'evidenceIds'>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TaskTerminalEvaluator {
   evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: DispatchTerminal,
     context: Readonly<{ identity: AttemptIdentity; binding?: OperationEvidenceBinding; beuserEvidence?: BeuserEvidence | null }>): Promise<TaskCriterionResult>;
 }

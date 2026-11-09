@@ -4,4 +4,4 @@ export { replayConfiguredMemoryPurges, countConfiguredMemoryPurgesPending } from
 export { prepareConfiguredMemoryExtraction, attemptReportClaimReader } from './internal/extraction.js';
 export { prepareConfiguredMemoryEvaluation, inspectConfiguredMemoryEvaluators } from './internal/evaluation.js';
 export { memoryPurgeJournalOf, memoryJournalFor } from './internal/journal.js';
-export { prepareConfiguredPlanningMemory, type PlanningMemory, type PlanningMemorySent } from './internal/planning.js';
+export { prepareConfiguredPlanningMemory, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type PlanningMemory, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type PlanningMemorySent } from './internal/planning.js';

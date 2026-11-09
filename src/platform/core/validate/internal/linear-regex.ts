@@ -20,7 +20,7 @@ import { CodedError } from '#platform/core/errors/index.js';
  */
 
 /** Why a pattern cannot be used: invalid ECMA-262 u-mode syntax, a construct this engine does not run in linear time, or a size limit. */
-export type PatternRefusalReason = 'invalid-pattern' | 'unsupported-pattern' | 'limit';
+type PatternRefusalReason = 'invalid-pattern' | 'unsupported-pattern' | 'limit';
 export class PatternRefusal extends CodedError {
   constructor(readonly reason: PatternRefusalReason, message: string) { super('PATTERN_REFUSED', { message }); this.name = 'PatternRefusal'; }
 }
@@ -29,7 +29,7 @@ export class StepBudgetExceeded extends CodedError {
   constructor() { super('VALIDATION_STEP_BUDGET_EXCEEDED', { message: 'validation step budget exceeded' }); this.name = 'StepBudgetExceeded'; }
 }
 export interface StepBudget { remaining: number }
-export interface PatternLimits { readonly sourceMax: number; readonly statesMax: number; readonly repeatMax: number }
+interface PatternLimits { readonly sourceMax: number; readonly statesMax: number; readonly repeatMax: number }
 /** `compileSteps`: generator visits spent compiling `source` (each visit charged once, bounded by a fixed multiple of `states`). */
 export interface LinearPattern { readonly source: string; readonly states: number; readonly compileSteps: number; test(input: string, budget: StepBudget): boolean }
 

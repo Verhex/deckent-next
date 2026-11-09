@@ -6,7 +6,7 @@ import limits from './clipboard-limits.json' with { type: 'json' };
 export const CLIPBOARD_LIMITS: Readonly<{ maxBytes: number; maxAnswerBack: number }> = Object.freeze({ ...limits });
 
 /** Why a clipboard request was refused before anything was written (typed, so the surface can say so in the person's language). */
-export type ClipboardRefusal = 'empty' | 'too-large' | 'unavailable';
+type ClipboardRefusal = 'empty' | 'too-large' | 'unavailable';
 export type ClipboardResult = Readonly<{ ok: true; bytes: number }> | Readonly<{ ok: false; reason: ClipboardRefusal; bytes: number }>;
 
 /**

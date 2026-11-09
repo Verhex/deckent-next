@@ -13,7 +13,7 @@ const SEGMENT = /^[A-Za-z0-9._@+-]{1,255}$/u;
 /** Project-relative source: normalized, no parent/current segment, never a Git or Deckent product directory. */
 const sourceSchema = persistedString(z.string().max(512)).refine(value => value.split('/').every(part => SEGMENT.test(part)
   && part !== '.' && part !== '..' && part !== '.git' && part !== '.deckent'));
-export const dockerMountTargetSchema = persistedString(z.string().max(512)).refine(value => value.startsWith('/') && value !== '/' && !unsafe.test(value)
+const dockerMountTargetSchema = persistedString(z.string().max(512)).refine(value => value.startsWith('/') && value !== '/' && !unsafe.test(value)
   && posix.normalize(value) === value && !value.endsWith('/') && !RESERVED_TARGETS.some(reserved => value === reserved || value.startsWith(reserved + '/')));
 const uniqueTargets = (mounts: readonly { readonly target: string }[]) => new Set(mounts.map(mount => mount.target)).size === mounts.length;
 /** S6 dependency class (owner 2026-10-17): the bind is a third-party dependency tree installed from `lockfile`, a path inside the bind. */
@@ -24,7 +24,7 @@ export const dockerReadOnlyMountsSchema = z.array(z.strictObject({ source: sourc
 /** Supervisor option: the same binds with sources resolved by trusted composition to real absolute host directories. */
 export const dockerResolvedMountsSchema = z.array(z.strictObject({ source: persistedString(z.string().min(1).max(4096)).refine(value => isAbsolute(value) && !unsafe.test(value)),
   target: dockerMountTargetSchema, dependencyTree }).readonly()).max(8).refine(uniqueTargets).readonly();
-export type DockerReadOnlyMount = z.infer<typeof dockerReadOnlyMountsSchema>[number];
+type DockerReadOnlyMount = z.infer<typeof dockerReadOnlyMountsSchema>[number];
 
 /** A bind source must be a real directory (no link anywhere on its path) that neither contains nor lies inside a guarded host path. */
 export async function assertReadOnlyMountSource(source: string, guarded: readonly string[]): Promise<void> {
@@ -52,7 +52,7 @@ export async function resolveDockerReadOnlyMounts(projectRoot: string, mounts: r
 }
 
 /** What the daemon reports for a created container's `.Mounts` (tmpfs lives in HostConfig, not here). */
-export type DockerReportedMount = Readonly<{ Type?: unknown; Source?: unknown; Destination?: unknown; RW?: unknown }>;
+type DockerReportedMount = Readonly<{ Type?: unknown; Source?: unknown; Destination?: unknown; RW?: unknown }>;
 export type DockerExpectedMount = Readonly<{ source: string; target: string; writable: boolean }>;
 const mountKey = (type: unknown, source: unknown, target: unknown, writable: unknown) => [type, source, target, writable].join('\0');
 /** Create-time proof (before start): the mount set the daemon actually realised must equal the requested bind set exactly. A missing,

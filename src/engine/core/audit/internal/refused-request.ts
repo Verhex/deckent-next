@@ -4,7 +4,7 @@ import { redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/ind
 import type { AuditApplication } from './application.js';
 
 type Refusal = Extract<AuditEvent['subject'], { kind: 'run-request-refused' }>;
-/** A refused work request as the person sees it again: when, which typed refusal, and the redacted start of what was asked. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A refused work request as the person sees it again: when, which typed refusal, and the redacted start of what was asked. */
 export type RefusedRunRequest = Readonly<{ atMs: number; commandId: string; code: string; title: string }>;
 /**
  * BeUser D-08 (lead 2026-10-28): the sealed event of a work request the planner refused before any Run existed. The request text is never kept

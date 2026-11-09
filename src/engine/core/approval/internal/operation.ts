@@ -16,7 +16,7 @@ type OperationSubject = Extract<ApprovalSubject, { kind: 'operation' }>;
 export const operationApprovalActionDigest = (scopeId: string, subject: OperationSubject, requester: ApprovalActor) =>
   sha256(encodeCommandProjection('operation-approval:1', { scopeId, subject, requester }));
 
-export interface OperationApprovalBrokerOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface OperationApprovalBrokerOptions {
   /** Pending request lifetime (`approvals.requestTtlMs`). */
   readonly requestTtlMs: number;
   /** Admission window of an `allow` when the descriptor declares no `admitWithinMs`. */
@@ -114,7 +114,7 @@ export function approvalSubjectsHiddenFromProtocol(version: number): readonly Ap
     ...(version >= RUN_CREATE_SUBJECT_PROTOCOL_VERSION ? [] : ['run-create' as const])];
 }
 
-export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';
 /**
  * Optional wait of a surface (SDK/terminal) for the decision of one operation approval: `allow`/`deny` as decided, `expired` when the
  * stored request expired (or vanished), `timeout` at `deadline`, `cancelled` on `signal`. The request belongs to the command, not to the

@@ -1,6 +1,6 @@
 import type { ConfigChoiceDeclaration, ConfigNumberUnit } from './choices.js';
 export type ConfigStepper = Readonly<{ min: number; max: number; step: number; unit: ConfigNumberUnit; current: number }>;
-export function numericSchema(schema: unknown): Record<string, unknown> | null {
+function numericSchema(schema: unknown): Record<string, unknown> | null {
   if (!schema || typeof schema !== 'object') return null;
   const s = schema as Record<string, unknown>;
   if (s['type'] === 'number' || s['type'] === 'integer') return s;

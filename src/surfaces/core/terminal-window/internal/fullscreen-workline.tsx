@@ -56,7 +56,7 @@ export type ChatViewportLabels = Readonly<{ below: string; newMessages?: string;
 /** The full window's mouse wheel (mouse.ts); absent where the mouse is not captured. */
 export const WheelContext = createContext<WheelSource | null>(null);
 /** The full window's left-button pointer (mouse.ts) and the host's clipboard write for the selected text; absent where the mouse is not captured. */
-export type PointerSelection = Readonly<{ pointer: PointerSource; copy: (text: string) => void }>;
+type PointerSelection = Readonly<{ pointer: PointerSource; copy: (text: string) => void }>;
 export const PointerContext = createContext<PointerSelection | null>(null);
 type Selection = Readonly<{ anchor: SelectionPoint; focus: SelectionPoint; dragging: boolean }>;
 /** How long the "copied" line stays in the hint row after a selection is copied. */

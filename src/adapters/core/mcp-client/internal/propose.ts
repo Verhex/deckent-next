@@ -43,7 +43,7 @@ export const PROPOSE_MCP_SERVER_TOOL_SPEC: AgentToolSpec = Object.freeze({ name:
     reason: { type: 'string', description: 'Why this server is needed, for the person who decides.' } } } });
 
 const REFERENCE = /\$(?:DECK:|\{|[A-Za-z_])/u;
-export type McpProposalPlan = { readonly ok: true; readonly proposal: McpProposal; readonly entry: McpServerEntry } | { readonly ok: false; readonly reason: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpProposalPlan = { readonly ok: true; readonly proposal: McpProposal; readonly entry: McpServerEntry } | { readonly ok: false; readonly reason: string };
 export function planMcpProposal(args: Record<string, unknown>): McpProposalPlan {
   // Values a person binds are refused by name, before anything else (the model is told where they belong).
   if ('env' in args || 'headers' in args) return { ok: false, reason: MCP_PROPOSAL_SECRETS_REFUSED };

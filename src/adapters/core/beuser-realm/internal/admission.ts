@@ -5,7 +5,7 @@ import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type B
 import type { BeuserContext } from '#engine/index.js';
 import { BEUSER_REALM_RECIPE as recipe, checkHandle, NANOSECONDS_PER_SECOND, namespaceReadback, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 
-/** Read by a fresh trusted process, never terminal/persona output. No ledger, key, receipt or host HOME is read. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Read by a fresh trusted process, never terminal/persona output. No ledger, key, receipt or host HOME is read. */
 export const BEUSER_INSPECTION_SCRIPT = `
 const fs=require('node:fs'),os=require('node:os');
 const text=p=>fs.readFileSync(p,'utf8');
@@ -25,7 +25,7 @@ const inspectSchema = z.array(z.object({ Id: z.string(), Image: z.string(), Stat
 })).length(1);
 const probeSchema = z.strictObject({ uid: persistedNumber(z.number()), gid: persistedNumber(z.number()), status: z.record(z.string(), z.string()), ns: z.record(z.string(), z.string()), mounts: z.string(), ptsDevice: z.string(),
   cgroup: z.object({ memory: z.string(), pids: z.string(), cpu: z.string() }), net: z.array(z.string()), genesis: z.unknown().optional() });
-export interface BeuserRealmEvidence {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserRealmEvidence {
   readonly kind: 'containment' | 'kernel'; readonly bindingDigest: string; readonly incarnation: string;
   readonly digest: string; readonly value: string;
 }

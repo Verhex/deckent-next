@@ -5,7 +5,7 @@ import ruleAsset from '../../../../../assets/delivery-summary/autonomy-1.json' w
 import { DELIVERY_RISK_DATA, type DeliveryRiskData } from './projector.js';
 import { deliveryModelVerdictSchema, deliverySummaryOperationSchema, deliveryVerificationPhaseSchema, type DeliverySummary } from './contract.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Rule `autonomy@1` (OTONOM-TESLIM D1-lite shadow, owner Q1 2026-10-23). Thresholds and the eligible model verdicts are versioned rule DATA
  * (asset), never code. The result is advice for a shadow record only: it never delivers, adopts, blocks or changes a consent card.
  */
@@ -14,7 +14,7 @@ export const autonomyRuleDataSchema = z.strictObject({ schemaVersion: z.literal(
   acceptanceVerdicts: z.array(z.enum(['accepted', 'accepted-unverified'])).readonly(), verificationPhases: z.array(deliveryVerificationPhaseSchema).readonly(),
   modelVerdicts: z.array(deliveryModelVerdictSchema).readonly(), maxSizeBucket: identitySchema, maxOutOfScope: counterSchema,
   requireDeclaredScope: z.boolean() }).readonly();
-export type AutonomyRuleData = z.infer<typeof autonomyRuleDataSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AutonomyRuleData = z.infer<typeof autonomyRuleDataSchema>;
 export const AUTONOMY_RULE: AutonomyRuleData = autonomyRuleDataSchema.parse(ruleAsset);
 
 /** Generic facts the rule reads (no git or vendor term): any adapter's summary yields them. `null` = evidence absent; `withheld` = not readable. */

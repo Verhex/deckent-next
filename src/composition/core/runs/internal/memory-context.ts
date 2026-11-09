@@ -11,7 +11,7 @@ type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 type Part = Readonly<{ id: string; version: number; text: string }>;
 type Withheld = Extract<WorkerAdmissionWarning, { code: 'MEMORY_CONTEXT_WITHHELD' }>;
 /** The admission's memory hook: `wrap` reads and seals around the admission resolve, `compile` adds a task's part to its prompt, `warnings` the visible caveats. */
-export interface MemoryContextHook {
+interface MemoryContextHook {
   wrap(inner: RunAdmissionContext): RunAdmissionContext;
   compile(taskId: string | undefined, build: (extra: readonly Part[]) => ExecutionProfileDefinition): ExecutionProfileDefinition;
   warnings(): readonly WorkerAdmissionWarning[];

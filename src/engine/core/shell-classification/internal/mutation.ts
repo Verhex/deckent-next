@@ -5,7 +5,7 @@ import type { ShellDialect, ShellReadOnlyVerdict } from './classify.js';
 import type { ShellPathContext, ShellPathVerdict } from './grammar.js';
 import type { ShellRiskClassification } from './risk.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Narrow mutating tier (T-L4 slice 4a, owner 2026-09-27 q1). A separate layer beside the read-only classifier: it recognizes the
  * few programs that change workspace files in a checkable way (`mkdir`, `touch`, `cp`, `mv`), each with a small option grammar and
  * every path checked — sources through the read check, targets through the write check (inside the workspace, not denied, not on
@@ -16,8 +16,8 @@ import type { ShellRiskClassification } from './risk.js';
 export type ShellWriteKind = 'new-directory' | 'file' | 'existing-file';
 /** Write-target check (port; the composition implements it over the workspace scope and the write floor). */
 export interface ShellWritePathContext { checkWrite(word: ShellWord, kind: ShellWriteKind): Promise<ShellPathVerdict> }
-export type ShellMutationReason = ShellReasonCode | 'NARROW' | 'PACKAGE_MANAGER' | 'NETWORK_TOOL' | 'NOT_NARROW';
-export interface ShellMutationVerdict {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ShellMutationReason = ShellReasonCode | 'NARROW' | 'PACKAGE_MANAGER' | 'NETWORK_TOOL' | 'NOT_NARROW';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ShellMutationVerdict {
   readonly tier: 'narrow' | 'always-ask' | 'unrecognized';
   readonly reasonCode: ShellMutationReason;
   readonly detail?: string;

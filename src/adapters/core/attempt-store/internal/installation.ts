@@ -11,8 +11,8 @@ const ownershipSchema = z.strictObject({
   schemaVersion: z.literal(1), transactionId: persistedString(z.string().min(1).max(256)),
   planDigest: hex, profileDigest: hex, proposalDigest: hex,
 }).readonly();
-export type InstallationLedgerOwnership = z.infer<typeof ownershipSchema>;
-export type InstallationLedgerErrorCode = 'INSTALLATION_LEDGER_INVALID' | 'INSTALLATION_LEDGER_CONFLICT'
+type InstallationLedgerOwnership = z.infer<typeof ownershipSchema>;
+type InstallationLedgerErrorCode = 'INSTALLATION_LEDGER_INVALID' | 'INSTALLATION_LEDGER_CONFLICT'
   | 'INSTALLATION_LEDGER_CORRUPT' | 'INSTALLATION_LEDGER_UNAVAILABLE' | 'INSTALLATION_LEDGER_OUTCOME_UNKNOWN';
 export class InstallationLedgerError extends CodedError {
   constructor(override readonly code: InstallationLedgerErrorCode) { super(code); this.name = 'InstallationLedgerError'; }

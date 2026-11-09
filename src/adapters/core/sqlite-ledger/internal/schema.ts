@@ -8,9 +8,7 @@ import { effectStateSchema, isEffectOpen } from '#domain/index.js';
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
 export const RUN_LEDGER_VERSION = 12;
-export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
-export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
-export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
+const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
 export const MODEL_INVOCATION_LEDGER_VERSION = 18;
 export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
@@ -18,7 +16,7 @@ export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
 export const CURRENT_LEDGER_VERSION = 74;
-export const CAPACITY_RESOURCE_LEDGER_VERSION = 74;
+const CAPACITY_RESOURCE_LEDGER_VERSION = 74;
 // alpha.56 BP budget periods: each period-less spend checkpoint is archived once (append-only history) and gets its first local month boundary.
 // Older binaries refuse v72; rollback restores the pre-switch backup (the rewritten account records carry the period).
 export const PROVIDER_SPEND_PERIOD_LEDGER_VERSION = 72;
@@ -82,8 +80,7 @@ export const RUN_INTENT_LEDGER_VERSION = 73;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
-export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
-export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
+const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const AUDIT_EVENT_LEDGER_VERSION = 41;
 // B06-2b: adoption intent v2 (verification binding); exact v1 adopt records are rewritten, the table is unchanged.
 export const ADOPTION_VERIFICATION_LEDGER_VERSION = 42;

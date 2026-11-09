@@ -1,7 +1,7 @@
 import registry from './evidence-kinds.json' with { type: 'json' };
-/** What an installed evaluator's verdict rests on (law 1): the evidence kind and whether it checks content independently of the worker. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What an installed evaluator's verdict rests on (law 1): the evidence kind and whether it checks content independently of the worker. */
 export type EvaluatorEvidenceKind = 'exit-code' | 'operation-record' | 'harness-readback' | 'unknown';
-export type EvaluatorEvidence = Readonly<{ kind: EvaluatorEvidenceKind; independent: boolean | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type EvaluatorEvidence = Readonly<{ kind: EvaluatorEvidenceKind; independent: boolean | null }>;
 const KINDS: Readonly<Record<string, Readonly<{ evidence: string; independent: boolean }>>> = registry.evaluators;
 /** One registry for every surface and the delivery summary; an evaluator it does not list (an extension's) is `unknown`, independence unknown. */
 export function evaluatorEvidence(evaluator: Readonly<{ id: string }>): EvaluatorEvidence {

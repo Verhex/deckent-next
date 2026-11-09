@@ -10,7 +10,7 @@ import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sig
 const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex'), PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
 /** An Ed25519 key is 32 bytes (RFC 8032); its DER forms are the fixed prefix + the key; a signature is two key lengths. */
 const KEY = 32;
-export const ED25519_SPKI_BYTES = SPKI_PREFIX.length + KEY, ED25519_PKCS8_BYTES = PKCS8_PREFIX.length + KEY;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const ED25519_SPKI_BYTES = SPKI_PREFIX.length + KEY, ED25519_PKCS8_BYTES = PKCS8_PREFIX.length + KEY;
 /** A Buffer view over the same memory (never a copy, so zeroing the caller's bytes zeroes it). */
 const view = (bytes: Uint8Array) => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 const exact = (der: Uint8Array, prefix: Buffer, length: number) => der.byteLength === length && Buffer.from(der.buffer, der.byteOffset, prefix.length).equals(prefix);

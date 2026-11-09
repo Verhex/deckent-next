@@ -8,10 +8,10 @@ import { memoryJournalFor } from './journal.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 /** The memory block the planning context carries (structurally the Brain context v3 `memory`). */
-export interface PlanningMemoryBlock { readonly entries: readonly MemoryPlanningRow[]; readonly omitted: number }
-/** What actually went into the prompt after the planning byte bound (`truncated`: entries that bound removed). */
+interface PlanningMemoryBlock { readonly entries: readonly MemoryPlanningRow[]; readonly omitted: number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What actually went into the prompt after the planning byte bound (`truncated`: entries that bound removed). */
 export interface PlanningMemorySent { readonly entries: readonly MemoryPlanningRow[]; readonly omitted: number; readonly truncated: number }
-/** One planning request's memory: `block` for the prompt (null: none), `seal` before the first prompt leaves the machine, `note` for the card. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One planning request's memory: `block` for the prompt (null: none), `seal` before the first prompt leaves the machine, `note` for the card. */
 export interface PlanningMemory {
   readonly block: PlanningMemoryBlock | null;
   seal(sent: PlanningMemorySent | null, contextDigest: string): Promise<void>;

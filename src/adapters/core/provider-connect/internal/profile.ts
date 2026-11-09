@@ -24,10 +24,10 @@ export async function readProviderConnectSeed(name: string): Promise<ProviderCat
   catch { throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE'); }
   try { return parseProviderCatalogDocument(JSON.parse(text)); } catch { throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE'); }
 }
-export type ConnectionAdapter = Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConnectionAdapter = Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>;
   protocol: Readonly<{ family: string; version: string }>; tariff: 'published' | 'unmetered' }>;
 /** The installation's registered catalog row for the model being connected (M4): its channel, the ledger row revision and the v3 entry. */
-export type ConnectCatalogRow = Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }>;
+type ConnectCatalogRow = Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }>;
 type Tariff = Readonly<{ modelId: string; source: Readonly<{ url: string; retrievedAt: string }> }>;
 /**
  * M4 (owner 2026-10-23): a registered catalog row's `connect.tariff` for exactly this model, checked by the adapter's own tariff schema and

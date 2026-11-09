@@ -23,7 +23,7 @@ export const MCP_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 export const MCP_SERVER_NAME = /^(?=.{1,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const scope = z.enum(MCP_SCOPES);
-export const mcpTrustRecordSchema = z.strictObject({
+const mcpTrustRecordSchema = z.strictObject({
   scope, name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest,
   tools: z.array(z.strictObject({ name: persistedString(z.string().min(1).max(128)), digest, alwaysAsk: z.boolean() })).max(MCP_TRUST_TOOLS_MAX),
   /** `trusted`: offered; `declined`: the owner said no for this definition (not asked again until it changes or is reset). */
@@ -34,7 +34,7 @@ export const mcpTrustRecordSchema = z.strictObject({
 });
 export type McpTrustRecord = z.infer<typeof mcpTrustRecordSchema>;
 const fileSchema = z.strictObject({ schemaVersion: z.literal(1), revision: persistedInteger().nonnegative(), servers: z.array(mcpTrustRecordSchema).max(256) });
-export type McpTrustState = z.infer<typeof fileSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpTrustState = z.infer<typeof fileSchema>;
 const EMPTY: McpTrustState = Object.freeze({ schemaVersion: 1, revision: 0, servers: [] });
 
 type TrustRead<T> = { readonly ok: true } & T | { readonly ok: false; readonly reason: string };

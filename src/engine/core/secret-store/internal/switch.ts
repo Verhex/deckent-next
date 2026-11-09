@@ -28,7 +28,7 @@ export interface SecretStoreSwitchPorts {
   /** Names resolving from env but absent in this target; reads config and target metadata inside custody, never values. */
   readonly environmentReferences: (target: SecretStore) => Promise<readonly string[]>;
 }
-export interface SecretStoreSwitchRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SecretStoreSwitchRequest {
   readonly principal: { readonly issuer: string; readonly subject: string };
   readonly scopeId: string;
   readonly to: string;
@@ -36,7 +36,7 @@ export interface SecretStoreSwitchRequest {
   readonly confirmDowngrade: boolean;
   readonly confirmEnvMissing?: boolean;
 }
-/** `switched`: entries moved and the selection published; `current`: the target was already selected (leftover identical copies cleaned). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `switched`: entries moved and the selection published; `current`: the target was already selected (leftover identical copies cleaned). */
 export interface SecretStoreSwitchResult {
   readonly schemaVersion: 1; readonly scopeId: string; readonly status: 'switched' | 'current';
   readonly from: string; readonly to: string; readonly entries: number; readonly downgrade: boolean;

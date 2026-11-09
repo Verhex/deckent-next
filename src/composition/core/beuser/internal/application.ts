@@ -26,7 +26,7 @@ export { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.
 export type { BeuserJourneyProfile } from '#composition/core/supervisors/index.js';
 
 /** Reopenable controller custody plus an existing granted dispatch. No in-memory table can authorize a realm. */
-export async function createConfiguredBeuserHarness(root: string, context: BeuserContext, request: SandboxRequest, profile: SupervisorProfile,
+async function createConfiguredBeuserHarness(root: string, context: BeuserContext, request: SandboxRequest, profile: SupervisorProfile,
   store: SqliteAttemptStore, artifacts: ArtifactStore, owner: string, options: ConfigLoadOptions = {}, created?: (id: string) => Promise<void>) {
   const c = await loadConfiguredScopeContext(root, context.binding.identity.scopeId, options, 'write'), config = c.config;
   const { data, custody, runtimeOptions, removal, realm } = await openConfiguredBeuserRealmOwner(c, context, request, profile, store, artifacts, owner, created);

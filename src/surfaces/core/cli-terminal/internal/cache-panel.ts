@@ -12,7 +12,7 @@ type Host = Required<Pick<TerminalLaunchContext, 'planProfileCache'>> & Pick<Con
 /** Display precision of a price ratio (data: `cache-display.json`). */
 const ratio = (value: number, locale: Locale) => value.toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { maximumFractionDigits: DISPLAY.ratioFractionDigits });
 /** Reuses within the TTL after which the write premium is paid back: each read saves (1 − read) of the input price, the write costs (write − 1) more. */
-export function cachePaybackReuses(writeRatio: number, readRatio: number): number | null {
+function cachePaybackReuses(writeRatio: number, readRatio: number): number | null {
   if (readRatio >= 1) return null;
   return Math.max(1, Math.ceil((writeRatio - 1) / (1 - readRatio) - 1e-9));
 }

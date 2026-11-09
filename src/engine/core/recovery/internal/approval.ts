@@ -7,7 +7,7 @@ export const RECOVERY_CONTINUE_ACTION = 'continue-new-attempt';
 export const recoveryContinuationApprovalSchema = z.strictObject({ schemaVersion: z.literal(1), decisionRef: identitySchema,
   approvedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema, assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }),
   approvedAtMs: counterSchema, scopeIds: z.array(identitySchema).min(1).max(1024), action: z.literal(RECOVERY_CONTINUE_ACTION) }).readonly();
-export type RecoveryContinuationApproval = z.infer<typeof recoveryContinuationApprovalSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryContinuationApproval = z.infer<typeof recoveryContinuationApprovalSchema>;
 /**
  * The owner's policy grant `apply` on `recovery-action/continue-new-attempt` for the installation's own principal in `scopeId`, read fresh per call
  * (a revoked grant stops the next continuation). The AI floor refuses this grant to every AI principal; no grant, any doubt or an unreadable policy is no approval.

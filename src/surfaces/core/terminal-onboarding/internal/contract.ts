@@ -1,11 +1,10 @@
-import type { BrainPlanCommand } from '#domain/index.js';
 import type { SetupPlan, SetupStage, SetupObservation, RunIntentRecord, RunPlanningResult, SetupPermissionPreview } from '#engine/index.js';
 import type { Locale } from '#platform/index.js';
 /** The folder's kind and its visible top-level names (bounded by the observer); first-task facts are derived from them by registry data. */
 export type FolderFacts = Readonly<{ kind: 'coding' | 'documents' | 'empty' | 'unknown'; entries: readonly string[] }>;
 export type FirstTaskIntent = Readonly<{ commandId: string; scopeId: string; folder: string; intent: string; destination?: 'chat'; pending?: RunIntentRecord }>;
-export type OnboardingConfigBasis = Readonly<{ projectDigest: string | null; globalDigest: string }>;
-export type OnboardingCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; identity: boolean; sign: boolean; hooks: 'not-run';
+type OnboardingConfigBasis = Readonly<{ projectDigest: string | null; globalDigest: string }>;
+type OnboardingCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; identity: boolean; sign: boolean; hooks: 'not-run';
   total: number; selected: number; flagged: number; rows: readonly Readonly<{ path: string; bytes: number; flag: string | null }>[]; more: number; digest: string }>;
 export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; plan: SetupPlan; observation: SetupObservation; answers: Readonly<Record<string, unknown>>;
   deferred: readonly string[]; modelUsable: boolean; /** K3: the host's run-here answer (`localRunOffer`); false: no promise of a local run (absent: a fixture without the host). */ localRun?: boolean; folder: string; folderFacts: FolderFacts; scopeId: string;
@@ -52,4 +51,3 @@ export type OnboardingUi = Readonly<{ locale: Locale; provider(): Promise<void>;
   observed?(snapshot: OnboardingSnapshot): void }>;
 /** A narrowed /setup: only the worker steps (owner option A card) or only the model card (a message sent without a model). */
 export type OnboardingFocus = 'workers' | 'model';
-export const intentCommand = (intent: FirstTaskIntent): BrainPlanCommand => ({ schemaVersion: 1, commandId: intent.commandId, scopeId: intent.scopeId, intent: intent.intent });

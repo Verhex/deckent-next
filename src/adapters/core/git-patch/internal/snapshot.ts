@@ -63,7 +63,7 @@ export async function completeHiddenBase(lease: GitWorkspaceLease, options: GitW
   return result;
 }
 /** Linux descriptor-relative traversal; worker metadata is never interpreted by Git on the host. */
-export type WorkspaceBase = Readonly<{ listing: BaseListing; algorithm: 'sha1' | 'sha256'; keep?: ReadonlySet<string> }>;
+type WorkspaceBase = Readonly<{ listing: BaseListing; algorithm: 'sha1' | 'sha256'; keep?: ReadonlySet<string> }>;
 const CHUNK = 65_536;
 /** Streams a file through the patch digest and the Git blob id without retaining it; the scan budget is checked per chunk. */
 export async function hashStreaming(handle: FileHandle, size: number, algorithm: 'sha1' | 'sha256', budget: SnapshotBudget) {

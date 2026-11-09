@@ -8,7 +8,7 @@ import { UninstallError, UNINSTALL_TIERS, UNINSTALL_BLOCKERS, uninstallInstallat
   type UninstallPlan, type UninstallResource, type UninstallItem, type UninstallInstallation, type UninstallTier, type UninstallWork, type UninstallService, type UninstallBlocker } from './uninstall-contract.js';
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
 const contribution = z.strictObject({ id, owner: id, kind: z.enum(['service', 'image', 'path']), removeFrom: z.enum(UNINSTALL_TIERS), operation: id, targetKind: id, after: z.array(id) });
-export type UninstallContribution = z.infer<typeof contribution>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type UninstallContribution = z.infer<typeof contribution>;
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 const freeze = <T>(value: T): T => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };

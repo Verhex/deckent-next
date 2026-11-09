@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { counterSchema, attemptIdentitySchema } from '#domain/index.js';
 import { resourceSampleSchema, type ResourceSample } from '#engine/index.js';
 import type { ResourceObservationSettings } from '#platform/index.js';
-export const trimSchema = z.strictObject({ identity: attemptIdentitySchema, throughMs: counterSchema });
-export type Trim = z.infer<typeof trimSchema>;
+const trimSchema = z.strictObject({ identity: attemptIdentitySchema, throughMs: counterSchema });
+type Trim = z.infer<typeof trimSchema>;
 const legacySchema = z.strictObject({ schemaVersion: z.literal(1), trimmedBeforeMs: counterSchema.nullable(),
   lastTrim: trimSchema.nullable().optional(), samples: z.array(resourceSampleSchema) });
 const headerSchema = z.strictObject({ schemaVersion: z.literal(2), createdAtMs: counterSchema });

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | JsonObject;
 export interface JsonObject { readonly [key: string]: JsonValue }
-export interface JsonValueLimits { readonly maxDepth: number; readonly maxNodes: number; readonly maxCodeUnits: number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface JsonValueLimits { readonly maxDepth: number; readonly maxNodes: number; readonly maxCodeUnits: number }
 /** Version-1 wire bounds, not evaluator policy or model context limits. */
 export const JSON_VALUE_LIMITS = Object.freeze({ maxDepth: 16, maxNodes: 4096, maxCodeUnits: 65536 });
 /** Copy plain JSON without invoking property getters. Sorted keys give stable parameter encoding;

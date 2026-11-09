@@ -7,12 +7,12 @@ import { taskGraphSchema, taskResourceSchema } from '#domain/core/task-graph/ind
 import { brainContributionSchema } from './brain.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const proposalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
-/** D2b (owner 2026-10-18): a human's per-Run delivery intent, approved with the Run. One Run, one target (the queue's target ref shape);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). D2b (owner 2026-10-18): a human's per-Run delivery intent, approved with the Run. One Run, one target (the queue's target ref shape);
  * `enqueue-accepted` lets the service submit the Run's accepted Attempts to that target, re-queue a parked/expired ticket by typed cause
  * and start the bounded re-attempt. Publish/adopt remain the human's terminal cards. Additive and optional within proposal v1. */
 export const runDeliveryIntentSchema = z.strictObject({ target: taskResourceSchema, mode: z.literal('enqueue-accepted') }).readonly();
-export type RunDeliveryIntent = z.infer<typeof runDeliveryIntentSchema>;
-export const proposalPermissionSchema = z.strictObject({ kind: identitySchema, action: identitySchema, resourceId: identitySchema }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunDeliveryIntent = z.infer<typeof runDeliveryIntentSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const proposalPermissionSchema = z.strictObject({ kind: identitySchema, action: identitySchema, resourceId: identitySchema }).readonly();
 /** Attribution is checked against the authenticated principal; a model receipt reference never grants authority. */
 export const runProposalSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   proposalId: identitySchema, scopeId: identitySchema, runId: identitySchema, graph: taskGraphSchema,

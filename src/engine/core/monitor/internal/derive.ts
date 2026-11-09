@@ -17,7 +17,7 @@ export interface MonitorRunEvidence {
   /** BeUser M-33: set-aside `scope\0run\0task` keys; such a task owes no delivery in the outlook. */
   readonly dismissed?: ReadonlySet<string>;
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The one blocker precedence (MONITOR-DATA): repair/human conditions outrank progress; equal codes keep graph order. `unknown` (no
  * evidence) sits above the progressing codes so missing evidence is never shown as healthy progress.
  */

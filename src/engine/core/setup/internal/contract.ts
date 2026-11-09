@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 /** Versioned setup-plan contract (alpha.48 I-S1). The plan is pure and locale-free: titles, questions and reasons are message keys. */
 export const SETUP_PLAN_SCHEMA_VERSION = 2 as const;
-export const SETUP_STAGE_STATES = ['done', 'ready', 'needs-answer', 'blocked', 'skipped', 'unsupported'] as const;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const SETUP_STAGE_STATES = ['done', 'ready', 'needs-answer', 'blocked', 'skipped', 'unsupported'] as const;
 export type SetupStageState = typeof SETUP_STAGE_STATES[number];
 /** Generic Core stages only. Execution-environment, source-control and business-system stages are family registrations. */
 export const CORE_SETUP_STAGES = ['core:environment', 'core:language', 'core:folder', 'core:profile', 'core:policy', 'core:sandbox', 'core:model', 'core:final-check'] as const;
@@ -45,7 +45,7 @@ const params = z.record(z.string(), z.union([persistedString(z.string().max(512)
 const json: z.ZodType<JsonValue> = z.lazy(() => z.union([z.null(), z.boolean(), z.number().finite(), persistedString(z.string().max(4096)),
   z.array(json).max(64), z.record(z.string(), json)]));
 /** One existing owner's operation and its typed input; the setup sequences owners and never applies a state change itself. */
-export const setupOperationSchema = z.strictObject({ get id() { return z.string().regex(/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/); }, get version() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
+const setupOperationSchema = z.strictObject({ get id() { return z.string().regex(/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/); }, get version() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
   get input() { return z.record(z.string(), json); } });
 export type SetupOperation = z.output<typeof setupOperationSchema>;
 /** What a stage evaluator decides; the planner adds identity, order and eligibility. */

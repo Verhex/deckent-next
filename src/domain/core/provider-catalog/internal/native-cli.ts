@@ -21,7 +21,7 @@ export function nativeCliVocabulary(input: unknown): readonly string[] {
   if (!parsed.success) throw new NativeCliRegistryError();
   return Object.freeze(Object.keys(parsed.data.adapters));
 }
-/** Registry-derived id (a string whose values come from the asset at load); the published declaration must not reference the JSON
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Registry-derived id (a string whose values come from the asset at load); the published declaration must not reference the JSON
  * module (consumers resolve our `.d.ts` with `resolveJsonModule: false`), so the type is the vocabulary's element type, not `keyof typeof`. */
 export type NativeCliId = string;
 export const nativeCliIds: readonly [NativeCliId, ...NativeCliId[]] = nativeCliVocabulary(registry) as readonly [NativeCliId, ...NativeCliId[]];

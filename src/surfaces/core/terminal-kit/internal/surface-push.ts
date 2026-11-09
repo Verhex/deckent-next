@@ -3,20 +3,20 @@ export type { SurfaceFollowEvent } from '#engine/index.js';
 /** Cursor, gap, scope and backpressure for an in-process approval/run/worker push.
  * The runtime stays the event-source owner. Missing cursors are never invented. */
 
-export const SURFACE_PUSH_KINDS = ['approval', 'run', 'worker'] as const;
-export type SurfacePushKind = typeof SURFACE_PUSH_KINDS[number];
+const SURFACE_PUSH_KINDS = ['approval', 'run', 'worker'] as const;
+type SurfacePushKind = typeof SURFACE_PUSH_KINDS[number];
 export const SURFACE_WATCH_OWNER = 'terminal-watch';
 export const SURFACE_PUSH_QUEUE = 32;
 
-export type SurfaceWaitAction = 'poll-scope' | 'read-next' | 'hold-event' | 'report-gap' | 'refuse-scope';
-export type SurfaceWait = {
+type SurfaceWaitAction = 'poll-scope' | 'read-next' | 'hold-event' | 'report-gap' | 'refuse-scope';
+type SurfaceWait = {
   readonly timeoutMs: number;
   readonly owner: typeof SURFACE_WATCH_OWNER;
   readonly action: SurfaceWaitAction;
 };
 export type SurfaceDeliveryMode = 'push' | 'poll' | 'denied' | 'not-initialized';
 export type SurfacePushEvent = SurfacePublicationEvent;
-export type SurfacePushState = {
+type SurfacePushState = {
   readonly cursors: Readonly<Record<SurfacePushKind, number | null>>;
   readonly queued: number;
 };
@@ -37,10 +37,7 @@ export function surfaceWait(action: SurfaceWaitAction, pace: number): SurfaceWai
 export function pollWait(pace: number): SurfaceWait {
   return surfaceWait('poll-scope', pace);
 }
-export function surfaceDeliveryValues(mode: SurfaceDeliveryMode, pace: number) {
-  const wait = surfaceWait(mode === 'denied' || mode === 'not-initialized' ? 'refuse-scope' : mode === 'poll' ? 'poll-scope' : 'read-next', pace);
-  return { mode, timeoutMs: wait.timeoutMs, owner: wait.owner, action: wait.action };
-}
+
 export function openSurfacePush(): SurfacePushState {
   return { cursors: { approval: null, run: null, worker: null }, queued: 0 };
 }
@@ -85,14 +82,6 @@ export function surfaceFollowLine(step: SurfacePushStep, watch: { readonly worke
   const values: Record<string, string | number> = { status: step.status, timeoutMs: step.wait.timeoutMs, owner: step.wait.owner, action: step.wait.action };
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole));
 }
-
-/** Sequential reader. Releases the slot after an applied event so one painted event does not fill the queue. */
-export async function consumeSurfaceFollow(events: AsyncIterable<SurfaceFollowEvent>, scopeId: string, pace: number, signal: AbortSignal,
-  onStep: (step: SurfacePushStep) => void): Promise<void> {
-  const session = createSurfaceFollowSession();
-  await session.read(events, scopeId, pace, signal, onStep);
-}
-
 /** A snapshot must be applied before acknowledging a start, invalidation or gap. Denial is terminal. */
 export type SurfaceRefresh = (kinds: readonly SurfacePushKind[], signal: AbortSignal) => Promise<readonly SurfacePushKind[]>;
 /** A new producer explicitly announces its starting cursors; a gap never invents historical events. */

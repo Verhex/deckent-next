@@ -4,7 +4,7 @@ import { lstat } from 'node:fs/promises';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, inspectPersonalStoreReadiness, installationSecretRoot, openConfiguredSecretStore, openRegisteredSecretStore, readSecretsConfig, registeredSecretStores, type PersonalStoreReadiness } from '#adapters/index.js';
 import { ENV_SECRET_STORE_ID, inspectSecretEnvironmentGuard, isSecretName, missingSecretReferenceNames, type SecretStore, type SecretStoreInspection } from '#engine/index.js';
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
-export interface SecretStoreInspectionView extends SecretStoreInspection {
+interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly schemaVersion: 1; readonly backend: string; readonly writable: boolean; readonly enumerable: boolean;
   /** Present when another Core store holds names (`entries`) or could not be listed now (`unverified`; `codes`: each one's typed refusal, U1 S1). */
   readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
@@ -14,7 +14,7 @@ export interface SecretStoreInspectionView extends SecretStoreInspection {
   /** FIX8b: whether ChatGPT sign-in's personal custody would accept this store now (Linux only; read-only host facts, nothing written). */
   readonly personalCustody?: PersonalStoreReadiness;
 }
-export interface SecretNamesView { readonly schemaVersion: 1; readonly backend: string; readonly names: readonly string[] }
+interface SecretNamesView { readonly schemaVersion: 1; readonly backend: string; readonly names: readonly string[] }
 /** Read the selection without resolving any secret value. */
 async function selectedStore(projectRoot: string, options: ConfigLoadOptions) {
   const config = await loadComposedConfig(projectRoot, { ...options, force: true, heal: false, secretResolver: async () => undefined, onWarning: () => {} });
@@ -67,7 +67,7 @@ async function environmentGuard(root: string, options: ConfigLoadOptions) {
     .filter(id => id !== ENV_SECRET_STORE_ID).map(id => openRegisteredSecretStore(id, options.env ?? process.env, options.platform)));
 }
 /** Collect unresolved config reference names; a forced read avoids the effective-config cache. */
-export async function configuredEnvironmentReferenceNames(root: string, options: ConfigLoadOptions): Promise<readonly string[]> {
+async function configuredEnvironmentReferenceNames(root: string, options: ConfigLoadOptions): Promise<readonly string[]> {
   const names = new Set<string>(), env = options.env ?? process.env;
   await loadComposedConfig(root, { ...options, force: true, heal: false, onWarning: () => {}, secretResolver: async name => {
     if (isSecretName(name) && Object.hasOwn(env, name) && typeof env[name] === 'string' && env[name] !== '') names.add(name);

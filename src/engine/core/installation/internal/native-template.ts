@@ -26,7 +26,7 @@ const discoveryModeSchema = z.enum(['disabled', 'repository']);
  * (`disabled`, owner 2026-10-23 Q2); a connected worker requires disabled. Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
 const requestSchema = z.strictObject({ provider: nativeCliIdSchema, kind: identitySchema,
   image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), connection: identitySchema.optional(), detach: z.boolean().optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() });
-export type CodingTemplateRequest = z.infer<typeof requestSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CodingTemplateRequest = z.infer<typeof requestSchema>;
 export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
   profile: ExecutionRegistry['profiles'][number]; kind: ExecutionRegistry['kinds'][number]; registry: ExecutionRegistry;
   expect: string | null; connection?: string | null; write: ConfigWriteResult | null }>;

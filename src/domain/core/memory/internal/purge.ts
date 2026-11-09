@@ -29,7 +29,7 @@ export const MEMORY_PURGE_REASONS = Object.freeze(['personal-data', 'poisoned', 
 export function assertMemoryPerson(actor: { readonly issuer: string; readonly subject: string; readonly assurance?: string }): void {
   if (isAiPrincipal(actor)) throw new MemoryError('MEMORY_PERSON_REQUIRED');
 }
-export const memoryTombstoneOf = (record: MemoryPurgeRecord): MemoryTombstone =>
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryTombstoneOf = (record: MemoryPurgeRecord): MemoryTombstone =>
   Object.freeze({ purged: true, contentDigest: record.contentDigest, digestKind: 'keyed', purgeRecordId: record.purgeId, reasonCode: record.reasonCode });
 /** One revision with its content replaced by the record's tombstone (same revision, state and history; the content digest becomes the keyed one). */
 export function tombstoneMemoryRevision(revision: MemoryEntry, record: MemoryPurgeRecord): MemoryEntry {
@@ -45,7 +45,7 @@ export const memoryContestResolutionSchema = z.strictObject({ schemaVersion: z.l
   decision: z.enum(MEMORY_CONTEST_DECISIONS), by: actor, retiredEntryId: identitySchema.nullable(), atMs: counterSchema })
   .refine(value => (value.decision === 'dismiss') === (value.retiredEntryId === null)).readonly();
 export type MemoryContestResolution = z.infer<typeof memoryContestResolutionSchema>;
-export type MemoryContestDecision = typeof MEMORY_CONTEST_DECISIONS[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryContestDecision = typeof MEMORY_CONTEST_DECISIONS[number];
 
 /**
  * §6.5 retention (owner S-M13): the retention of a system entry is the `memory-automation` row of its WorkClass family (the root class the

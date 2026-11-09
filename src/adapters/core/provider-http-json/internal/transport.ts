@@ -26,7 +26,7 @@ export interface NativeJsonHttpStream {
   push(chunk: Buffer): Readonly<{ deltas: readonly ModelInvocationDelta[]; limit: boolean; rejected?: ModelInvocationRejectionReason }>;
   finish(): NativeJsonHttpParsed;
 }
-export interface NativeJsonHttpSendOptions {
+interface NativeJsonHttpSendOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
   /** Exactly one of parseResponse (whole body) and stream (incremental) is required. */
   readonly parseResponse?: (body: Buffer) => NativeJsonHttpParsed;

@@ -16,7 +16,7 @@ export const processCommandSchema = (<S extends z.ZodRawShape & { timeoutMs: z.Z
   env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), scalar).readonly(),
   timeoutMs: persistedInteger().positive().max(2_147_483_647), outputBytes: positive });
 export type ProcessCommand = z.infer<typeof processCommandSchema>;
-export const processEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), requestId: persistedUuid(), started: z.boolean(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const processEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), requestId: persistedUuid(), started: z.boolean(),
   // `stopped`: the v2 line consumer ended the process; `line-limit`: one stdout line exceeded the command's line bound.
   reason: z.enum(['exit', 'signal', 'timeout', 'cancelled', 'output-limit', 'start-failed', 'stopped', 'line-limit']),
   exitCode: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), signal: scalar.pipe(persistedString(z.string().min(1))).nullable(),

@@ -1,5 +1,5 @@
 import { CodedError, pathWithin } from '#platform/index.js';
-/** WORK-TARGETS (owner 2026-09-30 K1 = W2): a work target is a named source repository that Deckent's coding work runs against
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). WORK-TARGETS (owner 2026-09-30 K1 = W2): a work target is a named source repository that Deckent's coding work runs against
  * instead of the project root. Slice 1 implements the Git kind only; a future non-Git workspace kind is another adapter producing
  * the same observation for its realm. Business systems (ERP) are not work targets: their effects stay on the C11 operation catalog
  * and EffectTarget port. The decision below is the one owner of the typed refusals; adapters only observe. */
@@ -22,7 +22,7 @@ export interface WorkTargetObservation {
   readonly alternates: boolean | null;
   readonly baseCommit: string | null;
 }
-export interface WorkTargetContext {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkTargetContext {
   /** Canonical project root and its repository's common directory (null when the project is not inside a Git repository). */
   readonly projectRoot: string;
   readonly projectCommonDirectory: string | null;

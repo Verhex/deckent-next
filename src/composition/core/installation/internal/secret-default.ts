@@ -9,7 +9,7 @@ import { applyPolicyTemplateInstallation } from './policy-template.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { registerFreshInstallation } from './attachment.js';
 /** A refused secret-store default leaves the installation standing; a successful switch carries its own record. */
-export type InstallationSecretStoreDefault = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string;
+type InstallationSecretStoreDefault = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string;
   record?: Readonly<{ policyRevision: string; atMs: number; subject: AuditEvent['subject'] }> }>;
 export async function applyPolicyTemplateInstallationWithSecretDefault(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
   // Keep the installer's process environment and layout fallback; options select the secret-store default.

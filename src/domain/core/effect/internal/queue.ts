@@ -11,7 +11,7 @@ type QueueActor = z.infer<typeof actor>;
  * target = target). Under it the service may re-attempt this ticket's task once the target base advanced and enqueue the re-attempt for the
  * same two human cards. Additive and optional: absent keeps the human-only requeue. */
 export const queueDeliveryIntentSchema = z.literal('service-reattempt');
-/** D1a lineage of a service-enqueued re-attempt: the ticket it replaces, the human intent ticket it acts under, its count and typed cause.
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). D1a lineage of a service-enqueued re-attempt: the ticket it replaces, the human intent ticket it acts under, its count and typed cause.
  * `approvedBy` is the delegating human; the ticket's actor is that human's service principal (provenance, never a policy principal). */
 export const queueReattemptSchema = z.strictObject({ sourceCommandId: identitySchema, intentCommandId: identitySchema, count: counterSchema.positive(),
   cause: queueReasonSchema, approvedBy: actor }).readonly();
@@ -51,7 +51,7 @@ export const targetQueueRecordSchema = z.strictObject({ schemaVersion: z.literal
   /** Additive (BENIMSEME-DEPO-KIMLIGI): the typed code of the failure an effect stopped on, or why a started ticket parked as not applied. */
   reason: queueReasonSchema.nullable().optional() }).readonly();
 export type TargetQueueRecord = z.infer<typeof targetQueueRecordSchema>;
-export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
 export type TargetQueueOutcome = z.infer<typeof targetQueueOutcomeSchema>;
 export class TargetQueueError extends CodedError {
   constructor(override readonly code: 'QUEUE_CONFLICT' | 'QUEUE_CAPACITY' | 'QUEUE_TARGET_BUSY' | 'QUEUE_CORRUPT' | 'QUEUE_AUTHORITY_REQUIRED'

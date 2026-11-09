@@ -3,11 +3,11 @@ import { persistedInteger } from '#domain/index.js';
 import { AsyncResource } from 'node:async_hooks';
 
 const positiveSafeInteger = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-export interface RuntimeServiceDeadline { wait(milliseconds: number, signal: AbortSignal): Promise<void> }
-/** `admissionWaitMs` bounds how long a transport request may wait for capacity before the typed refusal (0 or absent: refuse at once);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RuntimeServiceDeadline { wait(milliseconds: number, signal: AbortSignal): Promise<void> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `admissionWaitMs` bounds how long a transport request may wait for capacity before the typed refusal (0 or absent: refuse at once);
  * the wait queue never holds more than `maxConcurrentRequests` requests. */
 export interface RuntimeServiceLifecycleOptions { readonly maxConcurrentRequests: number; readonly maxConcurrentExecutions: number; readonly admissionWaitMs?: number }
-export type RuntimeServiceWorkClass = 'execution' | 'control';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RuntimeServiceWorkClass = 'execution' | 'control';
 export type RuntimeServiceDrainResult = Readonly<{ state: 'clean' | 'incomplete'; remainingRequests: number; recoveryPending: boolean }>;
 export class RuntimeServiceLifecycleError extends CodedError {
   /** Set on a refusal after a bounded wait: when the caller may reasonably try again. */

@@ -9,12 +9,12 @@ export { registerOperationAdapterModule, registerSecretGrantStore, registerSecre
 export { createSecretHelperFactory, type SecretHelperOptions } from '#adapters/core/secret-store/index.js';
 export { CORE_API_VERSION, RegistryError } from '#domain/index.js';
 export { registerApprovalAssuranceProducer, registerEnvironmentProbeKind, registerMcpCapabilityGroup, registerProviderSpendNoChargeCertification, registerProviderSpendPeriod } from '#engine/index.js';
-export type { EnvironmentProbe } from '#engine/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EnvironmentProbe } from '#engine/index.js';
 export type { EnvironmentRequirement } from '#domain/index.js';
 export type { McpCapabilityGroup } from '#domain/index.js';
 export type { AdapterModuleManifest, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 export { EffectTargetError, SECRET_GRANT_STORE_ID_PATTERN, SECRET_STORE_ID_PATTERN } from '#engine/index.js';
-export type { AdapterModuleRegistration, TargetAdapterFactory, TargetAdapterOptions, EffectTarget, EffectApplyRequest, SecretStore, SecretStoreContext,
+export type { AdapterModuleRegistration, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TargetAdapterFactory, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TargetAdapterOptions, EffectTarget, EffectApplyRequest, SecretStore, SecretStoreContext,
   SecretStoreDescriptor, SecretStoreFactory, SecretStoreInspection, SecretGrantStore, SecretGrantStoreContext, SecretGrantStoreFactory, SecretGrantFile, SecretGrant,
   ProjectVaultAnchor } from '#engine/index.js';
 export type { EffectConfirmation, EffectConfirmationView } from '#engine/index.js';
@@ -39,4 +39,4 @@ export async function runMcp(argv: readonly string[] = process.argv.slice(2)): P
   const { run } = await import('#composition/core/mcp/index.js');
   await run(argv);
 }
-export type { ApprovalAssuranceEvidence, ApprovalAssuranceAttester, ApprovalAssuranceProducerManifest, ApprovalAssuranceProducerRegistration } from '#engine/index.js';
+export type { ApprovalAssuranceEvidence, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalAssuranceAttester, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalAssuranceProducerManifest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalAssuranceProducerRegistration } from '#engine/index.js';

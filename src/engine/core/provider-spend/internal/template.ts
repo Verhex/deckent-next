@@ -1,7 +1,7 @@
 import { providerSpendBudgetSchema, type ProviderSpendBudget } from '#domain/index.js';
 import { providerSpendEvidenceDigest } from './account.js';
 type Template = Omit<ProviderSpendBudget, 'scopeId' | 'revision' | 'schemaVersion'>;
-export interface ProviderSpendTemplatePorts {
+interface ProviderSpendTemplatePorts {
   template(): Promise<Template | null>; current(): Promise<ProviderSpendBudget | null>; configured(): Promise<boolean>;
   create(budget: ProviderSpendBudget, evidenceDigest: string): Promise<unknown>;
 }

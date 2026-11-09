@@ -24,7 +24,7 @@ type DoctorJson = Partial<Readonly<{ schemaVersion: number; scope: string; platf
   toolchains: Readonly<{ providers: readonly Readonly<{ provider: string; status: string; reason?: string | null }>[] }> }>>;
 
 /** The report object among the JSON lines the doctor wrote (configuration warnings are JSON lines on the same sink). */
-export function doctorReportOf(text: string): DoctorJson | null {
+function doctorReportOf(text: string): DoctorJson | null {
   for (const line of text.split('\n').reverse()) {
     if (!line.trim().startsWith('{')) continue;
     try { const value = JSON.parse(line) as DoctorJson; if (value && value.scope === 'kernel' && value.schemaVersion === 2) return value; } catch { /* not the report */ }

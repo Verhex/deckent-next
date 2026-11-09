@@ -17,7 +17,7 @@ function parseFlags<T>(command: string, locale: Locale, parse: () => T): T {
     throw ErrorRegistry.createError('CLI_USAGE', { params: { command, usage: t('queue.cli.help', {}, locale), flag: typeof path === 'string' ? FLAG_OF[path] ?? path : '--input' } });
   }
 }
-export interface QueueCommandContext extends CliBaseContext, Pick<Parameters<typeof scopeLister>[0], 'configChoiceSources'> { deliveryQueue?: QueueSubmitClient; confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
+interface QueueCommandContext extends CliBaseContext, Pick<Parameters<typeof scopeLister>[0], 'configChoiceSources'> { deliveryQueue?: QueueSubmitClient; confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
   describeDeliverySummaries?: DeliverySummaryReader; readAutonomyShadow?: AutonomyShadowReader }
 /** Queue admission is non-interactive; the exact publish and adoption batch each need the verified TTY. */
 export async function queueCommand(argv: readonly string[], context: QueueCommandContext) {

@@ -39,12 +39,12 @@ export function uninstallStatusMessage(status: UninstallResult['status'], locale
     unknown: t('cli.uninstall.status.unknown', {}, locale) }[status];
 }
 /** A resource's card group from the registry; null for a file the card names by its path (unlisted, VCS-tracked, other owners' entries). */
-export function uninstallGroup(item: Pick<UninstallItem, 'resourceId'>): string | null {
+function uninstallGroup(item: Pick<UninstallItem, 'resourceId'>): string | null {
   const exact = Object.entries(registry.groups).find(([, ids]) => ids.includes(item.resourceId))?.[0];
   return exact ?? Object.entries(registry.prefixes).find(([prefix]) => item.resourceId.startsWith(prefix))?.[1] ?? null;
 }
 /** One readable line per tier blocker: an authority path keeps its path; a resource blocker its reason. */
-export function uninstallBlockerText(blocker: string, locale: Locale): string {
+function uninstallBlockerText(blocker: string, locale: Locale): string {
   const messages = uninstallMessages(locale), path = /^authority-(relocated|unsafe):(.+)$/su.exec(blocker), where = { path: safe(path?.[2] ?? '') };
   if (path) return path[1] === 'relocated' ? t('cli.uninstall.blocker.authority-relocated', where, locale) : t('cli.uninstall.blocker.authority-unsafe', where, locale);
   const key = blocker.startsWith('policy:') ? 'blocker.policy' : `blocker.${blocker}`, reason = blocker.slice(blocker.lastIndexOf(':') + 1);

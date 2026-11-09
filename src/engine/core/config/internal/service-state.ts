@@ -1,7 +1,7 @@
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { runtimeConfigFreshness } from './restart-digest.js';
 
-export type ConfigServiceState = 'current' | 'stale' | 'unknown' | 'stopped';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConfigServiceState = 'current' | 'stale' | 'unknown' | 'stopped';
 /** The one thing read from the service's answer; the full descriptor satisfies it. */
 export type DescribeService = (root: string, options: ConfigLoadOptions) => Promise<{ readonly configDigest?: string | undefined }>;
 const timeoutAfter = (milliseconds: number) => new Promise<never>((_, reject) => { setTimeout(() => reject(new Error('timeout')), milliseconds).unref(); });

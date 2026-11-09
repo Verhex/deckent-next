@@ -3,7 +3,7 @@ import { persistedString, persistedInteger, persistedUuid } from '#domain/index.
 import { z } from 'zod';
 
 const text = persistedString(z.string().min(1).max(256)), counter = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/u);
-export const personalCustodyOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const personalCustodyOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
   principal: z.strictObject({ issuer: text, subject: text }).readonly() }).readonly();
 export type PersonalCustodyOwner = z.infer<typeof personalCustodyOwnerSchema>;
 /** Named host contract v1. Never serialized to an application surface or accepted from a request. */

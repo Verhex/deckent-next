@@ -4,12 +4,12 @@ import { z } from 'zod';
 import { HUB_LIMITS } from '#domain/index.js';
 import { HubServerError, type HubIdentityVerifier } from '#engine/index.js';
 
-export const hubOidcProviderSchema = z.strictObject({ issuer: persistedUrl(), audience: persistedString(z.string().min(1)),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubOidcProviderSchema = z.strictObject({ issuer: persistedUrl(), audience: persistedString(z.string().min(1)),
   algorithms: z.array(z.enum(['RS256', 'ES256', 'EdDSA'])).min(1),
   /** The operator must configure values that certify WebAuthn + second factor at this exact issuer, never generic MFA alone. */
   passkeyAcr: z.array(persistedString(z.string().min(1))).min(1), passkeyAmr: z.array(persistedString(z.string().min(1))).min(1),
 }).readonly();
-export type HubOidcProvider = z.infer<typeof hubOidcProviderSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubOidcProvider = z.infer<typeof hubOidcProviderSchema>;
 const claimsSchema = z.object({ iss: z.string(), sub: persistedString(z.string().min(1)), aud: z.union([z.string(), z.array(z.string()).min(1)]),
   azp: z.string().optional(), nonce: z.string(), exp: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), iat: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), nbf: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
   email: persistedEmail(), email_verified: z.boolean(), name: persistedString(z.string().min(1)), acr: z.string(), amr: z.array(z.string()) });

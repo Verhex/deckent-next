@@ -5,7 +5,7 @@ import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
 import { assertPublicSecretName, assertSecretStorageProtection } from './protection.js';
 
-/** Who asks to change which secret in which scope. The principal is the verified caller, never an input of the request body. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Who asks to change which secret in which scope. The principal is the verified caller, never an input of the request body. */
 export interface SecretChangeRequest {
   readonly principal: { readonly issuer: string; readonly subject: string };
   readonly scopeId: string;

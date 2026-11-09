@@ -92,7 +92,7 @@ export interface FirstRunPolicyTemplateInput {
   readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[];
 }
 type RecoveryRuleVersion = Readonly<{ id: string; version: number }>;
-export interface FirstRunPolicyTemplate {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface FirstRunPolicyTemplate {
   readonly id: typeof FIRST_RUN_POLICY_TEMPLATE_ID;
   readonly version: typeof FIRST_RUN_POLICY_TEMPLATE_VERSION;
   readonly policy: PolicyFile;
@@ -162,7 +162,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: number) {
   return { policy, bindings };
 }
 
-/** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
 export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: number; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
@@ -229,7 +229,7 @@ const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
 /** v7 actions (SPEND-SETTLEMENT): read, audit and the two governed management commands (held reconcile, budget revision). */
 const PROVIDER_SPEND_ACCOUNT_ACTIONS = ['inspect', 'audit', 'reconcile', 'budget-revision'] as const;
-export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[];
     /** Rules still missing after this batch (only when the plan exceeds POLICY_CHANGE_MAX); a second run plans them. `covered`: v20 rules an allow covers (never added). */ readonly remaining?: number; readonly covered?: readonly FirstRunProposalCover[] }
   | { readonly status: 'current'; readonly conflicts: readonly string[]; readonly covered?: readonly FirstRunProposalCover[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
 type Selection = 'all' | readonly string[];
@@ -333,7 +333,7 @@ export function policyNamedPeople(current: unknown, scopeId: string, limit: numb
   }
   return Object.freeze(people);
 }
-export type NamedPersonAdditions = Extract<FirstRunTemplateAdditions, { readonly status: 'plan' | 'current' }>
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NamedPersonAdditions = Extract<FirstRunTemplateAdditions, { readonly status: 'plan' | 'current' }>
   | { readonly status: 'unavailable'; readonly reason: 'person-not-named' | 'invalid' };
 /**
  * The v4 → v5 additions for a hand-built policy (POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079): a v2 policy without the template's

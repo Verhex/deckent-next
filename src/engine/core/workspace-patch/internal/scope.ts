@@ -1,7 +1,7 @@
 import { createGlobMatcher, hasGlobWildcard } from '#platform/index.js';
 import { instructionSurfaceWrites } from '#domain/index.js';
 import { WorkspacePatchError, type WorkspacePatch } from './contract.js';
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * K6 = A (owner 2026-09-30; lane Jev c93ceea4): every changed path of a host-produced patch is classified against the task's declared
  * scope (`workInput.scope.paths`, task graph v3). Derived, never persisted: both inputs are immutable (content-addressed patch artifact,
  * Run snapshot frozen at admission), so the classification is reproducible from durable evidence; `matcher` names the match rules.

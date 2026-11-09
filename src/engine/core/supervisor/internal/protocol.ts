@@ -5,7 +5,7 @@ const operation = z.enum(['execute', 'observe', 'cancel', 'recover-output', 'rel
 export const supervisorCommandSchema = z.strictObject({ protocolVersion: z.literal(1), requestId: identitySchema,
   operation, request: sandboxRequestSchema }).readonly();
 const header = { protocolVersion: z.literal(1), requestId: identitySchema, identity: attemptIdentitySchema };
-export const supervisorReplySchema = z.discriminatedUnion('operation', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const supervisorReplySchema = z.discriminatedUnion('operation', [
   z.strictObject({ ...header, operation: z.literal('execute'), value: sandboxResultSchema }),
   z.strictObject({ ...header, operation: z.literal('observe'), value: sandboxObservationSchema }),
   z.strictObject({ ...header, operation: z.literal('cancel'), value: sandboxObservationSchema }),

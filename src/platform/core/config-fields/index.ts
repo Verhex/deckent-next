@@ -3,7 +3,7 @@ export { mergeConfigFields } from './internal/field.js';
 export { SQLITE_STORAGE_OPTIONS } from './internal/storage.js';
 export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, GIT_COPY_BYTES, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS, deliveryMode } from './internal/execution.js';
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './internal/fields.js';
-export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, parseConfigEntry, configEntryAllowed } from './internal/choices.js';
+export { CONFIG_VALUE_CHOICES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CONFIG_ALLOWED_ENTRY_FIELDS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, parseConfigEntry, configEntryAllowed } from './internal/choices.js';
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit } from './internal/choices.js';
 export { configStepper, stepConfigNumber, configNumberText } from './internal/numeric.js';
 export type { ConfigStepper } from './internal/numeric.js';

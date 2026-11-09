@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 
 export const MODEL_INGRESS_FIELD_TEXT_ENCODING = 'deckent.model-ingress-field-text.v1';
 export const MODEL_INGRESS_MODEL_TEXT_ENCODING = 'deckent.model-ingress-model-text.v1';
-export type ModelIngressTextEncoding = typeof MODEL_INGRESS_FIELD_TEXT_ENCODING | typeof MODEL_INGRESS_MODEL_TEXT_ENCODING;
-export type ModelIngressTextDigest = {
+type ModelIngressTextEncoding = typeof MODEL_INGRESS_FIELD_TEXT_ENCODING | typeof MODEL_INGRESS_MODEL_TEXT_ENCODING;
+type ModelIngressTextDigest = {
   readonly encodingVersion: ModelIngressTextEncoding;
   readonly codeUnits: number;
   readonly sha256: string;

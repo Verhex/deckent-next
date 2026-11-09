@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { persistedString, identitySchema, counterSchema, immutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
-export const criterionTypeSchema = z.enum(['completion', 'correctness', 'safety', 'authorization']);
-export const coreEvidenceTypeSchema = z.enum(['retained-artifact', 'verification-result', 'operation-settlement', 'observed-readback', 'approval-receipt']);
-export const evidenceTypeSchema = z.union([coreEvidenceTypeSchema, z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)]);
-export const criterionAcceptanceSchema = z.strictObject({ criterionType: criterionTypeSchema,
+const criterionTypeSchema = z.enum(['completion', 'correctness', 'safety', 'authorization']);
+const coreEvidenceTypeSchema = z.enum(['retained-artifact', 'verification-result', 'operation-settlement', 'observed-readback', 'approval-receipt']);
+const evidenceTypeSchema = z.union([coreEvidenceTypeSchema, z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)]);
+const criterionAcceptanceSchema = z.strictObject({ criterionType: criterionTypeSchema,
   evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
 }).refine(value => new Set(value.evidenceTypes).size === value.evidenceTypes.length).readonly();
 /** Version-1 text safety bound; description is explanatory, evaluator rules live in parameters. */

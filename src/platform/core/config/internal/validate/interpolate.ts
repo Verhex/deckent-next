@@ -4,7 +4,7 @@ import { DeckentError } from '#platform/core/errors/index.js';
 
 /** Composition supplies the authorized secret backend; no file-format or keyring policy lives here. */
 export type SecretResolver = (reference: string) => Promise<string | undefined>;
-export interface SecretResolution<T> { readonly config: T; readonly secretPaths: readonly string[]; readonly references: readonly string[]; readonly knownSecrets: KnownSecretSnapshot }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SecretResolution<T> { readonly config: T; readonly secretPaths: readonly string[]; readonly references: readonly string[]; readonly knownSecrets: KnownSecretSnapshot }
 /** One exact grammar shared by interpolation and the pre-resolution section guard. */
 export function parseSecretReference(value: unknown): string | undefined {
   return typeof value === 'string' ? value.match(/^\$DECK:([A-Z_][A-Z0-9_]*)$/)?.[1] : undefined;

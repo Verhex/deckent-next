@@ -16,8 +16,8 @@ const imagePin = z.looseObject({ imageId: digest, providers: z.array(z.string().
 const receiptSchema = z.looseObject({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: digest, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
   images: z.array(imagePin).nonempty().optional(), manifest: z.looseObject({ providers: z.array(z.looseObject({ id: z.string().regex(/^[a-z0-9]{1,32}$/u) })).nonempty() }).optional(), measuredAt: persistedDateTime() })
   .refine(value => value.schemaVersion === 2 || value.images?.[0]?.imageId === value.imageId);
-export type WorkerImagePresence = 'present' | 'missing' | 'unknown';
-export type WorkerImageReceiptView = Readonly<{ imageId: string; imageVersion: string; durationMs?: number; images?: readonly Readonly<{ imageId: string; providers: readonly string[] }>[] }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerImagePresence = 'present' | 'missing' | 'unknown';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerImageReceiptView = Readonly<{ imageId: string; imageVersion: string; durationMs?: number; images?: readonly Readonly<{ imageId: string; providers: readonly string[] }>[] }>;
 
 /** Exact image presence; daemon uncertainty never means missing. */
 export async function workerImagePresence(input: Readonly<{ executable: string; imageId: string; timeoutMs?: number; outputBytes?: number }>): Promise<WorkerImagePresence> {

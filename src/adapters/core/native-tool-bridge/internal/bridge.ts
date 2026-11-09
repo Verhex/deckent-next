@@ -14,7 +14,7 @@ export interface NativeToolBridgeLimits {
   readonly replayMaxEntries: number;
   readonly replayMaxBytes: number;
 }
-export interface NativeToolBridgeOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface NativeToolBridgeOptions {
   /** Composition supplies K1's AI/MCP session, never a human application port. */
   readonly port: ToolSessionPort;
   readonly bridge: NativeAgentBridge;

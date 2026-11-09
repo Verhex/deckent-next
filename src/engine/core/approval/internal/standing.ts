@@ -17,7 +17,7 @@ export function standingCallKey(call: { readonly tool: string; readonly cell: st
   return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, pattern: found.pattern.text, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
 }
 
-/** Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
 export type StandingCellName = SessionCell;
 
 /** Typed refusals of the standing-approval application (never a silent no-op: the card tells the person what was not saved). */
@@ -27,7 +27,7 @@ export class StandingApprovalError extends CodedError {
   }
 }
 
-/** Opaque process-local custody for one pending remembered audit; only its SessionStanding owner can commit it. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Opaque process-local custody for one pending remembered audit; only its SessionStanding owner can commit it. */
 export interface SessionStandingBinding { valid(): boolean; close(): void }
 
 /**
@@ -105,7 +105,7 @@ export async function rememberSessionStanding(input: { readonly memory: SessionS
 }
 
 export interface StandingGrantView { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
-/** What the card may offer for "in this project always": the person's own persisted grant, or why not. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the card may offer for "in this project always": the person's own persisted grant, or why not. */
 export type StandingOffer = { readonly available: true } | { readonly available: false; readonly reason: 'unsupported' | 'limit' | 'delegation' };
 
 export interface PersistentStandingDependencies {

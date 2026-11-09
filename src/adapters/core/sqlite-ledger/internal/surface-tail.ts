@@ -4,11 +4,10 @@ import { AttemptStoreError } from '#engine/index.js';
 import type { SqliteLedgerOptions } from './options.js';
 import { openSqliteLedgerReadOnly } from './connection.js';
 
-export const LEDGER_SURFACE_KINDS = ['approval', 'run', 'worker'] as const;
-export type LedgerSurfaceKind = typeof LEDGER_SURFACE_KINDS[number];
+export type LedgerSurfaceKind = 'approval' | 'run' | 'worker';
 /** One new publication row. `missed` is how many earlier revisions of this row were not returned. */
-export type LedgerSurfaceRow = { readonly kind: LedgerSurfaceKind; readonly id: string; readonly missed: number };
-export interface LedgerSurfaceTail { read(): readonly LedgerSurfaceRow[]; close(): void }
+type LedgerSurfaceRow = { readonly kind: LedgerSurfaceKind; readonly id: string; readonly missed: number };
+interface LedgerSurfaceTail { read(): readonly LedgerSurfaceRow[]; close(): void }
 
 type IdRow = { n: number; id: string };
 type RunRow = { run_id: string; revision: number };

@@ -40,7 +40,7 @@ export const memoryEvaluationResolver = (openStore: MemoryJournalDependencies['o
     return { record: ref, evaluator: record.evaluator, verdict: record.verdict, subjectDigest: record.subjectDigest, mode: record.mode, evaluatorModel: record.evaluatorModel, sourceModels: record.sourceModels };
   } finally { store.close(); }
 };
-/** §6.2 step 2: the independent rows (canonical maker differs from every source maker), subscription channels first, then registry order. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). §6.2 step 2: the independent rows (canonical maker differs from every source maker), subscription channels first, then registry order. */
 export function selectMemoryEvaluator(rows: readonly MemoryEvaluatorRow[], sources: readonly MemoryModelRef[]): MemoryEvaluatorRow | null {
   const eligible = independentMakerRows(rows.filter(row => row.invocable), row => row.maker, sources.map(model => model.maker));
   const rank = (row: MemoryEvaluatorRow) => { const index = BILLING_ORDER.indexOf(row.billing ?? ''); return index < 0 ? BILLING_ORDER.length : index; };
@@ -62,7 +62,7 @@ function capped(records: readonly MemoryEvaluationRecord[], now: number, automat
   if (use.spendUnknown || use.minorUnits >= bounds.spendMinorUnitsPerScopePerDay) return 'memory.alert.spendCap';
   return null;
 }
-export interface MemoryEvaluationDependencies {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface MemoryEvaluationDependencies {
   readonly deps: MemoryJournalDependencies;
   readonly evaluator: MemoryEvaluatorPorts;
   /** The evaluator's own principal (composition root identity). */

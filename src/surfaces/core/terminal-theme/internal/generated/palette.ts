@@ -4,14 +4,14 @@
  */
 export type PaletteRole = 'model' | 'provider' | 'success' | 'error' | 'warning' | 'info' | 'muted' | 'accent' | 'focus' | 'link' | 'code' | 'userBar' | 'userLabel' | 'assistantLabel' | 'workerCard' | 'windowBorder' | 'windowTitle' | 'selection' | 'diffAdded' | 'diffRemoved' | 'modeIndicator' | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'systemLabel' | 'systemRail' | 'stateConnected' | 'stateDisconnected';
 
-export type PaletteClass = 'primary' | 'supplemental' | 'decorative';
+type PaletteClass = 'primary' | 'supplemental' | 'decorative';
 
 /** WCAG 2.2: `text` needs 4.5:1 (1.4.3), `border` 3:1 (1.4.11) against each reference background; `none` uses the terminal's foreground. */
-export type PaletteContrast = 'text' | 'border' | 'none';
+type PaletteContrast = 'text' | 'border' | 'none';
 
 export type PaletteTheme = 'dark' | 'light' | 'dark-daltonized' | 'light-daltonized' | 'dark-ansi' | 'light-ansi' | 'dark-high-contrast' | 'light-high-contrast' | 'neutral-ansi';
 
-export interface PaletteEntry {
+interface PaletteEntry {
   readonly hex: string | null;
   readonly ansi256: number | null;
   readonly ansi16: string;

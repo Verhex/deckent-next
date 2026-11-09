@@ -9,7 +9,7 @@ import type { EffectStore } from '#engine/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { LocalRuntimeSocketError } from '#adapters/core/local-runtime-socket/index.js';
-export interface FileEffectStoreBounds { readonly maxBytes: number; readonly maxRecords: number }
+interface FileEffectStoreBounds { readonly maxBytes: number; readonly maxRecords: number }
 const bodySchema = z.strictObject({ schemaVersion: z.literal(1), revision: counterSchema, records: z.array(effectRecordSchema) });
 type Body = z.infer<typeof bodySchema>;
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);

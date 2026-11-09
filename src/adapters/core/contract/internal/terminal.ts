@@ -9,7 +9,7 @@ import responseStyleData from './terminal-response-styles.json' with { type: 'js
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi', 'dark-high-contrast', 'light-high-contrast', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
 /** T2 attention notices (first entry = default): the terminal bell while the window is unfocused, or nothing. */
-export const TERMINAL_NOTIFY = ['bell', 'off'] as const;
+const TERMINAL_NOTIFY = ['bell', 'off'] as const;
 /** T6 response style vocabulary: registry data (`terminal-response-styles.json`); `default` is the id that adds nothing to the model-facing instructions. */
 export const TERMINAL_RESPONSE_STYLES = Object.freeze(Object.keys(responseStyleData.styles)) as readonly [string, ...string[]];
 const DEFAULT_RESPONSE_STYLE = responseStyleData.default;
@@ -91,8 +91,8 @@ export const terminalConfigSchema = z.strictObject({
   }).optional(),
 });
 
-export type TerminalConfig = z.infer<typeof terminalConfigSchema>;
-export type TerminalChatConfig = NonNullable<TerminalConfig['chat']>;
+type TerminalConfig = z.infer<typeof terminalConfigSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TerminalChatConfig = NonNullable<TerminalConfig['chat']>;
 
 export function readTerminalChatConfig(config: Record<string, unknown>): TerminalChatConfig | null {
   const section = config['terminal'];
@@ -108,7 +108,7 @@ export function readTerminalShellConfig(config: Record<string, unknown>): Termin
   return Object.freeze({ realm: shell.realm, timeoutMs: shell.timeoutMs, environment: Object.freeze([...shell.environment]), clockStepToleranceMs: shell.clockStepToleranceMs });
 }
 
-export type TerminalScratchConfig = { readonly writeMaxBytes: number; readonly sessionMaxBytes: number; readonly installationMaxBytes: number;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TerminalScratchConfig = { readonly writeMaxBytes: number; readonly sessionMaxBytes: number; readonly installationMaxBytes: number;
   readonly retentionDays: number; readonly sweepIntervalMs: number };
 /** The scratch section, or its defaults when absent (1 MiB write, 64 MiB session, 512 MiB installation, 7 days, hourly sweep). */
 export function readTerminalScratchConfig(config: Record<string, unknown>): TerminalScratchConfig {
@@ -127,7 +127,7 @@ export function readTerminalFetchConfig(config: Record<string, unknown>): Termin
   return Object.freeze({ egress, allowedHosts: Object.freeze([...allowedHosts]), maxBytes, timeoutMs, maxRedirects });
 }
 
-export type TerminalResponseStyle = { readonly id: string; readonly instruction: string | null };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TerminalResponseStyle = { readonly id: string; readonly instruction: string | null };
 /** The configured response style with the instruction line it adds to a turn (null for the default style or an id without a line). */
 export function readTerminalResponseStyle(config: Record<string, unknown>): TerminalResponseStyle {
   const id = config['terminal'] === undefined ? DEFAULT_RESPONSE_STYLE : terminalConfigSchema.parse(config['terminal']).responseStyle;

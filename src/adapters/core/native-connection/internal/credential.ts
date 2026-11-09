@@ -38,7 +38,7 @@ export function nativeProjectionDispatch(binding: NativeSubscription | undefined
 export class NativeConnectionError extends CodedError {
   constructor(override readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE' | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' | 'NATIVE_SUBSCRIPTION_OTHER_PERSON') { super(code); this.name = 'NativeConnectionError'; }
 }
-/** A provider's local credential spec as shipped in `providers.json`; declared explicitly so the published `.d.ts` never references the JSON module. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A provider's local credential spec as shipped in `providers.json`; declared explicitly so the published `.d.ts` never references the JSON module. */
 export interface NativeProviderSpec { readonly homeOverride: string; readonly home: string; readonly file: string; readonly destinations: readonly string[];
   readonly environment: Readonly<Record<string, string>>;
   /** How a Docker worker of this CLI authenticates: `relayed` (the host relay attaches the login per request; the container holds a placeholder),

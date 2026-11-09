@@ -11,7 +11,7 @@ export interface SessionAuthority {
 export interface SessionVerifier {
   verifySession(credential: unknown): Promise<Readonly<{ principal: unknown; session: unknown }>>;
 }
-export interface AuthenticatedSession { readonly principal: VerifiedPrincipal; readonly session: VerifiedSession }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AuthenticatedSession { readonly principal: VerifiedPrincipal; readonly session: VerifiedSession }
 export class SessionAuthenticationError extends CodedError {
   constructor(override readonly code: 'SESSION_REQUIRED' | 'SESSION_EXPIRED' | 'SESSION_INACTIVE') { super(code); this.name = 'SessionAuthenticationError'; }
 }

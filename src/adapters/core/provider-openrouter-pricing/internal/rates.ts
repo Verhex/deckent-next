@@ -3,7 +3,7 @@ import { decimalRate, maxRate, type DecimalRate } from './decimal.js';
 import { OpenRouterPricingError } from './error.js';
 
 export const chargeDimensions = ['prompt', 'completion', 'request', 'input_cache_read', 'input_cache_write', 'input_cache_write_1h', 'internal_reasoning'] as const;
-export type ChargeDimension = typeof chargeDimensions[number];
+type ChargeDimension = typeof chargeDimensions[number];
 export type TariffRates = Readonly<Record<ChargeDimension, DecimalRate>>;
 const conditions = ['min_prompt_tokens', 'utc_start', 'utc_end', 'utc_days'];
 const unreachable = ['image', 'image_output', 'image_token', 'web_search', 'audio', 'audio_output', 'input_audio_cache'];

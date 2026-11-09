@@ -85,7 +85,7 @@ const BACKUP_SECRET = 'BACKUP_PASSPHRASE';
  * Who uses each key, from the installation's own config layer (the only layer that may hold `$DECK:NAME`): the config field that names it,
  * plus the scheduled backup's fixed passphrase. Read in memory with the shared reference grammar; no store is opened, no value is read.
  */
-export async function secretUsers(root: string, options: ConfigLoadOptions, locale: Locale): Promise<Map<string, string[]>> {
+async function secretUsers(root: string, options: ConfigLoadOptions, locale: Locale): Promise<Map<string, string[]>> {
   const users = new Map<string, string[]>(), add = (name: string, user: string) => users.set(name, [...(users.get(name) ?? []), user]);
   const global = await loadGlobalConfig(options).catch(() => null);
   if (global) {

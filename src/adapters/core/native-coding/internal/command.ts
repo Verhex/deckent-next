@@ -31,7 +31,7 @@ export const nativeCodingInvocationFields = z.strictObject({
 });
 export const nativeCodingInvocationSchema = nativeCodingInvocationFields.refine(value => value.schemaVersion >= 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined))
   .refine(value => (value.schemaVersion === 4) === (typeof value.model === 'object')).readonly();
-export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 
 /** One rule for templates and compilation: `disabled` needs a registered realisation (argv or checkout), hook settings need `repository`,
  * and a project hidden set only exists for a checkout-realised `disabled`. */

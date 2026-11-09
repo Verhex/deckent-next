@@ -7,7 +7,7 @@ import { CURRENT_LEDGER_VERSION } from './schema.js';
 import { sqliteFailure, assertSqliteEngineSupported, type SqliteLedgerOptions } from './options.js';
 
 const COMPANY = /^[a-z0-9][a-z0-9-]{0,62}$/;
-export interface ScopeRegistration {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ScopeRegistration {
   readonly registered: readonly string[]; readonly pinnedElsewhere: readonly string[];
   /** Effective pin of every requested scope after the insert-only write (a concurrent writer may have pinned it elsewhere). */
   readonly pins: ReadonlyMap<string, string>;

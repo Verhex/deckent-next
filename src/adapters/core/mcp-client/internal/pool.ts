@@ -15,7 +15,7 @@ import { MCP_TRUST_TOOLS_MAX } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 import { boundedMcpTransport } from './input.js';
 
-/** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the `initialize` era as the fallback — 2025-11-25
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the `initialize` era as the fallback — 2025-11-25
  * offered first, every earlier published revision accepted when a server answers with it (spec 2025-11-25 lifecycle "Version Negotiation"; YTK-40). */
 export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
 export const MCP_CLIENT_IDENTITY = createHash('sha256').update(JSON.stringify([PACKAGE_VERSION, readBuildIdentity()?.sourceTreeSha256 ?? null, MCP_CLIENT_PROTOCOL_VERSIONS])).digest('hex');
@@ -24,7 +24,7 @@ export const MCP_SERVER_HOMES_DIR = 'mcp-home';
 export const MCP_CLIENT_TOOLS_MAX = MCP_TRUST_TOOLS_MAX;
 /** Pages of one `tools/list` (SDK ≥ 2.2 follows `nextCursor` itself; `listMaxPages` is its hard cap, so a server that never stops paging ends here). */
 export const MCP_CLIENT_LIST_PAGES_MAX = 16;
-export const MCP_CLIENT_STDERR_TAIL_BYTES = 4_096;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MCP_CLIENT_STDERR_TAIL_BYTES = 4_096;
 
 /** Where a server starts: the project root, the service environment (a stdio server's base, the HOME/PATH of a sandbox view) and the sandbox providers. */
 export interface McpLaunchContext {
@@ -162,12 +162,12 @@ export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legac
 /** An answered call's JSON-RPC error: the server's own (`server`), SEP-2243 HEADER_MISMATCH (`header-mismatch`, -32020; never re-sent), or a
  * structured result that does not conform to the pinned outputSchema or is missing although one is declared (`output-schema`, -32602; the
  * server answered, so its effect may have happened). */
-export interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' }
+interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' }
 /** Why the current registry and trust no longer admit a call (MCP-REVOKE): the trust was reset or the server removed or declined
  * (`trust-revoked`), its definition or scope is not the one the call was offered under (`definition-changed`), the tool's pin is gone or
  * different (`pin-revoked`), or the trust record cannot be read or locked (`trust-unavailable`, fail closed). */
 export type McpSendRefusal = 'trust-revoked' | 'definition-changed' | 'pin-revoked' | 'trust-unavailable';
-/** The send authority of one call: asked right before the request is handed to the SDK, after every local pre-send check; null admits.
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The send authority of one call: asked right before the request is handed to the SDK, after every local pre-send check; null admits.
  * Required (A6-11): a caller with no trust layer names `probe-only`, so a call can never skip MCP-REVOKE by leaving it out. */
 export type McpSendAdmission = (() => Promise<McpSendRefusal | null>) | 'probe-only';
 export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: CallToolResult } | { readonly outcome: 'answered'; readonly error: McpAnsweredError }

@@ -7,7 +7,7 @@ import { PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LIMITS, type ProviderConnectKi
 import type { ProviderProbeOptions } from './probe.js';
 const workspace = z.object({ id: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u), name: persistedString(z.string().min(1).max(256)), archived_at: z.string().nullable() });
 const page = z.object({ data: z.array(workspace), has_more: z.boolean(), last_id: z.string().nullable() });
-export type ProviderWorkspace = Readonly<{ id: string; name: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderWorkspace = Readonly<{ id: string; name: string }>;
 /** Registry-pinned free metadata read. Redirects, incomplete pagination, invalid data and excess bytes fail closed. */
 export async function listProviderWorkspaces(profile: unknown, key: string, options: ProviderProbeOptions = {}): Promise<readonly ProviderWorkspace[]> {
   const parsed = modelInvocationProfileSchema.parse(profile); if (parsed.adapter.id !== ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'not-listable');

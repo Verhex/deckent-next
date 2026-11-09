@@ -10,7 +10,7 @@ export const CATALOG_BILLING_KINDS = Object.freeze(['subscription', 'per-token',
 export const CATALOG_PRICING_KINDS = Object.freeze(['per-token', 'subscription', 'unknown'] as const);
 export const MODEL_LIFECYCLE_STATES = Object.freeze(['active', 'legacy', 'deprecated', 'retired'] as const);
 export const REASONING_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const);
-export const EXACT_MODEL_ID_MAX_LENGTH = 256;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const EXACT_MODEL_ID_MAX_LENGTH = 256;
 const CATALOG_ALIAS_MAX = 64;
 
 /** An exact model id as a provider's API names it: printable, trimmed, never option-like. Aliases share the grammar and are data. */

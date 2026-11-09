@@ -1,6 +1,6 @@
 import { BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS } from './arguments.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S3-5: the closed view one non-shell process runs in (the headless subscription CLI). Every path is absolute and real; nothing outside it exists
  * inside the realm (bubblewrap's root is its own tmpfs), so the rest of the person's HOME (`~/.ssh`, tokens, other projects) is absent. The order
  * below is the mount order and is load-bearing: a later mount covers an earlier one.
@@ -24,7 +24,7 @@ export interface IsolatedProcessView {
   readonly tmpfsBytes: number;
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * bubblewrap's arguments for a view (without `-- <command>`), per the bundled 0.13.0 manual: every namespace unshared and the user namespace
  * required (`--disable-userns` needs it: the process cannot build a namespace of its own to rearrange its view), no `--share-net` (an empty
  * network namespace: only loopback), the realm dies with its launcher (PID namespace: no process outlives the call), a fresh /proc and a

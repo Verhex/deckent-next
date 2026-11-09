@@ -66,7 +66,7 @@ export async function restoreUninstallArchive(set: string, roots: readonly strin
   try { await (await verifyBackupCoverage(base, input, passphrase, limits, [owner(roots, new Map(), kept)])).restore(); } finally { base.close(); }
   if (kept.length) throw ErrorRegistry.createError('UNINSTALL_RESTORE_KEPT', { params: { paths: kept.join(', ') } }); return true;
 }
-export const hasUninstallArchive = (set: string) => existsSync(set + manifestSuffix);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hasUninstallArchive = (set: string) => existsSync(set + manifestSuffix);
 /** The folders an uninstall archive may write back into: the project folder, the vault folder of the person's global home and the trust store. */
 export const uninstallArchiveRoots = (projectRoot: string, globalRoot: string, env: Readonly<Record<string, string | undefined>> = process.env) =>
   [projectRoot, join(globalRoot, PROJECT_VAULT.directory), dirname(instructionTrustDirectory(env))]; // a store emptied by uninstall comes back too

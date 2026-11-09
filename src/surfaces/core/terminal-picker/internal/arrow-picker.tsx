@@ -17,7 +17,7 @@ const FALLBACK_COLUMNS = 80;
 const FILTER_CONTROL = /[\u0000-\u001f\u007f]/gu;
 
 /** The original indexes of the rows whose text contains `filter` (case-insensitive); an empty filter keeps every row. */
-export function filterPickerRows(rows: readonly string[], filter: string): readonly number[] {
+function filterPickerRows(rows: readonly string[], filter: string): readonly number[] {
   const needle = filter.toLowerCase();
   return rows.flatMap((row, index) => !needle || row.toLowerCase().includes(needle) ? [index] : []);
 }

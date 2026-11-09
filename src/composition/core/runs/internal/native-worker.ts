@@ -23,7 +23,7 @@ export async function resolveNativeWorkerUse(root: string, scopeId: string, bind
 }
 export type NativeWorkerUse = Awaited<ReturnType<typeof resolveNativeWorkerUse>>;
 /** `use`: this check point's own fresh resolution of the same binding; the point then reads one snapshot. */
-export async function nativeWorkerResource(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions, use?: NativeWorkerUse) {
+async function nativeWorkerResource(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions, use?: NativeWorkerUse) {
   const current = use ?? await resolveNativeWorkerUse(root, scopeId, binding, options);
   const reader = await openSqliteInventoryReader(await current.context.path(), { busyTimeoutMs: current.context.config.storage.sqlite.busyTimeoutMs });
   try {

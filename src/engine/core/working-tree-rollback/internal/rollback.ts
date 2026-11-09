@@ -11,7 +11,7 @@ import { deliverySummary, patchChangeDigests, requireDelivered, WorkspacePatchEr
 export const workingTreeRollbackCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, deliveryCommandId: identitySchema }).readonly();
 export type WorkingTreeRollbackCommand = z.infer<typeof workingTreeRollbackCommandSchema>;
-/** The working-tree target's undo: the delivered patch's `before` contents back, only while every path still holds its `after` (same lock and writer). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The working-tree target's undo: the delivered patch's `before` contents back, only while every path still holds its `after` (same lock and writer). */
 export interface WorkingTreeRollbackTarget extends Pick<IntegrationDeliveryTarget, 'delivered'> { rollback(plan: IntegrationDeliveryPlan, patch: WorkspacePatch): Promise<readonly string[] | void> }
 
 /**

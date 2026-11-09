@@ -15,10 +15,10 @@ const SGR_TOKEN = /\u001b\[[\d;]*m/u;
 const SGR_ALL = /\u001b\[[\d;]*m/gu;
 const REVERSE_ON = '\u001b[7m', REVERSE_OFF = '\u001b[27m';
 
-export const stripSgr = (text: string): string => text.replace(SGR_ALL, '');
+const stripSgr = (text: string): string => text.replace(SGR_ALL, '');
 
 /** −1, 0 or 1: document order of two points (an unknown key sorts first; the caller drops such a selection). */
-export function comparePoints(blocks: ViewportBlocks, a: SelectionPoint, b: SelectionPoint): number {
+function comparePoints(blocks: ViewportBlocks, a: SelectionPoint, b: SelectionPoint): number {
   const left = blocks.keys.indexOf(a.key), right = blocks.keys.indexOf(b.key);
   return Math.sign(left - right || a.line - b.line || a.cell - b.cell);
 }

@@ -13,7 +13,7 @@ export const branchDecisionSchema = z.strictObject({ schemaVersion: z.literal(1)
   request: branchInputSchema, sourceGraph: taskGraphSchema,
   selectedTaskId: identitySchema, notSelectedTaskId: identitySchema,
 }).readonly();
-export type BranchDecision = z.infer<typeof branchDecisionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BranchDecision = z.infer<typeof branchDecisionSchema>;
 
 /** Compile one exclusive diamond into the ordinary DAG. Nonselected work is retained in the
  * decision evidence, never forged as an accepted Task. Other consumers are rejected, not rewired. */

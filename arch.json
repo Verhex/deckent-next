@@ -4781,7 +4781,6 @@
     },
     "src/surfaces/core/terminal-onboarding": {
       "dependencies": [
-        "src/domain/core/run",
         "src/engine/core/setup",
         "src/engine/core/worker-setup",
         "src/engine/core/run-proposal",
@@ -5505,9 +5504,9 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42157,
+      "adapters": 42125,
       "surfaces": 45000,
-      "composition": 13676
+      "composition": 13668
     },
     "totalSrcLines": 200000,
     "testCases": 8980,

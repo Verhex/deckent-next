@@ -13,7 +13,7 @@ function stateText(entry: Entry, locale: Locale): string {
 }
 
 /** The page as a person reads it: short Run and attempt ids among the page's own (`--verbose`: full), owner, launch/exit state, cancellation, output. */
-export function renderInventory(data: InventoryPage, context: RunCommandContext, locale: Locale, verbose: boolean, notice: readonly string[]): string {
+function renderInventory(data: InventoryPage, context: RunCommandContext, locale: Locale, verbose: boolean, notice: readonly string[]): string {
   const entries = data.page.entries, runs = entries.map(entry => entry.identity.runId), attempts = entries.map(entry => entry.identity.attemptId);
   const id = (value: string, among: readonly string[]) => verbose ? value : shownId(value, among);
   return terminalSafeText([...notice, t('inventory.heading', { count: entries.length }, locale),

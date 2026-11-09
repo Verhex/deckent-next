@@ -30,7 +30,7 @@ export const GIT_EXECUTION_SETTINGS = z.strictObject({ get gitExecutable() { ret
 const configIdentity = persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 /** B06-2c: what counts as verification of an adopted commit. `kind` is the task kind whose Run verifies; `required` refuses adoption
  * without one; `criteria` is the bar each such Run's acceptance must meet (per evaluator: never accepting more than these parameters). */
-export const ADOPTION_VERIFICATION_REQUIREMENT = z.strictObject({ kind: configIdentity, get required() { return z.boolean(); },
+const ADOPTION_VERIFICATION_REQUIREMENT = z.strictObject({ kind: configIdentity, get required() { return z.boolean(); },
   get criteria() { return z.array(z.strictObject({ evaluator: z.strictObject({ id: configIdentity, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }),
     parameters: z.record(z.string(), z.unknown().optional()) })).min(1).max(16); } });
 export const ADOPTION_TARGET_SETTINGS = z.strictObject({ get targets() { return z.array(z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/)).max(64).prefault([]).describe('config.field.execution.adoption.targets'); },

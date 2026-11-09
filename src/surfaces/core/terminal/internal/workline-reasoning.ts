@@ -7,7 +7,7 @@ export type WorklineReasoningLabels = Readonly<{ on: string; off: string; usage:
 const NEUTRAL: WorklineReasoningLabels = { on: 'Reasoning on (preview and model thinking)', off: 'Reasoning off (preview and model thinking)',
   usage: 'Usage: /reasoning [on|off]' };
 /** What the `/reasoning` window sets: whether the model thinks, and whether the live preview of that thinking is shown. */
-export type ReasoningSetting = 'thinking-on' | 'thinking-off' | 'preview-on' | 'preview-off';
+type ReasoningSetting = 'thinking-on' | 'thinking-off' | 'preview-on' | 'preview-off';
 
 /**
  * Whether the model reasons in this terminal session (TL-A D6, protocol v16): on by default, for this session only. Off hides the

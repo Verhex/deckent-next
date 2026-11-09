@@ -4,7 +4,7 @@ import type { CliCardRequest } from './card.js';
 /** Where the scope of a command came from: typed `--scope`, the configured `terminal.scopeId` (reads only), or the person's TTY choice. */
 export type ScopeResolution = Readonly<{ scopeId: string; source: 'flag' | 'default' | 'picked' }>;
 /** The person's choice on a TTY card (the CLI card launcher); null = cancelled. */
-export type ScopePick = (request: CliCardRequest) => Promise<string | null>;
+type ScopePick = (request: CliCardRequest) => Promise<string | null>;
 
 /**
  * The scope rule (CLI review "Scope"): a read uses `--scope` or the configured default and says which; a change never takes a silent

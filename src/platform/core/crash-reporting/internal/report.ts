@@ -27,7 +27,7 @@ export function formatHumanError(error: DeckentError, options: ColorOptions & { 
   if (error.docLink) lines.push(t('error.docs', { text: error.docLink }, locale));
   return redactSensitive(lines.join('\n'));
 }
-export interface CrashArtifactV1 { schemaVersion: 1; timestamp: string; pid: number; command: string; deckentVersion: string; projectRootDigest: string; name: string; message: string; stack: string | null }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface CrashArtifactV1 { schemaVersion: 1; timestamp: string; pid: number; command: string; deckentVersion: string; projectRootDigest: string; name: string; message: string; stack: string | null }
 export function buildCrashArtifact(error: unknown, root: string, argv: readonly string[]): CrashArtifactV1 {
   return { schemaVersion: 1, timestamp: new Date().toISOString(), pid: process.pid,
     command: redactSensitive(argv.join(' ')), deckentVersion: PACKAGE_VERSION,

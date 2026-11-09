@@ -19,5 +19,5 @@ export const auditFollowPageSchema = z.strictObject({ schemaVersion: z.literal(1
   records: z.array(z.strictObject({ sequence: counterSchema.positive(), event: auditEventSchema }).readonly()).max(PAGE_MAX).readonly(),
   gaps: z.array(z.strictObject({ afterSequence: counterSchema, beforeSequence: counterSchema.positive() }).readonly()).max(PAGE_MAX).readonly(),
   after: counterSchema, more: z.boolean() }).readonly();
-export type AuditFollowQuery = z.infer<typeof auditFollowQuerySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AuditFollowQuery = z.infer<typeof auditFollowQuerySchema>;
 export type AuditFollowPage = z.infer<typeof auditFollowPageSchema>;

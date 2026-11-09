@@ -27,7 +27,7 @@ export const hubKeyDelegationMessage = (delegation: Omit<HubKeyDelegation, 'sign
   signatureMessage(SIGNATURE_LABELS.hubKeyDelegation, encodeCommandProjection(SIGNATURE_LABELS.hubKeyDelegation, delegation));
 /** The pinned hub identity: `hubId` is the fingerprint of the root key a person pinned (never served by the hub itself). */
 export interface HubRoot { readonly hubId: string; readonly publicKey: string }
-/** The client's trusted clock. `stored`: re-verifying content this installation already verified and stored, the only case where a historical
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The client's trusted clock. `stored`: re-verifying content this installation already verified and stored, the only case where a historical
  * signing time (a delegation that has since ended) still counts; anything arriving now must be signed under a delegation valid now. */
 export interface HubTrustClock { readonly nowMs: number; readonly stored?: boolean }
 /**

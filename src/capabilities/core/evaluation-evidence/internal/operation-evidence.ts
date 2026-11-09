@@ -32,10 +32,10 @@ const projectionSchema = z.object({ sequence: counterSchema.positive(), state: z
   evidence: z.strictObject({ kind: z.enum(['idempotency-record', 'fence']), version: persistedString(z.string().min(1).max(256)).nullable(), observedAt: counterSchema }).nullable(),
   refusal: z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']).nullable(),
 }).refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));
-export type OperationSettlementReference = Readonly<{ kind: 'operation-settlement'; scopeId: string; commandId: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OperationSettlementReference = Readonly<{ kind: 'operation-settlement'; scopeId: string; commandId: string;
   sequence: number; inputDigest: string; digest: string }>;
 type CriterionResult = TaskEvaluation['criteria'][number];
-export type OperationEvidenceResult = (Readonly<{ verdict: 'pass'; evidence: OperationSettlementReference }>
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OperationEvidenceResult = (Readonly<{ verdict: 'pass'; evidence: OperationSettlementReference }>
   | Readonly<{ verdict: 'unknown' | 'fail'; reason: NonNullable<CriterionResult['reason']> }>)
   & Readonly<{ effectEvidence?: NonNullable<CriterionResult['effectEvidence']> }>;
 

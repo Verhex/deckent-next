@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CodedError, persistedString, attemptIdentitySchema } from '#domain/index.js';
 import { workspaceSourceSchema } from '#engine/core/workspaces/index.js';
 import rules from './rules.json' with { type: 'json' };
-/** Bounded reason for PATCH_LIMIT: which configured budget or Git output bound was exceeded. Never carries paths or content. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Bounded reason for PATCH_LIMIT: which configured budget or Git output bound was exceeded. Never carries paths or content. */
 export type WorkspacePatchLimitDetail = 'git-output' | 'git-timeout' | 'git-copy' | 'time' | 'bytes' | 'entries' | 'depth' | 'path';
 /** Config field an operator changes to raise each PATCH_LIMIT bound (shown in the error text; never a hidden default). */
 export const patchLimitFields: Readonly<Record<WorkspacePatchLimitDetail, string>> = Object.freeze({

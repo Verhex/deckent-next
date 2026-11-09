@@ -18,7 +18,7 @@ export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: bool
 }
 
 /** Derived from the install carrier's observation, never from --yes or an apply exit code. */
-export function setupAuthority(plan: SetupPlan) {
+function setupAuthority(plan: SetupPlan) {
   const stage = plan.stages.find(row => row.id === 'permissions:start-mode');
   return { status: !stage ? 'unavailable' as const : stage.state === 'done' ? 'applied' as const : stage.state === 'skipped' ? 'not-applicable' as const : 'authority-pending' as const,
     state: stage?.state ?? null, nextAction: stage && !['done', 'skipped'].includes(stage.state) ? 'setup.permissions.pending' : null };
@@ -33,7 +33,7 @@ const STATE_LABELS: Readonly<Record<SetupStageState, (locale: Locale) => string>
   ready: l => t('setup.state.ready', {}, l), 'needs-answer': l => t('setup.state.needsAnswer', {}, l), blocked: l => t('setup.state.blocked', {}, l),
   skipped: l => t('setup.state.skipped', {}, l), unsupported: l => t('setup.state.unsupported', {}, l) });
 const LANGUAGE_NAMES: Readonly<Record<string, (locale: Locale) => string>> = Object.freeze({ en: l => t('setup.language.en', {}, l), tr: l => t('setup.language.tr', {}, l) });
-export const stateLabel = (state: SetupStageState, locale: Locale) => STATE_LABELS[state](locale);
+const stateLabel = (state: SetupStageState, locale: Locale) => STATE_LABELS[state](locale);
 /** An answered stage with no operation waits for installation; it cannot offer Apply yet. */
 export const stageStateLabel = (stage: SetupStage, locale: Locale) => stage.state === 'ready' && !stage.operation
   ? t('setup.state.answered', {}, locale) : stateLabel(stage.state, locale);
@@ -47,8 +47,7 @@ export function stageText(plan: SetupPlan, key: string, params: Readonly<Record<
   }));
   return setupMessage(key, shown, locale);
 }
-/** The installation's scope as the folder stage reports it (configured or answered), else none. */
-export const setupScope = (plan: SetupPlan) => { const value = plan.stages.find(stage => stage.id === 'core:folder')?.reason.params['scope']; return typeof value === 'string' && value ? value : null; };
+
 export const stageTitle = (stage: SetupStage, locale: Locale) => setupMessage(stage.title, {}, locale);
 export const stageCommand = (stage: SetupStage) => stage.cli ? stage.cli.map(part => terminalSafeText(part)).join(' ') : null;
 

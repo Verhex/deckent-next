@@ -6,7 +6,7 @@ export interface ModelAllocationIntegrityQuery {
   readonly scopeId: string; readonly allocationId: string;
   readonly checkpoint: ModelAllocationCheckpoint | null; readonly afterInvocationId: string | null; readonly limit: number;
 }
-export interface ModelAllocationIntegrityPage {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelAllocationIntegrityPage {
   readonly checkpoint: ModelAllocationCheckpoint;
   readonly receipts: readonly ModelInvocationReceipt[];
   readonly nextInvocationId: string | null;
@@ -15,7 +15,7 @@ export interface ModelAllocationIntegrityReader {
   readPage(query: ModelAllocationIntegrityQuery): Promise<ModelAllocationIntegrityPage | null>;
   close(): void;
 }
-export const MODEL_ALLOCATION_INTEGRITY_PAGE_MAX = 1000;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_ALLOCATION_INTEGRITY_PAGE_MAX = 1000;
 export function validateModelAllocationPageSize(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MODEL_ALLOCATION_INTEGRITY_PAGE_MAX) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');

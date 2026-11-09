@@ -9,7 +9,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
-export const memoryRolloutModesOf = (config: Pick<DeckentConfig, 'memoryAutomation'>): MemoryRolloutModes => ({ extraction: config.memoryAutomation.extraction.mode,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryRolloutModesOf = (config: Pick<DeckentConfig, 'memoryAutomation'>): MemoryRolloutModes => ({ extraction: config.memoryAutomation.extraction.mode,
   verification: config.memoryAutomation.verification.mode, context: config.memoryAutomation.context.mode });
 
 /**

@@ -6,7 +6,7 @@ import REGISTRY from './project-vault.json' with { type: 'json' };
 /** `<namespace>.secret-grant.<name>@<version>`; Core owns the `core` namespace. */
 export const SECRET_GRANT_STORE_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-grant\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/u;
 export const CORE_SECRET_GRANT_STORE_ID = REGISTRY.grantStore.core;
-export type SecretGrantStoreErrorCode = 'SECRET_GRANT_STORE_UNSAFE' | 'SECRET_GRANT_STORE_INVALID';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SecretGrantStoreErrorCode = 'SECRET_GRANT_STORE_UNSAFE' | 'SECRET_GRANT_STORE_INVALID';
 
 /**
  * Where a project's grants live (PRE-8 v2, law audit MINOR: Enterprise replaces it through a sealed registry, like the secret store backends).

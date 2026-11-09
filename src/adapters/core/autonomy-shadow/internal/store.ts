@@ -6,10 +6,10 @@ import { z } from 'zod';
 import { autonomyShadowDigest, autonomyShadowRecordSchema, sameAutonomyShadowTicket, type AutonomyShadowRecord, type AutonomyShadowStore } from '#engine/index.js';
 import limits from './limits.json' with { type: 'json' };
 
-/** Store bounds (data, not code): one active file plus one rotated predecessor, so the store never exceeds two files of `maxFileBytes`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Store bounds (data, not code): one active file plus one rotated predecessor, so the store never exceeds two files of `maxFileBytes`. */
 export const autonomyShadowStoreLimitsSchema = z.strictObject({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxFileEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), lockTimeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
-export type AutonomyShadowStoreLimits = z.infer<typeof autonomyShadowStoreLimitsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AutonomyShadowStoreLimits = z.infer<typeof autonomyShadowStoreLimitsSchema>;
 export const AUTONOMY_SHADOW_STORE_LIMITS: AutonomyShadowStoreLimits = autonomyShadowStoreLimitsSchema.parse(limits);
 const lineSchema = z.strictObject({ sha256: z.string().regex(/^[a-f0-9]{64}$/u), record: z.unknown().optional() });
 

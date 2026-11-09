@@ -21,7 +21,7 @@ export const SLASH_GROUPS = Object.freeze([
   { id: 'info', labelKey: 'terminal.slash.group.info' }, { id: 'work', labelKey: 'terminal.slash.group.work' }, { id: 'approvals', labelKey: 'terminal.slash.group.approvals' },
   { id: 'settings', labelKey: 'terminal.slash.group.settings' }, { id: 'session', labelKey: 'terminal.slash.group.session' }, { id: 'other', labelKey: 'terminal.slash.group.other' },
 ] as const);
-export type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
+type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
 
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'hub', group: 'settings', descriptionKey: 'hub.window.slash' },
@@ -91,8 +91,8 @@ export const RESERVED_SLASH_COMMAND_NAMES: readonly string[] = Object.freeze([])
 export const keepsTypedArgument = (command: string): boolean => WORKLINE_SLASH_COMMANDS.some(entry => entry.name === command && entry.typedArgument === true);
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
-export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope', 'roles'] as const);
-export type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];
+const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope', 'roles'] as const);
+type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];
 export function isInspectSlashCommand(command: string): command is InspectSlashCommand {
   return (INSPECT_SLASH_COMMANDS as readonly string[]).includes(command);
 }
@@ -104,7 +104,7 @@ export interface SessionUsageView { readonly reports: number; readonly promptTok
   readonly models?: readonly Readonly<{ model: string; provider: string; reports: number; promptTokens: number; completionTokens: number }>[] }
 /** CACHE-SLICE1: raw cache classes summed over the measured reports, and the same-request net benefit (USD x 1e10) over the reports that carried
  * one (`benefitReports`); an unknown benefit is never counted as zero. */
-export interface SessionCacheUsage { readonly reports: number; readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number;
+interface SessionCacheUsage { readonly reports: number; readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number;
   readonly write5mTokens: number; readonly write1hTokens: number; readonly netBenefitUsdE10: number; readonly benefitReports: number }
 type ReportCache = Readonly<{ readTokens: number; writeTokens: number; promptTokens: number; write5mTokens?: number; write1hTokens?: number; netBenefitUsdE10?: number | null }>;
 export const EMPTY_SESSION_USAGE: SessionUsageView = Object.freeze({ reports: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0, reasoningUnmeasured: 0 });
@@ -129,7 +129,7 @@ export function addSessionUsage(total: SessionUsageView, report: Readonly<{ prom
 }
 /** `/status` without a fresh port keeps the launch-time line; with one, a failed read shows its typed error, never that old line. */
 /** `sessionFullAccess` (Astra 2431 P2): this session holds full access (launched so, or switched into for this session only). */
-export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean }>) => Promise<readonly string[]>;
+type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean }>) => Promise<readonly string[]>;
 export type InspectSlashPorts = Readonly<Partial<Record<InspectSlashCommand, InspectSlashPort>>>;
 /** The ports as plain `(args)` commands, each given the usage the terminal measured at call time. */
 export function bindInspectPorts(ports: InspectSlashPorts | undefined, usage: () => SessionUsageView, sessionFullAccess: () => boolean = () => false):

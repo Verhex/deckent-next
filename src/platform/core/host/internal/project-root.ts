@@ -7,7 +7,7 @@ import { productRootOverride, type Environment } from './env.js';
 import { normalizeGlobalScopePlatform, resolveGlobalScopePaths } from './global-scope.js';
 
 /** The entry facts the resolver reads (an lstat never follows a link; null = absent). */
-export interface ProjectRootEntry { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; readonly uid: number; readonly mode: number; readonly nlink: number; readonly dev: number }
+interface ProjectRootEntry { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; readonly uid: number; readonly mode: number; readonly nlink: number; readonly dev: number }
 export interface ProjectRootPorts {
   readonly realpath: (path: string) => Promise<string>;
   readonly lstat: (path: string) => Promise<ProjectRootEntry | null>;

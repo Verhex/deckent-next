@@ -3,18 +3,18 @@ import { resolveWorkerUsage, workerFinished, type WorkerObservation, type Worker
 import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 
 /** What a person needs to know about one worker: running now, finished (history), lost (no process and no result) or unknown (not verifiable). */
-export type WorkerKind = 'active' | 'finished' | 'lost' | 'unknown';
+type WorkerKind = 'active' | 'finished' | 'lost' | 'unknown';
 // Exhaustive over the engine's process states (a new state fails the typecheck here instead of silently reading as running).
 const PROCESS_KIND: Readonly<Record<WorkerProcessState, WorkerKind>> = { running: 'active', paused: 'active', created: 'active', exited: 'finished',
   missing: 'lost', 'absent-unverified': 'lost', unknown: 'unknown', 'present-unverified': 'unknown', denied: 'unknown' };
 
 /** A worker with a recorded end (terminal result) or released custody is history; otherwise its observed process decides. */
-export function workerKind(worker: WorkerObservation): WorkerKind {
+function workerKind(worker: WorkerObservation): WorkerKind {
   return workerFinished(worker) ? 'finished' : PROCESS_KIND[worker.process];
 }
 
 /** The newest instant this worker was heard from: its heartbeat, else its last resource sample, else its last reported event. */
-export function lastSignalAt(worker: WorkerObservation, observedAt: number): number | null {
+function lastSignalAt(worker: WorkerObservation, observedAt: number): number | null {
   const heartbeat = worker.files?.heartbeat;
   if (heartbeat && heartbeat.ageMs !== null) return observedAt - heartbeat.ageMs;
   return worker.resources?.latest?.observedAtMs ?? worker.files?.activity?.receivedAt ?? null;
@@ -26,7 +26,7 @@ export function sourceStatusText(status: WorkerObservationSource['status'], loca
     : status === 'not-sampled' ? t('cli.workers.source.notSampled', {}, locale) : t('cli.workers.source.unavailable', {}, locale);
 }
 
-export interface WorkersViewInput {
+interface WorkersViewInput {
   readonly report: WorkerObservationReport; readonly scopeLine: string; readonly all: boolean; readonly sinceMs: number | null;
   readonly style: CliTableStyle; readonly locale: Locale;
   /** The exact command that reads a truncated source's next page. */

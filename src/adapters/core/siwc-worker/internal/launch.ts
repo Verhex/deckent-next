@@ -18,7 +18,7 @@ export function assertSiwcWorkerLaunchable(input: Readonly<{ platform: NodeJS.Pl
   if (!input.imageCodexVersion) throw ErrorRegistry.createError('SIWC_APP_SERVER_AUTH_UNAVAILABLE', { params: { reason: 'image-codex-missing' } });
   if (R.activation !== 'open') throw ErrorRegistry.createError('SIWC_APP_SERVER_AUTH_UNAVAILABLE', { params: { reason: 'activation-hold' } });
 }
-/** The visible worker state (U9 rev 6 §11.5; adapter view, not a Run state). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The visible worker state (U9 rev 6 §11.5; adapter view, not a Run state). */
 export type SiwcWorkerStop = Readonly<{ phase: 'stopped' | 'cleanup-unproven'; reason: string; outcome: SiwcTurnOutcome | null }>;
 /**
  * U9-7b stop order: revoke C (upstream sends and streams close, `turn/interrupt` is asked) → bounded drain → supervisor kill + inspect of

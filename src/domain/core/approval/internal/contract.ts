@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { approvalPreviewCutSchema } from '#domain/core/agent-turn/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-export const approvalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const approvalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 const renewalSchema = z.strictObject({ previousApprovalId: identitySchema, commandId: identitySchema, commandDigest: digest, actor: approvalActorSchema,
   get reason() { return persistedString(z.string().min(1).max(2048)); } }).readonly();
 /** Task-admission approval (v1): unchanged, so every sealed v1 record keeps verifying byte for byte. */
@@ -26,7 +26,7 @@ const configChangeSubjectSchema = z.strictObject({ get kind() { return z.literal
 /** The `unset` ⇔ no value invariant of a config-change subject (a discriminated union member cannot carry a refinement). */
 export const configChangeSubjectConsistent = (subject: z.infer<typeof configChangeSubjectSchema>) =>
   (subject.action === 'unset') === (subject.after === null && subject.valueDigest === null);
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * What an approval authorizes (C12, operation-keyed): a task admission; one agent tool call — exactly this turn, round, call index,
  * tool version, canonical resource and argument digest (T-L4); or one catalog operation command — exactly this command id, operation
  * id@version, target record, canonical input digest, descriptor + endpoint binding, expected version and compensation reference (G1).
@@ -53,7 +53,7 @@ export const approvalSubjectSchema = z.discriminatedUnion('kind', [
  */
 export const APPROVAL_ASSURANCE = Object.freeze({ peerSession: 'peer-session', turnBound: 'turn-bound' } as const);
 export const approvalAssuranceSchema = z.string().regex(/^[a-z][a-z0-9-]{1,63}$/);
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * What a card must show besides the binding line (request v3, filled by the producer, never derived by a surface): the risk from the existing
  * vocabularies (`cell`: the tool call's permission cell; `effect-class`: the operation descriptor's class and authority surface; null = not
  * declared), how it is undone (null = not declared), what happens on expiry (nothing runs) and the required assurance at request time
@@ -74,7 +74,7 @@ const requestShape = { approvalId: identitySchema, scopeId: identitySchema, subj
 /** Operation-keyed approval request (v2, C12): agent tool calls and catalog operation commands; task admission keeps v1. */
 const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, ...requestShape }).refine(r => r.expiresAt > r.createdAt).readonly();
 /** Card-facts approval request (v3, B1/APPROVAL-SURFACE): the v2 shape plus the producer's `facts`; v1/v2 records stay readable as written. */
-/** Versioned display expansion: sealed with the request and bound to the exact tool arguments. Older v3 records retain their bytes. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Versioned display expansion: sealed with the request and bound to the exact tool arguments. Older v3 records retain their bytes. */
 export const approvalPreviewSchema = z.strictObject({ schemaVersion: z.literal(1), argsDigest: digest,
   text: persistedString(z.string().max(16_384)), cut: approvalPreviewCutSchema.nullable() }).readonly();
 /** KG4 F3 expand: the worker fact as a sealed, typed field instead of the display summary. Nothing writes it yet: an earlier build's strict schema
@@ -106,11 +106,11 @@ const attestedDecisionSchema = z.strictObject({ get schemaVersion() { return z.l
  */
 const notedDecisionSchema = z.strictObject({ get schemaVersion() { return z.literal(3); }, ...decisionShape, assurance: approvalAssuranceSchema, get approverNote() { return z.literal(true); } }).readonly();
 export const deciderClassSchema = z.enum(['human-tty', 'ai-policy', 'system']);
-export type DeciderClass = z.infer<typeof deciderClassSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DeciderClass = z.infer<typeof deciderClassSchema>;
 /** D0 v4 seals the producer-derived decider class. Older MAC payloads remain byte-identical. */
 const classifiedDecisionSchema = z.strictObject({ get schemaVersion() { return z.literal(4); }, ...decisionShape, assurance: approvalAssuranceSchema,
   deciderClass: deciderClassSchema, get approverNote() { return z.literal(true).optional(); } }).readonly();
-export const approvalDecisionSchema = z.union([classifiedDecisionSchema, notedDecisionSchema, attestedDecisionSchema, sessionDecisionSchema]);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const approvalDecisionSchema = z.union([classifiedDecisionSchema, notedDecisionSchema, attestedDecisionSchema, sessionDecisionSchema]);
 /** The dual reader: a decision's assurance, `peer-session` for a decision sealed before B1. */
 export const approvalDecisionAssurance = (decision: z.infer<typeof approvalDecisionSchema>): string =>
   'assurance' in decision ? decision.assurance : APPROVAL_ASSURANCE.peerSession;
@@ -137,7 +137,7 @@ export function approvalRenewalRefusal(previous: ApprovalRecord, next: ApprovalR
   return next.status !== 'pending' || next.request.renewal?.previousApprovalId !== previous.request.approvalId || next.request.scopeId !== previous.request.scopeId
     || next.request.actionDigest !== previous.request.actionDigest || !(previous.status === 'expired' || previous.status === 'decided' && (previous.decision?.decision === 'deny' || previous.decision?.decision === 'allow' && next.request.createdAt > previous.decision.decidedAt + next.request.expiresAt - next.request.createdAt)) ? 'APPROVAL_CONFLICT' : null;
 }
-export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
 export type ApprovalActor = z.infer<typeof approvalActorSchema>;
 export class ApprovalError extends CodedError {

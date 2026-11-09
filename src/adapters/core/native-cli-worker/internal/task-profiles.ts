@@ -32,6 +32,6 @@ export const taskProfileObservesWorker = (profile: SupervisorProfile) => executi
 export const executionTask = (profile: ExecutionProfileDefinition) => executionAdapter(profile.adapter.id).task(profile);
 export const executionTaskSilenceDeadline = (profile: ExecutionProfileDefinition) => executionAdapter(profile.adapter.id).silenceDeadline(profile);
 export const executionTaskHiddenPaths = (profile: ExecutionProfileDefinition) => executionAdapter(profile.adapter.id).hiddenPaths(profile);
-export const executionTaskEffects = (profile: ExecutionProfileDefinition) => executionAdapter(profile.adapter.id).effects(profile);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const executionTaskEffects = (profile: ExecutionProfileDefinition) => executionAdapter(profile.adapter.id).effects(profile);
 /** @deprecated B1-17: kept one release for unverified Enterprise callers; read task data through `executionTask`. */
 export const executionTaskBase = (profile: ExecutionProfileDefinition) => isNativeCliWorkerProfile(profile) ? nativeCliWorkerTaskBase(resolveNativeCliWorkerProfile(profile).base) : profile;

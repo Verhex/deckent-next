@@ -4,12 +4,12 @@ import { sameSandboxRequest } from '#engine/core/supervisor/index.js';
 import { dispatchClaimSchema, dispatchRecordSchema, DispatchError,
   type DispatchRecord, type LaunchDecision, type LaunchRequest } from './port.js';
 
-export interface DispatchLaunchState {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DispatchLaunchState {
   readonly run: RunSnapshot;
   readonly attempt: AttemptSnapshot | null;
   readonly dispatch: DispatchRecord;
 }
-export type DispatchLaunchTransition = Readonly<{ decision: LaunchDecision; projectedRun: RunSnapshot | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchLaunchTransition = Readonly<{ decision: LaunchDecision; projectedRun: RunSnapshot | null }>;
 
 export function validateLaunchRequest(input: LaunchRequest): LaunchRequest {
   return Object.freeze({ claim: dispatchClaimSchema.parse(input.claim), principal: verifiedPrincipalSchema.parse(input.principal),

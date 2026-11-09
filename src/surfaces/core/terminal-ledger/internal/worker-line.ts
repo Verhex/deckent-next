@@ -28,7 +28,7 @@ export interface WorkerLineLabels {
   readonly card?: LedgerCardLabels;
 }
 
-export type WorkerLineTone = 'normal' | 'muted' | 'error';
+type WorkerLineTone = 'normal' | 'muted' | 'error';
 export type WorkerLine = Readonly<{ text: string; tone: WorkerLineTone }>;
 
 const DETAIL_MAX = 60;

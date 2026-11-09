@@ -6,7 +6,7 @@ import { FIND_ACTIONS, SHELL_PROGRAM_CONTEXT } from './tables.js';
 import { readsOnlyModelled } from './floor-read.js';
 import type { ShellDialect } from './classify.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Whether a command may run without a card inside an enforced sandbox (SHELL-AUTONOMY, owner 2026-09-28). There the realm draws the
  * boundary — no network, HOME hidden, `.git` and the write floor read-only, the product state masked — so a command the strict
  * classifier cannot bound (compound, variable or command expansion, a path outside the project) no longer needs one. What still
@@ -25,7 +25,7 @@ import type { ShellDialect } from './classify.js';
  */
 export type ShellContainmentReason = 'CONTAINED' | 'PROGRAM_FLOOR' | 'PROGRAM_UNKNOWN' | 'PROCESS_SUBSTITUTION' | 'PROTECTED_NAME' | 'UNPARSEABLE'
   | 'EMPTY_COMMAND' | 'UNSUPPORTED_DIALECT';
-export interface ShellContainmentVerdict { readonly contained: boolean; readonly reasonCode: ShellContainmentReason; readonly detail?: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ShellContainmentVerdict { readonly contained: boolean; readonly reasonCode: ShellContainmentReason; readonly detail?: string }
 
 const SUBSTITUTION = '__shell_substitution__';
 /** Words before a pipeline's program: shell keywords, group openers and assignments. */

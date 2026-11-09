@@ -8,9 +8,9 @@ import type { RunStore } from '#engine/core/runs/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
 export const taskInputBindingSchema = z.strictObject({ name: taskInputNameSchema,
   sourceAttemptId: identitySchema, output: taskInputNameSchema.optional(), receipt: artifactReceiptSchema }).readonly();
-export type TaskInputBinding = z.infer<typeof taskInputBindingSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TaskInputBinding = z.infer<typeof taskInputBindingSchema>;
 type Store = Pick<RunStore, 'loadRun'> & Pick<AttemptStore, 'load'> & RunBoundDispatchStore;
-/** Accepted direct dependencies only. Source content permission is independent of target execution. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Accepted direct dependencies only. Source content permission is independent of target execution. */
 export class TaskInputApplication {
   constructor(private readonly store: Store,
     private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchIdentityAuthorization) {}

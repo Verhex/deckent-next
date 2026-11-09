@@ -66,7 +66,7 @@ export const shutdownOutcomeSchema = z.strictObject({
 
 // Unconfigured installations expose no invented service/scope identity or implied shutdown grant.
 /** Source build the service runs from (absent when started from source or from a build before this field). */
-export const serviceBuildSchema = z.strictObject({ sourceTreeSha256: z.string().regex(/^[0-9a-f]{64}$/),
+const serviceBuildSchema = z.strictObject({ sourceTreeSha256: z.string().regex(/^[0-9a-f]{64}$/),
   sourceCommit: z.string().regex(/^[0-9a-f]{40,64}$/).nullable() }).readonly();
 /** `processId` lets a launcher tell its own process from a concurrent winner on the same endpoint (Astra 2054 R2). */
 const processIdSchema = persistedInteger().positive().optional();
@@ -91,7 +91,7 @@ export type ServiceActor = z.infer<typeof serviceActorSchema>;
 export type ShutdownAdmission = z.infer<typeof shutdownAdmissionSchema>;
 export type ShutdownOutcome = z.infer<typeof shutdownOutcomeSchema>;
 export type RuntimeServiceDescriptor = z.infer<typeof runtimeServiceDescriptorSchema>;
-export type StableShutdownActor = Readonly<Pick<ServiceActor['principal'], 'issuer' | 'subject' | 'assurance'>>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type StableShutdownActor = Readonly<Pick<ServiceActor['principal'], 'issuer' | 'subject' | 'assurance'>>;
 
 export function stableShutdownActor(actor: ServiceActor): StableShutdownActor {
   const principal = serviceActorSchema.parse(actor).principal;

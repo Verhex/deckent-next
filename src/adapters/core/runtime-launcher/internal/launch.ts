@@ -7,8 +7,8 @@ import { CodedError, persistedString } from '#platform/index.js';
 
 const path = persistedString(z.string().min(1)).refine(value => !value.includes('\0') && isAbsolute(value));
 const inputSchema = z.strictObject({ executable: path, entry: path, cwd: path, logPath: path, env: z.record(z.string(), z.string()) });
-export type DetachedRuntimeLaunchInput = z.infer<typeof inputSchema>;
-export type RuntimeLauncherErrorCode = 'RUNTIME_LAUNCH_INVALID' | 'RUNTIME_LAUNCH_FAILED' | 'RUNTIME_LAUNCH_UNSUPPORTED';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DetachedRuntimeLaunchInput = z.infer<typeof inputSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RuntimeLauncherErrorCode = 'RUNTIME_LAUNCH_INVALID' | 'RUNTIME_LAUNCH_FAILED' | 'RUNTIME_LAUNCH_UNSUPPORTED';
 export class RuntimeLauncherError extends CodedError {
   constructor(override readonly code: RuntimeLauncherErrorCode, options?: ErrorOptions) { super(code, options); this.name = 'RuntimeLauncherError'; }
 }

@@ -14,7 +14,7 @@ const receiptSchema = z.strictObject({ schemaVersion: z.literal(1), command: pro
   actor: actorSchema, authorization: authorizationSchema, examinedCheckpoint: z.unknown().optional(),
   startedAtMs: counterSchema, completedAtMs: counterSchema, digest: digestSchema }).readonly();
 
-export interface ProviderSpendAuditReceiptInput {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ProviderSpendAuditReceiptInput {
   readonly command: ProviderSpendAuditCommand;
   readonly principal: VerifiedPrincipal;
   readonly authorization: Readonly<{ revision: string; ruleId: string }>;

@@ -19,7 +19,7 @@ import { approvalCallOf, approvalToolKind, approvalToolParts, approvalWindowHint
 /** The countdown and expiry check tick once a second (a clock unit, not a tunable). */
 const SECOND = 1000;
 /** Private copy of display fields only. The original authority DTO never crosses the public renderer boundary. */
-export type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;
+type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;
   risk: string | null | undefined; undo: string | null | undefined; requiredAssurance: string | undefined; expiresAt: number; hasDecisionCapability: boolean;
   tool: string | undefined; target: string | null | undefined; posture: AgentShellPosture | undefined;
   call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; preview: string | undefined; config: WorklineApproval['config']; displayAttempt: string | null; displayArgsDigest: string | null }>;

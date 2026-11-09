@@ -12,7 +12,7 @@ export interface SecretInventoryProject {
   readonly deck: DeckDeclarations | null;
   readonly current: boolean;
 }
-export interface SecretInventoryInput {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SecretInventoryInput {
   /** The main vault's names; null when the backend cannot enumerate (the environment backend). */
   readonly mainNames: readonly string[] | null;
   /** Who uses which name in the caller's project: a provider profile id/version, a config field, the backup. */

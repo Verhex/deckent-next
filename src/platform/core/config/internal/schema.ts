@@ -10,7 +10,7 @@ export type CoreConfig = z.infer<typeof CORE_SCHEMA>;
 /** `terminal.scopeId` (and `--scope`): one rule for the registered terminal section and the launch shell that reads it before registration. */
 export const TERMINAL_SCOPE_ID_SCHEMA = persistedString(z.string().min(1).max(128));
 export type DeckentConfig = CoreConfig & Record<string, unknown>;
-export interface ConfigSectionOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfigSectionOptions {
   /** Called on the authored global/project layers before they are merged. */
   readonly optional?: boolean;
   /** Opaque public data sections can forbid secret interpolation before any resolver reads. 'allow' = installation (global) layer only;

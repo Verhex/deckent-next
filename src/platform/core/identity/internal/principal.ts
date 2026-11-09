@@ -1,8 +1,8 @@
 import { userInfo, hostname } from 'node:os';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
-export type PrincipalAssurance = 'unverified' | 'os-user' | 'token-parsed' | 'token-verified';
-export type PrincipalIdentityClass = 'local' | 'oidc' | 'workload' | 'connector' | 'service';
-export interface PrincipalEvidence {
+type PrincipalAssurance = 'unverified' | 'os-user' | 'token-parsed' | 'token-verified';
+type PrincipalIdentityClass = 'local' | 'oidc' | 'workload' | 'connector' | 'service';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PrincipalEvidence {
   readonly id: string;
   readonly identityClass: PrincipalIdentityClass;
   readonly assurance: PrincipalAssurance;
@@ -10,7 +10,7 @@ export interface PrincipalEvidence {
   readonly verifiedBy: string;
   readonly role?: string;
 }
-export interface ActorContext {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ActorContext {
   readonly id: string;
   readonly assurance?: PrincipalAssurance;
   readonly provenance?: string;
@@ -31,7 +31,7 @@ export function resolveLocalOsPrincipal(provenance: string, options: { user?: ()
 export function principalToActor(principal: PrincipalEvidence): ActorContext {
   return { id: principal.id, identityClass: principal.identityClass, assurance: principal.assurance, provenance: principal.provenance, ...(principal.role ? { role: principal.role } : {}) };
 }
-export function assessActorAssurance(actor: ActorContext): { ok: boolean; code: 'ACTOR_ASSURANCE_OK' | 'ACTOR_ASSURANCE_MISSING' | 'ACTOR_UNVERIFIED' } {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function assessActorAssurance(actor: ActorContext): { ok: boolean; code: 'ACTOR_ASSURANCE_OK' | 'ACTOR_ASSURANCE_MISSING' | 'ACTOR_UNVERIFIED' } {
   if (!actor.assurance) return { ok: false, code: 'ACTOR_ASSURANCE_MISSING' };
   if (actor.assurance === 'unverified') return { ok: false, code: 'ACTOR_UNVERIFIED' };
   return { ok: true, code: 'ACTOR_ASSURANCE_OK' };

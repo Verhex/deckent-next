@@ -1,6 +1,6 @@
-/** One measured rollout value: `count` of `sample` (and of `of` when the whole of a known set is required). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One measured rollout value: `count` of `sample` (and of `of` when the whole of a known set is required). */
 export type RolloutMeasure = Readonly<{ count: number; sample: number; of: number | null }>;
-/** A rollout exit criterion's bounds (registry data); ratios are integers per mille, so no floating comparison decides a gate. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A rollout exit criterion's bounds (registry data); ratios are integers per mille, so no floating comparison decides a gate. */
 export type RolloutBounds = Readonly<{ minSample?: number | undefined; minPerMille?: number | undefined; maxPerMille?: number | undefined; maxCount?: number | undefined }>;
 const PER_MILLE = 1000;
 /** Pure: whether `value` meets `criterion` (shared by the memory and recovery rollouts; an unread value is unmet, never assumed). */

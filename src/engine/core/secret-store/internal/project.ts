@@ -56,7 +56,7 @@ export const projectVaultClaimed = (current: Pick<ProjectVaultAnchor, 'projectRo
   ErrorRegistry.createError('SECRET_PROJECT_VAULT_CLAIMED', { params: { project: current.projectRoot } });
 
 const principalSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * One grant: main-vault key NAME may be used in this project. It exists only with the id of the sealed `authority-decision` event that decided
  * it on the `secret`/`set` cell (recorded before this file is written); a grant without that id does not parse, so it grants nothing.
  */
@@ -72,7 +72,7 @@ export const emptySecretGrantFile = (anchor: Pick<ProjectVaultAnchor, 'installat
   secretGrantFileSchema.parse({ schemaVersion: 1, installationId: anchor.installationId, projectId: anchor.projectId, revision: 0, grants: [] });
 export const findSecretGrant = (file: SecretGrantFile, name: string): SecretGrant | null => file.grants.find(grant => grant.name === name) ?? null;
 
-/** Refusals of one provider credential resolution, each before any value is read or sent. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Refusals of one provider credential resolution, each before any value is read or sent. */
 export type CredentialSourceRefusal = 'SECRET_PROJECT_IDENTITY_REQUIRED' | 'SECRET_PROJECT_MISSING' | 'DECK_DECLARATION_REQUIRED' | 'SECRET_GRANT_REQUIRED';
 export type CredentialSource = { readonly source: 'project' } | { readonly source: 'main' } | { readonly source: 'refused'; readonly code: CredentialSourceRefusal };
 export interface CredentialSourceInput {

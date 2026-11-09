@@ -10,7 +10,7 @@ const optionsSchema = z.strictObject({ executable: processString.pipe(persistedS
   cwd: processString.pipe(persistedString(z.string().min(1))), timeoutMs: persistedInteger().positive().max(2_147_483_647),
   maxInputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxOutputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
 }).readonly();
-export type ProcessSupervisorOptions = z.infer<typeof optionsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProcessSupervisorOptions = z.infer<typeof optionsSchema>;
 /** Internal trusted worker-control subprocess; not a public execution or authorization endpoint.
  * One bounded command per process. Transport loss never proves worker termination and never retries.
  */

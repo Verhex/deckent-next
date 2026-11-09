@@ -1,8 +1,8 @@
 import policy from './model-ingress-policy.json' with { type: 'json' };
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 
-export type ModelIngressRecorder = (notice: ModelIngressProjection) => Promise<void>;
-export type ModelIngressArgumentsResult = { readonly ok: true } | { readonly ok: false; readonly text: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelIngressRecorder = (notice: ModelIngressProjection) => Promise<void>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelIngressArgumentsResult = { readonly ok: true } | { readonly ok: false; readonly text: string };
 
 /** Parsed JSON only: escape spelling cannot bypass classification. Keys and nested values share one path.
  * Never substitute a projected string into an executable argument. Pure tests may omit the audit port. */

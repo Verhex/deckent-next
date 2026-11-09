@@ -32,7 +32,7 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   return `${why} ${next}`;
 }
 /** Why a trusted server's tools got no policy grant (K1), in the owner's words; an unknown code is shown as it is. */
-export function mcpGrantReasonText(reason: string, locale: Locale): string {
+function mcpGrantReasonText(reason: string, locale: Locale): string {
   if (reason === 'delegation') return t('mcp.grant.reason.delegation', {}, locale);
   if (reason === 'unsupported') return t('mcp.grant.reason.unsupported', {}, locale);
   if (reason === 'administer') return t('mcp.grant.reason.administer', {}, locale);
@@ -82,7 +82,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
 }
 /** `deckent mcp import` (L1 item 2): the servers another MCP client declares, each added untrusted through the registry's own `add` (its audited
  * `reset` included), so an import never carries trust; a name or entry Deckent cannot take is listed with its reason, never renamed. */
-export type McpConfiguredRequest = McpCommandRequest | { readonly verb: 'import'; readonly from: McpImportFrom; readonly scope?: 'local' | 'user' };
+type McpConfiguredRequest = McpCommandRequest | { readonly verb: 'import'; readonly from: McpImportFrom; readonly scope?: 'local' | 'user' };
 async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: 'import' }>, context: McpCommandContext) {
   const projectKey = await realpath(context.projectRoot).catch(() => context.projectRoot);
   const read = await readMcpImportSources({ projectRoot: projectKey, projectKeys: [context.projectRoot, projectKey], from: request.from, environment: context.environment,

@@ -1,3 +1,3 @@
 /** Public native CLI seam; the shared pure capability contract owns the session types. */
 export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema } from '#capabilities/index.js';
-export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, ToolSessionClosure, ToolSessionCancellation, ToolSessionRevocation } from '#capabilities/index.js';
+export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionClosure, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionCancellation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionRevocation } from '#capabilities/index.js';

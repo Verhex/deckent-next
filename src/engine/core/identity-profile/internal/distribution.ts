@@ -7,7 +7,7 @@ import type { PersistentStandingDependencies } from '#engine/core/approval/index
 import { IdentityProfileApplication, type IdentityPreviewSnapshot } from './application.js';
 import { IdentityProfileRegistry } from './registry.js';
 
-export interface IdentityPrincipalChoice {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface IdentityPrincipalChoice {
   readonly id: string; readonly label: string; readonly kind: 'human' | 'machine' | 'agent';
   /** Produced by the installed verifier/directory port, never accepted from a persona or user-authored draft. */
   readonly principal: { readonly issuer: string; readonly subject: string };
@@ -16,7 +16,7 @@ export interface IdentityPrincipalChoice {
 export interface IdentityDistributionSource {
   load(projectScopeIds: readonly string[]): Promise<IdentityPreviewSnapshot & { readonly principals: readonly IdentityPrincipalChoice[] }>;
 }
-export interface IdentityDistributionDependencies extends Pick<PersistentStandingDependencies, 'administration'> {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface IdentityDistributionDependencies extends Pick<PersistentStandingDependencies, 'administration'> {
   readonly effects: Pick<EffectStore, 'loadEffect'>;
 }
 const fail = (code: 'IDENTITY_PREVIEW_INVALID' | 'IDENTITY_PREVIEW_CONFLICT' | 'IDENTITY_PREVIEW_UNAVAILABLE' | 'IDENTITY_PREVIEW_SCOPE_DENIED'): never => { throw new IdentityProfileError(code); };

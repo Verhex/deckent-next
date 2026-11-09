@@ -4,7 +4,7 @@ import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { policyVerdictRefusal } from './verdict.js';
 import { PoolPolicyAuthorization, type PoolAuthorization } from './pool.js';
 
-export type WorkTargetAction = typeof policyResources.workTarget.actions[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkTargetAction = typeof policyResources.workTarget.actions[number];
 /** Current authority over one configured work target (WORK-TARGETS, owner 2026-09-30 K2 = A); the resource id is the target id. */
 export class WorkTargetPolicyAuthorization {
   constructor(private readonly source: PolicySource) {}

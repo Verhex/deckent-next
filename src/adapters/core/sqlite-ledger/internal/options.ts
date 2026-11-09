@@ -14,7 +14,7 @@ export function sqliteFailure(error: unknown): unknown {
   if (typeof code === 'number' && [5, 6].includes(code & 255)) return new AttemptStoreError('ATTEMPT_STORE_BUSY');
   return error;
 }
-export type LedgerTransactionOptions = Readonly<{ mode?: 'write' | 'read'; join?: boolean; unknown?: () => Error; failure?: (error: unknown) => unknown }>;
+type LedgerTransactionOptions = Readonly<{ mode?: 'write' | 'read'; join?: boolean; unknown?: () => Error; failure?: (error: unknown) => unknown }>;
 /** One ledger transaction over a synchronous SQLite connection (`write` = BEGIN IMMEDIATE, `read` = one deferred snapshot; `join` runs inside the caller's open
  * transaction, which owns commit and rollback). Owner B1-9 (a): once COMMIT was attempted, or when ROLLBACK fails, the outcome is unknown
  * until reconciled; every earlier failure is the caller's mapping (default `sqliteFailure`). A Promise keeps the transaction open until it settles. */

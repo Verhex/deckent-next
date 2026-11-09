@@ -1,1 +1,1 @@
-export { mcpImportEntry, readMcpImportSources, type McpImportFrom, type McpImportSource, type McpImportSourceProblem } from './internal/sources.js';
+export { mcpImportEntry, readMcpImportSources, type McpImportFrom, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type McpImportSource, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type McpImportSourceProblem } from './internal/sources.js';

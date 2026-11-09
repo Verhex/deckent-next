@@ -49,7 +49,7 @@ export function anthropicMaxChargeMinorUnits(tariff: AnthropicPublishedTariff, c
   return Number(minor);
 }
 
-export type AnthropicPreparedView = Readonly<{ body: string; request: { max_completion_tokens: number; model: string }; scopeId: string;
+type AnthropicPreparedView = Readonly<{ body: string; request: { max_completion_tokens: number; model: string }; scopeId: string;
   definition: unknown; limits: unknown; countedTokens?: number | null }>;
 
 /** Pure, repeatable quote for the exact prepared request: published tariff and the pinned conservative input estimate. A tariff sealed to a

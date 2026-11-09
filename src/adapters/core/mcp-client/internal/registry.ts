@@ -14,11 +14,11 @@ import { mcpCanonical } from './pin.js';
  * only in Core). The same name in several scopes connects once from the highest one — managed > local > project > user — as a whole entry,
  * never merged. Trust and tool pins are product state (unit `adapters/core/mcp-trust`), never these files.
  */
-export const MCP_SCOPES = TRUST_SCOPES;
+const MCP_SCOPES = TRUST_SCOPES;
 export const MCP_SERVER_NAME = TRUST_SERVER_NAME;
 export type McpScope = typeof MCP_SCOPES[number];
 export const MCP_SCOPE_PRECEDENCE: readonly McpScope[] = Object.freeze([...MCP_SCOPES]);
-export const MCP_REGISTRY_FILE = 'mcp.json';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MCP_REGISTRY_FILE = 'mcp.json';
 /** The project registry, relative to the project root; the agent's read floor protects it (an MCP entry widens authority). */
 export const MCP_PROJECT_REGISTRY_PATH = `${DECKENT_DIR}/${MCP_REGISTRY_FILE}`;
 export const MCP_REGISTRY_MAX_BYTES = 1_048_576;
@@ -43,8 +43,7 @@ export const mcpServerEntrySchema = (stdio => z.union([stdio, httpEntryFields.ex
   timeoutMs: persistedInteger().min(1_000).max(3_600_000).optional(),
 }));
 export type McpServerEntry = z.infer<typeof mcpServerEntrySchema>;
-export type McpStdioEntry = Exclude<McpServerEntry, { readonly type: 'http' }>;
-export type McpHttpEntry = Extract<McpServerEntry, { readonly type: 'http' }>;
+type McpHttpEntry = Extract<McpServerEntry, { readonly type: 'http' }>;
 export const isMcpHttpEntry = (entry: McpServerEntry): entry is McpHttpEntry => entry.type === 'http';
 /** Transports other clients write that this one does not speak (named as such, not as a malformed entry). */
 const UNSUPPORTED_TRANSPORTS: ReadonlySet<unknown> = new Set(['sse', 'ws', 'streamable-http']);
@@ -63,12 +62,12 @@ export interface ManagedMcpPolicy {
   readonly denied: readonly string[];
 }
 
-export interface McpRegistrySource { readonly scope: McpScope; readonly file: string; readonly servers: Readonly<Record<string, unknown>> }
-export interface McpRegistryEntry { readonly name: string; readonly scope: McpScope; readonly file: string; readonly entry: McpServerEntry;
+interface McpRegistrySource { readonly scope: McpScope; readonly file: string; readonly servers: Readonly<Record<string, unknown>> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpRegistryEntry { readonly name: string; readonly scope: McpScope; readonly file: string; readonly entry: McpServerEntry;
   /** Digest of the entry as written (a project entry also binds its allowlisted variables' values, `mcpScopedDigest`): trust binds it, so any change asks again. */
   readonly definitionDigest: string; readonly shadows: readonly McpScope[] }
 export interface McpRegistryProblem { readonly name: string | null; readonly scope: McpScope; readonly file: string; readonly reason: string }
-export interface McpRegistry { readonly servers: readonly McpRegistryEntry[]; readonly problems: readonly McpRegistryProblem[] }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpRegistry { readonly servers: readonly McpRegistryEntry[]; readonly problems: readonly McpRegistryProblem[] }
 
 /** The digest trust binds: the entry as written, a stdio entry's realm as it takes effect (K4: an entry that names none runs in the default realm, so a
  * changed default changes what was trusted and asks again; an entry that names its realm keeps its digest). */
@@ -147,7 +146,7 @@ export function mcpEndpointRefusal(url: string): string | null {
   if (parsed.protocol === 'https:') return null;
   return parsed.protocol === 'http:' ? LOOPBACK.has(parsed.hostname) ? null : 'url-insecure-remote' : 'url-scheme-refused';
 }
-export type McpExpandedEntry = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Readonly<Record<string, string>>;
+type McpExpandedEntry = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Readonly<Record<string, string>>;
   /** The server's known values (KG8 P16, owner B2-10): the resolved `$DECK:` values and the personal `${VAR}` values read into `env` and header values;
    * never shown, and cut out of anything the server sends back or a failed start shows. */
   readonly secrets: readonly string[] }
