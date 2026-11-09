@@ -40,17 +40,20 @@ export interface BackupSource { readonly layout: ProductLayout; readonly project
 export class FileBackupStorage implements BackupStoragePort {
   constructor(private readonly source: BackupSource, private readonly limits: BackupLimits) {}
   locate(set: string): Promise<void> { return locateBackupSet(set); }
+  /** Verify keeping the handle open: a caller that binds members to the set (uninstall) never verifies it again; it closes the handle. */
+  async open(set: string, passphrase: string): Promise<VerifiedBackup> {
+    await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout); return verifyBackupSet(set, passphrase, this.limits);
+  }
   async execute(command: BackupCommand, passphrase: string): Promise<BackupResult> {
-    await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout);
-    if (command.action === 'create') return createBackupSet(this.source.layout, this.source.projectRoot, this.source.installationId,
-      this.source.keyFile, command.set, passphrase, this.limits, await this.source.configDocument?.());
-    const verified = await verifyBackupSet(command.set, passphrase, this.limits);
+    if (command.action === 'create') { await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout);
+      return createBackupSet(this.source.layout, this.source.projectRoot, this.source.installationId, this.source.keyFile, command.set, passphrase, this.limits, await this.source.configDocument?.()); }
+    const verified = await this.open(command.set, passphrase);
     try { return command.action === 'verify' ? verified.result('verify') : await this.restore(command, verified); }
     finally { verified.close(); }
   }
   private async restore(command: Extract<BackupCommand, { action: 'restore' }>, verified: VerifiedBackup): Promise<BackupResult> {
     const target = await safePath(command.target), state = verified.state;
-    if (state.installationId !== this.source.installationId) return refuse('BACKUP_TARGET_IDENTITY_MISMATCH');
+    verified.assertInstallation(this.source.installationId, () => refuse('BACKUP_TARGET_IDENTITY_MISMATCH'));
     if (inside(target, verified.set) || inside(verified.set, target)) return refuse('BACKUP_PATH_UNSAFE');
     const exists = await lstat(target).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     if (exists && (!exists.isDirectory() || exists.uid !== process.getuid?.())) return refuse('BACKUP_PATH_UNSAFE');
@@ -147,7 +150,8 @@ export class FileBackupStorage implements BackupStoragePort {
       const ledger = productResourcePath(staged, 'ledger'); await writePrivate(ledger, new Uint8Array());
       const db = openSetLedger(join(verified.set, 'ledger.db'));
       try { await backup(db, ledger); } finally { db.close(); }
-      if (ledgerFingerprint(ledger) !== ledgerFingerprint(join(verified.set, 'ledger.db'))) return refuse('BACKUP_FINGERPRINT_INVALID');
+      // The copy matches the fingerprint the manifest verified, so a set ledger swapped after verify is never restored.
+      if (ledgerFingerprint(ledger) !== verified.fingerprint) return refuse('BACKUP_FINGERPRINT_INVALID');
       // Astra 2471 R1: a durable hold precedes the first publication; config admission refuses it until the last one completed.
       if (!await lstat(hold).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
         const pending = `${hold}.${token}`; await writePrivate(pending, JSON.stringify({ schemaVersion: 1, kind: 'backup-restore', operation: token, target, startedAt: new Date().toISOString() }) + '\n');

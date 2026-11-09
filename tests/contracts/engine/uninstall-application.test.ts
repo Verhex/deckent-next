@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, lstat } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { UninstallApplication, authorizeUninstall, authorizeUninstallSteps, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
+import { UninstallApplication, approvedUninstallEffects, authorizeUninstall, authorizeUninstallSteps, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
   EffectTargetError, type UninstallAdmission, type UninstallApplicationPorts, type UninstallInventory, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
@@ -55,10 +55,10 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
         version, owner: 'fixture-installation', ownership: 'exclusive', ownershipEvidence: 'a'.repeat(64), present: true, protected: false, capability: true, backup: 'covered' }],
       blockers: [], protectedPaths: [ledger], deletionRoots: [root], backupDestination: join(`${root}-recovery`, 'backup'), packageRemoval: { command: null, shared: true },
       dataBlockers: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true }, service: { running: false, unit: null, unitDisable: 'none', command: null }, managedScopes: [] };
-    let retained: UninstallPlan | null = null, observed = inventory;
+    let retained: UninstallPlan | null = null, observed = inventory, fakeEffects: UninstallAdmission['effects'] | null = null;
     const ports = (): UninstallApplicationPorts => ({ channel, witness: { attest: async () => witness }, principal: async () => principal,
       authorize: async () => { if (principal.subject === 'denied') throw new Error('denied'); }, inventory: async () => observed, retainedPlan: async () => retained,
-      withAdmission: async (_plan, _id, work) => work({ scopeId: 's', recoveryLocation: join(root, 'recovery'), effects: effects(),
+      withAdmission: async (_plan, _id, work) => work({ scopeId: 's', recoveryLocation: join(root, 'recovery'), effects: fakeEffects ?? effects(),
         revalidate: async item => { if (changed || item?.resourceId === changedResource) throw Object.assign(new Error('changed'), { code: 'UNINSTALL_PLAN_CHANGED' }); },
         prepareBackup: async () => { backupCalls++; if (!covered) throw Object.assign(new Error('coverage'), { code: 'UNINSTALL_BACKUP_COVERAGE' }); },
         approvePlan: async () => { approved = true; }, finish: async result => { finished.push(result); },
@@ -118,6 +118,19 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
     expect(partial).toMatchObject({ status: 'partial', failureCode: 'UNINSTALL_PLAN_CHANGED',
       items: [{ resourceId: 'cache', state: 'settled' }, { resourceId: 'second', state: null }] });
     expect(sends).toBe(2); expect(await readFile(ledger, 'utf8')).toBe('KEEP');
+    // S5-e3 (S5-R13): a failure the store records as claimed is unknown, never partial or a refusal.
+    let claimed = false; changedResource = null;
+    observed = { ...observed, resources: [{ ...current, resourceId: 'third' }] }; retained = createUninstallPlan({ schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false }, observed);
+    fakeEffects = { inspect: async () => claimed ? { state: 'claimed' } as never : null, execute: async () => { claimed = true; throw new Error('reply lost after the claim'); } };
+    expect(await new UninstallApplication(ports()).apply({ ...command, planDigest: retained.planDigest }, interaction)).toMatchObject({ status: 'unknown', failureCode: 'EFFECT_OUTCOME_UNKNOWN' });
+    // S5-e2 (S5-R17): the broker refuses any command the plan does not name exactly, before the effect application sees it.
+    let submits = 0; const exact = { schemaVersion: 1, commandId: 'exact', idempotencyKey: 'exact', scopeId: 's', operation: retained.items[0]!.operation,
+      target: { kind: 'installation-cache', id: 'third' }, expectedVersion: retained.items[0]!.version, input: { planDigest: retained.planDigest, resourceId: 'third' } };
+    const broker = approvedUninstallEffects(retained, 's', { submit: async () => { submits++; throw new Error('must not submit'); } } as unknown as EffectApplication, {} as never);
+    for (const wrong of [{ target: { kind: 'installation-cache', id: 'cache' } }, { target: { kind: 'installation-data', id: 'third' } }, { scopeId: 'other' }, { expectedVersion: 'other-version' },
+      { operation: { ...exact.operation, version: 2 } }, { input: { planDigest: 'f'.repeat(64), resourceId: 'third' } }, { input: { planDigest: retained.planDigest, resourceId: 'third', extra: true } }])
+      await expect(broker.execute({ ...exact, ...wrong })).rejects.toMatchObject({ code: 'UNINSTALL_INVALID' });
+    await expect(broker.execute(exact)).rejects.toThrow('must not submit'); expect(submits).toBe(1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

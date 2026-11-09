@@ -209,7 +209,7 @@ it('reads Git tracking hardened: a hostile repository config runs nothing, track
 
 it('archives members into the encrypted companion bound to D0, never deletes one changed after archiving, and restores only files that are missing', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: uninstall archive custody is Linux-only'); return; }
-  const { createBackupSet } = await import('#adapters/core/backup-store/index.js');
+  const { createBackupSet, verifyBackupSet } = await import('#adapters/core/backup-store/index.js');
   const { createUninstallArchive, restoreUninstallArchive, InstallationDataRemovalTarget } = await import('#adapters/core/installation-removal/index.js');
   const { resolveProductLayout, productResourcePath } = await import('#platform/index.js');
   const { DatabaseSync } = await import('node:sqlite');
@@ -225,7 +225,8 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   const limits = { maxFiles: 100, maxDepth: 10, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 22 }, phrase = 'fixture-private-backup-passphrase';
   const set = join(base, 'recovery/set'); await mkdir(dirname(set), { mode: 0o700 }); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
   const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
-  const { members: bound } = await createUninstallArchive(set, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
+  const verified = await verifyBackupSet(set, phrase, limits);
+  const { members: bound } = await createUninstallArchive(verified, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits); verified.close();
   expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
   // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
   const target = new InstallationDataRemovalTarget('fixture', members, []), ref = { kind: target.kind, id: 'conversation-data' };

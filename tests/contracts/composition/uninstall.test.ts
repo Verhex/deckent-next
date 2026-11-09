@@ -70,6 +70,10 @@ vi.mock('node:fs/promises', async original => { const actual = await original<ty
     // `at`: the process dies at the first unlink whose path names this text (one member of the final tail), once.
     if (tail.left !== null && tail.left-- <= 0 || tail.at && String(path).includes(tail.at) && !(tail.at = null)) throw Object.assign(new Error('crash'), { code: 'EIO' });
     return actual.unlink(path); } }; });
+// R2: each recovery-key derivation (64 MiB scrypt) is one set verification or one envelope; the count pins how often a set is verified.
+const kdf = vi.hoisted(() => ({ calls: 0 }));
+vi.mock('node:crypto', async original => { const actual = await original<typeof import('node:crypto')>();
+  return { ...actual, scrypt: (...args: Parameters<typeof actual.scrypt>) => { kdf.calls++; return actual.scrypt(...args); } }; });
 /** A member still there for a resumed tail: under its name, or moved aside by a removal the crash interrupted (resumed, never left as a stray). */
 const unremoved = async (path: string) => !!await lstat(path).catch(() => null) || (await readdir(dirname(path)).catch(() => [] as string[])).some(name => name.startsWith(`.${basename(path)}.`) && name.endsWith('.removing'));
 
@@ -180,10 +184,11 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     expect(cancelled.status).toBe('cancelled'); expect(await lstat(ledger)).toBeTruthy();
     await expect(lstat(cancelled.backup.destination!)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
-    let cards = 0;
+    let cards = 0; kdf.calls = 0;
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'purge', planDigest: plan.planDigest }, {
       backupPassphrase: async () => phrase, confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; },
     }, options);
+    expect(kdf.calls).toBe(6); // R2: initial and final set, each created (encrypt + staging verify) and verified once with audit
     expect(result.status).toBe('completed'); expect(cards).toBe(1); expect(result.backup.destination).not.toBe(cancelled.backup.destination);
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     for (const path of strays) expect(await readFile(path, 'utf8')).toBe('FOREIGN KEEP');
@@ -358,8 +363,9 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     const withCache = await previewConfiguredUninstall(project, ALL, options); await chmod(report, 0o000);
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'archive-fails', planDigest: withCache.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options)).rejects.toThrow();
     await chmod(report, 0o600); expect(await readFile(cached, 'utf8')).toBe('CACHE'); expect(await readFile(report, 'utf8')).toBe('CACHE');
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: (await previewConfiguredUninstall(project, ALL, options)).planDigest },
-      { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    const approved = (await previewConfiguredUninstall(project, ALL, options)).planDigest; kdf.calls = 0;
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: approved }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    expect(kdf.calls).toBe(10); // R2: per set create 2, audited verify 1 and the archive companion's encrypt + verify 2; the held set is not verified again
     expect(result.status).toBe('completed');
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');
@@ -566,8 +572,9 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
     await expect(resume()).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
     for (const path of remaining) expect(await unremoved(path)).toBe(true);
     // R11: with the recorded policy back the resumed tail completes like the normal step: the retired marker is there and the service refuses to start.
-    await writeFile(join(local, 'policy.json'), policy, { mode: 0o600 });
+    await writeFile(join(local, 'policy.json'), policy, { mode: 0o600 }); kdf.calls = 0;
     expect(await resume()).toMatchObject({ status: 'completed' });
+    expect(kdf.calls).toBe(2); // R2: the final set verified once for the resumed tail, its archive companion with that handle
     for (const path of remaining) expect(await unremoved(path)).toBe(false);
     const { assertNotRetired } = await import('#platform/index.js');
     await expect(assertNotRetired(local)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' });

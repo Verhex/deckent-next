@@ -116,6 +116,7 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
 });
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] refuses nonempty targets without exact confirmation, preserves damaged files on confirmed restore and requires installation-wide policy', async () => {
   const f=await fixture();await call(f,'create');
+  await expect(call(f,'create')).rejects.toMatchObject({code:'BACKUP_SET_EXISTS'}); // S5-e4: an existing set is never replaced
   await expect(call(f,'restore',phrase,{target:f.root})).rejects.toMatchObject({code:'BACKUP_TARGET_NOT_EMPTY'});
   await writeFile(join(f.layout.root,'artifacts/result.txt'),'damaged');
   const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
@@ -175,6 +176,9 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');
   const {symlink}=await import('node:fs/promises');const link=join(f.base,'link');await symlink(f.root,link);
   await expect(call(f,'restore',phrase,{target:link,confirmTarget:link})).rejects.toMatchObject({code:'BACKUP_PATH_UNSAFE'});
+  // S5-e4: another valid ledger in the set is caught by the manifest before any fingerprint (a recomputed manifest fails the AEAD, below).
+  const setLedger=join(f.set,'ledger.db'),other=join(f.base,'other.db'),saved=await readFile(setLedger);const db=new DatabaseSync(other);db.exec('CREATE TABLE forged(value TEXT)');db.close();
+  await writeFile(setLedger,await readFile(other));await expect(call(f,'verify')).rejects.toMatchObject({code:'BACKUP_MANIFEST_INVALID'});await writeFile(setLedger,saved);
   const path=join(f.set,'ledger.fingerprint.json');await writeFile(path,'forged');
   const manifest=join(f.set,'MANIFEST.sha256'),text=await readFile(manifest,'utf8');
   const digest=createHash('sha256').update('forged').digest('hex');await writeFile(manifest,text.replace(/^[a-f0-9]{64} {2}ledger.fingerprint.json$/m,digest+'  ledger.fingerprint.json'));
