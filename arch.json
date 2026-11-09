@@ -3504,7 +3504,6 @@
         "src/engine/core/runs",
         "src/platform/core/errors",
         "src/platform/core/config",
-        "src/platform/core/config-fields",
         "src/platform/core/common",
         "src/engine/core/workspaces",
         "src/surfaces/core/delivery-summary",

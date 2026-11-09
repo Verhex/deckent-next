@@ -1,6 +1,6 @@
-import { loadConfig, deliveryMode, patchBody, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { loadConfig, patchBody, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { workingTreeSource, type DeliverySummaryRequest, type IntegrationAdoptionCommand, type IntegrationCommand, type IntegrationDeliveryCommand, type QueueConsent, type QueueQuery,
+import { workingTreeSource, patchChangeDigests, type DeliverySummaryRequest, type IntegrationAdoptionCommand, type IntegrationCommand, type IntegrationDeliveryCommand, type QueueConsent, type QueueQuery,
   type QueueSubmitClient, type RunQuery, type RunView, type TargetBatchExecution, type TargetQueueView, type WorkspaceAdoptionApplication, type WorkspaceDeliveryApplication,
   type WorkspaceIntegrationApplication, type WorkspacePatch } from '#engine/index.js';
 import { queueSummaryRequest, readConsentSummaries, DELIVERY_RENDER_LIMITS, type DeliverySummaryReader } from '#surfaces/core/delivery-summary/index.js';
@@ -119,7 +119,7 @@ export function terminalDeliveryPort(root: string, context: DeliveryPortHost, op
       const summary = describe ? (await summaries([{ schemaVersion: 1, identity, operation: 'deliver', target: null, verificationRunId: null, topPaths: 0 }]))[0] ?? null : undefined;
       const files = workingTreeSource(preview.patch.source); // R9p/R9n: the Run's own mode; the yes writes these exact before/after contents into the files
       return Object.freeze({ target, identity, ...stat, diffs, ...(summary !== undefined ? { summary } : {}), source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
-        ...(files ? { workingTree: true as const, changes: preview.patch.changes.map(change => ({ path: change.path, before: change.before?.digest ?? null, after: change.after?.digest ?? null })) } : {}),
+        ...(files ? { workingTree: true as const, changes: patchChangeDigests(preview.patch, 'forward') } : {}),
         outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze(files ? [] : [...config.execution?.adoption.targets ?? []]),
         verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null,
         ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef,
@@ -132,10 +132,10 @@ export function terminalDeliveryPort(root: string, context: DeliveryPortHost, op
       return Object.freeze({ target, identity, ...patchStat(patch.changes, renderUnifiedDiff), diffs: patchDiffs(patch.changes, renderUnifiedDiff), source: '', base: patch.baseCommit,
         proposal: '', outOfScope: [], adoptionTargets: [], verification: null, ...(workingTreeSource(patch.source) ? { workingTree: true as const } : {}) });
     },
-    // BeUser M-25/DR2-07: an already-delivered result needs only its attempt, its changed files and the configured adoption step.
+    // BeUser M-25/DR2-07: the retained patch binds the delivered Run's mode; an unreadable patch must never guess from today's configuration.
     async previewDelivered(target) { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
-      const patch = await previewWorkspacePatch(root, identity, options).then(preview => preview.patch, () => null), bar = config.execution?.adoption.verification;
-      const stat = patch ? patchStat(patch.changes, renderUnifiedDiff) : { files: [], added: 0, removed: 0 }, files = patch ? workingTreeSource(patch.source) : deliveryMode(config.execution) === 'working-tree';
+      const patch = (await previewWorkspacePatch(root, identity, options)).patch, bar = config.execution?.adoption.verification;
+      const stat = patchStat(patch.changes, renderUnifiedDiff), files = workingTreeSource(patch.source);
       return Object.freeze({ target, identity, ...stat, source: '', base: '', proposal: '', outOfScope: [], adoptionTargets: Object.freeze(files ? [] : [...config.execution?.adoption.targets ?? []]),
         verification: bar ? Object.freeze({ kind: bar.kind, required: bar.required }) : null, ...(files ? { workingTree: true as const } : {}) }); },
     async deliver(preview, ids, answer) {

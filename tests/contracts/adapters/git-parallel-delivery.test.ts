@@ -13,6 +13,8 @@ import { workingTreeRemovalPatterns } from '#adapters/core/git-patch/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
   targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
+import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
+import { homeEnv } from '../support/host-platform.js';
 
 // F1 (Astra 3015): the person's save is injected exactly between the working-tree writer's steps; every other call is the real one.
 type Hook = null | ((from: string, to: string) => Promise<void>);
@@ -63,7 +65,7 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
     await target.verify(manifest, p);
     return { manifest, receipt };
   };
-  const deliver = async (p: WorkspacePatch, candidate?: Awaited<ReturnType<typeof prepare>>) => {
+  const deliver = async (p: WorkspacePatch, candidate?: Awaited<ReturnType<typeof prepare>>, ask = confirmation) => {
     const { manifest, receipt } = candidate ?? await prepare(p);
     const command = { schemaVersion: 1 as const, commandId: p.identity.runId, identity: p.identity, integrationCommandId: manifest.command.commandId };
     let record: IntegrationDeliveryRecord | null = null;
@@ -73,7 +75,7 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
     const patches = { async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; }, assertScope() {} };
     const inspection = { async inspect() { return { manifest, receipt }; } };
     const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, workingTree ? files : delivery, store, sessions,
-      { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, confirmation);
+      { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, ask);
     const result = await app.deliver(command), plan = result.plan;
     expect(result.status).toBe(workingTree ? 'working-tree-delivered' : 'reference-delivered'); expect(await (workingTree ? files : delivery).delivered(plan)).toBe(true);
     expect(record!.delivered).toBe(true);
@@ -614,7 +616,18 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
   });
   it('L1c rollback: the yes puts the delivery\'s originals back with the delivery\'s card and authority; a file changed since is refused and nothing is written', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'); p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!);
-    const { record } = await f.deliver(p), receipt = record.intent.patch, clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, cards: import('#engine/index.js').EffectConfirmationView[] = [];
+    const cards: import('#engine/index.js').EffectConfirmationView[] = [];
+    const root = join(f.workspaceRoot, 'preview'); await mkdir(join(root, '.deckent'), { recursive: true });
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
+      logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 } } }));
+    const port = terminalDeliveryPort(root, { inspectInventory: async () => ({ page: { entries: [{ identity: p.identity }], nextAfter: null } }),
+      previewWorkspacePatch: async () => ({ patch: p }), checkWorkspaceIntegration: async () => ({ observation: { source: 'source', head: p.baseCommit }, proposal: 'proposal', scope: { status: 'unscoped' } }),
+      prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: () => '', interactiveDelivery: () => ({}) } as never, { env: homeEnv(join(root, 'home')) })!;
+    const shown = await port.preview({ key: 'k', title: 't', ...p.identity });
+    const { record } = await f.deliver(p, undefined, { async assertAvailable() {}, async confirm(card) { cards.push(card); return async () => {}; } });
+    const forward = [{ path: 'a.txt', before: patchDigest('a before\n'), after: patchDigest('a after\n') }, { path: 'dir/new.txt', before: null, after: patchDigest('added\n') }];
+    expect(shown.changes).toEqual(forward); expect(cards[0]!.changes).toEqual(forward);
+    const receipt = record.intent.patch, clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) };
     const store = { async findDelivery() { return record; }, async loadRun() { return { revision: 1, graph: { tasks: [{ id: 't', acceptanceCriteria: ['exit'] }] }, progress: [{ taskId: 't', phase: 'accepted' }] } as RunSnapshot; } };
     const app = new WorkingTreeRollbackApplication({ async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; } } as never, f.files, store, await LocalOsSessionAuthority.create(['s'], 10000, clock),
       { async authorizeIdentity(action) { expect(action).toBe('deliver-integration'); } }, clock, { async assertAvailable() {}, async confirm(card) { cards.push(card); return async () => {}; } });

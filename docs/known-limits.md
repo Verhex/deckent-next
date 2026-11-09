@@ -628,6 +628,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`ADOPTION_BASE_CHANGED`). Deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
 - **A patch made on a stale checkout can fail to apply.** The delivery check stops it before anything is written.
   *Workaround:* re-run the request on the current source.
+- **An older delivery consent without per-file digests needs a fresh yes (alpha.64).** If the confirmation card carries
+  change digests but the pending consent does not, the terminal asks you to confirm the exact card again after upgrading.
+- **An unreadable retained patch blocks the delivered-result preview (alpha.64).** The terminal shows the read error;
+  today's delivery setting cannot establish how that Run delivered. *Workaround:* restore access to the retained patch.
 - **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
   adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
   command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line. A working-tree delivery is

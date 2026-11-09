@@ -10,6 +10,22 @@ it('keeps absent legacy fields unknown and rejects unsupported brief versions', 
   expect(projectResultBrief(null, { verdict: null })).toMatchObject({ report: null, openIssues: null, runDelivery: null });
   expect(taskBriefSchema.safeParse({ ...projectTaskBrief(base, 't'), schemaVersion: 2 }).success).toBe(false);
   expect(resultBriefSchema.safeParse({ ...projectResultBrief(null, { verdict: null }), schemaVersion: 2 }).success).toBe(false);
+  const receipt = { state: 'delivered' as const, commit: 'c'.repeat(40), commandId: 'delivery', targetRef: 'refs/deckent/deliveries/d' };
+  const brief = projectResultBrief('a', { verdict: 'accepted' }, null, { ...receipt, receipts: [receipt] });
+  expect(resultBriefSchema.parse(brief).runDelivery).toEqual({ ...receipt, receipts: [receipt] });
+  for (const extra of [{ application: 'working-tree' }, { schemaVersion: 2 }, { unexpected: true }])
+    expect(resultBriefSchema.safeParse({ ...brief, runDelivery: { ...brief.runDelivery, ...extra } }).success).toBe(false);
+  for (const application of ['working-tree', 'reference-only']) {
+    const versioned = { ...receipt, schemaVersion: 2, application };
+    const future = { ...brief, runDelivery: { ...versioned, receipts: [receipt, versioned] } };
+    expect(resultBriefSchema.parse(future)).toEqual(future);
+    for (const extra of [{ schemaVersion: 3 }, { application: 'unknown' }, { unexpected: true }]) {
+      expect(resultBriefSchema.safeParse({ ...future, runDelivery: { ...future.runDelivery, ...extra } }).success).toBe(false);
+      expect(resultBriefSchema.safeParse({ ...future, runDelivery: { ...future.runDelivery, receipts: [{ ...versioned, ...extra }] } }).success).toBe(false);
+    }
+  }
+  expect(brief.runDelivery).not.toHaveProperty('schemaVersion');
+  expect(brief.runDelivery).not.toHaveProperty('application');
 });
 it('reads frozen profile pins and explicit context references without raw prompt text or invented purpose', () => {
   const run = { ...base, execution: { ...base.execution, tasks: [{ ...base.execution.tasks[0]!, profile: { ...base.execution.tasks[0]!.profile,

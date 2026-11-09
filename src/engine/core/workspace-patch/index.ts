@@ -52,5 +52,5 @@ export { reattemptCommandIds, reattemptEligibility, reattemptGraph, stepDelivery
 export type { DeliveryReattemptPorts, ReattemptEffects, WorkspaceReattemptContext } from './internal/reattempt.js';
 export { assertRunDeliveryIntent, stepRunDelivery, stepWorkspaceRunDelivery } from './internal/run-intent.js';
 export type { RunDeliveryPorts, RunDeliveryStep, WorkspaceRunDeliveryContext } from './internal/run-intent.js';
-export { workspacePatchChangeFacts, deliverySummary } from './internal/effect-summary.js';
+export { workspacePatchChangeFacts, deliverySummary, patchChangeDigests } from './internal/effect-summary.js';
 export { assertSameWorkSource } from './internal/work-source.js';

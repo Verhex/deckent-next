@@ -621,6 +621,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   rebase ya da merge yapmaz. *Yol:* güncel tabanda yeniden teslim edin.
 - **Bayat bir checkout'ta üretilen yama uygulanmayabilir.** Teslim kontrolü, bir şey yazılmadan önce durdurur.
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.
+- **Dosya özetleri olmayan eski teslim onayı yeniden evet ister (alpha.64).** Onay kartı değişiklik özetlerini taşıyor,
+  bekleyen onay taşımıyorsa sürüm yükseltmesinden sonra terminal aynı kartı yeniden onaylamanızı ister.
+- **Saklanan yama okunamıyorsa teslim edilmiş sonucun önizlemesi durur (alpha.64).** Terminal okuma hatasını gösterir;
+  bugünkü teslim ayarı o Run'ın nasıl teslim edildiğini kanıtlamaz. *Yol:* saklanan yamaya erişimi geri getirin.
 - **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
   kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
   dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın. Çalışma ağacına teslim

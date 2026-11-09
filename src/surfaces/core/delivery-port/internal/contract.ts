@@ -23,7 +23,7 @@ export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
 /** `reattempt`: with a queue target, the enqueue carries the bounded service re-attempt intent (`targetQueue.reattempts` > 0). */
 /** `summary`: TESLIM-KARTI-OZET, what the Attempt claims, what acceptance rests on, model and risk (null: not readable; absent: no reader bound). */
-/** `workingTree`: the installation's delivery writes into the project's files (`execution.deliveryMode`); `changes`: each path's before/after digest the yes binds. */
+/** `workingTree`: the Run's retained source binds delivery into the project's files; `changes`: each path's before/after digest the yes binds. */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
   verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null; workingTree?: true; changes?: EffectConfirmationView['changes'] }>;
@@ -78,7 +78,11 @@ export function consentMatches(consent: DeliveryConsent, view: EffectConfirmatio
     const shown = [...new Set(consent.files)].sort(), asked = [...new Set(view.files)].sort();
     if (shown.length !== asked.length || shown.some((path, index) => path !== asked[index])) return false;
   }
-  if (consent.changes && JSON.stringify(consent.changes) !== JSON.stringify(view.changes)) return false;
+  const shown = consent.changes, asked = view.changes;
+  if (shown !== undefined || asked !== undefined) {
+    if (!shown || !asked || shown.length !== asked.length || shown.some((change, index) => change.path !== asked[index]!.path
+      || change.before !== asked[index]!.before || change.after !== asked[index]!.after)) return false;
+  }
   return (consent.from === undefined || consent.from === view.from) && (consent.resource === undefined || consent.resource === view.resource)
     && (consent.to === undefined || consent.to === view.to);
 }

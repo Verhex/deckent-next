@@ -3,6 +3,11 @@ import type { AttemptIdentity, RunSnapshot } from '#domain/index.js';
 import type { DeliveryChangeFacts } from '#engine/core/delivery-summary/index.js';
 import type { WorkspacePatch } from './contract.js';
 import type { PatchScope } from './scope.js';
+export function patchChangeDigests(patch: Pick<WorkspacePatch, 'changes'>, direction: 'forward' | 'reverse') {
+  return patch.changes.map(change => { const [before, after] = direction === 'forward' ? [change.before, change.after] : [change.after, change.before];
+    return { path: change.path, before: before?.digest ?? null, after: after?.digest ?? null }; });
+}
+
 /** Bounded line counts, not content. Exact changed paths and file modes are represented by the patch. */
 function patchLineCounts(patch?: Pick<WorkspacePatch, 'changes'>) {
   let added = 0, removed = 0;
