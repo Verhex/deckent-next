@@ -1,4 +1,4 @@
-import { ErrorRegistry } from '#platform/index.js';
+import { optionalField, ErrorRegistry } from '#platform/index.js';
 import { SECRET_NAME_PATTERN } from './port.js';
 import REGISTRY from './project-vault.json' with { type: 'json' };
 
@@ -15,7 +15,7 @@ export type DeckInvalidReason = 'too-large' | 'too-many-entries' | 'header' | 'e
 export const DECK_FILE = Object.freeze({ ...REGISTRY.deck });
 const ENTRY = /^([A-Z_][A-Z0-9_]*)=(main|project)$/u;
 const invalid = (reason: DeckInvalidReason, line?: number) =>
-  ErrorRegistry.createError('DECK_FILE_INVALID', { params: { reason, ...(line === undefined ? {} : { line }) } });
+  ErrorRegistry.createError('DECK_FILE_INVALID', { params: { reason, ...optionalField('line', line) } });
 
 /**
  * PRE-8 v2 (owner 2026-10-21): the project's `.deck` v1, a dotenv-like list of references that may be committed. The first entry is the

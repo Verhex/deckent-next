@@ -109,3 +109,4 @@ export function persistedNumber(schema: z.ZodNumber) {
     return z.NEVER;
   }).meta({ type: 'number', ...numberJsonBounds(schema) });
 }
+export const persistedCounter = () => persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);

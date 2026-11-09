@@ -1,6 +1,7 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { userInfo } from 'node:os';
 import { loadConfig, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { DockerSupervisor, GitWorkspaceBroker, FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
+import { DockerSupervisor, GitWorkspaceBroker, FileArtifactStore } from '#adapters/index.js';
 import { validateExecutionSupervisorProfile } from '#adapters/index.js';
 /** Single config/layout snapshot. The caller must authorize the source repository and install identity/policy
  * before admitting commands; these adapters alone never grant execution permission. */
@@ -15,7 +16,7 @@ export async function openConfiguredExecution(projectRoot: string, sourceRoot: s
   const supervisor = new DockerSupervisor({ ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
   const workspaces = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot, workspaceRoot });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
-  const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'allow', { validate: validateExecutionSupervisorProfile });
+  const store = await openConfiguredLedger({ config, path: async () => ledger }, { migration: 'allow', validate: validateExecutionSupervisorProfile });
 
   return Object.freeze({ layout, supervisor, workspaces, artifacts, store });
 }

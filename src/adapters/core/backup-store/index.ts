@@ -9,3 +9,4 @@ export { listBackupSets, lastBackupVerifications, type BackupSetEntry } from './
 
 export { createBackupCoverage, verifyBackupCoverage } from './internal/coverage.js';
 export type { BackupCoverageRequest } from './internal/coverage.js';
+export { digestFile } from './internal/files.js';

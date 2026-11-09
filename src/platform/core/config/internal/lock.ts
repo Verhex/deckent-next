@@ -8,16 +8,12 @@ import { emit } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
 import { SystemTrustedClock, MAX_WALL_SKEW_MS, type ClockSample, type TrustedClock } from '#platform/core/clock/index.js';
 import { getConfigFieldDefault } from '#platform/core/config-fields/index.js';
-import { productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, type Environment } from '#platform/core/host/index.js';
+import { processExists, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, type Environment } from '#platform/core/host/index.js';
 import type { ConfigWarning } from './validate/issues.js';
 
 const STALE_MS = 10 * 60_000;
 interface Owner { pid?: number; hostname?: string; createdAt?: string; nonce?: string }
 export interface ConfigLockOptions { onWarning?: (warning: ConfigWarning) => void; locale?: Locale; signal?: AbortSignal }
-function pidState(pid: number): 'alive' | 'dead' | 'unknown' {
-  try { process.kill(pid, 0); return 'alive'; }
-  catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH' ? 'dead' : (error as NodeJS.ErrnoException).code === 'EPERM' ? 'alive' : 'unknown'; }
-}
 async function observe(lock: string, clock: TrustedClock, started: ClockSample) {
   const stat = await lstat(lock);
   if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD');
@@ -72,8 +68,8 @@ async function observe(lock: string, clock: TrustedClock, started: ClockSample) 
   const ageSeconds = Math.max(0, (now - since - MAX_WALL_SKEW_MS) / 1000);
   // Legacy pid-only files were local; remote and permission-denied owners are never presumed dead.
   const local = owner.hostname === undefined || owner.hostname === hostname();
-  const state = local && validPid ? pidState(owner.pid!) : 'unknown';
-  const stale = state === 'dead' || (local && !validPid && ageSeconds * 1000 > STALE_MS);
+  const gone = local && validPid && !processExists(owner.pid!);
+  const stale = gone || (local && !validPid && ageSeconds * 1000 > STALE_MS);
   return { stat, owner, ageSeconds, stale, empty };
 }
 /** Keep generation tombstones: a second rename cannot overwrite a nonempty directory.

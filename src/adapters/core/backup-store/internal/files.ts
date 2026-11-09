@@ -1,8 +1,7 @@
-import { constants, createReadStream } from 'node:fs';
+import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, resolve, sep } from 'node:path';
-import { createHash } from 'node:crypto';
-import { ErrorRegistry, PrivateFileError, privateFile, readPrivateFile } from '#platform/index.js';
+import { digestPrivateFile, ErrorRegistry, PrivateFileError, readPrivateFile } from '#platform/index.js';
 export const refuse = (code: string, params?: Record<string, string>): never => { throw ErrorRegistry.createError(code, params ? { params } : undefined); };
 /** Reject a link or special file at every existing ancestor (owners are checked by each caller). Same-uid path swapping is outside the trusted host boundary. */
 export async function safePath(path: string): Promise<string> {
@@ -57,16 +56,10 @@ export async function syncDirectory(path: string) {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 export async function digestFile(path: string): Promise<string> {
-  await safePath(path); const hash = createHash('sha256');
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const before = await handle.stat();
-    if (!privateFile(before)) return refuse('BACKUP_PATH_UNSAFE');
-    let bytes = 0;
-    for await (const chunk of createReadStream(path, { fd: handle.fd, autoClose: false, end: Math.max(0, before.size - 1) })) { bytes += chunk.length; hash.update(chunk); }
-    const after = await handle.stat();
-    if (bytes !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs) return refuse('BACKUP_STATE_CHANGED');
-    return hash.digest('hex');
-  } finally { await handle.close(); }
+  return digestPrivateFile(await safePath(path)).catch((error: unknown) => {
+    if (!(error instanceof PrivateFileError)) throw error;
+    return refuse(PRIVATE_REFUSAL[error.reason]);
+  });
 }
+
 export async function canonical(path: string) { await safePath(path); return realpath(path); }

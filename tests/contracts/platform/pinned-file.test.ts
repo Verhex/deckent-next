@@ -4,6 +4,8 @@ import { appendFile, chmod, link, lstat, mkdir, mkdtemp, open, readFile, rename,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
+import { digestFile } from '#adapters/core/backup-store/index.js';
+import { digestPrivateFile } from '#platform/core/utils/index.js';
 import { lineCut, pathWithin, privateDirectory, privateFile, readPinnedFile, readPrivateFile, relativeInside, removePinnedFile, restorePinnedFile } from '#platform/index.js';
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -107,6 +109,17 @@ it.skipIf(process.platform !== 'linux')('KG12 F1: a private file is read only as
   const refused = (reason: string) => expect.objectContaining({ reason });
   try {
     await writeFile(file, 'RECORD', { mode: 0o600 }); await writeFile(other, 'OTHER', { mode: 0o600 });
+    expect(await digestFile(file)).toBe('1092e2e43a486c0a247743940abb3210d77c912476ac72e4c854ae4f13383125');
+    expect(await digestPrivateFile(file)).toBe('1092e2e43a486c0a247743940abb3210d77c912476ac72e4c854ae4f13383125');
+    await writeFile(file, '', { mode: 0o600 });
+    expect(await digestFile(file)).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    await writeFile(file, 'RECORD');
+    await expect(digestFile(join(root, 'absent'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await chmod(file, 0o640); await expect(digestFile(file)).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' }); await chmod(file, 0o600);
+    await link(file, join(root, 'digest-link')); await expect(digestFile(file)).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' }); await unlink(join(root, 'digest-link'));
+    await symlink(file, join(root, 'digest-symlink')); await expect(digestFile(join(root, 'digest-symlink'))).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
+    execFileSync('mkfifo', ['-m', '600', join(root, 'digest-fifo')]);
+    await expect(digestFile(join(root, 'digest-fifo'))).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
     expect((await readPrivateFile(file, 64, { mode: 'mask' }))?.toString()).toBe('RECORD');
     expect(await readPrivateFile(join(root, 'absent'), 64, { mode: 'mask' })).toBeNull();
     expect(await privateDirectory(root)).toBe(true); expect(await privateDirectory(join(root, 'absent'))).toBeNull();
@@ -133,6 +146,8 @@ it.skipIf(process.platform !== 'linux')('KG12 F1: a private file is read only as
     const probe = await open(other, 'r'), proto = Object.getPrototypeOf(probe) as { stat(): Promise<unknown> }; await probe.close();
     const afterFirstStat = (change: () => Promise<void>) => { const stat = proto.stat, spy = vi.spyOn(proto, 'stat').mockImplementation(async function (this: unknown) {
       spy.mockRestore(); const info = await stat.call(this); await change(); return info; }); };
+    afterFirstStat(() => appendFile(file, 'GROWN'));
+    await expect(digestPrivateFile(file)).rejects.toEqual(refused('changed'));
     afterFirstStat(() => appendFile(file, 'GROWN'));
     await expect(readPrivateFile(file, 64, { mode: 'mask' })).rejects.toEqual(refused('changed'));
     afterFirstStat(() => appendFile(file, 'X'.repeat(64)));

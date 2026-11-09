@@ -1,4 +1,4 @@
-import { persistedInteger, TargetQueueError, targetQueueRecordSchema, targetDisplaySchema, identitySchema, attemptIdentitySchema, effectTargetRefSchema, targetQueueStateSchema, targetQueueOutcomeSchema, queueReasonSchema, queueRequeueCause, type TargetQueueRecord, type TargetDisplay } from '#domain/index.js';
+import { counterSchema, persistedInteger, TargetQueueError, targetQueueRecordSchema, targetDisplaySchema, identitySchema, attemptIdentitySchema, effectTargetRefSchema, targetQueueStateSchema, targetQueueOutcomeSchema, queueReasonSchema, queueRequeueCause, type TargetQueueRecord, type TargetDisplay } from '#domain/index.js';
 import { z } from 'zod';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -7,12 +7,12 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
  * re-attempt Run (its normal Run-create card); `running`: the re-attempt Run works on the current base; `enqueued`: its ticket waits in the
  * queue for the same two cards; `refused`/`failed`/`exhausted`: final, a human decides. */
 export const queueReattemptViewSchema = z.strictObject({ state: z.enum(['waiting-base', 'awaiting-approval', 'running', 'enqueued', 'refused', 'failed', 'exhausted']),
-  count: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), bound: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(), cause: queueReasonSchema,
+  count: counterSchema, bound: counterSchema.optional(), cause: queueReasonSchema,
   runId: identitySchema.optional(), commandId: identitySchema.optional(), reason: queueReasonSchema.optional() }).readonly();
 export type QueueReattemptView = z.infer<typeof queueReattemptViewSchema>;
 export const targetQueueViewSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: identitySchema, identity: attemptIdentitySchema,
-  operation: z.enum(['delivery', 'rollback']), target: effectTargetRefSchema, display: targetDisplaySchema, state: targetQueueStateSchema, outcome: targetQueueOutcomeSchema.nullable(), revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  observedAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), freshness: z.literal('last-known'), position: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
+  operation: z.enum(['delivery', 'rollback']), target: effectTargetRefSchema, display: targetDisplaySchema, state: targetQueueStateSchema, outcome: targetQueueOutcomeSchema.nullable(), revision: counterSchema,
+  observedAt: counterSchema, freshness: z.literal('last-known'), position: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
   nextAction: z.enum(['wait-service', 'confirm-batch', 'watch-reconciliation', 'new-attempt', 'select-target', 'prepare-current', 'inspect-receipt', 'approve-run']),
   responsibility: z.enum(['human', 'reconciler', 'service']), basis: z.strictObject({ observed: z.string(), effective: z.string(), candidate: z.string() }).nullable(),
   verification: z.strictObject({ phase: z.enum(['accepted', 'failed', 'pending', 'cancelled', 'unknown']), receipt: digest }).nullable(), evidenceRefs: z.array(digest),
@@ -21,7 +21,7 @@ export const targetQueueViewSchema = z.strictObject({ schemaVersion: z.literal(1
   reattempt: queueReattemptViewSchema.optional(),
   /** D2b: submitted by the service for this human under the Run's delivery intent; `requeues` used so far of the bound. */
   delegation: z.strictObject({ grantedBy: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }), runId: identitySchema,
-    requeues: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).optional() }).readonly();
+    requeues: counterSchema }).optional() }).readonly();
 export type QueueNextAction = 'wait-service' | 'confirm-batch' | 'watch-reconciliation' | 'new-attempt' | 'select-target' | 'prepare-current' | 'inspect-receipt' | 'approve-run';
 /** The authorized own-ticket projection never leaks physical ordinals, other scopes or an installation-wide backlog count. */
 export function projectTargetQueue(input: TargetQueueRecord, descriptor: TargetDisplay, observedAt: number, position: number | null = null, live?: QueueReattemptView, requeueMax?: number) {

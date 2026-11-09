@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { SystemTrustedClock, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteAttemptStore } from '#adapters/index.js';
 import { verifiedPrincipal, authenticate, RunApplication, runCommandSchema, RunPolicyAuthorization, RunCancellationCoordinator, type RunCommand } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createRecordedCancellationDelivery } from './cancellation-runtime.js';
 /** Explicit delivery, separate from request-only SDK entry. Current Run and per-Attempt policy gate
  * every delivery; stopped containers stay retained until independent output durability/release.
@@ -18,7 +17,7 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
     if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', {
       params: { missing: 'cancellation' },
     });
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
 
     try {
       const runs = new RunApplication(store, verifier, authorization);

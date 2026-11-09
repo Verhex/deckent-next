@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 /** Tokens kept free beyond the completion limit (legacy default): chat template and tokenizer differences never overflow a round. */
 const SAFETY_RESERVE_TOKENS = 2_048;
 
@@ -22,5 +24,5 @@ export function agentTurnAdmission(maxCompletionTokens: number, inputMaxBytes: n
     // Compaction headroom heuristic, not a token-to-byte guarantee. Exact JSON byte guards still admit each request.
     // Reserve an estimated answer and one user message of up to an eighth of the bound, at most 32 KiB.
     requestReserveBytes: maxCompletionTokens * 4 + Math.min(32_768, Math.floor(inputMaxBytes / 8)), completionLimitTokens: maxCompletionTokens,
-    ...(compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens }) });
+    ...optionalField('compactionThresholdTokens', compactionThresholdTokens) });
 }

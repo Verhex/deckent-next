@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 import type { VerifiedPrincipal } from '#domain/index.js';
 import type { ModelBindingDefinition, ModelInvocationProfile, ModelReference } from '#domain/index.js';
 import { parseModelActivationCommand, modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationProfileSchema,
@@ -75,7 +77,7 @@ export class ModelActivationApplication {
         }
       }
       const admission = parseModelActivationAdmission({ command, actor, authorization, admittedAtMs: this.now(),
-        ...(definition === undefined ? {} : { definition }) });
+        ...optionalField('definition', definition) });
       const result = await store.admit(admission), receipt = verifyModelActivationReceipt(result.receipt);
       if (typeof result.replayed !== 'boolean' || !sameModelActivationRequest(receipt, command, actor)
         || (!result.replayed && (JSON.stringify(receipt.authorization) !== JSON.stringify(authorization)

@@ -10,7 +10,7 @@ import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
-import { DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { optionalField, DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
@@ -358,7 +358,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(openMode ? { open: openMode } : {}),
     inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
     set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: { readonly sessionId: string | null }) => context.setPermissionMode!(root,
-      { schemaVersion: 1, scopeId, mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
+      { schemaVersion: 1, scopeId, mode, expectedRevision, ...optionalField('askEdits', askEdits), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
   // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
   // it again on every turn and call). A closed explicit mode offers the host PRE-9 card; a stored mode without its grant starts standart.
   let fullAccess = false;

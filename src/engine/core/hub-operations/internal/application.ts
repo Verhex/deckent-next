@@ -3,6 +3,8 @@ import { ErrorRegistry, hasSecret, REDACTION_GATE_PATTERNS, EMPTY_KNOWN_SECRETS 
 import { HubClientError, decodeHubBundle } from '#engine/core/hub-client/index.js';
 import { parseHubOperation, type HubOperationPorts, type HubRemoteOperation } from './contract.js';
 
+const secretGates = REDACTION_GATE_PATTERNS.map(pattern => new RegExp(pattern.source, pattern.flags));
+
 /** One installation-side dispatcher. Local state changes remain owned by HubClientApplication. */
 export class HubApplication {
   constructor(private readonly ports: HubOperationPorts) {}
@@ -39,7 +41,7 @@ export class HubApplication {
     const client = this.ports.client;
     const principal = await client.authorizeRemote(request.operation === 'hub.inspect' ? 'search' : request.operation.slice(4) as 'search' | 'publish' | 'yank' | 'revoke', request.input.scopeId);
     const known = this.ports.knownSecrets?.() ?? EMPTY_KNOWN_SECRETS;
-    const secret = (text: string) => hasSecret(text, known) || REDACTION_GATE_PATTERNS.some(pattern => new RegExp(pattern.source, pattern.flags).test(text));
+    const secret = (text: string) => hasSecret(text, known) || secretGates.some(pattern => { pattern.lastIndex = 0; return pattern.test(text); });
     // Every remote input leaves the scope, not only a publish bundle: the outbound gate sees the exact canonical input that is sent.
     if (secret(canonicalHubJson(request.input))) throw ErrorRegistry.createError('HUB_SECRET_REFUSED');
     if (request.operation === 'hub.publish') {

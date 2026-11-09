@@ -1,10 +1,9 @@
 import { projectAttachmentSchema, type ProjectAttachment } from '#domain/index.js';
-import { createHash } from 'node:crypto'; import { lstat } from 'node:fs/promises'; import { dirname } from 'node:path';
+ import { lstat } from 'node:fs/promises'; import { dirname } from 'node:path';
 import { inspectInstallationFile, publishInstallationFile } from './publication.js';
 import { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { InstallationPublicationError, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, inspectProductFile, prepareProductFile, productDataRootIgnorePath, productResourcePath, PRODUCT_DATA_ROOT_IGNORE as IGNORE, validateConfig, type ProductLayout } from '#platform/index.js';
-const digest = (content: string) => createHash('sha256').update(content).digest('hex');
+import { sha256 as digest, getConfigFieldDefault, inspectProductFile, prepareProductFile, productDataRootIgnorePath, productResourcePath, PRODUCT_DATA_ROOT_IGNORE as IGNORE, validateConfig, type ProductLayout } from '#platform/index.js';
 /** First-session material is data in the existing installer journal, never a second config writer or migration; v12: it names `service.identity`; G2-1: the data root's ignore rule when that name is free. */
 export async function firstSessionTargets(layout: ProductLayout, scopeId: string, maxBytes: number, retained?: unknown, service: { readonly scopeId: string; readonly serviceId: string } | null = null, attachment?: ProjectAttachment): Promise<readonly PolicyTemplatePublishTarget[]> {
   if (retained !== undefined) {

@@ -2,7 +2,7 @@ import { ownerBaselineCommand, parseBaseline } from './owner-baseline.js';
 import { identityCommand } from './identity.js';
 import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
-import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { policyPreviewText } from './policy-preview.js';
 import { parseModes, policyModesCommand, typedMode } from './policy-modes.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
@@ -147,10 +147,10 @@ export async function initCommand(argv: readonly string[], context: Installation
       throw ErrorRegistry.createError('CLI_USAGE');
     }
     if (families !== undefined) return ownerBaselineCommand(context, { root, scopeId, families, apply: policyApply, json, locale, sinks,
-      ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
+      ...optionalField('expect', expect), ...optionalField('person', person) });
     if (modes !== undefined) {
       return policyModesCommand(context, { root, scopeId, modes, modesText: modesText!, apply: policyApply, json, locale, sinks,
-        ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
+        ...optionalField('expect', expect), ...optionalField('person', person) });
     }
     if (policyUpgrade) {
       if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');

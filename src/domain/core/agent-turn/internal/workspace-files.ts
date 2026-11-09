@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 /**
@@ -30,7 +30,7 @@ export const WORKSPACE_ATTACHMENT_REFUSALS = Object.freeze(['path-invalid', 'pat
 /** A refusal is a typed result, not a failure: the turn goes on without that file and the surface says why. */
 export const workspaceAttachmentSchema = z.discriminatedUnion('status', [
   z.strictObject({ schemaVersion: z.literal(1), path: persistedString(z.string().min(1).max(PATH_MAX_CHARS)), status: z.literal('attached'), content: z.string(),
-    bytes: persistedInteger().nonnegative().max(WORKSPACE_ATTACHMENT_MAX_BYTES), totalBytes: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), truncated: z.boolean() }),
+    bytes: persistedInteger().nonnegative().max(WORKSPACE_ATTACHMENT_MAX_BYTES), totalBytes: counterSchema, truncated: z.boolean() }),
   z.strictObject({ schemaVersion: z.literal(1), path: persistedString(z.string().min(1).max(PATH_MAX_CHARS)), status: z.literal('refused'), reason: z.enum(WORKSPACE_ATTACHMENT_REFUSALS) }),
 ]).readonly();
 export type WorkspaceAttachment = z.infer<typeof workspaceAttachmentSchema>;

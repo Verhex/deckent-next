@@ -7,7 +7,7 @@ import { projectModelIngressField, type ModelIngressProjection } from './model-i
 import { checkModelIngressArguments, projectModelIngressSchema } from './model-ingress-json.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
-import { LOCALES, t, type Locale } from '#platform/index.js';
+import { optionalField, LOCALES, t, type Locale } from '#platform/index.js';
 import { agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
   type AgentTurnMessage, type AgentMessageContinuation, type AgentProviderStop, type ChatTurnSteerOutcome } from '#domain/index.js';
 
@@ -254,10 +254,10 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
       const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
       carry.observed(message, call, round, index, invoked, status, cleanup);
       emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
-        ...(cleanup !== undefined ? { cleanup } : {}) });
+        ...optionalField('cleanup', cleanup) });
       await ports.settled?.({ round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
       return { message, progressed, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
-        ...(cleanup !== undefined ? { cleanup } : {}), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
+        ...optionalField('cleanup', cleanup), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
     };
     if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`); }
     // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.

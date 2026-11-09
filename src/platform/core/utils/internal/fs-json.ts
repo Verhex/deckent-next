@@ -1,7 +1,8 @@
 import { lstat, open, mkdir, rename, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { sha256 } from '#platform/core/integrity/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 
 export type JsonRecord = Record<string, unknown>;
@@ -26,7 +27,8 @@ export function deepMerge<T>(base: T, override: Partial<T>): T {
   }
   return out as T;
 }
-export function digestText(text: string): string { return createHash('sha256').update(text).digest('hex'); }
+/** @deprecated Use sha256; retained for one release. */
+export const digestText = sha256;
 export type JsonRead = { kind: 'absent' } | { kind: 'corrupt'; text: string; digest: string }
   | { kind: 'ready'; value: unknown; text: string; digest: string } | { kind: 'io'; error: unknown };
 export async function readJsonFile(path: string): Promise<JsonRead> {
@@ -81,3 +83,6 @@ export function jsonRecordDirectory(directory: string): (name: string) => JsonRe
       remove: () => unlink(path).catch(error => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }) };
   };
 }
+/** Omit only undefined; zero, false, empty text and null are supplied values. */
+export const optionalField = <K extends PropertyKey, V>(key: K, value: V): Partial<Record<K, Exclude<V, undefined>>> =>
+  value === undefined ? {} : { [key]: value } as Record<K, Exclude<V, undefined>>;

@@ -2,9 +2,9 @@ import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#plat
 import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
 /** The caller's own standing approvals for `deckent policy grants --mine` / `revoke` (G6): local OS person; a revoke is the governed `policy.administer@1` change, `confirm` is the person's own answer. */
@@ -20,7 +20,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
     if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied, serviceIdentity: config.service.identity }, principal);
     const peer = localPrincipalPeer(), clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock, peer);
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), ledger = await path();
-    const effects = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid'), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
+    const effects = await openConfiguredLedger({ config, path: async () => ledger }, { migration: 'forbid' }), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     const auditStore = await openSqliteAuditStore(ledger, config.storage.sqlite, 'forbid');
     try {
       const audit = new AuditApplication(auditStore, integrity);

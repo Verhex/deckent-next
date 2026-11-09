@@ -1,11 +1,9 @@
-import { persistedString, persistedInteger, redactBounded } from '#platform/index.js';
-import { createHash } from 'node:crypto';
+import { sha256, persistedString, persistedInteger, redactBounded } from '#platform/index.js';
 import { z } from 'zod';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { fetchableUrlError, fetchHttps, type HttpFetchResult, type HttpFetchTransport } from './request.js';
 
-const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 export const NETWORK_FETCH_TARGET_KIND = 'network-fetch';
 /** Core operation of an agent fetch (FETCH S7, owner 2026-09-28): the `network` namespace is Core's. A request leaves the machine, so it is a
  * write-class external effect; policy decides it, it has no precondition and no compensation. The input is the URL and the byte limit. */

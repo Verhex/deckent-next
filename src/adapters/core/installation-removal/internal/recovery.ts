@@ -1,11 +1,10 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ErrorRegistry, sha256, uninstallHoldPath, PRIVATE_PERMISSION_MASK, type IntegrityAuthority } from '#platform/index.js';
+import { isAbsent as absent, ErrorRegistry, sha256, uninstallHoldPath, PRIVATE_PERMISSION_MASK, type IntegrityAuthority } from '#platform/index.js';
 import type { UninstallPlan, UninstallResult } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 const fail = (): never => { throw ErrorRegistry.createError('UNINSTALL_RECOVERY_INVALID'); };
-const absent = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 /** Immutable authenticated plan and append-only outcome companion. Generic effect states stay exclusively in FileEffectStore. */
 export class UninstallRecovery {
   readonly directory: string;

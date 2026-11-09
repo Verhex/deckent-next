@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, attemptIdentitySchema, identitySchema, type WorkerModelVerdict } from '#domain/index.js';
+import { counterSchema, persistedString, persistedInteger, attemptIdentitySchema, identitySchema, type WorkerModelVerdict } from '#domain/index.js';
 import { z } from 'zod';
 import limits from './limits.json' with { type: 'json' };
 
@@ -12,7 +12,7 @@ export const DELIVERY_SUMMARY_LIMITS = Object.freeze(limits);
 /** Bounded text counts code points (the `*Chars` limits, the projector's cut and the list cells agree; REVISE 2734 R4), so an astral character
  * never makes a correctly cut string fail the envelope. The UTF-16 ceiling (two units per code point) is checked first and keeps the count cheap. */
 const text = (max: number, min = 0) => persistedString(z.string().min(min).max(max * 2)).refine(value => Array.from(value).length <= max);
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 const withheld = z.strictObject({ state: z.literal('withheld') });
 const unavailable = z.strictObject({ state: z.literal('unavailable') });
 

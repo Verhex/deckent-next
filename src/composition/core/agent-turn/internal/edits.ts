@@ -1,7 +1,8 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock, prepareProductDirectory, t, type Locale } from '#platform/index.js';
-import { agentFileEffectCommandId, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
+import { agentFileEffectCommandId, createLocalPeerSession, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 /**
  * Agent file edits of one turn in one area (T-L4 slice 2; SCR-A: the project, or the conversation's scratch area): the plan (version +
@@ -59,7 +60,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
       const clock = new SystemTrustedClock();
       const sessions = await (input.sessions ? input.sessions() : input.peer ? createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock) : Promise.reject(new SessionAuthenticationError('SESSION_REQUIRED')));
       const target = area.target(await prepareProductDirectory(context.layout, 'fileEffects'));
-      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
+      const store = await openConfiguredLedger(context, { migration: 'forbid' });
       try {
         const effects = new EffectApplication({ async resolve(ref) {
           return ref.id === descriptor.operation.id && ref.version === descriptor.operation.version ? descriptor : null;

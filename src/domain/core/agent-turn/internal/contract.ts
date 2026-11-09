@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { agentMessageContinuationSchema } from './continuation.js';
 import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
@@ -69,7 +69,7 @@ export type AgentTurnFinish = 'stop' | 'length' | 'cancelled' | 'error';
 /** `provider-count`: the provider's own tokenizer on exactly the round's request; `upper-bound`: a conservative byte-based bound. */
 export type AgentContextQuality = 'provider-count' | 'upper-bound';
 
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 const finishSchema = z.enum(['stop', 'length', 'cancelled', 'error']);
 const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']);
 /**

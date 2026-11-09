@@ -1,7 +1,7 @@
 import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { optionalField, shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler } from './context.js';
@@ -81,7 +81,7 @@ export function createWorklineLedgerPorts(input: {
       acceptSessionStandingClearance(command, await input.clearSessionStanding!(command));
     } } : {}),
     ...(followEvents ? { followEvents } : {}),
-    ...(workerHeartbeatMs === undefined ? {} : { workerHeartbeatMs }),
+    ...optionalField('workerHeartbeatMs', workerHeartbeatMs),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
     ...(input.describeQueueSummaries ? { async queueSummaryLines(views) {

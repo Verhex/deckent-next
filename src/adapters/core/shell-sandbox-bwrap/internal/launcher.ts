@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { chmodSync, closeSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeSync, type BigIntStats } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bubblewrapObservation, nativeShellKernelProbe, probeShellCapabilities, type BubblewrapCapability, type BubblewrapLauncher, type BubblewrapRestriction,
   type ShellCapabilities } from '#adapters/core/host-shell/index.js';
-import { PRODUCT_LAYOUT_REGISTRY } from '#platform/index.js';
+import { sha256, PRODUCT_LAYOUT_REGISTRY } from '#platform/index.js';
 import { BUBBLEWRAP_BUNDLED } from './bundled.js';
 
 /** Where a distribution installs bubblewrap; PATH is never consulted for the launcher (a PATH entry is data the command sees). */
@@ -59,7 +59,6 @@ const atLeast = (version: string, minimum: string) => {
   return true;
 };
 const identityOf = (info: BigIntStats) => `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
-const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const errorText = (error: unknown) => (error as NodeJS.ErrnoException).code ?? (error instanceof Error ? error.message : String(error));
 /** Verified content per file identity (git-object cache pattern: content cannot change without the kernel advancing ctime). */
 const verifiedCopies = new Map<string, string>();

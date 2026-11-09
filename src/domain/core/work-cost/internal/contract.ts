@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { acceptanceViewSchema, measuredCostSchema } from '#domain/core/run/index.js';
@@ -10,24 +10,24 @@ export const workCostSchema = z.strictObject({ schemaVersion: z.literal(1), iden
   effort: z.string().nullable(), acceptance: acceptanceViewSchema,
   axes: z.strictObject({ cpuSeconds: value, sampledPeakBytes: value, kernelPeakBytes: value, wallMs: value,
     apiMoney: measuredCostSchema.nullable(),
-    subscription: z.strictObject({ calls: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), durationMs: value, limit: z.null() }).readonly().nullable(),
-    localModel: z.strictObject({ calls: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), durationMs: value }).readonly().nullable(),
-    humanInterventions: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
+    subscription: z.strictObject({ calls: counterSchema.nullable(), durationMs: value, limit: z.null() }).readonly().nullable(),
+    localModel: z.strictObject({ calls: counterSchema.nullable(), durationMs: value }).readonly().nullable(),
+    humanInterventions: counterSchema.nullable(),
   }).readonly(),
-  quality: z.strictObject({ reworkCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), rollbackCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
-    interventionCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), followup: z.enum(['unknown', 'open', 'complete']) }).readonly(),
-  coverage: z.literal('partial'), sampleCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), gapCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  quality: z.strictObject({ reworkCount: counterSchema.nullable(), rollbackCount: counterSchema.nullable(),
+    interventionCount: counterSchema.nullable(), followup: z.enum(['unknown', 'open', 'complete']) }).readonly(),
+  coverage: z.literal('partial'), sampleCount: counterSchema, gapCount: counterSchema,
 }).readonly();
 export type WorkCost = z.infer<typeof workCostSchema>;
 export const workCostReportSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema,
   recommendations: z.array(costRecommendationSchema).readonly().optional(),
   recommendationsTruncated: z.boolean().optional(),
-  runRevision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), observedAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  coverage: z.literal('partial'), withheld: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  runRevision: counterSchema, observedAtMs: counterSchema,
+  coverage: z.literal('partial'), withheld: counterSchema,
   attempts: z.array(workCostSchema).readonly(),
-  summary: z.strictObject({ acceptedTasks: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), failedTasks: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-    unknownTasks: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), measuredCpuSeconds: value, sampledPeakBytes: value,
-    measuredApiUsdNanos: z.string().regex(/^(0|[1-9][0-9]*)$/).nullable(), unknownApiAttempts: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  summary: z.strictObject({ acceptedTasks: counterSchema, failedTasks: counterSchema,
+    unknownTasks: counterSchema, measuredCpuSeconds: value, sampledPeakBytes: value,
+    measuredApiUsdNanos: z.string().regex(/^(0|[1-9][0-9]*)$/).nullable(), unknownApiAttempts: counterSchema,
     sampledCpuSecondsPerAcceptedTask: value,
   }).readonly(),
 }).readonly();

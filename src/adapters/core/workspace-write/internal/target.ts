@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger } from '#platform/index.js';
+import { optionalField, persistedString, persistedInteger } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
@@ -153,7 +153,7 @@ export class WorkspaceFileTarget implements EffectTarget {
         return { version: ABSENT_FILE_VERSION };
       }
       return { version: await writeWorkspaceFile(this.scope, target, request.expectedVersion, bytes,
-        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...(createMode !== undefined ? { createMode } : {}),
+        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...optionalField('createMode', createMode),
           ...(maxFileBytes ? { maxFileBytes } : {}), ...(change.mode !== undefined ? { mode: change.mode } : {}) }) };
     } catch (error) {
       if (error instanceof WorkspaceWriteError) {

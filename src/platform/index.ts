@@ -42,7 +42,7 @@ export { DeckentJsonSchemaValidator, JsonSchemaRefusal, JSON_SCHEMA_LIMITS, JSON
 export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSchemaResult, JsonSchemaValidatorOptions } from '#platform/core/validate/index.js';
 // SEC-6 F31: the same linear-time engine matches model-chosen shell globs (no backtracking RegExp on the service thread).
 export { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern, type StepBudget } from '#platform/core/validate/index.js';
-export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
+export { optionalField, deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining, errorCodeOf, isAbsent } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, TERMINAL_SCOPE_ID_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions, ConfigSectionSchema } from '#platform/core/config/index.js';
@@ -91,7 +91,7 @@ export { ED25519_PKCS8_BYTES, ED25519_SPKI_BYTES, ed25519KeyId, ed25519Signer, g
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
-export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, relativeInside, privateLocationSafe, privateFile, privateDirectory, readPrivateFile, PrivateFileError, type PrivateFileMode, PRIVATE_PERMISSION_MASK, openPinnedParent, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, restorePinnedFile, writePinnedFile, boundState, removeBoundMembers, fileDigest, type BoundMember, lineCut, PinnedFileError, type PinnedFileIdentity, type PinnedRemoval } from '#platform/core/utils/index.js';
+export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, relativeInside, privateLocationSafe, privateFile, privateDirectory, digestPrivateFile, readPrivateFile, PrivateFileError, type PrivateFileMode, PRIVATE_PERMISSION_MASK, openPinnedParent, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, restorePinnedFile, writePinnedFile, boundState, removeBoundMembers, fileDigest, type BoundMember, lineCut, PinnedFileError, type PinnedFileIdentity, type PinnedRemoval } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
 export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 
@@ -105,4 +105,4 @@ export { patchBody } from '#platform/core/common/index.js';
 
 export { workerImageConsentSchema, type WorkerImageConsent } from '#platform/core/config-fields/index.js';
 export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/core/common/index.js';
-export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode, toInputJsonSchema } from '#platform/core/validate/index.js';
+export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedCounter, persistedNumber, persistedIssueCode, toInputJsonSchema } from '#platform/core/validate/index.js';

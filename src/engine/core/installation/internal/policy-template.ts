@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { optionalField, sha256 as digestOf } from '#platform/index.js';
 import { governedPolicyDigest, policyTemplateUpgradeKey, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { delegationWithin, resolvePolicyBindings } from '#domain/index.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, systemPolicyRowsPublicationEvent } from '#engine/core/system-policy-rows/index.js';
@@ -120,7 +120,6 @@ function canonical(input: unknown): string {
   if (!parsed.success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return JSON.stringify(parsed.data);
 }
-const digestOf = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 
 export interface PreparePolicyTemplateInput {
@@ -267,7 +266,7 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /** The add-only plan's names (the `--upgrade` path below and setup's anchored read share one construction). */
-const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId, ...toolNames, ...(serviceId === undefined ? {} : { serviceId }) });
+const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId, ...toolNames, ...optionalField('serviceId', serviceId) });
 /** Setup's read of an installed first-run policy whose revision a governed edit rewrote (the U4E carrier's PRE-9 full-auto grant): the
  * `first-run-read-tools` anchor naming this person keeps it installed, and the same add-only plan `--upgrade` applies decides current vs
  * upgradable. Read-only and grants nothing; no anchor, another person or an unreadable document is `null` (setup: hand-built). */

@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { chmod, link, mkdtemp, open, readFile, rename, writeFile, rm, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import ts from 'typescript';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { effectIntentSchema, effectRecordSchema, markEffectUnknown, refuseEffect, settleEffect, type EffectRecord } from '#domain/core/effect/index.js';
@@ -45,8 +45,28 @@ it('keeps a generic unknown intent outside a deleted ledger, fences CAS/replay a
     expect(await store().claimEffect(input)).toEqual(settled); expect(effects).toBe(1);
     await expect(store().saveEffect(settled, settled)).rejects.toMatchObject({ code: 'EFFECT_CONFLICT' });
     const lock = acquireLedgerLock(join(directory, 'effects.lock'));
-    try { await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ALREADY_RUNNING' }); } finally { lock.release(); }
+    try { await expect(store().initialize()).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ALREADY_RUNNING', name: 'LocalRuntimeSocketError', message: 'LOCAL_RUNTIME_ALREADY_RUNNING' }); } finally { lock.release(); }
+    const lockFile = join(directory, 'effects.lock');
+    await chmod(lockFile, 0o644);
+    await expect(store().initialize()).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+    await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+    await chmod(lockFile, 0o600); await link(lockFile, join(directory, 'extra-lock'));
+    await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+    await unlink(join(directory, 'extra-lock')); await unlink(lockFile); await symlink(join(directory, 'effects.json'), lockFile);
+    await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+    await unlink(lockFile);
+    const held = acquireLedgerLock(lockFile);
+    try { await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ALREADY_RUNNING', name: 'LocalRuntimeSocketError', message: 'LOCAL_RUNTIME_ALREADY_RUNNING' }); } finally { held.release(); }
     const file = join(directory, 'effects.json'), text = await readFile(file, 'utf8');
+    const probe = await open(file, 'r'), proto = Object.getPrototypeOf(probe) as { stat(): Promise<unknown> }; await probe.close();
+    const originalStat = proto.stat, aside = `${file}.held`;
+    const swapped = vi.spyOn(proto, 'stat').mockImplementation(async function (this: unknown) {
+      swapped.mockRestore(); const info = await originalStat.call(this);
+      await rename(file, aside); await writeFile(file, text, { mode: 0o600 }); return info;
+    });
+    try { await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' }); }
+    finally { swapped.mockRestore(); await unlink(file); await rename(aside, file); }
+    expect(await store().loadEffect('s', 'remove')).toEqual(settled);
     await writeFile(file, text.replace('"state":"settled"', '"state":"unknown"'));
     await expect(store().loadEffect('s', 'remove')).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' });
     await expect(store().assertUnclaimed()).rejects.toMatchObject({ code: 'EFFECT_CORRUPT' });

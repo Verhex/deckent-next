@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { copyFile, lstat, mkdir, open, readFile, realpath } from 'node:fs/promises';
 import { stripVTControlCharacters } from 'node:util';
-import { DeckentError, ErrorRegistry, redactSensitive } from '#platform/index.js';
+import { PRIVATE_PERMISSION_MASK, DeckentError, ErrorRegistry, redactSensitive } from '#platform/index.js';
 import { isAbsolute, join } from 'node:path';
 import { dockerClientEnvironment } from '#adapters/core/docker-supervisor/index.js';
 import { runNodeProcess, type ProcessCommand, type ProcessEvidence } from '#adapters/core/process-runner/index.js';
@@ -67,7 +67,7 @@ export const WORKER_IMAGE_ASSET_DIRECTORY = 'assets/worker-image';
 
 export async function privateDirectory(path: string) {
   const stat = await lstat(path);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o077) || await realpath(path) !== path) throw new WorkerImageBuildError('WORKER_IMAGE_CONTEXT_UNSAFE');
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & PRIVATE_PERMISSION_MASK) || await realpath(path) !== path) throw new WorkerImageBuildError('WORKER_IMAGE_CONTEXT_UNSAFE');
 }
 async function writeExclusive(path: string, text: string) {
   const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);

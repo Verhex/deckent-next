@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256 as digestOf } from '#platform/index.js';
 import { chainAuthorityRevision, governedPolicyDigest } from '#engine/core/policy/index.js';
 import { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, INSTALLER_PERMISSION_MODES_COMMAND_PREFIX, identitySchema, immutableJsonObjectSchema,
   planInstallerPermissionModes, type AuditEvent, type PermissionModeGrantState, type PolicyGrant } from '#domain/index.js';
@@ -23,7 +23,6 @@ export interface InstallerPermissionModesResult {
   readonly people: readonly Person[];
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
-const digestOf = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /**
  * `deckent init policy --scope <id> --modes <set> --preview|--apply [--expect <revision>] [--person <issuer>/<subject>]` (PRE-9, owner 2026-10-21):

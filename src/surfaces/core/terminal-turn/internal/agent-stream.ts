@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentToolClass, AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnNotice, ChatTurnResult, ChatTurnSteer, ChatTurnSteerResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { optionalField, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { PanelTurnBinding, TurnDelta, TurnSteer } from '#surfaces/core/terminal-kit/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
 
@@ -133,7 +133,7 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
     case 'usage': return { kind: 'usage', promptTokens: event.promptTokens, completionTokens: event.completionTokens, reasoningTokens: null };
     case 'message': return { kind: 'message', message: event.message, ...(event.steerId ? { steerId: event.steerId } : {}) };
     case 'context': return { kind: 'context', promptTokens: event.promptTokens, windowTokens: event.windowTokens, quality: event.quality,
-      ...(compacting ? { compacting } : {}), ...(compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens }) };
+      ...(compacting ? { compacting } : {}), ...optionalField('compactionThresholdTokens', compactionThresholdTokens) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision, summary: event.summary, preview: event.preview,
       expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}),

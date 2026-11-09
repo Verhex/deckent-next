@@ -2,8 +2,8 @@ import { resolve } from 'node:path';
 import { ErrorRegistry, prepareProductDirectory, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { TargetQueueError } from '#domain/index.js';
 import { createWorkspaceQueueAdmission, describeWorkspaceQueueCandidate, DispatchPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/index.js';
-import { FileArtifactStore, GitQueueTarget, openLocalIntegrityAuthority, openSqliteAttemptStore, resolveGitWorkTarget, selectWorkTarget, SqliteTargetQueue, openSqliteLedger, openSqliteLedgerReadOnly, type LocalPeerIdentity, type WorkTargetDeclaration, type ResolvedGitWorkTarget } from '#adapters/index.js';
-import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
+import { FileArtifactStore, GitQueueTarget, openLocalIntegrityAuthority, resolveGitWorkTarget, selectWorkTarget, SqliteTargetQueue, openSqliteLedger, openSqliteLedgerReadOnly, type LocalPeerIdentity, type WorkTargetDeclaration, type ResolvedGitWorkTarget } from '#adapters/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 /** Pure prerequisite shared with decisions that must precede a card and cannot open the queue. */
 export function assertQueueWorkTarget(selected: WorkTargetDeclaration | null, resolved: Pick<ResolvedGitWorkTarget, 'id'>): asserts selected is WorkTargetDeclaration {
@@ -30,10 +30,10 @@ async function openQueueContext(root: string, scopeId: string, options: ConfigLo
   const queue = new SqliteTargetQueue(db), bounds = { ...config.targetQueue, batchSize: Math.min(config.targetQueue.batchSize, config.targetQueue.chainSize) };
   try {
   const integrity = readOnly ? null : await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
-  const writers: Awaited<ReturnType<typeof openSqliteAttemptStore>>[] = [];
+  const writers: Awaited<ReturnType<typeof openConfiguredLedger>>[] = [];
   const openAttempts = async () => {
     if (readOnly) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
-    const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: async () => path }, { migration: 'forbid' });
     writers.push(store); return store;
   };
   const { app, validate, accepted } = createWorkspaceQueueAdmission(queue, authorization, principal, document.revision, bounds, integrity, { binding: ref => target.binding(ref), now: Date.now,

@@ -1,10 +1,8 @@
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 import { readProcessFile, type ProcessFileReader } from './service-manager.js';
 
-/** X11 (KG7 F5) [floor]: the one PID probe. Only ESRCH proves a process gone; EPERM or any other error reads alive (the busy side). */
-export function processExists(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
-}
+import { processExists } from '#platform/core/state-root/index.js';
+export { processExists };
 
 /**
  * S6R-3 N7 (lead on s6 Q: PID reuse): whether the process that recorded `startedAtMs` as its start can still be the one holding `pid`.

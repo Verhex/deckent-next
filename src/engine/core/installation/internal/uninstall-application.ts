@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { asPolicy, effectCommandSchema, queueNextState, evaluatePolicy, policyNamedScopes, principalGrants, isAiPrincipal, isEffectOpen, type Policy, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { sha256 as hash, ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
 import { OperationPolicyAuthorization, type EffectApplication } from '#engine/core/effect/index.js';
@@ -85,7 +85,6 @@ export interface UninstallApplicationPorts {
     unit(processId: number): Promise<{ readonly unit: string; readonly unitDisable: 'eligible' | 'command-only'; readonly command: string; readonly links?: readonly string[]; readonly unitFile?: string | null } | null>;
     shutdown(): Promise<unknown>; /** `disable --now` of the confirmed unit; its owner re-reads unit file and links right before (R3). */ disable(confirmed: UninstallPlan['service']): Promise<NonNullable<UninstallResult['unit']>>; /** Astra 2860 R2: the stopped process has ended. */ exited?(processId: number): Promise<boolean> };
 }
-const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const queries = UNINSTALL_TIERS.flatMap(tier => [false, true].flatMap(force => [false, true].map(disableUnit => ({ schemaVersion: 2 as const, tier, force, disableUnit }))));
 /** Joins lifecycle owners; EffectApplication alone claims, retries from target evidence and settles effects. */
 export class UninstallApplication {

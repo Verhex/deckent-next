@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { beuserBindingSchema, executionProfileDefinitionSchema, executionRegistrySchema } from '#domain/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, beuserParametersSchema, evaluateBeuserEvidence } from '#capabilities/index.js';
-import { openSqliteAttemptStore, FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
+import { FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
 import { BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, beuserArrangePlan, type BeuserReport, type SandboxRequest } from '#engine/index.js';
 import { sha256, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { evaluateConfiguredBeuserTask } from './evaluate.js';
@@ -28,7 +28,7 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
   await beuserPrivateRecord(await prepareProductDirectory(c.layout, 'crashes'), beuserMonitorName(input.scopeId, c.principal), c.config.artifacts.maxBytes)
     .write({ schemaVersion: 1, runId, journey: input.journey, startedAt: Date.now(), walkers: selected.map(({ profile, data }) => ({ id: profile.id,
       walker: data.choices['beuser-walker'], judge: data.choices['beuser-evaluator'], limitsRevision: data.limitsRevision, limits: beuserProfileLimits(data) })) });
-  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile });
+  const store = await openConfiguredLedger(c, { migration: 'forbid', validate: validateBeuserSupervisorProfile });
   const segments: BeuserReport['segments'] = [], unknown: BeuserReport['unknown'] = [], findings: NonNullable<BeuserReport['findings']> = [];
   const cleanup: NonNullable<BeuserReport['cleanup']> = [];
   let walked = 0, completed = 0, attempted = 0;

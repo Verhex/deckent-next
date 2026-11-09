@@ -1,5 +1,4 @@
-import { knownSecretValues, persistedString, redactBounded } from '#platform/index.js';
-import { createHash } from 'node:crypto';
+import { sha256, knownSecretValues, persistedString, redactBounded } from '#platform/index.js';
 import { z } from 'zod';
 import type { AgentToolOutcome } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
@@ -13,7 +12,6 @@ export const MCP_TOOL_CALL_OPERATION = Object.freeze({ schemaVersion: 1 as const
   targetKind: MCP_TOOL_TARGET_KIND, effectClass: 'write' as const, approval: 'policy' as const, precondition: 'none' as const,
   compensation: null, inputMaxBytes: 65_536 });
 
-const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 /** Effect identity of one MCP call: the turn, the call's position and its exact arguments (the shell's and fetch's scheme). */
 export const agentMcpEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-mcp-effect:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);

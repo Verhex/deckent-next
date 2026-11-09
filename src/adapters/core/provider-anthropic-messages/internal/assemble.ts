@@ -1,11 +1,11 @@
-import { persistedInteger } from '#domain/index.js';
+import { counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import type { JsonObject, ModelInvocationRejectionReason } from '#domain/index.js';
 import { checkedToolCalls, openAiChatUsageSchema, openAiChatWireObjectSchema, type OpenAiChatHttpLimits,
   type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { rememberAnthropicContent, type AnthropicContentBlock, type AnthropicContinuationScope } from './continuation.js';
 
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 const nullableCount = count.nullable().optional();
 /** Cumulative usage of one message: the input side arrives in `message_start`, `message_delta` restates it with the final output. */
 export const anthropicUsageSchema = z.looseObject({ input_tokens: nullableCount, cache_creation_input_tokens: nullableCount,

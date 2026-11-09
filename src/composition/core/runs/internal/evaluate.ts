@@ -1,11 +1,11 @@
 import { prepareConfiguredEvaluationPatch } from '#composition/core/workspace-patch/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { FileArtifactStore, openSqliteAttemptStore, inventoryReadsPerCall, classifyDockerTaskEffects } from '#adapters/index.js';
+import { FileArtifactStore, inventoryReadsPerCall, classifyDockerTaskEffects } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
 import { verifiedPrincipal, authenticate, describeTaskEvaluationReceipt, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, RunPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { observeConfiguredRunResults } from './result-view.js';
 /** Installed implementation selection. The current registry cannot replace a Run's pinned definitions. */
 export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
@@ -19,7 +19,7 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
     // This command returns a complete Run view: require its authority before any evaluation write, including replay.
     await new RunPolicyAuthorization(contextPolicySource({ layout, config }))
       .authorize('inspect', command.identity, principal);
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
     try {
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       // One retained dispatch-output receipt is the supported producer contract, not a configurable task limit.

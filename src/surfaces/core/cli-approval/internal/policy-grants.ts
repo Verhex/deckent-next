@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline/promises';
 import type { PolicyTemplateUpgradePort, PolicyUpgradeView } from '#surfaces/core/cli-terminal/index.js';
-import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ApprovalCommandContext } from './context.js';
 import { policyMcpCommand } from './policy-mcp.js';
@@ -53,7 +53,7 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
-  if (all) return policyGrantsAll(context, { root, scopeId, flagged: scope !== undefined, json, locale, env, ...(after === undefined ? {} : { after }) });
+  if (all) return policyGrantsAll(context, { root, scopeId, flagged: scope !== undefined, json, locale, env, ...optionalField('after', after) });
   const row = (grant: StandingGrantRow) => t('cli.policy.grants.row', { id: grant.id, tool: grant.tool, kind: grant.kind, text: grant.text }, locale);
   if (action === 'grants') {
     if (!context.listStandingGrants) throw ErrorRegistry.createError('CLI_USAGE');
