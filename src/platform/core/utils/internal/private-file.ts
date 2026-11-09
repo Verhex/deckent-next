@@ -39,7 +39,7 @@ export async function readPrivateFile(path: string, maxBytes: number, options: {
     for (let read = 1; read && length < bytes.length;) { read = (await handle.read(bytes, length, bytes.length - length, length)).bytesRead; length += read; }
     if (length > maxBytes) throw new PrivateFileError('too-large');
     const after = await handle.stat(), still = await named();
-    if (after.size !== info.size || after.mtimeMs !== info.mtimeMs || length !== info.size || still.dev !== info.dev || still.ino !== info.ino) throw new PrivateFileError('changed');
+    if (after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs || length !== info.size || still.dev !== info.dev || still.ino !== info.ino) throw new PrivateFileError('changed');
     return bytes.subarray(0, length);
   } finally { await handle.close(); }
 }

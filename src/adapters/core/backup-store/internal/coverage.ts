@@ -1,12 +1,11 @@
-import { persistedInteger, sha256 } from '#platform/index.js';
+import { pathWithin, persistedInteger, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
-import { resolve } from 'node:path';
 import { z } from 'zod';
 import { assertBackupCoverage, backupCoverageManifestSchema, type BackupCoverageManifest, type BackupContributionOwner } from '#engine/index.js';
 import type { VerifiedBackup } from './set.js';
 import type { BackupLimits } from './archive.js';
 import { encryptBackupContribution, decryptBackupContribution } from './crypto.js';
-import { inside, readPrivate, safePath, writePrivate, refuse } from './files.js';
+import { readPrivate, safePath, writePrivate, refuse } from './files.js';
 import policyData from './coverage-limits.json' with { type: 'json' };
 const coverageLimits = z.strictObject({ schemaVersion: z.literal(1), encryptedJsonExpansion: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).parse(policyData);
 const payloadSchema = z.strictObject({ schemaVersion: z.literal(1), manifest: backupCoverageManifestSchema,
@@ -24,11 +23,11 @@ async function paths(set: string, input: BackupCoverageRequest) {
   if (!input.deletionRoots.length) return refuse('BACKUP_PATH_UNSAFE');
   for (const root of input.deletionRoots) {
     await safePath(root);
-    if (inside(resolve(root), set) || inside(set, resolve(root)) || inside(resolve(root), resolve(input.companion))) return refuse('BACKUP_PATH_UNSAFE');
+    if (pathWithin(root, set) || pathWithin(set, root) || pathWithin(root, input.companion)) return refuse('BACKUP_PATH_UNSAFE');
   }
   await safePath(input.companion);
   // Companion is external to the immutable v1/v2 backup set, so older verification remains unchanged.
-  if (inside(set, resolve(input.companion))) return refuse('BACKUP_PATH_UNSAFE');
+  if (pathWithin(set, input.companion)) return refuse('BACKUP_PATH_UNSAFE');
 }
 const aad = (manifest: BackupCoverageManifest, ledgerDigest: string, setDigest: string) => JSON.stringify({ domain: 'backup-coverage:1', manifest, ledgerDigest, setDigest });
 /** Called under the backup owner's lifecycle snapshot custody and governed create/verify authorization, before any purge effect. `base`: the

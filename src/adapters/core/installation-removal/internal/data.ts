@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, parse } from 'node:path';
 import { currentSetDigest } from '#adapters/core/backup-store/index.js';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
-import { pathWithin as inside, boundState, removeBoundMembers, type BoundMember } from '#platform/index.js';
+import { pathWithin, boundState, removeBoundMembers, type BoundMember } from '#platform/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const refuse = (code: 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_PRECONDITION'): never => { throw new EffectTargetError(code); };
 /** One exact owned file of a purge: the resource owner names it; never a subtree or a path a request supplies. `directory`: its
@@ -33,7 +33,7 @@ export class InstallationDataRemovalTarget implements EffectTarget {
   private beforeRemove: (() => Promise<DataRemovalSnapshot>) | undefined;
   constructor(private readonly binding: string, private readonly members: readonly DataRemovalMember[], protectedPaths: readonly string[]) {
     if (process.platform === 'win32' || !process.getuid || members.some(member => !isAbsolute(member.path) || member.path === parse(member.path).root
-      || protectedPaths.some(path => inside(member.path, path) || inside(path, member.path)))) refuse('EFFECT_TARGET_REJECTED');
+      || protectedPaths.some(path => pathWithin(member.path, path) || pathWithin(path, member.path)))) refuse('EFFECT_TARGET_REJECTED');
   }
   identity() { return this.binding; }
   /** Only trusted composition under lifecycle custody supplies this callback, never an effect input. */
