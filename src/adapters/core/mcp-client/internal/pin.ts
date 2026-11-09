@@ -17,7 +17,7 @@ export interface McpClientServerSettings {
   readonly secrets?: readonly string[];
   readonly command: string;
   readonly args: readonly string[];
-  /** The expanded `env` of the registry entry (the SDK adds its own safe defaults: HOME, LOGNAME, PATH, SHELL, TERM, USER). */
+  /** The expanded `env` of the registry entry, over the explicit stdio base (`mcpStdioEnvironment`, the SDK default's names). */
   readonly env: Readonly<Record<string, string>>;
   /** K4: `sandbox-net` (the default) — a sandbox with network and the server's own persistent HOME; no sandbox → refused. */
   readonly realm: 'sandbox-net' | 'require-sandbox' | 'prefer-sandbox' | 'host';

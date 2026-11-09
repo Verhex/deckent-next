@@ -3,8 +3,8 @@ import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import type { StdioServerParameters } from '@modelcontextprotocol/client/stdio';
-import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, knownSecretValues, readBuildIdentity, redactBounded, PACKAGE_NAME, PACKAGE_VERSION,
-  type KnownSecretSnapshot } from '#platform/index.js';
+import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, knownSecretValues, mcpStdioEnvironment, readBuildIdentity, redactBounded, PACKAGE_NAME,
+  PACKAGE_VERSION, type KnownSecretSnapshot } from '#platform/index.js';
 import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
@@ -26,7 +26,7 @@ export const MCP_CLIENT_TOOLS_MAX = MCP_TRUST_TOOLS_MAX;
 export const MCP_CLIENT_LIST_PAGES_MAX = 16;
 export const MCP_CLIENT_STDERR_TAIL_BYTES = 4_096;
 
-/** Where a server starts: the project root, the service environment (HOME/PATH of a sandbox view) and the sandbox providers. */
+/** Where a server starts: the project root, the service environment (a stdio server's base, the HOME/PATH of a sandbox view) and the sandbox providers. */
 export interface McpLaunchContext {
   readonly cwd: string;
   readonly environment: Readonly<Record<string, string | undefined>>;
@@ -120,7 +120,7 @@ export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string
  * none usable → `require-sandbox` refuses, `prefer-sandbox` runs on the host and says so (never silently). A provider that wins after a
  * preferred one was passed over names that fallback on the cards (REALM-NOTICE, the shell's own line). */
 async function launchOf(server: McpClientServerSettings, context: McpLaunchContext): Promise<Launch> {
-  const env = { ...server.env };
+  const env = { ...mcpStdioEnvironment(context.environment), ...server.env };
   if (server.transport === 'http') return { ok: true, command: '', args: [], env, sandboxed: false, projectReadOnly: false, posture: MCP_HTTP_POSTURE };
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
   const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), rejected: { kind: string; reason: string }[] = [];
