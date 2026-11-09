@@ -411,6 +411,8 @@ export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
     template: z.strictObject({ id: identitySchema, version: counterSchema.positive() }), person: auditPrincipalSchema }); },
     commandId: identitySchema, inputDigest: digest, get revision() { return z.strictObject({ before: identitySchema, after: identitySchema }); },
     get counts() { return z.strictObject({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }); },
+    /** Lead 2026-11-09 (v20 side effect B): template rules left out because an allow already held their cell; ids only. */
+    get skipped() { return z.array(z.strictObject({ ruleId: identitySchema, heldBy: identitySchema })).min(1).max(8).optional(); },
     get policyDigestBefore() { return digest.optional(); }, get policyDigest() { return digest.optional(); } }),
 ]);
 export const auditEventSchema = z.strictObject({ get schemaVersion() { return z.literal(AUDIT_EVENT_SCHEMA_VERSION); }, eventId: identitySchema, scopeId: identitySchema,

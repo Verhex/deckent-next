@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, mcpPrincipalRef } from '#domain/index.js';
+import { FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { clearConfigCache } from '#platform/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
@@ -39,7 +40,7 @@ describe.skipIf(process.platform !== 'linux')('MCP authority through the actual 
     const client = new Client({ name: 'external-ai', version: '1' }); await client.connect(ct);
     try {
       for (const version of [7, 8, 9]) {
-        const grants = template.policy.grants.filter(rule => (version >= 9 || !rule.id.startsWith('first-run-mcp-observe-')) && !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id));
+        const grants = template.policy.grants.filter(rule => (version >= 9 || !rule.id.startsWith('first-run-mcp-observe-')) && ![...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(rule.id));
         await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...template.policy, revision: `first-run-template-v${version}`, grants }));
         for (const [name, args] of [['manage_provider_spending', revise], ['admit_model_activation', activation], ['invoke_model', {
           schemaVersion: 1, commandId: 'mcp-paid', scopeId: 'scope', reference, catalogRevision: 'catalog-1', expectedBinding: f.binding,

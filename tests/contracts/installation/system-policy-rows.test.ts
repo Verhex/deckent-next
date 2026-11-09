@@ -46,8 +46,8 @@ function fixture(initial: Snapshot = seed()) {
 const plan = (snapshot: Snapshot, action: 'apply' | 'rollback' = 'apply', history: readonly AuthorityRevision[] = []) =>
   planSystemPolicyRows({ data: CORE_SYSTEM_POLICY_ROWS.data, target, snapshot, history, action });
 
-it('fresh install and existing v19 upgrade share the same delta, audit and replay without a template bump', async () => {
-  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(19);
+it('fresh install and existing v20 upgrade share the same delta, audit and replay without a template bump', async () => {
+  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(20);
   for (const f of [fixture(), fixture(seed())]) {
     const before = f.snapshot, preview = await reconcileSystemPolicyRows(f.store, f.input({ apply: false }));
     expect(preview.status).toBe('preview'); expect(f.writes).toBe(0); expect(f.audit).not.toHaveBeenCalled();
@@ -59,7 +59,7 @@ it('fresh install and existing v19 upgrade share the same delta, audit and repla
     expect(f.audit.mock.calls[0]).toBeDefined();
     expect(await reconcileSystemPolicyRows(f.store, f.input())).toMatchObject({ status: 'replayed' });
     expect(f.writes).toBe(1); expect(f.audit).toHaveBeenCalledTimes(1); expect(f.snapshot).toEqual(after);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(19);
+    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(20);
   }
 });
 

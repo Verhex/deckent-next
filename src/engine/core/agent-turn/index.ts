@@ -23,3 +23,4 @@ export { agentCompactionExpected, agentContextFailureNote, agentHistoryBytes, cr
 export { AGENT_SESSION_CONTEXT_VERSION, AGENT_SESSION_RULES, AGENT_SESSION_SURFACES, SESSION_STATE_TOOL_SPEC, agentSessionCells, agentSessionSnapshot, agentSessionStateText,
   renderAgentSessionContext, type AgentSessionCell, type AgentSessionDecision, type AgentSessionShellInput, type AgentSessionSnapshot } from './internal/session-context.js';
 export { createInlineReasoningRouter, splitInlineReasoning } from './internal/inline-reasoning.js';
+export { AI_PROPOSAL_TOOL_SPECS, aiProposalToolDecision, LIST_SETTING_CHOICES_TOOL_SPEC, PROPOSE_SETTING_TOOL_SPEC, PROPOSE_WORK_TOOL_SPEC, planAiProposal, type AiProposalArgs } from './internal/proposals.js';

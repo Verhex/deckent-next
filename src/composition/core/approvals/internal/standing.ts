@@ -92,11 +92,11 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
 export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
-  readonly expect?: string; readonly reason: string }): Promise<TemplateUpgradeResult> {
+  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' }): Promise<TemplateUpgradeResult> {
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
     new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
       policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, recoveryRules: FIRST_RUN_RECOVERY_RULES, firstCommitOperationId: FIRST_RUN_FIRST_COMMIT_OPERATION_ID, uninstallOperationIds: FIRST_RUN_TOOL_NAMES.uninstallOperationIds ?? [], serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
-      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
+      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }));
 }
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
 export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {

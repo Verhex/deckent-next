@@ -77,6 +77,8 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
+  /** alpha.64 (owner S6): `/policy`'s AI proposals row turns the v20 rules on (`--apply --only ai-proposals`) and off (`--rollback`) through this governed upgrade. */
+  upgradePolicyTemplate?: import('./policy-panel.js').PolicyTemplateUpgradePort;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   /** CACHE-SLICE1: the scope's existing profiles offered the 5-minute prompt cache, and the per-layer profile documents that switch it on (read only). */

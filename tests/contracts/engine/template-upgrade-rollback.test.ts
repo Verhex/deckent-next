@@ -7,10 +7,10 @@ import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, ope
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationApplication, PolicyTemplateUpgrade, RecoveryPolicyCard, administerOwnPolicyChange, nervousStandingApproval,
-  upgradePolicyTemplate } from '#engine/index.js';
+  upgradePolicyTemplate, upgradeFirstRunProposalRules } from '#engine/index.js';
 import { createHmacIntegrity, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
 import { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 
 const names = { firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'],
@@ -54,10 +54,10 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
     rollback: (expect?: string) => upgrade.run({ scopeId: 's', principal, mode: 'rollback', reason: 'v14 rollback', ...(expect ? { expect } : {}) }) };
 }
 
-describe.skipIf(process.platform !== 'linux')('v19 rollback through the real approval and archived authority writer', () => {
-  it('approves the operation card, removes only v19 rules, preserves the only administration grants, and refuses stale replay', async () => {
+describe.skipIf(process.platform !== 'linux')('v20 rollback through the real approval and archived authority writer', () => {
+  it('approves the operation card, removes only v20 rules, preserves the only administration grants, and refuses stale replay', async () => {
     const f = await fixture(), beforeBytes = await f.bytes(), before = JSON.parse(beforeBytes);
-    expect(deltaIds).toEqual(['first-run-mcp-model-invocation', 'first-run-mcp-read-tools', 'first-run-mcp-scratch-tools', 'first-run-mcp-edit-shell-tools', 'first-run-mcp-tool-operations']);
+    expect(deltaIds).toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-setting', 'first-run-mcp-propose-pool', 'first-run-mcp-propose-target']);
     expect(await f.rollback('stale')).toMatchObject({ status: 'conflict' });
     expect(f.cards).toBe(0); expect(await f.bytes()).toBe(beforeBytes);
     expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') });
@@ -80,7 +80,7 @@ describe.skipIf(process.platform !== 'linux')('v19 rollback through the real app
 
   it('preserves a modified current-version rule carrying the only administration authority and reports its conflict', async () => {
     const modified = deltaIds[0]!;
-    // v19's delta names the MCP actor: the modified rule is moved to the person so it carries their only administration authority.
+    // v20's delta names the MCP actor: the modified rule is moved to the person so it carries their only administration authority.
     const f = await fixture(grants => grants.filter(rule => rule.id !== 'first-run-policy-administer').map(rule => rule.id === modified
       ? { ...rule, effect: 'allow', principals: grants.find(item => item.id === 'first-run-read-tools')!.principals, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule));
     const before = await f.bytes();
@@ -99,7 +99,7 @@ describe.skipIf(process.platform !== 'linux')('v19 rollback through the real app
   });
 });
 
-it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v19 delta: a delta the installer added under template v19 is rollbackable; an older or future key does not count', async () => {
+it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v20 delta: a delta the installer (or the S6 start upgrade) added under template v20 is rollbackable; an older or future key does not count', async () => {
   const seed = async (version: number) => {
     const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
     await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id)) },
@@ -109,9 +109,57 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v19 delta: a delta the
       `policy-template-upgrade-v${version}-${'a'.repeat(64)}`);
     return f;
   };
-  const v19 = await seed(19);
-  expect(await v19.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
-  for (const version of [18, 20]) {
+  const v20 = await seed(20);
+  expect(await v20.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  // Owner S6 (2026-11-09): the service start's own upgrade of an exact v19 policy adds exactly v20's rules, no card, audited, under that installer key;
+  // a second start is current, an already-v20 or hand-built policy is left alone, and once the person rolled them back they are never re-added.
+  const auto = await fixture(undefined, false), events: AuditEvent[] = [], audit = { openAudit: async () => ({ record: (event: AuditEvent) => { events.push(event); }, close: () => undefined }), now: () => 5 };
+  const run = async () => upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: (await auto.source.authorityHistory())!, ...audit });
+  expect(await run()).toBe('current'); expect(events).toEqual([]); // a fresh v20 install: nothing to add, nothing written
+  const v20Bytes = JSON.parse(await auto.bytes()), v19Policy = { ...v20Bytes, revision: 'first-run-template-v19', grants: v20Bytes.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id)) };
+  await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify(v19Policy), { mode: 0o600 });
+  expect(await run()).toBe('upgraded');
+  const upgraded = JSON.parse(await auto.bytes());
+  expect(upgraded.grants).toEqual([...v19Policy.grants, ...v20Bytes.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id))]);
+  // The Run and setting proposals are cards no mode lowers; the proposed Run's pool and work-target use are allow (lead 2026-11-09 option 2).
+  expect(upgraded.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id)).map((rule: PolicyGrant) => [rule.effect, rule.modeEligible])).toEqual([['require-approval', undefined], ['require-approval', undefined], ['allow', undefined], ['allow', undefined]]);
+  expect(events.map(event => event.subject)).toMatchObject([{ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 20 } }, counts: { grantsAdded: 4, grantsRemoved: 0 },
+    revision: { before: 'first-run-template-v19', after: upgraded.revision }, commandId: expect.stringMatching(/^policy-template-upgrade-v20-[a-f0-9]{64}$/u) }]);
+  expect(await run()).toBe('current'); expect(events).toHaveLength(1);
+  expect(await auto.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') }); // the person revokes them on the card
+  const revoked = await auto.bytes();
+  expect(await run()).toBe('current'); expect(await auto.bytes()).toBe(revoked); expect(events).toHaveLength(1); // never re-added
+  await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify({ ...v19Policy, revision: 'hand-built', grants: v19Policy.grants.filter((rule: { id: string }) => rule.id !== 'first-run-read-tools') }), { mode: 0o600 });
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: [], ...audit })).toBe('skipped');
+  // A hand-built (live-shape) policy is anchored on the configured service scope where an allow rule names the person; another person's is never touched.
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: { issuer: auto.principal.issuer, subject: 'someone-else' }, history: [], scopeId: 's', ...audit })).toBe('skipped');
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: [], scopeId: 's', ...audit })).toBe('upgraded');
+  expect(events.at(-1)!.subject).toMatchObject({ kind: 'authority-change', installer: { basis: 'named-person', template: { version: 20 } }, counts: { grantsAdded: 4 } });
+  expect(events.at(-1)!.subject).not.toHaveProperty('skipped');
+  // Lead 2026-11-09 (side effects A, B): an MCP actor that holds the `work` group keeps its allows. A rule is skipped only when one allow covers its
+  // whole cell: the group's run and every-target rules do (named in the audit record), its pool `p` does not cover v20's every pool, so the pool
+  // allow is added beside the setting card. The actor's create_run stays allow (no card) and its reserve and pool use are unchanged.
+  const ai = mcpPrincipalRef(auto.principal), work = ['run', 'pool', 'work-target'].map(kind => ({ id: `mcp-cap-work-${kind}`, effect: 'allow', actions: kind === 'run' ? ['create', 'inspect', 'reserve', 'cancel'] : ['use'],
+    scopes: ['s'], principals: [ai], resource: { kind, ids: kind === 'pool' ? ['p'] : 'all' } }));
+  await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify({ ...v19Policy, revision: 'a-work-group', grants: [...v19Policy.grants, ...work] }), { mode: 0o600 });
+  // The person as the service start passes it (issuer and subject: proposal-policy.ts), so the record is checked against the sealed audit contract.
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: { issuer: auto.principal.issuer, subject: auto.principal.subject }, history: [], ...audit })).toBe('upgraded');
+  expect(events.at(-1)!.subject).toMatchObject({ counts: { grantsAdded: 2 }, skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' },
+    { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }] });
+  expect(auditEventSchema.parse(events.at(-1)).subject).toMatchObject({ skipped: [{ ruleId: 'first-run-mcp-propose-work' }, {}] }); // the sealed audit contract carries the reasons
+  const grouped = await auto.source.load(), actor = { id: 'mcp', ...ai, assurance: 'workload-verified' as const, scopeIds: ['s'] };
+  expect(policySchema.parse(grouped).grants.map(rule => rule.id).filter(id => deltaIds.includes(id))).toEqual(['first-run-mcp-propose-setting', 'first-run-mcp-propose-pool']);
+  for (const [action, kind, id] of [['create', 'run', 'r'], ['reserve', 'run', 'r'], ['use', 'pool', 'p'], ['use', 'pool', 'q'], ['use', 'work-target', 't']] as const)
+    expect(evaluatePolicy(grouped, { principal: actor, scopeId: 's', action, resource: { kind, id } }).decision, `${kind}/${action}/${id}`).toBe('allow');
+  // Side effect B: a role binding is an effective grant too. A role-bound Run create allow of the AI actor skips the Run card rule (named with its
+  // derived `binding/role/permission` id), so the binding's create_run is never lowered to a card; the other three rules are added.
+  const bindingsPath = join(dirname(auto.archive), 'bindings.json'), bound = JSON.parse(await readFile(bindingsPath, 'utf8'));
+  await writeFile(join(dirname(auto.archive), 'policy.json'), JSON.stringify({ ...v19Policy, revision: 'a-role', roles: [...v19Policy.roles, { id: 'ai-work', permissions: [{ id: 'create', effect: 'allow', actions: ['create'], resource: { kind: 'run', ids: 'all' } }] }] }), { mode: 0o600 });
+  await writeFile(bindingsPath, JSON.stringify({ ...bound, revision: 'b-role', bindings: [...bound.bindings, { id: 'ai-bound', principals: [ai], roles: ['ai-work'], scopes: ['s'] }] }), { mode: 0o600 });
+  expect(await upgradeFirstRunProposalRules(auto.source, { person: auto.principal, history: [], ...audit })).toBe('upgraded');
+  expect(events.at(-1)!.subject).toMatchObject({ counts: { grantsAdded: 3 }, skipped: [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'ai-bound/ai-work/create' }] });
+  expect(evaluatePolicy(await auto.source.load(), { principal: actor, scopeId: 's', action: 'create', resource: { kind: 'run', id: 'r' } }).decision).toBe('allow');
+  for (const version of [19, 21]) {
     const other = await seed(version), before = await other.bytes();
     expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });
     expect(await other.bytes()).toBe(before); expect(other.cards).toBe(0);
@@ -128,7 +176,7 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 option A: a governed delta u
   const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
   const tag = `template-v5:${deltaIds.join(',')}`;
   // The governed chain binds the resolved (policy + bindings) revision it read.
-  const resolved = 'a-older+first-run-template-v19-bindings';
+  const resolved = 'a-older+first-run-template-v20-bindings';
   const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
   const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
@@ -145,7 +193,7 @@ it.skipIf(process.platform !== 'linux')('Astra 2596: a governed upgrade that nam
   const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || v12.includes(rule.id))
     .map((rule: { id: string; resource: object }) => rule.id === v12[1] ? { ...rule, resource: { kind: 'service', ids: ['local'] } } : rule);
   const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
-  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v19-bindings';
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v20-bindings';
   const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
   const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
@@ -164,7 +212,7 @@ it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `l
   // Then the configured service was `local`, covered by `own-stop`: the plan was the delta and scope inspection only, no stop rule.
   const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || rule.id === v12[0]);
   const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
-  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v19-bindings';
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v20-bindings';
   const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
   const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
@@ -176,22 +224,23 @@ it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `l
   expect(after.grants.some(rule => deltaIds.includes(rule.id))).toBe(false);
 });
 
-it.skipIf(process.platform !== 'linux')('rollback removes a fresh install\'s own v19 delta, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
-  // Owner 2026-11-05 (R4a, amends J3): on a provably fresh install the same card removes exactly the v19 MCP-actor rules; the person's rules stay,
-  // the MCP actor's model call is refused by policy afterwards, and `--apply` re-adds the same rules (a later rollback recognizes that upgrade).
+it.skipIf(process.platform !== 'linux')('rollback removes a fresh install\'s own v20 delta, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
+  // Owner 2026-11-05 (R4a, amends J3): on a provably fresh install the same card removes exactly the latest MCP-actor delta (v20 since alpha.64); the person's
+  // other rules stay, the AI's Run proposal is refused by policy afterwards (owner S6: revoking stops the proposals), and `--apply` re-adds the same rules.
   const fresh = await fixture(undefined, false), initial = JSON.parse(await fresh.bytes()) as { grants: { id: string }[] };
   const mcp = { ...fresh.principal, id: 'mcp', ...mcpPrincipalRef(fresh.principal), assurance: 'workload-verified' as const };
   const invoke = () => new ModelInvocationPolicyAuthorization(fresh.source).authorize('invoke', { scopeId: 's', reference: { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 } }, mcp);
-  expect(await invoke()).toMatchObject({ ruleId: 'first-run-mcp-model-invocation' });
+  const propose = async () => evaluatePolicy(await fresh.source.load(), { principal: { ...mcp, scopeIds: ['s'] }, scopeId: 's', action: 'create', resource: { kind: 'run', id: 'r' } }).decision;
+  expect(await invoke()).toMatchObject({ ruleId: 'first-run-mcp-model-invocation' }); expect(await propose()).toBe('require-approval');
   expect(await fresh.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
   expect(fresh.cards).toBe(1);
   expect((JSON.parse(await fresh.bytes()) as typeof initial).grants).toEqual(initial.grants.filter(rule => !deltaIds.includes(rule.id)));
-  await expect(invoke()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(await propose()).toBe('deny'); expect(await invoke()).toMatchObject({ ruleId: 'first-run-mcp-model-invocation' }); // v19's rules stay installed
   expect(await fresh.apply()).toMatchObject({ status: 'upgraded' }); expect(fresh.cards).toBe(2);
   const readded = (JSON.parse(await fresh.bytes()) as typeof initial).grants;
   expect(readded.filter(rule => deltaIds.includes(rule.id))).toEqual(initial.grants.filter(rule => deltaIds.includes(rule.id)));
   expect(readded.filter(rule => !deltaIds.includes(rule.id))).toEqual(initial.grants.filter(rule => !deltaIds.includes(rule.id)));
-  expect(await invoke()).toMatchObject({ ruleId: 'first-run-mcp-model-invocation' });
+  expect(await propose()).toBe('require-approval');
   expect(await fresh.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') });
   // NEGATIVE: the same template policy with an older bindings revision (an exact installer upgrade whose archive is gone) is not provably fresh.
   const stale = await fixture(undefined, false), staleBytes = await stale.bytes();
@@ -212,7 +261,7 @@ it.skipIf(process.platform !== 'linux')('rollback removes a fresh install\'s own
   expect(await restored.rollback()).toMatchObject({ status: 'rolled-back', conflicts: [deltaIds[0]], reason: deltaIds.slice(1).join(',') });
   expect(restored.cards).toBe(1);
   expect(JSON.parse(await restored.bytes()).grants.some((rule: { id: string }) => rule.id === deltaIds[0])).toBe(true);
-  // Hand-built (no first-run read anchor): the person still holds the read tools the v19 MCP rule delegates (I2 needs them to revoke it).
+  // Hand-built (no first-run read anchor): the person still holds the tool cells the v20 MCP rule delegates (I2 needs them to revoke it).
   const handBuilt = await fixture(grants => grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule));
   expect(await handBuilt.rollback()).toMatchObject({ status: 'rolled-back', conflicts: [] });
   expect(handBuilt.cards).toBe(1);

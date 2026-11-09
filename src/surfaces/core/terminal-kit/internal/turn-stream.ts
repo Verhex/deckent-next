@@ -68,6 +68,9 @@ export type TurnDelta =
     readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */
   | { readonly kind: 'output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
+  /** v31 (/do parity): a `propose_work` call's plan progress, shown as `/do` shows it (the quota wait, then /tasks for the admitted Run). */
+  | { readonly kind: 'work'; readonly callId: string; readonly phase: 'planning' | 'quota-wait' | 'admitted'; readonly runId?: string; readonly untilMs?: number;
+    readonly attempt?: number; readonly maxAttempts?: number }
   /** `note` is the engine's deterministic closure text when the turn ended without a model answer. v30: `notices` — the turn's MCP start
    * notices, each with its text in the person's language and a `key` (kind, server, code) the surface shows once per key; `steer` — the
    * added lines that joined and those the turn returned unsent (the person's to send again). */

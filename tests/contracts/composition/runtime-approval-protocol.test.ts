@@ -55,8 +55,8 @@ async function fixture() {
 // threshold retained by v30), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a current runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
-  // TP raised the protocol to 30; the lifecycle window is [30,29], and subject visibility thresholds remain unchanged.
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(30);
+  // alpha.64 B raised the protocol to 31; the lifecycle window is [31,30], and subject visibility thresholds remain unchanged.
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(31);
   // T3 L2: config-change records reach clients from v22 (the integration raises the protocol to it); below, they are hidden like operations below v15.
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change', 'run-create']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual(['config-change', 'run-create']);

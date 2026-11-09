@@ -712,6 +712,7 @@
   "mcp.grant.reason.administer": "policy'niz policy kurallarını değiştirmenize izin vermiyor (policy.administer işlemi ya da onun kartına karar verme hakkı yok); ilk kurulum bunları deckent init policy --scope <id> --upgrade --preview ve ardından --apply ile alır; aksi halde bu grant'i bir policy yöneticisi yazar",
   "mcp.grant.reason.unsupported": "kurulum policy dosyası bu izni taşıyamıyor (policy v1 ya da okunamıyor)",
   "mcp.grant.reason.principal": "onay, bu servisin çalıştığı kişiden başka birinden geldi",
+  "agent.proposal.origin": "Bu sohbetteki yapay zekâ önerdi; kararı sen verirsin.",
   "mcp.proposal.title": "Model bir MCP sunucusu eklemeyi öneriyor. Onaylamazsanız hiçbir şey yazılmaz.",
   "mcp.proposal.proposer": "Öneren: {proposer}",
   "mcp.proposal.name": "Ad: {name}",

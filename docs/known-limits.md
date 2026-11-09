@@ -252,7 +252,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   stay pending until the person's first witnessed terminal open. Afterwards `deckent secret store` (the runtime store switch) is an
   authority change and needs the terminal witness like the changes above. A supplied profile (`deckent init apply --profile`, or
   `init resume`) is published without a witness only while every rule it carries stays inside what the template would give the
-  installing person; anything wider (edit or shell tools allowed without asking, MCP actor grants beyond the template's own v19 rules, or grants to everyone) is refused
+  installing person; anything wider (edit or shell tools allowed without asking, MCP actor grants beyond the template's own v19 and v20 rules, or grants to everyone) is refused
   with `AUTHORITY_WITNESS_REQUIRED` off an interactive terminal, before any evidence step or write. *Impact:* whoever can run a first
   install on a fresh project gets the template's starting authority (never more), and an agent can still run a template-bounded
   supplied install unattended; this gate checks the terminal, not the AI-agent marker, the same as `init policy --upgrade --apply`.
@@ -504,9 +504,41 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   it shows the card). A native worker follows the mode of the installation's person who owns its AI actor the same way. An AI
   actor without its owning person gets no mode relaxation at all. The actor may call models and read their metadata, but it
   cannot read another principal's model content or cancel its calls. Shell commands, the write floor and every other hard-floor
-  cell still ask or refuse. Turning these rules off also stops the native agent. *Workaround:* run `deckent policy upgrade --template current
-  --rollback` in your own terminal (your card; on a fresh v19 install too) to remove exactly the v19 AI-actor rules, and
-  `--apply` to add them back; or do not connect an MCP client you do not want to call models.
+  cell still ask or refuse. Turning these rules off also stops the native agent. *Workaround:* since v20 `deckent policy upgrade --template
+  current --rollback` removes only the newest delta (the v20 proposal rules below); there is no self-service command for the v19 rules
+  today, so a company deny on `model-invocation`/`agent-tool` for `<host>/mcp` is the way, or do not connect an MCP client you do not want to call models.
+- **The chat AI proposes work and three settings only on your card (template v20, owner 2026-11-09).** Since v20 the AI actor
+  (`<host>/mcp`: the chat agent and every external MCP client) holds two `require-approval` rules with no mode eligibility: create a
+  Run, and write `language`, `output_mode` or `terminal.responseStyle` (project or global layer). No mode, full access included,
+  lowers them: `propose_setting` opens the same before/after card as `/config`, `propose_work` the same plan card as `/do`, and only
+  your yes has an effect; the tools are offered only while these rules hold (a company `agent-tool` deny closes them too). Run
+  admission also checks the requester's pool and work target, so v20 adds two `allow` rules for the AI actor (`pool/use`,
+  `work-target/use`, installed scope); without the Run card they admit nothing, and the Run card is still the one card you see. Models and
+  the Brain model stay in `/model`, every other setting in its own window. An existing installation gets the four rules
+  automatically at its first service start on this release, with no card (owner decision), when the service runs as the person who
+  owns the policy files and a rule names that person in the configured service scope (or a first-run read rule does): the start writes
+  an `authority-change` audit record and an archived revision under the installer's upgrade key, once. A rule whose whole cell one
+  allow of the AI actor already covers (the same or a wider action, scope and resource selection, a role binding of the actor included;
+  for example the MCP `work` group's run rule) is not added, so that allow never becomes a card; the record names each such rule and the
+  rule that holds it. An allow on part of the cell (one pool, for example) covers nothing, so the rule is added. `/policy` shows the four
+  rules as one row, **AI proposals** (on, off, partly on, or covered by an existing grant, which it names): off removes them on your card
+  (`deckent policy upgrade --template current --rollback`), on adds back only them (`--apply --only ai-proposals`); after you turn them
+  off the start never adds them again. A chat-started plan shows `/do`'s quota-wait window, its Run card carries `/do`'s uncommitted-changes
+  line, and its admitted Run opens `/tasks` when the turn ends. A model that cannot use tools still needs `/do`. *Workaround:* start
+  work with `/do`.
+- **A coverage gap of the AI proposal rules can still lower an existing narrower allow to a card.** The start upgrade skips a v20 rule only
+  when one allow covers its whole cell. When an allow of the AI actor covers part of the Run-create or setting cell (one Run id, one
+  setting), the `require-approval` rule is added and, because `require-approval` wins over `allow`, that part now asks on the card too.
+  *Workaround:* widen the allow to the whole cell before the upgrade, or turn the row off in `/policy`.
+- **A Brain plan's source check reads the planning answer as the installation person.** The AI actor holds no `inspect-content`; when it
+  proposes work (`propose_work`) the Run proposal's source check, and a refused planning call's typed refusal (the quota wait), read the
+  retained planning answer through the person's own model-invocation policy, and only the check's verdict reaches the AI. A company rule
+  that denies the person `inspect-content` therefore refuses chat-proposed Brain plans too. *Workaround:* use `/do`, or allow the person
+  `model-invocation/inspect-content`.
+- **The Run card does not bind the work target yet.** A Run's card is bound to its plan, pool and execution profile, not to the
+  configured work target's id (the Run does not record it; Slice 1 of work targets). A target changed in configuration between the card and
+  admission is checked again (`work-target/use`) but is not named on the card. *Workaround:* do not change `execution.workTargets` while a
+  Run card is open.
 
 ## Budgets and spend
 
@@ -757,13 +789,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   a unix socket inside a read-only folder bound into the worker is not checked. *Workaround:* do not bind folders that hold another
   service's socket. Letting workers act on outside systems themselves is not offered yet.
 - **Recovery is turned on only through your own exact policy cells.** Template v16 introduced the named person's
-  require-approval recovery-action and Nervous-promotion cells; current template v19 retains them, v17's first-commit
-  grant and v18's uninstall grants, and adds v19's MCP actor tool rules. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
+  require-approval recovery-action and Nervous-promotion cells; current template v20 retains them, v17's first-commit
+  grant, v18's uninstall grants and v19's MCP actor tool rules, and adds v20's proposal rules. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
   overlapping require-approval cells. Old installations change only through explicit upgrade; use the witnessed
   `deckent init policy --upgrade` path when the managed `deckent policy upgrade` path cannot add authority the caller lacks.
-  Current rollback removes only the content-equal v19 delta, not historical v16–v18 grants; customized rows are kept
+  Current rollback removes only the content-equal v20 delta, not historical v16–v19 grants; customized rows are kept
   and reported. Adding a Nervous/recovery rule or version still needs a template version and policy upgrade: this remains
-  an OPEN owner issue, also after v17–v19. Measured-exit rechecks bind the policy revision, not later sealed measurements.
+  an OPEN owner issue, also after v17–v20. Measured-exit rechecks bind the policy revision, not later sealed measurements.
   Lost workers dispatched before alpha.56 have no isolation record; they go to a person and shadow measurement restarts.
 
 - **Full clean-machine acceptance remains open.** The 2026-10-15/16 rehearsal stopped before the model/first-job chain.

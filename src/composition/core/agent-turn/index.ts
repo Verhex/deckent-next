@@ -1,7 +1,7 @@
 export { builtinAgentToolClass, cancelPeerConfiguredChatTurn, chatTurnApprovalPreview, chatTurnCompactionCommandId, chatTurnRoundFailureState,
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn, steerPeerConfiguredChatTurn } from './internal/turn.js';
-export type { RuntimeChatTurnHost } from './internal/turn.js';
+export type { PlanServiceRun, RuntimeChatTurnHost } from './internal/turn.js';
 export { createAgentCallDecisions, permissionModeEventId, SILENT_DECISION_COUNTERS, SHELL_CELLS } from './internal/mode.js';
 export { attachPeerWorkspaceFile, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';

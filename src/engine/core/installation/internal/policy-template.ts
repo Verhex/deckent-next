@@ -3,7 +3,7 @@ import { governedPolicyDigest, type AuthorityDocumentStore, type AuthorityRevisi
 import { delegationWithin, resolvePolicyBindings } from '#domain/index.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, systemPolicyRowsPublicationEvent } from '#engine/core/system-policy-rows/index.js';
 import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
-  namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
+  namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, proposalCoverageGrants, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
 import { uninstallOperationDescriptors } from './uninstall-plan.js';
@@ -318,7 +318,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const body = { ...(current as Record<string, unknown>), grants: [...(current as { grants: readonly unknown[] }).grants, ...rules] };
     return { ...body, revision: `a-${digestOf(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
   };
-  const templatePlan = (current: unknown): Planned => {
+  const templatePlan = (current: unknown, bindings: unknown): Planned => {
     const revision = revisionOf(current);
     if (input.expect !== undefined && input.expect !== revision) return { result: result('conflict', { reason: 'revision-changed', revision }), next: null };
     const wireRules = ((current as { grants?: { id: string; resource?: { kind?: string; ids?: unknown } }[] } | null)?.grants ?? [])
@@ -331,12 +331,12 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
       return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, wireRules }), next: exact.policy };
     }
     if (exact.status === 'current') return { result: result('current', { basis: 'first-run', exact: true, revision, wireRules }), next: null };
-    const additions = firstRunTemplateAdditions(current, names);
+    const aiGrants = proposalCoverageGrants(current, bindings, principal), additions = firstRunTemplateAdditions(current, { ...names, aiGrants }); // alpha.64: role grants too
     if (additions.status === 'unavailable' && additions.reason === 'not-first-run') {
       // A hand-built policy: only for an explicitly named person (never the OS identity implicitly); refusals carry the people it names.
       const people = policyNamedPeople(current, scopeId, input.peopleLimit);
       if (person === null) return { result: result('unavailable', { reason: 'not-first-run', revision, people }), next: null };
-      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId });
+      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants });
       if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
       if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, wireRules }), next: null };
       return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, wireRules }), next: nextWith(current, revision, mine.rules) };
@@ -346,7 +346,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   const plan = (snapshot: { policy: unknown; bindings: unknown }) => {
-    const base = templatePlan(snapshot.policy), pack = input.systemRows;
+    const base = templatePlan(snapshot.policy, snapshot.bindings), pack = input.systemRows;
     if (!pack || !base.result.basis || !['preview', 'current'].includes(base.result.status)) return { ...base, bindings: null, dataKey: null };
     const key = bindSystemPolicyRows(pack.data, { scopeId, person: principal }).key;
     if (pack.history.some(entry => entry.key === key)) return { ...base, bindings: null, dataKey: null };

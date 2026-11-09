@@ -1,14 +1,14 @@
-import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS } from '../support/first-run-v16.js';
+import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V19_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V20_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   getPolicyVocabulary, matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { DecisionPolicyAuthorization } from '#engine/core/decision/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_V20_RULE_IDS];
 
 // I-POL (alpha.48, owner A48-D3 + MON-NAMES + CA-1 + C3, 2026-10-19): one bump v12 → v13 with seven add-only rules. The named installing person
 // (the founding admin of every identity profile: the template does not depend on the profile) gets six; the MCP actor gets one read. No authority
@@ -163,7 +163,7 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
 
 it('since v14 the rollback delta is the latest version\'s: no v13 rule is a rollback candidate (it stays like v11 and v12); doctor recognises v13', () => {
   const delta = firstRunTemplateRollback(current.policy, person, 'installation', input);
-  expect(delta.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_V19_RULE_IDS]); expect(delta.conflicts).toEqual([]);
+  expect(delta.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_V20_RULE_IDS]); expect(delta.conflicts).toEqual([]);
   expect(delta.rules.some(rule => v13ids.includes(rule.id))).toBe(false);
   for (const id of [FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt, ...v12ids]) expect(v14ids.includes(id), id).toBe(false);
   // A customized v13 rule is not part of the delta: neither removed nor reported.

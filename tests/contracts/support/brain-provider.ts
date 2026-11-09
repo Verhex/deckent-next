@@ -16,7 +16,7 @@ import { applyModelCatalog } from '../../../src/index.js';
 import { seedCatalog, SEED_CHANNEL } from './model-catalog.js';
 import { nativeClaudeWorkers } from './native-claude-worker.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
-import { fixtureDockerRegistry } from './execution-registry.js';
+import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
 export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string | ((body: string) => string); hold?: boolean;
@@ -79,10 +79,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     ...(options.headless ? { schemaVersion: 2, billingAxis: 'subscription', protocol: { family: options.headless.protocolFamily ?? 'claude-code-stream-json', version: 'v1' }, adapter: { id: 'native-cli-headless', version: 1,
       definition: { schemaVersion: 1, executable: options.headless.executable, configDir: options.headless.configDir, stateDir: options.headless.stateDir,
         ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: options.headless.delegatedUse ?? null } }, limits: { requestMaxBytes: 128_000, responseMaxBytes: 65_536, timeoutMs: 10_000 } } : {}) };
-  const workClasses = { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
-    proposalAdmission: { risk: 'low', standingAdmission: options.standing ?? false }, acceptanceProfile: { schemaVersion: 1, version: 1,
-      criterionTypes: ['completion'], evidenceTypes: ['verification-result'], rubric: [{ criterionType: 'completion', evidenceTypes: ['verification-result'], weight: 1 }],
-      ceilingRules: [], decisionThresholds: { rejectBelow: 0.2, acceptAt: 1 } } }], bindings: [{ kind: 'purchase', classId: 'business' }] };
+  const workClasses = businessWorkClasses(options.standing ?? false);
   const workerRegistry = fixtureDockerRegistry(['purchase']);
   const seed = options.subscription ? await seedCatalog() : null;
   const workerModel = seed?.providers[0].models.find((row: { lifecycle: { state: string }; nativeId: string }) => row.lifecycle.state === 'active' && row.nativeId === 'claude-sonnet-5-5');

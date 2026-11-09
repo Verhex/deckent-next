@@ -53,6 +53,10 @@ export type AgentTurnEvent =
   | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (T-L4 shell): presentation; the call's result stays the only history. */
   | { readonly kind: 'tool.output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
+  /** v31 (alpha.64 B, /do parity): a `propose_work` call's plan progress, as /do shows it — planning (`attempt`), a Brain quota wait (until `untilMs`, the
+   * next `attempt` of `maxAttempts`) and the admitted Run (`runId`, which /tasks follows). Progress only: no authority; the card is `approval.requested`. */
+  | { readonly kind: 'work'; readonly callId: string; readonly phase: 'planning' | 'quota-wait' | 'admitted'; readonly runId?: string; readonly untilMs?: number;
+    readonly attempt?: number; readonly maxAttempts?: number }
   | { readonly kind: 'done'; readonly finish: AgentTurnFinish; readonly note: string | null };
 
 /**
@@ -92,6 +96,11 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({ get kind() { return z.literal('approval.settled'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get approvalId() { return persistedString(z.string().min(1).max(256)); },
     get outcome() { return z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']); } }),
   z.strictObject({ get kind() { return z.literal('tool.output'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get stream() { return z.enum(['stdout', 'stderr']); }, get text() { return persistedString(z.string().min(1)); } }),
+  z.strictObject({ get kind() { return z.literal('work'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get phase() { return z.enum(['planning', 'quota-wait', 'admitted']); },
+    get runId() { return persistedString(z.string().min(1).max(256)).optional(); }, get untilMs() { return count.optional(); },
+    get attempt() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(); }, get maxAttempts() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(); } })
+    .refine(event => event.phase === 'admitted' ? event.runId !== undefined && event.untilMs === undefined && event.attempt === undefined && event.maxAttempts === undefined
+      : event.runId === undefined && event.attempt !== undefined && (event.phase === 'quota-wait') === (event.untilMs !== undefined) && (event.untilMs !== undefined) === (event.maxAttempts !== undefined)),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 

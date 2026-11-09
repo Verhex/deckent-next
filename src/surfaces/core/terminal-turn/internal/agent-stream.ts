@@ -143,6 +143,8 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
       ...(names.has(event.callId) ? { tool: names.get(event.callId)!, target: targets.get(event.callId) ?? null } : {}) };
     case 'approval.settled': return { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome };
     case 'tool.output': return { kind: 'output', callId: event.callId, stream: event.stream, text: event.text };
+    case 'work': return { kind: 'work', callId: event.callId, phase: event.phase, ...(event.runId === undefined ? {} : { runId: event.runId }), ...(event.untilMs === undefined ? {} : { untilMs: event.untilMs }),
+      ...(event.attempt === undefined ? {} : { attempt: event.attempt }), ...(event.maxAttempts === undefined ? {} : { maxAttempts: event.maxAttempts }) };
     case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null };
     case 'tool.finished': return { kind: 'tool', phase: 'finished', callId: event.callId, name: event.name, target: targets.get(event.callId) ?? null,
       status: event.status, ms: event.ms, ...(event.cleanup !== undefined ? { cleanup: event.cleanup } : {}) };

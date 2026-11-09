@@ -151,7 +151,12 @@ largest result with no answer and no note. The loop takes waiting lines only at 
 model-call boundary — after every tool result of the round, before the next round is measured and sent — so a line never enters an
 approval or witness wait and never answers a card; each joins once as the person's `user` message (`message` event with its `steerId`),
 none joins after a cancel, and the result's `steer.returned` names the lines that did not join. A v29 terminal's `chatTurn` is closed
-unanswered (`LOCAL_RUNTIME_TRANSPORT`); the lifecycle window is `[30, 29]`. Stores:
+unanswered (`LOCAL_RUNTIME_TRANSPORT`).
+**Protocol v31 (alpha.64 B, /do parity).** A `propose_work` call streams `work` events (`callId`, `phase` `planning` with its `attempt`,
+`quota-wait` with `untilMs`, `attempt` and `maxAttempts`, `admitted` with the `runId`): the plan application's progress (`PlanServiceRun`
+takes `observe`) as `/do` shows it; the card stays `approval.requested`. The terminal maps them onto `/do`'s own quota-wait window, its
+uncommitted-changes line on the Run card and its `/tasks` handoff (one shared workline function each). A v30 terminal's `chatTurn` is
+closed unanswered; the lifecycle window is `[31, 30]`. Stores:
 `agent_turns`/`agent_turn_tool_calls` (T-L3b2). Errors: `AGENT_TURN_IN_PROGRESS | CONFLICT | CORRUPT | INVALID | UNAVAILABLE`.
 MCP `not-decided` notices carry a short `code` (at most 64 characters) and an optional identifier-shaped `detail` (at most 256);
 suggested commands are rendered from the surface's EN/TR catalog. Start failure phases include `decision`. A repeated failure with

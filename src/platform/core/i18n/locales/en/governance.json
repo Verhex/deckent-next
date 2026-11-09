@@ -712,6 +712,7 @@
   "mcp.grant.reason.administer": "your policy does not let you change policy rules (no policy.administer operation or no right to decide its card); a first-run installation takes them with deckent init policy --scope <id> --upgrade --preview, then --apply; otherwise a policy administrator writes this grant",
   "mcp.grant.reason.unsupported": "the installation policy cannot carry the grant (policy v1 or unreadable)",
   "mcp.grant.reason.principal": "the approval came from another person than this service runs for",
+  "agent.proposal.origin": "Proposed by the AI in this conversation; you decide.",
   "mcp.proposal.title": "The model proposes adding an MCP server. Nothing is written unless you approve.",
   "mcp.proposal.proposer": "Proposed by: {proposer}",
   "mcp.proposal.name": "Name: {name}",

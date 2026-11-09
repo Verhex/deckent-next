@@ -15,6 +15,8 @@ export async function* streamTerminalAgentTurn(...args: Parameters<typeof import
   return yield* (await terminalTurn()).streamTerminalAgentTurn(...args);
 }
 export type { ConfigChoiceList, ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
+// alpha.64 B + C: the plan card's lines and a setting's closed choices for the chat turn's proposals (loaded on the first proposal call).
+export function loadProposalViews() { return Promise.all([import('#surfaces/core/run-planning/index.js'), import('#surfaces/core/config/index.js')]); }
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 export { openConfigWindow } from '#surfaces/core/config-window/index.js';

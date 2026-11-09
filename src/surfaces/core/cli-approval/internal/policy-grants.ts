@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline/promises';
+import type { PolicyTemplateUpgradePort, PolicyUpgradeView } from '#surfaces/core/cli-terminal/index.js';
 import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -14,10 +15,8 @@ export type StandingGrantsHandler = (root: string, scopeId: string, options: { r
 export type StandingRevokeHandler = (root: string, input: { readonly scopeId: string; readonly id: string; readonly reason: string; readonly confirm: (grant: StandingGrantRow) => Promise<boolean> },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<{ readonly revoked: boolean; readonly grant: StandingGrantRow | null }>;
 
-/** The governed current first-run upgrade: the engine's result, which the surface only words. */
-export interface PolicyUpgradeView { readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null; readonly conflicts?: readonly string[] }
-export type PolicyUpgradeHandler = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string },
-  options: { readonly env: NodeJS.ProcessEnv }) => Promise<PolicyUpgradeView>;
+/** The governed current first-run upgrade: the engine's result, which the surface only words (one shape with `/policy`'s AI proposals row). */
+export type PolicyUpgradeHandler = PolicyTemplateUpgradePort;
 
 /**
  * `deckent policy grants [--mine] [--scope <id>] [--json]` lists the caller's own persisted standing approvals (read-only); `--all [--after <mark>]` everyone's (CA-1);
@@ -80,26 +79,28 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
  * `policy.administer@1` (I2, audit, archive). The deprecated `v5` selector uses the same current plan.
  */
 async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
-  let json = false, template: string | undefined, scope: string | undefined, language: string | undefined, expect: string | undefined, mode: 'preview' | 'apply' | 'rollback' | undefined;
+  let json = false, template: string | undefined, scope: string | undefined, language: string | undefined, expect: string | undefined, mode: 'preview' | 'apply' | 'rollback' | undefined, only: string | undefined;
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i]!;
     if (flag === '--json' && !json) json = true;
     else if ((flag === '--preview' || flag === '--apply' || flag === '--rollback') && mode === undefined) mode = flag.slice(2) as 'preview' | 'apply' | 'rollback';
-    else if (['--template', '--scope', '--lang', '--expect'].includes(flag)) {
+    else if (['--template', '--scope', '--lang', '--expect', '--only'].includes(flag)) {
       const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
       if (flag === '--template' && template === undefined) template = value; else if (flag === '--scope' && scope === undefined) scope = value;
       else if (flag === '--lang' && language === undefined) language = value; else if (flag === '--expect' && expect === undefined) expect = value;
+      else if (flag === '--only' && only === undefined) only = value;
       else throw ErrorRegistry.createError('CLI_USAGE');
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  if ((template !== 'current' && template !== 'v5') || (expect !== undefined && mode !== 'apply') || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
+  // alpha.64: `--only ai-proposals` previews or applies only the current delta (the AI actor's v20 proposal rules); rollback removes only it anyway.
+  if ((template !== 'current' && template !== 'v5') || (expect !== undefined && mode !== 'apply') || (only !== undefined && (only !== 'ai-proposals' || mode === 'rollback')) || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, config = await loadConfig(root, { env });
   const locale = commandLocale(context, language);
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (template === 'v5') (context.stderr ?? process.stderr).write(`${t('cli.policy.upgrade.deprecated', { scope: scopeId }, locale)}\n`);
-  const result = await context.upgradePolicyTemplate(root, scopeId, { mode: mode ?? 'preview', reason: t('cli.policy.upgrade.reason', {}, locale), ...(expect ? { expect } : {}) }, { env });
+  const result = await context.upgradePolicyTemplate(root, scopeId, { mode: mode ?? 'preview', reason: t('cli.policy.upgrade.reason', {}, locale), ...(expect ? { expect } : {}), ...(only ? { only: 'ai-proposals' as const } : {}) }, { env });
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const missing = (view: PolicyUpgradeView) => view.missing.map(item => item === 'policy-administer' ? t('cli.policy.upgrade.missing.policyAdminister', {}, locale)
     : item === 'approval-decide' ? t('cli.policy.upgrade.missing.approvalDecide', {}, locale) : item === 'lockout' ? t('cli.policy.upgrade.missing.lockout', {}, locale)

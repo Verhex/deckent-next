@@ -760,7 +760,8 @@
         "src/adapters/core/target-queue-store",
         "src/engine/core/workspace-patch",
         "src/adapters/core/autonomy-shadow",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/engine/core/proposal-upgrade"
       ],
       "plan": "EXECUTION"
     },
@@ -796,7 +797,8 @@
         "src/domain/core/principal",
         "src/domain/core/approval",
         "src/domain/core/audit",
-        "src/domain/core/recovery"
+        "src/domain/core/recovery",
+        "src/domain/core/agent-tool"
       ],
       "plan": "CONTRACT"
     },
@@ -2039,7 +2041,11 @@
         "src/adapters/core/native-connection",
         "src/composition/core/model-use",
         "src/engine/core/model-use",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/domain/core/run",
+        "src/engine/core/run-proposal",
+        "src/surfaces",
+        "src/composition/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -5219,6 +5225,16 @@
         "src/engine/core/workspace-patch"
       ],
       "plan": "ISOLATION"
+    },
+    "src/engine/core/proposal-upgrade": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/audit",
+        "src/platform/core/integrity",
+        "src/engine/core/policy",
+        "src/engine/core/installation"
+      ],
+      "plan": "INSTALLATION"
     }
   },
   "composition": {
@@ -5255,7 +5271,7 @@
       "engine": 60000,
       "adapters": 42376,
       "surfaces": 45000,
-      "composition": 13576
+      "composition": 13731
     },
     "totalSrcLines": 200000,
     "testCases": 8196,
