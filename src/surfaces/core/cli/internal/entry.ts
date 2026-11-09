@@ -11,7 +11,6 @@ export const runCommand = lazyFunction(cliRun, 'runCommand'), readGraphInput = l
 export const toolchainsCommand = lazyFunction(admin, 'toolchainsCommand');
 export const mcpCommand = lazyFunction(() => import('./mcp.js'), 'mcpCommand'), mcpSlash = lazyFunction(() => import('./mcp.js'), 'mcpSlash');
 
-/** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   beuser: lazyFunction(() => import('#surfaces/core/cli-beuser/index.js'), 'beuserCommand'),
   audit: lazyFunction(admin, 'auditCommand'), backup: lazyFunction(admin, 'backupCommand'), identity: lazyFunction(() => import('#surfaces/core/cli-identity/index.js'), 'identityCommand'),
@@ -25,7 +24,6 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   pool: lazyFunction(admin, 'poolCommand'),
   // Owner 2026-11-06: `models catalog brain` is a governed config write; the config surface owns it (it already depends on cli-models).
   models: async (argv, context) => (await models()).modelsCommand(argv, { ...context, brainOffer: async args => (await import('#surfaces/core/config/index.js')).brainOfferCommand(args, context) }), approval: lazyFunction(approval, 'approvalsCommand'),
-  // Load config commands only when requested.
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
   mcp: mcpCommand, secret: lazyFunction(admin, 'secretCommand'), toolchains: toolchainsCommand, doctor: runKernelCommand,
   inventory: lazyFunction(cliRun, 'inventoryCommand'), paths: runKernelCommand, runtime: lazyFunction(admin, 'runtimeCommand'), coding: lazyFunction(admin, 'codingCommand'),
@@ -34,7 +32,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   recovery: lazyFunction(approval, 'recoveryCommand'),
   hub: lazyFunction(() => import('#surfaces/core/cli-hub/index.js'), 'hubCommand'),
   agents: lazyFunction(() => import('#surfaces/core/cli-agents/index.js'), 'agentsCommand'),
-  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || argv[1] === 'recovery' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'show' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || argv[1] === 'recovery' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */

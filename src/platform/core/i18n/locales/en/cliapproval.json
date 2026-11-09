@@ -140,6 +140,7 @@
   "cli.policy.summary.count": "{on} of {total} on",
   "cli.policy.summary.delegations": "Steps handed to AI: {state} (deckent policy delegations)",
   "cli.policy.summary.mcp": "MCP permission groups: {state} (deckent policy mcp)",
+  "cli.policy.summary.rollback": "Undo adoption: attempt / rollback-integration; managed separately from deliver-working-tree.",
   "cli.policy.summary.unreadable": "(could not be read: {code})",
   "cli.policy.summary.revision": "Policy revision: {revision}",
   "cli.policy.scopes.header": "{count} scope(s) you may read:",

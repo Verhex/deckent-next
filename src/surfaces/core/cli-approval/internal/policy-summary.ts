@@ -31,7 +31,7 @@ async function soft(read: (() => Promise<string>) | undefined, locale: Locale): 
 }
 
 /**
- * `deckent policy` / `deckent policy status` (CLI review §policy): the default scope's policy summary — kind, administrators labelled, my standing
+ * `deckent policy` / `deckent policy status|show` (CLI review §policy): the default scope's policy summary — kind, administrators labelled, my standing
  * grants, the AI steps delegated and the MCP groups on, each with the command that shows it. Hashes only with `--verbose`; `--json` stays the
  * status view exactly as before (no new field).
  */
@@ -54,6 +54,7 @@ export async function policyStatusCommand(argv: readonly string[], context: Appr
   emit([scopeNotice(scope, locale), t('cli.policy.summary.kind', { kind: kindText(view, locale), count: view.usableAdminCount }, locale),
     ...view.admins.map(person => t('cli.policy.summary.admin', { person: terminalSafeText(`${person.issuer}/${person.subject}`) }, locale)),
     ...[grants, delegated, mcp].filter((line): line is string => line !== null),
+    t('cli.policy.summary.rollback', {}, locale),
     view.bootstrapRequired ? t('cli.policy.status.bootstrap', {}, locale) : view.recoveryRequired ? t('cli.policy.status.recovery', {}, locale) : t('cli.policy.status.ready', {}, locale),
     t('cli.policy.status.unverified', {}, locale),
     ...(args.verbose ? [t('cli.policy.summary.revision', { revision: terminalSafeText(view.revision) }, locale)] : [])].join('\n'), sinksOf(context));

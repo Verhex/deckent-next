@@ -30,6 +30,20 @@ describe('workTargetAttemptAuthorization (engine)', () => {
       await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(source), source).authorizeIdentity('deliver-integration', identity, { ...principal, scopeIds: ['other'] }))
         .rejects.toMatchObject({ code: 'POLICY_DENIED' });
     }
+    // Owner B1-3(b): rollback has its own cell; the company delivery lever never grants or denies it.
+    const rollbackPolicy = policySchema.parse({ ...document, grants: [...document.grants,
+      { ...document.grants[0], id: 'rollback', actions: ['rollback-integration'] },
+      { ...document.grants[0], id: 'company', effect: 'deny', actions: ['deliver-working-tree'] }] });
+    for (const effect of ['allow', 'deny', 'require-approval'] as const) {
+      const source = { load: async () => policySchema.parse({ ...rollbackPolicy,
+        grants: rollbackPolicy.grants.map(grant => grant.id === 'rollback' ? { ...grant, effect } : grant) }) };
+      const result = workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(source), source).authorizeIdentity('rollback-integration', identity, principal);
+      if (effect === 'allow') await expect(result).resolves.toBeUndefined();
+      else await expect(result).rejects.toMatchObject({ code: effect === 'deny' ? 'POLICY_DENIED' : 'POLICY_APPROVAL_UNSUPPORTED' });
+    }
+    const deliveryOnly = { load: async () => document };
+    await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(deliveryOnly), deliveryOnly).authorizeIdentity('rollback-integration', identity, principal))
+      .rejects.toMatchObject({ code: 'POLICY_DENIED' });
     const unavailable = { load: async () => { throw new Error('unreadable'); } };
     await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(unavailable), unavailable).authorizeIdentity('deliver-integration', identity, principal))
       .rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });

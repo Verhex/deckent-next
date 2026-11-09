@@ -21,11 +21,11 @@ export type PolicyUpgradeHandler = PolicyTemplateUpgradePort;
 /**
  * `deckent policy grants [--mine] [--scope <id>] [--json]` lists the caller's own persisted standing approvals (read-only); `--all [--after <mark>]` everyone's (CA-1);
  * `deckent policy revoke <id> [--scope <id>] [--yes]` removes one through the same `policy.administer@1` operation that created it.
- * Until `/policy` exists (PERSISTENT-APPROVALS G6). A revoke asks `y/N` on a terminal; without one it needs an explicit `--yes`.
+ * A revoke asks `y/N` on a terminal; without one it needs an explicit `--yes`.
  */
 export async function policyGrantsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
   if (['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '')) return policyDelegationsCommand(argv, context);
-  if (argv[1] === 'status') return policyStatusCommand(argv, context);
+  if (argv[1] === 'status' || argv[1] === 'show') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
   if (argv[1] === 'upgrade') return policyUpgradeCommand(argv, context);
   if (argv[1] === 'recovery') return policyRecoveryCommand(argv, context);

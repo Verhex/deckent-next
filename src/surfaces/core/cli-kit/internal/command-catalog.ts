@@ -233,6 +233,7 @@ export const CLI_CATALOG = [
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', args: '[--scope <id>]', bare: { read: 'status' }, children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', { installation: 'independent' }),
     action('status', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
+    action('show', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
     action('delegations', 'observe', 'policy.delegate.title', 'cli.help.policy'),
     action('delegate', 'approvals', 'policy.delegate.grant', 'cli.help.policy', { requires: ['--step <id>'] }),
     action('undelegate', 'approvals', 'policy.delegate.revoke', 'cli.help.policy', { requires: ['--step <id>'] }),

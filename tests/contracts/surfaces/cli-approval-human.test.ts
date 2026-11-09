@@ -174,8 +174,14 @@ it('policy: summary (labelled admin, counts, hashes only with --verbose), own gr
   expect(summary.code).toBe(0);
   expect(summary.text).toContain('Yönetici: host/DESKTOP/1000'); expect(summary.text).toContain('kullanılabilir admin'); expect(summary.text).toContain('Kalıcı onaylarım: 1');
   expect(summary.text).toContain(`${getDecisionSteps().length} içinde 1 açık`); expect(summary.text).toContain('okunamadı: POLICY_DENIED'); expect(summary.text).not.toContain('rev-123');
+  expect(summary.text).toContain('Benimsemeyi geri alma: attempt / rollback-integration; deliver-working-tree kuralından ayrı yönetilir.');
+  const english = await run(['policy', 'show', '--lang', 'en'], handlers, root);
+  expect(english.code).toBe(0);
+  expect(english.text).toContain('Undo adoption: attempt / rollback-integration; managed separately from deliver-working-tree.');
+  expect((await run(['policy', 'show', '--lang', 'tr'], handlers, root)).text).toBe(summary.text);
   expect((await run(['policy', 'status', '--verbose'], handlers, root)).text).toContain('rev-123');
   expect(JSON.parse((await run(['policy', 'status', '--json'], handlers, root)).text)).toEqual(status);
+  expect(JSON.parse((await run(['policy', 'show', '--json'], handlers, root)).text)).toEqual(status);
   reads.length = 0;
   const own = await run(['policy', 'grants', '--lang', 'en'], handlers, root);
   expect(own.code).toBe(0); expect(own.text).toContain('standing-1'); expect(reads).toEqual(['grants']);
