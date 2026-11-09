@@ -8,7 +8,7 @@ import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfac
 import { isCodedError, shortId, t } from '#platform/index.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
-  type ApprovalWindowContext } from './approval-decision-view.js';
+  type ApprovalWindowContext } from '#surfaces/core/terminal-approval/index.js';
 import { JobWindow, pickRun, runTitle } from './job-windows.js';
 import { RunAnswerDecisionCard, RunControlDecisionCard, RunsControlWindow, runRunsControl } from './run-control.js';
 import { systemSummaryEntry } from './system-summary.js';

@@ -1,3 +1,4 @@
+import { diffRows as splitDiffRows } from '#surfaces/core/terminal-approval/index.js';
 import { appendFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorklineApproval, TurnDelta } from '#surfaces/core/terminal/index.js';
@@ -38,6 +39,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const work = workSurfaceLabels(locale), w = work.approvalWindow;
     for (const [kind, fixture] of Object.entries(KINDS)) {
       it(`${locale} ${kind}: nine labelled fields, human risk and rule, digest only in the details`, () => {
+        expect(diffRows).toBe(splitDiffRows);
         const lines = approvalCardLines(fixture.approval, work, fixture.preview, kind === 'shell' ? 'rm -rf build && npm test' : null, { project: '/home/u/acme', mode: 'standart' }, NOW);
         const text = lines.join('\n');
         proof(`model ${locale} ${kind}`, text);

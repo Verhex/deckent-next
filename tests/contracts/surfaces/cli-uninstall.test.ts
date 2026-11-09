@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
-import { createUninstallPlan, type UninstallInventory } from '#engine/core/installation/index.js';
+import { createUninstallPlan, type UninstallInventory } from '#engine/core/uninstall/index.js';
 import { uninstallCommand, uninstallPlanLines, uninstallDetailLines, uninstallSummaryLines } from '#surfaces/core/cli-installation/index.js';
 import { CLI_COMMANDS, main } from '#surfaces/core/cli/index.js';
 import { CLI_CATALOG, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
@@ -95,6 +95,10 @@ it('offers force for running work before any card and prints a kept image\'s ste
   await expect(uninstallCommand(['uninstall', '--keep-data'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE', params: { runs: '1' } });
   expect(card.requests[0]!.options.map(option => option.id)).toEqual(['force', 'cancel']); expect(asked).toHaveLength(1);
   expect(card.requests[0]!.options.map(option => option.role)).toEqual(['yes', 'no']);
+  card.requests.length = 0; card.answers.push('cancel');
+  await expect(uninstallCommand(['uninstall', '--keep-data'], { ...context,
+    previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...busy, blockers: ['a:extension-refused'] }) })).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' });
+  expect(card.requests[0]!.options.map(option => option.id)).toEqual(['force', 'cancel']);
   // The menu keeps a tier whose refusal the person can resolve: running work blocks every tier, yet the choice leads to the force offer.
   card.requests.length = 0; card.answers.push('all', 'cancel');
   await expect(uninstallCommand(['uninstall'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' });

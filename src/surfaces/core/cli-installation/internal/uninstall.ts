@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, emit, getConfigFieldDefault, t, terminalSafeText as safe, type ExitCode } from '#platform/index.js';
-import { uninstallBlockerError, type UninstallPlan, type UninstallQuery } from '#engine/index.js';
+import { uninstallBlockerError, uninstallDecidingBlocker, uninstallBlockerRow, type UninstallPlan, type UninstallQuery } from '#engine/index.js';
 import { readHidden } from '#surfaces/core/cli-admin/index.js';
 import { askCliCard, cliMode, formatDuration, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -54,8 +54,9 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   }
   // Every check before the one confirmation. A refusal the person can resolve is offered with its flag twin (--force, --disable-unit).
   // A policy refusal is decided by the engine's own authorization (typed error with its owner), so it is not pre-empted here.
-  for (let blocker = plan.blockers.find(value => !value.startsWith('policy:')); blocker; blocker = plan.blockers.find(value => !value.startsWith('policy:'))) {
-    const work = uninstallResolvable(blocker, plan) && blocker !== 'service-managed' && !query.force, unit = blocker === 'service-managed' && !query.disableUnit && uninstallResolvable(blocker, plan);
+  for (let blocker = uninstallDecidingBlocker(plan.blockers.filter(value => !value.startsWith('policy:'))); blocker; blocker = uninstallDecidingBlocker(plan.blockers.filter(value => !value.startsWith('policy:')))) {
+    const row = uninstallBlockerRow(blocker), resolution = row && 'resolve' in row ? row.resolve : undefined;
+    const work = resolution === 'force' && !query.force && uninstallResolvable(blocker, plan), unit = resolution === 'disable-unit' && !query.disableUnit && uninstallResolvable(blocker, plan);
     const error = uninstallBlockerError(plan)!;
     if (yes || !(work || unit)) { print(uninstallPlanLines(plan, locale)); throw error; }
     const offer = work ? { id: 'force', label: blocker === 'uncertain-effects' ? t('cli.uninstall.uncertain.offer', {}, locale) : t('cli.uninstall.force.offer', {}, locale), role: 'yes' as const }

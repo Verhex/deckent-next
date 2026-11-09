@@ -6,7 +6,7 @@ import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, F
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, proposalCoverageGrants, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
-import { uninstallOperationDescriptors } from './uninstall-plan.js';
+import { uninstallOperationDescriptors } from '#engine/core/uninstall/index.js';
 import environmentRegistry from './execution-environments.json' with { type: 'json' };
 import { NERVOUS_RULES_SEED, loadNervousRules } from '#engine/core/nervous/index.js';
 import { installerAuthorityChangeEvent } from './authority-audit.js';

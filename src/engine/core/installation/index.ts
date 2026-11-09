@@ -30,10 +30,6 @@ export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, Instal
 
 export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, ownerBaselineFamilyKnown, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';
 
-export { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallLauncherResource, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
-export type { UninstallInventory, UninstallContribution } from './internal/uninstall-plan.js';
-export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError, UNINSTALL_TIERS } from './internal/uninstall-contract.js';
-export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem, UninstallTier, UninstallQuery, UninstallWork, UninstallService, UninstallBlocker } from './internal/uninstall-contract.js';
-export { UninstallApplication, authorizeUninstall, approvedUninstallEffects, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes } from './internal/uninstall-application.js';
-export type { UninstallApplicationPorts, UninstallAdmission, UninstallInteraction } from './internal/uninstall-application.js';
 export { installSystemPolicyRows, upgradeSystemPolicyRows } from './internal/policy-template.js';
+/** @deprecated Import uninstall from #engine/core/uninstall/index.js; retained for one release. */
+export * from '#engine/core/uninstall/index.js';

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallRegistry, uninstallOperationDescriptors, type UninstallInventory, type UninstallResource } from '#engine/core/installation/index.js';
+import { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallRegistry, uninstallOperationDescriptors, type UninstallInventory, type UninstallResource } from '#engine/core/uninstall/index.js';
 const resource = (resourceId: string, contribution: string, locator: string, extra: Partial<UninstallResource> = {}): UninstallResource => ({
   resourceId, contribution, locator, version: 'v1', owner: 'installation', ownership: 'exclusive', ownershipEvidence: 'a'.repeat(64),
   present: true, protected: false, capability: true, backup: 'covered', ...extra,
@@ -107,7 +107,7 @@ it('binds D0 to every member, location, version and owner evidence; guards the r
     if (action === 'blocked' || action === 'manual') expect(plan.blockers).toContain(`durable:${reason}`);
   }
   expect(createUninstallPlan(query('keep-data'), { ...base, resources: [resource('service', 'service', 'fixture.service', { ownership: 'unknown' })] }).items[0]).toMatchObject({ action: 'keep', reason: 'service-unresolved' });
-  // Of several blockers the refusal names today the first in alphabetical order (BAK-4 states this order in its table).
+  // The table decides: authority paths first, then the remaining registered blockers in precedence order.
   expect(uninstallBlockerError(createUninstallPlan(query('all'), { ...base, recoveryUnsafe: true, work: { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 1 }] } }))).toMatchObject({ code: 'UNINSTALL_RECOVERY_LOCATION' });
   // The whole order: an authority path first (before archive-limit), then alphabetical; a resource or policy blocker alone takes the fallback.
   const order = [['authority-relocated:/r', 'UNINSTALL_AUTHORITY_UNVERIFIED'], ['authority-unsafe:/u', 'UNINSTALL_AUTHORITY_UNVERIFIED'], ['archive-limit', 'UNINSTALL_BACKUP_COVERAGE'],
@@ -122,4 +122,7 @@ it('binds D0 to every member, location, version and owner evidence; guards the r
   const params = { runs: '1', approvals: '0', workspaces: '0', reason: 'manager-conditions-or-separate-consent', unit: '', command: '', path: '/fixture/data', recovery: '/r/set' };
   expect(refusal(['delivery-queued', 'work-active'])?.params).toEqual({ ...params, count: '1', list: 'del-1', owner: 'd' });
   expect(refusal(['work-active'], true)?.params).toEqual({ ...params, count: '1', list: 'effect e-1', owner: 'u' });
+  const mixed = createUninstallPlan(query('all'), { ...base, dataBlockers: ['archive-limit', 'authority-unsafe:/u:v'] });
+  expect(mixed.tiers.all.blocker).toBe('authority-unsafe:/u:v');
+  expect(uninstallBlockerError(mixed)).toMatchObject({ code: 'UNINSTALL_AUTHORITY_UNVERIFIED', params: { path: '/u:v' } });
 });

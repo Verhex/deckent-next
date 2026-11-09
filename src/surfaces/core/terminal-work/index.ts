@@ -1,6 +1,7 @@
 export { immediateSlashAction, resolveWorkerRef, runLedgerCommand, type WatchState, type WorklineActionLabels, type WorkSurfaceLabels } from './internal/workline-actions.js';
 export { approvalCardLines, useWorkSurface } from './internal/work-surface.js';
-export { diffRows, type ApprovalWindowLabels } from './internal/approval-window.js';
+/** @deprecated Import terminal approvals from #surfaces/core/terminal-approval/index.js; retained for one release. */
+export * from '#surfaces/core/terminal-approval/index.js';
 export { useWorklinePanel, type LocalExecution, type ResumePickerItem, type WorklinePanel, type SettingsPanelPresentation } from './internal/workline-panel.js';
 export { LedgerEntryRow, isToolStep, rowSpaceBefore, stepSpaceBefore, type LedgerEntryLabels } from './internal/ledger-entry.js';
 export { liveRunEntry, LIVE_WINDOW_MAX_ROWS, LiveWatchWindow, MonitorWindow, liveWindowClosedText, liveWindowLines, liveWindowStatus, type TaskWindowAction, type LiveWindowData, type LiveWindowKind,

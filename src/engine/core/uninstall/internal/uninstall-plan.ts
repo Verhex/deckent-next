@@ -51,11 +51,10 @@ export interface UninstallInventory {
   readonly recoveryUnsafe?: boolean;
 }
 type Query = { readonly tier: UninstallTier; readonly force: boolean; readonly disableUnit: boolean };
-/** Item actions and blockers of one tier over one observation; pure. */
 function decide({ tier, force, disableUnit }: Query, installation: UninstallInstallation, resources: readonly UninstallResource[], inventory: UninstallInventory,
   registry: ReturnType<typeof uninstallRegistry>) {
   resources = resources.filter(resource => !resource.tiers || resource.tiers.includes(tier));
-  const purge = tier === 'all', blockers = [...inventory.blockers, ...(purge ? inventory.dataBlockers : []), ...(tier !== 'keep-data' && inventory.policyBlocker ? [`policy:${inventory.policyBlocker}`] : [])];
+  const purge = tier === 'all', blockers: string[] = [...inventory.blockers, ...(purge ? inventory.dataBlockers : []), ...(tier !== 'keep-data' && inventory.policyBlocker ? [`policy:${inventory.policyBlocker}`] : [])];
   const items: UninstallItem[] = resources.map(resource => {
     const entry = registry.entries.find(item => item.id === resource.contribution);
     if (!entry) throw new UninstallError('UNINSTALL_INVALID');
@@ -132,7 +131,7 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
   const observed = { ...inventory, work, service };
   const { items, blockers, steps, archived } = decide({ tier, force, disableUnit }, installation, resources, observed, registry);
   const tiers = Object.fromEntries(UNINSTALL_TIERS.map(other => { const plan = decide({ tier: other, force, disableUnit }, installation, resources, observed, registry);
-    return [other, { removes: plan.items.filter(item => item.action === 'remove').length, blocker: plan.blockers[0] ?? null }]; })) as UninstallPlan['tiers'];
+    return [other, { removes: plan.items.filter(item => item.action === 'remove').length, blocker: uninstallDecidingBlocker(plan.blockers) }]; })) as UninstallPlan['tiers'];
   const nothingToRemove = !items.some(item => item.action === 'remove') && !steps.stopService && !steps.disableUnit && !steps.cancelRuns.length && !steps.rejectApprovals.length && !steps.withdrawDeliveries.length;
   const body = { schemaVersion: 2 as const, installation, tier, force, disableUnit, purge: tier === 'all', scopeSummary: [...inventory.scopeSummary].sort(),
     layoutRevision: inventory.layoutRevision, policyRevision: inventory.policyRevision, inventoryRevision: inventory.inventoryRevision,
@@ -140,11 +139,17 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
     backup: { required: archived, destination: inventory.backupDestination }, packageRemoval: { ...inventory.packageRemoval }, canApply: false as const };
   return freeze(JSON.parse(JSON.stringify({ ...body, planDigest: hash(body) })) as UninstallPlan);
 }
+/** The same deciding row serves the engine refusal and every surface; unknown extension blockers retain their value. */
+export const uninstallBlockerRow = (blocker: string) => UNINSTALL_BLOCKERS.find(entry => 'path' in entry ? blocker.startsWith(`${entry.id}:`) : blocker === entry.id);
+export function uninstallDecidingBlocker(blockers: readonly string[]): string | null {
+  for (const entry of UNINSTALL_BLOCKERS) { const blocker = blockers.find(value => uninstallBlockerRow(value) === entry); if (blocker) return blocker; }
+  return blockers[0] ?? null;
+}
 /** The typed refusal of the plan's deciding blocker (UNINSTALL_BLOCKERS order) with the counts and next step its message names; null when the plan has none. */
 export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'work' | 'service' | 'purge' | 'installation'> & { readonly backup?: { readonly destination: string | null } }) {
-  const named = (entry: typeof UNINSTALL_BLOCKERS[number]) => plan.blockers.find(value => 'path' in entry ? value.startsWith(`${entry.id}:`) : value === entry.id), row = UNINSTALL_BLOCKERS.find(named);
+  const blocker = uninstallDecidingBlocker(plan.blockers), row = blocker ? uninstallBlockerRow(blocker) : undefined;
   if (!row) return plan.blockers.length ? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP') : null;
-  if ('path' in row) return ErrorRegistry.createError(row.code, { params: { path: named(row)!.slice(row.id.length + 1) } });
+  if ('path' in row) return ErrorRegistry.createError(row.code, { params: { path: blocker!.slice(row.id.length + 1) } });
   const work = plan.work, listed = 'lists' in row ? work.deliveries.map(item => [item.id, item.scopeId]) : work.uncertain.map(item => [`${item.kind} ${item.id}`, item.scopeId]);
   return ErrorRegistry.createError(row.code, { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)), approvals: String(plan.purge ? work.approvals.length : 0),
     workspaces: String(plan.purge ? work.workspaces ?? 0 : 0), count: String(listed.length), list: listed.slice(0, 5).map(([label]) => label).join(', '), owner: listed[0]?.[1] ?? '',

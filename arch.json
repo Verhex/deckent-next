@@ -567,7 +567,8 @@
         "src/engine/core/beuser-contract",
         "src/engine/core/beuser-realm",
         "src/engine/core/project-attachment",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/engine/core/uninstall"
       ],
       "plan": "FOUNDATION"
     },
@@ -1330,15 +1331,12 @@
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/approval-presentation",
-        "src/platform/core/redaction",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-picker",
         "src/platform/core/common",
-        "src/domain/core/agent-turn",
-        "src/engine/core/approval",
         "src/surfaces/core/monitor",
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
@@ -1347,7 +1345,8 @@
         "src/platform/core/errors",
         "src/surfaces/core/approval-presentation-ink",
         "src/surfaces/core/terminal-kit-ink",
-        "src/surfaces/core/terminal-render-ink"
+        "src/surfaces/core/terminal-render-ink",
+        "src/surfaces/core/terminal-approval"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1480,7 +1479,8 @@
         "src/surfaces/core/cli-kit",
         "src/platform/core/config-fields",
         "src/surfaces/core/cli-admin",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/engine/core/uninstall"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1667,14 +1667,11 @@
         "src/domain/core/recovery",
         "src/engine/core/nervous",
         "src/domain/core/effect",
-        "src/engine/core/runtime",
-        "src/engine/core/effect",
-        "src/engine/core/approval",
-        "src/domain/core/attempt",
         "src/engine/core/bootstrap-identity",
         "src/engine/core/system-policy-rows",
         "src/capabilities/core/native-agent-execution",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/engine/core/uninstall"
       ],
       "plan": "INSTALLATION"
     },
@@ -1744,7 +1741,8 @@
         "src/composition/core/backup",
         "src/engine/core/authentication",
         "src/engine/core/provider-catalog",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/engine/core/uninstall"
       ],
       "plan": "INSTALLATION"
     },
@@ -4859,7 +4857,6 @@
         "src/platform/core/errors",
         "src/platform/core/integrity",
         "src/platform/core/config",
-        "src/engine/core/installation",
         "src/domain/core/principal",
         "src/platform/core/host",
         "src/adapters/core/backup-store",
@@ -4881,7 +4878,8 @@
         "src/domain/core/effect",
         "src/platform/core/validate",
         "src/adapters/core/project-attachment",
-        "src/adapters/core/file-lock"
+        "src/adapters/core/file-lock",
+        "src/engine/core/uninstall"
       ],
       "plan": "INSTALLATION"
     },
@@ -5470,6 +5468,44 @@
         "src/platform/core/output"
       ],
       "plan": "SURFACES",
+      "ink": true
+    },
+    "src/engine/core/uninstall": {
+      "dependencies": [
+        "src/domain/core/principal",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/engine/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/policy",
+        "src/platform/core/utils",
+        "src/domain/core/effect",
+        "src/engine/core/runtime",
+        "src/engine/core/effect",
+        "src/engine/core/approval",
+        "src/domain/core/attempt"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/terminal-approval": {
+      "plan": "SURFACES",
+      "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/i18n",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-render-ink",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/approval-presentation-ink",
+        "src/platform/core/redaction",
+        "src/domain/core/agent-turn",
+        "src/engine/core/runs",
+        "src/surfaces/core/terminal-kit",
+        "src/platform/core/common",
+        "src/surfaces/core/terminal-ledger",
+        "src/engine/core/approval"
+      ],
       "ink": true
     }
   },

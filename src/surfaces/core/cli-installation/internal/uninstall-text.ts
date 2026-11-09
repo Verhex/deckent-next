@@ -1,3 +1,4 @@
+import { UNINSTALL_BLOCKERS, uninstallBlockerRow } from '#engine/index.js';
 import { t, terminalSafeText as safe, type Locale } from '#platform/index.js';
 import type { UninstallItem, UninstallPlan, UninstallResult, UninstallTier } from '#engine/index.js';
 import registry from './uninstall-groups.json' with { type: 'json' };
@@ -45,8 +46,8 @@ export function uninstallGroup(item: Pick<UninstallItem, 'resourceId'>): string 
 }
 /** One readable line per tier blocker: an authority path keeps its path; a resource blocker its reason. */
 export function uninstallBlockerText(blocker: string, locale: Locale): string {
-  const messages = uninstallMessages(locale), path = /^authority-(relocated|unsafe):(.+)$/su.exec(blocker), where = { path: safe(path?.[2] ?? '') };
-  if (path) return path[1] === 'relocated' ? t('cli.uninstall.blocker.authority-relocated', where, locale) : t('cli.uninstall.blocker.authority-unsafe', where, locale);
+  const messages = uninstallMessages(locale), row = uninstallBlockerRow(blocker);
+  if (row && 'path' in row && blocker.length > row.id.length + 1) return row.id === 'authority-relocated' ? t('cli.uninstall.blocker.authority-relocated', { path: safe(blocker.slice(row.id.length + 1)) }, locale) : t('cli.uninstall.blocker.authority-unsafe', { path: safe(blocker.slice(row.id.length + 1)) }, locale);
   const key = blocker.startsWith('policy:') ? 'blocker.policy' : `blocker.${blocker}`, reason = blocker.slice(blocker.lastIndexOf(':') + 1);
   return messages[key] ?? messages[`reason.${reason}`] ?? `${t('cli.uninstall.unknown', {}, locale)} (${safe(blocker)})`;
 }
@@ -106,7 +107,7 @@ export function uninstallDetailLines(plan: UninstallPlan, locale: Locale, verbos
 }
 /** A blocker the person can resolve on the next card (running or pending work, unknown results, an eligible unit), offered with its flag twin. */
 export const uninstallResolvable = (blocker: string | null | undefined, plan: UninstallPlan) => !!blocker
-  && (['work-active', 'work-pending', 'uncertain-effects', 'delivery-queued'].includes(blocker) || blocker === 'service-managed' && plan.service.unitDisable === 'eligible');
+  && UNINSTALL_BLOCKERS.some(row => row.id === blocker && 'resolve' in row && (row.resolve === 'force' || plan.service.unitDisable === 'eligible'));
 /** The menu's tiers: keep-data always (recommended), keep-work only with waiting work (running included, as the CLI's `--keep-work --force`)
  * that it treats differently from keep-data, all always; a tier
  * the same observation refuses for good carries its reason, shown under the card (a resolvable refusal stays selectable). */

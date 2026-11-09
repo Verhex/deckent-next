@@ -70,8 +70,8 @@ export interface UninstallPlan {
 /** KG11 F6, S5-e1: blocker → refusal in precedence order (authority paths, then alphabetical as plans sort); the first row a plan names decides.
  * `path` rows persist as `<id>:<path>`; any other blocker (`<resource>:<reason>`, `policy:<code>`) takes the fallback: purge backup coverage, else ownership. */
 export const UNINSTALL_BLOCKERS = [{ id: 'authority-relocated', code: 'UNINSTALL_AUTHORITY_UNVERIFIED', path: true }, { id: 'authority-unsafe', code: 'UNINSTALL_AUTHORITY_UNVERIFIED', path: true },
-  { id: 'archive-limit', code: 'UNINSTALL_BACKUP_COVERAGE' }, { id: 'backup-destination', code: 'UNINSTALL_RECOVERY_LOCATION' }, { id: 'delivery-queued', code: 'UNINSTALL_DELIVERY_QUEUED', lists: 'deliveries' }, { id: 'service-managed', code: 'UNINSTALL_SERVICE_RUNNING' },
-  { id: 'uncertain-effects', code: 'UNINSTALL_UNCERTAIN_EFFECTS' }, { id: 'uncertain-managed', code: 'UNINSTALL_UNCERTAIN_MANAGED' }, { id: 'work-active', code: 'UNINSTALL_WORK_ACTIVE' }, { id: 'work-pending', code: 'UNINSTALL_WORK_ACTIVE' }, { id: 'work-unverified', code: 'UNINSTALL_SCOPE_UNVERIFIED' }] as const;
+  { id: 'archive-limit', code: 'UNINSTALL_BACKUP_COVERAGE' }, { id: 'backup-destination', code: 'UNINSTALL_RECOVERY_LOCATION' }, { id: 'delivery-queued', code: 'UNINSTALL_DELIVERY_QUEUED', lists: 'deliveries', resolve: 'force' }, { id: 'service-managed', code: 'UNINSTALL_SERVICE_RUNNING', resolve: 'disable-unit' },
+  { id: 'uncertain-effects', resolve: 'force', code: 'UNINSTALL_UNCERTAIN_EFFECTS' }, { id: 'uncertain-managed', code: 'UNINSTALL_UNCERTAIN_MANAGED' }, { id: 'work-active', resolve: 'force', code: 'UNINSTALL_WORK_ACTIVE' }, { id: 'work-pending', resolve: 'force', code: 'UNINSTALL_WORK_ACTIVE' }, { id: 'work-unverified', code: 'UNINSTALL_SCOPE_UNVERIFIED' }] as const;
 export type UninstallBlocker = Exclude<typeof UNINSTALL_BLOCKERS[number], { path: true }>['id'] | `${Extract<typeof UNINSTALL_BLOCKERS[number], { path: true }>['id']}:${string}`;
 export interface UninstallResult {
   readonly schemaVersion: 2; readonly planDigest: string;
