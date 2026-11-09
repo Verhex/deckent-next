@@ -1,5 +1,5 @@
-import { criterionWithin } from '#capabilities/index.js';
-import type { ArtifactStore } from '#capabilities/index.js';
+import { criterionWithin, type ArtifactStore } from '#capabilities/index.js';
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { candidateEvidenceSchema, CandidateBindingError, type TargetQueueRecord, type VerifiedPrincipal } from '#domain/index.js';
 import { PrivateCandidateRunAdmission, type PrivateCandidateWorkspace, type RunAdmissionApplication, type RunStore } from '#engine/core/runs/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
@@ -29,7 +29,7 @@ interface QueuePreparationPorts {
 }
 export function createWorkspaceQueuePreparation(c: QueuePreparationContext, store: IntegrationStore & Pick<RunStore, 'loadRun'> & AdoptionVerificationStore,
   patches: WorkspacePatchApplication, ports: QueuePreparationPorts): TargetQueuePreparation {
-  const verifier = { async verify() { return c.principal; } };
+  const verifier = verifiedPrincipal(c.principal);
   const expected = async (record: TargetQueueRecord) => {
     const original = await store.loadRun(record.request.identity.scopeId, record.request.identity.runId);
     if (!original || !c.registry) throw new CandidateBindingError('CANDIDATE_MISMATCH');

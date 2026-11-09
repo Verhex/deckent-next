@@ -2263,6 +2263,7 @@
     },
     "src/composition/core/provider-spend": {
       "dependencies": [
+        "src/engine/core/authentication",
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
         "src/engine/core/policy",
@@ -2433,6 +2434,7 @@
     },
     "src/composition/core/workspace-patch": {
       "dependencies": [
+        "src/engine/core/authentication",
         "src/engine/core/workspaces",
         "src/domain/core/attempt",
         "src/platform/core/config",

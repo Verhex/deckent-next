@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { isCodedError, isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition,
-  type VerifiedPrincipal, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest, type TaskGraph } from '#domain/index.js';
+import { isCodedError, isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition, type VerifiedPrincipal, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest, type TaskGraph } from '#domain/index.js';
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 import type { QueueReattemptView, TargetQueueApplication } from '#engine/core/effect/index.js';
 import type { RunAdmission, RunStore } from '#engine/core/runs/index.js';
@@ -107,7 +107,7 @@ export function stepWorkspaceQueueReattempt(c: WorkspaceReattemptContext, store:
     /** Retains the accepted Attempt's patch when evaluation did not (a kind without work input), like a human `patch-prepare`. */
     preparePatch(identity: AttemptIdentity): Promise<void> },
   record: TargetQueueRecord, act: boolean) {
-  const verifier = { async verify() { return c.principal; } }, maxBytes = c.config.artifacts.maxBytes;
+  const verifier = verifiedPrincipal(c.principal), maxBytes = c.config.artifacts.maxBytes;
   const integration = new WorkspaceIntegrationApplication(new WorkspacePatchApplication(store, c.artifacts, verifier, c.authorization, maxBytes, c.scopeMode),
     adapter.target, verifier, c.authorization, c.artifacts, maxBytes);
   return stepDeliveryReattempt({ bound: c.config.targetQueue.reattempts, policyRevision: c.document.revision, ttlMs: c.config.targetQueue.ttlMs, now: Date.now,

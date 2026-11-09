@@ -1,7 +1,7 @@
 import { ArtifactError } from '#capabilities/index.js';
 import { getConfigKnownSecrets, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteInventoryReader, selectWorkTarget } from '#adapters/index.js';
-import { DeliverySummaryApplication, RunPolicyAuthorization, queueTicketCommandIds, WorkspacePatchApplication, WorkspacePatchError, deliverySummaryRequestSchema, workspacePatchChangeFacts,
+import { verifiedPrincipal, DeliverySummaryApplication, RunPolicyAuthorization, queueTicketCommandIds, WorkspacePatchApplication, WorkspacePatchError, deliverySummaryRequestSchema, workspacePatchChangeFacts,
   type DeliverySummary, type DeliverySummaryRequest } from '#engine/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -24,7 +24,7 @@ export async function describeConfiguredDeliverySummaries(root: string, input: r
       const reader = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
       try {
         const attempts = contextDispatchAuthorization(c), artifacts = new FileArtifactStore({ root: await inspectProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });
-        const patches = new WorkspacePatchApplication(reader, artifacts, { async verify() { return c.principal; } }, attempts, c.config.artifacts.maxBytes, selectWorkTarget(c.config.execution)?.scope?.mode ?? 'warn');
+        const patches = new WorkspacePatchApplication(reader, artifacts, verifiedPrincipal(c.principal), attempts, c.config.artifacts.maxBytes, selectWorkTarget(c.config.execution)?.scope?.mode ?? 'warn');
         // REVISE 2734 R3: the same scope config snapshot's known secrets mask every card string (the shadow path already carries them).
         const app = new DeliverySummaryApplication({ store: reader, artifacts, runs: new RunPolicyAuthorization({ async load() { return c.document; } }), attempts, known: getConfigKnownSecrets(c.config),
           // No retained patch (or an unreadable one) is no change evidence; a policy refusal stays a refusal (the application shows it as withheld).

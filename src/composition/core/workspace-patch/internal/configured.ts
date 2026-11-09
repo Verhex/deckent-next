@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { executionTaskHiddenPaths, FileArtifactStore, GitWorkspaceBroker, GitWorkspacePatchSource, openSqliteInventoryReader, resolveGitWorkTarget, selectWorkTarget, validateExecutionSupervisorProfile, recordedTaskSupervisor, taskProfileObservesWorker, gitDockerAttemptCustody } from '#adapters/index.js';
-import { AttemptCustodyReleaseApplication, assertSameWorkSource, DispatchPolicyAuthorization, WorkspacePatchApplication, workTargetAttemptAuthorization, type ScopeAccess } from '#engine/index.js';
+import { verifiedPrincipal, AttemptCustodyReleaseApplication, assertSameWorkSource, DispatchPolicyAuthorization, WorkspacePatchApplication, workTargetAttemptAuthorization, type ScopeAccess } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -23,7 +23,7 @@ export async function workspacePatchContext(root: string, input: unknown, option
     const fingerprint = (sourceRoot: string) => new GitWorkspaceBroker({ ...execution.git, sourceRoot, workspaceRoot }).captureSourceBase().then(base => base.sourceFingerprint);
     await assertSameWorkSource(recorded, { now, project: resolve(root) }, fingerprint);
   };
-  return { ...context, identity, artifacts, authorization, policy, sameWorkSource, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
+  return { ...context, identity, artifacts, authorization, policy, sameWorkSource, verifier: verifiedPrincipal(principal), scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
 }
 async function preparePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions, release: boolean) {
   try {
