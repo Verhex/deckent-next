@@ -15,10 +15,12 @@ export const taskBriefSchema = z.strictObject({ schemaVersion: z.literal(1), tas
 export type TaskBrief = z.infer<typeof taskBriefSchema>;
 export const briefEvaluationSchema = z.strictObject({ verdict: z.enum(['accepted', 'accepted-unverified', 'rejected', 'unknown', 'pending']).nullable(),
   reason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional() }).readonly();
-const deliveryReceiptSchema = z.strictObject({ state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
-  commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional(),
-}).readonly();
-export const briefDeliverySchema = deliveryReceiptSchema.unwrap().extend({ receipts: z.array(deliveryReceiptSchema).readonly().optional() }).strict().readonly();
+const deliveryReceiptFields = { state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
+  commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional() };
+const deliveryModes = { schemaVersion: z.literal(2), application: z.enum(['working-tree', 'reference-only']) }; // Expand only; writers keep alpha.63.3's shape.
+const deliveryReceipts = [z.strictObject(deliveryReceiptFields), z.strictObject({ ...deliveryReceiptFields, ...deliveryModes })] as const;
+const history = { receipts: z.array(z.union(deliveryReceipts).readonly()).readonly().optional() };
+export const briefDeliverySchema = z.union([deliveryReceipts[0].extend(history), deliveryReceipts[1].extend(history)]).readonly();
 /** Failed tests of a failed verification attempt, read from its retained output under the read-output decision: the true count and the first names only. */
 export const briefFailedTestsSchema = z.strictObject({ count: persistedInteger().nonnegative(), names: z.array(text).readonly(), truncated: z.boolean() }).readonly();
 /** What a terminal accepted Run still owes its delivery when no integration/delivery/adoption receipt exists: no patch needed, a patch that was never prepared, or a prepared patch awaiting delivery. */
@@ -33,10 +35,8 @@ export const resultBriefSchema = z.strictObject({ schemaVersion: z.literal(1), a
 }).readonly();
 export type ResultBrief = z.infer<typeof resultBriefSchema>;
 export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
-  const definition = run.graph.tasks.find(task => task.id === taskId)!;
-  const input = definition.workInput, profile = run.execution.tasks.find(task => task.taskId === taskId)?.profile;
-  const parameters = profile?.parameters as { nativeSubscription?: { promptDelivery?: { schemaVersion?: number; segments?: unknown[] } } } | undefined;
-  const delivery = parameters?.nativeSubscription?.promptDelivery;
+  const definition = run.graph.tasks.find(task => task.id === taskId)!, input = definition.workInput, profile = run.execution.tasks.find(task => task.taskId === taskId)?.profile;
+  const delivery = (profile?.parameters as { nativeSubscription?: { promptDelivery?: { schemaVersion?: number; segments?: unknown[] } } } | undefined)?.nativeSubscription?.promptDelivery;
   const refs = delivery?.schemaVersion === 1 && Array.isArray(delivery.segments) ? delivery.segments.flatMap(segment => {
     const part = z.looseObject({ kind: z.literal('context'), ...contextRefSchema.unwrap().shape }).safeParse(segment);
     return part.success ? [{ id: safe(part.data.id), version: part.data.version, sha256: part.data.sha256 }] : [];

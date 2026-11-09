@@ -5,7 +5,7 @@ import type { RunSnapshot } from '#domain/index.js';
 import type { EffectConfirmation } from '#engine/core/effect/index.js';
 import { unconfirmedEffect } from './confirmation-default.js';
 import type { IntegrationCommitMetadata } from './commit-metadata.js';
-import { deliverySummary } from './effect-summary.js';
+import { deliverySummary, patchChangeDigests } from './effect-summary.js';
 import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot, type TrustedClock } from '#platform/index.js';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
@@ -85,7 +85,7 @@ export class WorkspaceDeliveryApplication {
       commandId: command.commandId, actor, resource: plan.ref,
       from: plan.schemaVersion === 2 ? plan.effectiveBaseCommit : plan.baseCommit, to: plan.commit,
       runId: command.identity.runId, taskId: command.identity.taskId, ...summary,
-      ...(files ? { changes: preview.patch.changes.map(change => ({ path: change.path, before: change.before?.digest ?? null, after: change.after?.digest ?? null })) } : {}) });
+      ...(files ? { changes: patchChangeDigests(preview.patch, 'forward') } : {}) });
     await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock); await confirm();
     const intent = integrationDeliveryIntentSchema.parse({ schemaVersion: 1, command, manifest: inspected.receipt, patch: preview.receipt, plan, actor });
     const claimed = await this.store.claimDelivery(intent);
