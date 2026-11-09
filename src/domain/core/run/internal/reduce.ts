@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { validateTaskGraph, inspectTaskReadiness, type TaskProgress } from '#domain/core/task-graph/index.js';
-import { checkedRun, runIdentitySchema, runSnapshotSchema, RunError } from './contract.js';
+import { checkedRun, runIdentitySchema, runSnapshotSchema, RunError, RUN_LIVE_PHASES } from './contract.js';
 export function createRun(identityInput: unknown, graphInput: unknown, nowInput: unknown, execution: unknown, branch?: unknown) {
   const identity = runIdentitySchema.parse(identityInput); const graph = validateTaskGraph(graphInput); counterSchema.parse(nowInput);
   return runSnapshotSchema.parse({ schemaVersion: 4, state: { kind: 'running' }, identity, revision: 0, graph, execution, ...(branch === undefined ? {} : { branch }), cancelRequested: false, bindings: [],
@@ -53,7 +53,7 @@ export function projectRunAttempt(input: unknown, expectedRevision: number, atte
   if ((binding.observedKind === 'exited' || binding.observedKind === 'cancelled' || closesAttemptWithoutExit(binding.observedKind)) && observation.result.kind !== binding.observedKind) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const progress = run.progress.map(task => {
     if (task.taskId !== attempt.identity.taskId) return task;
-    if (!['active', 'evaluating', 'reconciling'].includes(task.phase)) throw new RunError('RUN_ATTEMPT_CONFLICT');
+    if (!RUN_LIVE_PHASES.has(task.phase)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     const closing = closesAttemptWithoutExit(observation.result.kind);
     // Pre-launch refusals follow no observation. Unknown or unresolved effects never close here.
     if (closing && (task.phase !== 'active' || task.unresolvedEffects || binding.observedKind !== null)) throw new RunError('RUN_ATTEMPT_CONFLICT');

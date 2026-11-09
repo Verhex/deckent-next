@@ -5284,12 +5284,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42191,
+      "adapters": 42187,
       "surfaces": 45000,
       "composition": 13704
     },
     "totalSrcLines": 200000,
-    "testCases": 8199,
+    "testCases": 8201,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

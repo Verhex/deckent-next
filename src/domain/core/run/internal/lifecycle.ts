@@ -1,7 +1,7 @@
 import { resetRunQuota, askRunQuota } from './quota.js';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { inspectTaskReadiness, blockingDependencyIds, type TaskProgress } from '#domain/core/task-graph/index.js';
-import { checkedRun, runSnapshotSchema, RunError, type RunHoldSource, type RunSnapshot } from './contract.js';
+import { checkedRun, hasLiveWork, parseRun, runSnapshotSchema, RunError, RUN_PARKS, type RunHoldSource, type RunSnapshot } from './contract.js';
 import { heldRunState, readRunHold, runHoldOverlay } from './hold.js';
 export type RunLifecycleTiming = Readonly<{ now: number; timeoutMs: number }>;
 export type TaskDecisionReason = 'evaluation-unknown' | 'evaluation-not-ready';
@@ -11,7 +11,7 @@ function deadlineAt(now: number, timeoutMs: number) {
 }
 /** One pure owner of dependency closure and park/terminal classification. Never settles uncertain effects. */
 export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: number): RunSnapshot {
-  const run = runSnapshotSchema.parse(input); deadlineAt(now, timeoutMs);
+  const run = parseRun(input); deadlineAt(now, timeoutMs);
   if (run.state.kind === 'terminal') return run;
   const progress = new Map(run.progress.map(task => [task.taskId, task]));
   let changed: boolean;
@@ -30,7 +30,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
   const readiness = inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now, progress: tasks });
   let state: RunSnapshot['state'];
   if (tasks.every(task => task.phase === 'accepted')) state = { kind: 'terminal', outcome: 'completed', reason: 'completed' };
-  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready'].includes(run.state.reason)) state = run.state;
+  else if (!run.cancelRequested && run.state.kind === 'parked' && RUN_PARKS.kept.has(run.state.reason)) state = run.state;
   else if (!run.cancelRequested && run.bindings.some(row => row.observedKind === 'quota-exhausted' && tasks.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'))) {
     const waits = (run.quotaWaits ?? []).filter(wait => run.bindings.some(row => row.identity.attemptId === wait.identity.attemptId));
     state = { kind: 'parked', reason: 'quota-exhausted', since: Math.min(...waits.map(wait => wait.since)), deadline: Math.max(...waits.map(wait => wait.deadline)) };
@@ -39,7 +39,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
     const decision = tasks.find(task => task.decision?.reason === 'needs-input')!.decision!;
     state = { kind: 'parked', reason: 'needs-input', since: decision.since, deadline: decision.deadline };
   }
-  else if (tasks.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase)) || readiness.some(task => ['ready', 'delayed'].includes(task.disposition))) state = { kind: 'running' };
+  else if (tasks.some(hasLiveWork) || readiness.some(task => ['ready', 'delayed'].includes(task.disposition))) state = { kind: 'running' };
   else if (run.cancelRequested && !tasks.some(task => task.phase === 'awaiting-decision')) state = { kind: 'terminal', outcome: tasks.some(task => task.phase === 'accepted') ? 'incomplete' : 'cancelled', reason: 'cancelled' };
   else {
     const waiting = tasks.find(task => task.phase === 'awaiting-decision');
@@ -65,12 +65,12 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   if (ask) return ask;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
-    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending' && !task.unresolvedEffects) return { ...task, phase: 'cancelled' as const };
+    if (run.state.kind === 'parked' && RUN_PARKS.deadline.has(run.state.reason) && run.state.deadline <= now && task.phase === 'pending' && !task.unresolvedEffects) return { ...task, phase: 'cancelled' as const };
     if (!task.decision || (task.decision.deadline > now && !(run.state.kind === 'parked' && run.state.deadline <= now))) return task;
     return { ...task, decision: undefined, phase: 'failed' as const };
   });
-  const dueHold = run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now;
-  const live = progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase));
+  const dueHold = run.state.kind === 'parked' && RUN_PARKS.due.has(run.state.reason) && run.state.deadline <= now;
+  const live = progress.some(hasLiveWork);
   let next = reconcileRunLifecycle({ ...run, progress, ...(dueHold && !live ? { state: { kind: 'running' } } : {}) }, now, timeoutMs);
   if ((run.state.kind === 'parked' && run.state.deadline <= now) || (expired && next.state.kind === 'parked')) {
     // A Run with live work or uncertain effects remains under execution/reconciliation custody.
@@ -82,7 +82,7 @@ export const expireParkedRun = advanceRunLifecycle;
 export function closeParkedRun(input: unknown, expectedRevision: number, now: number, timeoutMs: number): RunSnapshot {
   const run = checkedRun(input, expectedRevision); counterSchema.parse(now);
   if (run.state.kind !== 'parked') throw new RunError('RUN_NOT_PARKED');
-  if (run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))) throw new RunError('RUN_DECISION_NOT_READY');
+  if (run.progress.some(hasLiveWork)) throw new RunError('RUN_DECISION_NOT_READY');
   const progress = run.progress.map(task => {
     if (task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
     if (task.phase !== 'awaiting-decision') return task;
@@ -98,7 +98,7 @@ export function resumeParkedRun(input: unknown, expectedRevision: number, now: n
     const state = { ...run.state }; delete state.operatorHold;
     return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state });
   }
-  if (['operator-hold', 'progression-failed'].includes(run.state.reason) && run.state.deadline > now) {
+  if (RUN_PARKS.resume.has(run.state.reason) && run.state.deadline > now) {
     return reconcileRunLifecycle({ ...run, revision: run.revision + 1, state: { kind: 'running' } }, now, timeoutMs);
   }
   // PRE-7: the operator fixed the environment. The refused attempts move aside, so the next turn reserves a NEW generation whose preflight runs again.

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, runSnapshotSchema,
+import { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, runSnapshotSchema, advanceRunLifecycle, closeParkedRun, RunError,
   createAttempt, applyAttemptObservation, inspectTaskReadiness } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'layout' };
@@ -75,4 +75,31 @@ it('records cancellation intent without inventing stopped workers or terminal ta
   const repaired = requestRunCancellation(legacyReconciling, reconciling.revision, { now: 100, timeoutMs: 1000 });
   expect(repaired.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
   expect(repaired.progress.slice(1).every(task => task.phase === 'cancelled')).toBe(true);
+});
+it('live work holds custody the same way in close, deadline and schema (S2-e2)', () => {
+  const single = { ...graph, tasks: [graph.tasks[0]!] }, created = createRun(identity, single, 0, fixtureExecution(single));
+  const observed: Record<string, string | null> = { active: null, evaluating: 'exited', reconciling: 'unknown', 'awaiting-decision': 'exited', failed: 'exited', cancelled: 'exited' };
+  const states = { 'non-sticky park': { kind: 'parked', reason: 'dependency-failed', since: 10, deadline: 110 }, 'sticky park': { kind: 'parked', reason: 'operator-hold', note: 'hold', since: 10, deadline: 110 },
+    terminal: { kind: 'terminal', outcome: 'failed', reason: 'operator-close' } };
+  const row = (phase: string, unresolvedEffects: boolean) => {
+    const task = { ...created.progress[0]!, phase, unresolvedEffects, ...phase === 'skipped' ? { skippedReason: 'dependency-failed' } : {}, ...phase === 'accepted' ? { acceptedEvidence: 'model-unverified' } : {},
+      ...phase === 'awaiting-decision' ? { decision: { reason: 'evaluation-unknown', since: 10, deadline: 110 } } : {} };
+    const bindings = phase in observed ? [{ identity: attemptIdentity, observedRevision: observed[phase] ? 1 : null, observedKind: observed[phase] }] : [];
+    const parsed = Object.entries(states).map(([name, state]) => [name, runSnapshotSchema.safeParse({ ...created, progress: [task], bindings, state })] as const);
+    const sticky = parsed[1]![1];
+    const effect = (step: (run: never) => { state: { kind: string } }) => { if (!sticky.success) return '-'; try { return step(sticky.data as never).state.kind; } catch (error) { return error instanceof RunError ? error.code : 'invalid'; } };
+    return [parsed.filter(([, result]) => result.success).map(([name]) => name).join('+') || 'none',
+      effect(run => closeParkedRun(run, 0, 20, 100)), effect(run => advanceRunLifecycle(run, 0, 110, 100)),
+      runSnapshotSchema.safeParse({ ...created, progress: [task], bindings: [], state: states['sticky park'] }).success ? 'unbound ok' : 'unbound refused'].join(' | ');
+  };
+  const table = Object.fromEntries(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision', 'accepted', 'failed', 'cancelled', 'skipped']
+    .flatMap(phase => [false, true].map(unresolved => [`${phase}${unresolved ? '+effects' : ''}`, row(phase, unresolved)])));
+  // Columns: states the schema accepts | close of the sticky park | its deadline | whether the phase may stand without a binding.
+  const held = 'sticky park | RUN_DECISION_NOT_READY | parked', settled = 'non-sticky park+sticky park+terminal | terminal | terminal | unbound ok', invalid = 'none | - | - | unbound refused';
+  expect(table).toEqual({ pending: 'non-sticky park+sticky park | terminal | terminal | unbound ok', 'pending+effects': `${held} | unbound ok`,
+    active: `${held} | unbound refused`, 'active+effects': `${held} | unbound refused`, evaluating: `${held} | unbound refused`, 'evaluating+effects': `${held} | unbound refused`,
+    reconciling: `${held} | unbound refused`, 'reconciling+effects': `${held} | unbound refused`,
+    'awaiting-decision': 'non-sticky park+sticky park | terminal | terminal | unbound refused', 'awaiting-decision+effects': 'none | - | - | unbound refused',
+    accepted: 'non-sticky park+sticky park | invalid | terminal | unbound ok', 'accepted+effects': invalid,
+    failed: settled, 'failed+effects': `${held} | unbound ok`, cancelled: settled, 'cancelled+effects': `${held} | unbound ok`, skipped: settled, 'skipped+effects': invalid });
 });

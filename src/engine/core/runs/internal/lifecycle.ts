@@ -2,7 +2,7 @@ import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerRunQuotaWrite, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
-  deciderClassSchema, isAiPrincipal, aiAuthorityFloor, readRunHold, safetyHoldSourceSchema, counterSchema, identitySchema, runSnapshotSchema, type AttemptIdentity, type VerifiedPrincipal,
+  deciderClassSchema, isAiPrincipal, aiAuthorityFloor, readRunHold, safetyHoldSourceSchema, counterSchema, identitySchema, parseRun, runSnapshotSchema, type AttemptIdentity, type VerifiedPrincipal,
   type TaskProgress, type RunSnapshot, type SafetyHoldSource, type RunQuotaAskPolicy } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
@@ -164,7 +164,7 @@ export class RunLifecycleApplication {
     const command = runSafetyHoldOnceSchema.parse(input);
     const prior = await this.store.loadRunReceipt?.(command.scopeId, command.commandId);
     if (prior) return prior;
-    const run = runSnapshotSchema.parse(await this.store.loadRun(command.scopeId, command.runId));
+    const run = parseRun(await this.store.loadRun(command.scopeId, command.runId));
     if (readRunHold(run.state)?.source === source) return null;
     return this.holdFrom(source, { ...command, expectedRevision: run.revision }, credential);
   }
@@ -174,7 +174,7 @@ export class RunLifecycleApplication {
     if (!this.decisions && isAiPrincipal(principal) && command.action !== 'hold' && command.action !== 'resume') throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     if (command.action === 'accept' || command.action === 'reject' || command.action === 'answer') {
       const replay = command.action === 'answer' ? await this.store.loadRunReceipt?.(command.scopeId, command.commandId) : null;
-      const run = runSnapshotSchema.parse(await this.store.loadRun(command.scopeId, command.runId));
+      const run = parseRun(await this.store.loadRun(command.scopeId, command.runId));
       const source = replay ? runSnapshotSchema.parse(replay.snapshot).progress.find(task => task.taskId === command.taskId)?.inputAnswer?.source
         : run.bindings.find(value => value.identity.taskId === command.taskId)?.identity;
       if (!source) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -182,8 +182,7 @@ export class RunLifecycleApplication {
     } else {
       await this.runAuthorization.authorize(command.action === 'close' || command.action === 'hold' ? 'cancel' : 'reserve', command, principal);
     }
-    const loaded = await this.store.loadRun(command.scopeId, command.runId);
-    const run = runSnapshotSchema.parse(loaded);
+    const run = parseRun(await this.store.loadRun(command.scopeId, command.runId));
     const receipt = await this.store.loadRunReceipt?.(command.scopeId, command.commandId);
     let replay: RunLifecycleWrite | undefined;
     if (receipt) { const payload = JSON.parse(receipt.command); delete payload.operation; replay = runLifecycleWriteSchema.parse(payload); }

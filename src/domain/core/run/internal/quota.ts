@@ -1,5 +1,5 @@
 import { attemptSnapshotSchema, type AttemptSnapshot } from '#domain/core/attempt/index.js';
-import { readWorkerModelPin } from '#domain/core/worker-event/index.js';
+import { readWorkerModelPin, QUOTA_RESET_EVIDENCE } from '#domain/core/worker-event/index.js';
 import { z } from 'zod';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
@@ -33,7 +33,7 @@ export function resetRunQuota(run: RunSnapshot, now: number): RunSnapshot | null
   const held = run.bindings.filter(row => row.observedKind === 'quota-exhausted');
   if (!held.length || run.cancelRequested || run.state.kind !== 'parked' || run.state.reason !== 'quota-exhausted' || run.state.operatorHold) return null;
   const waits = held.map(row => run.quotaWaits?.find(wait => wait.identity.attemptId === row.identity.attemptId));
-  if (waits.some(wait => !wait || wait.quota.source !== 'claude-rate-limit' || wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since || wait.deadline > now
+  if (waits.some(wait => !wait || !QUOTA_RESET_EVIDENCE[wait.quota.source] || wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since || wait.deadline > now
     || (run.quotaWaits ?? []).filter(prior => prior.identity.taskId === wait.identity.taskId).length > wait.maxResumes)) return null;
   return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state: { kind: 'running' },
     bindings: run.bindings.filter(row => !held.includes(row)), previousBindings: [...(run.previousBindings ?? []), ...held] });
@@ -92,7 +92,6 @@ export function answerRunQuota(input: unknown, expectedRevision: number, choice:
 /** The write fields of a person's quota answer (the choice and the configured bounds the application read), spread into the lifecycle write schema. */
 export const quotaAnswerFields = { quotaChoice: z.enum(['wait', 'next-candidate']).optional(), quotaWaitMs: counterSchema.positive().optional(), quotaMaxRewaits: counterSchema.optional() };
 type QuotaAnswerShape = Readonly<{ action: string; quotaChoice?: unknown; quotaWaitMs?: unknown; quotaMaxRewaits?: unknown }>;
-/** The three fields exist exactly on a `quota-answer` write. */
 export const quotaAnswerShapeInvalid = (write: QuotaAnswerShape) => (write.action === 'quota-answer') !== (write.quotaChoice !== undefined && write.quotaWaitMs !== undefined && write.quotaMaxRewaits !== undefined)
   || write.action !== 'quota-answer' && (write.quotaChoice !== undefined || write.quotaWaitMs !== undefined || write.quotaMaxRewaits !== undefined);
 /** The ledger transition of a quota answer: a person (never an AI actor, policy cell or forged decision class) chose; the bounds are the ones the application read. */

@@ -34,7 +34,7 @@ export class SqliteRunDispatch {
     const observed = observeRunAttempt(run, run.revision, attempt);
     // finishDispatch is the terminal write: a cancel-requested worker that has now exited settles to `cancelled` in the same transaction.
     const snapshot = (run.cancelRequested || attempt.cancelRequested) && attempt.lastObservation?.result.kind === 'exited'
-      ? settleBoundAttempt(observed, attempt, { dispatched: true, terminal: true }, timing).run : observed;
+      ? settleBoundAttempt(observed, attempt, 'exited', timing).run : observed;
     const written = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
       .run(snapshot.revision, JSON.stringify(snapshot), run.identity.scopeId, run.identity.runId, run.revision);
     if (written.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');

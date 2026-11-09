@@ -5,11 +5,8 @@ export class CodedError<C extends string = string> extends Error {
   declare readonly params?: Readonly<Record<string, unknown>>;
   constructor(readonly code: C, options: { readonly message?: string; readonly params?: Readonly<Record<string, unknown>>; readonly cause?: unknown } = {}) {
     super(options.message ?? code, options.cause === undefined ? undefined : { cause: options.cause });
-    this.name = new.target.name;
-    if (options.params !== undefined) this.params = options.params;
+    this.name = new.target.name; if (options.params !== undefined) this.params = options.params;
   }
-}
-Object.defineProperty(CodedError.prototype, CODED, { value: true });
+} Object.defineProperty(CodedError.prototype, CODED, { value: true });
 /** A floor decision reads a code only through this brand check; a plain `{ code }` (wire, foreign object) never passes. */
-export const isCodedError = <C extends string>(error: unknown, code: C): error is CodedError<C> =>
-  typeof error === 'object' && error !== null && (error as { [CODED]?: unknown })[CODED] === true && (error as { code?: unknown }).code === code;
+export const isCodedError = <C extends string>(error: unknown, code: C): error is CodedError<C> => typeof error === 'object' && error !== null && (error as { [CODED]?: unknown })[CODED] === true && (error as { code?: unknown }).code === code;

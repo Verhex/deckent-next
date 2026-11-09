@@ -4,7 +4,7 @@ import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/hand
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
 import { taskQuotaHoldSchema, runPoolObservationSchema } from './pool-observation.js';
-import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema, workerTaskParameters, taskAgentSealSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
+import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, safeParseRun, workerEffortSchema, workerTaskParameters, taskAgentSealSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
 import { RunStoreError } from './store.js';
 import { workerTreeExclusionSchema, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -42,7 +42,7 @@ export const runViewSchema = z.strictObject({
 export type RunView = z.infer<typeof runViewSchema>;
 export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = [],
   exclusions: readonly WorkerTreeExclusionRecord[] = []): RunView {
-  const parsed = runSnapshotSchema.safeParse(input);
+  const parsed = safeParseRun(input);
   if (!parsed.success) throw new RunStoreError('RUN_STORE_CORRUPT');
   const run = parsed.data; const progress = new Map(run.progress.map(task => [task.taskId, task]));
   return runViewSchema.parse({ schemaVersion: 3, runId: run.identity.runId, scopeId: run.identity.scopeId,

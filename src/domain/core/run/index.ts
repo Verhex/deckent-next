@@ -1,6 +1,7 @@
 export { parkRunQuota, resetRunQuota, releaseRunQuota, askRunQuota, answerRunQuota, QUOTA_ASK_OPEN, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerRunQuotaWrite } from './internal/quota.js';
 export type { RunQuotaWait, RunQuotaChoice, RunQuotaAskPolicy } from './internal/quota.js';
-export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES, RUN_HOLD_SOURCES, safetyHoldSourceSchema } from './internal/contract.js';
+export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES, RUN_HOLD_SOURCES, safetyHoldSourceSchema, checkedRun, loadedRunSchema, parseRun, safeParseRun,
+  RUN_LIVE_PHASES, RUN_BOUND_PHASES, RUN_OPEN_PHASES, RUN_PARKS, hasLiveWork } from './internal/contract.js';
 export type { RunHoldSource, SafetyHoldSource } from './internal/contract.js';
 export { readRunHold } from './internal/hold.js';
 export type { RunHold } from './internal/hold.js';
@@ -15,7 +16,8 @@ export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, 
 export { preventRunAttempt } from './internal/prevent.js';
 export { workspaceDeliveryState } from './internal/workspace-custody.js';
 export type { WorkspaceDeliveryState } from './internal/workspace-custody.js';
-export { settleCancelledRunAttempt } from './internal/settle.js';
+export { settleCancelledRunAttempt, classifyCancelledAttempt } from './internal/settle.js';
+export type { CancelledAttemptDispatch } from './internal/settle.js';
 export { executionRegistrySchema, executionProfileDefinitionSchema, evaluatorDefinitionSchema, encodeExecutionProfileDefinition } from './internal/registry.js';
 export type { ExecutionRegistry, ExecutionProfileDefinition, EvaluatorDefinition } from './internal/registry.js';
 export { runExecutionSnapshotSchema, taskStallPolicySchema } from './internal/registry.js';
