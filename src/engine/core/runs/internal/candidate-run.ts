@@ -1,6 +1,6 @@
 import { candidateBindingSchema, CandidateBindingError, encodeCommandProjection, type CandidateBinding, type AttemptIdentity } from '#domain/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type WorkspaceSource } from '#engine/core/workspaces/index.js';
-import { runAdmissionSchema, type RunAdmission, type RunAdmissionApplication } from '#engine/core/runs/index.js';
+import { runAdmissionSchema, type RunAdmission, type RunAdmissionApplication } from './admission.js';
 
 /** Service-only lookup of immutable candidate custody. A client never supplies a path, source binding or revision. */
 export interface PrivateCandidateStore { loadCandidate(scopeId: string, commandId: string): Promise<CandidateBinding | null> }

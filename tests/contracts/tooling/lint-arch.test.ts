@@ -224,6 +224,29 @@ describe('lint-arch tier contract', () => {
 });
 
 describe('lint-arch unit contract', () => {
+  it('rejects a unit importing its own public index while allowing internal imports and external consumers', async () => {
+    const root = await fixture({
+      'src/platform/core/example/index.ts': "export { value } from './internal/value.js'; export type { Value } from './internal/value.js';",
+      'src/platform/core/example/internal/value.ts': 'export const value = 1; export type Value = number;',
+      'src/platform/core/example/internal/use.ts': "import { value, type Value } from './value.js'; export const used: Value = value;",
+      'src/platform/core/consumer/index.ts': "export { value } from '#platform/core/example/index.js';",
+      'src/platform/index.ts': "export { value } from './core/example/index.js';",
+    }, true, true);
+    const allowed = await lint(root);
+    expect(allowed.code, allowed.out).toBe(0);
+    await writeFile(join(root, 'src/platform/core/example/internal/use.ts'), [
+      "import { value } from '#platform/core/example/index.js';",
+      "import type { Value } from '../index.js';",
+      "export { value as again } from '../index.js';",
+      "export const lazy = () => import('#platform/core/example/index.js');",
+      "export type Indirect = import('#platform/core/example/index.js').Value;",
+      'export const used: Value = value;',
+    ].join('\n'));
+    const rejected = await lint(root);
+    expect(rejected.code, rejected.out).toBe(1);
+    for (const line of [1, 2, 3, 4, 5]) expect(rejected.out).toContain(`[self-index] src/platform/core/example/internal/use.ts:${line}`);
+  });
+
   it('rejects dependency cycles from the observed graph', async () => {
     const root = await fixture({
       'src/platform/core/a/index.ts': "import { b } from '#platform/core/b/index.js'; export const a = b;",

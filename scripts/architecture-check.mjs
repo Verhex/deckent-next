@@ -292,6 +292,7 @@ for (const file of [...srcFiles, ...appFiles]) {
           const dstRank = tierRank.get(dst.tier);
           if (srcRank !== undefined && dstRank !== undefined && dstRank > srcRank) fail('tier-direction', `${rel(file)}:${imp.line}`, `${src.tier} may not import ${dst.tier} (order: ${tiers.order.join(' ← ')})`);
           const sameUnit = src.tier === dst.tier && src.unit === dst.unit && src.unit !== null;
+          if (sameUnit && targetRel === `${unitId(src)}/index.ts`) fail('self-index', `${rel(file)}:${imp.line}`, `a unit may not import its own public index.ts; import the internal module directly (got ${imp.spec})`);
           if (!sameUnit && !/^src\/[^/]+\/[^/]+\/[^/]+\/index\.ts$/.test(targetRel)) fail('unit-api', `${rel(file)}:${imp.line}`, `cross-unit import must target the unit index.ts (got ${imp.spec})`);
           if (!sameUnit && arch.imports?.enforce && !imp.aliased) fail('import-style', `${rel(file)}:${imp.line}`, `cross-unit import must use the ${arch.imports.aliasPrefix}<pkg>/<tier>/<unit>/index.js alias (got ${imp.spec})`);
         }
