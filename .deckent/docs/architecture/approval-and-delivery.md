@@ -238,7 +238,7 @@ document → config document. Reference resolution stays lock-free (before publi
 one). A v18 secret change
 whose known answer cannot fit the delivery budget is refused (`RUNTIME_SERVICE_RESPONSE_LIMIT`) before the policy decision, audit or write
 (Astra 2185 R6). Enterprise/custom backends
-(vaults, KMS) register through `registerSecretStoreBackend` before `registerProviderConfig()` seals the registry — no Core edit; `core.` is
+(vaults, KMS) register through `registerSecretStoreBackend` before `composeCore()` seals the registry (`sealExtensionRegistries`) — no Core edit; `core.` is
 reserved. Selection: config section `secrets.store`, installation (global) layer only (a project file carrying `secrets` is refused,
 `SECRETS_PROJECT_LAYER_FORBIDDEN`), absent by default so a healed/default-filled project file never carries one, never a `$DECK` reference,
 unknown id `SECRET_STORE_UNKNOWN` at load. An explicitly selected backend never falls back to the environment (owner S1: no silent

@@ -146,9 +146,6 @@
     "src/adapters/core/contract": {
       "dependencies": [
         "src/platform/core/utils",
-        "src/adapters/core/host-shell",
-        "src/adapters/core/http-conditional-effect",
-        "src/adapters/core/workspace-write",
         "src/domain/core/adapter-registry",
         "src/domain/core/effect",
         "src/domain/core/inference-serving",
@@ -161,9 +158,6 @@
         "src/engine/core/provider-spend",
         "src/platform/core/common",
         "src/platform/core/config",
-        "src/adapters/core/scratch-store",
-        "src/adapters/core/http-fetch",
-        "src/adapters/core/mcp-client",
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/engine/core/secret-store",
@@ -173,9 +167,26 @@
         "src/domain/core/decision",
         "src/domain/core/identity-profile",
         "src/engine/core/identity-profile",
-        "src/capabilities/core/run-planner"
+        "src/capabilities/core/run-planner",
+        "src/adapters/core/extension-registry"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/adapters/core/extension-registry": {
+      "dependencies": [
+        "src/domain/core/adapter-registry",
+        "src/domain/core/effect",
+        "src/engine/core/adapter-registry",
+        "src/engine/core/secret-store",
+        "src/adapters/core/http-conditional-effect",
+        "src/adapters/core/secret-store",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/host-shell",
+        "src/adapters/core/scratch-store",
+        "src/adapters/core/http-fetch",
+        "src/adapters/core/mcp-client"
+      ],
+      "plan": "SECURITY"
     },
     "src/adapters/core/docker-supervisor": {
       "dependencies": [
@@ -564,7 +575,8 @@
         "src/adapters/core/contract",
         "src/platform/core/config",
         "src/engine/core/approval",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/adapters/core/extension-registry"
       ],
       "plan": "FOUNDATION"
     },
@@ -5285,12 +5297,12 @@
       "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42186,
+      "adapters": 42199,
       "surfaces": 45000,
       "composition": 13704
     },
     "totalSrcLines": 200000,
-    "testCases": 8202,
+    "testCases": 8203,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
@@ -6380,21 +6392,25 @@
       ]
     },
     "publicExtensions": {
-      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A; EXT-SERVICE-ENTRY): an external package registers through deckent/extensions only, before the composition root seals the registries; lazy CLI and MCP runners reach only their listed unit indexes; an overlay fixture proves it with public imports only.",
+      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A; EXT-SERVICE-ENTRY): an external package registers through deckent/extensions only, before the composition root seals the registries; the entry reaches adapters only through the listed unit indexes (no adapters barrel) and the lazy CLI and MCP runners; an overlay fixture proves it with public imports only.",
       "entry": "src/extensions.ts",
       "sdkEntry": "src/index.ts",
       "packageExport": "./extensions",
       "packageImport": "./dist/extensions.js",
       "registrations": [
         "registerApprovalAssuranceProducer",
+        "registerEnvironmentProbeKind",
+        "registerMcpCapabilityGroup",
         "registerOperationAdapterModule",
+        "registerProviderSpendNoChargeCertification",
+        "registerProviderSpendPeriod",
         "registerSecretGrantStore",
         "registerSecretStoreBackend"
       ],
       "compositionOnly": [
         {
           "name": "registerProviderConfig",
-          "reason": "Closes and seals the registries; called only by the composition root (composeCore)."
+          "reason": "Registers Core's config sections; called only by the composition root (composeCore)."
         },
         {
           "name": "registerLedgerScopes",
@@ -6408,9 +6424,12 @@
         }
       ],
       "rootOnly": {
-        "registerProviderConfig": "src/composition/core/root"
+        "registerProviderConfig": "src/composition/core/root",
+        "sealExtensionRegistries": "src/composition/core/root"
       },
       "unitImports": [
+        "src/adapters/core/extension-registry",
+        "src/adapters/core/secret-store",
         "src/composition/core/cli",
         "src/composition/core/mcp"
       ],

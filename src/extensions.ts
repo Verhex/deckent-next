@@ -5,8 +5,8 @@
 // a no-charge certification lets settlement and startup recovery release a hold after a documented admission rejection at its own exact
 // endpoints only (add-only; it can never widen an existing vendor's certification). The SDK entry (`deckent`) exports no
 // registration function of these registries (lint-arch G-i). Inventory: tests/contracts/composition/extensions-entry.test.ts.
-export { registerOperationAdapterModule, registerSecretGrantStore, registerSecretStoreBackend } from '#adapters/index.js';
-export { createSecretHelperFactory, type SecretHelperOptions } from '#adapters/index.js';
+export { registerOperationAdapterModule, registerSecretGrantStore, registerSecretStoreBackend } from '#adapters/core/extension-registry/index.js';
+export { createSecretHelperFactory, type SecretHelperOptions } from '#adapters/core/secret-store/index.js';
 export { CORE_API_VERSION, RegistryError } from '#domain/index.js';
 export { registerApprovalAssuranceProducer, registerEnvironmentProbeKind, registerMcpCapabilityGroup, registerProviderSpendNoChargeCertification, registerProviderSpendPeriod } from '#engine/index.js';
 export type { EnvironmentProbe } from '#engine/index.js';
