@@ -1,5 +1,5 @@
 import { providerSpendAuditCommandInputSchema, type ProviderSpendAuditCommand } from '#domain/index.js';
-import { ProviderSpendAuditApplication, ProviderSpendAccountPolicyAuthorization, ProviderSpendError } from '#engine/index.js';
+import { ProviderSpendAuditApplication, ProviderSpendAccountPolicyAuthorization, ProviderSpendError, verifiedPrincipal } from '#engine/index.js';
 import { openSqliteProviderSpendAuditStore, openSqliteProviderSpendIntegrityReader, providerSpendAuditConfigSchema,
   type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -25,7 +25,7 @@ async function audit(input: ProviderSpendAuditCommand, maxResultBytes: number,
     const configured = providerSpendAuditConfigSchema.safeParse(context.config['provider_spend_audit']);
     if (!configured.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
     const { pageSize, maxReservations, timeoutMs } = configured.data;
-    return await new ProviderSpendAuditApplication({ async verify() { return context.principal; } },
+    return await new ProviderSpendAuditApplication(verifiedPrincipal(context.principal),
       new ProviderSpendAccountPolicyAuthorization(contextPolicySource(context)),
       async () => openSqliteProviderSpendAuditStore(await context.path(), context.config.storage.sqlite, 'forbid'),
       async () => openSqliteProviderSpendIntegrityReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),
