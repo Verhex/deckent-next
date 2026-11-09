@@ -47,6 +47,10 @@ import { verifyConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit }
 import { configuredSetup } from '#composition/core/setup/index.js';
 import { assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
 
+/** A host handler's failure leaves as a typed query failure: its registered code, never the raw cause. */
+const typed = <T>(work: Promise<T>): Promise<T> => work.catch((error: unknown) => { throw queryFailure(error); });
+const installationProfile = (path: string) => readInstallationProfileFile(path, getConfigFieldDefault('installation').profileMaxBytes);
+
 /** The call's settings the light entry resolved before any host module loaded. */
 export type CliHostBase = { readonly root: string; readonly locale: Locale; readonly signal: AbortSignal } & Pick<NonNullable<Parameters<typeof runCli>[1]>, 'agentEnvironment'>;
 
@@ -61,10 +65,11 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
   // PV: the person at this terminal for a CLI subscription sign-in: its TTY witness and none of the installation's AI-agent or CI markers.
   const person = (options: { env?: NodeJS.ProcessEnv }) => headlessPersonWitness(options.env ?? process.env, base.agentEnvironment ?? getConfigFieldDefault('cli').agentEnvironment);
   const host: Parameters<typeof runCli>[1] & object = { ...base, initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
-    walkBeuser: async (...args) => (await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args).catch(error => { throw queryFailure(error); }),
-    readBeuserReport: async (...args) => (await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args),
-    setupBeuser: async (...args) => (await import('#composition/core/beuser/index.js')).setupConfiguredBeuser(...args).catch(error => { throw queryFailure(error); }),
-    inspectBeuserMonitor: async options => (await import('#composition/core/beuser/index.js')).inspectConfiguredBeuserMonitor(options).catch(error => { throw queryFailure(error); }),
+    walkBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args)),
+    readBeuserReport: async (...args) => typed((await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args)),
+    setupBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).setupConfiguredBeuser(...args)),
+    inspectBeuserMonitor: async options => typed((await import('#composition/core/beuser/index.js')).inspectConfiguredBeuserMonitor(options)),
+    // Unmapped on purpose: it reads only the shipped journey files, so a failure is a broken package and stays a crash report.
     listBeuserJourneys: async () => (await import('#composition/core/beuser/index.js')).listConfiguredBeuserJourneys(),
     verifyAudit: verifyConfiguredAudit, listAudit: listConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
@@ -103,7 +108,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
-    ensureTerminalIdentity: (projectRoot, scopeId, options) => ensureConfiguredTerminalIdentity(projectRoot, scopeId, options).catch(error => { throw queryFailure(error); }),
+    ensureTerminalIdentity: (projectRoot, scopeId, options) => typed(ensureConfiguredTerminalIdentity(projectRoot, scopeId, options)),
     resolveInstallationIdentity: resolveConfiguredInstallationIdentity, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
     stopRuntimeService: (projectRoot, options, reason) => stopConfiguredRuntimeService(projectRoot, options, reason), inspectBackupSets: inspectConfiguredBackupSets, inspectAdminPaths: inspectConfiguredAdminPaths,
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
@@ -140,15 +145,15 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
         displayName: (model as { displayName?: string }).displayName ?? model.nativeId, priced: providerConnectModelPriced(kind, model.nativeId) }))); } },
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     // PRE-8 v2: the inventory, grants, project-vault changes and the handover run in this process at the person's witnessed terminal (no protocol op).
-    inspectSecretInventory: (projectRoot, input, options) => inspectConfiguredSecretInventory(projectRoot, input.scopeId, input.all, options).catch(error => { throw queryFailure(error); }),
-    changeSecretGrant: (projectRoot, input, options) => changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options).catch(error => { throw queryFailure(error); }),
-    setProjectSecret: (projectRoot, input, options) => setProjectSecret(projectRoot, input.scopeId, input.name, input.value, options).catch(error => { throw queryFailure(error); }),
-    handOverSecrets: (projectRoot, input, options) => handOverProjectSecrets(projectRoot, input.scopeId, options).catch(error => { throw queryFailure(error); }),
+    inspectSecretInventory: (projectRoot, input, options) => typed(inspectConfiguredSecretInventory(projectRoot, input.scopeId, input.all, options)),
+    changeSecretGrant: (projectRoot, input, options) => typed(changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options)),
+    setProjectSecret: (projectRoot, input, options) => typed(setProjectSecret(projectRoot, input.scopeId, input.name, input.value, options)),
+    handOverSecrets: (projectRoot, input, options) => typed(handOverProjectSecrets(projectRoot, input.scopeId, options)),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
     // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
-    inspectWorkerInstructions: (projectRoot, options) => inspectConfiguredWorkerInstructions(projectRoot, options).catch(error => { throw queryFailure(error); }),
-    changeWorkerInstructionTrust: (projectRoot, input, options) => changeConfiguredWorkerInstructionTrust(projectRoot, input, options).catch(error => { throw queryFailure(error); }),
+    inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
+    changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
@@ -158,13 +163,13 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
     // PRE-8 first-use card (lead fan-in): the card is UX; the grant is the governed `secret grant` (secret/set cell, terminal witness, sealed decision).
     secretGrantCard: { offer: terminalSecretGrantOffer, grant: (root, scopeId, name, opts) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts).then(() => {}),
-      check: (root, scopeId, name, opts) => assertConfiguredProjectCredential(root, scopeId, name, opts).catch(error => { throw queryFailure(error); }) },
+      check: (root, scopeId, name, opts) => typed(assertConfiguredProjectCredential(root, scopeId, name, opts)) },
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady, toolClass: builtinAgentToolClass,
         // v30: Ctrl+Enter's line for the running turn (owner S5) and the typed MCP notices in this terminal's language (tema L6).
         steerChatTurn: steerRuntimeChatTurn, describeNotice: notice => renderMcpStartNotice(notice, locale),
         // PRE-8 v2: the provider credential decision before the turn binds (no value read); SECRET_GRANT_REQUIRED opens the first-use card.
-        credential: (root, opts, reference, scope) => assertConfiguredTerminalCredential(root, reference, scope, opts).catch(error => { throw queryFailure(error); }),
+        credential: (root, opts, reference, scope) => typed(assertConfiguredTerminalCredential(root, reference, scope, opts)),
         settledUsage: async (root, command, round, options) => {
           const reference = command.reference ?? (await describeTerminalChat(root, options)).reference;
           return settledProviderCacheUsage((reference ? await inspectConfiguredModelInvocationCommand(root, { schemaVersion: 1, scopeId: command.scopeId,
@@ -186,51 +191,35 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectSiwcConnections: inspectConfiguredSiwcConnections,
     inspectBrainModels: inspectConfiguredBrainModels, // R9b: /model marks the Brain's models
     inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, person(options)), assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
-    /* T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state. */ planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
+    planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels, inspectSubscriptionReadiness: inspectConfiguredNativeChat, // R8e: the seal a guarded turn wrote
     planProfileProtocol: planConfiguredProfileProtocol, openProviderWorkspaces: openConfiguredProviderWorkspaces,
+    // T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state.
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),
     releaseQuota: releaseConfiguredQuota, applyPoolCapacity: applyConfiguredPoolCapacity, inspectPoolCapacity: inspectConfiguredPoolCapacity, applyRunLifecycle: applyConfiguredRunLifecycle, applyPoolHold: applyConfiguredPoolHold, inspectPoolHold: inspectConfiguredPoolHold, // K5 typed pool hold (local, ledger-read by the service)
-    previewUninstall: (root, query, options) => previewConfiguredUninstall(root, query, options).catch(error => { throw queryFailure(error); }),
-    applyUninstall: (root, input, interaction, options, signal) => applyConfiguredUninstall(root, input, interaction, options, signal).catch(error => { throw queryFailure(error); }),
-    previewInstallation: async (projectRoot, input) => {
-      try { return await previewSuppliedInstallation(projectRoot,
-        await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
-        { allowShutdown: input.allowShutdown }); }
-      catch (error) { throw queryFailure(error); }
-    },
-    inspectInstallation: async (projectRoot, input) => {
-      try { return await inspectSuppliedInstallation(projectRoot,
-        await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
-        { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable }); }
-      catch (error) { throw queryFailure(error); }
-    },
-    applyInstallation: async (projectRoot, input) => {
-      try { return await applySuppliedInstallation(projectRoot,
-        await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
-        { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable,
-          proposalDigest: input.proposalDigest, acceptCustom: input.acceptCustom }); }
-      catch (error) { throw queryFailure(error); }
-    },
-    resumeInstallation: async (projectRoot, input) => {
-      try { return await resumeInstallation(projectRoot, input); }
-      catch (error) { throw queryFailure(error); }
-    },
-    projectAttachment: (root, input, options) => executeConfiguredProjectAttachment(root, input, options).catch(error => { throw queryFailure(error); }),
-    previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
-    applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
+    previewUninstall: (root, query, options) => typed(previewConfiguredUninstall(root, query, options)),
+    applyUninstall: (root, input, interaction, options, signal) => typed(applyConfiguredUninstall(root, input, interaction, options, signal)),
+    previewInstallation: (projectRoot, input) => typed(installationProfile(input.profilePath).then(profile => previewSuppliedInstallation(projectRoot, profile,
+      { allowShutdown: input.allowShutdown }))),
+    inspectInstallation: (projectRoot, input) => typed(installationProfile(input.profilePath).then(profile => inspectSuppliedInstallation(projectRoot, profile,
+      { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable }))),
+    applyInstallation: (projectRoot, input) => typed(installationProfile(input.profilePath).then(profile => applySuppliedInstallation(projectRoot, profile,
+      { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable, proposalDigest: input.proposalDigest, acceptCustom: input.acceptCustom }))),
+    resumeInstallation: (projectRoot, input) => typed(resumeInstallation(projectRoot, input)),
+    projectAttachment: (root, input, options) => typed(executeConfiguredProjectAttachment(root, input, options)),
+    previewPolicyTemplateInstallation: (projectRoot, scopeId) => typed(previewPolicyTemplateInstallation(projectRoot, scopeId)),
+    applyPolicyTemplateInstallation: (projectRoot, scopeId) => typed(applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId)),
     openOwnerBaselineInstallation: (projectRoot, scopeId, input) => openOwnerBaselineInstallation(projectRoot, scopeId, input),
     openPermissionModesInstallation: (projectRoot, scopeId, input) => openPermissionModesInstallation(projectRoot, scopeId, input),
-    upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)
-      .catch(error => { throw queryFailure(error); }),
-    installConfiguredExecutionPool: (projectRoot, scopeId, apply) => installConfiguredExecutionPool(projectRoot, scopeId, apply).catch(error => { throw queryFailure(error); }),
+    upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => typed(upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)),
+    installConfiguredExecutionPool: (projectRoot, scopeId, apply) => typed(installConfiguredExecutionPool(projectRoot, scopeId, apply)),
     inspectOwnerBaseline: inspectOwnerBaselineInstallation,
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options), inspectAnchoredPolicyTemplate,
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
     inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
-    upgradePolicyTemplate: (root, scopeId, input, options) => configuredPolicyTemplateUpgrade(root, scopeId, options, input).catch(error => { throw queryFailure(error); }),
+    upgradePolicyTemplate: (root, scopeId, input, options) => typed(configuredPolicyTemplateUpgrade(root, scopeId, options, input)),
     delegations: { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation },
     // alpha.56: lost-worker recovery cards, in this process at the person's witnessed terminal (no protocol op); the rollout read for doctor too.
     inspectRecoveryRollout: inspectConfiguredRecoveryRollout, recovery: { inspectRollout: inspectConfiguredRecoveryRollout, inspectPolicy: inspectConfiguredRecoveryPolicy,

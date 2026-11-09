@@ -5222,7 +5222,7 @@
       "engine": 60000,
       "adapters": 42388,
       "surfaces": 45000,
-      "composition": 13558
+      "composition": 13547
     },
     "totalSrcLines": 200000,
     "testCases": 8220,
@@ -6308,7 +6308,7 @@
       ]
     },
     "cliBootstrap": {
-      "note": "P5a (owner 2026-10-31): the deckent bin and runtime service entry enable Node's compile cache before the CLI graph loads, so it may import the platform state-root unit (node: built-ins and the common unit's registry JSON) instead of the platform barrel; startup-graph pins its static reach.",
+      "note": "P5a (owner 2026-10-31): the deckent bin and runtime service entry enable Node's compile cache before the CLI graph loads, so it may import the platform state-root unit (node: built-ins and the common unit's registry JSON) instead of the platform barrel; compile-cache.test.ts pins its static reach.",
       "entry": "src/composition/core/cli/internal/entry.ts",
       "unitImports": [
         "src/platform/core/state-root"
