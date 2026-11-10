@@ -4,5 +4,10 @@
   "guideAfter": "core:model",
   "observationOnly": ["coding:hosts"],
   "firstTask": "onboarding:first-task",
-  "cardInputGuardMs": 500
+  "cardInputGuardMs": 500,
+  "cliGuidance": [
+    { "id": "claude", "installPage": "https://code.claude.com/docs/en/quickstart", "signIn": "claude auth login" },
+    { "id": "codex", "installPage": "https://developers.openai.com/codex/cli/", "signIn": "codex login" },
+    { "id": "cursor", "installPage": "https://cursor.com/docs/cli/installation", "signIn": "agent login" }
+  ]
 }
