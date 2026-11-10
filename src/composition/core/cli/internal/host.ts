@@ -34,10 +34,10 @@ import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredP
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
-import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
+import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.js';
+import { getConfigFieldDefault, loadConfig, t, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
@@ -60,6 +60,12 @@ type CliHostBase = { readonly root: string; readonly locale: Locale; readonly si
  */
 export function createCliHost(base: CliHostBase, serviceEntry?: string): Parameters<typeof runCli>[1] & object {
   const { root, locale, signal } = base, runtime = createConfiguredRuntimeClient(root);
+  const narrowDirectory = async (path: string, json = false, language: Locale = locale) => {
+    if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
+    return await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path], initial: 'no', options: [
+      { id: 'yes', label: t('setup.window.yes', {}, language), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, language), role: 'no' },
+    ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) }) === 'yes';
+  };
   const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view, locale, process.stdin, process.stderr,
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
   // PV: the person at this terminal for a CLI subscription sign-in: its TTY witness and none of the installation's AI-agent or CI markers.
@@ -207,9 +213,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     applyInstallation: (projectRoot, input) => typed(installationProfile(input.profilePath).then(profile => applySuppliedInstallation(projectRoot, profile,
       { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable, proposalDigest: input.proposalDigest, acceptCustom: input.acceptCustom }))),
     resumeInstallation: (projectRoot, input) => typed(resumeInstallation(projectRoot, input)),
-    projectAttachment: (root, input, options) => typed(executeConfiguredProjectAttachment(root, input, options)),
+    projectAttachment: (root, input, options, interaction) => typed(executeConfiguredProjectAttachment(root, input, options, path => narrowDirectory(path, interaction?.json))),
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => typed(previewPolicyTemplateInstallation(projectRoot, scopeId)),
-    applyPolicyTemplateInstallation: (projectRoot, scopeId) => typed(applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId)),
+    applyPolicyTemplateInstallation: (projectRoot, scopeId, interaction) => typed(applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId, {}, path => narrowDirectory(path, interaction?.json))),
     openOwnerBaselineInstallation: (projectRoot, scopeId, input) => openOwnerBaselineInstallation(projectRoot, scopeId, input),
     openPermissionModesInstallation: (projectRoot, scopeId, input) => openPermissionModesInstallation(projectRoot, scopeId, input),
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => typed(upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)),
@@ -235,5 +241,5 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
   };
-  return { ...host, ...configuredSetup(host) }; // I-S3: bare `deckent init`
+  return { ...host, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language)) }; // I-S3: bare `deckent init`
 }

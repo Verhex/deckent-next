@@ -334,6 +334,7 @@
   "setup.instructions.external": "Imports outside this project are listed below. Trust applies only to this session; these instructions grant no permissions.",
   "setup.instructions.legacy": "Legacy DECKENT.md is used only because AGENTS.md and CLAUDE.md are absent. Move your instructions to AGENTS.md; Deckent never generates DECKENT.md.",
   "setup.instructions.legacyNext": "Move the instructions to AGENTS.md, then run deckent doctor again.",
+  "setup.attachment.narrowPermission": "Others can write to this folder; narrow the permission?",
   "setup.attach.title": "Connect this folder to the selected installation?",
   "setup.attach.body": "Folder: {path}\nScope / project: {scope}\nThis prepares an isolated project context. Model access is configured separately.",
   "setup.attach.saved": "Project connection record saved.",

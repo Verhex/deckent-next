@@ -186,7 +186,12 @@ flowchart LR
 ```
 
 1. **Proje başına bir kez kurun.** *Kapsam (scope)*, policy'yi, iş kayıtlarını ve harcamayı bu projeye bağlayan sabit addır;
-   bir klasör ya da sandbox değildir. `my-project` gibi bir ad seçin, ilk kurulum policy'sini önizleyin ve kurun:
+   bir klasör ya da sandbox değildir. Size ait, başka hesapların yazamadığı bir klasör kullanın. Ubuntu gibi grup yazma
+   izniyle klasör oluşturan sistemlerde Deckent, gerçek terminalde o klasörün iznini daraltmayı bir kez sorar.
+   Evet yalnız o klasörün grup/diğer yazma iznini kaldırır; hayır klasörü değiştirmez ve `chmod go-w .` rehberini gösterir.
+   `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra üretilen özeti `--apply --expect <özet>` ile kullanın.
+   Makine çıktısı (`--json`), TTY dışı ve AI çağrıları soru veya izin değişikliği olmadan reddedilir.
+   `my-project` gibi bir kapsam seçin, policy'yi önizleyin ve kurun:
 
    ```sh
    deckent init policy --scope my-project --preview

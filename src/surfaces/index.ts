@@ -20,7 +20,7 @@ export function loadProposalViews() { return Promise.all([import('#surfaces/core
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 export { openConfigWindow } from '#surfaces/core/config-window/index.js';
-export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+export { askCliCard, cliMode, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 // I-S3: `deckent init`'s setup reader (loads the setup surface lazily, as `init` does) and doctor's own measurement for the final check.
 export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
 /** The launch shell keeps input while its package loads the Workline groups, before the CLI host also loads the adapters. */

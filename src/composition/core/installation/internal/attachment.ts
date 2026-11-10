@@ -6,7 +6,7 @@ import { configuredInvocationProfiles, modelInvocationBillingAxis, ProjectAttach
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { localProjectAttachmentPorts, readAttachmentBootstrapConfig, withSideEffectFreeSqliteReads } from '#adapters/index.js';
+import { localProjectAttachmentPorts, prepareAttachmentDirectory, readAttachmentBootstrapConfig, withSideEffectFreeSqliteReads } from '#adapters/index.js';
 import { projectAttachmentCommandSchema } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { applyPolicyTemplateInstallation } from './policy-template.js';
@@ -19,8 +19,15 @@ export async function configuredProjectAttachment(root: string, options: ConfigL
     source: (root, scope, actor) => inspectConfiguredInstallationSource(root, scope, actor, options),
     install: (attachment, identity) => applyPolicyTemplateInstallation(root, attachment.scopeId, options, { attachment, identity }) });
 }
-export async function executeConfiguredProjectAttachment(root: string, input: unknown, options: ConfigLoadOptions = {}) {
-  const command = projectAttachmentCommandSchema.parse(input), app = await configuredProjectAttachment(root, options);
+/** Optional interaction belongs only to the trusted local CLI; SDK/MCP callers have no repair answer port. */
+export async function prepareConfiguredAttachmentDirectory(root: string, options: ConfigLoadOptions, confirm?: (path: string) => Promise<boolean>) {
+  const config = await loadComposedConfig(root, { ...options, globalOnly: true, heal: false, force: true }), store = configuredAttachmentStore(config, options);
+  return prepareAttachmentDirectory(root, localProjectAttachmentPorts(config, options, store).authorize, confirm);
+}
+export async function executeConfiguredProjectAttachment(root: string, input: unknown, options: ConfigLoadOptions = {}, confirm?: (path: string) => Promise<boolean>) {
+  const command = projectAttachmentCommandSchema.parse(input);
+  if (confirm && ['preview', 'offer', 'apply', 'register-preview', 'register'].includes(command.action)) await prepareConfiguredAttachmentDirectory(root, options, confirm);
+  const app = await configuredProjectAttachment(root, options);
   const complete = async (result: Awaited<ReturnType<typeof app.apply>>) => {
       const modelLease = await grantConfiguredModelUse(root, result.attachment.scopeId, options, result.preparation?.digest);
       const config = await loadComposedConfig(root, options), registration = await configuredAttachmentStore(config, options).registration();

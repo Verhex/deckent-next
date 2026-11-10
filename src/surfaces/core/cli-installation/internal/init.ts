@@ -25,7 +25,7 @@ export type InstallationResumeHandler = (projectRoot: string, input: Installatio
 // versioned default template is product-fixed (proof/SCR-B-2026-09-28/review.md), the only input is which scope
 // it is granted for.
 export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
-export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
+export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string, interaction?: { readonly json: boolean }) => Promise<unknown>;
 type Person = { readonly issuer: string; readonly subject: string };
 /** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. `person` (lead 2026-10-08): the person a hand-built
  * policy's file owner names (`--person <issuer>/<subject>`). */
@@ -160,7 +160,7 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     if (policyApply) {
       if (!context.applyPolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
-      const result = await context.applyPolicyTemplateInstallation(root, scopeId);
+      const result = await context.applyPolicyTemplateInstallation(root, scopeId, { json });
       emit(result, { ...sinks, json, render: value => formatValue(value) });
       return;
     }

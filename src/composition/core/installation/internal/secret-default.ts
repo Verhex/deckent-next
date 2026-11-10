@@ -7,15 +7,17 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { missingEnvironmentReferenceNames } from '#composition/core/secrets/index.js';
 import { applyPolicyTemplateInstallation } from './policy-template.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { registerFreshInstallation } from './attachment.js';
+import { registerFreshInstallation, prepareConfiguredAttachmentDirectory } from './attachment.js';
 /** A refused secret-store default leaves the installation standing; a successful switch carries its own record. */
 type InstallationSecretStoreDefault = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string;
   record?: Readonly<{ policyRevision: string; atMs: number; subject: AuditEvent['subject'] }> }>;
-export async function applyPolicyTemplateInstallationWithSecretDefault(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
+export async function applyPolicyTemplateInstallationWithSecretDefault(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}, confirm?: (path: string) => Promise<boolean>) {
   // Keep the installer's process environment and layout fallback; options select the secret-store default.
   const layout = await loadComposedConfig(projectRoot, { heal: false, force: true }).then(config => config.productLayout, () => resolveProductLayout({ projectRoot }));
   const absent = (resource: 'policy' | 'installationIdentity') => lstat(productResourcePath(layout, resource)).then(() => false, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return true; throw error; });
-  const fresh = await absent('policy'), newIdentity = fresh && await absent('installationIdentity'), result = await applyPolicyTemplateInstallation(projectRoot, scopeId);
+  const fresh = await absent('policy'), newIdentity = fresh && await absent('installationIdentity');
+  if (newIdentity) await prepareConfiguredAttachmentDirectory(projectRoot, {}, confirm);
+  const result = await applyPolicyTemplateInstallation(projectRoot, scopeId);
   if (!fresh || result.status !== 'installed') return result;
   const secretStore = await defaultSecretStore(projectRoot, scopeId, options);
   return Object.freeze({ ...result, secretStore, ...(newIdentity ? { registration: await registerFreshInstallation(projectRoot, scopeId, {}) } : {}) });

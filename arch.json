@@ -304,6 +304,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/surfaces/core/cli-human",
         "src/engine/core/secret-store",
         "src/adapters/core/native-cli-registry",
         "src/platform/core/state-root",
@@ -5635,12 +5636,12 @@
       "domain": 11300,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42173,
+      "adapters": 42207,
       "surfaces": 45000,
-      "composition": 13675
+      "composition": 13690
     },
     "totalSrcLines": 200000,
-    "testCases": 8992,
+    "testCases": 9002,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

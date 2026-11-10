@@ -9,7 +9,7 @@ const exec = promisify(execFile); const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-git-workspace-')); roots.push(root);
-  const source = join(root, 'source'); const workspaces = join(root, 'workspaces'); await mkdir(source); await mkdir(workspaces);
+  const source = join(root, 'source'); const workspaces = join(root, 'workspaces'); await mkdir(source, { mode: 0o755 }); await mkdir(workspaces, { mode: 0o755 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', source, ...args])).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(source, 'tracked'), 'base'); await git('add', 'tracked'); await git('commit', '-m', 'fixture');
@@ -60,7 +60,8 @@ describe.skipIf(process.platform === 'win32')('requires POSIX private Git custod
     expect((await lstat(lease.workspace)).mode & 0o777).toBe(0o775);
   });
   it('pins committed content without carrying owner WIP, runtime files or source hooks', async () => {
-    const f = await fixture(); const lease = await f.broker.allocate(f.request);
+    const f = await fixture(); await chmod(f.source, 0o755); const lease = await f.broker.allocate(f.request);
+    expect((await lstat(f.source)).mode & 0o777).toBe(0o755);
     expect(await readFile(join(lease.workspace, 'tracked'), 'utf8')).toBe('base');
     expect(await readFile(join(f.source, 'tracked'), 'utf8')).toBe('owner-wip');
     await expect(stat(join(lease.workspace, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -72,6 +73,15 @@ describe.skipIf(process.platform === 'win32')('requires POSIX private Git custod
     expect(a.ino).not.toBe(b.ino);
     await f.broker.release(f.request); await expect(stat(lease.workspace)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(f.source, 'tracked'), 'utf8')).toBe('owner-wip');
+  });
+  it('refuses group/other-writable source folders without changing them or carrying WIP', async () => {
+    const f = await fixture();
+    for (const mode of [0o775, 0o757, 0o777]) {
+      await chmod(f.source, mode);
+      await expect(f.broker.allocate(f.request)).rejects.toThrow('WORKSPACE_UNSAFE');
+      expect((await lstat(f.source)).mode & 0o777).toBe(mode);
+      expect(await readFile(join(f.source, 'tracked'), 'utf8')).toBe('owner-wip');
+    }
   });
   it('reuses its lease without discarding worker changes and rejects identity substitution', async () => {
     const f = await fixture(); const lease = await f.broker.allocate(f.request);
