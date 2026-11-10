@@ -335,6 +335,8 @@
   "setup.instructions.legacy": "AGENTS.md ve CLAUDE.md olmadığı için eski DECKENT.md okunuyor. Talimatlarınızı AGENTS.md dosyasına taşıyın; Deckent DECKENT.md üretmez.",
   "setup.instructions.legacyNext": "Talimatları AGENTS.md dosyasına taşıyın, ardından deckent doctor komutunu yeniden çalıştırın.",
   "setup.attachment.narrowPermission": "Başkaları bu klasöre yazabiliyor; izni daraltalım mı?",
+  "setup.attachment.narrowPermissionScope": "Yalnız bu klasör: grubun ve diğer hesapların yazma izni kaldırılır. Klasörün içindekiler değişmez.",
+  "setup.attachment.narrowPermissionMode": "Klasör izni: {before} → {after}",
   "setup.attach.title": "Bu klasör seçilen kuruluma bağlansın mı?",
   "setup.attach.body": "Klasör: {path}\nScope / proje: {scope}\nBu işlem ayrı bir proje bağlamı hazırlar. Model erişimi ayrıca yapılandırılır.",
   "setup.attach.saved": "Proje bağlantı kaydı saklandı.",

@@ -50,6 +50,7 @@ const credentialRefs = (config: Record<string, unknown>, scopeId: string): reado
  * gets the general note, which the secret lane may replace (`tui.panel.provider.transparency`).
  */
 function custodyText(backend: string, locale: Locale): string {
+  if (backend === '-') return t('tui.panel.provider.storeUnresolved', {}, locale);
   if (backend === 'core.secret-store.env@1') return t('doctor.secretStore.custody.env', {}, locale).trim();
   if (backend === 'core.secret-store.file@1') return t('doctor.secretStore.custody.file', {}, locale).trim();
   if (backend === 'core.secret-store.encrypted-file@1') return t('doctor.secretStore.custody.encryptedFile', {}, locale).trim();

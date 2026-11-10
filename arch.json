@@ -5638,7 +5638,7 @@
       "engine": 60000,
       "adapters": 42211,
       "surfaces": 45000,
-      "composition": 13690
+      "composition": 13694
     },
     "totalSrcLines": 200000,
     "testCases": 9002,
