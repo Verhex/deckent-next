@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHmacIntegrity } from '../../../src/platform/core/integrity/index.js';
 import { openSqliteApprovalStore } from '../../../src/adapters/core/approval-store/index.js';
 import { LocalOsSessionAuthority } from '../../../src/adapters/core/local-principal/index.js';
-import { ApprovalApplication, ConfigChangeApprovalBroker, RunCreateApprovalBroker, agentToolApprovalFacts, approvalRequestDigest, awaitAgentToolApproval, sealApproval, requestAgentToolApproval, requestTaskApproval, verifyApproval, type ApprovalAssuranceOptions } from '../../../src/engine/core/approval/index.js';
+import { ApprovalApplication, ConfigChangeApprovalBroker, RunCreateApprovalBroker, createTurnDecisionCapabilities, agentToolApprovalFacts, approvalRequestDigest, awaitAgentToolApproval, sealApproval, requestAgentToolApproval, requestTaskApproval, verifyApproval, type ApprovalAssuranceOptions } from '../../../src/engine/core/approval/index.js';
 import { approvalRecordSchema, mcpPrincipalRef, type ApprovalRecord, type ApprovalSubject } from '#domain/index.js';
 import { PROPOSE_MCP_SERVER_TOOL } from '#adapters/core/mcp-client/index.js';
 import { SQLITE_STORAGE_OPTIONS } from '../../../src/platform/core/config-fields/index.js';
@@ -42,8 +42,9 @@ it.skipIf(process.platform !== 'linux')('PROPFIX2: AI proposal decisions require
     let actor = ai as typeof person, witnessed = false;
     const sessions = { verifySession: async () => ({ principal: actor, session: { ...(await f.session.verifySession(undefined)).session, kind: actor.assurance,
       principalRef: { id: actor.id, issuer: actor.issuer, subject: actor.subject } } }), isSessionActive: async () => true, revoke: async () => {} };
+    const capabilities = createTurnDecisionCapabilities();
     const app = new ApprovalApplication(f.journal.store, { verify: async () => actor }, sessions, { load: async () => policy }, f.integrity,
-      { sample: () => f.clock }, 'local-sdk', 20, undefined, undefined, { interactive: async () => witnessed });
+      { sample: () => f.clock }, 'local-sdk', 20, undefined, undefined, { interactive: async () => witnessed, producers: [capabilities], peerPid: process.pid });
     for (const subject of [
       { kind: 'config-change', commandId: 'setting', action: 'set', layer: 'project', keyPath: 'language', before: '"en"', after: '"tr"', expectDigest: null, valueDigest: 'b'.repeat(64), ruleId: 'proposal' },
       { kind: 'run-create', commandId: 'work', runId: 'r', inputDigest: 'b'.repeat(64), admissionDigest: 'c'.repeat(64), decisionRecordId: 'decision' },
@@ -76,6 +77,22 @@ it.skipIf(process.platform !== 'linux')('PROPFIX2: AI proposal decisions require
       round: 1, index: 0, tool: 'run_shell', toolVersion: 1, resource: 'project', argsDigest: 'e'.repeat(64) }, policyRevision: 'policy',
       summary: 'Ordinary delegated call', createdAt: 1000, expiresAt: 1100, facts: agentToolApprovalFacts(policy, 'scope', 'shell-read-low') });
     expect((await app.decide({ ...f.command, approvalId: ordinary.request.approvalId })).decision).toMatchObject({ deciderClass: 'ai-policy', decision: 'allow' });
+    for (const decision of ['allow', 'deny'] as const) {
+      // An older API turn recorded the person as requester, although the proposal came from its AI actor.
+      const card = requestAgentToolApproval(f.journal.store, f.integrity, { scopeId: 'scope', requester: { id: person.id, issuer: person.issuer, subject: person.subject }, subject: { kind: 'agent-tool-call', turnId: `old-api-${decision}`,
+        round: 1, index: 0, tool: PROPOSE_MCP_SERVER_TOOL, toolVersion: 1, resource: 'mcp:example', argsDigest: 'f'.repeat(64) }, policyRevision: 'policy',
+        summary: 'MCP proposal tool call', createdAt: 1000, expiresAt: 1100 });
+      const command = { ...f.command, approvalId: card.request.approvalId, commandId: `old-api-${decision}`, decision,
+        decisionCapability: capabilities.mint({ scopeId: 'scope', approvalId: card.request.approvalId, principal: person, peerPid: process.pid, expiresAt: 1100 }, 1000) };
+      for (const attempted of ['allow', 'deny']) await expect(app.decide({ ...command, decision: attempted })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
+      expect(f.journal.store.load('scope', card.request.approvalId)).toEqual(card);
+      actor = person; witnessed = true;
+      const decided = await app.decide(command);
+      expect(decided.decision).toMatchObject({ decision, deciderClass: 'human-tty' });
+      expect(await awaitAgentToolApproval(f.journal.store, f.integrity, card, { sample: () => f.clock }, new AbortController().signal)).toBe(decision);
+      expect(await app.decideWithSettlement(command)).toEqual({ record: decided, commit: 'replay' });
+      actor = ai; witnessed = false;
+    }
   } finally { await f.close(); }
 });
 

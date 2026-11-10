@@ -11,7 +11,7 @@ import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABI
 import { PolicyAuthorizationError, authorityRefusalAuditEvent, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
-import { approvalActorRef, approvalRequestDigest, decidedRefusal, expireDue, verifyApproval, sealApproval } from './integrity.js';
+import { approvalActorRef, approvalRequestDigest, decidedRefusal, proposalProposer, expireDue, verifyApproval, sealApproval } from './integrity.js';
 import { approvalAssuranceRegistry, requiredApprovalAssurance, operationApprovalFacts } from './assurance.js';
 export const approvalQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema });
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
@@ -64,11 +64,11 @@ export class ApprovalApplication {
   }
   private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: Policy, decision: 'allow' | 'deny'): Promise<boolean> {
     const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request);
-    const proposal = requiresPersonProposalDecision(record.request);
-    if ((worker || proposal) && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
-    if (proposal && samePrincipalRef(approvalActorRef(principal), record.request.requester)) throw new ApprovalError('APPROVAL_DENIED');
+    const subject = approvalSubject(record.request), proposal = requiresPersonProposalDecision(record.request);
+    if ((worker || proposal || subject.kind === 'run-create' && this.store.hasRunProposal(record.request.scopeId, subject.commandId, subject.runId)) && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
+    if (proposal && samePrincipalRef(approvalActorRef(principal), proposalProposer(record.request))) throw new ApprovalError('APPROVAL_DENIED');
     if (decision === 'allow' && (worker || record.request.schemaVersion === 3 && record.request.preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
-    const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
+    const facts = approvalFacts(record.request);
     if (!interactive) {
       const risk = facts?.risk;
       if (decision === 'allow' && (aiMayNotAllow(facts, subject)
@@ -105,7 +105,6 @@ export class ApprovalApplication {
     const record = this.store.load(query.scopeId, query.approvalId);
     return record ? verifyApproval(record, this.integrity) : null;
   }
-  /** `view.excludeSubjects` narrows the page selection itself (never a post-filter): a page of `limit` visible records after `afterId`. */
   async list(input: unknown, credential?: unknown, view: { readonly excludeSubjects?: readonly ApprovalSubjectKind[] } = {}) {
     const query = approvalListSchema.parse(input); const principal = await authenticate(this.verifier, credential, query.scopeId);
     if (query.limit > this.pageLimit) throw new ApprovalError('APPROVAL_INVALID');
@@ -139,9 +138,7 @@ export class ApprovalApplication {
     this.beforeCommit(next);
     return this.store.renew(previous, next, { operation: 'renew', scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
   }
-  async decide(input: unknown, credential?: unknown) {
-    return (await this.decideWithSettlement(input, credential)).record;
-  }
+  async decide(input: unknown, credential?: unknown) { return (await this.decideWithSettlement(input, credential)).record; }
   async decideWithSettlement(input: unknown, credential?: unknown, sessionGuard?: (record: ApprovalRecord, actor: VerifiedPrincipal) => void): Promise<ApprovalSettlement> {
     const parsed = approvalCommandSchema.safeParse(input); if (!parsed.success) throw new ApprovalError('APPROVAL_INVALID');
     const command = parsed.data, { channels } = this.assurance;

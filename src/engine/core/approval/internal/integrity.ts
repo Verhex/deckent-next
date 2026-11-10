@@ -1,4 +1,4 @@
-import { asPolicy, approvalDecisionClass, approvalDecisionAssurance, requiresPersonProposalDecision, isWorkloadPrincipalRef, samePrincipalRef, approvalRecordSchema, ApprovalError, encodeCommandProjection, type ApprovalRecord, type ApprovalRequest,
+import { asPolicy, approvalDecisionClass, approvalDecisionAssurance, requiresPersonProposalDecision, approvalSubject, mcpPrincipalRef, isWorkloadPrincipalRef, samePrincipalRef, approvalRecordSchema, ApprovalError, encodeCommandProjection, type ApprovalRecord, type ApprovalRequest,
   type RunSnapshot, type ApprovalActor } from '#domain/index.js';
 import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
@@ -23,15 +23,18 @@ export function verifyApproval(input: unknown, authority: IntegrityAuthority): A
   if (!parsed.success || !authority.verify(projection(parsed.data), parsed.data.mac, parsed.data.keyId)) throw new ApprovalError('APPROVAL_INTEGRITY');
   return parsed.data;
 }
-/** The one pending → expired transition (lazy expiry, tool-call close, service-start sweep): sealed, conditional on `record`. */
 export function expireApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord): ApprovalRecord {
   return store.transition(record, sealApproval({ request: record.request, revision: record.revision + 1, status: 'expired', decision: null }, integrity));
 }
 export const expireDue = (store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord, now: number) =>
   record.status === 'pending' && now >= record.request.expiresAt ? expireApproval(store, integrity, record) : record;
-/** The existing sealed person class, never inferred from the declared channel or a legacy decision. */
+/** Older API tool cards name the turn's person; the proposal belongs to that person's AI actor. */
+export function proposalProposer(request: ApprovalRequest): ApprovalActor {
+  const actor = request.requester, ref = approvalSubject(request).kind === 'agent-tool-call' && !isWorkloadPrincipalRef(actor) ? mcpPrincipalRef(actor) : actor;
+  return { id: `${actor.id}${ref.issuer.slice(actor.issuer.length)}`, issuer: ref.issuer, subject: ref.subject };
+}
 export const witnessedPersonDecision = (record: ApprovalRecord): boolean => record.decision !== null && approvalDecisionClass(record.decision) === 'human-tty'
-  && approvalDecisionAssurance(record.decision) !== 'ai-policy' && !isWorkloadPrincipalRef(record.decision.actor) && !samePrincipalRef(record.decision.actor, record.request.requester);
+  && approvalDecisionAssurance(record.decision) !== 'ai-policy' && !isWorkloadPrincipalRef(record.decision.actor) && !samePrincipalRef(record.decision.actor, proposalProposer(record.request));
 /**
  * KG4 F2 (S1-D1): why a stored record does not admit its command, or null: not decided, not an allow, a decision on another request, a decider
  * the caller does not accept; then the time. A decision dated beyond the clock skew is a conflict everywhere (owner B2-2; another process may
