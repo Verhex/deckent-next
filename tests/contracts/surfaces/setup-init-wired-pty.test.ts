@@ -126,7 +126,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(run.output.indexOf('Who uses this installation: applied')).toBeGreaterThan(run.output.indexOf('Language: applied', permissions));
     const summary = screen(run.output);
     for (const line of ['1. Language · done', '6. Permissions · done', '3. Folder and scope · done', '5. Who uses this installation · done', '7. Starting permissions · done',
-      '9. Final check · done']) expect(summary).toContain(line);
+      '9. Final check · check ran']) expect(summary).toContain(line);
     for (const result of ['Permissions: applied', 'Language: applied', 'Who uses this installation: applied', 'Starting permissions: applied']) expect(summary).toContain(result);
     for (const title of ['Model connection', 'Worker image', 'Execution environment', 'Project instructions', 'First work kind', 'Worker pool']) expect(summary).not.toContain(title);
     expect(summary).not.toContain('Final check: applied'); // KUR-14: the observed warnings settle; no read-only apply loop.

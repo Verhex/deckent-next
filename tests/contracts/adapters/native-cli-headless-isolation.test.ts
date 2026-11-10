@@ -157,6 +157,10 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     await expect(prepareHeadlessConnection({ protocol: { family: c.profile.protocol.family, version: 'v1' }, minCliVersion: '9.0.0', stateDir: join(c.root, 'state'),
       executable: c.executable, configDir: c.configDir, env: {}, now: () => 1, isolation: unavailable })).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE' });
     expect(await c.log()).toEqual([]);
+    // Doctor reads the retained update and names its executable without spawning or requiring an available realm.
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', updatedFrom: '1.0.0', version: '2.0.0' }));
+    expect((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated).toEqual({ cli: 'fake-cli', from: '1.0.0', to: '2.0.0' });
+    expect(await c.log()).toEqual([]);
   });
   it('closes the channel typed when the realm itself cannot start (a launcher that refuses), and never runs the CLI outside it', async () => {
     const c = await connection({ steps: happy({}) }, {}, 'a'.repeat(64), async () => broken);

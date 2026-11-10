@@ -94,8 +94,8 @@
   "setup.reason.modelMissing": "Henüz bağlı model yok.",
   "setup.reason.modelChosen": "{model} modeli bağlanacak.",
   "setup.reason.checkReady": "Son kontrole hazır.",
-  "setup.reason.checkPassed": "Son kontrol geçti.",
-  "setup.reason.checkWarnings": "Son kontrol uyarılar buldu; deckent doctor her birini sonraki adımıyla listeler.",
+  "setup.reason.checkPassed": "Son kontrol çalıştı; ilgi bekleyen madde yok.",
+  "setup.reason.checkWarnings": "Son kontrol çalıştı; ilgi bekleyen maddeler var. Her birinin sonraki adımı için deckent doctor çalıştırın.",
   "setup.reason.checkErrors": "Son kontrol hatalar buldu.",
   "error.SETUP_STAGE_INVALID": "Bir kurulum aşaması kaydı veya kararı geçersiz.",
   "error.SETUP_STAGE_SHADOW": "Bir kurulum aşaması kaydı Core'u veya başka bir aileyi değiştiremez.",
@@ -353,5 +353,7 @@
   "setup.attachment.restore": "Proje bağını geri aç ve yeni model kullanım izni ver",
   "setup.attachment.body": "İşlem: {action}\nKlasör: {path}\nScope / proje: {scope}\nİşlem güncel politikayı ve gereken yerde tam önizlemeyi kullanır.",
   "setup.attachment.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <özet>] [--command-id <uuid>] [--json]\nDoğrulanmış kaynağı kendi klasöründe kaydedin, sonra yeni projeyi önizleyip bağlayın. --lease-revoke <projeKimliği> --apply yalnız model kullanımını geri alır. --detach <projeKimliği> --apply veri silmeden bağı ve kullanımı geri alır. Kaynakta --unregister --apply bağlı projelerin ayrılmasını gerektirir. --relocate --scope <id> --apply gerçek taşımayı uzlaştırır. Şifreli yedekten dönüşten sonra eski kapsam için önizleme alın; --restore <projeKimliği> --expect <özet> --apply yeni kullanım izni verir. Her uygulama gerçek terminalde kişi ister.",
-  "setup.session.registerHint": "Başka klasörde kuruluysa kurulu klasörünüzde `deckent terminal attach --register --apply` çalıştırın, kaynağı onaylayıp buraya dönün."
+  "setup.session.registerHint": "Başka klasörde kuruluysa kurulu klasörünüzde `deckent terminal attach --register --apply` çalıştırın, kaynağı onaylayıp buraya dönün.",
+  "setup.state.checked": "kontrol çalıştı",
+  "setup.reason.checkPending": "Son kontrol çalıştı; {count} madde sizi bekliyor. Sonuçlar ve sonraki adımlar için deckent doctor çalıştırın."
 }

@@ -35,7 +35,7 @@ const STATE_LABELS: Readonly<Record<SetupStageState, (locale: Locale) => string>
 const LANGUAGE_NAMES: Readonly<Record<string, (locale: Locale) => string>> = Object.freeze({ en: l => t('setup.language.en', {}, l), tr: l => t('setup.language.tr', {}, l) });
 const stateLabel = (state: SetupStageState, locale: Locale) => STATE_LABELS[state](locale);
 /** An answered stage with no operation waits for installation; it cannot offer Apply yet. */
-export const stageStateLabel = (stage: SetupStage, locale: Locale) => stage.state === 'ready' && !stage.operation
+export const stageStateLabel = (stage: SetupStage, locale: Locale) => stage.id === 'core:final-check' && stage.state === 'done' ? t('setup.state.checked', {}, locale) : stage.state === 'ready' && !stage.operation
   ? t('setup.state.answered', {}, locale) : stateLabel(stage.state, locale);
 export const languageName = (code: string, locale: Locale) => LANGUAGE_NAMES[code]?.(locale) ?? terminalSafeText(code);
 
