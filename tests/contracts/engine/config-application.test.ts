@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ConfigApplication, ConfigApplicationError, configDefinitions, definitionFor, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
 import { createDefaultConfig, validateConfig, registerConfigSection } from '../../../src/platform/core/config/index.js';
 import { ModelBindingApplication } from '#engine/index.js';
@@ -7,6 +7,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { parseModelInvocationProfile } from '#domain/index.js';
 import type { ConfigSnapshot, ConfigApprovalPort, ConfigChangeSubject } from '#engine/core/config/index.js';
 import { digestText } from '../../../src/platform/core/utils/index.js';
+import { DeckentJsonSchemaValidator, type ConfigSectionSchema } from '#platform/index.js';
 
 const principal = { id: 'test', issuer: 'local-os', subject: 'test', assurance: 'os-user', scopeIds: ['test'] } as const;
 const command = { keyPath: 'max_workers', value: 2, principal, scopeId: 'test', commandId: 'config-test' };
@@ -78,6 +79,28 @@ describe('registry config application', () => {
     const copy = configDefinitions() as Map<string, unknown>; copy.clear();
     expect(configDefinitions().has('max_workers')).toBe(true);
   });
+});
+
+it('preserves foreign section issue order and projected validation across recreated nodes and distinct reference roots', () => {
+  const leaf = { $ref: '#/$defs/value' }, issues = [{ message: 'first', path: ['a'] }, { message: 'second', path: ['b'] }];
+  for (const [name, type] of [['cfg_projected_text', 'string'], ['cfg_projected_count', 'integer']] as const) {
+    const projection = { type: 'object', additionalProperties: false, properties: { value: leaf }, $defs: { value: { type } } };
+    const schema: ConfigSectionSchema = { '~standard': { version: 1, vendor: 'leftover-fixture',
+      validate: value => value === 'bad' ? { issues } : { value: value ?? {} }, jsonSchema: { input: () => projection, output: () => projection } } };
+    registerConfigSection(name, schema, { optional: true, metadata: { descriptionKey: 'config.section', tier: 'custom', since: '1',
+      binding: { state: 'bound', consumers: ['src/engine/core/config'] }, apply: 'live' } });
+    expect(definitionFor(name).schema.safeParse('bad')).toEqual({ success: false, error: { issues } });
+  }
+  const spy = vi.spyOn(DeckentJsonSchemaValidator.prototype, 'getValidator');
+  try {
+    for (let repeat = 0; repeat < 3; repeat++) {
+      for (const [name, valid, invalid] of [['cfg_projected_text', 'kept', 4], ['cfg_projected_count', 4, 'kept']] as const) {
+        expect(definitionFor(`${name}.value`).schema.safeParse(valid)).toEqual({ success: true, data: valid });
+        expect(definitionFor(`${name}.value`).schema.safeParse(invalid)).toEqual({ success: false, error: { issues: [{ message: 'SECTION_INVALID' }] } });
+      }
+    }
+    expect(spy).toHaveBeenCalledTimes(2);
+  } finally { spy.mockRestore(); }
 });
 
 it('never exposes a secret-like registered nested value', async () => {

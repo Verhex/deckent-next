@@ -37,7 +37,7 @@ Alpha.62 integration verification covers valid config versions 4–6 without rew
   “The working directory could not be verified; this command may reach Deckent's state folder.” No automatic or standing approval applies.
   The conservative check also warns on literal dollar/backtick text or operands named cd/find/xargs. This is the owner's 2026-11-03 warning-card
   decision, replacing K15B's pre-approval refusal; a person approving a computed path can expose global state. Explicit global-root names
-  (absolute, `~`, `$HOME`, `$DECKENT_GLOBAL_HOME`) remain hard refusals even with approval armed. Use an enforcing sandbox for isolation. Ordinary
+  (absolute, `~`, `$HOME`, `$DECKENT_GLOBAL_HOME`, `$DECKENT_HOME`) remain hard refusals even with approval armed. Use an enforcing sandbox for isolation. Ordinary
   pnpm/cp-al names no longer hit the global-state hard-link refusal; other sandbox inode floors still apply; aliases of registry login identity files are refused by device/inode metadata, without
   reading credentials. File tools still refuse all hard-linked files. **The host realm is not a security boundary; name checks are best
   effort.** Paths computed inside arbitrary programs and concurrent replacements remain outside this check. Assembled subscription-bridge

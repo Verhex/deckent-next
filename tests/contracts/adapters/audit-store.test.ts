@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { AuditError, type AuditEvent } from '#domain/index.js';
 import { AuditApplication, verifyAuditRecord } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
+import { openSqliteAuditStore, SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { AUDIT_EVENT_LEDGER_VERSION, CURRENT_LEDGER_VERSION, openSqliteLedger, readScopeCompanies } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
 import { DOWNGRADE_TO_V40_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
@@ -175,6 +175,24 @@ it('propagates a failed write as a typed error so the caller applies no effect (
   expect(() => relax(2)).toThrow(expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }));
   expect(applied).toBe(1);
   expect(rows(path, 'SELECT count(*) AS n FROM audit_events').at(0)).toEqual({ n: 1 });
+});
+
+it('keeps snapshot failure identity, rollback attempts and caller-owned transaction boundaries', () => {
+  for (const write of [false, true]) for (const at of ['begin', 'work', 'commit', 'rollback', 'joined'] as const) {
+    const calls: string[] = [], original = Object.assign(new Error(`injected-${at}`), { code: `INJECTED_${at.toUpperCase()}` });
+    const db = { isTransaction: at === 'joined', exec(sql: string) {
+      calls.push(sql);
+      if (at === 'begin' && sql.startsWith('BEGIN') || at === 'commit' && sql === 'COMMIT' || at === 'rollback' && sql === 'ROLLBACK') throw original;
+    } } as unknown as DatabaseSync;
+    const store = new SqliteAuditStore(db);
+    const workError = new AuditError('AUDIT_INTEGRITY');
+    const work = () => { if (['work', 'rollback', 'joined'].includes(at)) throw workError; return 42; };
+    let caught: unknown;
+    try { store.snapshot(write, work); } catch (error) { caught = error; }
+    expect(caught, `${write}:${at}`).toBe(['begin', 'commit'].includes(at) ? original : workError);
+    expect(calls, `${write}:${at}`).toEqual(at === 'joined' ? [] : at === 'begin' ? [write ? 'BEGIN IMMEDIATE' : 'BEGIN']
+      : [write ? 'BEGIN IMMEDIATE' : 'BEGIN', ...(at === 'commit' ? ['COMMIT'] : []), 'ROLLBACK']);
+  }
 });
 
 it.skipIf(process.platform === 'win32')('requires POSIX private file modes: ledger upgrade creates a 0600 backup', async () => {

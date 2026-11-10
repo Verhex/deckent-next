@@ -6,6 +6,7 @@ import { expandGlob, segmentMatcher, SHELL_GLOB_MAX_MATCHES } from './paths.js';
 
 const GLOB = /[*?[]/u;
 const HOME_VARIABLE = new RegExp(`^\\$(?:\\{(HOME|${PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey})\\}|(HOME|${PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey}))(?=/|$)`, 'u');
+const ROOT_VARIABLE = new RegExp(`^\\$(?:\\{${PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey}\\}|${PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey})(?=/|$)`, 'u');
 
 /** Names, not contents: resolve existing ancestors without dropping `link/..`; absent children still inherit their real parent. */
 async function realName(path: string): Promise<string> {
@@ -33,7 +34,7 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
     }
     return false;
   };
-  return async text => {
+  const checkPath = async (text: string): Promise<boolean> => {
     if (['[', '[[', ']', ']]'].includes(text)) return false;
     text = text.replace(/^[A-Za-z_][A-Za-z0-9_]*=/u, '');
     // Conservatively recognize HOME spellings even when quoted: quotes never open a protected name.
@@ -69,6 +70,13 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
       if (await loginAlias(match)) return true;
     }
     return false;
+  };
+  return async text => {
+    // Keep every existing refusal, including literal variable-named aliases; the installation-home expansion only adds refusals.
+    if (await checkPath(text)) return true;
+    const path = text.replace(/^[A-Za-z_][A-Za-z0-9_]*=/u, '');
+    const expanded = path.replace(ROOT_VARIABLE, value => env[PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey] ?? value);
+    return expanded !== path && await checkPath(expanded);
   };
 }
 

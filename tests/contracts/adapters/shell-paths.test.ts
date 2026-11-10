@@ -167,14 +167,26 @@ it('K15: global root names cover HOME, traversal, globs, aliases and absent chil
   await mkdir(join(global, 'headless/logins/fixture'), { recursive: true });
   await symlink(global, join(root, 'state-link'));
   await symlink(join(global, 'headless'), join(root, 'deep-state-link'));
-  const check = await createShellGlobalStateCheck(root, [global, join(root, 'new-global')], { HOME: home, DECKENT_GLOBAL_HOME: global });
-  // SHELL keeps the current variable grammar, including brace forms, assignment removal and token boundaries.
-  for (const name of ['${DECKENT_GLOBAL_HOME}/new', 'target=$HOME/.deckent/new', 'target=${DECKENT_GLOBAL_HOME}/new']) expect(await check(name), name).toBe(true);
-  for (const name of ['$HOME_SUFFIX/.deckent/new', '${HOME_SUFFIX}/.deckent/new', '$DECKENT_HOME/new']) expect(await check(name), name).toBe(false);
+  const check = await createShellGlobalStateCheck(root, [global, join(root, 'new-global')], { HOME: home, DECKENT_GLOBAL_HOME: global, DECKENT_HOME: global });
+  // SHELL's existing variable grammar also covers the layout registry's installation-root alias.
+  for (const name of ['${DECKENT_GLOBAL_HOME}/new', 'target=$HOME/.deckent/new', 'target=${DECKENT_GLOBAL_HOME}/new',
+    '$DECKENT_HOME', '${DECKENT_HOME}', '$DECKENT_HOME/new', '${DECKENT_HOME}/new', 'target=$DECKENT_HOME/new', 'target=${DECKENT_HOME}/new',
+    '$DECKENT_HOME/headless/*/auth.json', '${DECKENT_HOME}/headless/*/auth.json']) expect(await check(name), name).toBe(true);
+  for (const name of ['$HOME_SUFFIX/.deckent/new', '${HOME_SUFFIX}/.deckent/new', '$DECKENT_HOME_SUFFIX/new', '${DECKENT_HOME_SUFFIX}/new']) expect(await check(name), name).toBe(false);
+  for (const env of [{}, { DECKENT_HOME: join(root, 'src') }]) {
+    const ordinary = await createShellGlobalStateCheck(root, [global], env);
+    for (const name of ['$DECKENT_HOME/new', '${DECKENT_HOME}/new']) expect(await ordinary(name), name).toBe(false);
+  }
   for (const name of [global, `${global}/headless/logins/fixture/auth.json`, '~/.deckent/headless/*/auth.json', '$HOME/.deckent/new',
     '${HOME}/.deckent/new', '$DECKENT_GLOBAL_HOME/new', '../home/.deckent/new', 'state-link/new/deeper', 'deep-state-link/../new',
     '../home/.deck*/headless/*/auth.json', '../*/.deckent/headless/*/auth.json', `${global}/../.deckent/missing`, 'new-global/new', `if=${global}/headless/logins/fixture/auth.json`]) {
     expect(await check(name), name).toBe(true);
   }
   for (const name of ['src/a.ts', '../outside/secret', '../home/.deckent-other/auth.json', 'new-global-other/new', '[', '[[']) expect(await check(name), name).toBe(false);
+  const nested = await createShellGlobalStateCheck(global, [global], { DECKENT_HOME: root });
+  expect(await nested('$DECKENT_HOME/new')).toBe(true);
+  expect(await nested('target=[')).toBe(true);
+  await symlink(global, join(root, '$DECKENT_HOME'));
+  const literalAlias = await createShellGlobalStateCheck(root, [global], { DECKENT_HOME: join(root, 'src') });
+  expect(await literalAlias('$DECKENT_HOME/new')).toBe(true);
 });
