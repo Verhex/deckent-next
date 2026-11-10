@@ -176,10 +176,11 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   INSTALLATION_ROOT_UNSAFE: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'mode' ? t('error.INSTALLATION_ROOT_UNSAFE.mode', p, l) : t('error.INSTALLATION_ROOT_UNSAFE', p, l) }) },
 }, plainErrors('error.', { INSTALLATION_ROOT_FOREIGN: 'config', INSTALLATION_ROOT_INSIDE_DATA_ROOT: 'config', INSTALLATION_ROOT_WALK_UNSUPPORTED: 'config' }), {
   INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
+  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l) : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
 }, plainErrors('error.', {
   INSTALLATION_IDENTITY_RELOCATED: 'config', INSTALLATION_IDENTITY_RESOLUTION_INVALID: 'config', INSTALLATION_IDENTITY_INVALID: 'config',
   PROJECT_ATTACHMENT_INVALID: 'config', PROJECT_ATTACHMENT_SOURCE_REGISTERED: 'config', PROJECT_ATTACHMENT_READ_LIMIT: 'config', PROJECT_ATTACHMENT_UNAVAILABLE: 'config',
-  PROJECT_ATTACHMENT_CHANGED: 'config', PROJECT_ATTACHMENT_DENIED: 'config', PROJECT_ATTACHMENT_PERSON_MISMATCH: 'config', MODEL_USE_NOT_ACTIVE: 'config',
+  PROJECT_ATTACHMENT_CHANGED: 'config', PROJECT_ATTACHMENT_PERSON_MISMATCH: 'config', MODEL_USE_NOT_ACTIVE: 'config',
   MODEL_USE_BINDING_CHANGED: 'config', PROJECT_ATTACHMENT_REVOKED: 'config', PROJECT_ATTACHMENT_INCOMPLETE: 'config', PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED: 'config',
   INSTALLATION_IDENTITY_UNAVAILABLE: 'config', INSTALLATION_IDENTITY_MASKED: 'config', INSTALLATION_IDENTITY_LOCKED: 'config',
   INSTALLATION_IDENTITY_UNSUPPORTED: 'config', INSTALLATION_IDENTITY_SOURCE_INVALID: 'config', INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED: 'config',

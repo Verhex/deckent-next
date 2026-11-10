@@ -334,6 +334,7 @@
   "setup.instructions.external": "Bu projenin dışından alınan dosyalar aşağıda listelenir. Güven yalnız bu oturum içindir; bu talimatlar yetki vermez.",
   "setup.instructions.legacy": "AGENTS.md ve CLAUDE.md olmadığı için eski DECKENT.md okunuyor. Talimatlarınızı AGENTS.md dosyasına taşıyın; Deckent DECKENT.md üretmez.",
   "setup.instructions.legacyNext": "Talimatları AGENTS.md dosyasına taşıyın, ardından deckent doctor komutunu yeniden çalıştırın.",
+  "setup.attachment.narrowPermission": "Başkaları bu klasöre yazabiliyor; izni daraltalım mı?",
   "setup.attach.title": "Bu klasör seçilen kuruluma bağlansın mı?",
   "setup.attach.body": "Klasör: {path}\nScope / proje: {scope}\nBu işlem ayrı bir proje bağlamı hazırlar. Model erişimi ayrıca yapılandırılır.",
   "setup.attach.saved": "Proje bağlantı kaydı saklandı.",

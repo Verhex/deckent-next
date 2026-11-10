@@ -1267,6 +1267,8 @@
   "error.PROJECT_ATTACHMENT_UNAVAILABLE": "The selected installation could not be verified. Restore its original identity and location; no replacement identity was created.",
   "error.PROJECT_ATTACHMENT_CHANGED": "The installation or folder changed. Preview the attachment again before applying it.",
   "error.PROJECT_ATTACHMENT_DENIED": "This project's connection or model does not match the installation, company, scope or person it was set up for (for example, it was copied from another folder or edited by hand). Preview the project connection again with `deckent terminal attach --scope <id> --preview`, or connect the model again here with /provider.",
+  "error.PROJECT_ATTACHMENT_DENIED.location": "Deckent could not verify your ownership of this project folder: {path}. Use a real folder you own, then retry the setup or attachment command.",
+  "error.PROJECT_ATTACHMENT_DENIED.location-write": "Group or other accounts have write permission on this folder: {path}. In that folder, run `chmod go-w .` to remove group and other write access, then retry the setup or attachment command.",
   "error.PROJECT_ATTACHMENT_PERSON_MISMATCH": "This project was connected to the installation by another person on this computer. Open it from that person's account, or start a project of your own in a folder you own.",
   "error.MODEL_USE_NOT_ACTIVE": "This model is turned off for this project (or in the project its subscription is shared from). Turn it on in /model, then send again. Nothing was sent.",
   "error.MODEL_USE_BINDING_CHANGED": "This model's catalog entry changed after it was connected. Connect it again with /provider, then send again. Nothing was sent.",

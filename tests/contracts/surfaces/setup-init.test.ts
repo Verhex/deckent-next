@@ -248,7 +248,8 @@ describe('I-S4 setup window controller (no Ink)', () => {
     await chosen.step('en'); await chosen.step('yes'); await chosen.step('core:team');
     expect(chosen.model().rows.join('\n')).toContain('4. Who uses this installation · answered');
     expect(run.applied).toEqual([]);
-    await chosen.step('yes'); await chosen.step('apply');
+    await chosen.step('yes'); expect(await chosen.step('apply')).toBeNull();
+    expect(run.applied).toEqual([]); expect(await chosen.runPending()).toBe(true);
     expect(run.applied[0]!.operation!.input).toEqual({ scopeId: 'my-erp' });
     expect(chosen.model().rows.find(row => row.startsWith('>'))).toContain('1. Language');
     await chosen.step('apply');
@@ -282,7 +283,8 @@ describe('I-S4 setup window controller (no Ink)', () => {
     model = (await controller.step('yes'))!; sizes.push(model.rows.length);
     expect(model.options.map(option => option.id)).toEqual(['apply', 'later']);
     expect(run.applied).toEqual([]);
-    model = (await controller.step('apply'))!; sizes.push(model.rows.length);
+    expect(await controller.step('apply')).toBeNull(); expect(run.applied).toEqual([]);
+    expect(await controller.runPending()).toBe(true); model = controller.model(); sizes.push(model.rows.length);
     expect(run.applied.map(stage => stage.operation!.id)).toEqual(['installation.policy-template']);
     expect(model.rows.at(-1)).toContain('cannot apply setup stages yet');
     expect(new Set(sizes).size).toBe(1);

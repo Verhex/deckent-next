@@ -26,7 +26,7 @@ export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
 export interface CommandContext extends BeuserCommandContext, InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, MemoryCommandContext, AgentsCommandContext, HubCommandContext, TerminalLaunchContext,
   RunCommandContext, TaskCommandContext, ApprovalCommandContext, AdminCommandContext, KernelCommandContext {
-  projectAttachment?: (root: string, input: import('#domain/index.js').ProjectAttachmentCommand, options: import('#platform/index.js').ConfigLoadOptions) => Promise<unknown>;
+  projectAttachment?: (root: string, input: import('#domain/index.js').ProjectAttachmentCommand, options: import('#platform/index.js').ConfigLoadOptions, interaction?: Readonly<{ json?: boolean }>) => Promise<unknown>;
   runMcpCommand?: McpCommandHandler;
   initialize?: () => void;
   /** COLDSTART: the host's operations, loaded only when a command or the terminal runs (never for help, `--version` or an unknown command). */
