@@ -124,9 +124,9 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   if (f.catalogDiagnostics === null) rows.push(row('security', 'security.catalogSigner', 'untested', t('agentstats.signer.unavailable', {}, l)));
   const audit = r.auditIntegrity;
   if (audit) rows.push(audit.status === 'match' ? row('security', 'security.audit', 'ok', t('doctor.check.audit.ok', {}, l))
-    // A new installation has no checkpoint to compare with yet: nothing to fix, nothing verified.
-    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? row('security', 'security.audit', 'untested', t('doctor.check.audit.noCheckpoint', {}, l))
-    : row('security', 'security.audit', audit.status === 'unknown' ? 'warning' : 'error', t('doctor.check.audit.problem', { status: renderAuditStatus(audit.status, l), reason: renderAuditReason(audit.reason, l) }, l), scoped('deckent audit verify', f), fix('security.audit')));
+    // Unverified audit integrity cannot establish health, including before the first checkpoint.
+    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? row('security', 'security.audit', 'error', t('doctor.check.audit.noCheckpoint', {}, l), scoped('deckent audit verify', f))
+    : row('security', 'security.audit', 'error', t('doctor.check.audit.problem', { status: renderAuditStatus(audit.status, l), reason: renderAuditReason(audit.reason, l) }, l), scoped('deckent audit verify', f), fix('security.audit')));
   const directory = r.recoveryFiles?.installationDirectory;
   if (directory) rows.push((parseInt(directory.mode, 8) & 0o077)
     ? row('security', 'security.directory', 'warning', t('doctor.check.directory.open', { mode: directory.mode }, l), `chmod 700 ${directory.path}`, fix('security.directory'))

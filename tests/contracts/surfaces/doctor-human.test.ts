@@ -104,10 +104,12 @@ describe('doctor rows (pure)', () => {
     expect(poolReadinessLines({ status: 'unconfigured', drift: null }, 'en')).toEqual(['Pool readiness: not configured']);
     expect(poolReadinessLines({ status: 'missing', code: 'RUN_POOL_REQUIRED', drift: null }, 'en')[0]).toContain('(RUN_POOL_REQUIRED)');
   });
-  it('an error row reads as needing attention; a new installation without an audit checkpoint is not tested, not a problem', () => {
+  it('an error row reads as needing attention; an unverified audit needs attention even on a new installation', () => {
     const fresh = doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'unknown', reason: 'no-checkpoint-yet', head: null, checkpoint: null } } as never, facts(), 'en');
-    expect(fresh.find(row => row.id === 'security.audit')).toMatchObject({ state: 'untested' });
-    expect(fresh.find(row => row.id === 'security.audit')?.next).toBeUndefined();
+    expect(fresh.find(row => row.id === 'security.audit')).toMatchObject({ state: 'error', next: 'deckent audit verify --scope live' });
+    expect(renderDoctorChecks(fresh, 'en').split('\n')[0]).toMatch(/^Status: needs attention · 1 error\(s\)/);
+    expect(doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'match', head: null, checkpoint: null } } as never, facts(), 'en')
+      .find(row => row.id === 'security.audit')).toMatchObject({ state: 'ok' });
     const blocked = { ...report, startability: { status: 'blocked' as const, endpoint: null, checks: [{ code: 'X', message: 'ledger missing' }] } };
     expect(renderDoctorChecks(doctorChecks(blocked, facts(), 'en'), 'en').split('\n')[0]).toMatch(/^Status: needs attention · 1 error\(s\)/);
     const clean = doctorChecks({ ...report, imageRefresh: null, recoveryFiles: null }, facts({ identityProfile: { state: 'selected', id: 'solo' }, backupPassphraseStored: false, retiringModels: [] }), 'en')

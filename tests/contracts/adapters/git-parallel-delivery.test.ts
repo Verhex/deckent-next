@@ -412,7 +412,8 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     // The person's repository (refs, HEAD, status, index bytes, object files); Deckent's own workspace root is not part of it.
     const person = async () => { const { candidates, ...state } = await f.state(); void candidates; return [state, await readFile(join(s, '.git/index')), await objects(s)]; }, before = await person();
     const base = await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'r9n' }, limits, workerTreeDenied);
-    expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual([['.env', 'patch-excluded'], ['hard.txt', 'hard-link'], ['link.txt', 'symlink'], ['secret.pem', 'deny-path:**/*.pem']]);
+    // DENY: credential-table exclusions precede the caller's deny-path rule; the files and their order stay pinned.
+    expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual([['.env', 'patch-excluded'], ['hard.txt', 'hard-link'], ['link.txt', 'symlink'], ['secret.pem', 'patch-excluded']]);
     const identity = { scopeId: 's', runId: 'r9n', taskId: 't', attemptId: 'w', layoutRevision: 'l', generation: 1 };
     const lease = await new GitWorkspaceBroker(base.options).allocate({ schemaVersion: 1, identity, baseCommit: base.commit });
     expect(lease.sourceBase.adapter.version).toBe(2); expect((await readdir(lease.workspace)).filter(name => name !== '.git').sort()).toEqual(['a.txt', 'b.txt', 'old.txt', 'todo.txt']);

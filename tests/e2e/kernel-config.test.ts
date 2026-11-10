@@ -66,8 +66,9 @@ describe('K1 real binary journeys', () => {
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'degraded', startability: { status: 'blocked' }, policyTemplate: null, policyAdministration: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable; alpha.35 P0: policyAdministration, null without a
-    // terminal scope; Node floor 24.22.0: node; alpha.56 U2: ownerBaseline and BP: providerSpending, both null without a terminal scope).
-    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
+    // terminal scope; Node floor 24.22.0: node; alpha.56 U2: ownerBaseline and BP: providerSpending, both null without a terminal scope;
+    // alpha.64 SETUPUX: codingRepository, the read-only coding-folder observation).
+    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
     expect({ ownerBaseline: result.ownerBaseline, providerSpending: result.providerSpending }).toEqual({ ownerBaseline: null, providerSpending: null });
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });

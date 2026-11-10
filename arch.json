@@ -5639,7 +5639,7 @@
       "composition": 13675
     },
     "totalSrcLines": 200000,
-    "testCases": 8986,
+    "testCases": 8988,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
