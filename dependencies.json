@@ -114,10 +114,11 @@
         "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.",
         "MCP-SCHEMA-VALIDATOR (owner 2026-09-29): the SDK's embedded @cfworker/json-schema@4.1.1 (last release 2025-01-31; cfworker#335/#337 fail-closed, #150 $dynamicRef fail-open; ReDoS through pattern) is no longer used or shipped; build-dist refuses cfWorkerProvider/@cfworker/json-schema like ajv. It remains in the installed dev/test tree (embedded[] mirrors the installed sourcemaps).",
         "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint.",
+        "2026-11-11 review (lead): no release after 2.4.0 (2026-10-23); the ten upstream advisories (newest 2026-10-15) are all fixed at or before 2.3.0; deps-watch reports only the embedded fast-uri findings as mitigated; upstream typescript-sdk#2036 (fast-uri bump) is still open.",
         "2026-10-31 review (proof/ALPHA60/PAKET-2/DEPREVIEW/REPORT.md): 2.4.0 (2026-10-23) carries no security fix; seven SDK advisories 2026-09-30..10-15 were fixed at or before 2.3.0. Behaviour changes: a tool whose x-mcp-header parameter is a number is no longer listed (spec 2026-07-28), an outputSchema .meta({id}) is no longer wrapped in {result}, an invalid URI scheme in $id/$ref no longer compiles. Its nested zod copies are pinned to 4.6.7 by package.json overrides (GHSA-mrhx-c7xc-m3w5, <4.6.6)."
       ],
-      "lastReview": "2026-10-31",
-      "nextReview": "2026-11-14"
+      "lastReview": "2026-11-11",
+      "nextReview": "2026-11-25"
     },
     "@modelcontextprotocol/server": {
       "kind": "runtime",
@@ -195,8 +196,8 @@
         "Three nested zod copies under the SDK packages (client and server 4.6.5, core 4.6.7 since SDK 2.3.1) until our zod 4 migration dedupes them.",
         "2026-10-31 review (proof/ALPHA60/PAKET-2/DEPREVIEW/REPORT.md): 2.4.0 (2026-10-23) carries no security fix; seven SDK advisories 2026-09-30..10-15 were fixed at or before 2.3.0. Behaviour changes: a tool whose x-mcp-header parameter is a number is no longer listed (spec 2026-07-28), an outputSchema .meta({id}) is no longer wrapped in {result}, an invalid URI scheme in $id/$ref no longer compiles. Its nested zod copies are pinned to 4.6.7 by package.json overrides (GHSA-mrhx-c7xc-m3w5, <4.6.6)."
       ],
-      "lastReview": "2026-10-31",
-      "nextReview": "2026-11-14"
+      "lastReview": "2026-11-11",
+      "nextReview": "2026-11-25"
     },
     "ink": {
       "kind": "runtime",
