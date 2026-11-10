@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
 import { PACKAGE_VERSION, t } from '#platform/index.js';
 
@@ -91,6 +91,51 @@ it('F5: invalid input names only registered command words and uses config langua
     expect(errors).not.toContain('Reuse the command');
     expect(errors).toContain('için');
   }
+});
+it('ATTACHDOC: human previews give a complete apply command; JSON stays exact and missing flags are named before any effect', async () => {
+  const plan = { schemaVersion: 1, status: 'preview', planDigest: 'a'.repeat(64) };
+  const projectAttachment = vi.fn(async () => plan);
+  const invoke = async (argv: string[]) => {
+    let output = '', errors = '';
+    const code = await main(['terminal', 'attach', ...argv], { root, env, projectAttachment,
+      stdin: { isTTY: false } as NodeJS.ReadStream,
+      stdout: { write: text => { output += text; } }, stderr: { write: text => { errors += text; } },
+    });
+    return { code, output, errors };
+  };
+  const commandIds = new Set<string>();
+  for (const language of ['en', 'tr']) {
+    await config(language);
+    const preview = await invoke(['--scope', 'target', '--preview']);
+    expect(preview.code, preview.errors).toBe(0);
+    expect(preview.output).toContain(language === 'en' ? 'To apply, run this command.' : 'Uygulamak için bu komutu çalıştırın.');
+    const command = preview.output.trimEnd().split('\n').at(-1)!;
+    expect(command).toMatch(/^deckent terminal attach --scope target --apply --expect a{64} --command-id [a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    commandIds.add(command.split(' ').at(-1)!);
+    const args = command.split(' ').slice(3);
+    projectAttachment.mockClear();
+    const refused = await invoke(args);
+    expect(refused.errors).toContain('AUTHORITY_WITNESS_REQUIRED');
+    expect(refused.errors).not.toContain('CLI_USAGE'); expect(projectAttachment).not.toHaveBeenCalled();
+    for (const flag of ['--scope', '--expect', '--command-id']) {
+      const missing = args.filter((_, index) => args[index] !== flag && args[index - 1] !== flag);
+      const result = await invoke(missing);
+      expect(result.code).toBe(2); expect(result.output).toBe('');
+      expect(result.errors).toContain(`${language === 'en' ? 'Missing argument' : 'Eksik argüman'}: ${flag}.`);
+      expect(projectAttachment).not.toHaveBeenCalled();
+    }
+    const invalid = await invoke(args.map(value => value === command.split(' ').at(-1) ? 'private-invalid-id' : value));
+    expect(invalid.code).toBe(2); expect(invalid.errors).toContain('--command-id');
+    expect(invalid.errors).not.toContain('private-invalid-id'); expect(projectAttachment).not.toHaveBeenCalled();
+    const json = await invoke(['--scope', 'target', '--preview', '--json']);
+    expect(json.code).toBe(0); expect(json.output).toBe(JSON.stringify(plan) + '\n');
+    const registration = await invoke(['--register', '--scope', 'source', '--preview']);
+    expect(registration.code).toBe(0);
+    expect(registration.output.trimEnd().split('\n').at(-1)).toBe(`deckent terminal attach --register --scope source --apply --expect ${plan.planDigest}`);
+    const quoted = await invoke(['--scope', "target's project", '--preview']);
+    expect(quoted.output).toContain("--scope 'target'\\''s project' --apply");
+  }
+  expect(commandIds.size).toBe(2);
 });
 it('keeps environment locale available with invalid config', async () => {
   await writeFile(join(root, '.deckent', 'config.json'), '{broken');

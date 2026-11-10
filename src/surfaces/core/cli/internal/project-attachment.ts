@@ -1,15 +1,17 @@
-import { ErrorRegistry, emit, loadConfig, loadConfigLanguage, resolveLocale, t, terminalSafeText, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
+import { randomUUID } from 'node:crypto';
+import { PACKAGE_NAME, ErrorRegistry, emit, loadConfig, loadConfigLanguage, resolveLocale, t, terminalSafeText, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import { projectAttachmentCommandSchema } from '#domain/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
+import { shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 /** Explicit source, attachment and recovery commands share the witnessed application owner. */
 export async function projectAttachmentCommand(argv: readonly string[], context: CommandContext) {
-  const values = new Map<string, string>(), switches = new Set<string>();
+  const values = new Map<string, string>(), switches = new Set<string>(), commandPath = ['terminal', 'attach'].join(' ');
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]!;
     if (['--scope', '--expect', '--command-id', '--revoke', '--lease-revoke', '--detach', '--restore', '--lang'].includes(flag) && !values.has(flag)) {
-      const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(flag, value);
+      const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE', { params: { flag } }); values.set(flag, value);
     } else if (['--preview', '--apply', '--register', '--unregister', '--relocate', '--json', '--no-color'].includes(flag) && !switches.has(flag)) switches.add(flag);
     else throw ErrorRegistry.createError('CLI_USAGE');
   }
@@ -29,7 +31,16 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
   const parsed = projectAttachmentCommandSchema.safeParse(switches.has('--unregister') ? { action: 'unregister' } : switches.has('--relocate') ? { action: 'relocate', scopeId } : revoke ? { action: values.has('--restore') ? 'restore' : values.has('--detach') ? 'detach' : values.has('--lease-revoke') ? 'lease-revoke' : 'revoke', projectId: revoke, ...(values.has('--restore') ? { expect: values.get('--expect') } : {}) }
     : { action: switches.has('--register') ? apply ? 'register' : 'register-preview' : apply ? 'apply' : 'preview', scopeId,
       ...(apply ? { expect: values.get('--expect') ?? registration?.planDigest, ...(!switches.has('--register') ? { commandId: values.get('--command-id') } : {}) } : {}) });
-  if (!parsed.success) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!parsed.success) {
+    const flags: Record<string, string | undefined> = { scopeId: '--scope', expect: '--expect', commandId: '--command-id',
+      projectId: ['--revoke', '--lease-revoke', '--detach', '--restore'].find(flag => values.has(flag)) };
+    const field = String(parsed.error.issues[0]?.path[0]), flag = flags[field];
+    const missing = field === 'scopeId' ? !scopeId : flag && !values.has(flag);
+    throw ErrorRegistry.createError(missing ? 'CLI_ARGUMENT_MISSING' : 'CLI_USAGE', { locale, params: {
+      command: `${PACKAGE_NAME} ${commandPath}`, ...(flag ? { flag } : {}),
+      usage: missing ? t('cli.help.bare.missing', { argument: flag! }, locale) + '\n' + t('cli.help.bare.details', { command: commandPath }, locale) : t('setup.attachment.help', {}, locale),
+    } });
+  }
   if (apply) {
     if (cliMode(context, switches.has('--json')).reason !== 'tty') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'project.attach' } });
     const actionLabel = { register: t('setup.attachment.register', {}, locale), apply: t('setup.attachment.apply', {}, locale),
@@ -44,6 +55,10 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
     if (answer !== 'yes') return;
   }
   const result = await context.projectAttachment(root, parsed.data, options, interaction);
-  emit(result, { json: switches.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), render: value =>
-    `${apply ? t('setup.attach.saved', {}, locale) : t('setup.attach.preview', {}, locale)}\n${terminalSafeText(JSON.stringify(value, null, 2))}` });
+  emit(result, { json: switches.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), render: value => {
+    const output = `${apply ? t('setup.attach.saved', {}, locale) : t('setup.attach.preview', {}, locale)}\n${terminalSafeText(JSON.stringify(value, null, 2))}`;
+    if (parsed.data.action !== 'preview' && parsed.data.action !== 'register-preview') return output;
+    const command = `${PACKAGE_NAME} ${commandPath}${parsed.data.action === 'register-preview' ? ' --register' : ''} --scope ${shellIdentity(parsed.data.scopeId)} --apply --expect ${(value as { planDigest: string }).planDigest}${parsed.data.action === 'preview' ? ` --command-id ${randomUUID()}` : ''}`;
+    return output + '\n' + t('setup.attachment.next', { command }, locale);
+  } });
 }
