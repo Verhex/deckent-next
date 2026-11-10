@@ -1,5 +1,7 @@
 # Bilinen sınırlar
 
+Kabuk koruması tek tırnaklı `'$DECKENT_HOME/x'` sabit metnini de reddeder; ayrıştırmada tırnak bilgisi kaybolduğu için bu, tutucu bir yanlış rettir.
+
 Patch dışlamaları çalışma alanının okuma kimlik bilgisi tabanını da kullanır. `.gnupg`, `.docker`, `.config/gh`, `.git-credentials`, `.pypirc`, `*.pem`, `*.key`, `secrets.json` ve `*.jks` dahil kimlik bilgisi yolları artık patch dışında tutulur. Mevcut patch dışlamaları da geçerlidir.
 
 Alpha.63 işçi adayı, kalıcı işçi kanıtını ilk korumalı Attempt ile üretir. Okunamayan kayıt veya sonucu belirsiz doğrulama kilidi uzlaştırma bekletir; kendiliğinden yeniden denenmez. Görev girdileri ve önceki görevin çıktıları yalnız araçların salt okunur görünümündedir; CLI giriş realm’ine girmez. Gerçek hesap ve monte sürüm kabulü açıktır.

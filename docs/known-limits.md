@@ -1,5 +1,7 @@
 # Known limits
 
+The shell guard also refuses the single-quoted literal `'$DECKENT_HOME/x'`; this is a conservative false refusal because quote information is lost during parsing.
+
 Patch exclusions also use the workspace read credential floor. Patches now withhold credential paths including `.gnupg`, `.docker`, `.config/gh`, `.git-credentials`, `.pypirc`, `*.pem`, `*.key`, `secrets.json` and `*.jks`. Existing patch exclusions still apply.
 
 The alpha.63 worker candidate verifies its first guarded Attempt before retaining worker evidence. An unreadable record or an unresolved verification claim keeps the worker waiting for reconciliation; it is never retried automatically. Task artifacts and predecessor outputs are read-only tool inputs and are absent from the CLI login realm. Real-account and assembled-release acceptance remain open.

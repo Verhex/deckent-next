@@ -5,7 +5,7 @@ import limits from './proposal-limits.json' with { type: 'json' };
  * A lane may only narrow `settingKeys`; widening it is the owner's decision. Model and Brain choices stay in /model, every other key in its window.
  */
 export const AI_PROPOSAL_REGISTRY = Object.freeze({ version: 1, maxCardRounds: limits.maxCardRounds,
-  tools: Object.freeze({ work: 'propose_work', setting: 'propose_setting', choices: 'list_setting_choices' } as const),
+  tools: Object.freeze({ work: 'propose_work', setting: 'propose_setting', choices: 'list_setting_choices', mcp: 'propose_mcp_server' } as const),
   settingKeys: Object.freeze(['language', 'output_mode', 'terminal.responseStyle'] as const),
   layers: Object.freeze(['project', 'global'] as const) });
 export type AiSettingKey = typeof AI_PROPOSAL_REGISTRY.settingKeys[number];

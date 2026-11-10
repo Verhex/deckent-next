@@ -2642,6 +2642,7 @@
     },
     "src/domain/core/approval": {
       "dependencies": [
+        "src/domain/core/agent-tool",
         "src/domain/core/primitives",
         "src/domain/core/agent-turn",
         "src/domain/core/attempt"
@@ -5639,7 +5640,7 @@
       "composition": 13675
     },
     "totalSrcLines": 200000,
-    "testCases": 8986,
+    "testCases": 8991,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

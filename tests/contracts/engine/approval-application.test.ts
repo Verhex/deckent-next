@@ -7,8 +7,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHmacIntegrity } from '../../../src/platform/core/integrity/index.js';
 import { openSqliteApprovalStore } from '../../../src/adapters/core/approval-store/index.js';
 import { LocalOsSessionAuthority } from '../../../src/adapters/core/local-principal/index.js';
-import { ApprovalApplication, requestAgentToolApproval, requestTaskApproval, verifyApproval, type ApprovalAssuranceOptions } from '../../../src/engine/core/approval/index.js';
-import { approvalRecordSchema, type ApprovalRecord } from '#domain/index.js';
+import { ApprovalApplication, ConfigChangeApprovalBroker, RunCreateApprovalBroker, agentToolApprovalFacts, approvalRequestDigest, awaitAgentToolApproval, sealApproval, requestAgentToolApproval, requestTaskApproval, verifyApproval, type ApprovalAssuranceOptions } from '../../../src/engine/core/approval/index.js';
+import { approvalRecordSchema, mcpPrincipalRef, type ApprovalRecord, type ApprovalSubject } from '#domain/index.js';
+import { PROPOSE_MCP_SERVER_TOOL } from '#adapters/core/mcp-client/index.js';
 import { SQLITE_STORAGE_OPTIONS } from '../../../src/platform/core/config-fields/index.js';
 
 async function fixture() {
@@ -32,6 +33,96 @@ async function fixture() {
   return { journal, path, make, record, command, clock, session, integrity, policy,
     close: async () => { journal.close(); await rm(root, { recursive: true, force: true }); } };
 }
+it.skipIf(process.platform !== 'linux')('PROPFIX2: AI proposal decisions require a witnessed person; ordinary delegated cards remain AI-answerable', async () => {
+  const f = await fixture();
+  try {
+    const person = (await f.session.verifySession(undefined)).principal, ai = { ...person, ...mcpPrincipalRef(person), assurance: 'workload-verified' as const };
+    const requester = { id: ai.id, issuer: ai.issuer, subject: ai.subject };
+    const policy = { ...f.policy, grants: [{ ...f.policy.grants[0]!, actions: ['inspect', 'decide'], principals: [{ issuer: ai.issuer, subject: ai.subject }, { issuer: person.issuer, subject: person.subject }] }] };
+    let actor = ai as typeof person, witnessed = false;
+    const sessions = { verifySession: async () => ({ principal: actor, session: { ...(await f.session.verifySession(undefined)).session, kind: actor.assurance,
+      principalRef: { id: actor.id, issuer: actor.issuer, subject: actor.subject } } }), isSessionActive: async () => true, revoke: async () => {} };
+    const app = new ApprovalApplication(f.journal.store, { verify: async () => actor }, sessions, { load: async () => policy }, f.integrity,
+      { sample: () => f.clock }, 'local-sdk', 20, undefined, undefined, { interactive: async () => witnessed });
+    for (const subject of [
+      { kind: 'config-change', commandId: 'setting', action: 'set', layer: 'project', keyPath: 'language', before: '"en"', after: '"tr"', expectDigest: null, valueDigest: 'b'.repeat(64), ruleId: 'proposal' },
+      { kind: 'run-create', commandId: 'work', runId: 'r', inputDigest: 'b'.repeat(64), admissionDigest: 'c'.repeat(64), decisionRecordId: 'decision' },
+    ] satisfies ApprovalSubject[]) {
+      const card = f.journal.store.create(sealApproval({ request: { schemaVersion: 3, approvalId: subject.commandId, scopeId: 'scope', subject, requester,
+        actionDigest: 'b'.repeat(64), policyRevision: 'policy', summary: 'AI proposal', createdAt: 1000, expiresAt: 1100,
+        facts: { risk: { source: 'effect-class', effectClass: 'write', authority: true }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } }, revision: 0, status: 'pending', decision: null }, f.integrity));
+      const command = { ...f.command, approvalId: card.request.approvalId, commandId: subject.commandId + '-allow' };
+      for (const decision of ['allow', 'deny']) {
+        await expect(app.decide({ ...command, decision })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
+        expect(f.journal.store.load('scope', card.request.approvalId)).toEqual(card);
+        expect(f.journal.store.receipt('scope', command.commandId)).toBeNull();
+      }
+      actor = person;
+      await expect(app.decide(command)).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+      witnessed = true;
+      const decided = await app.decide(command);
+      expect(decided.decision).toMatchObject({ deciderClass: 'human-tty', assurance: 'peer-session' });
+      expect(await app.decideWithSettlement(command)).toEqual({ record: decided, commit: 'replay' });
+      actor = ai; witnessed = false;
+      const ordinary = f.journal.store.create(sealApproval({ request: { ...card.request, approvalId: subject.commandId + '-delegable',
+        subject: { ...subject, commandId: subject.commandId + '-delegable' }, actionDigest: (subject.kind === 'config-change' ? 'd' : 'e').repeat(64), facts: {
+        risk: { source: 'effect-class', effectClass: 'write', authority: false }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } },
+        revision: 0, status: 'pending', decision: null }, f.integrity));
+      expect((await app.decide({ ...command, approvalId: ordinary.request.approvalId, commandId: subject.commandId + '-delegable' })).decision)
+        .toMatchObject({ deciderClass: 'ai-policy', decision: 'allow' });
+    }
+    // No proposal subject: an explicit delegation still seals an AI policy decision.
+    const ordinary = requestAgentToolApproval(f.journal.store, f.integrity, { scopeId: 'scope', requester, subject: { kind: 'agent-tool-call', turnId: 'turn',
+      round: 1, index: 0, tool: 'run_shell', toolVersion: 1, resource: 'project', argsDigest: 'e'.repeat(64) }, policyRevision: 'policy',
+      summary: 'Ordinary delegated call', createdAt: 1000, expiresAt: 1100, facts: agentToolApprovalFacts(policy, 'scope', 'shell-read-low') });
+    expect((await app.decide({ ...f.command, approvalId: ordinary.request.approvalId })).decision).toMatchObject({ deciderClass: 'ai-policy', decision: 'allow' });
+  } finally { await f.close(); }
+});
+
+it.skipIf(process.platform !== 'linux')('PROPFIX2: both proposal brokers refuse sealed AI, unknown and self decisions, including consumed Run replay', async () => {
+  const f = await fixture();
+  try {
+    const person = (await f.session.verifySession(undefined)).session.principalRef, requester = { ...person, ...mcpPrincipalRef(person) };
+    const clock = { sample: () => f.clock }, options = { requestTtlMs: 1000, admitWithinMs: 1000 };
+    const config = new ConfigChangeApprovalBroker(f.journal.store, f.integrity, clock, options), runs = new RunCreateApprovalBroker(f.journal.store, f.integrity, clock, options);
+    for (const variant of ['ai-policy', 'unknown', 'self', 'false-person', 'unmarked-ai', 'human-tty', 'deny', 'delegable'] as const) {
+      const aiDecision = ['ai-policy', 'unmarked-ai', 'delegable'].includes(variant), personDecision = !['unmarked-ai', 'delegable'].includes(variant);
+      const inputs = [
+        { scopeId: 'scope', requester, policy: f.policy, policyRevision: 'policy', personDecision, summary: 'AI setting', subject: { kind: 'config-change' as const,
+          commandId: variant, action: 'set' as const, layer: 'project' as const, keyPath: 'language', before: '"en"', after: '"tr"', expectDigest: null, valueDigest: 'b'.repeat(64), ruleId: 'proposal' } },
+        { scopeId: 'scope', requester, policy: f.policy, policyRevision: 'policy', personDecision, subject: { kind: 'run-create' as const, commandId: variant,
+          runId: 'r', inputDigest: 'b'.repeat(64), admissionDigest: 'c'.repeat(64), decisionRecordId: 'decision' } },
+      ];
+      for (const input of inputs) {
+        const admit = (personDecision = input.personDecision) => input.subject.kind === 'config-change' ? config.admit({ ...input, subject: input.subject, summary: 'AI setting', personDecision }) : runs.admit({ ...input, subject: input.subject, personDecision });
+        const pending = admit(); expect(pending).toHaveProperty('pending');
+        if (!('pending' in pending)) throw Error('EXPECTED_PENDING');
+        const card = f.journal.store.load('scope', pending.pending.approvalId)!;
+        const base = { commandId: variant, decision: variant === 'deny' ? 'deny' as const : 'allow' as const, actor: variant === 'self' ? requester : person,
+          sessionId: 'session', channel: 'local-terminal-card', reason: 'Reviewed', decidedAt: 1000, requestDigest: approvalRequestDigest(card.request),
+          commandDigest: 'c'.repeat(64), idempotencyKeyHash: 'd'.repeat(64) };
+        const record = f.journal.store.transition(card, sealApproval({ ...card, revision: 1, status: 'decided', decision: variant === 'unknown'
+          ? { ...base, schemaVersion: 2, assurance: 'peer-session' }
+          : { ...base, schemaVersion: 4, assurance: aiDecision || variant === 'false-person' ? 'ai-policy' : 'peer-session', deciderClass: aiDecision ? 'ai-policy' : 'human-tty' } }, f.integrity));
+        const reference = { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, requestDigest: record.decision!.requestDigest, commandId: variant };
+        if (variant === 'human-tty' || variant === 'delegable') {
+          expect(admit()).toHaveProperty('approved'); expect(admit()).toHaveProperty('approved');
+          if (input.subject.kind === 'run-create') expect(() => runs.verifyConsumed({ ...input, subject: input.subject }, reference)).not.toThrow();
+        } else {
+          expect(() => admit(true)).toThrow('APPROVAL_DENIED');
+          if (input.subject.kind === 'run-create' && variant !== 'deny') expect(() => runs.verifyConsumed({ ...input, subject: input.subject, personDecision: true }, reference)).toThrow('APPROVAL_DENIED');
+        }
+      }
+    }
+    const card = requestAgentToolApproval(f.journal.store, f.integrity, { scopeId: 'scope', requester, subject: { kind: 'agent-tool-call', turnId: 'proposal-turn',
+      round: 1, index: 0, tool: PROPOSE_MCP_SERVER_TOOL, toolVersion: 1, resource: 'mcp:example', argsDigest: 'e'.repeat(64) }, policyRevision: 'policy',
+      summary: 'MCP proposal', createdAt: 1000, expiresAt: 1100 });
+    f.journal.store.transition(card, sealApproval({ ...card, revision: 1, status: 'decided', decision: { schemaVersion: 4, commandId: 'mcp-self', decision: 'allow',
+      actor: requester, sessionId: 'ai-session', channel: 'local-sdk', reason: 'AI self approval', decidedAt: 1000, requestDigest: approvalRequestDigest(card.request),
+      commandDigest: 'c'.repeat(64), idempotencyKeyHash: 'd'.repeat(64), assurance: 'ai-policy', deciderClass: 'ai-policy' } }, f.integrity));
+    await expect(awaitAgentToolApproval(f.journal.store, f.integrity, card, clock, new AbortController().signal)).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  } finally { await f.close(); }
+});
 describe('S02 trusted producer settlement and unchanged durable record', () => {
   it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] producer settlement distinguishes one fresh decision from concurrent and historical replays without changing stored or legacy bytes', async () => {
     const f = await fixture(), settle = vi.fn();

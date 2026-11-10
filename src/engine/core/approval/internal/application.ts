@@ -2,7 +2,7 @@ import { readWorkerToolCard, workerToolPreviewComplete } from '#capabilities/ind
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { aiAuthorityFloor, aiMayNotAllow, approvalFacts, approvalRenewalRefusal, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema,
+import { aiAuthorityFloor, aiMayNotAllow, requiresPersonProposalDecision, approvalFacts, approvalRenewalRefusal, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema,
   encodeCommandProjection, evaluatePolicy, samePrincipalRef, separationOfDutiesViolation, principalGrants, APPROVAL_ASSURANCE, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type OperationDescriptor,
   type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
@@ -11,7 +11,7 @@ import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABI
 import { PolicyAuthorizationError, authorityRefusalAuditEvent, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
-import { approvalRequestDigest, decidedRefusal, expireDue, verifyApproval, sealApproval } from './integrity.js';
+import { approvalActorRef, approvalRequestDigest, decidedRefusal, expireDue, verifyApproval, sealApproval } from './integrity.js';
 import { approvalAssuranceRegistry, requiredApprovalAssurance, operationApprovalFacts } from './assurance.js';
 export const approvalQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema });
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
@@ -64,7 +64,9 @@ export class ApprovalApplication {
   }
   private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: Policy, decision: 'allow' | 'deny'): Promise<boolean> {
     const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request);
-    if (worker && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
+    const proposal = requiresPersonProposalDecision(record.request);
+    if ((worker || proposal) && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
+    if (proposal && samePrincipalRef(approvalActorRef(principal), record.request.requester)) throw new ApprovalError('APPROVAL_DENIED');
     if (decision === 'allow' && (worker || record.request.schemaVersion === 3 && record.request.preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
     if (!interactive) {
@@ -140,7 +142,6 @@ export class ApprovalApplication {
   async decide(input: unknown, credential?: unknown) {
     return (await this.decideWithSettlement(input, credential)).record;
   }
-  /** Trusted producer result: exactly one decision owner; settlement is supplied by the atomic store transaction. */
   async decideWithSettlement(input: unknown, credential?: unknown, sessionGuard?: (record: ApprovalRecord, actor: VerifiedPrincipal) => void): Promise<ApprovalSettlement> {
     const parsed = approvalCommandSchema.safeParse(input); if (!parsed.success) throw new ApprovalError('APPROVAL_INVALID');
     const command = parsed.data, { channels } = this.assurance;
@@ -157,7 +158,6 @@ export class ApprovalApplication {
     if (command.decision === 'allow') await this.assertDecidableHere(record, actor);
     const fingerprint = approvalCommandFingerprint('approval-command:1', command, actor);
     const replay = this.store.receipt(command.scopeId, command.commandId);
-    // A replay returns the exact receipt; it never issues a new authorization or reopens the request.
     if (replay) {
       if (replay.operation !== 'decide' || replay.fingerprint !== fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
       const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);

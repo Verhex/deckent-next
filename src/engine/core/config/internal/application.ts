@@ -114,7 +114,7 @@ export class ConfigApplication {
       const authorization = await approvals.evaluate(item);
       if (!proposal && authorization.decision === 'allow') { subjects.push(null); continue; }
       const subject = configChangeSubject(preview, item, unset, authorization.ruleId ?? 'policy');
-      const admission = await approvals.admit(item, subject, authorization);
+      const admission = await approvals.admit(item, subject, authorization, proposal);
       if ('pending' in admission) return { status: 'approval-pending', commandId: item.commandId, expect: preview.digest, keyPath: item.keyPath, layer: preview.layer, approval: admission.pending };
       subjects.push(subject); approvalId = admission.approved.approvalId;
     }
@@ -161,7 +161,7 @@ export class ConfigApplication {
           const current = await approvals.evaluate(input);
           if (proposal || current.decision === 'require-approval') {
             if (!approved) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
-            const admission = await approvals.admit(input, approved, current);
+            const admission = await approvals.admit(input, approved, current, proposal);
             if (!('approved' in admission)) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
             approvalId = admission.approved.approvalId;
           }

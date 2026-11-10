@@ -59,7 +59,7 @@ export class RunCreationAuthority {
     // R9 (owner 2026-11-05): the worker ceiling belongs to a plan the person approves on its card (shown there, sealed in its basis); a Run admitted without a card keeps the current mode alone.
     if (evaluation.verdict.decision === 'allow' && create.execution.workerMode) create = { ...create, execution: Object.fromEntries(Object.entries(create.execution).filter(([key]) => key !== 'workerMode')) as RunCreate['execution'] };
     const record = this.seal(command, principal, evaluation, this.basis(create, workspace)), reference = { eventId: record.event.eventId, sequence: record.sequence };
-    const approvalInput = { ...this.approvalInput(record, evaluation.policy), summary: renderRunCreateApprovalSummary(command, create,
+    const approvalInput = { ...this.approvalInput(record, evaluation.policy, !!command.proposal && isAiPrincipal(principal)), summary: renderRunCreateApprovalSummary(command, create,
       evaluation.verdict, this.presentation.locale, this.presentation.known, this.presentation.registry, evaluation.askedAtExecution) };
     if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
     const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
@@ -82,7 +82,7 @@ export class RunCreationAuthority {
       || subject.action !== 'create' || subject.resource.kind !== 'run' || subject.resource.id !== command.runId
       || subject.inputDigest !== hash('run-admission:1', command) || subject.basisDigest !== hash('run-admission-basis:1', this.basis(create, workspace))) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     if (subject.verdict.decision === 'deny' || (subject.verdict.decision === 'require-approval') !== (create.authority.approval !== undefined)) throw new AuditError('AUDIT_INTEGRITY');
-    if (create.authority.approval) this.approvals.verifyConsumed(this.approvalInput(record, null), create.authority.approval);
+    if (create.authority.approval) this.approvals.verifyConsumed(this.approvalInput(record, null, !!command.proposal && isAiPrincipal(principal)), create.authority.approval);
   }
   private basis(create: RunCreate, workspace?: RunWorkspaceCustody) {
     return { create: runCreateSchema.omit({ now: true, authority: true }).strip().parse(create), workspace: workspace ?? null };
@@ -94,10 +94,10 @@ export class RunCreationAuthority {
       inputDigest: hash('run-admission:1', command), basisDigest: basis === null ? null : hash('run-admission-basis:1', basis),
       policyDigest: hash('policy:1', evaluation.policy), verdict: evaluation.verdict }, this.clock.sample().wallMs);
   }
-  private approvalInput(record: AuditRecord, policy: unknown): RunCreateApprovalInput {
+  private approvalInput(record: AuditRecord, policy: unknown, personDecision: boolean): RunCreateApprovalInput {
     const subject = record.event.subject;
     if (subject.kind !== 'authority-decision' || subject.basisDigest === null) throw new AuditError('AUDIT_INTEGRITY');
-    return { scopeId: record.event.scopeId, requester: subject.envelope.principalRef, policyRevision: record.event.policyRevision, policy,
+    return { scopeId: record.event.scopeId, requester: subject.envelope.principalRef, policyRevision: record.event.policyRevision, policy, personDecision,
       subject: { kind: 'run-create', commandId: subject.envelope.commandId, runId: subject.resource.id, inputDigest: subject.inputDigest,
         admissionDigest: subject.basisDigest, decisionRecordId: record.event.eventId } };
   }
