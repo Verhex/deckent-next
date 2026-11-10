@@ -16,7 +16,9 @@ type DoctorGroup = 'setup' | 'security' | 'work' | 'tools' | 'data';
 type DoctorCheckState = 'ok' | 'warning' | 'error' | 'untested';
 /** One row: what was measured in plain words, and for a warning or error the one next command (or step) that resolves it. `fix` names a
  * registry fix the interactive doctor may offer on a terminal; it is offered only when its port is wired and it is not a hard-floor item. */
-export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: DoctorCheckState; text: string; next?: string; fix?: string }>;
+export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: DoctorCheckState; text: string; next?: string; fix?: string;
+  /** Unverified health needs attention even when there is no installation error. */
+  needsAttention?: true }>;
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
@@ -124,8 +126,8 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   if (f.catalogDiagnostics === null) rows.push(row('security', 'security.catalogSigner', 'untested', t('agentstats.signer.unavailable', {}, l)));
   const audit = r.auditIntegrity;
   if (audit) rows.push(audit.status === 'match' ? row('security', 'security.audit', 'ok', t('doctor.check.audit.ok', {}, l))
-    // Unverified audit integrity cannot establish health, including before the first checkpoint.
-    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? row('security', 'security.audit', 'error', t('doctor.check.audit.noCheckpoint', {}, l), scoped('deckent audit verify', f))
+    // A fresh scope cannot prove integrity yet, but has no checkpoint failure that blocks installation.
+    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? { ...row('security', 'security.audit', 'untested', t('doctor.check.audit.noCheckpoint', {}, l)), needsAttention: true }
     : row('security', 'security.audit', 'error', t('doctor.check.audit.problem', { status: renderAuditStatus(audit.status, l), reason: renderAuditReason(audit.reason, l) }, l), scoped('deckent audit verify', f), fix('security.audit')));
   const directory = r.recoveryFiles?.installationDirectory;
   if (directory) rows.push((parseInt(directory.mode, 8) & 0o077)
@@ -303,11 +305,15 @@ const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doc
 const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doctor.group.setup', {}, l) : group === 'security' ? t('doctor.group.security', {}, l)
   : group === 'work' ? t('doctor.group.work', {}, l) : group === 'data' ? t('doctor.group.data', {}, l) : t('doctor.group.tools', {}, l);
 
-/** The human summary and the JSON verdict use the same check states. */
+/** One health verdict for JSON and the human summary; unverified health is never ready. */
+export function doctorNeedsAttention(checks: readonly DoctorCheck[]): boolean {
+  return checks.some(check => check.state === 'error' || check.needsAttention === true);
+}
+
 export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): string {
   const count = (state: DoctorCheckState) => checks.filter(check => check.state === state).length;
   const errors = count('error'), warnings = count('warning'), untested = count('untested');
-  return [errors ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale),
+  return [doctorNeedsAttention(checks) ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale),
     ...(errors ? [t('doctor.summary.errors', { n: errors }, locale)] : []), ...(warnings ? [t('doctor.summary.warnings', { n: warnings }, locale)] : []),
     ...(untested ? [t('doctor.summary.untested', { n: untested }, locale)] : []), ...(!errors && !warnings ? [t('doctor.summary.clean', {}, locale)] : [])].join(' · ');
 }

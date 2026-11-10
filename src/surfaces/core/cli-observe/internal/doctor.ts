@@ -4,7 +4,7 @@ import {
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
-import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -143,12 +143,12 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push(ownerBaseline.missing ? { group: 'security', id: 'owner-baseline', state: 'warning',
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
     : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
-  return { data: { ...data, status: checks.some(check => check.state === 'error') ? 'degraded' as const : 'ready' as const,
+  return { data: { ...data, status: doctorNeedsAttention(checks) ? 'degraded' as const : 'ready' as const,
     providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:
- * any error row → errors, else any warning row → warnings, else ok ("not tested" rows count as neither, as in the doctor summary). */
+ * any error row → errors, else any warning row → warnings, else ok. Untested health still needs attention without blocking installation. */
 export async function doctorVerdict(root: string, context: KernelCommandContext, options: ConfigLoadOptions): Promise<'ok' | 'warnings' | 'errors'> {
   const env = options.env ?? process.env, call: KernelCall = { args: { positionals: ['doctor'], json: true, global: false, dryRun: false, toolchains: false, verbose: false },
     root, env, options: { env }, locale: 'en', mode: 'json', output: () => undefined };
