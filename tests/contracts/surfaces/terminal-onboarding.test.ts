@@ -150,11 +150,64 @@ it('R13/R18: the image card follows an answered work choice, the step total is k
   expect(answers).toContainEqual({ connection: 'claude-subscription' }); expect(applied).toEqual(['execution:worker-settings', 'work:kind', 'work:pool']); expect(frame).not.toContain('Confirm worker readiness');
 });
 
-it('U4E G2: install permission recovery precedes an absent model; not-applicable profiles never get a permission success card', () => {
+it('U4E G2 + B1-WORKERCARD: permission order, CLI setup guidance without admission, and ready CLI selection (EN/TR)', async () => {
   const missing = { ...snapshot, observation: { ...observation, model: { connections: 0 } }, budget: { ...snapshot.budget, needed: false },
     permissions: { state: 'needs-profile' as const, reason: 'onboarding.permissions.profileMissing' } };
   expect(onboardingSteps(missing)[0]?.kind).toBe('permissions');
   expect(onboardingSteps({ ...missing, permissions: { state: 'not-applicable', reason: '' } }).some(step => step.kind === 'permissions')).toBe(false);
+  const { PassThrough, Writable } = await import('node:stream');
+  const { terminalBuffers } = await import('../../fixtures/terminal-screen.js');
+  const { runOnboardingSession } = await loadOnboardingScreens();
+  for (const locale of ['en', 'tr'] as const) for (const state of ['missing', 'unsigned', 'unknown', 'ready', 'admitted'] as const) {
+    const stage = { id: 'work:kind', namespace: 'work', title: 'setup.work.kindTitle', phase: 'onboarding', state: 'needs-answer',
+      reason: { code: 'setup.work.kindMissing', params: {} }, operation: null, question: null, default: null, cli: null, autoEligible: false } as SetupStage;
+    const hosts = [{ id: 'claude', cli: state === 'unknown' ? 'unknown' : state === 'unsigned' ? 'found' : 'absent', login: state === 'unknown' ? 'unknown' : 'absent' },
+      { id: 'codex', cli: state === 'missing' ? 'absent' : 'found', login: state === 'ready' || state === 'admitted' ? 'found' : 'absent' },
+      { id: 'cursor', cli: 'absent', login: 'found' }]; // A login record alone must never make an absent CLI ready.
+    const current = { ...snapshot, hosts, admittedProviders: state === 'admitted' ? ['codex'] : [], folderFacts: { kind: 'coding' as const, entries: [] }, budget: { ...snapshot.budget, needed: false }, deferred: ['onboarding:first-task:done'],
+      plan: { ...snapshot.plan, stages: [{ ...stage, state: state === 'admitted' ? 'done' as const : stage.state }] } };
+    let frame = ''; const answers: unknown[] = [], deferred: string[] = [], controller = new AbortController();
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, next) { frame += String(chunk); next(); } }), { isTTY: true, columns: 80, rows: 24 });
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const main = () => terminalBuffers(frame.replace(/\n/gu, '\r\n'), 80, 24).main;
+    const port = { assertPerson: async () => {}, defer: async (id: string) => { deferred.push(id); },
+      observe: async (values: Readonly<Record<string, unknown>>) => { if (values['work:kind']) answers.push(values['work:kind']);
+        return values['work:kind'] ? { ...current, plan: { ...current.plan, stages: [] } } : current; } } as unknown as OnboardingPort;
+    const run = runOnboardingSession(port, { locale } as never, { locale, env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never, signal: controller.signal }, state === 'admitted');
+    try {
+      if (state === 'ready') {
+        await waitForCard(() => frame, locale === 'en' ? 'Use codex for coding work?' : 'Kodlama işlerini codex yapsın mı?');
+        stdin.write('\u001b[B'); await settle(30); stdin.write('\r');
+      } else if (state === 'admitted') {
+        await waitForCard(() => frame, locale === 'en' ? 'Coding work is set up on codex. Keep it?' : 'Kodlama işi codex üzerinde kurulu. Böyle kalsın mı?');
+        stdin.write('\u001b[B'); await settle(30); stdin.write('\r');
+      }
+      const title = state === 'ready' || state === 'admitted' ? (locale === 'en' ? 'Choose a signed-in coding CLI' : 'Oturum açılmış bir kodlama CLI seçin')
+        : state === 'unknown' ? (locale === 'en' ? 'No coding CLI is ready' : 'Hazır bir kodlama CLI yok') : state === 'missing' ? (locale === 'en' ? 'No coding CLI is installed' : 'Kurulu bir kodlama CLI yok')
+          : (locale === 'en' ? 'No coding CLI is signed in' : 'Oturum açılmış bir kodlama CLI yok');
+      await waitForCard(() => frame, title);
+      expect(main()).toContain('https://code.claude.com/docs/en/quickstart'); expect(main()).toContain('claude auth login');
+      expect(main()).toContain(locale === 'en' ? 'terminal app' : 'terminal uygulamasıdır');
+      if (state === 'unknown') expect(main()).toContain(locale === 'en' ? 'Could not check installation or sign-in' : 'Kurulum veya oturum durumu kontrol edilemedi');
+      const before = frame.length; stdin.write('\r');
+      await until(() => frame.slice(before).includes(locale === 'en' ? 'not ready' : 'hazır değil'), 'visible unavailable feedback');
+      expect(main()).toContain('claude auth login'); expect(answers).toEqual([]); expect(deferred).toEqual([]);
+      expect(main()).toContain(locale === 'en' ? 'Esc · Later' : 'Esc · Sonra');
+      stdin.write('\u001b[B'); await settle(50);
+      if (state === 'ready') {
+        stdin.write('\r'); await settle(50); await waitForCard(() => frame.slice(before), locale === 'en' ? 'Use codex for coding work?' : 'Kodlama işlerini codex yapsın mı?');
+        stdin.write('\r'); expect(await run).toBeNull(); expect(answers).toContain('codex'); expect(deferred).toEqual([]);
+      } else {
+        if (state !== 'admitted') {
+          expect(main()).toContain('https://developers.openai.com/codex/cli/'); expect(main()).toContain('codex login');
+          stdin.write('\u001b[B'); await settle(50);
+        } else expect(main()).not.toContain('codex ·'); // An admitted ready CLI stays installed, but cannot be added twice.
+        expect(main()).toContain('https://cursor.com/docs/cli/installation'); expect(main()).toContain('agent login');
+        stdin.write('\r'); await settle(50); expect(answers).toEqual([]); // Absent CLI + found login still only explains setup.
+        stdin.write('\u001b'); expect(await run).toBeNull(); expect(deferred).toEqual(['work:kind']);
+      }
+    } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
+  }
 });
 
 it('U6-S4: image consent immediately follows work choice, offers verified adoption first (highlighted, owner 2026-10-26) and preserves missing-only repair', async () => {
