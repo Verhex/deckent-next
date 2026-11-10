@@ -28,9 +28,13 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.63.3`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.64`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
+>
+> Alpha.64 son alpha'dır. Onay kökeni, teslim modu, Brain kökeni veya resource-key kayıtları yazıldıktan sonra
+> alpha.63.3 bunları okuyamaz: **alpha.63.3'e geri dönüş yoktur**. Kurtarma ileri sürüm düzeltmesi gerektirir;
+> yükseltme öncesi yedekleri veri kurtarma için saklayın. [Bilinen sınırlar](docs/known-limits.tr.md).
 
 ## Deckent nedir
 

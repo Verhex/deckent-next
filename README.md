@@ -28,10 +28,14 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.63.3`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.64`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
+>
+> Alpha.64 is the last alpha. Once it writes approval origin, delivery mode, Brain origin or resource-key records,
+> alpha.63.3 cannot read them: **there is no rollback to alpha.63.3**. Recovery requires a forward fix;
+> keep pre-upgrade backups for data recovery. See [known limits](docs/known-limits.md).
 
 ## What is Deckent
 

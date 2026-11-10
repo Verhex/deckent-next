@@ -379,8 +379,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   "doğrulandı" şu an yapılmış bir kontrol değildir; sonraki tur yine tipli bir nedenle durabilir.
 - **Model metni araç satırının iki yanına bölünebilir (alpha.63, R5d; owner 2026-11-06).** Ekrandaki gizli bilgi filtresi bir metin
   bloğunun son kelimesini tur bitene kadar tutar; cümle araç satırından sonra bitebilir. Filtrenin araçlar arasında bağlamı koruması
-  güvenlik tabanıdır (Astra 3030); güvenli bir ekran düzeltmesi alpha.64'te. Nadiren bir cevabın son harfleri, turun rastgele giriş
-  anahtarının başıyla eşleşince `[REDACTED]` görünür; bu sızıntı değil, filtrenin temkinidir (o da alpha.64'te).
+  güvenlik tabanıdır (Astra 3030); bu sıralama sınırı devam eder. Alpha.64 giriş anahtarını `~` ile başlatır; böylece normal
+  bir cevabın son harfinin rastgele anahtarın ilk base64url harfiyle çakışıp maskelenmesi düzelir. Sır filtresinin bağlamı korunur.
 - **Brain planı ve işçi raporunun sizin dilinizde olması istenir, garanti edilmez (alpha.63, D4).** Brain şablonu v5 (v6 korur) ve işçi rapor talimatı
   başlıkları, görev metnini, ölçüt açıklamalarını ve rapor özetini sizin dilinizde ister; JSON anahtarları ve kimlikler değişmez. Gerçek
   modellerde ölçülmedi. *Etki:* model yine İngilizce cevap verebilir; Deckent model metnini çevirmez.
@@ -627,7 +627,12 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   rebase ya da merge yapmaz. *Yol:* güncel tabanda yeniden teslim edin.
 - **Bayat bir checkout'ta üretilen yama uygulanmayabilir.** Teslim kontrolü, bir şey yazılmadan önce durdurur.
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.
-- **alpha.64’ten alpha.63.3’e geri dönüş yoktur.** alpha.64 işçi onay kökenini veya sürüm 2 teslim özetini yazdıktan sonra alpha.63.3 bu kayıtları okuyamaz. Kurtarma ileri sürümde düzeltme gerektirir.
+- **alpha.64’ten alpha.63.3’e geri dönüş yoktur (owner 2026-11-09; son alpha).** alpha.64 onay kökeni, teslim modu,
+  Brain kökeni ve resource-key kayıtlarını yazar; alpha.63.3 bunları okuyamaz. Kurtarma ileri sürümde düzeltme gerektirir.
+- **alpha.64 veri yükseltmesi canlı geçiş kanıtı değildir.** Kurulum defteri v74 → v75 (15 indeks, invocation resource key,
+  `ledger_extensions`); ayrı Hub server deposu v3 → v4 (4 sorgu indeksi); runtime protokol v30 → v31. Tutulan live/N1
+  kopyası kanıtları eski satırların korunmasını, integrity ve yeniden açmayı doğrular; canlı yükseltme kabulü ayrı kapıdır.
+  Eski v30 istemci yalnız lifecycle işlemleriyle uyumludur; normal işler için güncel terminali açın.
 - **Dosya özetleri olmayan eski teslim onayı yeniden evet ister (alpha.64).** Onay kartı değişiklik özetlerini taşıyor,
   bekleyen onay taşımıyorsa sürüm yükseltmesinden sonra terminal aynı kartı yeniden onaylamanızı ister.
 - **Saklanan yama okunamıyorsa teslim edilmiş sonucun önizlemesi durur (alpha.64).** Terminal okuma hatasını gösterir;

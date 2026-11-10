@@ -383,8 +383,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   *Impact:* "verified" on screen is not a check made now; a later turn can still stop with a typed reason.
 - **Model text can split around a tool line (alpha.63, R5d; owner 2026-11-06).** The display's secret filter holds the last word of a
   text block until the turn ends, so a sentence may finish after the tool line. Keeping the filter's context across tools is a security
-  floor (Astra 3030); a safe display fix is planned for alpha.64. Rarely, the last letters of a reply show as `[REDACTED]` when they
-  match the start of the turn's random sign-in token; this is the filter being careful, not a leak (also planned for alpha.64).
+  floor (Astra 3030); this ordering limit remains. Alpha.64 starts the sign-in token with `~`, fixing ordinary answer endings
+  masked because their last character happened to match the token's first base64url character. The secret filter keeps its context.
 - **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 (v6 keeps it) and the worker report
   instruction ask for titles, task text, criterion descriptions and the report summary in your language; JSON keys and ids stay unchanged.
   This has not been measured on real models. *Impact:* a model may still answer in English; Deckent does not translate model text.
@@ -634,7 +634,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`ADOPTION_BASE_CHANGED`). Deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
 - **A patch made on a stale checkout can fail to apply.** The delivery check stops it before anything is written.
   *Workaround:* re-run the request on the current source.
-- **No rollback from alpha.64 to alpha.63.3.** Once alpha.64 writes worker approval origins or version 2 delivery summaries, alpha.63.3 cannot read those records. Recovery requires a forward fix.
+- **No rollback from alpha.64 to alpha.63.3 (owner 2026-11-09; last alpha).** Alpha.64 writes approval origin, delivery mode,
+  Brain origin and resource-key records; alpha.63.3 cannot read them. Recovery requires a forward fix.
+- **The alpha.64 data upgrade is not evidence of a live switch.** Installation ledger v74 → v75 adds 15 indexes, the invocation
+  resource key and `ledger_extensions`; the separate Hub server store v3 → v4 adds four query indexes; runtime protocol changes
+  from v30 to v31. Retained live/N1-copy proofs verify old-row preservation, integrity and reopen; live upgrade acceptance is
+  separate. Old v30 clients are compatible only for lifecycle operations; reopen the current terminal for ordinary work.
 - **An older delivery consent without per-file digests needs a fresh yes (alpha.64).** If the confirmation card carries
   change digests but the pending consent does not, the terminal asks you to confirm the exact card again after upgrading.
 - **An unreadable retained patch blocks the delivered-result preview (alpha.64).** The terminal shows the read error;
