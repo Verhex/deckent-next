@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 // @ts-expect-error Executable JS tooling has no declaration file.
 import { CACHE_INPUTS, cacheIdentity, licenseInput, restoreBuild, saveBuild, verifyCache } from '../../../scripts/bwrap-cache.mjs';
+// @ts-expect-error Executable JS tooling has no declaration file.
+import { DOCKER_PREFLIGHT_INPUTS } from '../../../scripts/docker-preflight.mjs';
 
 const roots: string[] = [], repo = fileURLToPath(new URL('../../..', import.meta.url));
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -29,7 +31,7 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'bwrap-cache-')); roots.push(root);
   const lock = JSON.parse(readFileSync(join(repo, 'packaging/bwrap/bwrap.lock.json'), 'utf8'));
   const write = (path: string, content: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), content); };
-  for (const path of CACHE_INPUTS as string[]) { mkdirSync(dirname(join(root, path)), { recursive: true }); cpSync(join(repo, path), join(root, path)); }
+  for (const path of [...CACHE_INPUTS, ...DOCKER_PREFLIGHT_INPUTS] as string[]) { mkdirSync(dirname(join(root, path)), { recursive: true }); cpSync(join(repo, path), join(root, path)); }
   lock.outputs.x86_64.sha256 = sha('binary-x86_64'); lock.source.sha256 = sha('source');
   for (const part of lock.linked.filter((part: { licenseText: unknown }) => part.licenseText)) part.licenseText.sha256 = sha(part.name);
   write('packaging/bwrap/bwrap.lock.json', JSON.stringify(lock));
@@ -117,9 +119,10 @@ it.skipIf(process.platform === 'win32')('cache miss errors distinguish Docker an
     { env: { ...process.env, PATH: bin } }); expect.unreachable(); }
   catch (error) {
     const stderr = String((error as { stderr: Buffer }).stderr);
-    expect(stderr).toContain('Cannot connect to the Docker daemon'); expect(stderr).not.toContain('Alpine pins');
+    expect(stderr).toContain('BWRAP_BUILD_FAILED: Docker is not reachable'); expect(stderr).not.toContain('Alpine pins');
     expect(stderr).not.toContain('deps-watch'); expect(stderr).toContain('--out <fresh-directory>');
   }
+  expect(existsSync(join(f.root, 'unreachable'))).toBe(false);
   for (const [mode, info] of Object.entries({ rootless: { SecurityOptions: ['name=rootless'] }, podman: { host: { security: { rootless: true } } }, rootful: { SecurityOptions: [] } })) {
     writeFileSync(docker, `#!/bin/sh\nif [ "$1" = info ]; then echo '${JSON.stringify(info)}'; exit; fi\necho "$*" >&2\nexit 42\n`);
     const dest = join(f.root, mode);
@@ -140,14 +143,20 @@ it('committed license texts match the lock, and a missing or altered text refuse
   // Cold cache and an unreachable source URL: reaching the download first would fail with "fetch failed", not the license refusal.
   const f = fixture(), cache = join(f.root, 'downloads'), licenses = join(f.root, 'packaging/bwrap/licenses'); mkdirSync(cache); mkdirSync(licenses);
   writeFileSync(join(f.root, 'packaging/bwrap/bwrap.lock.json'), JSON.stringify({ ...f.lock, source: { ...f.lock.source, url: `http://127.0.0.1:9/v${f.lock.version}/unreachable.tar.xz` } }));
-  const run = (out: string) => { try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--arch', 'x86_64', '--cache', cache, '--out', join(f.root, out)],
-    { env: { ...process.env, PATH: '' }, stdio: 'pipe' }); } catch (error) { return String((error as { stderr: Buffer }).stderr); } return expect.unreachable(); };
+  const run = (out: string, path = '') => { try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--arch', 'x86_64', '--cache', cache, '--out', join(f.root, out)],
+    { env: { ...process.env, PATH: path }, stdio: 'pipe' }); } catch (error) { return String((error as { stderr: Buffer }).stderr); } return expect.unreachable(); };
   expect(run('missing')).toMatch(/vendored license text missing for musl: .*musl-COPYRIGHT; verify https:\/\/git\.musl-libc\.org\//u);
   writeFileSync(join(licenses, 'musl-COPYRIGHT'), 'altered'); writeFileSync(join(licenses, 'libcap-License'), 'libcap');
   expect(run('altered')).toContain(`sha256 mismatch for ${join(licenses, 'musl-COPYRIGHT')}: expected ${sha('musl')}, got ${sha('altered')}`);
   expect(readdirSync(cache)).toEqual([]);
   writeFileSync(join(licenses, 'musl-COPYRIGHT'), 'musl');
-  expect(run('download')).toContain('fetch failed');
+  expect(run('download')).toContain('BWRAP_BUILD_FAILED: Docker is not reachable');
+  expect(existsSync(join(f.root, 'download'))).toBe(false);
+  if (process.platform !== 'win32') {
+    const bin = join(f.root, 'bin'); mkdirSync(bin);
+    writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n'); chmodSync(join(bin, 'docker'), 0o755);
+    expect(run('network', bin)).toContain('fetch failed');
+  }
 });
 it('all build workflows restore exact keys including recipes, verify before use/save, and keep SHA-pinned cache actions', () => {
   for (const name of ['ci', 'bwrap-bundle', 'platform-verification']) {

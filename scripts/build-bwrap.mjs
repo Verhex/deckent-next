@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { licenseInput, restoreBuild, saveBuild, verifyCache } from './bwrap-cache.mjs';
+import { requireDocker } from './docker-preflight.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PACKAGING = join(ROOT, 'packaging', 'bwrap');
@@ -190,6 +191,7 @@ async function main() {
     process.stdout.write('build-bwrap: verified cache hit; no Docker or Alpine access\n'); return;
   }
   const texts = Object.fromEntries(lock.linked.filter(entry => entry.licenseText).map(part => [part.name, vendoredLicense(part)]));
+  requireDocker('BWRAP_BUILD_FAILED');
   mkdirSync(cache, { recursive: true }); mkdirSync(join(out, 'in'), { recursive: true }); mkdirSync(join(out, 'out'), { recursive: true });
 
   const tarball = `bubblewrap-${lock.version}.tar.xz`;

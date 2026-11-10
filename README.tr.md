@@ -162,7 +162,8 @@ Kurulum başarıyla bittiyse derleme adımına geçilebilir; bu bildirim güvenl
 kurabilen `npm audit fix --force` komutunu çalıştırmayın.
 
 Build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter. `BUBBLEWRAP_BUILD_REQUIRED` ile durursa Docker'a
-ulaşılamamıştır: Docker'ı başlatın, iki `build-bwrap` komutunu yeni bir `--out` dizinle (örneğin
+ulaşılamamıştır: rootless → `systemctl --user start docker` (sonraki oturumlar için `systemctl --user enable docker`); sistem Docker'ı → `sudo systemctl start docker`; WSL'de Docker Desktop → Desktop'ı başlatın ve Settings > Resources > WSL Integration'ı etkinleştirin.
+İki betik de uzun işten önce Docker'ı yoklar; hata, saptanan kuruluma uyan komutu (bilinmiyorsa üçünü) gösterir. İki `build-bwrap` komutunu yeni bir `--out` dizinle (örneğin
 `.pack/bwrap/second-build`) yeniden çalıştırın, sonra `npm run build`. Ubuntu 24.04 ve sonrasında çekirdek, bubblewrap'ın ihtiyaç
 duyduğu kullanıcı ad alanlarını engelleyebilir; Deckent bunu söyler ve Landlock'a düşer. İki durumu ve bir yöneticinin
 kısıtı nasıl kaldıracağını

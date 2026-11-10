@@ -9,6 +9,8 @@ import { assertResolved, refresh, refreshedLock, refreshBody, REFRESH_PATHS } fr
 import { publish } from '../../../scripts/publish-bwrap-refresh.mjs';
 // @ts-expect-error Executable JS tooling has no declaration file.
 import { licenseInput } from '../../../scripts/bwrap-cache.mjs';
+// @ts-expect-error Executable JS tooling has no declaration file.
+import { DOCKER_PREFLIGHT_INPUTS } from '../../../scripts/docker-preflight.mjs';
 import { bundledIdentityModule } from '../../../scripts/build-bwrap.mjs';
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const roots: string[] = [];
@@ -52,7 +54,8 @@ describe('candidate pin resolution', () => {
     const repo = new URL('../../../', import.meta.url);
     const licenses = ['packaging/bwrap/licenses/musl-COPYRIGHT', 'packaging/bwrap/licenses/libcap-License'];
     mkdirSync(join(root, 'packaging/bwrap/licenses'));
-    for (const path of ['packaging/bwrap/build.sh', 'packaging/bwrap/resolve.sh', 'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs', ...licenses]) {
+    for (const path of ['packaging/bwrap/build.sh', 'packaging/bwrap/resolve.sh', 'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs', ...DOCKER_PREFLIGHT_INPUTS, ...licenses]) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
       writeFileSync(join(root, path), readFileSync(new URL(path, repo)));
     }
     writeFileSync(join(root, REFRESH_PATHS[0]), JSON.stringify(lock)); writeFileSync(join(root, REFRESH_PATHS[1]), 'unchanged identity');
