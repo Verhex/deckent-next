@@ -162,7 +162,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   context, slash registry, `TurnDelta` stream contract) ← `terminal-render` ← `terminal-picker` (ArrowPicker) and
   `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
   ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
-  its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
+  its barrel re-exports the lower units); split by responsibility to keep each unit within the 2200-line unit budget.
 - **Units (T3, 2026-10-07; `wave/tui-3`; released with alpha.11, PR #42):** `cli-terminal` (TERMINAL-LAUNCH, L0): the interactive terminal launch, ledger ports
   and terminal handler types, moved out of `cli`. Its own `TerminalLaunchContext` (the CLI `CommandContext` extends it). CLI commands arrive as
   ports (`runKernelCommand`, `mcpSlash`, `renderRunCancellation`, `runMcp`), so the unit never imports `cli`. The launch loads lazily

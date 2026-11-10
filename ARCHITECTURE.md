@@ -193,7 +193,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - Accepted size policy: 1,500 lines maximum per file including native C; 800 is a design target, not a second
   hard ceiling. FOUNDATION/A applies this limit coherently in ESLint and the source/native/app gate.
   No silent native exemption. Variable product policies/catalogs are data; protocol constants and safety
-  invariants are explicit versioned code contracts. Unit cohesion matters beyond the accepted 2,000-line unit budget.
+  invariants are explicit versioned code contracts. Unit cohesion matters beyond the accepted 2,200-line unit budget.
 
 ### Task-centered execution — owner checkpoint 2026-09-17
 
