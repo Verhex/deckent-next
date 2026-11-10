@@ -1,6 +1,6 @@
 {
   "agent.shell.subscriptionHostRefused": "Bu abonelik ajanı için sandbox yok; ajan bilgisayarda komut çalıştıramaz. Hiçbir komut çalıştırılmadı.",
-  "agent.shell.productStateProtected": "Hiçbir onay Deckent durumunu açamaz. Hiçbir komut çalıştırılmadı.",
+  "agent.shell.productStateProtected": "Hiçbir onay Deckent durumunu açamaz. HOME, DECKENT_GLOBAL_HOME veya DECKENT_HOME üzerinden bu durumu adlandıran yollar da korunur. Hiçbir komut çalıştırılmadı.",
   "agent.edit.previewCounts": "(+{added} −{removed} satır)",
   "agent.shell.fullAccessUnavailable": "Tam erişim için açık sandbox gerekir; hiçbir komut çalıştırılmadı.",
   "agent.shell.sandboxNotStarted": "Sandbox bu komutu başlatamadı: {reason}. Hiçbir şey çalışmadı, host kabuğuna geçilmedi; `deckent doctor` aynı sandbox öz-testini çalıştırır.",

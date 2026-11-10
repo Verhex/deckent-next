@@ -37,7 +37,7 @@ Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytl
   “Çalışma yeri doğrulanamadı; Deckent durum klasörüne ulaşabilir.” Otomatik veya kalıcı/oturumluk izin bu kartı kaldırmaz.
   Tutucu denetim düz metindeki dolar/ters tırnağa ve cd/find/xargs adlı operandlara da uyarı verir. Owner'ın 2026-11-03 kararı uyarılı karttır;
   K15B'nin onay öncesi reddi owner'ın kabul ettiği kırılma değildir. Hesaplanmış yolu onaylamak global durumu açabilir. Global kökü açıkça
-  adlandıran mutlak/`~`/`$HOME`/`$DECKENT_GLOBAL_HOME` yolları, onay cevabı hazır olsa da kesin reddedilir. Yalıtım için gerçek sandbox kullanın. Meşru pnpm/cp-al hard
+  adlandıran mutlak/`~`/`$HOME`/`$DECKENT_GLOBAL_HOME`/`$DECKENT_HOME` yolları, onay cevabı hazır olsa da kesin reddedilir. Yalıtım için gerçek sandbox kullanın. Meşru pnpm/cp-al hard
   link adları global durum ad denetimince topluca reddedilmez; diğer sandbox inode sınırları sürer; registry giriş kimlik dosyalarıyla aynı aygıt/inode'a bağlı adlar içerik okunmadan reddedilir. Dosya
   araçları tüm hard link'leri reddetmeye devam eder. **Host realm bir güvenlik sınırı değildir; ad denetimi en iyi çabadır.** Programın içinde
   üretilen yollar ve eşzamanlı yol değiştirme bu denetimin dışındadır. Monte abonelik köprüsü ve gerçek CLI stdout kanaryası kabulü,
