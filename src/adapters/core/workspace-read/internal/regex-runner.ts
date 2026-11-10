@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { Worker } from 'node:worker_threads';
 
 // A model or user regular expression can backtrack for minutes (`^(a+)+$`); run on the service thread it would stall every
@@ -13,7 +14,7 @@ parentPort.on('message', ({ id, source, flags, lines }) => {
   parentPort.postMessage({ id, hits });
 });`;
 
-export class RegexCancelled extends Error { constructor() { super('cancelled'); this.name = 'RegexCancelled'; } }
+export class RegexCancelled extends CodedError { constructor() { super('cancelled'); this.name = 'RegexCancelled'; } }
 
 export interface RegexRunner {
   /** Indexes of the lines the expression matches; rejects with RegexCancelled when the signal fires. */

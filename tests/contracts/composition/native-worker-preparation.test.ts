@@ -1,7 +1,9 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import * as adapters from '#adapters/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
@@ -67,10 +69,13 @@ it('K26: a preflight failure returns its typed wait without starting a model or 
     expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_LOGIN_REQUIRED');
     expect(preflight).toHaveBeenCalledTimes(1); expect(driver).not.toHaveBeenCalled();
     expect(await h.runtime.readiness.read(h.query)).toBeNull(); expect(h.f.posts).toBe(0);
+    // An unmapped code, even an inherited property name, is the environment refusal.
+    preflight.mockRejectedValue({ code: 'constructor' }); expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   } finally { await h.f.close(); }
 });
 
-it('K26: concurrent preparation shares one binding claim and an abandoned claim is never stolen', async () => {
+// B1 12b (owner 2026-11-09): the claim is a kernel lock; a live holder process keeps it, and its death releases it (no hand removal).
+it('K26: concurrent preparation shares one binding claim; a live holder is never displaced and a dead one releases it', async () => {
   const h = await fixture();
   try {
     let entered!: () => void, release!: () => void;
@@ -79,7 +84,14 @@ it('K26: concurrent preparation shares one binding claim and an abandoned claim 
     const first = h.runtime.prepare!(h.profile); await started;
     expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_CAPABILITY_UNSEALED');
     release(); expect(await first).toBe('NATIVE_AGENT_CLI_UNAVAILABLE'); expect(preflight).toHaveBeenCalledTimes(1);
-    await writeFile(join(h.stateDir, `worker-preflight-${h.query.profileDigest}.json.lock`), '', { mode: 0o600, flag: 'wx' });
-    expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_CAPABILITY_UNSEALED'); expect(preflight).toHaveBeenCalledTimes(1);
+    const child = spawn(process.execPath, ['-e', 'require(process.argv[1]).lockFile(process.argv[2]); process.send("held"); setInterval(() => {}, 1000);',
+      resolve('src/adapters/core/local-runtime-socket/native/build/Release/peer_credentials.node'), join(h.stateDir, `worker-preflight-${h.query.profileDigest}.json.lock`)],
+    { stdio: ['ignore', 'ignore', 'pipe', 'ipc'], env: {} });
+    try {
+      await Promise.race([once(child, 'message'), once(child, 'exit').then(() => { throw new Error('lock holder exited before ready'); })]);
+      expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_CAPABILITY_UNSEALED'); expect(preflight).toHaveBeenCalledTimes(1);
+      const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited;
+      expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_CLI_UNAVAILABLE'); expect(preflight).toHaveBeenCalledTimes(2);
+    } finally { if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited; } }
   } finally { await h.f.close(); }
 });

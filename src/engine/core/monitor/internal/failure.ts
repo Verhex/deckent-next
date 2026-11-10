@@ -1,7 +1,7 @@
 import type { WorkerEvent } from '#domain/index.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
 
-/** MONITOR v1.1 bound for one surfaced line (first failure). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). MONITOR v1.1 bound for one surfaced line (first failure). */
 export const MONITOR_FAILURE_MAX_CHARS = 200;
 // Recognised failure lines, any of which counts; the first one in output order wins (stdout before stderr).
 const FAILURE_LINES: readonly RegExp[] = Object.freeze([

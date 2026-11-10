@@ -1,6 +1,6 @@
 import type { RunHoldSource, RunSnapshot } from './contract.js';
 type ParkedState = Extract<RunSnapshot['state'], { kind: 'parked' }>;
-export type RunHold = Readonly<{ note: string; source: RunHoldSource }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunHold = Readonly<{ note: string; source: RunHoldSource }>;
 /** S5b: the one reader of a Run's hold, as its own park (`operator-hold`) or as an overlay on another park. */
 export function readRunHold(state: RunSnapshot['state']): RunHold | null {
   if (state.kind !== 'parked') return null;

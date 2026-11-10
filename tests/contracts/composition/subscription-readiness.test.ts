@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { nativeAgentReadinessSchema, type NativeAgentExecution } from '#capabilities/core/native-agent-execution/index.js';
+import { t } from '#platform/index.js';
+import { subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
+import { nativeChatReasonText, nativeChatPreflightReason } from '#composition/core/agent-turn/index.js';
 import { inspectSubscriptionReadiness, type SubscriptionReadinessQuery, type SubscriptionReadinessObservations,
   type SubscriptionReadinessSurface } from '#composition/core/subscription-readiness/index.js';
 
@@ -10,6 +13,11 @@ const query = (surface: SubscriptionReadinessSurface = 'chat'): SubscriptionRead
   profileDigest: execution.profileDigest, flagSetDigest: execution.flagSetDigest });
 const observations = (): SubscriptionReadinessObservations => ({ cli: true, login: true, environment: true,
   toolSurface: true, plugins: true, bridge: true, execution });
+const reasonKeys = {
+  NATIVE_AGENT_CLI_UNAVAILABLE: 'cli', NATIVE_AGENT_LOGIN_REQUIRED: 'login', NATIVE_AGENT_CAPABILITY_UNSEALED: 'sealed',
+  NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED: 'tools', NATIVE_AGENT_PLUGIN_UNEXPECTED: 'plugins',
+  NATIVE_AGENT_BRIDGE_UNAVAILABLE: 'bridge', NATIVE_AGENT_ENVIRONMENT_REFUSED: 'environment',
+} as const;
 
 describe('subscription prerequisite query', () => {
   it('reads the exact surface and scoped model once without invoking models, login or authority operations', async () => {
@@ -40,6 +48,15 @@ describe('subscription prerequisite query', () => {
       const missing = { ...observations(), [key]: null };
       expect(await inspectSubscriptionReadiness(query(), { read: async () => missing })).toEqual({ state: 'unknown', reason });
     }
+    for (const locale of ['en', 'tr'] as const) for (const [reason, suffix] of Object.entries(reasonKeys)) {
+      const typedReason = reason as keyof typeof reasonKeys, text = t(`headless.agent.unknown.${suffix}`, {}, locale);
+      if (suffix === 'sealed') expect(text).toBe(locale === 'en'
+        ? 'Tools are not verified yet for this CLI version and profile. Your first message verifies them; text chat works meanwhile.'
+        : 'Araçlar bu CLI sürümü ve profil için henüz doğrulanmadı. İlk mesajın onları doğrular; bu arada metin sohbeti çalışır.');
+      expect(subscriptionReadinessText({ state: 'unknown', reason: typedReason }, locale))
+        .toBe(t('headless.agent.readiness.unknown', { reason: text }, locale));
+      expect(nativeChatReasonText(typedReason, locale, true)).toBe(text);
+    }
   });
 
   it('reports definite failures before unknowns without converting lack of evidence into a refusal', async () => {
@@ -48,6 +65,15 @@ describe('subscription prerequisite query', () => {
     for (const [key, reason] of Object.entries(reasons)) {
       expect(await inspectSubscriptionReadiness(query(), { read: async () => ({ [key]: false }) }))
         .toEqual({ state: 'unavailable', reason });
+    }
+    for (const locale of ['en', 'tr'] as const) for (const reason of Object.keys(reasonKeys)) {
+      const typedReason = reason as keyof typeof reasonKeys, text = t(`headless.agent.reason.${reason}`, {}, locale);
+      expect(subscriptionReadinessText({ state: 'unavailable', reason: typedReason }, locale))
+        .toBe(t('headless.agent.readiness.unavailable', { reason: text }, locale));
+      expect(nativeChatReasonText(typedReason, locale)).toBe(text);
+      for (const unknown of [false, true]) expect(nativeChatReasonText(typedReason, locale, unknown, true)).toBe(
+        reason === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' ? t('headless.agent.surfaceStopped', {}, locale)
+          : nativeChatReasonText(typedReason, locale, unknown));
     }
   });
 
@@ -88,5 +114,12 @@ describe('subscription prerequisite query', () => {
     });
     expect(await inspectSubscriptionReadiness(input, { read })).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' });
     expect(read).toHaveBeenCalledTimes(1);
+    for (const [error, reason] of [
+      [{ code: 'HEADLESS_LOGIN_REQUIRED' }, 'NATIVE_AGENT_LOGIN_REQUIRED'],
+      [{ code: 'HEADLESS_CLI_UNAVAILABLE' }, 'NATIVE_AGENT_CLI_UNAVAILABLE'],
+      [{ code: 'constructor' }, 'NATIVE_AGENT_ENVIRONMENT_REFUSED'],
+      [{ code: 'OTHER', message: 'private credential canary' }, 'NATIVE_AGENT_ENVIRONMENT_REFUSED'],
+      [{ code: 1 }, 'NATIVE_AGENT_ENVIRONMENT_REFUSED'], [null, 'NATIVE_AGENT_ENVIRONMENT_REFUSED'],
+    ] as const) expect(nativeChatPreflightReason(error)).toBe(reason);
   });
 });

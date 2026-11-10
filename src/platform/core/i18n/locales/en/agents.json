@@ -73,6 +73,7 @@
   "error.AGENT_STANDING_REFUSED": "That agent standing change is not allowed from its current standing or by this principal. Nothing was changed.",
   "error.AGENT_STANDING_CONFLICT": "The agent's standing changed since it was shown. Nothing was changed; look at it again and decide on the current standing.",
   "agent.card.selected": "  agent: {agentId} (revision {revision}, {standing})",
+  "agent.card.selectedNamed": "  agent: {name} (id {agentId}, revision {revision}, {standing})",
   "agent.card.skills": "    skills: {skills}",
   "agent.card.skill": "{skillId} (revision {revision})",
   "agent.standing.active": "promoted",
@@ -89,5 +90,9 @@
   "error.AGENT_WORK_CLASS_UNKNOWN.known": "A WorkClass is not in this installation's registry. Use one of: {known}. Example: deckent agents define --example",
   "agents.card.diff": "Changes {field}: {before} → {after}",
   "agents.card.diff.persona": "Changes the persona text (shown above).",
-  "agents.card.diff.none": "Nothing changes compared with the current revision."
+  "agents.card.diff.none": "Nothing changes compared with the current revision.",
+  "error.AGENT_USE_PIN_MISMATCH": "The selected agent is unavailable for this task or its pinned revision or content no longer matches. Inspect the agent and prepare a new pin; no other agent was selected.",
+  "error.AGENT_USE_TASK_UNAVAILABLE": "The selected task does not exist or has no work input. Choose a task with work input before preparing an agent pin.",
+  "error.AGENT_USE_WORK_CLASS_REQUIRED": "The selected task has no resolved WorkClass. Assign a registered WorkClass before using the pinned agent.",
+  "error.AGENT_USE_CATALOG_UNAVAILABLE": "Agent selection cannot open the catalog. Restore catalog access before using the pinned agent; no agent was selected."
 }

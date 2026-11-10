@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { isLiteralLoopbackHostname } from '#platform/index.js';
+import { CodedError, isLiteralLoopbackHostname } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { endpointMayCarryKey, parseProviderCatalogDocument, type CatalogModel, type JsonObject, type ProviderCatalogDocument } from '#domain/index.js';
@@ -10,8 +10,8 @@ import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, anthropicMessagesProtocol, anthropicModelCapability,
   anthropicPublishedTariff, anthropicTariffSchema, parseAnthropicMessagesDefinition } from '#adapters/core/provider-anthropic-messages/index.js';
 import { providerEndpoint, providerMetadataRouteSchema, providerProtocolRouteSchema, type ProviderConnectKind } from './registry.js';
-export class ProviderConnectError extends Error {
-  constructor(readonly code: 'MODEL_CONNECT_SEED_UNAVAILABLE' | 'MODEL_CONNECT_TARIFF_UNKNOWN' | 'MODEL_CONNECT_TARIFF_UNVERIFIED' | 'MODEL_CONNECT_KEY_INSECURE'
+export class ProviderConnectError extends CodedError {
+  constructor(override readonly code: 'MODEL_CONNECT_SEED_UNAVAILABLE' | 'MODEL_CONNECT_TARIFF_UNKNOWN' | 'MODEL_CONNECT_TARIFF_UNVERIFIED' | 'MODEL_CONNECT_KEY_INSECURE'
     | 'MODEL_CONNECT_DEFINITION_INVALID' | 'MODEL_CONNECT_PRICE_REQUIRED') {
     super(code); this.name = 'ProviderConnectError';
   }
@@ -24,10 +24,10 @@ export async function readProviderConnectSeed(name: string): Promise<ProviderCat
   catch { throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE'); }
   try { return parseProviderCatalogDocument(JSON.parse(text)); } catch { throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE'); }
 }
-export type ConnectionAdapter = Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConnectionAdapter = Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>;
   protocol: Readonly<{ family: string; version: string }>; tariff: 'published' | 'unmetered' }>;
 /** The installation's registered catalog row for the model being connected (M4): its channel, the ledger row revision and the v3 entry. */
-export type ConnectCatalogRow = Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }>;
+type ConnectCatalogRow = Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }>;
 type Tariff = Readonly<{ modelId: string; source: Readonly<{ url: string; retrievedAt: string }> }>;
 /**
  * M4 (owner 2026-10-23): a registered catalog row's `connect.tariff` for exactly this model, checked by the adapter's own tariff schema and

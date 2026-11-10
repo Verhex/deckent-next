@@ -1,6 +1,6 @@
 import type { ArtifactStore } from '#capabilities/index.js';
 import { retainOutput, retainRecoveredOutput, verifyRetainedOutput } from './output.js';
-import { identitySchema, type CorePolicyAction, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
+import { type Policy, identitySchema, type CorePolicyAction, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { sandboxRequestSchema, sandboxResultSchema, sandboxObservationSchema, sandboxOutputSchema, SupervisorError, type ExecutionSupervisor, type SupervisorProfileSource, type SandboxRequest } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord, type DispatchStore } from './port.js';
@@ -10,9 +10,9 @@ export interface DispatchAuthorization {
 }
 /** Same attempt action authority, usable before any stored execution request is read. */
 export interface DispatchIdentityAuthorization {
-  authorizeIdentity(action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void>;
+  authorizeIdentity(action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal, policy?: Policy): Promise<void>;
 }
-export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord } | { kind: 'prevented'; record: DispatchRecord }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord } | { kind: 'prevented'; record: DispatchRecord }>;
 /** Internal application execution entry. Composition supplies a trusted broker workspace, verifier,
  * policy, supervisor and process-owner identity. It does not expose arbitrary paths to public callers.
  */

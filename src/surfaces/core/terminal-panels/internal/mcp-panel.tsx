@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fillTemplate, span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, span, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import type { WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { EntryWindow } from './entry.js';

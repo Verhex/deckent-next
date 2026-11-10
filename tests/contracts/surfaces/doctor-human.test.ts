@@ -108,6 +108,13 @@ describe('doctor rows (pure)', () => {
     const fresh = doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'unknown', reason: 'no-checkpoint-yet', head: null, checkpoint: null } } as never, facts(), 'en');
     expect(fresh.find(row => row.id === 'security.audit')).toMatchObject({ state: 'untested' });
     expect(fresh.find(row => row.id === 'security.audit')?.next).toBeUndefined();
+    for (const locale of ['en', 'tr'] as const) {
+      const audit = fresh.filter(row => row.id === 'security.audit');
+      expect(audit[0]).toMatchObject({ needsAttention: true });
+      expect(renderDoctorChecks(audit, locale).split('\n')[0]).toBe(locale === 'en' ? 'Status: needs attention · 1 not tested · no warnings' : 'Durum: ilgi bekliyor · 1 sınanmadı · uyarı yok');
+    }
+    expect(doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'match', head: null, checkpoint: null } } as never, facts(), 'en')
+      .find(row => row.id === 'security.audit')).toMatchObject({ state: 'ok' });
     const blocked = { ...report, startability: { status: 'blocked' as const, endpoint: null, checks: [{ code: 'X', message: 'ledger missing' }] } };
     expect(renderDoctorChecks(doctorChecks(blocked, facts(), 'en'), 'en').split('\n')[0]).toMatch(/^Status: needs attention · 1 error\(s\)/);
     const clean = doctorChecks({ ...report, imageRefresh: null, recoveryFiles: null }, facts({ identityProfile: { state: 'selected', id: 'solo' }, backupPassphraseStored: false, retiringModels: [] }), 'en')

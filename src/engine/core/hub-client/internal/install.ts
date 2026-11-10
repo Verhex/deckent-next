@@ -1,3 +1,4 @@
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { HUB_LIMITS, HubError, canonicalHubJson, isAiPrincipal, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { AgentCatalogApplication, AgentStandingApplication, personaDigest, skillSetDigest } from '#engine/core/agent-catalog/index.js';
@@ -6,7 +7,7 @@ import { HubClientError, type HubBundle, type HubClientDependencies, type HubCli
 import { decodeHubBundle, encodeHubBundle } from './bundle.js';
 import { acceptClientFeed, higherHubVersion, requirePackageNotRevoked, verifyClientBundle } from './verification.js';
 type Command = { scopeId: string; commandId: string; hubId: string; workClassMapping: Readonly<Record<string, string>>; feeds: Readonly<Record<string, HubRevocationFeed>> };
-export const hubItemCommandId = (commandId: string, kind: string, id: string) => sha256(canonicalHubJson({ commandId, kind, id }));
+const hubItemCommandId = (commandId: string, kind: string, id: string) => sha256(canonicalHubJson({ commandId, kind, id }));
 /** Exact dependency closure, children first. Cached dependencies are verified identically; no fetch port exists. */
 export async function installClientBundles(deps: HubClientDependencies, store: HubClientStore, source: HubSource, bundles: readonly HubBundle[], feed: HubRevocationFeed,
   command: Command, principal: VerifiedPrincipal, update: boolean): Promise<readonly HubInstall[]> {
@@ -49,7 +50,7 @@ export async function installClientBundles(deps: HubClientDependencies, store: H
   for (const node of ordered) { const id = `${node.source.hubId}/${node.bundle.manifest.packageId}`;
     if (versions.has(id)) throw new HubClientError('HUB_DEPENDENCY_REFUSED'); versions.add(id); }
   // Every node is verified under its own source and signed feed before the first catalog mutation.
-  const results: HubInstall[] = [], catalogDeps = { ...deps.catalog, verifier: { verify: async () => principal }, openStore: async () => store.borrowCatalog() };
+  const results: HubInstall[] = [], catalogDeps = { ...deps.catalog, verifier: verifiedPrincipal(principal), openStore: async () => store.borrowCatalog() };
   for (const { bundle, source: nodeSource, keys: trust } of ordered) {
     const source = nodeSource;
     const manifest = bundle.manifest, prior = await store.install(command.scopeId, source.hubId, manifest.packageId), root = bundle === bundles[0];
@@ -115,7 +116,7 @@ export async function installClientBundles(deps: HubClientDependencies, store: H
 }
 /** Retire current package-owned agents through the existing signed standing transition; retained revisions and frozen Run pins remain readable. */
 export async function retireClientInstall(deps: HubClientDependencies, store: HubClientStore, installed: HubInstall, principal: VerifiedPrincipal, commandId: string, retained = new Set<string>()) {
-  const standing = new AgentStandingApplication({ ...deps.catalog, verifier: { verify: async () => principal }, openStore: async () => store.borrowCatalog() });
+  const standing = new AgentStandingApplication({ ...deps.catalog, verifier: verifiedPrincipal(principal), openStore: async () => store.borrowCatalog() });
   for (const item of installed.items.filter(row => row.kind === 'agent' && !retained.has(row.id))) {
     const current = await store.loadAgent(installed.scopeId, item.id);
     if (current?.revision !== item.revision) continue;

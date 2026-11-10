@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { planSetup, SETUP_PHASES, SETUP_PLAN_SCHEMA_VERSION, type SetupPhase, type SetupObservation, type SetupPlan, SetupStageRegistry } from '#engine/index.js';
 import { cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -29,7 +29,7 @@ export function parseSetupFlags(argv: readonly string[]): SetupFlags {
     else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (phase === 'onboarding' && (!json || yes)) throw ErrorRegistry.createError('CLI_USAGE');
-  return { json, yes, ...(here ? { here } : {}), ...(phase ? { phase } : {}), ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }), ...(imageId === undefined ? {} : { imageId }) };
+  return { json, yes, ...(here ? { here } : {}), ...(phase ? { phase } : {}), ...optionalField('scope', scope), ...optionalField('lang', lang), ...optionalField('imageId', imageId) };
 }
 
 /** The answers a call brings without a window: `--scope` answers the folder stage (never derived); without a person the profile comes from the setup registry's unattended default; `--yes` (INIT-D5) also confirms the detected language and a fresh first-run policy, nothing else. */

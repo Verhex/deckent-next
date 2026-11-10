@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, policySchema, sameMcpCapabilityRule, type PolicyGrant,
+import { POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, sameMcpCapabilityRule, type PolicyGrant,
   type Policy, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
 import { PolicyAdministrationInspection } from '#engine/core/policy/index.js';
@@ -11,10 +11,10 @@ import { RECOVERY_CONTINUE_ACTION } from './approval.js';
 export type RecoveryPolicyRow = Readonly<{ kind: 'action' | 'rule'; id: string; managed: 'none' | 'granted' | 'conflict'; effective: 'allowed' | 'denied'; available: boolean;
   exits: boolean | null }>;
 export type RecoveryPolicyView = Readonly<{ schemaVersion: 1; scopeId: string; revision: string; rows: readonly RecoveryPolicyRow[]; rollout: RecoveryRolloutView }>;
-export const recoveryPolicyCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, kind: z.enum(['action', 'rule']), id: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const recoveryPolicyCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, kind: z.enum(['action', 'rule']), id: identitySchema,
   action: z.enum(['grant', 'revoke']), expectedRevision: identitySchema }).readonly();
 export type RecoveryPolicyCommand = z.infer<typeof recoveryPolicyCommandSchema>;
-/** What the card reads besides the policy: the measured rollout view (re-read inside a change) and the stop actions with an executor. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the card reads besides the policy: the measured rollout view (re-read inside a change) and the stop actions with an executor. */
 export type RecoveryPolicyPorts = Readonly<{ rollout: (scopeId: string) => Promise<RecoveryRolloutView>; executable: readonly string[] }>;
 
 /**
@@ -46,7 +46,7 @@ export class RecoveryPolicyCard {
   private async read(input: Readonly<{ schemaVersion: 1; scopeId: string }>, principal: VerifiedPrincipal): Promise<Readonly<{ policy: Policy; view: RecoveryPolicyView }>> {
     const { scopeId } = input;
     if (!principal.scopeIds.includes(scopeId)) throw ErrorRegistry.createError('POLICY_DENIED');
-    const policy = policySchema.parse(await this.deps.policy.load());
+    const policy = await this.deps.policy.load();
     await new PolicyAdministrationInspection({ load: async () => policy }).inspect(principal, { schemaVersion: 1, scopeId });
     const rollout = await this.ports.rollout(scopeId);
     const row = (kind: RecoveryPolicyRow['kind'], id: string, available: boolean, exits: boolean | null): RecoveryPolicyRow => {

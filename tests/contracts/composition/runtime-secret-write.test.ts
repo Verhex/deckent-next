@@ -1,4 +1,5 @@
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
+import { FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -8,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { clearConfigCache, formatHumanError, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
 import { createFileSecretStore, encodeServiceFrame, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
@@ -141,7 +142,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     expect(changes(events)).toEqual(['set', 'delete', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN',
       backend: 'core.secret-store.file@1', decision: { effect: 'allow', ruleId: 'first-run-secret-store' } })));
     // The principal is the socket peer (never a request field); the policy revision is the template's.
-    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v19') });
+    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining(`first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`) });
     expect(await f.scanForCanary()).toEqual([]);
   }, 60_000);
 

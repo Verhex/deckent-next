@@ -1,7 +1,8 @@
-export type ServiceFrameErrorCode = 'SERVICE_FRAME_LIMIT' | 'SERVICE_FRAME_TRUNCATED' | 'SERVICE_FRAME_EXTRA'
+import { CodedError } from '#platform/index.js';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ServiceFrameErrorCode = 'SERVICE_FRAME_LIMIT' | 'SERVICE_FRAME_TRUNCATED' | 'SERVICE_FRAME_EXTRA'
   | 'SERVICE_FRAME_UTF8' | 'SERVICE_FRAME_JSON' | 'SERVICE_FRAME_FINISHED';
-export class ServiceFrameError extends Error {
-  constructor(readonly code: ServiceFrameErrorCode) { super(code); this.name = 'ServiceFrameError'; }
+export class ServiceFrameError extends CodedError {
+  constructor(override readonly code: ServiceFrameErrorCode) { super(code); this.name = 'ServiceFrameError'; }
 }
 function limit(value: number) {
   if (!Number.isSafeInteger(value) || value <= 0 || value > 0xffffffff) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');

@@ -5,9 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnEvent, ModelInvocationProfile, ModelReference } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelActivationReader, openSqliteModelInvocationStore, openSqliteProviderSpendAccountReader, registerProviderConfig } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, ModelInvocationApplication, ModelInvocableNowApplication, ProviderSpendError, checkModelInvocationCapacity,
-  inspectModelSwitch, prepareModelSwitch, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest, runAgentTurn, type ModelSwitchPorts } from '#engine/index.js';
+  inspectModelSwitch, modelInvocabilityText, prepareModelSwitch, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest, runAgentTurn, type ModelSwitchPorts } from '#engine/index.js';
 import { modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 import { clearConfigCache, t } from '#platform/index.js';

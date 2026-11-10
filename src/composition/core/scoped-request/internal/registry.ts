@@ -1,9 +1,7 @@
-import { userInfo } from 'node:os';
 import { inspectProductFile, ManagedFileError, type ResolvedConfig } from '#platform/index.js';
 import { readScopeCompanies, registerLedgerScopes } from '#adapters/index.js';
-import { policySchema } from '#domain/index.js';
 import { installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError, type ScopeAccess, type ScopeRegistry } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 async function existingLedger(config: ResolvedConfig): Promise<string | null> {
   try { return await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null; throw error; }
@@ -34,8 +32,8 @@ export async function resolveConfiguredScopeMembership(config: ResolvedConfig, d
 export async function registerConfiguredScopesAtStart(config: ResolvedConfig) {
   const path = await existingLedger(config);
   if (!path) return null;
-  const policy: unknown = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
-    .then(document => policySchema.parse(document)).catch(() => null);
+  const policy: unknown = await contextPolicySource({ layout: config.productLayout, config }).load()
+    .catch(() => null);
   const scopes = installationOwnScopes(policy, [...(config.service.identity ? [config.service.identity.scopeId] : []),
     ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])]);
   const refuseIfForeign = (pins: ReadonlyMap<string, string>) => {

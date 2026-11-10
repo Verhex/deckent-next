@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, processExitCauseShape, isValidExitCause, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
@@ -7,7 +8,7 @@ export const dispatchClaimSchema = claimObject.readonly();
 /** R3: why the supervisor stopped waiting (additive; older records omit it and read as null). `inactivity`: the host watchdog aborted a silent
  * worker; `cancel`: another abort of the execute signal; `deadline`: interrupted without an abort (the profile deadline or a supervisor CLI
  * failure). Only `inactivity` is ever retried. */
-export const DISPATCH_INTERRUPT_CAUSES = ['deadline', 'inactivity', 'cancel'] as const;
+const DISPATCH_INTERRUPT_CAUSES = ['deadline', 'inactivity', 'cancel'] as const;
 export const dispatchTerminalSchema = z.strictObject({ handle: identitySchema, ...processExitCauseShape, container: containerEvidenceSchema.optional(), interrupted: z.boolean().nullable(),
   interruptCause: z.enum(DISPATCH_INTERRUPT_CAUSES).nullable().optional() }).refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID')
   .refine(value => !value.interruptCause || value.interrupted === true, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
@@ -61,6 +62,6 @@ export interface DispatchStore {
   grantLaunch(input: LaunchRequest): Promise<LaunchDecision>;
   finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal): Promise<DispatchRecord>;
 }
-export class DispatchError extends Error {
-  constructor(readonly code: 'DISPATCH_FENCE_CONFLICT' | 'DISPATCH_FENCED' | 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
+export class DispatchError extends CodedError {
+  constructor(override readonly code: 'DISPATCH_FENCE_CONFLICT' | 'DISPATCH_FENCED' | 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
 }

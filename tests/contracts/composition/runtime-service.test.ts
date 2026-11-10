@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, ErrorRegistry, formatHumanError, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { main } from '#surfaces/core/cli/index.js';

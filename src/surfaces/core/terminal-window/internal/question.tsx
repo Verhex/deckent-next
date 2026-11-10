@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Text, type Key } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
+import { useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useCardCopyOptions } from './card-copy.js';
 import { Window } from './window.js';
 import { WINDOW_PRIORITY } from './window-stack.js';
@@ -17,7 +17,7 @@ import { WINDOW_PRIORITY } from './window-stack.js';
  * `decision.json`), so keys typed for the input just before it appeared never decide it. Display and keys only: what a choice is allowed to
  * mean stays with the caller's controller and the service.
  */
-export type QuestionKind = 'single' | 'multi';
+type QuestionKind = 'single' | 'multi';
 /** `role`: the yes or the no answer of a yes/no question, whose letter the contract derives; `key`: any other answer's own letter. Never both. */
 export type QuestionOption = Readonly<{ id: string; label: string } & ({ key?: string; role?: never } | { role: 'yes' | 'no'; key?: never })>;
 const YES_NO_KEYS = { yes: 'y', no: 'n' } as const;
@@ -25,7 +25,7 @@ const YES_NO_KEYS = { yes: 'y', no: 'n' } as const;
 /** The one letter an option shows and answers to: `y`/`n` from its yes/no role, else its own key. */
 export const optionKey = (option: QuestionOption): string | undefined => option.role ? YES_NO_KEYS[option.role] : option.key;
 export type QuestionState = Readonly<{ at: number; ticked: readonly string[] }>;
-export type QuestionStep = Readonly<{ kind: 'move'; state: QuestionState }> | Readonly<{ kind: 'submit'; ids: readonly string[] }> | Readonly<{ kind: 'cancel' }> | Readonly<{ kind: 'ignored' }>;
+type QuestionStep = Readonly<{ kind: 'move'; state: QuestionState }> | Readonly<{ kind: 'submit'; ids: readonly string[] }> | Readonly<{ kind: 'cancel' }> | Readonly<{ kind: 'ignored' }>;
 
 export function questionStep(kind: QuestionKind, options: readonly QuestionOption[], state: QuestionState, input: string, key: Key): QuestionStep {
   const last = Math.max(0, options.length - 1), move = (at: number): QuestionStep => ({ kind: 'move', state: { ...state, at: Math.min(last, Math.max(0, at)) } });

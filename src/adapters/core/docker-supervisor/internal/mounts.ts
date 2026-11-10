@@ -1,8 +1,9 @@
 import { persistedString } from '#domain/index.js';
 import { lstat, realpath } from 'node:fs/promises';
-import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, posix, resolve } from 'node:path';
 import { z } from 'zod';
 import { SupervisorError } from '#engine/index.js';
+import { pathWithin } from '#platform/index.js';
 
 /** Container paths a dependency bind may never cover: the delivered tree (`/workspace`) must stay exactly the verified commit, and the
  * scratch, task-input, connection and kernel mounts belong to the supervisor. */
@@ -12,7 +13,7 @@ const SEGMENT = /^[A-Za-z0-9._@+-]{1,255}$/u;
 /** Project-relative source: normalized, no parent/current segment, never a Git or Deckent product directory. */
 const sourceSchema = persistedString(z.string().max(512)).refine(value => value.split('/').every(part => SEGMENT.test(part)
   && part !== '.' && part !== '..' && part !== '.git' && part !== '.deckent'));
-export const dockerMountTargetSchema = persistedString(z.string().max(512)).refine(value => value.startsWith('/') && value !== '/' && !unsafe.test(value)
+const dockerMountTargetSchema = persistedString(z.string().max(512)).refine(value => value.startsWith('/') && value !== '/' && !unsafe.test(value)
   && posix.normalize(value) === value && !value.endsWith('/') && !RESERVED_TARGETS.some(reserved => value === reserved || value.startsWith(reserved + '/')));
 const uniqueTargets = (mounts: readonly { readonly target: string }[]) => new Set(mounts.map(mount => mount.target)).size === mounts.length;
 /** S6 dependency class (owner 2026-10-17): the bind is a third-party dependency tree installed from `lockfile`, a path inside the bind. */
@@ -23,15 +24,14 @@ export const dockerReadOnlyMountsSchema = z.array(z.strictObject({ source: sourc
 /** Supervisor option: the same binds with sources resolved by trusted composition to real absolute host directories. */
 export const dockerResolvedMountsSchema = z.array(z.strictObject({ source: persistedString(z.string().min(1).max(4096)).refine(value => isAbsolute(value) && !unsafe.test(value)),
   target: dockerMountTargetSchema, dependencyTree }).readonly()).max(8).refine(uniqueTargets).readonly();
-export type DockerReadOnlyMount = z.infer<typeof dockerReadOnlyMountsSchema>[number];
+type DockerReadOnlyMount = z.infer<typeof dockerReadOnlyMountsSchema>[number];
 
-const inside = (parent: string, child: string) => { const path = relative(parent, child); return path === '' || (path !== '..' && !path.startsWith('..' + sep) && !isAbsolute(path)); };
 /** A bind source must be a real directory (no link anywhere on its path) that neither contains nor lies inside a guarded host path. */
 export async function assertReadOnlyMountSource(source: string, guarded: readonly string[]): Promise<void> {
   const invalid = new SupervisorError('SUPERVISOR_REQUEST_INVALID');
   let real: string; try { real = await realpath(source); } catch { throw invalid; }
   if (real !== source || unsafe.test(source) || !(await lstat(source)).isDirectory()) throw invalid;
-  if (guarded.some(path => inside(path, source) || inside(source, path))) throw invalid;
+  if (guarded.some(path => pathWithin(path, source) || pathWithin(source, path))) throw invalid;
 }
 /** Resolves profile binds against the trusted project root before any dispatch (B06-2c). `excluded` names product data (layout root and
  * resources): a bind can expose neither the ledger, keys and approvals nor other attempts' workspaces to a task. Each excluded path is absolute
@@ -52,7 +52,7 @@ export async function resolveDockerReadOnlyMounts(projectRoot: string, mounts: r
 }
 
 /** What the daemon reports for a created container's `.Mounts` (tmpfs lives in HostConfig, not here). */
-export type DockerReportedMount = Readonly<{ Type?: unknown; Source?: unknown; Destination?: unknown; RW?: unknown }>;
+type DockerReportedMount = Readonly<{ Type?: unknown; Source?: unknown; Destination?: unknown; RW?: unknown }>;
 export type DockerExpectedMount = Readonly<{ source: string; target: string; writable: boolean }>;
 const mountKey = (type: unknown, source: unknown, target: unknown, writable: unknown) => [type, source, target, writable].join('\0');
 /** Create-time proof (before start): the mount set the daemon actually realised must equal the requested bind set exactly. A missing,

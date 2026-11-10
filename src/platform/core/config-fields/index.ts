@@ -1,9 +1,9 @@
-export { CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, CORE_SCHEMA, getConfigFieldDefault, MEMORY_AUTOMATION_MODES } from './internal/fields.js';
+export { clearConfigFieldDefaultCache, CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, CORE_SCHEMA, getConfigFieldDefault, MEMORY_AUTOMATION_MODES } from './internal/fields.js';
 export { mergeConfigFields } from './internal/field.js';
 export { SQLITE_STORAGE_OPTIONS } from './internal/storage.js';
-export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS, deliveryMode } from './internal/execution.js';
+export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, GIT_COPY_BYTES, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS, deliveryMode } from './internal/execution.js';
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './internal/fields.js';
-export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, configEntryAllowed } from './internal/choices.js';
+export { CONFIG_VALUE_CHOICES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CONFIG_ALLOWED_ENTRY_FIELDS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, parseConfigEntry, configEntryAllowed } from './internal/choices.js';
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit } from './internal/choices.js';
 export { configStepper, stepConfigNumber, configNumberText } from './internal/numeric.js';
 export type { ConfigStepper } from './internal/numeric.js';
@@ -13,3 +13,4 @@ export { CORE_TURN_ASSURANCE_REFERENCE } from './internal/approval-assurance.js'
 
 export { workerImageConsentSchema } from './internal/worker-consent.js';
 export type { WorkerImageConsent } from './internal/worker-consent.js';
+export { freezeConfigDefault } from './internal/field.js';

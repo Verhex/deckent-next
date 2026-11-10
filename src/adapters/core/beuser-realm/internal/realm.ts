@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUuid } from '#platform/index.js';
+import { CodedError, persistedInteger, persistedUuid } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { lstat, open, realpath, readlink } from 'node:fs/promises';
@@ -19,7 +19,7 @@ export type BeuserRealmOptions = z.infer<typeof optionsSchema>;
 export interface BeuserRealmCommand {
   (args: readonly string[], context: BeuserContext): Promise<string>;
 }
-export class BeuserContainerMissing extends Error {
+export class BeuserContainerMissing extends CodedError {
   constructor(readonly containerId: string) { super('BEUSER_CONTAINER_MISSING'); }
 }
 export const refuseRealm = (): never => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); };
@@ -39,7 +39,7 @@ export async function canonicalRealmPath(path: string, kind: 'directory' | 'file
   if (await realpath(path) !== path || (kind === 'directory' ? !info.isDirectory() : !info.isFile())) return refuseRealm();
   return path;
 }
-export function pathContains(parent: string, child: string) { return child === parent || child.startsWith(parent + sep); }
+export function pathContains(parent: string, child: string) { return child === parent || child.startsWith(parent + sep); } // kept (KG12 F2): canonical paths; `/` holds only itself here, pathWithin('/') would hold every path
 export const realmFileIdentity = async (path: string) => {
   const info = await lstat(path, { bigint: true });
   return `${info.dev}:${info.ino}`;

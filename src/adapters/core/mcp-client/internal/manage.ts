@@ -11,14 +11,15 @@ import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettin
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpToolGrantPort, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
 import { openMcpAgentTools, type McpOfferedTool } from './agent.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
-import { expandMcpEntry, isMcpHttpEntry, mcpScopedDigest, mcpEntryDisplay, mcpLaunchValues, mcpEndpointRefusal, mcpEntryRedacted, MCP_DEFAULT_REALM, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile,
-  resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
-import { findMcpTrust, MCP_TRUST_FILE, mcpProjectTrustDirectory, readMcpTrust, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
+import { expandMcpEntry, isMcpHttpEntry, mcpScopedDigest, mcpEntryDisplay, mcpLaunchValues, mcpEndpointRefusal, mcpEntryRedacted, MCP_DEFAULT_REALM, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME,
+  MCP_VARIABLE_NAME, parseMcpRegistryFile, readMcpRegistryFile, readMcpRegistryText, resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistryProblem, type McpScope, type McpSecretRefusal,
+  type McpServerEntry } from './registry.js';
+import { findMcpTrust, MCP_STATE_LOCK_MS, MCP_TRUST_FILE, mcpProjectTrustDirectory, parseMcpTrust, readMcpTrust, readMcpTrustText, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 import type { AgentToolApprovalFacts } from '#engine/index.js';
 import noticeLimits from './notice-limits.json' with { type: 'json' };
 
-/** What the registry needs from its host: the project, its layout (the alpha.47 trust location, start failures and server homes are in its data
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the registry needs from its host: the project, its layout (the alpha.47 trust location, start failures and server homes are in its data
  * root), the environment and secret resolver of the launch, and the company policy (none in Core yet). */
 export interface McpRegistryContext {
   readonly projectRoot: string;
@@ -35,14 +36,18 @@ export interface McpRegistryContext {
 export const mcpGlobalRoot = (environment: Readonly<Record<string, string | undefined>>) =>
   resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, environment), environment).configDir;
 
+const personalServers = async (projectRoot: string, environment: Readonly<Record<string, string | undefined>>) => { const key = await realpath(projectRoot).catch(() => projectRoot), file = await readMcpRegistryFile(mcpRegistryPaths(key, mcpGlobalRoot(environment)).personal, 'personal', key); return file.ok ? { ...file.user, ...file.local } : {}; };
 /** KER-17: which personal-file servers (user scope, and this project's local scope) name which `$DECK:` key; nothing is resolved (secret list, doctor, card). */
-export async function mcpSecretUsers(projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly { readonly server: string; readonly name: string }[]> { const key = await realpath(projectRoot).catch(() => projectRoot), file = await readMcpRegistryFile(mcpRegistryPaths(key, mcpGlobalRoot(environment)).personal, 'personal', key);
-  return file.ok ? Object.entries({ ...file.user, ...file.local }).flatMap(([server, entry]) => [...new Set([...JSON.stringify(entry).matchAll(/\$DECK:([A-Z_][A-Z0-9_]*)/gu)].map(match => match[1]!))].map(name => ({ server, name }))) : []; }
-/** `trusted`: approved definition, launchable; `pending-approval`: never decided (reason `trust-moved`: a record in the alpha.47 place, the
+export async function mcpSecretUsers(projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly { readonly server: string; readonly name: string }[]> {
+  return Object.entries(await personalServers(projectRoot, environment)).flatMap(([server, entry]) => [...new Set([...JSON.stringify(entry).matchAll(/\$DECK:([A-Z_][A-Z0-9_]*)/gu)].map(match => match[1]!))].map(name => ({ server, name }))); }
+/** A6-3 (alpha.63.2) follow-up: the `${VAR}` names the personal file's user servers and this project's local servers read; the runtime service
+ * starts with them, as it does with referenced secret names. A project file reads only its allowlist, so it adds none. Nothing is expanded here. */
+export const mcpEnvironmentNames = async (projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly string[]> => [...new Set([...JSON.stringify(await personalServers(projectRoot, environment)).matchAll(MCP_VARIABLE_NAME)].map(match => match[1]!))];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `trusted`: approved definition, launchable; `pending-approval`: never decided (reason `trust-moved`: a record in the alpha.47 place, the
  * project's data root, waits for its one re-approval by card, owner A48-D6); `changed`: the entry changed since it was decided; `declined`: the
  * owner said no to this definition; `invalid-launch`: its values cannot be expanded; `trust-store-unavailable`: a trust record cannot be read. */
 export type McpServerStatus = 'trusted' | 'pending-approval' | 'changed' | 'declined' | 'invalid-launch' | 'trust-store-unavailable';
-/** Where the trust record of a scope lives (SEC-2, F29): user trust beside the personal registry (every project); project and local trust in
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where the trust record of a scope lives (SEC-2, F29): user trust beside the personal registry (every project); project and local trust in
  * the global root's directory of this project, never in the project tree. `prepare`: created for a writer. Unsafe or in-project: typed refusal. */
 export async function mcpTrustDirectory(scope: McpScope, context: Pick<McpRegistryContext, 'projectRoot' | 'environment'>, prepare = false): Promise<string> {
   const root = mcpGlobalRoot(context.environment);
@@ -52,15 +57,16 @@ export async function mcpTrustDirectory(scope: McpScope, context: Pick<McpRegist
 }
 /** Where alpha.47 kept project and local trust (the data root's `integrations`): read only to say a record waits for its re-approval, never as trust. */
 const movedTrustDirectory = (layout: ProductLayout) => productResourcePath(layout, 'integrations');
-const storeOf = (directory: Promise<string>) => directory.then(readMcpTrust, (error: unknown) =>
+const storeTextOf = (directory: Promise<string>) => directory.then(readMcpTrustText, (error: unknown) =>
   ({ ok: false as const, reason: String((error as { params?: { reason?: unknown } })?.params?.reason ?? 'trust-store-unreadable') }));
-export interface McpServerView {
+const storeOf = async (directory: Promise<string>) => parseMcpTrust(await storeTextOf(directory));
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpServerView {
   readonly name: string; readonly scope: McpScope; readonly file: string; readonly shadows: readonly McpScope[]; readonly definitionDigest: string;
-  readonly entry: McpServerEntry; readonly status: McpServerStatus; readonly reason?: string; readonly trust: McpTrustRecord | null;
+  readonly entry: McpServerEntry; readonly status: McpServerStatus; readonly reason?: string; readonly refusal?: McpSecretRefusal; readonly trust: McpTrustRecord | null;
   /** The launch values, for a server that may start (trusted, expandable); never for a pending one. */
   readonly launch: McpClientServerSettings | null;
 }
-export interface McpRegistryView { readonly projectKey: string; readonly paths: { readonly project: string; readonly personal: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpRegistryView { readonly projectKey: string; readonly paths: { readonly project: string; readonly personal: string };
   readonly servers: readonly McpServerView[]; readonly problems: readonly McpRegistryProblem[] }
 
 /** Reads both registry files and the trust record and decides each effective server's status. Starts nothing. */
@@ -71,17 +77,14 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
   const problems: McpRegistryProblem[] = [];
   if (!project.ok) problems.push({ name: null, scope: 'project', file: paths.project, reason: project.reason });
   if (!personal.ok) problems.push({ name: null, scope: 'user', file: paths.personal, reason: personal.reason });
-  const registry = resolveMcpRegistry([{ scope: 'local', file: paths.personal, servers: personal.ok ? personal.local : {} },
-    { scope: 'project', file: paths.project, servers: project.ok ? project.user : {} }, { scope: 'user', file: paths.personal, servers: personal.ok ? personal.user : {} }],
-  context.managed ?? null, context.environment);
+  const registry = resolveFiles(context, paths, project, personal);
   const [projectTrust, userTrust, moved] = await Promise.all([storeOf(mcpTrustDirectory('project', context)), storeOf(mcpTrustDirectory('user', context)),
     readMcpTrust(movedTrustDirectory(context.layout))]);
   const servers = await Promise.all(registry.servers.map(async (server): Promise<McpServerView> => {
     const trust = server.scope === 'user' ? userTrust : projectTrust;
     const record = trust.ok ? findMcpTrust(trust.state, server.scope, server.name) : null;
     const expanded = await expandMcpEntry(server.entry, server.scope, context.environment, context.secret, context.knownSecrets);
-    const decided: McpServerStatus = !trust.ok ? 'trust-store-unavailable' : !record ? 'pending-approval' : record.definitionDigest !== server.definitionDigest ? 'changed'
-      : record.decision === 'declined' ? 'declined' : expanded.ok ? 'trusted' : 'invalid-launch';
+    const decided = statusOf(trust.ok, record, server.definitionDigest, expanded.ok);
     const waits = decided === 'pending-approval' && server.scope !== 'user' && moved.ok && findMcpTrust(moved.state, server.scope, server.name) !== null;
     const reason = !trust.ok ? trust.reason : !expanded.ok ? expanded.reason : waits ? 'trust-moved' : undefined;
     const shown = mcpEntryDisplay(server.entry);
@@ -89,16 +92,24 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
       ...(server.entry.timeoutMs ? { timeoutMs: server.entry.timeoutMs } : {}), tools: record.tools, label: [shown.command, ...shown.args].join(' '), generation: record.reconnect,
       binding: Object.freeze({ scope: server.scope, definitionDigest: server.definitionDigest }) }) : null;
     return Object.freeze({ name: server.name, scope: server.scope, file: server.file, shadows: server.shadows, definitionDigest: server.definitionDigest, entry: server.entry,
-      status: decided, ...(reason ? { reason } : {}), trust: record, launch });
+      status: decided, ...(reason ? { reason } : {}), ...(trust.ok && !expanded.ok && expanded.refusal ? { refusal: expanded.refusal } : {}), trust: record, launch });
   }));
   return { projectKey, paths, servers, problems: [...problems, ...registry.problems] };
 }
+const resolveFiles = (context: McpRegistryContext, paths: ReturnType<typeof mcpRegistryPaths>, project: ReturnType<typeof parseMcpRegistryFile>, personal: ReturnType<typeof parseMcpRegistryFile>) =>
+  resolveMcpRegistry([{ scope: 'local', file: paths.personal, servers: personal.ok ? personal.local : {} }, { scope: 'project', file: paths.project, servers: project.ok ? project.user : {} },
+    { scope: 'user', file: paths.personal, servers: personal.ok ? personal.user : {} }], context.managed ?? null, context.environment, context.knownSecrets);
+/** The one status rule (`expanded`: the entry's launch values expand), and what each status means for a send: only `trusted` admits, then the pin decides. */
+const statusOf = (trustOk: boolean, record: McpTrustRecord | null, digest: string, expanded: boolean): McpServerStatus => !trustOk ? 'trust-store-unavailable' : !record ? 'pending-approval' : record.definitionDigest !== digest ? 'changed' : record.decision === 'declined' ? 'declined' : expanded ? 'trusted' : 'invalid-launch';
+const sendRefusalOf = (status: McpServerStatus): McpSendRefusal | null => status === 'trusted' ? null : status === 'trust-store-unavailable' ? 'trust-unavailable' : status === 'pending-approval' || status === 'declined' ? 'trust-revoked' : 'definition-changed';
 /**
- * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right before a call is handed to the SDK — after its approval wait — the current registry files and the scope's trust record are read again
- * (user trust in the global root, project and local trust in that root's project directory) and the call is admitted only while the server is still trusted as exactly the scope and definition the turn offered it under and the tool's pin is still that digest. The check runs under the
+ * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right before a call is handed to the SDK — after its approval wait — both registry files and the bound scope's trust record are read again
+ * (user trust in the global root, project and local trust in that root's project directory) and the call is admitted only while the server is still trusted as exactly the scope and definition the turn offered it under, its entry still expands and the tool's pin is still that digest. The check runs under the
  * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before the check is always seen; a later change can race the actual send (the lock is released before the SDK sends; a revocation never recalls a call already sent). Fails closed.
+ * X8: no read is skipped; only their parse is reused while the bytes read under the lock are the same. Selection re-applies company policy and environment/known-secret checks at every send. A15: only the called server is expanded, its `$DECK:` values resolved at every send, never kept.
  */
 export function mcpSendAuthority(registry: McpRegistryContext) {
+  let memo: { readonly key: string; readonly project: ReturnType<typeof parseMcpRegistryFile>; readonly personal: ReturnType<typeof parseMcpRegistryFile>; readonly trust: ReturnType<typeof parseMcpTrust> } | null = null;
   return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null }): Promise<McpSendRefusal | null> => {
     const { binding } = call;
     if (!binding) return 'trust-revoked';
@@ -107,19 +118,23 @@ export function mcpSendAuthority(registry: McpRegistryContext) {
     // No trust directory: nothing is trusted in this scope (and the lock does not create one).
     if (!(await lstat(directory).then(info => info.isDirectory(), () => false))) return 'trust-revoked';
     const check = async (): Promise<McpSendRefusal | null> => {
-      const server = (await loadMcpRegistry(registry)).servers.find(entry => entry.name === call.server);
+      const projectKey = await realpath(registry.projectRoot).catch(() => registry.projectRoot), paths = mcpRegistryPaths(projectKey, mcpGlobalRoot(registry.environment));
+      const read = await Promise.all([readMcpRegistryText(paths.project, 'project'), readMcpRegistryText(paths.personal, 'personal'), storeTextOf(mcpTrustDirectory(binding.scope, registry))] as const);
+      const key = createHash('sha256').update(JSON.stringify([projectKey, read])).digest('hex');
+      if (memo?.key !== key) memo = { key, trust: parseMcpTrust(read[2]), project: parseMcpRegistryFile(read[0], 'project'), personal: parseMcpRegistryFile(read[1], 'personal', projectKey) };
+      const server = resolveFiles(registry, paths, memo.project, memo.personal).servers.find(entry => entry.name === call.server);
       if (!server) return 'trust-revoked';
-      if (server.status === 'trust-store-unavailable') return 'trust-unavailable';
+      const trust = (server.scope === 'user') === (binding.scope === 'user') ? memo.trust : await storeOf(mcpTrustDirectory(server.scope, registry));
+      if (!trust.ok) return 'trust-unavailable';
       if (server.scope !== binding.scope || server.definitionDigest !== binding.definitionDigest) return 'definition-changed';
-      if (server.status === 'pending-approval' || server.status === 'declined') return 'trust-revoked';
-      if (server.status !== 'trusted' || !server.trust) return 'definition-changed';
-      return server.trust.tools.some(pin => pin.name === call.tool && pin.digest === call.digest) ? null : 'pin-revoked';
+      const record = findMcpTrust(trust.state, server.scope, server.name), status = statusOf(true, record, server.definitionDigest, true);
+      const refusal = sendRefusalOf(status !== 'trusted' || (await expandMcpEntry(server.entry, server.scope, registry.environment, registry.secret, registry.knownSecrets)).ok ? status : 'invalid-launch');
+      return refusal ?? (record!.tools.some(pin => pin.name === call.tool && pin.digest === call.digest) ? null : 'pin-revoked');
     };
-    try { return await withConfigWriteLock(join(directory, MCP_TRUST_FILE), check, 10_000); }
+    try { return await withConfigWriteLock(join(directory, MCP_TRUST_FILE), check, MCP_STATE_LOCK_MS); }
     catch { return 'trust-unavailable'; }
   };
 }
-/** The client settings of the trusted servers (null when there is none): code defaults, the agent's result bound and the MCP message bound. */
 export function mcpClientSettings(view: McpRegistryView, limits: { readonly resultMaxBytes?: number; readonly inputMaxBytes?: number }): McpClientSettings | null {
   const servers = view.servers.flatMap(server => server.launch ? [server.launch] : []);
   return servers.length ? Object.freeze({ ...MCP_CLIENT_DEFAULTS, ...(limits.resultMaxBytes ? { resultMaxBytes: limits.resultMaxBytes } : {}),
@@ -147,9 +162,8 @@ export interface McpCommandContext extends McpRegistryContext {
   readonly scopeId?: string;
 }
 /** K4: where the `sandbox-net` servers' own HOMEs live (the data root's `integrations/mcp-home`, never the user's HOME or the project). */
-export const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layout, 'integrations'), MCP_SERVER_HOMES_DIR);
-/** The trust context of a registry context (both trust places prepared for writing on demand). */
-export function mcpTrustContext(context: McpRegistryContext & { readonly sandboxes: McpLaunchContext['sandboxes']; readonly principal: McpTrustContext['principal'];
+const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layout, 'integrations'), MCP_SERVER_HOMES_DIR);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function mcpTrustContext(context: McpRegistryContext & { readonly sandboxes: McpLaunchContext['sandboxes']; readonly principal: McpTrustContext['principal'];
   readonly audit: McpTrustAudit; readonly inputMaxBytes?: number; readonly now?: () => number; readonly scopeId?: string }, cwd: string): McpTrustContext {
   return { environment: context.environment, secret: context.secret, cwd, sandboxes: context.sandboxes, principal: context.principal, audit: context.audit, ...(context.grants ? { grants: context.grants } : {}),
     ...(context.knownSecrets ? { knownSecrets: context.knownSecrets } : {}),
@@ -159,7 +173,6 @@ export function mcpTrustContext(context: McpRegistryContext & { readonly sandbox
 }
 const fail = (code: string, params: Record<string, string> = {}) => ErrorRegistry.createError(code, { params });
 
-/** Changes one registry file under its config write lock: read, change, write a temporary with the scope's mode, rename. */
 async function mutateRegistry<T>(path: string, mode: number, change: (raw: Record<string, unknown>) => T): Promise<T> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   return withConfigWriteLock(path, async () => {
@@ -169,14 +182,13 @@ async function mutateRegistry<T>(path: string, mode: number, change: (raw: Recor
     try { await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }
     try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
     return result;
-  }, 10_000);
+  }, MCP_STATE_LOCK_MS);
 }
 async function rawFile(path: string): Promise<Record<string, unknown>> {
   try { const value = JSON.parse(await readFile(path, 'utf8')) as unknown; if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>; }
   catch (error) { if ((error as { code?: unknown })?.code === 'ENOENT') return {}; }
   throw fail('MCP_REGISTRY_FILE_INVALID', { path });
 }
-/** The `mcpServers` object of one scope inside a raw file; created on the way when `create`, else null when absent. */
 function serversOf(raw: Record<string, unknown>, scope: Exclude<McpScope, 'managed'>, projectKey: string, create: boolean): Record<string, unknown> | null {
   const child = (holder: Record<string, unknown>, key: string): Record<string, unknown> | null => {
     const value = holder[key];
@@ -198,7 +210,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     return failure ? { lastStart: { phase: failure.phase, atMs: failure.atMs, code: failure.code, ...(failure.detail ? { detail: failure.detail } : {}),
       ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(failure.phase === 'decision' ? mcpDecisionNotice(server.name, failure.code, failure.detail) : failure.phase === 'tools' ? { kind: 'tools-changed', name: server.name, count: Number(failure.detail) || 0 }
       : mcpStartFailedNotice(server.name, failure)) } } : {}; };
-  const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
+  const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}), ...(server.refusal ? { refusal: server.refusal } : {}),
     shadows: server.shadows, realm: isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM, ...mcpEntryDisplay(server.entry),
     definitionDigest: server.definitionDigest, pinnedTools: server.trust?.decision === 'trusted' ? server.trust.tools.length : 0, ...lastStartOf(server) });
   /** `/mcp approve|reconnect|remove` and a successful approval are the owner's explicit retry: the recorded failure goes. */
@@ -242,7 +254,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     const refused = isMcpHttpEntry(entry.data) && !entry.data.url.includes('${') ? mcpEndpointRefusal(entry.data.url) : null;
     if (refused) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: refused });
     const path = fileOf(view, request.scope), mode = request.scope === 'project' ? 0o644 : 0o600;
-    const target = { name: request.name, scope: request.scope, definitionDigest: mcpScopedDigest(request.name, request.scope, entry.data, context.environment) };
+    const target = { name: request.name, scope: request.scope, definitionDigest: mcpScopedDigest(request.name, request.scope, entry.data, context.environment, context.knownSecrets) };
     const exists = async () => { const servers = serversOf(await rawFile(path), request.scope, view.projectKey, false); return !!servers && Object.hasOwn(servers, request.name); };
     if (await exists()) throw fail('MCP_SERVER_EXISTS', { name: request.name, scope: request.scope });
     // MCP-REGISTRY-AUDIT: the audited trust decision comes first, the registry file after it. An audit refusal or failure leaves the registry and the trust
@@ -288,8 +300,8 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   const server = find(request.name);
   if (!server) throw fail('MCP_SERVER_UNKNOWN', { name: request.name });
   if (request.verb === 'reset' || request.verb === 'revoke') {
-    // `/mcp approve`: forget this server's decision, so its next use asks again with the cards (a decline is not final). `revoke` (K1): the
-    // trust and the approver's tool grant go together; the entry stays and is not started again until it is approved again.
+    // Decision 14 (b): both forget this server's decision and take the approver's tool grant with it (K1); the entry stays and its next use asks
+    // again with the cards (`/mcp approve` resets first: a decline is not final). Only the audit action and the answer key differ.
     const grant = await recordMcpTrust(server, trustContext, request.verb, () => null);
     await forgetFailure(server.scope, server.name);
     return { schemaVersion: 1, [request.verb === 'reset' ? 'reset' : 'revoked']: { name: server.name, scope: server.scope }, ...(grant && grant.status !== 'none' ? { grant } : {}) };
@@ -364,7 +376,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   // MCP-REVOKE: a process whose server is no longer trusted (reset, removed, declined, changed) stops; its next use starts it after the cards.
   const trustedIds = (current: McpRegistryView) => new Set(current.servers.flatMap(server => server.launch ? [server.name] : []));
   pool.retain(trustedIds(view));
-  const undecided = view.servers.filter(server => (server.status === 'pending-approval' || server.status === 'changed') && !server.reason?.startsWith('secret-'));
+  const undecided = view.servers.filter(server => (server.status === 'pending-approval' || server.status === 'changed') && !server.refusal);
   if (undecided.length) {
     const { revision: policyRevision, trustFacts } = await input.requestPolicy(), layout = registry.layout;
     const trust = mcpTrustContext({ ...registry, scopeId, sandboxes: input.sandboxes, principal, inputMaxBytes: input.inputMaxBytes, ...(input.grants ? { grants: input.grants } : {}),
@@ -393,10 +405,10 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     view = await loadMcpRegistry(registry);
     pool.retain(trustedIds(view));
   }
-  for (const server of view.servers) if (server.reason?.startsWith('secret-')) {
-    const reason = server.reason, detail = modelTextPrefix(reason.slice(reason.indexOf(':') + 1), 200);
-    const notice: McpStartNotice = reason.startsWith('secret-refused:') ? { kind: 'secret-refused', name: server.name, code: reason.slice(15).split(':')[0]!, key: reason.slice(15).split(':').slice(1).join(':'), scope: scopeId } : mcpDecisionNotice(server.name, reason.split(':')[0]!, detail);
-    await remember(server, { scope: server.scope, name: server.name, definitionDigest: server.definitionDigest, phase: 'decision', atMs: now(), code: reason.split(':')[0]!, detail }, notice);
+  for (const server of view.servers) if (server.refusal) {
+    const refusal = server.refusal, code = refusal.kind, detail = modelTextPrefix(['code' in refusal ? refusal.code : '', 'key' in refusal ? refusal.key : ''].filter(Boolean).join(':') || code, 200);
+    const notice: McpStartNotice = refusal.kind === 'secret-refused' ? { kind: 'secret-refused', name: server.name, code: refusal.code, key: refusal.key, scope: scopeId } : mcpDecisionNotice(server.name, code, detail);
+    await remember(server, { scope: server.scope, name: server.name, definitionDigest: server.definitionDigest, phase: 'decision', atMs: now(), code, detail }, notice);
   }
   const settings = mcpClientSettings(view, { resultMaxBytes: input.resultMaxBytes, inputMaxBytes: input.inputMaxBytes });
   const byName = new Map(view.servers.map(server => [server.name, server])), outcomes: [McpServerView, McpServerOpen][] = [];

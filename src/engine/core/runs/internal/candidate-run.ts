@@ -1,14 +1,14 @@
 import { candidateBindingSchema, CandidateBindingError, encodeCommandProjection, type CandidateBinding, type AttemptIdentity } from '#domain/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type WorkspaceSource } from '#engine/core/workspaces/index.js';
-import { runAdmissionSchema, type RunAdmission, type RunAdmissionApplication } from '#engine/core/runs/index.js';
+import { runAdmissionSchema, type RunAdmission, type RunAdmissionApplication } from './admission.js';
 
-/** Service-only lookup of immutable candidate custody. A client never supplies a path, source binding or revision. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Service-only lookup of immutable candidate custody. A client never supplies a path, source binding or revision. */
 export interface PrivateCandidateStore { loadCandidate(scopeId: string, commandId: string): Promise<CandidateBinding | null> }
 export interface PrivateCandidateWorkspace {
   /** Verifies stored adapter custody (full tree/revision/digest), not just object existence. */
   capture(candidate: CandidateBinding): Promise<{ readonly source: WorkspaceSource; readonly baseRevision: string }>;
 }
-export interface CandidateRunRequest { readonly scopeId: string; readonly runId: string; readonly candidateCommandId: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface CandidateRunRequest { readonly scopeId: string; readonly runId: string; readonly candidateCommandId: string }
 /** Normal Run admission remains the transition owner. This resolver supplies only the immutable workspace pin after its authorization. */
 export async function pinRunToCandidate(store: PrivateCandidateStore, provider: PrivateCandidateWorkspace,
   authorizeRead: (identity: AttemptIdentity) => Promise<void>, request: CandidateRunRequest): Promise<RunWorkspaceCustody> {
@@ -23,7 +23,7 @@ export async function pinRunToCandidate(store: PrivateCandidateStore, provider: 
   return runWorkspaceCustodySchema.parse({ schemaVersion: 1, scopeId: request.scopeId, runId: request.runId,
     source: captured.source, baseRevision: captured.baseRevision });
 }
-export interface CandidateRunCriteria {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface CandidateRunCriteria {
   /** Reuse the original Task's pinned evaluator/version/parameters AND the current installation bar.
    * Unknown implementations and weaker criteria fail closed, before any Run is admitted. */
   assert(candidate: CandidateBinding, admission: RunAdmission): Promise<void>;

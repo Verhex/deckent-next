@@ -1,5 +1,5 @@
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
+import { isCodedError, PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -11,7 +11,6 @@ export const runCommand = lazyFunction(cliRun, 'runCommand'), readGraphInput = l
 export const toolchainsCommand = lazyFunction(admin, 'toolchainsCommand');
 export const mcpCommand = lazyFunction(() => import('./mcp.js'), 'mcpCommand'), mcpSlash = lazyFunction(() => import('./mcp.js'), 'mcpSlash');
 
-/** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   beuser: lazyFunction(() => import('#surfaces/core/cli-beuser/index.js'), 'beuserCommand'),
   audit: lazyFunction(admin, 'auditCommand'), backup: lazyFunction(admin, 'backupCommand'), identity: lazyFunction(() => import('#surfaces/core/cli-identity/index.js'), 'identityCommand'),
@@ -22,8 +21,9 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   workers: lazyFunction(observe, 'workersCommand'), run: runCommand, task: lazyFunction(() => import('#surfaces/core/cli-task/index.js'), 'taskCommand'),
   do: lazyFunction(cliRun, 'doCommand'),
   report: lazyFunction(cliRun, 'reportCommand'),
-  pool: lazyFunction(admin, 'poolCommand'), models: lazyFunction(models, 'modelsCommand'), approval: lazyFunction(approval, 'approvalsCommand'),
-  // The config surface renders through terminal-render (whose barrel carries Ink): a lazy edge keeps it off every other command's start.
+  pool: lazyFunction(admin, 'poolCommand'),
+  // Owner 2026-11-06: `models catalog brain` is a governed config write; the config surface owns it (it already depends on cli-models).
+  models: async (argv, context) => (await models()).modelsCommand(argv, { ...context, brainOffer: async args => (await import('#surfaces/core/config/index.js')).brainOfferCommand(args, context) }), approval: lazyFunction(approval, 'approvalsCommand'),
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
   mcp: mcpCommand, secret: lazyFunction(admin, 'secretCommand'), toolchains: toolchainsCommand, doctor: runKernelCommand,
   inventory: lazyFunction(cliRun, 'inventoryCommand'), paths: runKernelCommand, runtime: lazyFunction(admin, 'runtimeCommand'), coding: lazyFunction(admin, 'codingCommand'),
@@ -32,7 +32,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   recovery: lazyFunction(approval, 'recoveryCommand'),
   hub: lazyFunction(() => import('#surfaces/core/cli-hub/index.js'), 'hubCommand'),
   agents: lazyFunction(() => import('#surfaces/core/cli-agents/index.js'), 'agentsCommand'),
-  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || argv[1] === 'recovery' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'show' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || argv[1] === 'recovery' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
@@ -75,7 +75,6 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   // renders in the same language as its heading.
   let locale = context.locale ?? resolveLocale(undefined, context.env), shell: import('#surfaces/core/terminal-host/index.js').TerminalShell | null = null;
   try {
-    assertErrorRegistry();
     const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams, async (locale, query) => (await import('#surfaces/core/terminal-labels/index.js')).terminalCommandHelp(locale, query));
     if (help) {
       locale = help.locale; context.onLocale?.(locale);
@@ -108,7 +107,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       const launch = async (selected = context) => (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...selected, onLocale: value => { locale = value; context.onLocale?.(value); } });
       // I-S5 (owner D8): bare `deckent` with no scope in a folder with no installation offers the guided setup to a person on a terminal.
       await launch().catch(async (error: unknown) => {
-        if (argv.length !== 0 || (error as { code?: unknown } | null)?.code !== 'TERMINAL_SCOPE_REQUIRED') throw error;
+        if (argv.length !== 0 || !isCodedError(error, 'TERMINAL_SCOPE_REQUIRED')) throw error;
         await (await import('./setup-offer.js')).offerSetup(error, context, locale, launch);
       });
       await shell?.host.close(); // the Workline did not take the shell (it closed or the launch returned early)

@@ -1,7 +1,7 @@
 import { ErrorRegistry, type Environment } from '#platform/index.js';
-import type { SecretStore, SecretStoreContext, SecretStoreFactory } from '#engine/index.js';
+import { ENV_SECRET_STORE_ID, type SecretStore, type SecretStoreContext, type SecretStoreFactory } from '#engine/index.js';
 
-export const ENV_SECRET_STORE_ID = 'core.secret-store.env@1';
+export { ENV_SECRET_STORE_ID };
 /**
  * `core.secret-store.env@1` — the default backend and the behaviour every read site had before SECRET-K1: a reference resolves to the
  * caller's own environment property of that name. Read-only (Deckent cannot persist into a process environment) and not enumerable

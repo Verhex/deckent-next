@@ -1,4 +1,4 @@
-import { parkRunQuota, recoverStalledTask, applyTaskEvaluation, attemptSnapshotSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity } from '#domain/index.js';
+import { parkRunQuota, recoverStalledTask, applyTaskEvaluation, attemptSnapshotSchema, readWorkerModelPin, parseRun, sameAttemptIdentity, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity } from '#domain/index.js';
 import { dispatchRecordSchema } from '#engine/core/dispatch/index.js';
 import { assertRunExecution } from '#engine/core/runs/index.js';
 
@@ -12,7 +12,7 @@ export function assertTaskEvaluationReady(runInput: unknown, attemptInput: unkno
   identity: AttemptIdentity, now: number, stall = false) {
   let run; let attempt; let dispatch;
   try {
-    run = runSnapshotSchema.parse(runInput); attempt = attemptSnapshotSchema.parse(attemptInput);
+    run = parseRun(runInput); attempt = attemptSnapshotSchema.parse(attemptInput);
     dispatch = dispatchRecordSchema.parse(dispatchInput); assertRunExecution(run.graph, run.execution);
   } catch { invalid(); }
   if (!Number.isSafeInteger(expectedRunRevision) || expectedRunRevision < 0 || run.revision !== expectedRunRevision) stale();

@@ -28,9 +28,13 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.63.3`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.64`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
+>
+> Alpha.64 son alpha'dır. Onay kökeni, teslim modu, Brain kökeni veya resource-key kayıtları yazıldıktan sonra
+> alpha.63.3 bunları okuyamaz: **alpha.63.3'e geri dönüş yoktur**. Kurtarma ileri sürüm düzeltmesi gerektirir;
+> yükseltme öncesi yedekleri veri kurtarma için saklayın. [Bilinen sınırlar](docs/known-limits.tr.md).
 
 ## Deckent nedir
 
@@ -129,6 +133,11 @@ Sizin adınıza kurulum yapan AI asistanı için [AI kurulum rehberini](docs/ai-
 
 ### Kaynaktan kurulum
 
+[Node.js indirme sayfasından](https://nodejs.org/en/download) desteklenen bir sürüm kurun; WSL2 için de Linux seçin.
+Aynı terminalde `node --version` ve `npm --version` ile kontrol edin. Ubuntu'daki `apt install nodejs`, Deckent'in
+çalışmadığı Node 18'i kurabilir. npm `EBADENGINE` bildirirse Node'u [package.json](package.json) aralığına yükseltin,
+yeni terminal açın ve klonun içinde `npm ci` komutunu yeniden çalıştırın.
+
 npm paketi yayımlanana kadar Deckent'i bir kez kaynaktan derleyin ve `deckent` komutunu bağlayın:
 
 ```sh
@@ -140,6 +149,17 @@ node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/first-build
 npm run build
 npm link
 ```
+
+Klon zaten varsa `cd deckent-next` ile girip `git status` kontrol edin; üzerine yeniden klonlamadan oradan devam edin.
+Klon tamamlanmış ama bağımlılık kurulumu yarıda kalmışsa `npm ci` ile devam edebilirsiniz; kaynak değişikliklerinizi
+değil, `node_modules` dizinini yeniler. Klonun kendisi eksikse klasörü koruyup farklı bir dizine klonlayın.
+Bubblewrap derlemesi başarısız olduysa yeni bir `--out` dizini kullanın; yalnız tamamlanan derlemeyi stage edip
+ardından `npm run build` çalıştırın.
+
+npm'in orta önem dereceli güvenlik açığı bildirimi, `npm ci` kurulum sonucundan ayrı bir bağımlılık denetimidir.
+Kurulum başarıyla bittiyse derleme adımına geçilebilir; bu bildirim güvenlik onayı değildir. Etkilenen paketleri
+`npm audit` ile inceleyip bakımcılara bildirin. Bu kurulumda kilit dosyasını koruyun; uyumsuz bağımlılık sürümleri
+kurabilen `npm audit fix --force` komutunu çalıştırmayın.
 
 Build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter. `BUBBLEWRAP_BUILD_REQUIRED` ile durursa Docker'a
 ulaşılamamıştır: Docker'ı başlatın, iki `build-bwrap` komutunu yeni bir `--out` dizinle (örneğin
@@ -166,7 +186,12 @@ flowchart LR
 ```
 
 1. **Proje başına bir kez kurun.** *Kapsam (scope)*, policy'yi, iş kayıtlarını ve harcamayı bu projeye bağlayan sabit addır;
-   bir klasör ya da sandbox değildir. `my-project` gibi bir ad seçin, ilk kurulum policy'sini önizleyin ve kurun:
+   bir klasör ya da sandbox değildir. Size ait, başka hesapların yazamadığı bir klasör kullanın. Ubuntu gibi grup yazma
+   izniyle klasör oluşturan sistemlerde Deckent, gerçek terminalde o klasörün iznini daraltmayı bir kez sorar.
+   Evet yalnız o klasörün grup/diğer yazma iznini kaldırır; hayır klasörü değiştirmez ve `chmod go-w .` rehberini gösterir.
+   `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra üretilen özeti `--apply --expect <özet>` ile kullanın.
+   Makine çıktısı (`--json`), TTY dışı ve AI çağrıları soru veya izin değişikliği olmadan reddedilir.
+   `my-project` gibi bir kapsam seçin, policy'yi önizleyin ve kurun:
 
    ```sh
    deckent init policy --scope my-project --preview
@@ -178,14 +203,16 @@ flowchart LR
    eylemlerin her biri yine kontrol edilir ve kaydedilir. `deckent doctor` neyin hazır olduğunu söyler, kurulum
    başlayamıyorsa sıfır dışı kodla çıkar. `deckent init` aynı kurulumu adım adım yapar ve eksik kalanı listeler.
 2. **Terminali açın**: `deckent`. Az önce kurduğunuz kapsamda açılır (`deckent --scope my-project` kapsamı açıkça seçer) ve
-   runtime servisini arka planda başlatır.
+   runtime servisini arka planda başlatır. İlk açılışı Türkçe yapmak için `deckent --lang tr` kullanın; tercihi
+   `deckent config set --global language tr` ile kaydedin (İngilizce: `en`). `deckent init --lang tr` sırasında da seçebilirsiniz.
 3. **Sağlayıcı bağlayın**: `/provider`. Anahtarı gizlenen bir alana yazarsınız; sağlayıcı sunuyorsa Deckent onu ücretsiz
    bir istekle dener ve adıyla saklar. Değer bir daha gösterilmez ve hiçbir ajan ya da işçi onu almaz. Ardından **Model
    bağla**'yı seçip sağlayıcının listesinden birebir bir model seçin. Bağlamak, modeli bu kapsamda çağrılabilir yapar;
    5. adım bu oturumun bağlı modellerden hangisini kullanacağını seçer.
 4. **Bütçe belirleyin.** Her ücretli API turu kapsamın tek ve ortak USD bütçesinden pay ayırır; bütçe yoksa her ücretli tur
-   reddedilir ve pencereler nedenini söyler. `/provider`'ın ilk satırı **Bütçe oluştur**, 5 ile 100 USD arası hazır tutarlar
-   ya da 1000'e kadar başka bir tam dolar tutarı sunar, ardından bir onay adımı gelir. Yerel modeller bütçe istemez.
+   reddedilir ve pencereler nedenini söyler. `/provider` içinde bağlantıları geçip **Bütçe oluştur** satırına inin
+   (ya da `bütçe` yazarak süzün). Başlangıç seçimi 10 USD'dir; 5 ile 100 USD arası hazır tutarlar veya 1000'e kadar
+   başka bir tam dolar tutarı sunar, ardından onay ister. Yerel modeller bütçe istemez.
 5. **Model seçin**: `/model` ile, yalnız bu oturum için ya da varsayılanınız olarak. Henüz kullanamayacağınız model, nedeni
    ve çözümüyle kilitli görünür.
 6. **Çalışın.** İsteğinizi düz bir cümleyle söyleyin. Araç çağrıları kurulumunuzun policy'sine ve izin modunuza uyar; size
@@ -200,7 +227,7 @@ konuşma satırları kırpıldı; başka hiçbir şey değiştirilmedi.
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/09-model.png" alt="Bütçe yokken /model: Bütçe oluştur satırı, kullanılabilir yerel model, nedeniyle kilitli ikinci model"><br><sub><b>Bütçeden önce.</b> <code>/model</code> önce <b>Bütçe oluştur</b> satırını sunar. Yerel deneme modeli zaten kullanılabilir, çünkü yerel modeller bütçe istemez; bu kapsamın çağıramayacağı model nedeniyle kilitlidir.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/08b-saglayici-butce-satiri.png" alt="İlk satırı Bütçe oluştur olan /provider ve sağlayıcı listesi"><br><sub><b>/provider.</b> Önce <b>Bütçe oluştur</b>, sonra her sağlayıcı bağlantı durumuyla.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/08b-saglayici-butce-satiri.png" alt="/provider bütçe eylemi ve sağlayıcı listesi"><br><sub><b>/provider.</b> Önce bağlantılar gelir; <b>Bütçe oluştur</b> için aşağı inin veya süzün. Bu görsel önceki sırayı gösterir.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/10-butce.png" alt="Hazır tutarlarla bütçe penceresi"><br><sub><b>Bütçe penceresi.</b> Hazır tutarlar ya da ok tuşlarıyla başka bir tutar.</sub></td>
@@ -246,6 +273,12 @@ aşağıdaki iş adımları Deckent'in kendi geliştirmesinde her gün kullanıl
 ([bilinen sınırlar](docs/known-limits.tr.md)).
 
 ### Bir kez yapılan kurulum
+
+Paketle gelen Claude önerileri günlük işler için Opus 5.5'i, zor akıl yürütme işleri için
+[Fable 5.2'yi](https://platform.claude.com/docs/en/models/fable-5-2/overview) kullanır.
+Fable 5.2 için [Claude Code 2.1.321 veya sonrası](https://code.claude.com/docs/en/model-config) gerekir.
+Fable 5.1 katalogda seçilebilir kalır; katalog kaydı ve öneriler modeli etkinleştirmez.
+Fable 5.1'i bir rolde kullanmak için `deckent models roles set` ile o rolü açıkça atamanız gerekir.
 
 İş bir işçi konteynerinde çalışır; bu yüzden Deckent'in bir işçi imajına, işin nerede çalışacağını söyleyen ayarlara, ilk
 iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` kurar; `deckent`i ilk açtığınızda kurulum adımları (`/setup`)

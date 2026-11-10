@@ -1,7 +1,7 @@
 import { persistedUuid, identitySchema as id, counterSchema, immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
-export const BEUSER_CONTRACT_VERSION = 2;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const BEUSER_CONTRACT_VERSION = 2;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const competence = counterSchema.max(4);
 /** Package adapter pin; the complete inventory stays in the candidate, outside bounded execution JSON. */
@@ -32,9 +32,9 @@ export const beuserVerdictSchema = z.strictObject({ schemaVersion: z.literal(1),
   safety: z.enum(['pass', 'fail', 'unknown']), experience: z.enum(['pass', 'friction', 'fail', 'unknown']),
   validity: z.enum(['valid', 'drift', 'leak', 'invalid', 'unknown']), independence: z.enum(['independent', 'reduced', 'unknown']),
   evidenceRefs: z.array(id).readonly() }).readonly();
-export type AcceptanceSubject = z.infer<typeof acceptanceSubjectSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AcceptanceSubject = z.infer<typeof acceptanceSubjectSchema>;
 export type BeuserWalkerSummary = z.infer<typeof beuserWalkerSummarySchema>;
-export type BeuserSealedRubric = z.infer<typeof beuserSealedRubricSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BeuserSealedRubric = z.infer<typeof beuserSealedRubricSchema>;
 export type BeuserBinding = z.infer<typeof beuserBindingSchema>;
 export type BeuserTranscriptEntry = z.infer<typeof beuserTranscriptEntrySchema>;
 export type BeuserVerdict = z.infer<typeof beuserVerdictSchema>;

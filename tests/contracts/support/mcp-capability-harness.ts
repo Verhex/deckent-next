@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach } from 'vitest';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { clearConfigCache, productResourcePath, resolveProductLayout } from '#platform/index.js';
 
 const roots: string[] = [];

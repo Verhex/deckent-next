@@ -3,7 +3,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { inspectConfiguredWorkers } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createNormalizerState, flushUnmapped, normalizeClaudeLine, openSqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { workerEventSchema, type WorkerEvent } from '#domain/index.js';

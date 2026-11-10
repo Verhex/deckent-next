@@ -1,8 +1,9 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { readWorkerFinalReport, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
 import type { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
-export class HandoffError extends Error {
-  constructor(readonly code: 'HANDOFF_SOURCE_NOT_ACCEPTED' | 'HANDOFF_ARTIFACT_MISMATCH' | 'HANDOFF_PATCH_UNAPPLICABLE' | 'HANDOFF_INVALID' | 'HANDOFF_LIMIT_EXCEEDED') { super(code); this.name = 'HandoffError'; }
+export class HandoffError extends CodedError {
+  constructor(override readonly code: 'HANDOFF_SOURCE_NOT_ACCEPTED' | 'HANDOFF_ARTIFACT_MISMATCH' | 'HANDOFF_PATCH_UNAPPLICABLE' | 'HANDOFF_INVALID' | 'HANDOFF_LIMIT_EXCEEDED') { super(code); this.name = 'HandoffError'; }
 }
 export function verifyAcceptedHandoffSource(expected: AttemptIdentity, recorded: AttemptIdentity, phase: string | undefined) {
   if (phase !== 'accepted' || !sameAttemptIdentity(expected, recorded)) throw new HandoffError('HANDOFF_SOURCE_NOT_ACCEPTED');

@@ -7,7 +7,7 @@ import { span, type Span } from './spans.js';
  */
 type Grammar = Readonly<{ keywords: ReadonlySet<string>; literals: ReadonlySet<string>; line: readonly string[]; block: readonly [string, string] | null;
   quotes: string; caseless: boolean; variables: boolean }>;
-export type HighlightState = Readonly<{ inBlockComment: boolean }>;
+type HighlightState = Readonly<{ inBlockComment: boolean }>;
 export const HIGHLIGHT_START: HighlightState = Object.freeze({ inBlockComment: false });
 
 const words = (text: string): ReadonlySet<string> => new Set(text.split(' '));

@@ -28,10 +28,14 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.63.3`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.64`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
+>
+> Alpha.64 is the last alpha. Once it writes approval origin, delivery mode, Brain origin or resource-key records,
+> alpha.63.3 cannot read them: **there is no rollback to alpha.63.3**. Recovery requires a forward fix;
+> keep pre-upgrade backups for data recovery. See [known limits](docs/known-limits.md).
 
 ## What is Deckent
 
@@ -130,6 +134,11 @@ For an AI assistant installing on your behalf, use the [AI installation guide](d
 
 ### Install from source
 
+Install a supported Node version from the [Node.js download page](https://nodejs.org/en/download), choosing Linux for
+WSL2 too, then check `node --version` and `npm --version` in that terminal. Ubuntu's `apt install nodejs` may supply
+Node 18, which cannot run Deckent. If npm reports `EBADENGINE`, upgrade Node to the range in [package.json](package.json),
+open a new terminal and run `npm ci` again in the clone.
+
 Until the npm package is published, build Deckent once from source and link the `deckent` command:
 
 ```sh
@@ -141,6 +150,16 @@ node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/first-build
 npm run build
 npm link
 ```
+
+If the clone already exists, enter it with `cd deckent-next` and check `git status`; continue there instead of cloning
+over it. A completed clone with an interrupted dependency install can resume with `npm ci` (it replaces `node_modules`,
+not your source changes). If the clone itself is incomplete, keep that folder and clone to a different directory.
+After a failed bubblewrap build, use a fresh `--out` directory and stage only a completed build before `npm run build`.
+
+An npm notice about moderate vulnerabilities is a dependency audit, separate from whether `npm ci` completed.
+If installation exited successfully, the next build step is available; the notice is not a security clearance.
+Read `npm audit` for the affected packages and report them to the maintainers. Keep the lockfile for this setup;
+do not run `npm audit fix --force`, which can install incompatible dependency versions.
 
 The build ends with `bubblewrap=present` or `bubblewrap=staged from …`. If it stops with `BUBBLEWRAP_BUILD_REQUIRED`,
 Docker was not reachable: start it, run both `build-bwrap` commands again with a new `--out` directory (for example
@@ -166,7 +185,12 @@ flowchart LR
 ```
 
 1. **Set up once per project.** A *scope* is the stable name that ties policy, work records and spending to this project;
-   it is not a folder or a sandbox. Choose one, such as `my-project`, preview the first-run policy and install it:
+   it is not a folder or a sandbox. Use a folder you own that other accounts cannot write to. On systems such as Ubuntu
+   that create group-writable folders, Deckent asks once on a real terminal whether to narrow that folder's permission.
+   Yes removes group/other write access from that folder only; no leaves it unchanged and shows `chmod go-w .` guidance.
+   For `terminal attach --preview`, this explicit permission step happens before the read-only preview; after yes, use its digest with `--apply --expect <digest>`.
+   Machine output (`--json`), non-TTY and AI callers are refused without a question or permission change.
+   Choose a scope such as `my-project`, preview the policy and install it:
 
    ```sh
    deckent init policy --scope my-project --preview
@@ -178,14 +202,16 @@ flowchart LR
    checked and recorded. `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init`
    runs the same setup step by step and lists what is still missing.
 2. **Open the terminal** with `deckent`. It opens in the scope you just set up (`deckent --scope my-project` picks one
-   explicitly) and starts the runtime service in the background.
+   explicitly) and starts the runtime service in the background. To start in Turkish, run `deckent --lang tr`; save that
+   preference with `deckent config set --global language tr` (English: `en`). You can also choose it during `deckent init --lang tr`.
 3. **Connect a provider** with `/provider`. Type the key into a masked field; Deckent checks it with a free request where
    the provider offers one and stores it under its name. The value is never shown again, and no agent or worker receives
    it. Then choose **Connect a model** and pick an exact model from the provider's list. Connecting makes a model callable in
    this scope; step 5 picks which connected model this session uses.
 4. **Set a budget.** Every paid API turn reserves money from one shared USD budget of the scope, so without a budget each
-   paid turn is refused, and the windows say why. The first row of `/provider`, **Create budget**, offers 5 to 100 USD or
-   another whole-dollar amount up to 1000, then a confirm step. Local models need no budget.
+   paid turn is refused, and the windows say why. In `/provider`, move down past the connections to **Create budget**
+   (or type `budget` to filter). It highlights 10 USD, offers 5 to 100 USD presets or another whole-dollar amount up to
+   1000, then asks for confirmation. Local models need no budget.
 5. **Choose a model** with `/model`, for this session or as your default. A model you cannot use yet is shown locked,
    with the reason and the fix.
 6. **Work.** Ask in plain words. Tool calls follow your installation's policy and your permission mode; anything that needs
@@ -200,7 +226,7 @@ each window are trimmed; nothing else is changed.
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/09-model.png" alt="/model with no budget: Create budget row, the local model usable, a second model locked with its reason"><br><sub><b>Before a budget.</b> <code>/model</code> offers <b>Create budget</b> first. The local test model is already usable, because local models need no budget; a model this scope may not call is locked with its reason.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/08b-provider-budget-row.png" alt="/provider with Create budget as its first row and the provider list"><br><sub><b>/provider.</b> <b>Create budget</b> first, then each provider with its connection state.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/08b-provider-budget-row.png" alt="/provider budget action and provider list"><br><sub><b>/provider.</b> Connections come first; move down or filter for <b>Create budget</b>. This illustration predates that order.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/10-budget.png" alt="Budget window with preset amounts"><br><sub><b>Budget window.</b> Preset amounts, or another amount with the arrow keys.</sub></td>
@@ -246,6 +272,12 @@ up to connecting a model; the job steps below are used every day in Deckent's ow
 from scratch yet ([known limits](docs/known-limits.md)).
 
 ### One-time setup
+
+The packaged Claude recommendations use Opus 5.5 for everyday work and
+[Fable 5.2](https://platform.claude.com/docs/en/models/fable-5-2/overview) for demanding reasoning.
+Fable 5.2 requires [Claude Code 2.1.321 or later](https://code.claude.com/docs/en/model-config).
+Fable 5.1 remains selectable in the catalog; registration and recommendations do not activate a model.
+Using Fable 5.1 for a role requires assigning that role explicitly with `deckent models roles set`.
 
 Work runs in a worker container, so Deckent needs a worker image, settings that say where work runs, a first kind of
 work and a worker pool. `deckent init` installs; the first time you open `deckent` its setup steps (`/setup`) prepare all

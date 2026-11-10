@@ -3,8 +3,8 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyModelCatalog, inspectModelCatalog } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
+import { clearConfigCache, ErrorRegistry, t } from '#platform/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { terminalAdminPorts, type TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import { WORKLINE_SLASH_COMMANDS, EMPTY_SESSION_USAGE, addSessionUsage } from '#surfaces/core/terminal-kit/index.js';
@@ -235,8 +235,31 @@ describe('terminal read-only management (S09)', () => {
       const real = terminalAdminPorts({ ...base, locale, context: {}, doctor: sink => runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }).inspect;
       const lines = await real.doctor!('', { usage: EMPTY_SESSION_USAGE });
       expect(lines.length).toBeGreaterThan(3); expect(lines.join('\n')).not.toContain('"schemaVersion"');
+      const blocked = { root, env, inspectCodingRepository: async () => ({ state: 'skipped', reason: { code: 'setup.coding.notRepository', params: {} } }),
+        inspectInstallationStartability: async () => ({ status: 'blocked' as const, endpoint: null,
+        checks: [{ code: 'FIXTURE_BLOCKED', message: 'fixture runtime cannot start' }] }) };
+      const doctor = terminalAdminPorts({ ...base, locale, context: {},
+        doctor: sink => runKernelCommand(['doctor', '--lang', locale], { ...blocked, stdout: sink, stderr: sink }),
+        doctorReport: sink => runKernelCommand(['doctor', '--json', '--lang', locale], { ...blocked, stdout: sink, stderr: sink }) });
+      const blockedLines = (await doctor.inspect.doctor!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
+      expect(blockedLines).toContain('fixture runtime cannot start');
+      expect(blockedLines).not.toContain(locale === 'en' ? 'Status: ready' : 'Durum: hazır');
+      expect(blockedLines).toContain(t('setup.coding.notRepository', {}, locale));
+      expect(blockedLines).not.toContain(t('doctor.firstJob.next', { step: t('setup.work.kindTitle', {}, locale) }, locale));
+      const window = JSON.stringify(await doctor.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE }));
+      expect(window).toContain('fixture runtime cannot start');
+      expect(window).toContain('FIXTURE_BLOCKED');
+      expect(window).not.toContain(t('terminal.info.doctor.poolSetup', {}, locale));
+      blocked.inspectCodingRepository = async () => ({ state: 'blocked', reason: { code: 'setup.coding.repositoryUnknown', params: {} } });
+      const unknown = (await doctor.inspect.doctor!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
+      expect(unknown).toContain(t('setup.coding.repositoryUnknown', {}, locale));
+      const unknownWindow = JSON.stringify(await doctor.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE }));
+      expect(unknownWindow).toContain(t('setup.coding.repositoryUnknown', {}, locale));
+      expect(unknownWindow).not.toContain(t('terminal.info.doctor.poolSetup', {}, locale));
     }
     const bad = terminalAdminPorts({ ...base, locale: 'en', context: {}, doctor: async () => { throw typed('CLI_USAGE'); } }).inspect;
+    const empty = terminalAdminPorts({ ...base, locale: 'en', context: {}, doctor: async () => { throw typed('INSTALLATION_NOT_STARTABLE'); } }).inspect;
+    await expect(empty.doctor!('', { usage: EMPTY_SESSION_USAGE })).rejects.toMatchObject({ code: 'INSTALLATION_NOT_STARTABLE' });
     const view = await open({ inspect: bad });
     await type(view, '/doctor \r');
     await until(() => view.stdout.text.includes('ERR:'), 'typed doctor failure');

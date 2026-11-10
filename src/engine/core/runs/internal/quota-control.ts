@@ -14,7 +14,7 @@ export type QuotaReleaseCommand = z.infer<typeof quotaReleaseCommandSchema>;
 export type QuotaReleaseReceipt = z.infer<typeof quotaReleaseReceiptSchema>;
 export interface QuotaReleaseWrite { readonly command: QuotaReleaseCommand & { readonly poolId: string };
   readonly actor: Readonly<{ issuer: string; subject: string }>; readonly atMs: number; readonly authorizedPoolIds: readonly string[] }
-export interface QuotaReleaseStore {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface QuotaReleaseStore {
   loadQuotaReleasePools(write: Omit<QuotaReleaseWrite, 'authorizedPoolIds'>): Promise<readonly string[]>;
   releaseQuota(write: QuotaReleaseWrite, audit: (store: AuditStore, released: number, poolIds: readonly string[]) => void): Promise<QuotaReleaseReceipt>;
   recordPoolHoldRefusal(audit: (store: AuditStore) => void): Promise<void>;

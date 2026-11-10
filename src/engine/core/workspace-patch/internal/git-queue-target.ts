@@ -2,7 +2,7 @@ import { targetBindingSchema, TargetQueueError, type EffectTargetRef } from '#do
 import { assertQueueGitTarget, queueGenerationRef, queueGenerationSchema, type GitQueueFence } from './queue-git.js';
 import { adoptionRepositoryIdentity } from './git-fence.js';
 interface QueueGitPort { custody(): Promise<void>; run(args: string[], input?: string): Promise<string>; common(): Promise<{ path: string; inode: number }> }
-/** `main` and `master` are a product security invariant of the queue (never moved); the repository's default branch and remote HEADs extend them at binding. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `main` and `master` are a product security invariant of the queue (never moved); the repository's default branch and remote HEADs extend them at binding. */
 export const QUEUE_PROTECTED_BASE_REFS = Object.freeze(['refs/heads/main', 'refs/heads/master']);
 /** BeUser DR2-06: the queue target-branch refusal known from configuration alone (no Git read), so a surface never offers a queue step that must fail. */
 export function queueTargetConfigRefusal(ref: string, allowed: readonly string[], protectedRefs: readonly string[]): TargetQueueError | null {

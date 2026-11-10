@@ -10,7 +10,7 @@ export type TerminalSessionOrigin = z.infer<typeof originSchema>;
 export type TerminalSessionFilter = Readonly<{ principal?: TerminalSessionOrigin['principal']; folder?: string; allFolders?: boolean }>;
 
 /** undefined = legacy (absent); null = present but unreadable/unsafe. Neither is authority. */
-export async function readSessionOrigin(path: string): Promise<TerminalSessionOrigin | null | undefined> {
+async function readSessionOrigin(path: string): Promise<TerminalSessionOrigin | null | undefined> {
   let handle;
   try { handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : null; }

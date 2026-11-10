@@ -1,11 +1,10 @@
 import { persistedInteger } from '#domain/index.js';
 import { readInvocationPlanUsage } from './plan-usage.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
-import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { ProviderSpendError, ModelInvocationStoreError, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
-import { MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, openLedgerDatabase, MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationCommandRecord, loadInvocationRecord } from './read.js';
 import { decodeInvocationControl } from './control.js';
 
@@ -20,11 +19,10 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
   async loadInspection(scopeInput: string, invocationInput: string) {
     const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
     // A read transaction binds control/outcome and financial rows to one snapshot without a writer lock.
-    this.db.exec('BEGIN');
-    try {
+    return ledgerTransaction(this.db, () => {
       const row = invocationRow(this.db, scopeId, invocationId);
       const record = decodeInvocationRecord(row, scopeId, invocationId, 'invocation_id');
-      if (!record) { this.db.exec('COMMIT'); return null; }
+      if (!record) { return null; }
       let spending = null;
       const version = requireLedgerVersion(this.db, MODEL_INVOCATION_LEDGER_VERSION);
       if (version === PROVIDER_SPEND_LEDGER_VERSION - 1
@@ -44,12 +42,8 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
       const planUsage = readInvocationPlanUsage(this.db, version, record);
       const result = Object.freeze({ record, control: decodeInvocationControl(row, record), spending,
         ...(record.receipt.profile.schemaVersion !== 1 ? { planUsage } : {}) });
-      this.db.exec('COMMIT');
       return result;
-    } catch (error) {
-      if (this.db.isTransaction) this.db.exec('ROLLBACK');
-      throw error;
-    }
+    }, { mode: 'read', unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
   }
 
   close() { this.db.close(); }
@@ -59,9 +53,7 @@ export function openSqliteModelInvocationReader(path: string, options: { readonl
   if (typeof path !== 'string' || !path || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   let db: DatabaseSync | undefined;
   try {
-    assertSqliteEngineSupported(process.versions.sqlite);
-    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
+    db = openLedgerDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION);
     return new SqliteModelInvocationReader(db);
   } catch (error) {

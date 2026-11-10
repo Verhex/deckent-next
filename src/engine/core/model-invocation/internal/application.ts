@@ -27,7 +27,7 @@ export interface ModelInvocationAuthorizer {
   authorize(action: 'invoke' | 'inspect' | 'inspect-content' | 'purge-content' | 'cancel-invocation', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelInvocationAuthorization>;
 }
-export interface ModelInvocationProfileSource {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationProfileSource {
   resolve(scopeId: string, reference: ModelReference): Promise<ModelInvocationProfile | null>;
 }
 export interface ModelInvocationNativePort {

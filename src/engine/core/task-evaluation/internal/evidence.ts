@@ -1,13 +1,13 @@
 import { beuserDigest, beuserEvidenceSchema, beuserParametersSchema, type BeuserEvidence } from '#capabilities/index.js';
 import { createHash } from 'node:crypto';
-import { hasSecret } from '#platform/index.js';
+import { CodedError, hasSecret } from '#platform/index.js';
 import type { DispatchRecord } from '#engine/core/dispatch/index.js';
 import { taskEvaluationSchema, sameAttemptIdentity } from '#domain/index.js';
 import { verifyEvaluationEvidence, type EvaluationEvidenceLimits, type ArtifactStore } from '#capabilities/index.js';
 import { dispatchRecordSchema, verifyRetainedOutputEnvelope, verifyRetainedFileReceipts, type DispatchStore } from '#engine/core/dispatch/index.js';
 import { sandboxRequestSchema, sameSandboxRequest } from '#engine/core/supervisor/index.js';
-export class TaskEvidenceError extends Error {
-  constructor(readonly code: 'TASK_EVIDENCE_INVALID' | 'TASK_EVIDENCE_UNAVAILABLE' | 'TASK_EVIDENCE_UNLINKED') { super(code); this.name = 'TaskEvidenceError'; }
+export class TaskEvidenceError extends CodedError {
+  constructor(override readonly code: 'TASK_EVIDENCE_INVALID' | 'TASK_EVIDENCE_UNAVAILABLE' | 'TASK_EVIDENCE_UNLINKED') { super(code); this.name = 'TaskEvidenceError'; }
 }
 /** Internal read-only evidence step after admission. The record comes from the trusted ledger, never
  * from evaluator input. Only retained dispatch output is currently supported; arbitrary task artifacts

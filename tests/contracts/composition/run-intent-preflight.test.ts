@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({ store: null as unknown, principal: { id: 'owne
 vi.mock('#adapters/index.js', async original => ({ ...await original<object>(), openSqliteRunProposalStore: async () => Object.assign(state.store as object, { close() {} }) }));
 vi.mock('#composition/core/scoped-request/index.js', async original => ({ ...await original<object>(), loadConfiguredScopeContext: async () => ({ principal: state.principal,
   config: { storage: { sqlite: {} }, inspection: { policyMaxBytes: 4096 } }, layout: {}, path: async () => 'unused' }) }));
-vi.mock('#composition/core/policy/index.js', async original => ({ ...await original<object>(), createLayoutPolicySource: () => ({ load: async () => ({ schemaVersion: 1, revision: 'p', restrictions: [],
+vi.mock('#composition/core/policy/index.js', async original => ({ ...await original<object>(), contextPolicySource: () => ({ load: async () => ({ schemaVersion: 1, revision: 'p', restrictions: [],
   grants: [{ id: 'inspect', effect: 'allow', actions: ['inspect'], principals: 'all', scopes: ['s'], resource: { kind: 'run', ids: 'all' } }] }) }) }));
 vi.mock('../../../src/composition/core/run-planner/internal/intent-facts.js', () => ({ configuredWorkerSetupFact: async () => ({ id: 'fact', revision: 1, basis: 'a'.repeat(64), ready: false,
   reason: 'WORKER_SETUP_PENDING', params: { phase: 'waiting-docker' } }) }));

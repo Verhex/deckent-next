@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { approvalRequestSchema, configChangeSubjectConsistent, encodeCommandProjection, ApprovalError, type ApprovalActor, type ApprovalFacts,
   type ApprovalRecord, type ApprovalSubject } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
+import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, expireDue, sealApproval, verifyApproval, witnessedPersonDecision } from './integrity.js';
 import { minimumApprovalAssurance } from './assurance.js';
 
-export type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
+type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
 /**
  * The action a config-change approval authorizes (T3 L2): this scope, this requester and exactly this command — layer, key, set/unset, the
  * exact value (its digest) and the layer digest it was previewed against. Display copies and the asking rule are not bound: they describe.
@@ -15,20 +15,19 @@ export const configChangeApprovalActionDigest = (scopeId: string, subject: Confi
   sha256(encodeCommandProjection('config-change-approval:1', { scopeId, requester, commandId: subject.commandId, action: subject.action, layer: subject.layer,
     keyPath: subject.keyPath, valueDigest: subject.valueDigest, expectDigest: subject.expectDigest }));
 
-/** Card facts of a config change: it writes a configuration layer (no authority surface); how it is undone is not declared (no evidence). */
-export function configChangeApprovalFacts(policy: unknown, scopeId: string): ApprovalFacts {
-  const risk = { source: 'effect-class' as const, effectClass: 'write' as const, authority: false };
+/** A proposed setting delegates no decision authority: its existing authority-risk fact requires the person's card. Undo is undeclared. */
+export function configChangeApprovalFacts(policy: unknown, scopeId: string, personDecision = false): ApprovalFacts {
+  const risk = { source: 'effect-class' as const, effectClass: 'write' as const, authority: personDecision };
   return Object.freeze({ risk, reversibility: null, onExpiry: 'nothing-runs' as const, requiredAssurance: minimumApprovalAssurance(policy, scopeId, 'config-change', risk) });
 }
 
-export interface ConfigChangeApprovalRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfigChangeApprovalRequest {
   readonly scopeId: string; readonly requester: ApprovalActor; readonly subject: ConfigChangeSubject;
-  /** The current policy document (facts) and its revision (the request's `policyRevision`). */
-  readonly policy: unknown; readonly policyRevision: string;
+  readonly policy: unknown; readonly policyRevision: string; readonly personDecision?: boolean;
   /** The card's bounded, human-readable sentence (the producer's words in the requester's language). */
   readonly summary: string;
 }
-export type ConfigChangeApprovalAdmission =
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConfigChangeApprovalAdmission =
   | { readonly pending: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } }
   | { readonly approved: { readonly approvalId: string; readonly actionDigest: string } };
 
@@ -50,23 +49,16 @@ export class ConfigChangeApprovalBroker {
     const now = this.clock.sample().wallMs;
     const found = this.store.findConfigChange(input.scopeId, actionDigest);
     if (!found) return { pending: this.pending(this.open(input, actionDigest, now)) };
-    let current = verifyApproval(found, this.integrity);
-    if (current.status === 'pending' && now >= current.request.expiresAt) current = expireApproval(this.store, this.integrity, current);
+    const current = expireDue(this.store, this.integrity, verifyApproval(found, this.integrity), now);
     if (current.status === 'pending') return { pending: this.pending(current) };
-    if (current.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const stored = current.decision!;
-    if (stored.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (stored.requestDigest !== approvalRequestDigest(current.request)) throw new ApprovalError('APPROVAL_INTEGRITY');
-    // Another process may have decided on a clock ahead of this one; only the bounded skew is tolerated (I40), never a window extension.
-    if (stored.decidedAt > now + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
-    if (now > stored.decidedAt + this.options.admitWithinMs) throw new ApprovalError('APPROVAL_EXPIRED');
+    admitDecided(current, { now, window: this.options.admitWithinMs }, !input.personDecision || witnessedPersonDecision(current));
     return { approved: { approvalId: current.request.approvalId, actionDigest } };
   }
 
   private open(input: ConfigChangeApprovalRequest, actionDigest: string, now: number): ApprovalRecord {
     const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject, requester: input.requester,
       actionDigest, policyRevision: input.policyRevision, summary: input.summary.slice(0, 2048), createdAt: now, expiresAt: now + this.options.requestTtlMs,
-      facts: configChangeApprovalFacts(input.policy, input.scopeId) });
+      facts: configChangeApprovalFacts(input.policy, input.scopeId, input.personDecision) });
     // `create` is idempotent on the digest: a concurrent open of the same change returns the one stored request.
     return verifyApproval(this.store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, this.integrity)), this.integrity);
   }

@@ -3,21 +3,20 @@ import { encodeCommandProjection, targetQueueRequestSchema, targetQueueRecordSch
   type TargetQueueRequest, type TargetQueueRecord } from '#domain/index.js';
 import { targetQueueKey, decodeTargetQueueRow, assertTargetQueueBounds, newQueueRecord, assertQueueChange, type TargetQueueStore, type TargetQueueBounds, type TargetQueueAudit } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
+import { ledgerTransaction, EFFECT_OPEN_STATE_SQL } from '#adapters/core/sqlite-ledger/index.js';
 const open = "state NOT IN('settled','cancelled','expired','parked')";
 /** Short ledger transactions only; audit and queue CAS commit together. The service owns this writer, never the public client. */
 export class SqliteTargetQueue implements TargetQueueStore {
   constructor(private readonly db: DatabaseSync) {}
   private transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const result = work(); this.db.exec('COMMIT'); return result; }
-    catch (error) { try { this.db.exec('ROLLBACK'); } catch { throw new TargetQueueError('QUEUE_RECOVERY_REQUIRED'); } throw error; }
+    return ledgerTransaction(this.db, work, { unknown: () => new TargetQueueError('QUEUE_RECOVERY_REQUIRED'), failure: error => error });
   }
   load(scopeId: string, commandId: string): TargetQueueRecord | null {
     const row = this.db.prepare('SELECT * FROM target_queue WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     return row ? decodeTargetQueueRow(row) : null;
   }
   forVerification(scopeId: string, runId: string): TargetQueueRecord | null {
-    const rows = this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND json_extract(record,'$.effectCommandIds[3]')=? LIMIT 2").all(scopeId, runId);
+    const rows = this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.effectCommandIds[3]') END)=? LIMIT 2").all(scopeId, runId);
     if (rows.length > 1) throw new TargetQueueError('QUEUE_CORRUPT');
     return rows[0] ? decodeTargetQueueRow(rows[0]) : null;
   }
@@ -25,7 +24,7 @@ export class SqliteTargetQueue implements TargetQueueStore {
     return this.db.prepare(`SELECT * FROM target_queue WHERE ${open} AND (target_key>? OR (target_key=? AND ordinal>?)) ORDER BY target_key,ordinal LIMIT ?`)
       .all(after?.key ?? '', after?.key ?? '', after?.ordinal ?? 0, limit).map(decodeTargetQueueRow);
   }
-  epoch(key: string): number { return Number(this.db.prepare("SELECT coalesce(max(json_extract(record,'$.epoch')),0) AS n FROM target_queue WHERE target_key=?").get(key)?.n); }
+  epoch(key: string): number { return Number(this.db.prepare("SELECT coalesce(max((CASE WHEN json_valid(record) THEN json_extract(record,'$.epoch') END)),0) AS n FROM target_queue WHERE target_key=?").get(key)?.n); }
   head(key: string): TargetQueueRecord | null {
     const row = this.db.prepare(`SELECT * FROM target_queue WHERE target_key=? AND ${open} ORDER BY ordinal LIMIT 1`).get(key);
     return row ? decodeTargetQueueRow(row) : null;
@@ -36,14 +35,14 @@ export class SqliteTargetQueue implements TargetQueueStore {
       .all(scopeId, after ?? '', limit).map(row => decodeTargetQueueRow(row));
   }
   forRun(scopeId: string, runId: string, limit: number): readonly TargetQueueRecord[] {
-    return this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND json_extract(record,'$.request.identity.runId')=? ORDER BY command_id LIMIT ?")
+    return this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.identity.runId') END)=? ORDER BY command_id LIMIT ?")
       .all(scopeId, runId, limit).map(decodeTargetQueueRow);
   }
   /** D1a work list: base-advanced tickets under delivery intent submitted after `since`, whose re-attempt ticket does not exist yet. */
   reattemptable(since: number, limit: number): readonly TargetQueueRecord[] {
-    return this.db.prepare(`SELECT * FROM target_queue t WHERE state='settled' AND json_extract(record,'$.outcome')='conflict-needs-reattempt' AND json_extract(record,'$.reason')='PATCH_BASE_ADVANCED'
-      AND json_extract(record,'$.request.deliveryIntent') IS NOT NULL AND json_extract(record,'$.request.submittedAt')>? AND NOT EXISTS (SELECT 1 FROM target_queue s
-      WHERE s.scope_id=t.scope_id AND json_extract(s.record,'$.request.reattempt.sourceCommandId')=t.command_id) ORDER BY target_key,ordinal LIMIT ?`).all(since, limit).map(decodeTargetQueueRow);
+    return this.db.prepare(`SELECT * FROM target_queue t WHERE state='settled' AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.outcome') END)='conflict-needs-reattempt' AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.reason') END)='PATCH_BASE_ADVANCED'
+      AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.deliveryIntent') END) IS NOT NULL AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.submittedAt') END)>? AND NOT EXISTS (SELECT 1 FROM target_queue s
+      WHERE s.scope_id=t.scope_id AND (CASE WHEN json_valid(s.record) THEN json_extract(s.record,'$.request.reattempt.sourceCommandId') END)=t.command_id) ORDER BY target_key,ordinal LIMIT ?`).all(since, limit).map(decodeTargetQueueRow);
   }
   /** D2b work list: Runs whose approved proposal carries a delivery intent, newest first, with the granting human (a pass per lease). */
   intentRuns(limit: number) {
@@ -98,7 +97,7 @@ export class SqliteTargetQueue implements TargetQueueStore {
       if (all >= bounds.capacity || count >= bounds.perTarget) throw new TargetQueueError('QUEUE_CAPACITY');
       // Historical records have no proven source binding: conservatively hold matching addresses for explicit reconciliation.
       if (this.db.prepare('SELECT 1 FROM workspace_adoptions WHERE target_ref=? AND settled=0 LIMIT 1').get(request.target.target.id)
-        || this.db.prepare("SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND state IN('claimed','unknown') LIMIT 1")
+        || this.db.prepare(`SELECT 1 FROM effect_intents WHERE target_kind=? AND target_id=? AND ${EFFECT_OPEN_STATE_SQL} LIMIT 1`)
           .get(request.target.target.kind, request.target.target.id)) throw new TargetQueueError('QUEUE_RECOVERY_REQUIRED');
       const ordinal = Number(this.db.prepare('SELECT coalesce(max(ordinal),0)+1 AS n FROM target_queue WHERE target_key=?').get(key)?.n);
       const record = newQueueRecord(request, ordinal);

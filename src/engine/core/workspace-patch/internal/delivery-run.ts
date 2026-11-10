@@ -1,9 +1,9 @@
 import type { AttemptIdentity } from '#domain/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceProvider } from '#engine/core/workspaces/index.js';
-import { requireDelivered, WorkspaceAdoptionError, type IntegrationAdoptionStore } from './adoption.js';
-import type { IntegrationDeliveryTarget } from './delivery.js';
+import { requireDelivered, WorkspaceAdoptionError, type IntegrationAdoptionStore } from '#engine/core/workspace-adoption/index.js';
+import type { IntegrationDeliveryTarget } from '#engine/core/workspace-patch-contract/index.js';
 
-export interface DeliveryRunPinRequest { readonly scopeId: string; readonly runId: string; readonly deliveryCommandId: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DeliveryRunPinRequest { readonly scopeId: string; readonly runId: string; readonly deliveryCommandId: string;
   /** Replay of an admitted command: resolve from the ledger's completed delivery only, like adoption's resume (no reference check). */
   readonly replay?: boolean }
 /** Workspace custody of a Run pinned to a completed delivery of the same scope: the delivered commit, captured from the trusted source.

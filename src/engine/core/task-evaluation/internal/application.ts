@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { detectWorkerQuota } from './quota.js';
 import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
-import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport, workerReportEvidence, workerReportRefusal,
+import { attemptIdentitySchema, counterSchema, readWorkerModelPin, parseRun, sameAttemptIdentity, readWorkerFinalReport, workerReportEvidence, workerReportRefusal,
   bindTaskAcceptance, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal, type OperationEvidenceBinding } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
@@ -23,19 +23,19 @@ import type { ReattemptEffects } from '#engine/core/workspace-patch/index.js';
 import { BEUSER_EVALUATOR, type BeuserEvidence } from '#capabilities/index.js';
 const RETAINED_OUTPUT_EVIDENCE = coreEvidenceTypeSchema.enum['retained-artifact'];
 /** R3 retry inputs: the installation backoff and the one adapter effect classifier (shared with the delivery re-attempt). */
-export interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
+interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
 
 export const taskEvaluationCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema });
 export type TaskEvaluationCommand = z.infer<typeof taskEvaluationCommandSchema>;
-export interface TaskEvaluationAuthorization {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TaskEvaluationAuthorization {
   authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void>;
 }
-export interface UnknownEvaluationPolicy {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface UnknownEvaluationPolicy {
   decide(evaluation: TaskEvaluation, principal: VerifiedPrincipal): Promise<'wait' | 'fail'>;
 }
-export type TaskCriterionResult = 'pass' | 'fail' | 'unknown' | Omit<TaskEvaluation['criteria'][number], 'criterionId' | 'evidenceIds'>;
-export interface TaskTerminalEvaluator {
+type TaskCriterionResult = 'pass' | 'fail' | 'unknown' | Omit<TaskEvaluation['criteria'][number], 'criterionId' | 'evidenceIds'>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface TaskTerminalEvaluator {
   evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: DispatchTerminal,
     context: Readonly<{ identity: AttemptIdentity; binding?: OperationEvidenceBinding; beuserEvidence?: BeuserEvidence | null }>): Promise<TaskCriterionResult>;
 }
@@ -68,7 +68,7 @@ export class TaskEvaluationApplication {
         const stored = runLifecycleWriteSchema.parse({ ...value, action });
         if (stored.expectedRevision !== command.expectedRevision || stored.runId !== command.identity.runId || stored.taskId !== command.identity.taskId
           || stored.actor.id !== principal.id || stored.actor.issuer !== principal.issuer || stored.actor.subject !== principal.subject) throw new RunStoreError('RUN_COMMAND_CONFLICT');
-        const snapshot = runSnapshotSchema.parse(replay.snapshot);
+        const snapshot = parseRun(replay.snapshot);
         if (!snapshot.bindings.some(binding => sameAttemptIdentity(binding.identity, command.identity))) throw new RunStoreError('RUN_COMMAND_CONFLICT');
         if (snapshot.revision !== stored.expectedRevision + 1 || snapshot.identity.scopeId !== command.identity.scopeId
           || snapshot.identity.runId !== command.identity.runId || snapshot.identity.layoutRevision !== command.identity.layoutRevision) throw new RunStoreError('RUN_STORE_CORRUPT');
@@ -78,7 +78,7 @@ export class TaskEvaluationApplication {
     try { return await this.evaluate(command, credential); }
     catch (error) {
       if (!(error instanceof TaskEvaluationError) || error.code !== 'TASK_EVALUATION_NOT_READY' || !this.store.commitRunLifecycle) throw error;
-      const run = runSnapshotSchema.parse(await this.store.loadRun(command.identity.scopeId, command.identity.runId));
+      const run = parseRun(await this.store.loadRun(command.identity.scopeId, command.identity.runId));
       const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, command.identity));
       const dispatch = await this.store.loadBoundDispatch(command.identity);
       // Only host-proven exited custody is parked. A live or uncertain effect keeps its slot and reconciliation owner.
@@ -109,7 +109,7 @@ export class TaskEvaluationApplication {
         || !sameAttemptIdentity(stored.evaluation.identity, identity) || JSON.stringify(stored.actor) !== JSON.stringify(actor)) {
         throw new RunStoreError('RUN_COMMAND_CONFLICT');
       }
-      const snapshot = runSnapshotSchema.parse(replay.snapshot);
+      const snapshot = parseRun(replay.snapshot);
       if (snapshot.identity.scopeId !== identity.scopeId || snapshot.identity.runId !== identity.runId
         || snapshot.identity.layoutRevision !== identity.layoutRevision || snapshot.revision !== stored.expectedRevision + 1
         || !snapshot.bindings.some(binding => sameAttemptIdentity(binding.identity, identity)
@@ -118,7 +118,7 @@ export class TaskEvaluationApplication {
       assertRunExecution(snapshot.graph, snapshot.execution);
       return replay;
     }
-    const run = runSnapshotSchema.parse(await this.store.loadRun(identity.scopeId, identity.runId));
+    const run = parseRun(await this.store.loadRun(identity.scopeId, identity.runId));
     assertRunExecution(run.graph, run.execution);
     const attempt = await this.store.load(identity.scopeId, identity.attemptId);
     let dispatch = await this.store.loadBoundDispatch(identity);

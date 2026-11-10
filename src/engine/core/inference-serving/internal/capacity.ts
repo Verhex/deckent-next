@@ -1,6 +1,6 @@
 import type { InferenceServingProfile } from '#domain/index.js';
 
-export interface ReplicaCapacityEstimate {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ReplicaCapacityEstimate {
   readonly kvPoolGb: number;
   readonly tokenCapacity: number;
   readonly maxNumSeqs: number;

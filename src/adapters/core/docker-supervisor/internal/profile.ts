@@ -20,7 +20,7 @@ function dockerWorkerIsolation(options: DockerSupervisorOptions): WorkerIsolatio
   if (options.relay) return { schemaVersion: 2, network: DOCKER_WORKER_NETWORK, egress: { kind: 'private-model-relay', provider: 'siwc', policySha256: options.relay.policySha256, bindingSha256: options.relay.bindingSha256 } };
   return { schemaVersion: 1, network: DOCKER_WORKER_NETWORK, egress: options.connection?.provider ? { kind: 'provider-gateway', provider: options.connection.provider } : { kind: 'none' } };
 }
-export function dockerHostIdentity() {
+function dockerHostIdentity() {
   const user = userInfo(); return { hostname: hostname(), platform: platform(), architecture: arch(), uid: user.uid, gid: user.gid };
 }
 export function captureDockerProfile(options: DockerSupervisorOptions, daemonId: string, endpoint: string): SupervisorProfile {

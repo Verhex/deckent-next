@@ -26,6 +26,7 @@ export function encodeHubBundle(bundle: HubBundle): Uint8Array {
   const value = { manifest: bundle.manifest, envelope: bundle.envelope, ...(bundle.delegation ? { delegation: bundle.delegation } : {}),
     files: [...bundle.files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map(file => ({ path: file.path, base64: Buffer.from(file.bytes).toString('base64') })) };
   const bytes = Buffer.from(canonicalHubJson(value));
-  decodeHubBundle(bytes);
+  if (bytes.byteLength > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
+  if (!bundleSchema.safeParse(value).success) throw new HubError('HUB_PACKAGE_INVALID');
   return bytes;
 }

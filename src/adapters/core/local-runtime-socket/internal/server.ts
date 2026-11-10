@@ -11,7 +11,7 @@ import { assertSocketPublicationBudget, LocalRuntimeSocketError, releaseRuntimeS
 import { acquireLedgerLock, type LedgerLock } from './ledger-lock.js';
 import { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/index.js';
 
-export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
+type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
   response: RuntimeServiceResponse;
   afterResponseOrDisconnect: () => void;
 }>;

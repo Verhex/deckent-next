@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import type { Dir } from 'node:fs';
 import { constants } from 'node:fs';
 import { access, mkdtemp, open, opendir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -21,7 +22,7 @@ const REALM_FAILURE = /^(?:bwrap|deckent-relay|prlimit): /u, LIMITS_FAILURE = /^
 /** `/proc/<pid>/stat` CPU fields count USER_HZ ticks, fixed at 100 in the Linux ABI (proc(5)). */
 const USER_HZ = 100;
 /** f5: which realm bound stopped the CLI (its reserved relay exit code), or null. */
-export type HeadlessLimit = 'cpu-time' | 'processes' | 'memory';
+type HeadlessLimit = 'cpu-time' | 'processes' | 'memory';
 
 /**
  * The relay inside the realm (`node -e`): it listens on the registry proxy address of the realm's own loopback and pipes each connection to the
@@ -116,7 +117,7 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
       if (realm.configVisible.includes(entry.name) || entry.isSymbolicLink()) continue;
       (entry.isDirectory() ? directories : files).push(join(configDir, entry.name));
     }
-  } catch (error) { if ((error as { code?: unknown }).code === 'HEADLESS_PREFLIGHT_FAILED') throw error; refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' }); }
+  } catch (error) { if (isCodedError(error, 'HEADLESS_PREFLIGHT_FAILED')) throw error; refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' }); }
   finally { await dir?.close().catch(() => undefined); }
   return Object.freeze({ directories: directories.sort(), files: files.sort(), copies });
 }
@@ -160,7 +161,17 @@ type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 
 export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
   // f5: one spawn per login dir across the person's connections, none while the CLI's own refresh lock exists (item 5).
-  return withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, () => runLocked(entry, isolation, spawn, bounds, signal, onLine), signal);
+  const start = performance.now(); let entered = false;
+  try { return await withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, () => {
+    entered = true; return runLocked(entry, isolation, spawn, bounds, signal, onLine);
+  }, signal); }
+  catch (error) {
+    // Only cancellation before the realm callback proves that no process started; later failures retain their uncertainty.
+    if (entered || !signal?.aborted || error !== signal.reason && !(error instanceof Error && error.name === 'AbortError')) throw error;
+    return { schemaVersion: 1, requestId: randomUUID(), started: false, reason: 'cancelled', exitCode: null, signal: null,
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: performance.now() - start,
+      egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
+  }
 }
 async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {

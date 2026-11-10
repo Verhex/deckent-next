@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { Box, Text, renderToString } from 'ink';
-import { useWorklinePalette, WorklinePaletteProvider, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
+import { type WorklineInkPalette, useWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 
 /**
  * T2 T-STARTUP (owner 2026-10-07): when the rich surface opens, the visible screen is cleared and the cursor homed, so Deckent starts at the

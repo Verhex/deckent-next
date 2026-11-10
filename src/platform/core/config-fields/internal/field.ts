@@ -9,8 +9,8 @@ export interface ConfigFieldMetadata {
 }
 type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
 /** One config field declaration; used by fields.ts and the registered field fragments only (lint: config-binding-fragment). */
-export function field<T extends z.ZodTypeAny>(descriptionKey: string, binding: ConfigBinding, apply: ConfigApplyMode, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
-  return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since, binding: binding.state === 'bound' ? Object.freeze({ ...binding, consumers: Object.freeze([...binding.consumers]) }) : Object.freeze({ ...binding }), apply }) });
+export function field<T extends z.ZodTypeAny>(descriptionKey: string, binding: ConfigBinding, apply: ConfigApplyMode, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE, derivedFrom?: Readonly<Record<string, string>>) {
+  return Object.freeze({ schema, environment, ...(derivedFrom ? { derivedFrom: Object.freeze({ ...derivedFrom }) } : {}), metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since, binding: binding.state === 'bound' ? Object.freeze({ ...binding, consumers: Object.freeze([...binding.consumers]) }) : Object.freeze({ ...binding }), apply }) });
 }
 /** Merges the core fields with the per-writer fragments in order; a field name declared twice fails at load, never last-wins. */
 export function mergeConfigFields<A extends object, B extends object, C extends object>(core: A, setup: B, models: C): A & B & C {
@@ -20,4 +20,11 @@ export function mergeConfigFields<A extends object, B extends object, C extends 
     merged[key] = value;
   }
   return merged as A & B & C;
+}
+
+export function freezeConfigDefault<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value); Object.values(value).forEach(freezeConfigDefault);
+  }
+  return value;
 }

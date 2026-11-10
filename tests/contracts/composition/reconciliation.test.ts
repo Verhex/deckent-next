@@ -8,7 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 import { reconcileAttempt } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { DockerSupervisor, openSqliteAttemptStore, runNodeDockerCommand, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';

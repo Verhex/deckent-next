@@ -4,12 +4,12 @@ import { sameSandboxRequest } from '#engine/core/supervisor/index.js';
 import { dispatchClaimSchema, dispatchRecordSchema, DispatchError,
   type DispatchRecord, type LaunchDecision, type LaunchRequest } from './port.js';
 
-export interface DispatchLaunchState {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DispatchLaunchState {
   readonly run: RunSnapshot;
   readonly attempt: AttemptSnapshot | null;
   readonly dispatch: DispatchRecord;
 }
-export type DispatchLaunchTransition = Readonly<{ decision: LaunchDecision; projectedRun: RunSnapshot | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DispatchLaunchTransition = Readonly<{ decision: LaunchDecision; projectedRun: RunSnapshot | null }>;
 
 export function validateLaunchRequest(input: LaunchRequest): LaunchRequest {
   return Object.freeze({ claim: dispatchClaimSchema.parse(input.claim), principal: verifiedPrincipalSchema.parse(input.principal),
@@ -39,5 +39,5 @@ export function decideDispatchLaunch(input: LaunchRequest, state: DispatchLaunch
     : { ...dispatch, launch: 'granted', grant: { generation: identity.generation, grantedAt: now,
       principal: { id: principal.id, issuer: principal.issuer, subject: principal.subject } } });
   const decision = Object.freeze({ kind: cancelled ? 'prevented' as const : 'granted' as const, record });
-  return Object.freeze({ decision, projectedRun: cancelled ? preventRunAttempt(run, run.revision, attempt, timing) : null });
+  return Object.freeze({ decision, projectedRun: cancelled ? preventRunAttempt(run, run.revision, attempt, 'denied', timing) : null });
 }

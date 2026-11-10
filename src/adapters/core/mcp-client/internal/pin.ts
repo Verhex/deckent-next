@@ -4,7 +4,7 @@ import { projectModelIngressField } from '#engine/index.js';
 
 /**
  * Deckent as an MCP client (MCP-CLIENT, owner 2026-09-28 S6 a): a server's tools are offered to the agent only when the owner approved the
- * server's exact definition and pinned its tools (product state, `trust.ts`) and each live tool definition still matches its pin: a definition
+ * server's exact definition and pinned its tools (product state, unit `mcp-trust`) and each live tool definition still matches its pin: a definition
  * that changes under a running server is never accepted silently (`deckent mcp approve` pins again).
  */
 export interface McpClientServerSettings {
@@ -13,11 +13,11 @@ export interface McpClientServerSettings {
   readonly transport?: 'http';
   readonly url?: string;
   readonly headers?: Readonly<Record<string, string>>;
-  /** The resolved secret values of the entry (`$DECK:`): cut out of every answer before it reaches the model; never shown. */
+  /** The server's known values (`expandMcpEntry`: `$DECK:` and personal `${VAR}` env/header values): cut out of every answer and failed start; never shown. */
   readonly secrets?: readonly string[];
   readonly command: string;
   readonly args: readonly string[];
-  /** The expanded `env` of the registry entry (the SDK adds its own safe defaults: HOME, LOGNAME, PATH, SHELL, TERM, USER). */
+  /** The expanded `env` of the registry entry, over the explicit stdio base (`mcpStdioEnvironment`, the SDK default's names). */
   readonly env: Readonly<Record<string, string>>;
   /** K4: `sandbox-net` (the default) — a sandbox with network and the server's own persistent HOME; no sandbox → refused. */
   readonly realm: 'sandbox-net' | 'require-sandbox' | 'prefer-sandbox' | 'host';
@@ -42,7 +42,6 @@ export interface McpClientSettings {
   readonly inputMaxBytes: number;
   readonly servers: readonly McpClientServerSettings[];
 }
-/** Code defaults of the MCP client (the registry entry's `timeoutMs` overrides the call deadline per server). */
 export const MCP_CLIENT_DEFAULTS = Object.freeze({ connectTimeoutMs: 15_000, callTimeoutMs: 120_000, resultMaxBytes: 65_536, maxRestarts: 3, inputMaxBytes: 1_048_576 });
 
 /** A tool as a server lists it (the fields a pin binds; anything else a server adds is not part of the definition the model sees). */
@@ -54,16 +53,16 @@ export interface McpLiveTool {
   readonly outputSchema?: Record<string, unknown>;
   readonly annotations?: Record<string, unknown>;
 }
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+export function mcpCanonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(mcpCanonical).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().filter(key => (value as Record<string, unknown>)[key] !== undefined)
-    .map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
+    .map(key => `${JSON.stringify(key)}:${mcpCanonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
   return JSON.stringify(value);
 }
 /** The pin of one tool definition: name, title, description (model-facing text), input/output schema and annotations (they decide the floor). */
 export function mcpToolPinDigest(tool: McpLiveTool): string {
   const { name, title, description, inputSchema, outputSchema, annotations } = tool;
-  return createHash('sha256').update(`mcp-tool-pin:1\0${canonical({ name, title, description, inputSchema, outputSchema, annotations })}`).digest('hex');
+  return createHash('sha256').update(`mcp-tool-pin:1\0${mcpCanonical({ name, title, description, inputSchema, outputSchema, annotations })}`).digest('hex');
 }
 /** The provider-safe name the model calls (`mcp__<server>__<tool>`, lower case, `[^a-z0-9_]` → `_` in both parts, ≤ 64); null when it cannot be formed.
  * A server name's single hyphens become `_`; the name rule (no `--`) keeps the server/tool separator the first `__`, so distinct servers never collide. */
@@ -71,12 +70,12 @@ export function mcpToolWireName(serverId: string, toolName: string): string | nu
   const tool = toolName.toLowerCase().replace(/[^a-z0-9_]/gu, '_'), wire = `mcp__${serverId.replace(/-/gu, '_')}__${tool}`;
   return tool.length > 0 && /^[a-z][a-z0-9_]{1,63}$/u.test(wire) ? wire : null;
 }
-/** How the owner and the audit name a tool: `mcp:<server>/<tool>`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). How the owner and the audit name a tool: `mcp:<server>/<tool>`. */
 export const mcpToolDisplay = (serverId: string, toolName: string) => `mcp:${serverId}/${toolName}`;
 
 /** `mcp-call`: asks by default, a company-eligible rule may be lowered in full-auto; `mcp-floor`: asks in every mode. */
 export type McpToolCell = 'mcp-call' | 'mcp-floor';
-export type McpToolStatus = 'pinned' | 'drifted' | 'unpinned' | 'missing' | 'unmappable';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpToolStatus = 'pinned' | 'drifted' | 'unpinned' | 'missing' | 'unmappable';
 export interface McpToolVerdict {
   readonly name: string;
   readonly display: string;
@@ -86,7 +85,6 @@ export interface McpToolVerdict {
   readonly pinnedDigest: string | null;
   readonly status: McpToolStatus;
   readonly cell: McpToolCell | null;
-  /** The agent tool, only for a `pinned` tool. */
   readonly spec: AgentToolSpec | null;
   readonly reason?: string;
   /** What the live definition says (shown on the approval card; the digest binds it). */
@@ -97,13 +95,14 @@ const DESCRIPTION_MAX = 2_000;
 /**
  * Verifies a live listing against the server's pins. Offered (`pinned`, with its agent tool): pinned name, same digest, a wire name no other
  * tool of the server maps to, an object input schema. The floor (`mcp-floor`) is the owner's `alwaysAsk` or an explicit `destructiveHint: true`
- * in the pinned definition (a server's claim, stable because it is pinned).
+ * in the pinned definition (a server's claim, stable because it is pinned). `pinned`: the pool's digests of this listing, reused when its names are unique.
  */
-export function verifyMcpTools(server: McpClientServerSettings, live: readonly McpLiveTool[]): McpToolVerdict[] {
+export function verifyMcpTools(server: McpClientServerSettings, live: readonly McpLiveTool[], pinned?: ReadonlyMap<string, { readonly digest: string }>): McpToolVerdict[] {
   const wires = new Map<string, number>();
   for (const tool of live) { const wire = mcpToolWireName(server.id, tool.name); if (wire) wires.set(wire, (wires.get(wire) ?? 0) + 1); }
   const verdicts = live.map((tool): McpToolVerdict => {
-    const pin = server.tools.find(entry => entry.name === tool.name) ?? null, digest = mcpToolPinDigest(tool), display = mcpToolDisplay(server.id, tool.name);
+    const pin = server.tools.find(entry => entry.name === tool.name) ?? null, display = mcpToolDisplay(server.id, tool.name);
+    const digest = (pinned?.size === live.length ? pinned.get(tool.name)?.digest : undefined) ?? mcpToolPinDigest(tool);
     const wireName = mcpToolWireName(server.id, tool.name), base = { name: tool.name, display, wireName, digest, pinnedDigest: pin?.digest ?? null,
       ...(tool.description !== undefined ? { description: tool.description } : {}), ...(tool.annotations !== undefined ? { annotations: tool.annotations } : {}) };
     if (!pin) return { ...base, status: 'unpinned', cell: null, spec: null };

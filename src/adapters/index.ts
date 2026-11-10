@@ -1,43 +1,43 @@
-export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSchema, providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingTemplate, providerSpendAuditConfigSchema, readTerminalChatConfig, effectiveTerminalOutputCap, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalResponseStyle, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_RESPONSE_STYLES, TERMINAL_THEMES, type TerminalChatConfig, type TerminalFetchConfig, type TerminalResponseStyle, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig,
-  openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS, isRegisteredSecretStore,
-  openRegisteredSecretStore, registeredSecretStores, registerSecretGrantStore, installationSecretRoot, openProjectVaultStore, openSecretGrantStore } from '#adapters/core/contract/index.js';
+export { readIdentityProfileConfig, registerProviderConfig, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ providerSpendingSchema, providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingTemplate, providerSpendAuditConfigSchema, readTerminalChatConfig, effectiveTerminalOutputCap, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalResponseStyle, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_RESPONSE_STYLES, TERMINAL_THEMES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalChatConfig, type TerminalFetchConfig, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalResponseStyle, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, resolveOperationCatalog, resolveOperationTargets, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type OperationsConfig,
+  openConfiguredSecretStore, readSecretsConfig, secretsConfigSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SECRET_CUSTODY_WAIT_MS, isRegisteredSecretStore,
+  openRegisteredSecretStore, registeredSecretStores, installationSecretRoot, openProjectVaultStore, openSecretGrantStore } from '#adapters/core/contract/index.js';
+export { registerOperationAdapterModule, registerSecretGrantStore, registerSecretStoreBackend, sealExtensionRegistries } from '#adapters/core/extension-registry/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
-export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, indexMonitorInstall, stampMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
+export { readMonitorLedger, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ readMonitorInstall, prepareMonitorInstall, indexMonitorInstall, stampMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
-export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, recordedWorkerIsolation, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
+export { readScopeCompanies, registerLedgerScopes, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
+export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, recordedWorkerIsolation, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
   resolveDockerReadOnlyMounts, dockerProfileObservesWorker, dockerClientEnvironment, DOCKER_CLIENT_ENV_NAMES } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
-export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal, captureLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
+export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, readLocalOsOwner, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal, captureLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
 export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-workspace/index.js';
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';
-export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-workspace/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GitSourcePreimage, GitSourceBase } from '#adapters/core/git-workspace/index.js';
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
 export { gitRefFileSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
-export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
+export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
 export { scanWorkerTree, workerTreeDenied, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
-export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
 export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/index.js';
-export type { FilePolicyOptions } from '#adapters/core/file-policy/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FilePolicyOptions } from '#adapters/core/file-policy/index.js';
 export { ProcessSupervisor } from '#adapters/core/process-supervisor/index.js';
-export type { ProcessSupervisorOptions } from '#adapters/core/process-supervisor/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProcessSupervisorOptions } from '#adapters/core/process-supervisor/index.js';
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
-export { processCommandSchema, processEvidenceSchema, validateProcessEvidence, ProcessRunnerError, runNodeProcess, createScopedNodeDockerRunner } from '#adapters/core/process-runner/index.js';
+export { processCommandSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ processEvidenceSchema, validateProcessEvidence, ProcessRunnerError, runNodeProcess, createScopedNodeDockerRunner } from '#adapters/core/process-runner/index.js';
 export type { ProcessCommand, ProcessEvidence } from '#adapters/core/process-runner/index.js';
-
-export { LocalPeerShutdownAuthentication } from '#adapters/core/local-runtime-socket/index.js';
 export * from '#adapters/core/local-runtime-socket/index.js';
+export * from '#adapters/core/file-lock/index.js';
 
 export { readInstallationProfileFile, InstallationProfileFileError } from '#adapters/core/installation-profile-file/index.js';
 export { measureInstalledPackage, InstallationArtifactError } from '#adapters/core/installation-artifacts/index.js';
 export { probeDockerImageAvailability, DockerImageProbeError } from '#adapters/core/docker-supervisor/index.js';
 
 export { withInstallationJournal, InstallationJournalError } from '#adapters/core/installation-journal/index.js';
-export type { InstallationJournalOptions, InstallationJournalSession, InstallationJournalErrorCode } from '#adapters/core/installation-journal/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationJournalOptions, InstallationJournalSession, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationJournalErrorCode } from '#adapters/core/installation-journal/index.js';
 export { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectInstallationFile, publishInstallationFile, InstallationFileError } from '#adapters/core/installation-files/index.js';
 export { initializeInstallationLedger, verifyInstallationLedger, InstallationLedgerError } from '#adapters/core/attempt-store/index.js';
 export { openSqliteModelActivationStore, openSqliteModelActivationReader, openSqliteModelCatalogStore, openSqliteModelCatalogReader } from '#adapters/core/sqlite-model-activation/index.js';
@@ -56,10 +56,10 @@ export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-
 
 export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#adapters/core/mcp-transport/index.js';
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError, assertNativeWorkerBinding,
-  nativeCliIdSchema, createNativeCodingTemplate, nativeWorkerEffortCapability, bindNativeWorkerEffort, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, NATIVE_PROMPT_LIMITS } from '#adapters/core/native-coding/index.js';
-export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
+  nativeCliIdSchema, createNativeCodingTemplate, nativeWorkerEffortCapability, bindNativeWorkerEffort, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, NATIVE_PROMPT_LIMITS } from '#adapters/core/native-coding/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export { detectNativeCliVersion } from '#adapters/core/native-coding/index.js';
-export { nativeCodingEnvironmentProbes, type ContainerProbeRunner } from '#adapters/core/native-coding/index.js';
+export { nativeCodingEnvironmentProbes, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type ContainerProbeRunner } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
 
 export * from '#adapters/core/git-patch/index.js';
@@ -99,7 +99,7 @@ export * from '#adapters/core/backup-store/index.js';
 export { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 
 export { openSqliteLedger, openSqliteLedgerReadOnly, openSqliteLedgerAnchor, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
-export { inspectInstallationStartabilityFiles, type InstallationStartability } from '#adapters/core/installation-files/index.js';
+export { inspectInstallationStartabilityFiles, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type InstallationStartability } from '#adapters/core/installation-files/index.js';
 export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';
 export { openSqliteRunProposalStore, openSqliteRunProposalReader } from '#adapters/core/run-proposal-store/index.js';
 export * from '#adapters/core/resource-trace/index.js';
@@ -113,20 +113,15 @@ export * from '#adapters/core/siwc-worker/index.js';
 
 export { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 
-export { GIT_QUEUE_DISPLAY, GitQueueTarget, gitQueueCandidateSource } from '#adapters/core/git-patch/index.js';
-export { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, workerImageEstimate, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
 export { detectCodingFacts, workingTreeChanges, codingSetupFamily, gitTracksPaths, previewFirstCommit, observeFirstCommitRecovery, firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
-export { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
-export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from '#adapters/core/worker-image/index.js';
-
 export * from '#adapters/core/hub-client-store/index.js';
 export * from '#adapters/core/hub-package-file/index.js';
 export * from '#adapters/core/hub-cache/index.js';
 export * from '#adapters/core/hub-http/index.js';
 
-export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInventory, installationScopes, uninstallRecoveryDirectory, nativeServiceExec, nativeUserUnitLinks, restoreUninstallArchive, hasUninstallArchive, uninstallArchiveRoots, prepareUninstallBackup, writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease, completeUninstall } from '#adapters/core/installation-removal/index.js';
+export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInventory, installationScopes, uninstallRecoveryDirectory, nativeServiceExec, nativeUserUnitLinks, restoreUninstallArchive, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ hasUninstallArchive, uninstallArchiveRoots, uninstallBackupSet, archiveUninstallMembers, bindFinalSnapshot, writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease, completeUninstall } from '#adapters/core/installation-removal/index.js';
 export { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 export * from '#adapters/core/beuser-realm/index.js';
 export * from '#adapters/core/beuser-surface/index.js';

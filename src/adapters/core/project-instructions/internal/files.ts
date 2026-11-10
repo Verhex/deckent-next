@@ -1,15 +1,15 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { dirname, join, parse, relative, resolve, sep } from 'node:path';
-import { redactForRecord, withConfigWriteLock, openPinnedParent, writePinnedFile, type KnownSecretSnapshot } from '#platform/index.js';
+import { isAbsent as missing, sha256, redactForRecord, withConfigWriteLock, openPinnedParent, writePinnedFile, type KnownSecretSnapshot } from '#platform/index.js';
 import type { CommittedInstructionSource, ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
 import { expandInstructionImports } from '#engine/index.js';
 import REGISTRY from './registry.json' with { type: 'json' };
 
 export const PROJECT_INSTRUCTION_REGISTRY = REGISTRY;
-export const instructionDigest = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
-const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
+/** @deprecated Use sha256 from the platform; retained for one release. */
+export const instructionDigest = sha256;
 
 /** No symlink, hardlink, FIFO or device, also for any directory of a nested name. Reads allocate only the registry bound plus one byte. */
 export async function readInstructionFile(root: string, name: string, maxBytes: number): Promise<Buffer | null> {
@@ -142,7 +142,7 @@ export async function forgetFolderLegacyTrust(rootInput: string, trustDirectory:
     if (named.isSymbolicLink() || named.dev !== info.dev || named.ino !== info.ino) throw new Error('unsafe');
   } finally { await parent.close(); }
 }
-/** The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
 export type ExpectedInstructionFile = Readonly<{ path: string; dev: number | null; ino: number | null }>;
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
 /** `files` narrows the candidates (a worker selection reads exactly one file); only the default terminal reader expands imports.

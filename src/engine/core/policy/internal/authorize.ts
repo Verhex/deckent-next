@@ -1,13 +1,15 @@
-import { delegationWithin, evaluatePolicy, policyResources, policySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
+import { CodedError } from '#platform/index.js';
+import { delegationWithin, evaluatePolicy, policyResources, type AttemptIdentity, type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
+import { policyVerdictRefusal } from './verdict.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
-export interface PolicySource { load(): Promise<unknown> }
-/** Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
+export interface PolicySource { load(): Promise<Policy> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Internal typed cause of a `SCOPE_UNKNOWN` refusal (H34 S3): the scope belongs to another company, or to none. Never on the wire:
  * surfaces carry the code only, so a caller cannot tell a scope held by another company from an unknown one (no disclosure). */
 export type PolicyRefusalReason = 'COMPANY' | 'UNREGISTERED';
-export class PolicyAuthorizationError extends Error {
-  constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN' | 'POLICY_APPROVAL_UNSUPPORTED' | 'DELIVERY_WORKING_TREE_DENIED' | 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED',
+export class PolicyAuthorizationError extends CodedError {
+  constructor(override readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN' | 'POLICY_APPROVAL_UNSUPPORTED' | 'DELIVERY_WORKING_TREE_DENIED' | 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED',
     readonly reason: PolicyRefusalReason | null = null) { super(code); this.name = 'PolicyAuthorizationError'; }
 }
 export class DispatchPolicyAuthorization implements DispatchAuthorization, DispatchIdentityAuthorization {
@@ -16,22 +18,22 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization, Dispa
    * any intersecting deny/require-approval refuses the collection before its rows are read. */
   async authorizeScopeReadOutput(scopeId: string, principal: VerifiedPrincipal): Promise<void> {
     if (!principal.scopeIds.includes(scopeId)) throw new PolicyAuthorizationError('SCOPE_UNKNOWN');
-    const policy = policySchema.parse(await this.source.load());
+    const policy = await this.source.load();
     const verdict = delegationWithin(policy, principal, [{ id: 'collection-read', effect: 'allow', scopes: [scopeId],
       actions: ['read-output'], resource: { kind: policyResources.attempt.kind, ids: 'all' } }]);
-    if (!verdict.ok) throw new PolicyAuthorizationError(verdict.reason === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'POLICY_DENIED');
+    const refusal = verdict.ok ? null : policyVerdictRefusal(verdict.reason, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
   async authorize(action: Parameters<DispatchAuthorization['authorize']>[0], request: SandboxRequest, principal: VerifiedPrincipal): Promise<void> {
     return this.authorizeIdentity(action, request.identity, principal);
   }
-  async authorizeIdentity(action: Parameters<DispatchAuthorization['authorize']>[0], identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void> {
+  async authorizeIdentity(action: Parameters<DispatchAuthorization['authorize']>[0], identity: AttemptIdentity, principal: VerifiedPrincipal, policy?: Policy): Promise<void> {
     let decision;
-    try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId: identity.scopeId,
+    try { decision = evaluatePolicy(policy ?? await this.source.load(), { principal, action, scopeId: identity.scopeId,
       resource: { kind: policyResources.attempt.kind, id: identity.attemptId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
 }
 
@@ -41,7 +43,7 @@ export class DispatchInventoryPolicyAuthorization implements DispatchInventoryAu
     let decision;
     try { decision = evaluatePolicy(await this.source.load(), { principal, action: policyResources.scope.actions[0], scopeId, resource: { kind: policyResources.scope.kind, id: scopeId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
   }
 }

@@ -15,7 +15,7 @@ import { render } from 'ink';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectConfiguredRun, inspectMonitor } from '#composition/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { loadConfig, clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';

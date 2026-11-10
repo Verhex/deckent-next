@@ -39,7 +39,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     if (!parsed.success || ![parsed.data.sourceRoot, parsed.data.workspaceRoot, parsed.data.gitExecutable].every(isAbsolute)) throw new WorkspaceError('WORKSPACE_OPTIONS_INVALID');
     // Delivery authorship and the delivery mode are not clone custody; changing them must not invalidate retained workspaces.
     // The Run's private base repository is where the base objects live, not clone custody: the base's adapter version records it.
-    const { deliveryIdentity, workingTree, runBase, ...workspaceOptions } = parsed.data; void deliveryIdentity; void workingTree; this.options = workspaceOptions;
+    const { deliveryIdentity, workingTree, runBase, copyBytes, ...workspaceOptions } = parsed.data; void deliveryIdentity; void workingTree; void copyBytes; this.options = workspaceOptions;
     if (runBase !== undefined && !isAbsolute(runBase)) throw new WorkspaceError('WORKSPACE_OPTIONS_INVALID'); this.runBase = runBase;
   }
   private identityTarget(input: unknown) { return gitWorkspaceIdentityTarget(input, this.options.workspaceRoot, format); }

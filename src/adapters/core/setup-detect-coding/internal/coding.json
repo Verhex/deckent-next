@@ -3,13 +3,13 @@
   "schemaVersion": 1,
   "git": {
     "executable": "git",
-    "prefix": ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"],
+    "prefix": ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "advice.graftFileDeprecated=false"],
     "versionArgs": ["--version"],
     "topLevelArgs": ["rev-parse", "--show-toplevel"],
     "headArgs": ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
     "filterListArgs": ["config", "--null", "--name-only", "--get-regexp", "^filter\\..*\\.(clean|process|smudge)$"], "changeConfig": ["-c", "core.untrackedCache=false", "-c", "submodule.recurse=false", "-c", "diff.external=", "-c", "core.attributesFile=/dev/null"], "trackedArgs": ["diff-index", "--name-only", "-z", "--ignore-submodules=all", "--no-ext-diff", "--no-renames", "HEAD", "--"], "untrackedArgs": ["ls-files", "--others", "--exclude-standard", "-z"], "maxFilterDrivers": 32,
     "notRepository": "not a git repository",
-    "env": { "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "", "GIT_NO_LAZY_FETCH": "1", "GIT_OPTIONAL_LOCKS": "0", "LC_ALL": "C" }
+    "env": { "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "", "GIT_NO_LAZY_FETCH": "1", "GIT_OPTIONAL_LOCKS": "0", "GIT_GRAFT_FILE": "/dev/null", "LC_ALL": "C" }
   },
   "limits": { "totalTimeoutMs": 8000, "commandTimeoutMs": 4000, "outputBytes": 65536, "pathDirectories": 256, "workTargets": 16, "hosts": 16 },
   "firstCommit": {

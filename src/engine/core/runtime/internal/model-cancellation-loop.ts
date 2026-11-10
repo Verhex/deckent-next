@@ -6,8 +6,8 @@ import { ScopedRuntimeLoop, type ScopedRuntimeLoopClock, type ScopedRuntimeLoopW
 
 const optionsSchema = z.strictObject({ scopeIds: z.array(identitySchema).min(1),
   pollIntervalMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), failureBackoffMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
-export type ModelCancellationRuntimeLoopOptions = Readonly<z.infer<typeof optionsSchema>>;
-export interface ModelCancellationRuntimeObserver {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelCancellationRuntimeLoopOptions = Readonly<z.infer<typeof optionsSchema>>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelCancellationRuntimeObserver {
   onPage(command: ModelInvocationCancellationRecoveryCommand, result: ModelInvocationCancellationRecoveryPage): void | Promise<void>;
   onError(command: ModelInvocationCancellationRecoveryCommand, error: unknown): void | Promise<void>;
 }

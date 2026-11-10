@@ -1,14 +1,14 @@
 import type { OperationDescriptor } from '#domain/core/effect/index.js';
-
-/** Where a catalog operation comes from. `core`: a module the Core composition passed at registry construction (its ids are Core's);
+import { CodedError } from '#domain/core/primitives/index.js';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where a catalog operation comes from. `core`: a module the Core composition passed at registry construction (its ids are Core's);
  * `module`: a registered overlay (owns only its namespace); `config`: the installation's `operations.catalog`. Provenance is data for
  * conflict decisions and inspection; it grants nothing (policy still decides every operation). */
 export type OperationProvenance = { readonly source: 'core' | 'module'; readonly module: string } | { readonly source: 'config' };
 export interface CatalogOperation { readonly descriptor: OperationDescriptor; readonly provenance: OperationProvenance }
 
-export class OperationCatalogError extends Error {
-  constructor(readonly code: 'OPERATION_TARGET_KIND_RESERVED' | 'OPERATION_CORE_REDEFINED' | 'OPERATION_CATALOG_CONFLICT' | 'OPERATION_NAMESPACE_RESERVED' | 'OPERATION_COMPENSATION_UNKNOWN',
-    readonly subject: string) { super(`${code}: ${subject}`); this.name = 'OperationCatalogError'; }
+export class OperationCatalogError extends CodedError {
+  constructor(override readonly code: 'OPERATION_TARGET_KIND_RESERVED' | 'OPERATION_CORE_REDEFINED' | 'OPERATION_CATALOG_CONFLICT' | 'OPERATION_NAMESPACE_RESERVED' | 'OPERATION_COMPENSATION_UNKNOWN',
+    readonly subject: string) { super(code, { message: `${code}: ${subject}` }); this.name = 'OperationCatalogError'; }
 }
 
 export const operationKey = (operation: { readonly id: string; readonly version: number }) => `${operation.id}@${operation.version}`;

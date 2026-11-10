@@ -3,7 +3,7 @@ import { clipboardRequest, copyableAnswers, createClipboardWriter, runCopyComman
 import { stepSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { notice, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
-import { WORKLINE_SLASH_COMMANDS, slashHelpText } from '#surfaces/core/terminal-kit/index.js';
+import { LOCAL_SLASH_COMMANDS, WORKLINE_SLASH_COMMANDS, slashHelpText } from '#surfaces/core/terminal-kit/index.js';
 import { t, snapshotKnownSecrets } from '#platform/index.js';
 import { terminalConfigSchema, readTerminalResponseStyle, TERMINAL_RESPONSE_STYLES } from '#adapters/index.js';
 import { renderAgentTurnSystemPrompt } from '#engine/index.js';
@@ -65,6 +65,7 @@ describe('/copy [n]', () => {
   });
 
   it('is a registered command with catalog words in both languages', () => {
+    for (const name of LOCAL_SLASH_COMMANDS) expect(WORKLINE_SLASH_COMMANDS.some(command => command.name === name)).toBe(true); // H3-R: a local handler is a registered name
     expect(WORKLINE_SLASH_COMMANDS.find(command => command.name === 'copy')).toMatchObject({ descriptionKey: 'tuicopy.slash.copy', argumentKey: 'tuicopy.slash.copyArgument' });
     for (const locale of ['en', 'tr'] as const) {
       const slash = terminalComposerLabels(locale).slash;

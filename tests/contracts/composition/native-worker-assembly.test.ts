@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as adapters from '#adapters/index.js';
 import * as runs from '#composition/core/runs/index.js';
+import * as engine from '#engine/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest } from '#engine/index.js';
@@ -61,7 +62,7 @@ it('K21: production driver binds the fresh K5 profile to K16 public transport, r
   expect(await runtime.driver(input, signal)).toBe(driver);
   expect(current).toHaveBeenCalledWith(fixture.root, profile.scopeId, binding, {});
   expect(create).toHaveBeenCalledWith(input, expect.any(Object), signal);
-  expect(transport.profile).toBe(profile); expect(transport.claudeDriver).toBe(adapters.createClaudeAgentDriver); expect(transport.claudeRun).toBe(adapters.prepareClaudeAgentRun);
+  expect(transport.profile).toBe(profile); expect(transport.claudeDriver).toBe(adapters.createClaudeAgentDriver);
   const preflight = vi.spyOn(adapters, 'preflightNativeAgent').mockResolvedValue({} as never);
   await transport.preflight(signal); expect(preflight).toHaveBeenCalledWith(profile, Date.now, expect.any(Function), signal);
   const isolated = vi.spyOn(adapters, 'runHeadlessIsolated').mockResolvedValue({} as never), entry = adapters.nativeCliAgent(binding.protocolFamily)!;
@@ -69,12 +70,22 @@ it('K21: production driver binds the fresh K5 profile to K16 public transport, r
   await transport.runIsolated(entry, spawn, bounds, signal, line); expect(isolated).toHaveBeenCalledWith(entry, expect.any(Function), spawn, bounds, signal, line);
   await expect(runtime.driver({ ...input, binding: { ...binding, modelUsePin: undefined } } as never, signal)).rejects.toMatchObject({ code: 'DISPATCH_FENCED' });
   expect(create).toHaveBeenCalledOnce();
+  // B2-11: an evidence target without a registry entry is the typed F08 refusal the readiness reader names, not an untyped error.
+  await expect(runtime.verification!.acquire({ identity: { scopeId: profile.scopeId, attemptId: 'a' } }, { ...binding, protocolFamily: 'unregistered' }, {} as never))
+    .rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
 });
 
 it('K21: K1 tools use the exact Attempt tree with an MCP workload session and durable effects, never the project tree', async () => {
   const f = await brainProviderFixture(), c = await connection(), attempt = await mkdtemp(join(tmpdir(), 'k21-tools-')); temporary.push(attempt);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
+    const run = engine.runDurableAgentTurn;
+    let cancelled!: ReturnType<typeof vi.spyOn>, revoked!: ReturnType<typeof vi.spyOn>;
+    vi.spyOn(engine, 'runDurableAgentTurn').mockImplementation((input, store, ports) => run(input, store, { ...ports,
+      invokeAgent: async (...args) => {
+        cancelled = vi.spyOn(args[0].session, 'cancel'); revoked = vi.spyOn(args[0].session, 'revoke');
+        return ports.invokeAgent!(...args);
+      } }));
     // R4a: the real first-run template (v19), never injected MCP grants: the worker's tool session runs as the MCP actor on its v19 rules.
     const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
     await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 }); await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 });
@@ -92,6 +103,13 @@ it('K21: K1 tools use the exact Attempt tree with an MCP workload session and du
     await expect(readFile(join(f.project, 'result.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await adapters.withMcpPrincipal(() => port!.cancel())).toMatchObject({ effects: 'settled', pendingCallIds: [], termination: 'unverified' });
     expect((await propose('late-write', 'write_file', { path: 'result.txt', content: 'late-overwrite' })).outcome.status).toBe('error');
+    expect(await readFile(join(attempt, 'result.txt'), 'utf8')).toBe('durable-attempt-result'); port = undefined;
+    port = await adapters.withMcpPrincipal(() => runtime.openTools({ ...request, identity: { ...identity, attemptId: 'revoked' } },
+      {} as NativeCliWorkerBinding, new AbortController().signal, {}));
+    expect(await adapters.withMcpPrincipal(() => port!.revoke())).toMatchObject({ kind: 'revoked', effects: 'settled', pendingCallIds: [], termination: 'unverified' });
+    expect(cancelled).not.toHaveBeenCalled(); expect(revoked).toHaveBeenCalledTimes(2);
+    expect((await propose('revoked-write', 'write_file', { path: 'result.txt', content: 'revoked-overwrite' })).outcome)
+      .toMatchObject({ status: 'error', text: expect.stringContaining('tool-session-closed') });
     expect(await readFile(join(attempt, 'result.txt'), 'utf8')).toBe('durable-attempt-result'); port = undefined;
     const { DatabaseSync } = await import('node:sqlite'), db = new DatabaseSync(f.path, { readOnly: true });
     try { expect(db.prepare('SELECT count(*) AS n FROM model_invocations').get()).toEqual({ n: 0 }); } finally { db.close(); }
@@ -139,7 +157,7 @@ it('K22: K1 reads scoped inputs, predecessor handoff and dependency views; rejec
   const { mkdir, symlink, link, unlink } = await import('node:fs/promises');
   const { loadConfiguredScopeContext } = await import('#composition/core/scoped-request/index.js');
   const { fixtureDockerRegistry } = await import('../support/execution-registry.js');
-  const f = await brainProviderFixture(), c = await connection(), attempt = await mkdtemp(join(tmpdir(), 'k22-inputs-')); temporary.push(attempt);
+  const f = await brainProviderFixture(), c = await connection(), custody = await mkdtemp(join(tmpdir(), 'k22-inputs-')), attempt = join(custody, 'workspace'); temporary.push(custody); await mkdir(attempt);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -161,12 +179,38 @@ it('K22: K1 reads scoped inputs, predecessor handoff and dependency views; rejec
       readOnlyMounts: [{ source: dependencies, target: '/worker-deps' }] };
     port = await adapters.withMcpPrincipal(() => runtime.openTools(request, {} as NativeCliWorkerBinding, new AbortController().signal, resources));
     let sequence = 0;
-    const read = (path: string) => { const id = `input-${++sequence}`; return adapters.withMcpPrincipal(() => port!.propose({ id, name: 'read_file', argumentsJson: JSON.stringify({ path }) },
+    const read = (path: string, extra: object = {}) => { const id = `input-${++sequence}`; return adapters.withMcpPrincipal(() => port!.propose({ id, name: 'read_file', argumentsJson: JSON.stringify({ path, ...extra }) },
       { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal)); };
     for (const path of ['/deckent/inputs/prior', '/deckent/inputs/_handoff/first.json']) expect((await read(path)).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('task-one-delivered') });
     expect((await read('/worker-deps/note.txt')).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('dependency-only') });
     expect((await read('/worker-deps/../policy.json')).outcome.status).toBe('error');
+    await writeFile(prepared.path, 'changed-source'); await writeFile(join(dependencies, 'note.txt'), 'changed-dependency');
+    expect((await read('/deckent/inputs/prior', { startLine: 1 })).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('task-one-delivered') });
+    expect((await read('/worker-deps/note.txt', { startLine: 1 })).outcome).toMatchObject({ status: 'ok', text: expect.stringContaining('dependency-only') });
+    const { chmod, readdir } = await import('node:fs/promises');
+    const snapshot = join(custody, (await readdir(custody)).find(name => name.startsWith('worker-inputs-'))!);
+    const copy = join(snapshot, '0'); expect(await readFile(copy, 'utf8')).toBe('task-one-delivered');
+    await chmod(copy, 0o600); await writeFile(copy, 'forged-copy-bytes'); await chmod(copy, 0o400);
+    expect((await read('/deckent/inputs/prior', { endLine: 1 })).outcome.status).toBe('error');
+    await writeFile(prepared.path, 'task-one-delivered');
     await adapters.withMcpPrincipal(() => port!.cancel()); port = undefined;
+    const { prepareNativeWorkerInputs } = await import('../../../src/composition/core/execution/internal/worker-inputs.js');
+    const bounds = { allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 8, maxFileBytes: 64, maxTotalBytes: 128, timeoutMs: 5000 };
+    const admit = (changes = {}, maxBytes = 64) => prepareNativeWorkerInputs(resources, 's', f.project, attempt, context.layout, { ...bounds, ...changes }, maxBytes, 4096);
+    for (const changes of [{ maxFiles: 1 }, { maxFileBytes: 1 }, { maxTotalBytes: 1 }, { timeoutMs: 0 }]) await expect(admit(changes)).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
+    await expect(admit({}, 1)).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
+    const views = await admit(), owned = views.views[0]!.source;
+    await chmod(owned, 0o600); await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' }); await chmod(owned, 0o400);
+    const shared = join(custody, 'shared-copy'); await link(owned, shared);
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' }); await unlink(shared);
+    const saved = await readFile(owned); await unlink(owned); await symlink(prepared.path, owned);
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' }); await unlink(owned); await writeFile(owned, saved, { mode: 0o400 });
+    await views.validate();
+    await chmod(owned, 0o600); await writeFile(owned, Buffer.alloc(saved.length, 'x')); await chmod(owned, 0o400);
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
+    await chmod(owned, 0o600); await writeFile(owned, saved); await chmod(owned, 0o400); await views.validate();
+    await writeFile(join(views.views[2]!.source, 'injected'), 'unexpected');
+    await expect(views.validate()).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
     const open = (resources: Parameters<NativeCliWorkerPorts['openTools']>[3]) => adapters.withMcpPrincipal(() => runtime.openTools(request, {} as NativeCliWorkerBinding, new AbortController().signal, resources));
     await expect(open({ inputs: [{ ...resources.inputs[0]!, receipt: { ...receipt, scopeId: 'other' } }] })).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
     await expect(open({ inputs: [{ ...resources.inputs[0]!, path: join(attempt, 'outside') }] })).rejects.toMatchObject({ code: 'NATIVE_WORKER_INPUT_REFUSED' });
@@ -192,22 +236,29 @@ async function verificationHarness(family: string, scenario: import('../../fixtu
   await writeFile(executable, source.replace("async function main() {", `async function main() { if (fs.existsSync(${JSON.stringify(inputCanary)}) || fs.existsSync('/deckent/inputs/prior')) throw Error('input-visible-in-login-realm');`), { mode: 0o700 });
   const f = await brainProviderFixture({ headless: { executable, configDir, stateDir, protocolFamily: family }, subscription: true });
   const options = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: global } }, profile = modelInvocationProfileSchema.parse(f.config.provider_invocation_profiles.profiles[0]);
+  const owner = adapters.readLocalOsIdentity(), firstRun = firstRunPolicyTemplate({ scopeId: profile.scopeId,
+    principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(f.data, 'policy.json'), JSON.stringify(firstRun.policy), { mode: 0o600 });
+  await writeFile(join(f.data, 'bindings.json'), JSON.stringify(firstRun.bindings), { mode: 0o600 }); clearConfigCache();
   vi.spyOn(runs, 'recheckNativeWorkerUse').mockResolvedValue({ profile } as never);
   const entry = adapters.nativeCliAgent(family)!, execution = (await adapters.preflightNativeAgent(profile, Date.now, (await import('../../fixtures/native-headless/connection.js')).testIsolation)).execution;
   const binding = { schemaVersion: 1, protocolFamily: family, profileDigest: modelInvocationProfileDigest(profile), definition: profile.adapter.definition,
     connectionId: '12345678-1234-4234-8234-123456789abc', resourceKey: 'slot', modelUsePin: { scopeId: profile.scopeId } } as NativeCliWorkerBinding;
   const runtime = createConfiguredNativeCliWorkerRuntime(f.project, options)!, query = { scopeId: profile.scopeId, reference: profile.reference, binding };
-  const session = { schemaVersion: 1 as const, turnId: 'verification-turn', generation: 1, approvalTtlMs: 1000, tools: [{ name: 'read_file', version: 1, toolClass: 'read' as const, description: 'read', inputSchema: { type: 'object' as const, properties: {} } }] };
-  const closure = { turnId: session.turnId, generation: session.generation, effects: 'settled' as const, termination: 'unverified' as const, pendingCallIds: [] };
-  const tools = { session, propose: vi.fn(), cancel: async () => ({ ...closure, kind: 'cancelled' as const }), revoke: async () => ({ ...closure, kind: 'revoked' as const }) };
+  const tools = { propose: vi.fn() };
   const ports: NativeCliWorkerPorts = { readiness: async () => ({ state: 'ready', execution }), f08: () => runtime.f08(query), verification: runtime.verification,
-    driver: runtime.driver, openTools: async () => tools, bridgeLimits: runtime.bridgeLimits, recheck: async () => {}, capacity: { acquire: async () => ({ state: 'acquired', release: async () => {} }) } };
+    driver: runtime.driver, async openTools(...args) {
+      const session = await adapters.withMcpPrincipal(() => runtime.openTools(...args));
+      return { ...session, propose: (...args) => { tools.propose(...args); return adapters.withMcpPrincipal(() => session.propose(...args)); },
+        cancel: () => adapters.withMcpPrincipal(() => session.cancel()), revoke: () => adapters.withMcpPrincipal(() => session.revoke()) };
+    }, bridgeLimits: runtime.bridgeLimits, recheck: async () => {}, capacity: { acquire: async () => ({ state: 'acquired', release: async () => {} }) } };
   const task = adapters.compileNativeCodingWorkInput(adapters.createNativeCodingTemplate({ imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 },
   { provider: entry.id, cliVersion: execution.cliVersion, discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding),
   { schemaVersion: 1, task: 'Complete the business task.', scope: { paths: ['result.txt'] }, acceptance: 'A durable result.', model: { channelId: profile.reference.providerId, modelId: 'vendor/model', auxiliaryModelIds: [] } });
   const request = { protocolVersion: 1 as const, identity: { scopeId: profile.scopeId, runId: 'verification-run', taskId: 'first', attemptId: 'verify-first', generation: 1, layoutRevision: 'layout' },
     workspace: join(c.root, 'attempt', 'workspace'), argv: adapters.resolveNativeCliWorkerProfile(task).argv };
+  await mkdir(request.workspace, { recursive: true });
   const prepare = (requestOverride = request) => adapters.prepareNativeCliWorker({ profile: task, request: requestOverride, ports, fence: async () => true, custody: adapters.nativeWorkerCustodyFile(requestOverride) });
   return { f, runtime, query, binding, execution, prepare, request, tools };
 }
@@ -262,7 +313,7 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
   const { configuredApproval } = await import('#composition/core/approvals/index.js');
   const { createTerminalRuntimeClient, terminalRuntimePeer } = await import('../support/terminal-runtime-client.js');
   const { approvalRecordSchema } = await import('#domain/index.js');
-  const f = await brainProviderFixture(), c = await connection(), workspace = await mkdtemp(join(tmpdir(), 'k22-readonly-')); temporary.push(workspace);
+  const f = await brainProviderFixture(), c = await connection(), custody = await mkdtemp(join(tmpdir(), 'k22-readonly-')), workspace = join(custody, 'workspace'); temporary.push(custody); await mkdir(workspace);
   let port: Awaited<ReturnType<NativeCliWorkerPorts['openTools']>> | undefined;
   try {
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -324,6 +375,13 @@ it('K22: an approved exact shell request cannot write input, handoff or dependen
       expect((await pending).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('Read-only file system') });
     }
     expect(await readFile(prepared.path, 'utf8')).toBe('immutable-input'); expect(await readFile(join(dependencies, 'note.txt'), 'utf8')).toBe('immutable-dependency');
+    const { chmod, readdir } = await import('node:fs/promises');
+    for (const name of (await readdir(custody)).filter(name => name.startsWith('worker-inputs-'))) {
+      const copy = join(custody, name, '0'); await chmod(copy, 0o600); await writeFile(copy, 'corrupted-input'); await chmod(copy, 0o400);
+    }
+    for (const [id, name, args] of [['corrupt-read', 'read_file', { path: '/deckent/inputs/locked' }], ['corrupt-shell', 'run_shell', { command: 'ls note.txt' }]] as const)
+      expect((await adapters.withMcpPrincipal(() => port!.propose({ id, name, argumentsJson: JSON.stringify(args) },
+        { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal))).outcome.status).toBe('error');
     await adapters.withMcpPrincipal(() => port!.cancel()); port = undefined; expect(f.posts).toBe(0);
   } finally { if (port) await adapters.withMcpPrincipal(() => port!.cancel()); await f.close(); }
 });

@@ -15,7 +15,7 @@ export const hubLimitsSchema = z.strictObject({ schemaVersion: z.literal(1), pac
   fetchRetries: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative(), publishesPerHour: positive, cacheMaxBytes: positive, skillFilesMaxBytes: positive,
   maxRedirects: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative(), httpMaxBytes: positive, networkInputMaxBytes: positive, httpMaxConcurrentRequests: positive,
   skillReadMaxBytes: positive, skillReadMaxFiles: positive, delegationMaxMs: positive, clockSkewMs: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative() }).readonly();
-export type HubLimits = z.infer<typeof hubLimitsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubLimits = z.infer<typeof hubLimitsSchema>;
 export const HUB_LIMITS = hubLimitsSchema.parse(limitData);
 /** Unit conversion of the registry cadence, shared by publisher and client. */
 export const HUB_REVOCATION_REFRESH_MS = HUB_LIMITS.revocationRefreshMinutes * 60_000;

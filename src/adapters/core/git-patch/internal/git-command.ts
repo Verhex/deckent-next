@@ -25,7 +25,6 @@ export class GitCommand {
       child.stdin?.on('error', () => undefined); child.stdin?.end(input);
     });
   }
-  /** Source root, workspace root and Git directory are real, owned, not group/other-writable directories. */
   async custody() {
     for (const path of [this.options.sourceRoot, this.options.workspaceRoot, await this.run(['rev-parse', '--absolute-git-dir'])]) {
       const stat = await lstat(path);

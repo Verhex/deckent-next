@@ -2,7 +2,7 @@ import { persistedString, persistedDateTime, persistedInteger, ErrorRegistry, sh
 import { z } from 'zod';
 import { layeredWorkerRecipeSchema, workerSourceUrl, type WorkerImageSources } from '#engine/core/toolchain-currency/index.js';
 /** The budget is one base build plus each selected image, with the existing cleanup/marker grace. */
-export const WORKER_IMAGE_GRACE_MS = 60_000;
+const WORKER_IMAGE_GRACE_MS = 60_000;
 export function workerImageBudget(buildTimeoutMs: number, images: number): number {
   const total = buildTimeoutMs * (images + 1) + WORKER_IMAGE_GRACE_MS;
   if (!Number.isSafeInteger(total) || total > 2_147_483_647 || images < 1) throw ErrorRegistry.createError('WORKER_PLAN_INVALID');
@@ -40,4 +40,4 @@ export function interruptedWorkerImage(state: WorkerImageState, instanceId: stri
   return ['acquiring', 'requested'].includes(state.phase) && (state.instanceId !== instanceId || Date.parse(state.expiresAt) <= Date.parse(now))
     ? { ...state, revision: state.revision + 1, phase: 'failed', code: 'WORKER_IMAGE_BUILD_INTERRUPTED', lastProgressAt: now } : state;
 }
-export const consentProviders = (records: readonly WorkerImageConsent[]) => [...new Set(records.flatMap(record => record.providers))];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const consentProviders = (records: readonly WorkerImageConsent[]) => [...new Set(records.flatMap(record => record.providers))];

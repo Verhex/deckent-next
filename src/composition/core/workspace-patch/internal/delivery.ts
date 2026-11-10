@@ -1,9 +1,9 @@
 import { resolve } from 'node:path';
-import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, removeRunBase, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
+import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, isCodedError, type ConfigLoadOptions } from '#platform/index.js';
+import { GitIntegrationTarget, GitIntegrationDelivery, GitWorkingTreeDelivery, removeRunBase, GitQueueTarget, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteInventoryReader, resolveGitWorkTarget, validateExecutionSupervisorProfile, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { assertAuthorityWitness, workingTreeDeliveryAuthorization, workingTreeSource, deliveryDismissalEvent, deliveryRollbackEvent, workingTreeRollbackCommandSchema, WorkingTreeRollbackApplication, WorkspacePatchError, type WorkingTreeRollbackCommand, dismissedDeliveries, WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { workspacePatchContext } from './configured.js';
 /**
@@ -58,7 +58,7 @@ async function releaseSettledRunBase(root: string, run: Readonly<{ scopeId: stri
 }
 /** The scope's dismissed tasks (none without an integrity key yet: recording one creates it); any other failure is the caller's to show. `limit` bounds the records read. */
 export const inspectConfiguredDismissedDeliveries = (root: string, scopeId: string, limit: number, options: ConfigLoadOptions) => loadConfiguredScopeContext(root, scopeId, options, 'read')
-  .then(c => withScopeAudit(c, audit => dismissedDeliveries(audit, scopeId, limit), false, 'read')).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'INTEGRITY_KEY_UNAVAILABLE') return [] as ReturnType<typeof dismissedDeliveries>; throw queryFailure(error); });
+  .then(c => withScopeAudit(c, audit => dismissedDeliveries(audit, scopeId, limit), false, 'read')).catch((error: unknown) => { if (isCodedError(error, 'INTEGRITY_KEY_UNAVAILABLE')) return [] as ReturnType<typeof dismissedDeliveries>; throw queryFailure(error); });
 /** Local SDK/CLI producer; paths, principal, session and Git options never come from the wire. */
 type DeliveryApplications = Readonly<{ deliver: () => WorkspaceDeliveryApplication; rollback: () => WorkingTreeRollbackApplication }>;
 async function withDelivery<T>(root: string, identity: AttemptIdentity, options: ConfigLoadOptions, confirmation: EffectConfirmation | undefined, use: (applications: DeliveryApplications) => Promise<T>) {
@@ -69,7 +69,7 @@ async function withDelivery<T>(root: string, identity: AttemptIdentity, options:
   const limits = { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, target = new GitIntegrationTarget(git, limits);
   const clock = new SystemTrustedClock();
   const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
-  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
+  const store = await openConfiguredLedger(c, { migration: 'forbid', validate: validateExecutionSupervisorProfile });
   try { await c.sameWorkSource(store);
     const patches = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
     const inspection = new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes);

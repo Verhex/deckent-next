@@ -1,5 +1,6 @@
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { NativeWorkerEvidenceFile } from './worker-verification.js';
+import { nativeAgentPreflightReason } from './readiness.js';
 
 /** The execution owner prepares only unknown observations. A refusal is never refreshed into a pass. */
 export async function prepareNativeWorkerObservation(ports: {
@@ -15,8 +16,6 @@ export async function prepareNativeWorkerObservation(ports: {
     finally { await claim.release(); }
     return null;
   } catch (error) {
-    const code = (error as { code?: unknown } | null)?.code;
-    return code === 'HEADLESS_LOGIN_REQUIRED' ? 'NATIVE_AGENT_LOGIN_REQUIRED'
-      : code === 'HEADLESS_CLI_UNAVAILABLE' ? 'NATIVE_AGENT_CLI_UNAVAILABLE' : 'NATIVE_AGENT_ENVIRONMENT_REFUSED';
+    return nativeAgentPreflightReason(error);
   }
 }

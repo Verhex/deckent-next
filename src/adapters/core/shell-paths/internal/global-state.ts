@@ -1,11 +1,12 @@
 import { realpath, stat } from 'node:fs/promises';
 import { posix } from 'node:path';
-import { JSON_SCHEMA_LIMITS, StepBudgetExceeded } from '#platform/index.js';
-import { classifyShellContainment, shellNamedPaths } from '#engine/index.js';
+import { JSON_SCHEMA_LIMITS, PRODUCT_LAYOUT_REGISTRY, pathWithin, StepBudgetExceeded } from '#platform/index.js';
+import { shellGlobalStateUnresolved, type ShellCommandScan } from '#engine/index.js';
 import { expandGlob, segmentMatcher, SHELL_GLOB_MAX_MATCHES } from './paths.js';
 
 const GLOB = /[*?[]/u;
-const within = (root: string, path: string) => root === '/' || path === root || path.startsWith(`${root}/`);
+const HOME_VARIABLE = new RegExp(`^\\$(?:\\{(HOME|${PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey})\\}|(HOME|${PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey}))(?=/|$)`, 'u');
+const ROOT_VARIABLE = new RegExp(`^\\$(?:\\{${PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey}\\}|${PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey})(?=/|$)`, 'u');
 
 /** Names, not contents: resolve existing ancestors without dropping `link/..`; absent children still inherit their real parent. */
 async function realName(path: string): Promise<string> {
@@ -20,7 +21,7 @@ async function realName(path: string): Promise<string> {
 export async function createShellGlobalStateCheck(projectRoot: string, roots: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env,
   loginFiles: readonly string[] = []): Promise<(text: string) => Promise<boolean>> {
   const protectedRoots = [...new Set([...roots, ...await Promise.all(roots.map(realName))])];
-  const protectedPath = (path: string) => protectedRoots.some(root => within(root, path));
+  const protectedPath = (path: string) => protectedRoots.some(root => pathWithin(root, path));
   const home = env['HOME'];
   const loginAlias = async (path: string) => {
     const info = await stat(path, { bigint: true }).catch(() => null);
@@ -33,11 +34,11 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
     }
     return false;
   };
-  return async text => {
+  const checkPath = async (text: string): Promise<boolean> => {
     if (['[', '[[', ']', ']]'].includes(text)) return false;
     text = text.replace(/^[A-Za-z_][A-Za-z0-9_]*=/u, '');
     // Conservatively recognize HOME spellings even when quoted: quotes never open a protected name.
-    const expanded = text.replace(/^~(?=\/|$)/u, home ?? '~').replace(/^\$(?:\{(HOME|DECKENT_GLOBAL_HOME)\}|(HOME|DECKENT_GLOBAL_HOME))(?=\/|$)/u, (value, braced: string | undefined, plain: string | undefined) => env[braced ?? plain!] ?? value);
+    const expanded = text.replace(/^~(?=\/|$)/u, home ?? '~').replace(HOME_VARIABLE, (value, braced: string | undefined, plain: string | undefined) => env[braced ?? plain!] ?? value);
     const raw = posix.isAbsolute(expanded) ? expanded : `${projectRoot}/${expanded}`;
     if (protectedPath(posix.normalize(raw))) return true;
     const globAt = raw.search(GLOB);
@@ -70,14 +71,18 @@ export async function createShellGlobalStateCheck(projectRoot: string, roots: re
     }
     return false;
   };
+  return async text => {
+    // Keep every existing refusal, including literal variable-named aliases; the installation-home expansion only adds refusals.
+    if (await checkPath(text)) return true;
+    const path = text.replace(/^[A-Za-z_][A-Za-z0-9_]*=/u, '');
+    const expanded = path.replace(ROOT_VARIABLE, value => env[PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey] ?? value);
+    return expanded !== path && await checkPath(expanded);
+  };
 }
 
 /** Host names are best effort, never confinement. Unresolved forms need a warning and per-call approval when global state exists. */
-export async function hostGlobalStateUnresolved(command: string, roots: readonly string[]): Promise<boolean> {
-  const unresolved = /[$`{}]/u.test(command) || shellNamedPaths(command, () => true).flatMap(word => word.split(/[<>]/u))
-    .some(word => /^~[^/]/u.test(word) || ['cd', 'pushd', 'popd', 'find', 'xargs'].includes(posix.basename(word.replace(/^[({]+|[)}]+$/gu, ''))))
-    || ['UNPARSEABLE', 'PROCESS_SUBSTITUTION'].includes(classifyShellContainment(command, () => false).reasonCode);
-  if (!unresolved) return false;
+export async function hostGlobalStateUnresolved(command: string, roots: readonly string[], shared?: ShellCommandScan): Promise<boolean> {
+  if (!shellGlobalStateUnresolved(command, shared)) return false;
   for (const root of roots) {
     try { await stat(root); return true; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true; }

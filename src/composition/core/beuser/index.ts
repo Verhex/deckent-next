@@ -3,7 +3,7 @@ export { walkConfiguredBeuser, admitConfiguredBeuserWalk } from './internal/walk
 export { validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
 export { beuserJourneyLaunch } from './internal/launch.js';
 export { configuredBeuserModels } from './internal/models.js';
-export { setupConfiguredBeuser, type BeuserSetupInput } from './internal/setup.js';
+export { setupConfiguredBeuser, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type BeuserSetupInput } from './internal/setup.js';
 export { listConfiguredBeuserJourneys } from './internal/journeys.js';
 export { inspectConfiguredBeuserMonitor } from './internal/monitor.js';
 export { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput, beuserEvaluatorInputLossy } from './internal/model-contract.js';

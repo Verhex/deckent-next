@@ -11,7 +11,7 @@ const entry = z.strictObject({ resource, path: persistedString(z.string().max(40
 const stateFields = { createdAt: persistedDateTime(), installationId: persistedString(z.string().min(1)),
   projectRoot: persistedString(z.string().min(1)), layoutRoot: persistedString(z.string().min(1)), resources: z.record(z.string(), z.string()), keyFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
   entries: z.array(entry) };
-/** v1 (alpha.18): `config` is the merged global+project document. v2 (S1 D1): `config` is the project layer alone; `globalConfig` the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). v1 (alpha.18): `config` is the merged global+project document. v2 (S1 D1): `config` is the project layer alone; `globalConfig` the
  * authored global layer (base64 JSON, null when absent). Both stay readable; the restore splits a v1 document (see `splitArchivedConfig`). */
 export const backupStateSchema = z.discriminatedUnion('schemaVersion', [z.strictObject({ schemaVersion: z.literal(1), ...stateFields }),
   z.strictObject({ schemaVersion: z.literal(2), ...stateFields, globalConfig: z.string().nullable() }),

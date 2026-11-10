@@ -7,7 +7,7 @@ import { openSqliteLedgerReadOnly, requireLedgerVersion, CURRENT_LEDGER_VERSION 
 import { ErrorRegistry, inspectProductFile, productResourcePath, resolveLocale, type ConfigLoadOptions, type loadConfig } from '#platform/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 
-export interface InstallationStartability {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstallationStartability {
   readonly status: 'ready' | 'blocked'; readonly endpoint: string | null;
   readonly checks: readonly { readonly code: string; readonly message: string }[];
 }

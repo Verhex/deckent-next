@@ -1,22 +1,22 @@
-import { persistedString, persistedInteger, sha256 } from '#platform/index.js';
+import { processExists, persistedString, persistedInteger, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, readdir, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { brainQuotaWaitRecordSchema, encodeCommandProjection, type BrainQuotaWaitRecord, type BrainQuotaWaitStore } from '#domain/index.js';
+import { counterSchema, brainQuotaWaitRecordSchema, encodeCommandProjection, type BrainQuotaWaitRecord, type BrainQuotaWaitStore } from '#domain/index.js';
 import limits from './limits.json' with { type: 'json' };
 
-/** Store bounds (data, not code): how many waits are kept, how large one file may be, and how long past its planned end a left-behind record is shown. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Store bounds (data, not code): how many waits are kept, how large one file may be, and how long past its planned end a left-behind record is shown. */
 export const brainQuotaWaitStoreLimitsSchema = z.strictObject({ maxEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  staleAfterMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
-export type BrainQuotaWaitStoreLimits = z.infer<typeof brainQuotaWaitStoreLimitsSchema>;
+  staleAfterMs: counterSchema }).readonly();
+type BrainQuotaWaitStoreLimits = z.infer<typeof brainQuotaWaitStoreLimitsSchema>;
 export const BRAIN_QUOTA_WAIT_STORE_LIMITS: BrainQuotaWaitStoreLimits = brainQuotaWaitStoreLimitsSchema.parse(limits);
-const fileSchema = z.strictObject({ schemaVersion: z.literal(1), record: z.unknown().optional(), expiresAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+const fileSchema = z.strictObject({ schemaVersion: z.literal(1), record: z.unknown().optional(), expiresAtMs: counterSchema,
   writer: z.strictObject({ pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), host: persistedString(z.string().min(1).max(255)) }) });
 const RECORD_FILE = /^[a-f0-9]{64}\.json$/u, TEMPORARY_FILE = /^\.[a-f0-9]{64}\.json\.[0-9a-f-]{36}\.tmp$/u;
-/** What a reader sees: the live waits (oldest first) and whether the directory held more files than the bound lets it read. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What a reader sees: the live waits (oldest first) and whether the directory held more files than the bound lets it read. */
 export type BrainQuotaWaitListing = Readonly<{ records: readonly BrainQuotaWaitRecord[]; truncated: boolean }>;
 type Stored = Readonly<{ record: BrainQuotaWaitRecord; expiresAtMs: number; writer: Readonly<{ pid: number; host: string }> }>;
 
@@ -24,7 +24,7 @@ const recordFile = (scopeId: string, commandId: string) => `${sha256(encodeComma
 /** A writer process on this host that no longer exists left its record behind (a crash); another host's writer cannot be checked here. */
 function writerGone(writer: Stored['writer']): boolean {
   if (writer.host !== hostname()) return false;
-  try { process.kill(writer.pid, 0); return false; } catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH'; }
+  return !processExists(writer.pid);
 }
 /** One record file, read without following a link and never past the bound; anything else (missing, oversized, damaged, foreign) is null. */
 async function readRecordFile(path: string, maxBytes: number): Promise<Stored | null> {

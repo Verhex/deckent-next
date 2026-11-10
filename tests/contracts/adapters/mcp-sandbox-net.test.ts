@@ -84,7 +84,7 @@ describe.skipIf(capabilities.bubblewrap.status !== 'available')('sandbox-net in 
       if (pool instanceof McpClientPool) pools.push(pool);
       const opened = await pool.open(spec, settings([spec]), { cwd: project, environment, sandboxes, homeRoot: homes });
       expect(opened).toMatchObject({ ok: true, sandboxed: spec.realm !== 'host' });
-      const answer = await pool.call(spec.id, 'probe', mcpToolPinDigest(probeTool), {}, { timeoutMs: 20_000, signal: new AbortController().signal });
+      const answer = await pool.call(spec.id, 'probe', mcpToolPinDigest(probeTool), {}, { timeoutMs: 20_000, signal: new AbortController().signal, admit: 'probe-only' });
       return { opened, result: JSON.parse((answer as { result: { content: { text: string }[] } }).result.content[0]!.text) as Record<string, string> };
     };
     return { project, home, homes, server, probe };

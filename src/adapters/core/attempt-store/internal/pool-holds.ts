@@ -2,10 +2,10 @@ import { persistedString } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
-import { AttemptStoreError, decidePoolHold, poolHoldReceiptSchema, RunStoreError, type AuditStore, type PoolHoldReceipt, type PoolHoldTransition,
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
+import { decidePoolHold, poolHoldReceiptSchema, RunStoreError, type AuditStore, type PoolHoldReceipt, type PoolHoldTransition,
   type PoolHoldWrite } from '#engine/index.js';
-import { SqliteExecutionPools } from './pools.js';
+import { SqliteExecutionPools } from '#adapters/core/run-store/index.js';
 const receiptRecordSchema = z.strictObject({ schemaVersion: z.literal(1), fingerprint: persistedString(z.string().min(1)), receipt: poolHoldReceiptSchema });
 const fingerprint = (write: PoolHoldWrite) => JSON.stringify({ command: write.command, actor: write.actor });
 
@@ -17,24 +17,17 @@ const fingerprint = (write: PoolHoldWrite) => JSON.stringify({ command: write.co
  */
 export class SqlitePoolHoldJournal {
   constructor(private readonly db: DatabaseSync) {}
-  private transaction<T>(work: () => T): T { return ledgerTransaction(this.db, work); }
   /** Sol 2210 K5-R1: the hold and the occupancy come from one read snapshot (a deferred transaction keeps the snapshot of its first
    * read, so another connection's commit between the two reads is invisible): `drained` never combines two ledger moments. */
   async readPoolHold(poolId: string) {
-    let active = false;
-    try {
-      this.db.exec('BEGIN'); active = true;
+    return ledgerTransaction(this.db, () => {
       const pools = new SqliteExecutionPools(this.db); pools.require(poolId);
-      const view = Object.freeze({ hold: pools.hold(poolId), occupancy: Object.freeze(pools.occupancy(poolId)) });
-      this.db.exec('COMMIT'); active = false; return view;
-    } catch (error) {
-      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-      throw sqliteFailure(error);
-    }
+      return Object.freeze({ hold: pools.hold(poolId), occupancy: Object.freeze(pools.occupancy(poolId)) });
+    }, { mode: 'read' });
   }
   async applyPoolHold(write: PoolHoldWrite, audit: (store: AuditStore, transition: PoolHoldTransition) => void): Promise<PoolHoldReceipt> {
     const { scopeId, commandId, poolId } = write.command, expected = fingerprint(write);
-    return this.transaction(() => {
+    return ledgerTransaction(this.db, () => {
       const prior = this.db.prepare('SELECT record FROM execution_pool_hold_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
       if (prior) {
         let stored;
@@ -61,6 +54,6 @@ export class SqlitePoolHoldJournal {
   }
   /** A refused hold/resume: only its sealed audit event is written. */
   async recordPoolHoldRefusal(audit: (store: AuditStore) => void): Promise<void> {
-    this.transaction(() => audit(new SqliteAuditStore(this.db)));
+    ledgerTransaction(this.db, () => audit(new SqliteAuditStore(this.db)));
   }
 }

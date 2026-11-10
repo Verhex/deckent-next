@@ -23,6 +23,11 @@ Linux sandbox tests additionally need kernel support and permission for user nam
 Landlock tests need a supported kernel. A binary on disk alone does not prove sandbox support.
 Read the test's setup and skip conditions before choosing an integration test.
 
+Install Node from the [official download page](https://nodejs.org/en/download); choose Linux inside WSL2.
+Check `node --version` and `npm --version` before installing dependencies. Ubuntu's apt package may provide Node 18.
+An `EBADENGINE` message means the active Node does not meet [package.json](package.json): upgrade to a supported
+version, open a new terminal, check it again and rerun `npm ci` in the existing clone.
+
 ## A 30-minute quickstart
 
 Use the first half hour to install, build and run one test. This is a suggested session plan,
@@ -47,6 +52,14 @@ VITEST_MAX_FORKS=2 node_modules/.bin/vitest run --configLoader runner \
 [`npm ci`](https://docs.npmjs.com/cli/v11/commands/npm-ci/) installs the dependency lockfile;
 it replaces an existing `node_modules`. Do not update dependencies just to get started.
 If installation reports a lockfile mismatch, include the error in your issue.
+An audit notice about moderate vulnerabilities is separate from the install exit code. After a successful install,
+you can continue to the build while investigating `npm audit` and reporting the affected packages; this does not
+establish that the dependencies are safe. Do not run `npm audit fix --force`: it can replace locked dependencies
+with incompatible versions. Dependency fixes need their own reviewed change.
+
+If `deckent-next` already exists, enter it and run `git status` instead of cloning over it. Rerun `npm ci` after an
+interrupted dependency install; it replaces `node_modules` and preserves source edits. Keep an incomplete clone and
+clone to a new directory. A failed bubblewrap build needs a fresh `--out` directory; stage only a completed build.
 
 The bubblewrap recipe and hashes live in [packaging/bwrap/bwrap.lock.json](packaging/bwrap/bwrap.lock.json).
 Linked license texts are committed in [packaging/bwrap/licenses](packaging/bwrap/licenses) and must match the lock hashes.
@@ -62,14 +75,45 @@ CI restores `.pack/bwrap/cache` with an exact key covering the lock, build recip
 cache verifier and target/runner architectures. It stores the built outputs and fetched APKs.
 `node scripts/build-bwrap.mjs --reuse --arch x86_64 --out <fresh-directory>` verifies the input
 identity, all recorded file/APK SHA256 values, complete installed package inventories, source,
-license texts and binary SHA256 against the lock before using a hit. Only a missing build cache
+license texts and binary SHA256 against the lock before using a hit. Sysroot inventories must
+equal the lock; the host inventory is retained and checksum-verified, but may differ from the
+lock's historical host snapshot. Only a missing build cache
 runs Docker. `--verify-cache --arch x86_64` checks it without staging. APK signature verification
 remains enabled during installation. A corrupt cache fails; it is never silently trusted or retried.
 The cache checksum manifest detects corruption; the committed lock remains the binary authority.
 Actions caches can expire or be evicted: this is not a permanent Alpine mirror.
 
-On a miss, unavailable Alpine pins fail with `BWRAP_PIN_REFRESH_REQUIRED` / `BWRAP_BUILD_FAILED`
-and point here. The daily/weekly/manual **platform verification → deps-watch** job runs
+The required `ci` preparation step uses the exact key
+`bwrap-v2-${runner.os}-${runner.arch}-x86_64-${hashFiles(lock, recipe, driver, verifier)}`.
+The four hashed paths are `packaging/bwrap/bwrap.lock.json`, `packaging/bwrap/build.sh`,
+`scripts/build-bwrap.mjs` and `scripts/bwrap-cache.mjs`; there are no prefix restore keys.
+An eviction or an input change takes the cold source-build path, without relying on an older cache.
+To exercise that path locally with a new empty cache (Docker must be reachable):
+
+```sh
+bwrap_cold=$(mktemp -d)
+node scripts/build-bwrap.mjs --reuse --arch x86_64 --cache "$bwrap_cold/cache" --out "$bwrap_cold/x86_64"
+node scripts/build-bwrap.mjs --verify-cache --arch x86_64 --cache "$bwrap_cold/cache"
+node scripts/build-bwrap.mjs --stage-dev "$bwrap_cold/x86_64"
+node scripts/build-bwrap.mjs --reuse --arch aarch64 --cache "$bwrap_cold/cache-arm64" --out "$bwrap_cold/aarch64"
+node scripts/build-bwrap.mjs --verify-cache --arch aarch64 --cache "$bwrap_cold/cache-arm64"
+```
+
+The image digest, source SHA256, every sysroot pin and output SHA256 remain mandatory.
+Build-host tools (including Python, zlib, expat, alpine-release and apk-tools) resolve from
+Alpine's signed repositories at build time; their old versions are not installation constraints.
+Host changes still have to produce the exact locked executable bytes. Rootless Docker and
+Podman's rootless info are detected before building, so container root keeps its caller mapping
+instead of chowning outputs to a subordinate host uid. Rootful builds chown to the caller.
+
+`BWRAP_BUILD_FAILED` includes the first build/probe error and the retained `build.log` path.
+A Docker connection failure calls out Docker; an unavailable sysroot pin also identifies
+`BWRAP_PIN_REFRESH_REQUIRED` and the refresh path. Failed builds are not retried implicitly.
+Keep a failed or half-built output for diagnosis, choose a fresh `--out` directory, then stage
+that successful output with `--stage-dev` or set `DECKENT_BWRAP_BUILD` to it before `npm run build`.
+The driver refuses non-empty output directories and never deletes unknown data to retry.
+
+The daily/weekly/manual **platform verification → deps-watch** job runs
 `node scripts/refresh-bwrap.mjs <fresh-evidence-directory>` in the digest-pinned image. It resolves
 a candidate host closure and every sysroot, updates the direct pins, builds once to record hashes
 and again in check mode to compare them, and retains the inventories, logs, lock delta and
@@ -79,12 +123,17 @@ It never updates the build image, source tarball, shipped architectures or sourc
 
 The watch runs independently of the advisory macOS/Windows verification matrix and stays read-only.
 A separate `deps-publish` job, the only one with
-`contents: write` and `pull-requests: write`, runs only when the watch verified a refresh and found
+`contents: write`, `pull-requests: write` and `issues: write`, runs only when the watch verified a refresh and found
 no integrity problem. It installs no packages, builds nothing and runs no candidate code: it checks
 out the base the watch resolved, re-verifies the uploaded `deps-watch-<attempt>` candidate and runs
 `scripts/publish-bwrap-refresh.mjs` to open a draft `build(bwrap): refresh pins (Alpine <release>)`
 pull request. It changes only the lock and generated runtime identity, reuses an existing PR and
-never force-updates or merges.
+never force-updates or merges. Before creating a candidate ref it deletes older orphan
+`build/bwrap-pins-<hex>` refs only when the tip is an Actions-bot pin-refresh commit touching
+only the admitted files and has no open PR. Human-owned or reviewed branches are preserved.
+If GitHub refuses PR creation (for example HTTP 403), it opens an issue with the candidate branch
+and verified evidence, and records it in the job summary. If issue creation also fails, the job
+fails with both errors and the evidence link. No repository-setting change or extra secret is needed.
 Independent maintainer review and hosted CI remain mandatory. GitHub-token-created PRs need an explicit maintainer
 CI dispatch on the candidate branch; their creation does not itself trigger the normal PR workflow.
 Hosted CI runs the full suite in 20 duration-balanced shards per Node version. A separate, non-required

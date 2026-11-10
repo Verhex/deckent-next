@@ -6,7 +6,7 @@ import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/c
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { Window, WindowOpeningContext, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { awaitingDeliveryTargets, consentMatches, deliveredTargets, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
-  type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from './contract.js';
+  type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from '#surfaces/core/delivery-port/index.js';
 import WINDOW from './window.json' with { type: 'json' };
 
 /** Catalog words of the delivery window (terminal.delivery.*); `next` maps a typed error code to its next-step sentence. */
@@ -40,7 +40,7 @@ export interface DeliveryWindowLabels {
   readonly diffListHints: string; readonly diffHints: string; readonly diffHeader: string; readonly diffUnavailable: string;
   readonly diffEmpty: string; readonly diffHidden: string; readonly diffPosition: string;
 }
-export type DeliveryOpening = 'foreground' | 'background';
+type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
 type Stage = Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
   | Readonly<{ kind: 'queue' | 'queue-working' }> | Readonly<{ kind: 'queue-confirm'; view: Omit<QueueConsent, 'capability'>; summaries?: readonly (DeliverySummary | null)[]; resolve: (yes: boolean) => void }>
@@ -65,7 +65,7 @@ interface Entry {
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
 
-export interface DeliveryWindowsInput {
+interface DeliveryWindowsInput {
   readonly port: TerminalDeliveryPort | undefined; readonly labels: DeliveryWindowLabels | undefined;
   /** This session's admitted Runs as last observed; only these open a window by themselves. */
   readonly runs: readonly RunView[];
@@ -457,4 +457,3 @@ function verifyLines(verify: Verify | null, preview: DeliveryPreview, delivered:
 export function shellWord(value: string): string {
   return /^[A-Za-z0-9._/:@%+=,-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
-export type DeliveryWindows = ReturnType<typeof useDeliveryWindows>;

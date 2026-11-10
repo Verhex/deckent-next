@@ -1,22 +1,22 @@
 import { createHash } from 'node:crypto';
-import { UninstallRecovery, FileEffectStore, acquireLedgerLock, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore,
+import { UninstallRecovery, FileEffectStore, withExclusiveFileLock, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore,
   localPrincipalPeer, attestLocalInteractiveTerminal, type LedgerLock } from '#adapters/index.js';
-import { ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
+import { verifiedPrincipal, ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
   UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
-import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, resolveGlobalConfigReadPath, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { userInfo } from 'node:os';
-import { uninstallRecoveryDirectory, installationScopes, prepareUninstallBackup, writeUninstallTombstone, completeUninstall, observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { withVerifiedUninstallSet } from '#composition/core/backup/index.js';
+import { uninstallRecoveryDirectory, installationScopes, uninstallBackupSet, archiveUninstallMembers, bindFinalSnapshot, writeUninstallTombstone, completeUninstall, observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
 export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: UninstallPlan, approved: string, principal: VerifiedPrincipal,
   scopeId: string, scopeIds: readonly string[], options: ConfigLoadOptions, work: (admission: UninstallAdmission) => Promise<T>, held?: LedgerLock): Promise<T> {
   const path = await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock');
   // A running service holds this custody: it is stopped by the plan's governed step, so a holder now is a service that came back (S4b).
-  const lock = held ?? (() => { try { return acquireLedgerLock(path); } catch (error) { if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
-    throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { reason: 'new-instance-holds-ledger', unit: plan.service.unit ?? '', command: plan.service.command ?? '' } }); } })();
+  const lock = held ?? await withExclusiveFileLock(path, { waitMs: 0, pollMs: 0 }) ?? (() => {
+    throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { reason: 'new-instance-holds-ledger', unit: plan.service.unit ?? '', command: plan.service.command ?? '' } }); })();
   try {
     // Fresh identity/layout/target observations after custody and before the first journal write.
     const current = await configuredUninstallInventory(config, plan.policyRevision, scopeIds, options), directory = uninstallRecoveryDirectory(config, options.env ?? process.env);
@@ -27,7 +27,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     const clock = new SystemTrustedClock(), peer = localPrincipalPeer();
     const sessions = await LocalOsSessionAuthority.create(scopeIds, config.approvals.sessionTtlMs, clock, peer ? { pid: peer.pid, uid: peer.uid } : undefined);
     sessions.requireInteractiveTerminal();
-    const policy = createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes);
+    const policy = contextPolicySource({ layout: config.productLayout, config });
     const path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
     // Every ledger-recorded and policy-named scope is quiescent and decided again under custody: a deny or legal hold is never skipped.
     const affected = installationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopeIds);
@@ -46,15 +46,19 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
       const app = new EffectApplication(catalog, { resolve: kind => [current.target, ...current.targets].find(target => target.kind === kind) ?? null }, store, broker,
         sessions, new OperationPolicyAuthorization(policy), clock, { surface: 'authority', producer: PRINCIPAL_EFFECT_PRODUCER });
-      const decider = new ApprovalApplication(approvals.store, { verify: async () => principal }, sessions, policy, integrity, clock,
+      const decider = new ApprovalApplication(approvals.store, verifiedPrincipal(principal), sessions, policy, integrity, clock,
         'local-terminal-card', config.approvals.pageSize, undefined, { catalog, surface: 'authority' },
         { producers: resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, undefined,
           { scopeId, principal, policyRevision: plan.policyRevision, atMs: clock.sample().wallMs }, event => { auditApplication.record(event); }),
           interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
       let passphrase = '', backup = plan.backup;
       const close = () => { if (!authorityClosed) { audit?.close(); audit = undefined; approvals.close(); authorityClosed = true; } };
+      // KG11 F3: each set is created and verified by the governed backup application, under the policy loaded now; the adapter only binds members.
+      const globalPath = await resolveGlobalConfigReadPath(options.env, options.platform), contents = { config, plan, approved, members: current.portable, globalPath, env: options.env };
+      const backupSet = async (set: string, actor: VerifiedPrincipal) => ({ set, scopeId, policy: await policy.load(), authority: { principal: actor, installationId: plan.installation.id, integrity }, passphrase, globalPath });
       current.dataTarget.prepare(async () => { close();
-        const final = await prepareUninstallBackup(config, plan, scopeId, { ...principal, scopeIds: affected }, await policy.load(), integrity, current.portable, passphrase, true, options, approved); backup = { ...plan.backup, destination: final.set }; return final.snapshot!;
+        const set = uninstallBackupSet(plan, 'final'), actor = { ...principal, scopeIds: affected };
+        const snapshot = await withVerifiedUninstallSet(config, await backupSet(set, actor), verified => bindFinalSnapshot(verified, contents, passphrase, actor)); backup = { ...plan.backup, destination: set }; return snapshot;
       });
       return await work({ scopeId, recoveryLocation,
         effects: approvedUninstallEffects(plan, scopeId, app, decider),
@@ -72,7 +76,8 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
           }
         }, verifiedBackup: () => backup,
         async prepareBackup(phrase) { if (!phrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED'); passphrase = phrase;
-          const initial = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, phrase, false, options, approved); backup = { ...plan.backup, destination: initial.set }; },
+          const set = uninstallBackupSet(plan, 'initial');
+          await withVerifiedUninstallSet(config, await backupSet(set, principal), verified => archiveUninstallMembers(verified, contents, phrase)); backup = { ...plan.backup, destination: set }; },
         async approvePlan() { /* The immutable witnessed plan is retained; each command is decided through the broker above. */ },
         async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); passphrase = ''; // R11, F8: one completion owner (an admitted noop too)
           await (['completed', 'noop'].includes(result.status) ? completeUninstall(config, plan, options.env ?? process.env, () => recovery.finish(result), lock) : recovery.finish(result)); },

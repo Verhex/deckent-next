@@ -9,7 +9,7 @@ import { z } from 'zod';
  * objects stay in the clone, so it is a context-cost measure, never confidentiality.
  */
 const SEGMENT = /^[A-Za-z0-9_@+-][A-Za-z0-9._@+-]{0,127}$|^\.[A-Za-z0-9_@+-][A-Za-z0-9._@+-]{0,126}$/u;
-export const workspaceHiddenPathSchema = persistedString(z.string().min(1).max(256)).refine(value => {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const workspaceHiddenPathSchema = persistedString(z.string().min(1).max(256)).refine(value => {
   const anchored = value.startsWith('/'), parts = (anchored ? value.slice(1) : value).split('/');
   return (anchored || parts.length === 1) && parts.every(part => SEGMENT.test(part));
 });

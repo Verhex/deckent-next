@@ -15,6 +15,7 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
   }
   const root = context.root ?? process.cwd(), options = { ...(context.env ? { env: context.env } : {}), heal: false }, requestedScope = values.get('--scope');
   const locale = resolveLocale(values.get('--lang'), context.env, await loadConfigLanguage(root, options)); context.onLocale?.(locale);
+  const interaction = { json: switches.has('--json') };
   const apply = switches.has('--apply'), preview = switches.has('--preview'), revoke = values.get('--revoke') ?? values.get('--lease-revoke') ?? values.get('--detach') ?? values.get('--restore');
   const lifecycle = switches.has('--unregister') || switches.has('--relocate') || !!revoke;
   if ([values.has('--revoke'), values.has('--lease-revoke'), values.has('--detach'), values.has('--restore'), switches.has('--unregister'), switches.has('--relocate')].filter(Boolean).length > 1) throw ErrorRegistry.createError('CLI_USAGE');
@@ -24,13 +25,13 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
   const terminal = switches.has('--register') && !requestedScope ? (await loadConfig(root, options))['terminal'] as { scopeId?: unknown } | undefined : undefined;
   const scopeId = requestedScope ?? TERMINAL_SCOPE_ID_SCHEMA.safeParse(terminal?.scopeId).data;
   const registration = switches.has('--register') && apply && !values.has('--expect') && scopeId
-    ? await context.projectAttachment(root, { action: 'register-preview', scopeId }, options) as { planDigest: string } : null;
+    ? await context.projectAttachment(root, { action: 'register-preview', scopeId }, options, interaction) as { planDigest: string } : null;
   const parsed = projectAttachmentCommandSchema.safeParse(switches.has('--unregister') ? { action: 'unregister' } : switches.has('--relocate') ? { action: 'relocate', scopeId } : revoke ? { action: values.has('--restore') ? 'restore' : values.has('--detach') ? 'detach' : values.has('--lease-revoke') ? 'lease-revoke' : 'revoke', projectId: revoke, ...(values.has('--restore') ? { expect: values.get('--expect') } : {}) }
     : { action: switches.has('--register') ? apply ? 'register' : 'register-preview' : apply ? 'apply' : 'preview', scopeId,
       ...(apply ? { expect: values.get('--expect') ?? registration?.planDigest, ...(!switches.has('--register') ? { commandId: values.get('--command-id') } : {}) } : {}) });
   if (!parsed.success) throw ErrorRegistry.createError('CLI_USAGE');
   if (apply) {
-    if (cliMode(context).reason !== 'tty') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'project.attach' } });
+    if (cliMode(context, switches.has('--json')).reason !== 'tty') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'project.attach' } });
     const actionLabel = { register: t('setup.attachment.register', {}, locale), apply: t('setup.attachment.apply', {}, locale),
       revoke: t('setup.attachment.revoke', {}, locale), 'lease-revoke': t('setup.attachment.leaseRevoke', {}, locale), detach: t('setup.attachment.detach', {}, locale),
       unregister: t('setup.attachment.unregister', {}, locale), relocate: t('setup.attachment.relocate', {}, locale), restore: t('setup.attachment.restore', {}, locale) };
@@ -42,7 +43,7 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
     if (answer !== 'yes') return;
   }
-  const result = await context.projectAttachment(root, parsed.data, options);
+  const result = await context.projectAttachment(root, parsed.data, options, interaction);
   emit(result, { json: switches.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), render: value =>
     `${apply ? t('setup.attach.saved', {}, locale) : t('setup.attach.preview', {}, locale)}\n${terminalSafeText(JSON.stringify(value, null, 2))}` });
 }

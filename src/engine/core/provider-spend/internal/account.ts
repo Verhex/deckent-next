@@ -40,7 +40,7 @@ export type ProviderSpendAccount = z.infer<typeof accountSchema>;
 export type ProviderSpendReservation = Omit<z.infer<typeof reservationSchema>, 'measurement'> & {
   readonly measurement: ProviderSpendMeasurement | null;
 };
-export type ProviderSpendSettlement = z.infer<typeof settlementSchema> & { readonly measurement?: ProviderSpendMeasurement };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderSpendSettlement = z.infer<typeof settlementSchema> & { readonly measurement?: ProviderSpendMeasurement };
 
 export function providerSpendEvidenceDigest(input: unknown): string {
   const parsed = immutableJsonObjectSchema.safeParse(input);

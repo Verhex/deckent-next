@@ -1,11 +1,10 @@
 import { t, type Locale } from '#platform/index.js';
-import type { MonitorInstall, MonitorMap } from '#engine/index.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import { modelInvocabilityText, type MonitorInstall, type MonitorMap } from '#engine/index.js';
 import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 
 /** The text markers of one view: ✓ ready, ○ off/unused, ! needs attention, → next action (ASCII `+ o ! ->`). */
-export interface MonitorMarkers { readonly ok: string; readonly off: string; readonly warn: string; readonly next: string; readonly sep: string }
+interface MonitorMarkers { readonly ok: string; readonly off: string; readonly warn: string; readonly next: string; readonly sep: string }
 type Group = 'execution' | 'models' | 'tools' | 'admin' | 'other';
 /** Policy resource kinds → the four permission groups a person reads (PB-MON-UX); a kind added later lands in "other", never hidden. */
 const RESOURCE_GROUPS: Readonly<Record<string, Group>> = {

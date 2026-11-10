@@ -66,6 +66,7 @@ describe.skipIf(process.platform !== 'linux')('worker image build context and bo
     const shellQuote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
     const fakeDocker = (tags: string, fail = false) => writeFile(join(bin, 'docker'), `#!/bin/sh
 printf '%s\\n' "$*" >> ${shellQuote(log)}
+printf '%s %s\\n' "$1" "\${DOCKER_CONTEXT-}\${DOCKER_TLS_VERIFY-}\${DOCKER_CERT_PATH-}" >> ${shellQuote(log + '.env')}
 case "$*" in
   'context inspect --format {{json .Endpoints.docker.Host}}') printf '%s\\n' '"unix:///fixture-daemon"' ;;
   '--host unix:///fixture-daemon image ls deckent/worker-base --format {{.Tag}}') exit 0 ;;
@@ -75,7 +76,7 @@ case "$*" in
 esac
 `, { mode: 0o700 });
     const input = { packageRoot, timeoutMs: 5000, outputBytes: 4096,
-      env: { PATH: bin, HOME: parent, SECRET_TOKEN: 'never-forward' } };
+      env: { PATH: bin, HOME: parent, SECRET_TOKEN: 'never-forward', DOCKER_CONTEXT: 'c', DOCKER_TLS_VERIFY: '1', DOCKER_CERT_PATH: '/certs' } };
     await fakeDocker('r3-20260922\nr4-20260930\nlatest\nr4-malformed');
     // The fake docker must be executable where the test writes it. A noexec tmpdir (the verify container's hardened /tmp) is a missing
     // environment capability, not a product defect: assert the real refusal first, then report a typed not-run; never loosen the mount.
@@ -91,6 +92,8 @@ esac
     expect(calls).toEqual(['context inspect --format {{json .Endpoints.docker.Host}}',
       '--host unix:///fixture-daemon image ls deckent/worker --format {{.Tag}}',
       '--host unix:///fixture-daemon image ls deckent/worker-base --format {{.Tag}}']);
+    // KG2 Q1.5: the context lookup sees the selectors; a pinned `--host` never does (docker 29.1.3 fails to start on an inherited TLS path).
+    expect((await readFile(log + '.env', 'utf8')).split('\n').filter(Boolean)).toEqual(['context c1/certs', '--host ', '--host ']);
     await fakeDocker('r9-20260101\nr10-20251231\nr4-20260930');
     await expect(readWorkerImageHeldVersion(input)).resolves.toBe('r10-20251231');
     await fakeDocker('latest');
@@ -100,7 +103,11 @@ esac
     calls = (await readFile(log, 'utf8')).trim().split('\n');
     expect(calls).toHaveLength(11);
     expect(calls.every(args => args.startsWith('context inspect ') || args.startsWith('--host unix:///fixture-daemon image ls '))).toBe(true);
-    expect((await readdir(parent)).sort()).toEqual(['bin', 'docker-calls.jsonl']);
+    expect((await readdir(parent)).sort()).toEqual(['bin', 'docker-calls.jsonl', 'docker-calls.jsonl.env']);
+    // A tcp context endpoint is never pinned: the --host calls drop the TLS selectors it would need (security review of the ENV card, as choices.ts).
+    await writeFile(join(bin, 'docker'), `#!/bin/sh\nprintf '%s\\n' "$*" >> ${shellQuote(log)}\n[ "$1" = context ] && printf '%s\\n' '"tcp://daemon.example:2376"'\nexit 0\n`, { mode: 0o700 });
+    await expect(readWorkerImageHeldVersion(input)).rejects.toMatchObject({ code: 'WORKER_IMAGE_VERSION_CHECK_FAILED' });
+    expect((await readFile(log, 'utf8')).trim().split('\n').slice(11)).toEqual(['context inspect --format {{json .Endpoints.docker.Host}}']);
   });
   it('retains timeout precedence and refuses arbitrary builder codes, with bounded sanitized diagnostics', async () => {
     const input = { packageRoot, timeoutMs: 1_200_000, outputBytes: 4096, env: { PATH: '/usr/bin', SECRET_TOKEN: 'never' } };

@@ -4,7 +4,7 @@ import { persistedString, counterSchema } from '#domain/core/primitives/index.js
 /** f5: a refused host name as asked (DNS grammar, lower case), never a port, path or payload. One call's gateway summary: tunnels, refusals and refused
  * names with counts (`other`: no valid name or past the gateway's `refusedHostsMax`). */
 export const HEADLESS_EGRESS_HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u;
-export const headlessEgressReasonSchema = z.enum(['allowlist', 'dns', 'non-public', 'client-hello', 'byte-budget', 'gateway-closed', 'upstream', 'unknown']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const headlessEgressReasonSchema = z.enum(['allowlist', 'dns', 'non-public', 'client-hello', 'byte-budget', 'gateway-closed', 'upstream', 'unknown']);
 export type HeadlessEgressReason = z.infer<typeof headlessEgressReasonSchema>;
 const reasonCounts = z.record(z.string().refine(key => headlessEgressReasonSchema.safeParse(key).success), counterSchema);
 export const headlessEgressSchema = z.strictObject({ connected: counterSchema, refused: counterSchema, hosts: z.record(z.string().regex(HEADLESS_EGRESS_HOST), counterSchema),

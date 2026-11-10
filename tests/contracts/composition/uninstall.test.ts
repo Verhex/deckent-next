@@ -15,8 +15,7 @@ const KEEP = { schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: f
 const MARKERS = [...getConfigFieldDefault('cli').agentEnvironment, 'CI'];
 beforeEach(() => { for (const name of MARKERS) vi.stubEnv(name, ''); }); afterEach(() => { vi.unstubAllEnvs(); });
 
-it('previews real recorded global caches without writing or exposing an installation name, and always preserves project/unknown global data', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: installation identity positive requires POSIX binding'); return; }
+it.skipIf(process.platform !== 'linux')('previews real recorded global caches without writing or exposing an installation name, and always preserves project/unknown global data [verify-not-run: platform custody unavailable]', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-preview-'));
   try {
     const project = join(root, 'project'), data = join(root, 'global');
@@ -70,11 +69,14 @@ vi.mock('node:fs/promises', async original => { const actual = await original<ty
     // `at`: the process dies at the first unlink whose path names this text (one member of the final tail), once.
     if (tail.left !== null && tail.left-- <= 0 || tail.at && String(path).includes(tail.at) && !(tail.at = null)) throw Object.assign(new Error('crash'), { code: 'EIO' });
     return actual.unlink(path); } }; });
+// R2: each recovery-key derivation (64 MiB scrypt) is one set verification or one envelope; the count pins how often a set is verified.
+const kdf = vi.hoisted(() => ({ calls: 0 }));
+vi.mock('node:crypto', async original => { const actual = await original<typeof import('node:crypto')>();
+  return { ...actual, scrypt: (...args: Parameters<typeof actual.scrypt>) => { kdf.calls++; return actual.scrypt(...args); } }; });
 /** A member still there for a resumed tail: under its name, or moved aside by a removal the crash interrupted (resumed, never left as a stray). */
 const unremoved = async (path: string) => !!await lstat(path).catch(() => null) || (await readdir(dirname(path)).catch(() => [] as string[])).some(name => name.startsWith(`.${basename(path)}.`) && name.endsWith('.removing'));
 
-it('applies the confirmed real temp cache through the production broker and generic store, then replays without another removal', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: production admission uses Linux custody'); return; }
+it.skipIf(process.platform !== 'linux')('applies the confirmed real temp cache through the production broker and generic store, then replays without another removal [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-admission-'));
   try {
@@ -138,8 +140,7 @@ it('applies the confirmed real temp cache through the production broker and gene
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('purges only the exact backed-up authority files, keeps every unrecorded or shared file, reconciles an interrupted final tail without deleting again and restores through deckent backup restore', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('purges only the exact backed-up authority files, keeps every unrecorded or shared file, reconciles an interrupted final tail without deleting again and restores through deckent backup restore [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { verifyBackupSet } = await import('#adapters/core/backup-store/index.js');
   const { uninstallRecoveryDirectory } = await import('#adapters/core/installation-removal/index.js');
@@ -180,10 +181,11 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     expect(cancelled.status).toBe('cancelled'); expect(await lstat(ledger)).toBeTruthy();
     await expect(lstat(cancelled.backup.destination!)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
-    let cards = 0;
+    let cards = 0; kdf.calls = 0;
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'purge', planDigest: plan.planDigest }, {
       backupPassphrase: async () => phrase, confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; },
     }, options);
+    expect(kdf.calls).toBe(6); // R2: initial and final set, each created (encrypt + staging verify) and verified once with audit
     expect(result.status).toBe('completed'); expect(cards).toBe(1); expect(result.backup.destination).not.toBe(cancelled.backup.destination);
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     for (const path of strays) expect(await readFile(path, 'utf8')).toBe('FOREIGN KEEP');
@@ -191,6 +193,8 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
     const finalSet = result.backup.destination!, verified = await verifyBackupSet(finalSet, phrase, getConfigFieldDefault('installation').packageMeasurement);
     expect(verified.state.installationId).toBe(plan.installation.id); verified.close();
+    // M14: both uninstall sets' audited create and verify (intent + succeeded each) stay in the persisted folder beside the sets (no rename).
+    expect(await readdir(join(finalSet, '..', 'backup-audit'))).toHaveLength(8);
     const replay = await previewConfiguredUninstall(project, ALL, options);
     expect(replay.items.every(item => item.action === 'keep')).toBe(true);
     expect((await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'replay', planDigest: replay.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
@@ -223,8 +227,7 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('keeps purge closed before any backup or hold when a legal hold names a company scope no allow lists, and when recorded scopes cannot be read', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('keeps purge closed before any backup or hold when a legal hold names a company scope no allow lists, and when recorded scopes cannot be read [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { DatabaseSync } = await import('node:sqlite');
   const { uninstallRecoveryDirectory } = await import('#adapters/core/installation-removal/index.js');
@@ -260,8 +263,7 @@ it('keeps purge closed before any backup or hold when a legal hold names a compa
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('blocks the whole purge before any backup, hold or cache removal when an authority file is unsafe or relocated, naming its exact path', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('blocks the whole purge before any backup, hold or cache removal when an authority file is unsafe or relocated, naming its exact path [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { uninstallRecoveryDirectory } = await import('#adapters/core/installation-removal/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-purge-unsafe-'));
@@ -305,8 +307,7 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('deletes an in-project installation (K1) after archiving every owned file, but keeps Git-tracked and unknown files (and so the folder), with the archive outside the project', async () => {
-  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: K1 in-project purge needs Linux custody and /usr/bin/git'); return; }
+it.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/git'))('deletes an in-project installation (K1) after archiving every owned file, but keeps Git-tracked and unknown files (and so the folder), with the archive outside the project [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { verifyBackupSet } = await import('#adapters/core/backup-store/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-purge-in-project-'));
@@ -358,8 +359,9 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     const withCache = await previewConfiguredUninstall(project, ALL, options); await chmod(report, 0o000);
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'archive-fails', planDigest: withCache.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options)).rejects.toThrow();
     await chmod(report, 0o600); expect(await readFile(cached, 'utf8')).toBe('CACHE'); expect(await readFile(report, 'utf8')).toBe('CACHE');
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: (await previewConfiguredUninstall(project, ALL, options)).planDigest },
-      { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    const approved = (await previewConfiguredUninstall(project, ALL, options)).planDigest; kdf.calls = 0;
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: approved }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    expect(kdf.calls).toBe(10); // R2: per set create 2, audited verify 1 and the archive companion's encrypt + verify 2; the held set is not verified again
     expect(result.status).toBe('completed');
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');
@@ -374,8 +376,7 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('keep-work archives conversation data and retires the folder; ALL force preserves unproven workspaces and backup restore brings owned files back', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('keep-work archives conversation data and retires the folder; ALL force preserves unproven workspaces and backup restore brings owned files back [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-archive-'));
@@ -434,8 +435,7 @@ it('keep-work archives conversation data and retires the folder; ALL force prese
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('resumes an interrupted final tail only through a second card that lists the remaining members, verifies the final set with the passphrase and decides the delete permission again', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('resumes an interrupted final tail only through a second card that lists the remaining members, verifies the final set with the passphrase and decides the delete permission again [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-purge-resume-'));
   try {
@@ -480,8 +480,7 @@ it('resumes an interrupted final tail only through a second card that lists the 
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('purges a tree only through its owner\'s signed records that the final set restores; unsigned, renamed and unready trees stay and are listed', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('purges a tree only through its owner\'s signed records that the final set restores; unsigned, renamed and unready trees stay and are listed [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
   const { verifyAuditRecord } = await import('#engine/index.js');
@@ -539,8 +538,7 @@ async function projectInstallation(root: string) {
   return { project, local, options, phrase, install };
 }
 
-it('fails closed when a kept policy file changed before an interrupted keep-work tail resumes: nothing more is deleted, the tail stays unknown', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('fails closed when a kept policy file changed before an interrupted keep-work tail resumes: nothing more is deleted, the tail stays unknown [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-tail-authority-'));
   try {
@@ -566,16 +564,16 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
     await expect(resume()).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
     for (const path of remaining) expect(await unremoved(path)).toBe(true);
     // R11: with the recorded policy back the resumed tail completes like the normal step: the retired marker is there and the service refuses to start.
-    await writeFile(join(local, 'policy.json'), policy, { mode: 0o600 });
+    await writeFile(join(local, 'policy.json'), policy, { mode: 0o600 }); kdf.calls = 0;
     expect(await resume()).toMatchObject({ status: 'completed' });
+    expect(kdf.calls).toBe(2); // R2: the final set verified once for the resumed tail, its archive companion with that handle
     for (const path of remaining) expect(await unremoved(path)).toBe(false);
     const { assertNotRetired } = await import('#platform/index.js');
     await expect(assertNotRetired(local)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' });
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('R13: an unknown result recorded in a scope the configuration no longer names stays under an all-scopes company restriction: force cannot delete data', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('R13: an unknown result recorded in a scope the configuration no longer names stays under an all-scopes company restriction: force cannot delete data [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { DatabaseSync } = await import('node:sqlite');
   const root = await mkdtemp(join(tmpdir(), 'deckent-managed-history-'));
@@ -598,8 +596,7 @@ it('R13: an unknown result recorded in a scope the configuration no longer names
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('F6: queued-withdraw preflight writes nothing, denies without the owner grant, and cancellation uses the queue owner after approval', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('F6: queued-withdraw preflight writes nothing, denies without the owner grant, and cancellation uses the queue owner after approval [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { DatabaseSync } = await import('node:sqlite');
   const { fixtureDockerRegistry } = await import('../support/execution-registry.js');
@@ -689,8 +686,7 @@ it('F6: queued-withdraw preflight writes nothing, denies without the owner grant
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('F8: an admitted keep-data whose only cache vanished after the card still completes through the common owner: the folder is retired', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('F8: an admitted keep-data whose only cache vanished after the card still completes through the common owner: the folder is retired [verify-not-run: platform custody unavailable]', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-admitted-noop-'));
   try {
     const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
@@ -708,8 +704,7 @@ it('F8: an admitted keep-data whose only cache vanished after the card still com
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('delete everything removes the bridges init wrote (a file init created whole, else only its line) and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed', async () => {
-  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: bridge purge needs Linux custody and /usr/bin/git'); return; }
+it.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/git'))('delete everything removes the bridges init wrote (a file init created whole, else only its line) and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { projectVaultDirectory, admitProjectVault, directoryLocation, createWorkspaceScope, WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } = await import('#adapters/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-bridges-'));
@@ -815,8 +810,7 @@ it('delete everything removes the bridges init wrote (a file init created whole,
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('F7: ALL + force preserves and reports a rejected real lease and clone while backing up and removing verified pending work', async () => {
-  if (process.platform !== 'linux') return;
+it.skipIf(process.platform !== 'linux')('F7: ALL + force preserves and reports a rejected real lease and clone while backing up and removing verified pending work [verify-not-run: Linux custody unavailable]', async () => {
   const { GitWorkspaceBroker, FileArtifactStore, openSqliteAttemptStore } = await import('#adapters/index.js');
   const { DispatchApplication, TaskEvaluationApplication } = await import('#engine/index.js');
   const { admitRunAttempts } = await import('../support/admission.js'), { custodyProfile, custodyOrDockerProfiles } = await import('../support/custody.js');

@@ -5,10 +5,10 @@ import { verifiedPrincipalSchema, isMcpPrincipal } from '#domain/core/principal/
 import { includes, policySchema, principalGrants, PolicyError, type Policy, type PolicyRule } from './schema.js';
 export { includes, policySchema, PolicyError } from './schema.js';
 export type { Policy } from './schema.js';
-/** Role is never a request field: authority comes from the principal's bindings in trusted policy data, not from the caller. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Role is never a request field: authority comes from the principal's bindings in trusted policy data, not from the caller. */
 export const policyRequestSchema = z.strictObject({ principal: verifiedPrincipalSchema, scopeId: identitySchema, action: identitySchema,
   resource: z.strictObject({ kind: identitySchema, id: identitySchema }).readonly() }).readonly();
-export type PolicyRequest = z.infer<typeof policyRequestSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type PolicyRequest = z.infer<typeof policyRequestSchema>;
 export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED' | 'AI_NON_DELEGABLE'; ruleId?: string }>;
 function matches(rule: PolicyRule, request: PolicyRequest) {
   return includes(rule.actions, request.action) && includes(rule.scopes, request.scopeId) && rule.resource.kind === request.resource.kind
@@ -16,19 +16,22 @@ function matches(rule: PolicyRule, request: PolicyRequest) {
       principal.issuer === request.principal.issuer && principal.subject === request.principal.subject));
 }
 /** A deep-frozen document (every policy schema level is readonly, so a parsed document is one) is validated once per object: one monitor
- * snapshot evaluates the same loaded document for hundreds of attempts. Any other input is validated on every call, as before. */
+ * snapshot evaluates the same loaded document for hundreds of attempts. Any other input is validated on every call. */
 const validated = new WeakMap<object, Policy>(), unfrozen = new WeakSet<object>();
 const deepFrozen = (value: unknown): boolean => value === null || typeof value !== 'object' || (Object.isFrozen(value) && Object.values(value).every(deepFrozen));
-function parsePolicy(input: unknown): ReturnType<typeof policySchema.safeParse> {
+export function safePolicy(input: unknown): ReturnType<typeof policySchema.safeParse> {
   const object = input !== null && typeof input === 'object' ? input : null, known = object ? validated.get(object) : undefined;
   if (known) return { success: true, data: known };
   const parsed = policySchema.safeParse(input);
   if (object && parsed.success && !unfrozen.has(object)) { if (deepFrozen(object)) validated.set(object, parsed.data); else unfrozen.add(object); }
   return parsed;
 }
+export function asPolicy(input: unknown): Policy {
+  const parsed = safePolicy(input); if (!parsed.success) throw parsed.error; return parsed.data;
+}
 /** Order is fixed and version-independent: scope → deny/restriction → require-approval → allow → NO_GRANT. Roles only add candidates. */
-export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDecision {
-  const parsed = parsePolicy(input); const checked = policyRequestSchema.safeParse(requestInput);
+export function evaluatePolicy(input: Policy, requestInput: unknown): PolicyDecision {
+  const parsed = safePolicy(input); const checked = policyRequestSchema.safeParse(requestInput);
   if (!parsed.success || !checked.success) throw new PolicyError();
   const policy = parsed.data; const request = checked.data;
   if (!request.principal.scopeIds.includes(request.scopeId)) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'SCOPE' });
@@ -59,7 +62,7 @@ export function matchingRuleIds(input: unknown, requestInput: unknown, effect: '
  * eligibility to a require-approval it does not own.
  */
 export function modeEligibleApproval(input: unknown, requestInput: unknown): readonly string[] | null {
-  if (evaluatePolicy(input, requestInput).decision !== 'require-approval') return null;
+  if (evaluatePolicy(asPolicy(input), requestInput).decision !== 'require-approval') return null;
   const policy = policySchema.parse(input), request = policyRequestSchema.parse(requestInput);
   const required = principalGrants(policy, request.principal).filter(rule => rule.effect === 'require-approval' && matches(rule, request));
   return required.length > 0 && required.every(rule => rule.modeEligible === true) ? Object.freeze(required.map(rule => rule.id)) : null;

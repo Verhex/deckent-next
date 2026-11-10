@@ -11,7 +11,7 @@ import { loadConfiguredScopeContext, loadConfiguredInstallationIdentity } from '
 
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 /** What the project credential path needs of a verified scope context (the invocation and scoped-request contexts both carry it). */
-export type ProjectSecretContext = Pick<ScopeContext, 'config' | 'layout' | 'installationId' | 'projectId'>;
+type ProjectSecretContext = Pick<ScopeContext, 'config' | 'layout' | 'installationId' | 'projectId'>;
 const lockMs = (context: ProjectSecretContext) => context.config.configFile.writeLockTimeoutMs;
 const envOf = (options: ConfigLoadOptions) => ({ env: options.env ?? process.env, platform: options.platform ?? process.platform });
 const globalRoot = (options: ConfigLoadOptions) => {

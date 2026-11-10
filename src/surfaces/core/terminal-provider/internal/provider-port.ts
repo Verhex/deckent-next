@@ -1,12 +1,11 @@
 import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
-import { DeckentError, ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { isCodedError, DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
-import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
+import { configuredInvocationProfiles, buildInferenceServingPlan, modelInvocabilityText, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost, ProviderWindowPort } from './context.js';
 import { subscriptionPort } from './subscription-port.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { providerDisplayName, providerKindLabel } from './provider-label.js';
 import { subscriptionReadinessPort, subscriptionReadinessText } from './readiness.js';
 import presentation from './presentation.json' with { type: 'json' };
@@ -39,7 +38,7 @@ function endpointWord(reason: string, locale: Locale): string {
   }
 }
 const credentialRefs = (config: Record<string, unknown>, scopeId: string): readonly string[] => {
-  const profiles = (config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [];
+  const profiles = configuredInvocationProfiles(config);
   return profiles.flatMap(profile => {
     const value = profile as { scopeId?: unknown; adapter?: { definition?: { authentication?: { credentialRef?: unknown } } } };
     const ref = value.adapter?.definition?.authentication?.credentialRef;
@@ -153,7 +152,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     try { result = await host.connectModel!(root, command, options); } catch (error) {
       pendingConnections.delete(pendingKey);
       // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
-      if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
+      if (isCodedError(error, 'SECRET_GRANT_REQUIRED')) throw error;
       return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error), error instanceof DeckentError ? error.params?.['connectPhase'] : undefined); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
     }
     if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
@@ -215,7 +214,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       let names: readonly string[] | null = null;
       if (host.listSecretNames) {
         try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
-        catch (error) { notes.push((error as { code?: unknown } | null)?.code === 'SECRET_STORE_UNSUPPORTED' ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
+        catch (error) { notes.push(isCodedError(error, 'SECRET_STORE_UNSUPPORTED') ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
       }
       let named: readonly string[] = [], served: string | null = null;
       try {
@@ -224,12 +223,11 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         // The installation's own inference server (inference_serving), when configured: the first address offered (owner 2026-10-08, D3).
         try { const profile = readInferenceServingProfile(config); served = profile ? buildInferenceServingPlan(profile).openaiBaseUrl : null; } catch { served = null; }
       } catch (error) { notes.push(t('tui.provider.note.profilesUnread', { reason: errorText(error) }, locale)); }
-      const catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
       /** The kind's address list: the configured server, the kind's known addresses (adapter data), the provider's default; one row per base. */
       const choicesOf = (kind: ProviderConnectKindView) => {
         if (!kind.endpointEditable) return [];
         const rows = [...(served ? [{ id: 'configured', label: t('tui.provider.endpoint.choice.configured', {}, locale), url: served }] : []),
-          ...kind.endpointChoices.map(choice => ({ id: choice.id, label: catalog[choice.labelKey] ?? choice.id, url: choice.url })),
+          ...kind.endpointChoices.map(choice => ({ id: choice.id, label: messageText(choice.labelKey, locale) ?? choice.id, url: choice.url })),
           ...(kind.endpointDefault ? [{ id: 'default', label: t('tui.provider.endpoint.choice.default', {}, locale), url: kind.endpointDefault }] : [])];
         const seen = new Set<string>();
         return rows.flatMap(row => {
@@ -269,7 +267,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const detail = kind.terminalTextChat ? join(t('tui.provider.login.ownSubscriptionNote', {}, locale)) : stateDetail;
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
-          grantBlocked = errorText(error); grantRequired = (error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED';
+          grantBlocked = errorText(error); grantRequired = isCodedError(error, 'SECRET_GRANT_REQUIRED');
         } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
@@ -296,9 +294,10 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const entry = channel?.access === 'allowed' ? channel.models.find(item => item.modelId === model.nativeId) : undefined;
         return entry !== undefined && entry.activation?.state !== 'active';
       };
-      const rows = await Promise.all((reading?.models ?? []).map(async model => { const login = subscriptionReadiness.recognizes(model.reference), closed = login && off(model);
-        return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(await subscriptionReadiness.inspect('chat', model.reference), locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
-        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; }));
+      const open = (reading?.models ?? []).filter(model => subscriptionReadiness.recognizes(model.reference) && !off(model)), readiness = await subscriptionReadiness.inspectMany('chat', open.map(model => model.reference));
+      const rows = (reading?.models ?? []).map(model => { const login = subscriptionReadiness.recognizes(model.reference), closed = login && off(model);
+        return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(readiness[open.indexOf(model)]!, locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
+        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; });
       // R3c: one note per subscription login (its models share the readiness words); a model whose words differ keeps its own; other models one note each.
       const groups = new Map<string, typeof rows>();
       for (const row of rows) { const key = row.login ? `${row.model.reference.providerId}\n${row.text}` : referenceKey(row.model.reference); groups.set(key, [...groups.get(key) ?? [], row]); }

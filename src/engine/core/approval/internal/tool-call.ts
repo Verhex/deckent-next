@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
+import { approvalRequestSchema, approvalSubject, requiresPersonProposalDecision, encodeCommandProjection, isEffectOpen, samePrincipalRef, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
   type EffectCommand, type EffectIntentApproval, type VerifiedPrincipal } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
+import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, agentToolApprovalLeft, approvalActorRef, expireApproval, sealApproval, verifyApproval, witnessedPersonDecision } from './integrity.js';
 import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
@@ -22,13 +22,13 @@ export const agentToolCallActionDigest = (scopeId: string, subject: ToolCallSubj
 export function requestAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, input: { readonly scopeId: string;
   readonly subject: ToolCallSubject; readonly requester: ApprovalActor; readonly policyRevision: string; readonly summary: string;
   readonly createdAt: number; readonly expiresAt: number; readonly facts?: ApprovalFacts;
-  readonly preview?: Extract<ApprovalRecord['request'], { schemaVersion: 3 }>['preview'] }): ApprovalRecord {
+  readonly origin?: Extract<ApprovalRecord['request'], { schemaVersion: 3 }>['origin']; readonly preview?: Extract<ApprovalRecord['request'], { schemaVersion: 3 }>['preview'] }): ApprovalRecord {
   const actionDigest = agentToolCallActionDigest(input.scopeId, input.subject);
   const existing = store.findToolCall(input.scopeId, actionDigest);
   if (existing) return verifyApproval(existing, integrity);
   const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject,
     requester: input.requester, actionDigest, policyRevision: input.policyRevision, summary: input.summary.slice(0, 2048),
-    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? undeclaredAgentToolApprovalFacts(input.scopeId), ...(input.preview ? { preview: input.preview } : {}) });
+    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? undeclaredAgentToolApprovalFacts(input.scopeId), ...(input.preview ? { preview: input.preview } : {}), ...(input.origin ? { origin: input.origin } : {}) });
   return verifyApproval(store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, integrity)), integrity);
 }
 
@@ -64,18 +64,17 @@ async function closeExpired(store: ApprovalStore, integrity: IntegrityAuthority,
 export async function awaitAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord,
   clock: TrustedClock, signal: AbortSignal, pollMs = 250, started: ClockSample = clock.sample()): Promise<AgentToolApprovalOutcome> {
   const { scopeId, approvalId, expiresAt } = record.request;
-  // The producer passes its creation sample so preview/persistence time also spends the original TTL.
-  const deadline = started.monotonicMs + Math.max(0, expiresAt - started.wallMs);
-  const remaining = () => { const now = clock.sample(); return Math.min(expiresAt - now.wallMs, deadline - now.monotonicMs); };
   const settled = (current: ApprovalRecord): AgentToolApprovalOutcome | null =>
     current.status === 'expired' ? 'expired' : current.status === 'decided' ? current.decision?.decision === 'allow' ? 'allow' : 'deny' : null;
   for (;;) {
     const loaded = store.load(scopeId, approvalId);
     const current = loaded ? verifyApproval(loaded, integrity) : null;
     if (!current) return 'expired';
+    if (current.status === 'decided' && requiresPersonProposalDecision(current.request) && !witnessedPersonDecision(current)) throw new ApprovalError('APPROVAL_DENIED');
     // A terminal decision is durable history, not permission to consume an allow after expiry or cancellation.
     if (signal.aborted) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'cancelled'; }
-    const left = remaining();
+    // The producer passes its creation sample so preview/persistence time also spends the original TTL.
+    const left = agentToolApprovalLeft(expiresAt, started, clock.sample());
     if (left <= 0) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'expired'; }
     const stored = settled(current);
     if (stored) return stored;
@@ -88,6 +87,25 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
 }
 
 /**
+ * KG4 F1 (X3): every producer's side of one requested tool-call approval. An allow is re-decided by policy now (`recheck`; a deny is the policy's
+ * refusal, `refused` records it, the owner's settlement stays `allow`), then is `cancelled` or `expired` when the call was cancelled or the request
+ * budget spent meanwhile; only a usable allow is `allowed`. `settled` hears the outcome once (`unsettled`: the wait failed). APPROVER-NOTE: a note comes only with the owner's own decision.
+ */
+export async function settleAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord, clock: TrustedClock, signal: AbortSignal, started: ClockSample,
+  steps: { recheck?(): Promise<boolean>; refused?(): void; allowed?(approval: NonNullable<AgentToolCallAdmission['approval']>): void; settled?(outcome: AgentToolApprovalOutcome | 'unsettled'): void }) {
+  let settlement: AgentToolApprovalOutcome | 'unsettled' = 'unsettled';
+  try {
+    const decided = await awaitAgentToolApproval(store, integrity, record, clock, signal, 250, started);
+    if (decided === 'allow' && steps.recheck && !await steps.recheck()) { steps.refused?.(); settlement = 'allow'; return 'policy-deny'; }
+    const outcome: AgentToolApprovalOutcome = decided !== 'allow' ? decided : signal.aborted ? 'cancelled' : agentToolApprovalLeft(record.request.expiresAt, started, clock.sample()) <= 0 ? 'expired' : 'allow';
+    settlement = outcome;
+    if (outcome === 'allow') steps.allowed?.({ approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
+    const note = outcome === decided && (outcome === 'allow' || outcome === 'deny') ? agentToolApprovalNote(store, integrity, record) : null;
+    return note !== null && (outcome === 'allow' || outcome === 'deny') ? { outcome, note } : outcome;
+  } finally { steps.settled?.(settlement); }
+}
+
+/**
  * APPROVER-NOTE (owner 2026-10-07): the decider's own words on a decided tool-call approval — its sealed reason when the decision is a noted
  * v3 decision (`approverNote`), else null (a surface's default sentence, an expired or undecided record, a record that does not verify).
  */
@@ -95,7 +113,6 @@ export function agentToolApprovalNote(store: ApprovalStore, integrity: Integrity
   let current: ApprovalRecord | null;
   try { const loaded = store.load(record.request.scopeId, record.request.approvalId); current = loaded ? verifyApproval(loaded, integrity) : null; }
   catch { return null; }
-  // Decision v3 is exactly a noted decision (APPROVER-NOTE); v1/v2 carry a surface's default sentence or an unmarked reason.
   return current?.status === 'decided' && current.decision && 'approverNote' in current.decision ? current.decision.reason : null;
 }
 
@@ -147,22 +164,18 @@ export function agentToolCallApprovalGate(records: () => Promise<{ readonly stor
     const loaded = store.load(command.scopeId, reference.approvalId);
     if (!loaded) throw new ApprovalError('APPROVAL_MISSING');
     const record = verifyApproval(loaded, integrity), { request } = record;
-    const requester = request.requester;
     if (request.scopeId !== call.scopeId || !isDeepStrictEqual(approvalSubject(request), call.subject) || request.actionDigest !== expectedDigest
-      || reference.actionDigest !== expectedDigest || requester.id !== principal.id || requester.issuer !== principal.issuer || requester.subject !== principal.subject) {
+      || reference.actionDigest !== expectedDigest || !samePrincipalRef(approvalActorRef(request.requester), approvalActorRef(principal))) {
       throw new ApprovalError('APPROVAL_CONFLICT');
     }
     if (record.status === 'pending') throw new ApprovalError('APPROVAL_REQUIRED');
-    if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    if (record.decision?.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (record.decision.requestDigest !== approvalRequestDigest(request)) throw new ApprovalError('APPROVAL_INTEGRITY');
+    admitDecided(record, null);
     return record;
   };
   return {
     async admit(descriptor, decision, command, principal, context) {
       const { record } = context;
-      // A terminal record replays its outcome: nothing is admitted again.
-      if (record && (record.state === 'settled' || record.state === 'refused')) return;
+      if (record && !isEffectOpen(record.state)) return;
       // Consumed: the intent pinned this approval; it is still the sealed allow of exactly this call, whatever the clock says now.
       if (record?.intent.approval) { await verified(record.intent.approval, command, principal); return { approval: record.intent.approval }; }
       if (descriptor.approval !== 'required' && decision === 'allow' && !call.approval) return;
@@ -173,8 +186,8 @@ export function agentToolCallApprovalGate(records: () => Promise<{ readonly stor
       if (user !== undefined && user !== command.commandId) throw new ApprovalError('APPROVAL_CONFLICT');
       // Admission is measured now (and again right before the claim): the owner's allow is usable only inside the request's expiry.
       const now = clock.sample(), { started } = call.approval, { expiresAt } = stored.request;
-      if (now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs) throw new ApprovalError('APPROVAL_EXPIRED');
-      if (stored.decision!.decidedAt > now.wallMs + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
+      if (agentToolApprovalLeft(expiresAt, started, now) <= 0) throw new ApprovalError('APPROVAL_EXPIRED');
+      admitDecided(stored, { now: now.wallMs, window: Number.POSITIVE_INFINITY }); // the request expiry above is its window
       consumed.set(reference.approvalId, command.commandId);
       return { approval: reference };
     },

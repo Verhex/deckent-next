@@ -3,7 +3,7 @@ import { closeSync } from 'node:fs';
 import { Socket } from 'node:net';
 import { LocalRuntimeSocketError } from './endpoint.js';
 
-/** Host-pid-namespace credentials of one accepted peer (SO_PEERCRED); `isActive` re-checks them against the still-connected socket. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Host-pid-namespace credentials of one accepted peer (SO_PEERCRED); `isActive` re-checks them against the still-connected socket. */
 export type ContainerPeer = Readonly<{ pid: number; uid: number; gid: number; isActive: () => boolean }>;
 interface Handoff { peer: { pid: number; uid: number; gid: number }; takeFd(): number }
 interface Native { isConnectionActive(fd: number, pid: number, uid: number, gid: number): boolean;

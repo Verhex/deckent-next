@@ -1,4 +1,4 @@
-/** Whether a Node.js version satisfies the package's engine range (the manifest range, never a source literal).
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Whether a Node.js version satisfies the package's engine range (the manifest range, never a source literal).
  * The range is one or more `||` clauses, each `>=X.Y.Z` with an optional `<M` upper major: one patched floor per supported major.
  * Node 24.21 and older 24.x carry a heap overrun in unaligned UTF-16LE decoding (fixed in 24.22.0); 24.22.1 and 26.12.1 are the
  * 2026-10-21 security release (Brotli out-of-bounds write, TLS hostname checks). An unparsable range or version is `unknown`. */
@@ -29,7 +29,6 @@ export function assessNodeSupport(version: string, range: string): NodeSupport {
   if (!sorted || !have) return { version, floor: sorted?.[0]?.floor ?? null, status: 'unknown' };
   const satisfied = sorted.find(clause => compare(have, clause.min) >= 0 && (clause.belowMajor === null || have[0] < clause.belowMajor));
   if (satisfied) return { version, floor: satisfied.floor, status: 'supported' };
-  // Name the same major's floor, else the next higher major's, else the highest.
   const named = sorted.find(clause => clause.min[0] === have[0]) ?? sorted.find(clause => clause.min[0] > have[0]) ?? sorted[sorted.length - 1]!;
   return { version, floor: named.floor, status: 'unsupported' };
 }

@@ -1,5 +1,4 @@
 export * from './internal/decision-keys.js';
-export * from './internal/ink-palette-context.js';
 export * from '#surfaces/core/terminal-theme/index.js';
 export * from './internal/slash-registry.js';
 export * from './internal/tool-line.js';
@@ -9,7 +8,6 @@ export * from './internal/line-stream.js';
 export * from './internal/session-references.js';
 export * from './internal/panel-contract.js';
 export * from './internal/panel-controller.js';
-export * from './internal/use-observation.js';
 export * from './internal/surface-push.js';
 export * from './internal/service-watch.js';
 export { treeChangeLine } from './internal/tree-change.js';

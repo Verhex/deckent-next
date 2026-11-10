@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 /** Kernel start time (clock ticks since boot, /proc/<pid>/stat field 22): with the pid it names one process incarnation. */
-export function procStartTime(pid: number): string | null {
+function procStartTime(pid: number): string | null {
   try { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null; } catch { return null; }
 }
 /**

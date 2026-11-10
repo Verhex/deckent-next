@@ -7,7 +7,7 @@ import type { TerminalAdminCall } from './context.js';
 import { queryFailureText } from './failure.js';
 type ProviderSpendAccountInspection = Awaited<ReturnType<ProviderSpendAccountInspectionHandler>>;
 
-export function spendMoney(minor: number | string, currency: string, call: Pick<TerminalAdminCall, 'locale'>): string {
+function spendMoney(minor: number | string, currency: string, call: Pick<TerminalAdminCall, 'locale'>): string {
   if (currency !== 'USD') return t('terminal.info.usage.minor', { amount: String(minor), currency }, call.locale);
   const [whole = '0', fraction = ''] = String(minor).split('.');
   const units = BigInt(SCOPE_BUDGET_CHOICES.minorUnitsPerUsd), integer = BigInt(whole);

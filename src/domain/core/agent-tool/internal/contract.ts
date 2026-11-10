@@ -1,7 +1,7 @@
 import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Agent tool contract (terminal tool loop, T-L1). A tool is data the model can call; it never grants authority — every
  * call is authorized for the principal and scope by policy before it runs. The class drives the default permission tier:
  * `read` needs no extra approval when policy permits, `edit`/`shell` follow the permission mode, `deckent` and `mcp` tools

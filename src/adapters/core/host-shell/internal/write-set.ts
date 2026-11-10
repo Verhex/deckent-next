@@ -2,15 +2,15 @@ import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, posix, relative } from 'node:path';
+import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describeSandboxWriteSet, sandboxWriteClockVerdict, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteRefusal,
   type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
 export { applySandboxWriteSet, describeSandboxWriteSet, type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteDecider,
-  type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
-import { normalizeGlobalScopePlatform, prepareProductDirectory, processWallLagMs, t, type Locale, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, type ProductLayout } from '#platform/index.js';
+  /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
+import { normalizeGlobalScopePlatform, pathWithin, prepareProductDirectory, processExists, processWallLagMs, t, type Locale, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, type ProductLayout } from '#platform/index.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * SHELL-OVERLAY bounds of one sandbox write set (fail closed: over any of them the whole set is refused, never partly applied): entries
  * listed in the upper directory plus the lower files a deleted or replaced directory removes, the bytes of all written files, one file.
  */
@@ -19,7 +19,7 @@ const HELPER = fileURLToPath(new URL('../native/build/Release/shell-overlay-scan
 const HELPER_TIMEOUT_MS = 10_000;
 const CLOCK_WATCH = fileURLToPath(new URL('../native/build/Release/shell-clock-watch', import.meta.url));
 
-/** A running realtime clock watch (`shell-clock-watch`): `result` ends it and reads its answer; `stop` ends it unread. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A running realtime clock watch (`shell-clock-watch`): `result` ends it and reads its answer; `stop` ends it unread. */
 export interface SandboxWriteClockWatcher { result(): Promise<SandboxWriteClockWatch>; stop(): void }
 /** Starts the clock watch and resolves once the kernel timer is armed; null when it cannot be armed (the call's set is then never applied). */
 export function startSandboxWriteClockWatch(): Promise<SandboxWriteClockWatcher | null> {
@@ -236,10 +236,9 @@ export async function scanSandboxWriteSetCall(directory: SandboxWriteSetDirector
  * scan is detected, `sandboxWriteClockVerdict`). */
 export interface SandboxWriteSetDirectory { readonly dir: string; readonly upper: string; readonly work: string; readonly mark: bigint;
   readonly clock: SandboxWriteClockReading; readonly clockStepToleranceMs: number }
-/** The process's clocks now: the wall clock (Date.now — the realtime clock ctime uses), the monotonic clock and the wall clock's lag behind the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The process's clocks now: the wall clock (Date.now — the realtime clock ctime uses), the monotonic clock and the wall clock's lag behind the
  * highest wall time the process already handed out. */
 export const readSandboxWriteClock = (): SandboxWriteClockReading => ({ wallMs: Date.now(), monotonicMs: performance.now(), lagMs: processWallLagMs() });
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
 /** Removes a call directory (the kernel may leave `work/work` without permissions) and ends its clock watch if no scan did. */
 export async function removeSandboxWriteSetDirectory(dir: string): Promise<void> {
   clockWatches.get(dir)?.stop();
@@ -257,7 +256,7 @@ export async function prepareSandboxWriteSetDirectory(root: string, callKey: str
   readClock: () => SandboxWriteClockReading = readSandboxWriteClock, watchClock: () => Promise<SandboxWriteClockWatcher | null> = startSandboxWriteClockWatch): Promise<SandboxWriteSetDirectory | null> {
   for (const entry of await readdir(root).catch(() => [] as string[])) {
     const owner = await readFile(join(root, entry, 'owner.json'), 'utf8').then(text => Number(JSON.parse(text).pid)).catch(() => null);
-    if (owner !== null && owner !== process.pid && !alive(owner)) await removeSandboxWriteSetDirectory(join(root, entry));
+    if (owner !== null && owner !== process.pid && !processExists(owner)) await removeSandboxWriteSetDirectory(join(root, entry));
   }
   const dir = join(root, callKey);
   // Armed before the reading and the mark: a clock set from here until the scan's answer is reported. Not armed → kept unwatched (never applied).
@@ -283,8 +282,7 @@ export async function prepareSandboxWriteSetDirectory(root: string, callKey: str
  */
 export async function sandboxWriteSetRoot(projectRoot: string, layout: ProductLayout, environment: Readonly<Record<string, string | undefined>>): Promise<string | null> {
   const project = await realpath(projectRoot);
-  const outside = (path: string) => { const down = relative(project, path), up = relative(path, project);
-    return down !== '' && (down.startsWith('..') || isAbsolute(down)) && (up.startsWith('..') || isAbsolute(up)); };
+  const outside = (path: string) => !pathWithin(project, path) && !pathWithin(path, project);
   const candidates: (() => Promise<string>)[] = [
     async () => join(await prepareProductDirectory(layout, 'fileEffects'), 'sandbox-writes'),
     async () => {

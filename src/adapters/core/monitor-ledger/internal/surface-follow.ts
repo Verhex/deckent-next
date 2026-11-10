@@ -4,8 +4,8 @@ import { openSqliteLedgerReadOnly, openLedgerSurfaceTail, type LedgerSurfaceKind
 import type { ResolvedConfig } from '#platform/index.js';
 import type { SurfaceFollowEvent } from '#engine/index.js';
 
-export type RuntimeSurfaceEvent = SurfaceFollowEvent;
-export interface AuthorizedSurfaceRead {
+type RuntimeSurfaceEvent = SurfaceFollowEvent;
+interface AuthorizedSurfaceRead {
   readonly config: ResolvedConfig;
   readonly ledger: string;
   readonly scopeId: string;

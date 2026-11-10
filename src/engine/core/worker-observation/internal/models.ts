@@ -1,11 +1,12 @@
 import { readWorkerModelPin, summarizeWorkerEvents, viewWorkerModels, workerEventSchema, type AttemptIdentity, type RunSnapshot,
   type VerifiedPrincipal, type WorkerEvent, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { WorkerObservationError, type WorkerEventLogStore, type WorkerUsageEvidence } from './contract.js';
 import type { WorkerEventArtifacts } from './transcript.js';
 
 type SealedLogs = Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
-const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED'].includes(String(error.code));
+const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS });
 /** Sealed, redacted events of one attempt, or null without a sealed log. A log that is not an event stream of this attempt is invalid. */
 export async function readSealedWorkerEvents(store: SealedLogs, artifacts: WorkerEventArtifacts, identity: AttemptIdentity): Promise<readonly WorkerEvent[] | null> {
   const log = await store.loadWorkerEventLog(identity.scopeId, identity.attemptId);
@@ -40,7 +41,7 @@ export async function describeAttemptWorkerModels(run: PinnedRun, identity: Atte
   return projectAttemptWorkerModels(run, identity.taskId, sealed, live);
 }
 /** Model row and usage summary of an observed attempt, from one read of the sealed log. */
-export type AttemptWorkerEvidence = Readonly<{ model: WorkerModelView | null; usage: WorkerEventSummary | null; usageEvidence: WorkerUsageEvidence }>;
+type AttemptWorkerEvidence = Readonly<{ model: WorkerModelView | null; usage: WorkerEventSummary | null; usageEvidence: WorkerUsageEvidence }>;
 /** Model row of an observed attempt from the ledger (the Run's pin; sealed verdict, else live `pending`) plus its usage (sealed summary, else live): model null when not a
  * pinned worker task; unavailable when evidence could not be read. An invalid sealed log gives model evidence 'invalid', no usage. */
 export async function observeAttemptWorkerModels(ledger: SealedLogs & { loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null> },

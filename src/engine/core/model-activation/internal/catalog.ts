@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { catalogModelRetired, retiredModelActivationRefusal, encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
   parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { catalogDay } from './worker-admission.js';
 
@@ -81,7 +82,7 @@ export type ModelCatalogChannelView = Readonly<{ channelId: string; access: 'den
   models: readonly Readonly<{ modelId: string; revision: number; model: ModelCatalogModelRecord['model'];
     activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null; chatState?: 'active' | 'inactive' | null; activationConflict?: boolean }>[] }>;
 export interface ModelCatalogInspection { readonly schemaVersion: 1; readonly scopeId: string; readonly channels: readonly ModelCatalogChannelView[] }
-/** Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
 export class ModelCatalogInspectionApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorizer: ModelCatalogAuthorizer,
     private readonly openReader: () => Promise<ModelCatalogReader>) {}
@@ -96,7 +97,7 @@ export class ModelCatalogInspectionApplication {
       for (const record of (await reader.channels()).filter(entry => query.channelId === undefined || entry.channelId === query.channelId)) {
         try { await this.authorizer.authorize('inspect', query.scopeId, { channelId: record.channelId, modelId: null }, principal, 'scope'); }
         catch (error) {
-          if (!(error instanceof Error && 'code' in error && ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED'].includes(String(error.code)))) throw error;
+          if (!(error instanceof Error && 'code' in error && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS }))) throw error;
           channels.push(Object.freeze({ channelId: record.channelId, access: 'denied' })); continue;
         }
         const models = [];

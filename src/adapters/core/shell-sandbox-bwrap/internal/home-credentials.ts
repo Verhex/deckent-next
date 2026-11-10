@@ -3,11 +3,11 @@ import { lstat, opendir, realpath } from 'node:fs/promises';
 import { basename, join, relative } from 'node:path';
 import { BASELINE_IGNORED_DIRS, HOME_CREDENTIAL_PATHS } from '#adapters/core/workspace-read/index.js';
 import { resolveLocale, t } from '#platform/index.js';
-/** Security/resource invariants. Oversized subtrees are hidden whole; an oversized HOME root refuses. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Security/resource invariants. Oversized subtrees are hidden whole; an oversized HOME root refuses. */
 export const BUBBLEWRAP_HOME_WALK_MAX_DEPTH = 3;
 export const BUBBLEWRAP_HOME_WALK_MAX_ENTRIES = 20_000;
 export const HOME_CREDENTIAL_REFUSAL = 'SHELL_HOME_CREDENTIALS_UNDETERMINED';
-const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
+const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`); // kept (KG12 F2): canonical paths; `/` holds only itself here, pathWithin('/') would hold every path
 /** Streaming read: retain at most the remaining budget, plus one sentinel; close on every exit. */
 async function boundedNames(path: string, remaining: number): Promise<{ names: Dirent[]; complete: boolean }> {
   let dir: Dir | undefined; const names: Dirent[] = [];

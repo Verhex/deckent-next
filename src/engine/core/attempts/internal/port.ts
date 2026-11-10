@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { AttemptSnapshot, VerifiedPrincipal } from '#domain/index.js';
 
 export interface AttemptReceipt {
@@ -19,8 +20,8 @@ export interface AttemptStore {
   receipt(scopeId: string, commandId: string): Promise<AttemptReceipt | null>;
   commit(input: AttemptCommit): Promise<AttemptReceipt>;
 }
-export class AttemptStoreError extends Error {
-  constructor(readonly code: 'ATTEMPT_STORE_CONFLICT' | 'ATTEMPT_COMMAND_CONFLICT' | 'ATTEMPT_STORE_VERSION' | 'LEDGER_RESET_REQUIRED' | 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' | 'ATTEMPT_STORE_CORRUPT' | 'ATTEMPT_STORE_BUSY' | 'ATTEMPT_STORE_OPTIONS' | 'ATTEMPT_STORE_OUTCOME_UNKNOWN' | 'ATTEMPT_STORE_READ_UNAVAILABLE' | 'ATTEMPT_STORE_SQLITE_UNSUPPORTED') {
+export class AttemptStoreError extends CodedError {
+  constructor(override readonly code: 'ATTEMPT_STORE_CONFLICT' | 'ATTEMPT_COMMAND_CONFLICT' | 'ATTEMPT_STORE_VERSION' | 'LEDGER_RESET_REQUIRED' | 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' | 'ATTEMPT_STORE_CORRUPT' | 'ATTEMPT_STORE_BUSY' | 'ATTEMPT_STORE_OPTIONS' | 'ATTEMPT_STORE_OUTCOME_UNKNOWN' | 'ATTEMPT_STORE_READ_UNAVAILABLE' | 'ATTEMPT_STORE_SQLITE_UNSUPPORTED') {
     super(code); this.name = 'AttemptStoreError';
   }
 }

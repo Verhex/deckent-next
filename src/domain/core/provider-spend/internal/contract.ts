@@ -26,7 +26,7 @@ const queryVersion = z.union([z.literal(1), z.literal(2)]);
 export const providerSpendExactAccountQuerySchema = z.strictObject({ schemaVersion: queryVersion, scopeId: identitySchema,
   budgetId: identitySchema, budgetRevision: counterSchema.positive(), holds: holds.optional() })
   .refine(query => (query.schemaVersion === 2) === (query.holds !== undefined)).readonly();
-export const providerSpendAccountQuerySchema = z.union([providerSpendExactAccountQuerySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const providerSpendAccountQuerySchema = z.union([providerSpendExactAccountQuerySchema,
   z.strictObject({ schemaVersion: queryVersion, scopeId: identitySchema, current: z.literal(true), holds: holds.optional() }).readonly()])
   .refine(query => (query.schemaVersion === 2) === (query.holds !== undefined));
 
@@ -59,4 +59,4 @@ export type ProviderSpendBudget = z.infer<typeof providerSpendBudgetSchema>;
 export type ProviderSpendAccountQuery = z.infer<typeof providerSpendAccountQuerySchema>;
 export type ProviderSpendExactAccountQuery = Extract<ProviderSpendAccountQuery, { budgetId: string }>;
 export type ProviderSpendQuote = z.infer<typeof providerSpendQuoteSchema>;
-export type ProviderSpendReservationDescriptor = z.infer<typeof providerSpendReservationDescriptorSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderSpendReservationDescriptor = z.infer<typeof providerSpendReservationDescriptorSchema>;

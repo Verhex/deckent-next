@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 /**
@@ -29,7 +29,7 @@ export const agentShellPostureSchema = z.strictObject({ realm: z.string().regex(
   passedOver: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).max(8).readonly() }).readonly();
 export type AgentShellPosture = z.infer<typeof agentShellPostureSchema>;
 
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 /**
  * Astra 2431 (L1 D4 for good): what a tool-call card shows as fields comes from the producer as data, never parsed out of the preview text — a
  * shell command's own lines may look like any metadata. `shell`: the whole command (never cut; the preview text may be) and the classifier's

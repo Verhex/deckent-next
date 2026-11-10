@@ -103,7 +103,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     const profile = config.provider_invocation_profiles.profiles.find((row: { adapter: { id: string } }) => row.adapter.id === 'native-cli-headless');
     const docker = { imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 268435456, cpus: 1, pids: 64, logMaxSizeKiB: 64, logMaxFiles: 2,
       tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-    const template = adapters.createNativeCodingTemplate(docker, { provider: 'claude', cliVersion: '9.1.0 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' });
+    // A Claude Docker template as written before alpha.64 (owner 2026-11-08: creating one is refused now).
+    const codexTemplate = adapters.createNativeCodingTemplate(docker, { provider: 'codex', cliVersion: '9.1.0 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' });
+    const template = { ...codexTemplate, parameters: { ...codexTemplate.parameters, invocation: { ...(codexTemplate.parameters['invocation'] as object), provider: 'claude' } } };
     config.terminal.scopeId = 'scope';
     config.execution = { docker: { ...docker, executable: 'docker' }, git: { gitExecutable: 'git', timeoutMs: 5000 } };
     config.admission = { poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'k29-before', profiles: [template],
@@ -135,9 +137,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
     output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(JSON.parse(output)).toMatchObject({ status: 'unchanged', connection: profile.id });
-    const back = await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, apply: false }, options, person);
-    expect(back.profile.adapter.version).toBe(1); expect(back.profile.parameters).not.toHaveProperty('worker');
-    expect((await configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, discovery: 'repository', apply: true }, options, person)).profile).toEqual(template);
+    // KG7 F3: `coding template` names the connection from the same worker binding `coding` lists.
+    output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
+    expect(output).toContain(`claude · ${profile.reference.modelId}`);
+    // Owner 2026-11-08: the kind no longer returns to a Claude Docker template; the refusal is typed and names the tokenless binding.
+    for (const back of [{ apply: false }, { discovery: 'repository', apply: true }]) await expect(configureNativeCodingTemplate(h.f.project, { provider: 'claude', kind: 'coding', detach: true, ...back }, options, person))
+      .rejects.toMatchObject({ code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', message: expect.stringContaining('--connection') });
     const stable = await readFile(path, 'utf8');
     await expect(adapters.withMcpPrincipal(() => configureNativeCodingTemplate(h.f.project, { ...request, apply: true }, options))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     expect(await readFile(path, 'utf8')).toBe(stable);

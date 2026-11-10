@@ -4,9 +4,9 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, sandboxHardFloored, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
-import { DECKENT_DIR, privateIpcRoot, resolveLocale, t } from '#platform/index.js';
+import { DECKENT_DIR, pathWithin, privateIpcRoot, relativeInside, resolveLocale, t } from '#platform/index.js';
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
-export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, bubblewrapArgumentsOverBound, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
@@ -19,13 +19,13 @@ export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.o
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** A long-lived server's line on its MCP cards (MCP-CLIENT, C5): the write part from the view its launch enforces, the rest as that view
  * is (a scratch area only when the layout binds one; the process ends with the service, not with a call). */
-export const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
+const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
   + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; ${profile ? 'its own private HOME (a persistent cache) is writable and the network is on; '
     + 'your HOME, project secrets and Deckent state are hidden' : 'HOME and everything else hidden, no network'}; it ends with the service)`;
 /** K4: the targets of the system resolver files that lie outside the bound system prefixes (a symbolic link the view would otherwise leave
  * dangling, e.g. WSL's `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`): regular files only, each bound alone and read-only. */
 const RESOLVER_FILES = ['/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf'];
-export function resolverFiles(): string[] {
+function resolverFiles(): string[] {
   const out: string[] = [];
   for (const file of RESOLVER_FILES) {
     try {
@@ -35,20 +35,20 @@ export function resolverFiles(): string[] {
   }
   return out;
 }
-/** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
-/** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
 export const BUBBLEWRAP_GIT_WALK_MAX_ENTRIES = 200_000;
-export const BUBBLEWRAP_MASK_MAX = 4_096;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const BUBBLEWRAP_MASK_MAX = 4_096;
 const MAX_DEPTH = 32;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
 const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys', '/var'];
-const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`); // kept (KG12 F2): canonical paths; `/` holds only itself here, pathWithin('/') would hold every path
 /** SANDBOX-SPAWN (2026-10-18): a read-only path inside another adds nothing (`--ro-bind` is recursive; read-only paths mount after every writable one), so
  * only the outermost is bound; deny masks inside stay. Before, a floored tree cost a mount per file (13 430 on the owner's checkout, over ARG_MAX). */
 const outermost = (paths: ReadonlySet<string>): string[] => [...paths].filter(path => { for (let up = dirname(path); up !== dirname(up); up = dirname(up)) if (paths.has(up)) return false; return true; });
 
-export interface BubblewrapOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BubblewrapOptions {
   readonly maxEntries?: number;
   readonly maxArgumentBytes?: number; // default BUBBLEWRAP_ARGUMENT_MAX_BYTES; tests lower it
   /** The reads used per directory (default: synchronous on a local file system, asynchronous otherwise — `fsOpsFor`); tests inject one. */
@@ -56,7 +56,7 @@ export interface BubblewrapOptions {
 }
 
 /** Whether `a` and `b` (real paths) are the same or one holds the other: overlay layers may not (bubblewrap man page; undefined otherwise). */
-const nested = (a: string, b: string) => { const up = relative(a, b), down = relative(b, a); return up === '' || !up.startsWith('..') && !isAbsolute(up) || !down.startsWith('..') && !isAbsolute(down); };
+const nested = (a: string, b: string) => pathWithin(a, b) || pathWithin(b, a);
 
 /** PATH entries bound read-only are program directories only: `bin`, `.bin` or `sbin` by name (a `bin` brings its `lib*`/`libexec` siblings). */
 const TOOLCHAIN_DIR_NAMES = new Set(['bin', '.bin', 'sbin']);
@@ -114,7 +114,7 @@ async function sealedRoots(project: string, roots: readonly string[], environmen
     catch { return { ok: false, reason: `a Deckent state root could not be prepared (${root})` }; }
   }
   if (contained && (open || !roots.includes(contained) || !real.includes(contained) || contained === project || !under(project, contained) || under(home ?? '/', contained)))
-    return { ok: false, reason: t('headless.agent.k27.containedWorkspaceRefused', undefined, resolveLocale(undefined, environment)) };
+    return { ok: false, reason: t('headless.agent.workspace.containedWorkspaceRefused', undefined, resolveLocale(undefined, environment)) };
   const holdsAll = [project, '/', ...(home && isAbsolute(home) ? [home] : [])], sealed = real.filter(root => root !== contained);
   for (const root of sealed) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the Deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
   const outer = [...new Set(sealed)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
@@ -309,7 +309,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   // Astra 2162: the product's own state and its ancestors stay protected under an ignored tree. An ignored directory that holds a
   // protected path is not skipped whole: it is listed, its denied entries masked, and only the ancestors of protected paths are entered
   // (siblings stay unscanned, as ignored). A symbolic link on such a chain cannot be masked by path → the call is refused.
-  const anchors = [...layout.project.protectedAnchors, DECKENT_DIR, ...(layout.hardFloor?.roots ?? []).map(path => relative(root, path)).filter(path => path && !path.startsWith('..') && !isAbsolute(path))];
+  const anchors = [...layout.project.protectedAnchors, DECKENT_DIR, ...(layout.hardFloor?.roots ?? []).flatMap(path => relativeInside(root, path) || [])];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const stateOnly = (dir: string, rel: string, names: ListedEntries, depth: number) => holdsProductStateOnly({ dir, rel, names, depth, denied: layout.project.denied,

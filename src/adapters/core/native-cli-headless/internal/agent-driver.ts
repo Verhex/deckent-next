@@ -1,30 +1,22 @@
-import { writeFile, rm, mkdtemp, realpath } from 'node:fs/promises';
+import { rm, mkdtemp, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { headlessEgressReasons, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { modelInvocationProfileDigest, createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeAgentExecutionSchema, toolSessionSchema, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
-import { feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import { createClaudeAgentDriver, prepareClaudeAgentRun } from './claude-agent.js';
-import { codexAgentArgv, codexAgentTurn, type CodexAgentResultLookup } from './codex-agent.js';
+import { feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, combineKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
+import { createClaudeAgentDriver } from './claude-agent.js';
+import { codexAgentTurn, type CodexAgentResultLookup } from './codex-agent.js';
+import { nativeAgentLaunch } from './launch.js';
 import { createNativeCliHeadlessPort } from './port.js';
 import { emptyRunDir } from './preflight.js';
 import { runHeadlessIsolated, type HeadlessIsolation, type HeadlessSpawn } from './realm.js';
 import { agentTarget, preflightNativeAgent, recordNativeAgentObservation } from './agent-observation.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, refuse } from './contract.js';
-import { buildHeadlessEnv, nativeAgentFlagSetDigest } from './env.js';
+import { nativeAgentFlagSetDigest } from './env.js';
 import { emitDelta, reject, type Prepared, type Refusal } from './turn.js';
 
 type Bridge = NonNullable<HeadlessSpawn['mcp']> & Readonly<{ turnToken: string; url: string; tokenEnvName: string }>;
-const knownPair = (a: KnownSecretSnapshot, b: KnownSecretSnapshot): KnownSecretSnapshot => Object.freeze({
-  spans: (text: string) => [...a.spans(text), ...b.spans(text)], recordSpans: (text: string) => [...a.recordSpans(text), ...b.recordSpans(text)],
-  pendingStart: (text: string) => Math.min(a.pendingStart(text), b.pendingStart(text)),
-  apply: (text: string, rest: (text: string) => string) => {
-    let matches = 0;
-    const result = a.apply(text, part => { const nested = b.apply(part, rest); matches += nested.matches; return nested.text; });
-    return { ...result, matches: result.matches + matches };
-  },
-});
 const projectResponse = (value: unknown, known: KnownSecretSnapshot, field = ''): unknown => typeof value === 'string'
   ? ['content', 'text', 'reasoning_content'].includes(field) ? finishRecordStream({ held: value, withheld: false }, known) : redactForRecord(value, known)
   : Array.isArray(value) ? value.map(item => projectResponse(item, known)) : value && typeof value === 'object'
@@ -68,7 +60,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck, notices: () => claude?.notices() ?? [],
     async close() { lifetime.abort(); calls.clear(); },
     native(bridge: Bridge, secrets: { configured: KnownSecretSnapshot; turn: KnownSecretSnapshot }): ModelInvocationNativePort {
-      const known = knownPair(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation });
+      const known = combineKnownSecrets(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation });
       // K4 projects the serialized envelope before sending it. Correlate that same representation, without re-executing the call.
       projectToolResult = value => JSON.parse(redactForRecord(JSON.stringify(value), known)) as typeof value;
       const tokens = new WeakSet<object>();
@@ -85,7 +77,6 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           const preflight = await checked(combined), { headless } = entry;
           // Profiles sharing a login may wait for its lock. Each owns its files before entering that wait.
           const runDir = await realpath(await mkdtemp(join(definition.stateDir, 'agent-run-')));
-          const env = buildHeadlessEnv(headless, runDir, definition.configDir);
           let stream = EMPTY_RECORD_STREAM, text = '';
           const delta: ModelInvocationDeltaSink = part => { if (part.kind !== 'text') return; text += part.text;
             const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
@@ -98,28 +89,11 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               Buffer.from(JSON.stringify(reason.body)), complete) });
           try {
             await emptyRunDir(runDir);
-            const promptFile = join(runDir, headless.systemPromptFile);
-            let args: readonly string[], configFile: string | undefined;
-            if (claude) {
-              const effort = entry.command.capabilities.reasoningEffort;
-              // prepare has already validated the request; recover its selected effort from the exact registry expansion.
-              const level = effort?.levels.find(level => isDeepStrictEqual(prepared.effortArgs,
-                effort.args.map(arg => arg.replaceAll('{effort}', level))));
-              const files = await prepareClaudeAgentRun(entry, port.session, { runDir, model: prepared.model, system: prepared.system,
-                turnToken: bridge.turnToken, ...(prepared.effortArgs.length && level ? { effort: level } : {}) });
-              args = files.args; configFile = files.configFile; dispose = () => files.dispose();
-            } else {
-              args = codexAgentArgv(entry, port.session, runDir, prepared.model, prepared.effortArgs, bridge.url);
-              await writeFile(promptFile, prepared.system, { mode: 0o600, flag: 'wx' }); dispose = () => rm(promptFile, { force: true });
-            }
-            const evidence = await runHeadlessIsolated(entry, input.isolation, { executable: preflight.executable, args,
-              env: claude ? env : Object.freeze({ ...env, [entry.bridge.tokenEnvName]: bridge.turnToken }),
-              stateDir: definition.stateDir, runDir, configDir: definition.configDir, promptFile,
-              ...(configFile ? { mcpConfigFile: configFile } : {}), mcp: bridge, now: input.now },
-            { timeoutMs: profile.limits.timeoutMs, outputBytes: 2 * profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
-              stderrBytes: headless.limits.stderrMaxBytes, maxLineBytes: headless.limits.maxLineBytes, interruptGraceMs: headless.limits.killGraceMs,
-              stdinBase64: Buffer.from(prepared.user).toString('base64') },
-            claude ? AbortSignal.any([combined, claude.signal]) : combined,
+            const launch = await nativeAgentLaunch(entry, { session: port.session, runDir, configDir: definition.configDir, model: prepared.model, system: prepared.system,
+              user: prepared.user, effortArgs: prepared.effortArgs, turnToken: bridge.turnToken, bridgeUrl: bridge.url, timeoutMs: profile.limits.timeoutMs,
+              outputMaxBytes: profile.limits.responseMaxBytes }); dispose = launch.dispose;
+            const evidence = await runHeadlessIsolated(entry, input.isolation, { ...launch.spawn, executable: preflight.executable, stateDir: definition.stateDir,
+              mcp: bridge, now: input.now }, launch.bounds, claude ? AbortSignal.any([combined, claude.signal]) : combined,
             raw => { if (claude) return claude.line(raw); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);
             if (finished?.kind === 'refused') {

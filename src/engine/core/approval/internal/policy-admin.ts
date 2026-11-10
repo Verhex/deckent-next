@@ -1,5 +1,5 @@
 import { PRINCIPAL_EFFECT_PRODUCER, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
-  effectCommandSchema, policyChangeSchema, type DelegationOptions, PolicyChangeError, PolicyLastAdminError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
+  effectCommandSchema, policyChangeSchema, type DelegationOptions, PolicyChangeError, PolicyLastAdminError, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
@@ -18,7 +18,7 @@ interface AuthoritySubmission { requester?: VerifiedPrincipal; decider?: Approva
 /** The bound's actor: the decider, with the requester's assurance only when the requester is that same person (else none: never a person raise).
  * `changeKind` (DelegationOptions) is engine input only, never part of the wire change: no raw submission declares `policy-recovery`. */
 const boundActor = (decider: ApprovalActor, requester?: VerifiedPrincipal) => requester?.issuer === decider.issuer && requester.subject === decider.subject ? { ...decider, assurance: requester.assurance } : decider;
-export interface AuthorityTargetHooks {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AuthorityTargetHooks {
   /** Throws when the touched rules exceed the bounding principal's authority on exactly this snapshot. */
   bound(snapshot: Policy, touched: readonly DelegatedRule[]): void;
   /** Records the applied change before any file changes (no record, no change). */
@@ -37,7 +37,7 @@ export class AuthorityDocumentTarget implements EffectTarget {
   constructor(private readonly store: AuthorityDocumentStore & PolicySource, private readonly hooks: AuthorityTargetHooks) {}
   identity() { return this.store.identity(); }
   private record(ref: EffectTargetRef) { if (ref.kind !== this.kind || ref.id !== 'installation') refuse(); }
-  async observe(ref: EffectTargetRef) { this.record(ref); return { version: policySchema.parse(await this.store.load()).revision }; }
+  async observe(ref: EffectTargetRef) { this.record(ref); return { version: (await this.store.load()).revision }; }
   async apply(request: EffectApplyRequest): Promise<{ readonly version: string }> {
     this.record(request.target);
     const expected = request.expectedVersion ?? refuse();
@@ -71,7 +71,7 @@ export class AuthorityDocumentTarget implements EffectTarget {
   async lookup(_ref: EffectTargetRef, idempotencyKey: string) { return this.store.lookupAuthority(idempotencyKey); }
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * I3 — the bound is carried by whoever decided (POLICY-ADMIN P3). Wraps the operation approval broker: when an admission carries the
  * approval (fresh, or the one the claimed intent consumed), the sealed record is loaded and its decider taken. Before the first claim the
  * bound is checked on the current policy and a decider without the authority is refused (`POLICY_DELEGATION_EXCEEDS`, nothing claimed);
@@ -90,7 +90,7 @@ export class DelegationBoundGate implements EffectApprovalGate {
     if (!stored || stored.decision !== 'allow') throw new ApprovalError('APPROVAL_CONFLICT');
     Object.assign(this.submission, { requester: principal, decider: stored.actor, approvalId: admission.approval.approvalId, inputDigest: context.inputDigest });
     if (context.record === null) {
-      const current = policySchema.parse(await this.policy.load());
+      const current = await this.policy.load();
       const files = authorityDocuments(current);
       const verdict = delegationWithin(current, boundActor(stored.actor, principal), planPolicyChange(files.policy, files.bindings, command.input).touched, this.options);
       if (!verdict.ok) throw delegationExceeded(verdict, current, command.scopeId, stored.actor);
@@ -99,7 +99,7 @@ export class DelegationBoundGate implements EffectApprovalGate {
   }
 }
 
-export interface PolicyAdministrationDependencies {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyAdministrationDependencies {
   readonly authority: AuthorityDocumentStore & PolicySource; readonly policy: PolicySource; readonly effects: EffectStore; readonly approvals: ApprovalStore;
   readonly integrity: IntegrityAuthority; readonly sessions: SessionVerifier & SessionAuthority; readonly clock: TrustedClock; readonly requestTtlMs: number;
   readonly audit: PermissionModeAudit;
@@ -147,7 +147,7 @@ export class PolicyAdministrationApplication {
     // (an id that exists, a known role) stay with the plan at the gate and inside the write.
     if (!policyChangeSchema.safeParse(command.input).success) return Promise.reject(new PolicyChangeError('POLICY_CHANGE_INVALID'));
     // The card shows what would change (bounded, redacted, human-readable), computed from the current documents and this exact input.
-    const describe = async (asked: EffectCommand, budget: number) => describePolicyChange(authorityDocuments(policySchema.parse(await deps.policy.load())), asked.input, budget);
+    const describe = async (asked: EffectCommand, budget: number) => describePolicyChange(authorityDocuments((await deps.policy.load())), asked.input, budget);
     const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs, describe });
     const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission, options);
     const target = new AuthorityDocumentTarget(deps.authority, {

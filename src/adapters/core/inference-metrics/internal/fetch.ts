@@ -1,16 +1,16 @@
-import { persistedInteger, persistedUrl } from '#platform/index.js';
+import { CodedError, persistedInteger, persistedUrl } from '#platform/index.js';
 import { request as httpRequest, type ClientRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
 import { isIPv4, isIPv6 } from 'node:net';
 import { z } from 'zod';
 
-export type InferenceMetricsErrorCode = 'INFERENCE_METRICS_ENDPOINT_INVALID' | 'INFERENCE_METRICS_HOST_DENIED'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InferenceMetricsErrorCode = 'INFERENCE_METRICS_ENDPOINT_INVALID' | 'INFERENCE_METRICS_HOST_DENIED'
   | 'INFERENCE_METRICS_TIMEOUT' | 'INFERENCE_METRICS_STATUS' | 'INFERENCE_METRICS_REDIRECT'
   | 'INFERENCE_METRICS_RESPONSE_TOO_LARGE' | 'INFERENCE_METRICS_UNAVAILABLE';
 
 /** Bounded failure evidence: never carries response bodies, headers or redirect targets. */
-export class InferenceMetricsError extends Error {
-  constructor(readonly code: InferenceMetricsErrorCode, readonly status?: number) { super(code); this.name = 'InferenceMetricsError'; }
+export class InferenceMetricsError extends CodedError {
+  constructor(override readonly code: InferenceMetricsErrorCode, readonly status?: number) { super(code); this.name = 'InferenceMetricsError'; }
 }
 
 const inputSchema = z.strictObject({
@@ -28,7 +28,7 @@ function loopbackAddress(address: string): boolean {
   return (isIPv4(address) && address.startsWith('127.')) || (isIPv6(address) && address === '::1');
 }
 function loopbackHost(hostname: string): boolean { const host = unbracket(hostname); return host === 'localhost' || loopbackAddress(host); }
-export type InferenceMetricsLookup = (hostname: string) => Promise<readonly { readonly address: string }[]>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InferenceMetricsLookup = (hostname: string) => Promise<readonly { readonly address: string }[]>;
 const systemLookup: InferenceMetricsLookup = hostname => lookup(hostname, { all: true, verbatim: true });
 
 /** A literal loopback address is used as is; the name `localhost` is resolved and every answer must be loopback before

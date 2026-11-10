@@ -1,1 +1,1 @@
-export { withSiwcConnection, type SiwcBrowserPresentation, type SiwcConnectionContext } from './internal/connection.js';
+export { withSiwcConnection } from './internal/connection.js';

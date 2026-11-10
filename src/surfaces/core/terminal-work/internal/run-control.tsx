@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { RunView } from '#engine/index.js';
 import { shortId } from '#platform/index.js';
-import { DecisionCard, approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
-import { fillTemplate, loadRunViewsForWatch, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
+import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels, DecisionCard } from '#surfaces/core/approval-presentation-ink/index.js';
+import { fillTemplate, loadRunViewsForWatch, runControlActions, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
+import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { runHoldText, runStateText, runTitle } from './job-windows.js';
 import RUN_CONTROL from './run-control.json' with { type: 'json' };
@@ -36,7 +36,7 @@ export interface RunAnswerLabels {
   readonly empty: string; readonly none: string; readonly reread: string;
 }
 /** A row key of the Runs window: the three Y1 controls and the answer to a worker's question. */
-export type RunRowAction = RunControlAction | 'answer';
+type RunRowAction = RunControlAction | 'answer';
 export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ spans: readonly Span[]; actions: readonly RunRowAction[] }>[]; status: string;
   empty: string; selected: number }>;
 export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunView; action: RunControlAction }>;
@@ -44,24 +44,12 @@ export type RunAnswerPresentation = Readonly<{ kind: 'run-answer'; run: RunView;
 
 const KEYS: Readonly<Record<string, RunRowAction>> = Object.freeze({ h: 'hold', r: 'resume', c: 'close', a: 'answer' });
 /** The question a needs-input task asks, or null (`a` answers it). */
-export function needsInputTask(run: RunView): Readonly<{ taskId: string; question: string }> | null {
+function needsInputTask(run: RunView): Readonly<{ taskId: string; question: string }> | null {
   for (const task of run.tasks ?? []) if (task.decision?.reason === 'needs-input' && task.decision.question) return { taskId: task.id, question: task.decision.question };
   return null;
 }
-/**
- * The keys a Run's observed state offers (display only: the service re-checks state and policy at the confirmed revision). Hold: a Run
- * that is not finished, not cancelling and not already held; close: a parked Run; resume: a Run parked by an operator hold (its own park or,
- * MCP-AI-AKTOR, an `operatorHold` overlay kept over another park — resume removes the overlay and the original reason stays) or a failed
- * progression — the only parks resume lifts (a question, a decision or a quota wait survives resume, so it is not offered there).
- */
-export function runControlActions(run: RunView): readonly RunControlAction[] {
-  if (run.state.kind === 'terminal' || run.cancellationRequested) return [];
-  if (run.state.kind !== 'parked') return ['hold'];
-  const held = run.state.reason === 'operator-hold' || run.state.operatorHold !== undefined;
-  return [...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' || run.state.reason === 'environment-not-ready' ? ['resume' as const] : []), 'close'];
-}
 /** One typed letter selects a key; Ctrl/Alt chords, pasted or coalesced text never do (the decision-key rule for an opening key). */
-export function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunRowAction | null {
+function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunRowAction | null {
   return key.ctrl || key.meta || input.length !== 1 ? null : KEYS[input] ?? null;
 }
 function runsHints(labels: RunControlLabels, actions: readonly RunRowAction[]): string {
@@ -179,3 +167,5 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
   }
   return results.length ? results.join(' · ') : fillTemplate(jobs.closed, { title });
 }
+
+export { runControlActions } from '#surfaces/core/terminal-ledger/index.js';

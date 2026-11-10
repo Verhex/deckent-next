@@ -1,12 +1,11 @@
-import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
-import { runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
+import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
+import { verifiedPrincipal, runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 import { withRunCreationAuthority } from './authority.js';
@@ -14,7 +13,7 @@ import { readWorkerInstructions } from './worker-instructions.js';
 import { prepareMemoryContext } from './memory-context.js';
 import { configuredAgentSelection, type TaskAgentUse } from '#composition/core/agent-catalog/index.js';
 import { configuredSiwcWorkerConnections } from '#composition/core/siwc/index.js';
-import { executionTaskBase, executionTaskSilenceDeadline } from '#adapters/index.js';
+import { executionTask, executionTaskSilenceDeadline } from '#adapters/index.js';
 import { nativeWorkerAdmission } from './native-worker.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
@@ -25,19 +24,23 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
   const { config, layout, document, principal, path } = context, instructions = await readWorkerInstructions(projectRoot, config, options);
   const siwc = await configuredSiwcWorkerConnections(projectRoot, context, options), [scopeId] = principal.scopeIds; // U9-7 producer facts (none while held)
   const store = runAdmissionStorePerCall({ reader: async () => openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
-    writer: async () => openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid') });
+    writer: async () => openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' }) });
   return withRunCreationAuthority(context, async (authority, sealing) => {
   const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity, agentUses); // S4B-5 memory, K8 exact work selection
-  const app = new RunAdmissionApplication(store, { async verify() { return principal; } }, authority,
+  const app = new RunAdmissionApplication(store, verifiedPrincipal(principal), authority,
     executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null),
     { ...memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
       refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: executionTaskSilenceDeadline, agents,
       validation: { profile(value) {
         if (value.adapter.id === 'beuser' && validateProfile) return validateProfile(value);
         try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
-        let base;
-        try { base = executionTaskBase(value); validateDockerTaskProfile(base); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
-        if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(base).options, config.execution.docker); return undefined;
+        let task;
+        try { task = executionTask(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+        // Owner 2026-11-08: an existing Claude Docker template (compiled here) or prepared profile is refused at admission, typed with the tokenless next step;
+        // (lead) a relayed local login is used only by its owner and the owner's delegated classes.
+        const subscription = isNativeCliWorkerProfile(value) || task.siwcWorker ? undefined : task.nativeSubscription, refusal = subscription && nativeDockerSubscriptionRefusal(subscription.provider, principal);
+        if (refusal) throw ErrorRegistry.createError(refusal);
+        if (config.execution?.docker) assertDockerResourceCeiling(task.options, config.execution.docker); return undefined;
       }, criterion(evaluator, criterion) { try { return validateInstalledCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } }, isTemplate: isNativeCodingTemplate },
       compiler: { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
         bind(value, selection, evidence) { try { return bindNativeWorkerEffort(value, selection, evidence); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
@@ -69,10 +72,10 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
     const command = runAdmissionSchema.parse(fields);
     return await admitConfiguredRun(projectRoot, command, options, async ({ config, layout, principal, path }, replay) => {
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = new DispatchPolicyAuthorization(policy);
+      const policy = contextPolicySource({ layout, config }), authorization = new DispatchPolicyAuthorization(policy);
       await authorizeWorkTargetUse(policy, selectWorkTarget(config.execution)?.id ?? null, command.scopeId, principal); // pinning reads the target
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
-      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+      const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
       try {
         return await pinRunToDelivery(store, new GitIntegrationDelivery(git), new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)),
           identity => authorization.authorizeIdentity('read-output', identity, principal),

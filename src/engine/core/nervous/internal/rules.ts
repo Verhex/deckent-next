@@ -1,11 +1,12 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, NERVOUS_RULE_STATUSES, identitySchema, recoveryActionSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { AUDIT_PAGE_MAX } from '#engine/core/audit/index.js';
 import seed from './rules.json' with { type: 'json' };
 /** The versioned Core seed (S6R-2): every threshold is provisional data until measured in shadow on a real installation (K-F S8); an overlay is a later slice. */
 export const NERVOUS_RULES_SEED: unknown = seed;
-export class NervousError extends Error {
-  constructor(readonly code: 'NERVOUS_RULES_UNREADABLE' | 'NERVOUS_SIGNAL_INVALID' | 'NERVOUS_ACTION_REFUSED') { super(code); this.name = 'NervousError'; }
+export class NervousError extends CodedError {
+  constructor(override readonly code: 'NERVOUS_RULES_UNREADABLE' | 'NERVOUS_SIGNAL_INVALID' | 'NERVOUS_ACTION_REFUSED') { super(code); this.name = 'NervousError'; }
 }
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const base = { version: positive, status: z.enum(NERVOUS_RULE_STATUSES), action: recoveryActionSchema };

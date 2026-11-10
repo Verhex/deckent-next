@@ -1,13 +1,15 @@
+import { CodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeView, policyResources,
-  policySchema, resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeView, policyResources,
+  resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
   type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 import { AuthorityChangeError, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore } from './authority.js';
 
-export class PermissionModeError extends Error {
+export class PermissionModeError extends CodedError {
   /** `mode` names the refused target for `PERMISSION_MODE_DENIED` (the message says which grant is missing). */
-  constructor(readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID' | 'PERMISSION_MODE_DENIED', readonly mode?: string) {
+  constructor(override readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID' | 'PERMISSION_MODE_DENIED', readonly mode?: string) {
     super(code); this.name = 'PermissionModeError';
   }
 }
@@ -29,7 +31,7 @@ export type PermissionModeAudit = (event: AuditEvent) => void;
 export function inspectPermissionMode(policy: unknown, principal: VerifiedPrincipal, input: unknown): PermissionModeView {
   let query;
   try { query = parsePermissionModeQuery(input); } catch { throw new PermissionModeError('PERMISSION_MODE_INVALID'); }
-  return permissionModeView(policySchema.parse(policy), principal, query.scopeId);
+  return permissionModeView(asPolicy(policy), principal, query.scopeId);
 }
 /**
  * A person sets their own terminal permission mode in one scope (T-L4 slice 4c, owner q7; MODES-3). The principal is the verified caller —
@@ -54,7 +56,7 @@ export class PermissionModeApplication {
   private write(principal: VerifiedPrincipal, command: ReturnType<typeof parsePermissionModeCommand>): Promise<PermissionModeChange> {
     const actor = { issuer: principal.issuer, subject: principal.subject };
     return this.store.updateAuthority<PermissionModeChange>(snapshot => {
-      const policy = snapshot.bindings === null ? policySchema.parse(snapshot.policy) : resolvePolicyBindings(snapshot.policy, snapshot.bindings);
+      const policy = snapshot.bindings === null ? asPolicy(snapshot.policy) : resolvePolicyBindings(snapshot.policy, snapshot.bindings);
       if (policy.revision !== command.expectedRevision) throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
       if (policy.schemaVersion === 1) throw new PermissionModeError('PERMISSION_MODE_UNSUPPORTED');
       const bindings = bindingsFileSchema.parse(snapshot.bindings);
@@ -82,7 +84,8 @@ export class PermissionModeApplication {
         // A refusal is recorded when possible; an unrecordable refusal is still a refusal.
         try { if (session) session(); else record(null); } catch { /* refused either way */ }
         // A refused mode is its own typed answer (which mode, which grant is missing), not the generic denial.
-        throw decision.decision === 'require-approval' ? new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED') : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
+        const refusal = policyVerdictRefusal(decision.decision, { deny: 'PERMISSION_MODE_DENIED' });
+        throw refusal === 'POLICY_APPROVAL_UNSUPPORTED' ? new PolicyAuthorizationError(refusal) : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
       }
       if (session) {
         // No record, no switch: the event is durable before the service answers.

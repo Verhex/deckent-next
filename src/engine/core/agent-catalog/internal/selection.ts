@@ -48,13 +48,14 @@ async function choose(store: SelectionStore, scopeId: string, workClass: string,
   if (active.length > 1) throw corrupt();
   const pick = pin ? allowed.find(row => row.agent.agentId === pin.agentId) : active[0] ?? allowed[0];
   if (pin && (!pick || pick.agent.revision !== pin.revision || pick.agent.personaDigest !== pin.personaDigest || pick.agent.skillSetDigest !== pin.skillSetDigest
-    || skillSetDigest(pin.skills) !== pin.skillSetDigest)) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT');
+    || skillSetDigest(pin.skills) !== pin.skillSetDigest)) throw new AgentCatalogStoreError('AGENT_USE_PIN_MISMATCH');
   if (!pick) return null;
   const { agent, standing } = pick, parts = agentPromptParts(agent, await pinnedAgentSkills(store, agent));
   const seal = taskAgentSealSchema.parse({ schemaVersion: 1, agentId: agent.agentId, revision: agent.revision, workClass, personaDigest: agent.personaDigest,
     skillSetDigest: agent.skillSetDigest, skills: agent.content.skills, standing: standing.standing, standingRevision: standing.standingRevision,
     // For an explicit choice the eligible set is narrowed to that one id; the v1 seal keeps its existing vocabulary.
-    selection: { eligible: pin ? 1 : ordered.length, position: pin ? 0 : ordered.indexOf(pick), reason: standing.standing === 'active' ? 'active-agent' : 'first-candidate' } });
+    selection: { eligible: pin ? 1 : ordered.length, position: pin ? 0 : ordered.indexOf(pick), reason: standing.standing === 'active' ? 'active-agent' : 'first-candidate' },
+    name: agent.content.name });
   return Object.freeze({ seal, parts });
 }
 
@@ -67,13 +68,13 @@ async function choose(store: SelectionStore, scopeId: string, workClass: string,
 export async function selectTaskAgents(graph: TaskGraph, registry: WorkClassRegistry | undefined, scopeId: string, store: SelectionStore,
   pins: ReadonlyMap<string, AgentUsePin> = new Map()): Promise<ReadonlyMap<string, TaskAgentSelection>> {
   const selected = new Map<string, TaskAgentSelection>(), byClass = new Map<string, TaskAgentSelection | null>();
-  for (const taskId of pins.keys()) if (!graph.tasks.some(task => task.id === taskId && task.workInput)) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT');
+  for (const taskId of pins.keys()) if (!graph.tasks.some(task => task.id === taskId && task.workInput)) throw new AgentCatalogStoreError('AGENT_USE_TASK_UNAVAILABLE');
   for (const task of graph.tasks) {
     if (!task.workInput) continue; // only a native prompt carries persona and skill parts
     let workClass: string | undefined;
     // An unresolvable WorkClass is refused, typed, by the worker assignment and effort path of the same admission; selection never decides it.
     try { workClass = resolveTaskWorkClass(task.kind, task.workClass ?? task.workInput.workClass, registry).workClass?.id; } catch (error) { if (error instanceof WorkerEffortError && !pins.has(task.id)) continue; throw error; }
-    if (!workClass) { if (pins.has(task.id)) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT'); continue; }
+    if (!workClass) { if (pins.has(task.id)) throw new AgentCatalogStoreError('AGENT_USE_WORK_CLASS_REQUIRED'); continue; }
     const pin = pins.get(task.id);
     if (pin) { selected.set(task.id, (await choose(store, scopeId, workClass, pin))!); continue; }
     if (!byClass.has(workClass)) byClass.set(workClass, await choose(store, scopeId, workClass));
@@ -88,7 +89,8 @@ export const agentSelectionSummary = (selection: ReadonlyMap<string, TaskAgentSe
 /** Opens the catalog for one selection and closes it (admission/proposal composition); no opener = no catalog = no agent. */
 export async function selectTaskAgentsFrom(open: (() => Promise<SelectionStore & { close(): void }>) | undefined, graph: TaskGraph, registryInput: unknown, scopeId: string,
   pins: ReadonlyMap<string, AgentUsePin> = new Map()) {
-  if (pins.size && (!open || !graph.tasks.some(task => task.workInput))) throw new AgentCatalogStoreError('AGENT_CATALOG_UNAVAILABLE');
+  if (pins.size && !open) throw new AgentCatalogStoreError('AGENT_USE_CATALOG_UNAVAILABLE');
+  if (pins.size && !graph.tasks.some(task => task.workInput)) throw new AgentCatalogStoreError('AGENT_USE_TASK_UNAVAILABLE');
   if (!open || !graph.tasks.some(task => task.workInput)) return new Map<string, TaskAgentSelection>(); // no prompt to fill: the catalog is not opened
   const store = await open();
   try { return await selectTaskAgents(graph, executionRegistrySchema.parse(registryInput).workClasses, scopeId, store, pins); } finally { store.close(); }

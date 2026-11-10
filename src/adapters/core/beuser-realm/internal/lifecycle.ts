@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { constants } from 'node:fs';
 import { sha256, HOST_LIMITS_REGISTRY } from '#platform/index.js';
 import { BEUSER_GENESIS_PATH, beuserRealmRemoved, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmRuntime, type BeuserRealmRemoval } from '#engine/index.js';
-import { pinBeuserLimits, type BeuserContext } from '#engine/index.js';
+import { assertBeuserLimits, type BeuserContext } from '#engine/index.js';
 import { BeuserContainerMissing, BEUSER_REALM_RECIPE as recipe, canonicalRealmPath, checkHandle, dockerRealmCommand, pathContains,
   NANOSECONDS_PER_SECOND, pinRealmOptions, privateControllerRoot, realmFileIdentity, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 import { inspectBeuserRealm, type BeuserEvidenceRetention } from './admission.js';
 
-export interface BeuserRealmDependencies {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserRealmDependencies {
   /** Durable, redacted evidence storage; failure must prevent admission. Hashes alone are not retained proof. */
   readonly retainEvidence: BeuserEvidenceRetention;
   /** Existing package/build custody, including absence of secrets, host state and embedded symlinks/volumes. */
@@ -25,7 +25,7 @@ export class DockerBeuserRealmRuntime implements BeuserRealmRuntime {
     this.#command = command ?? dockerRealmCommand(this.options);
   }
   async create(context: BeuserContext, publish: (handle: BeuserRealmHandle) => Promise<void>): Promise<BeuserRealmHandle> {
-    pinBeuserLimits(context.limits); context.signal.throwIfAborted();
+    assertBeuserLimits(context.limits); context.signal.throwIfAborted();
     const options = this.options;
     await privateControllerRoot(options.controllerRoot);
     await canonicalRealmPath(options.packageRoot, 'directory');

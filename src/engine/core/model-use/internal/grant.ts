@@ -1,3 +1,5 @@
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { installationRegistrationSchema, modelInvocationProfileSchema, type ModelUseLease } from '#domain/index.js';
@@ -8,7 +10,6 @@ import { ModelActivationPolicyAuthorization } from '#engine/core/policy/index.js
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { carryModelUseCatalog } from './catalog.js';
-import { modelUseProfiles } from './read.js';
 import { inspectModelUsePreparation } from './preparation.js';
 import type { ModelUseWritePorts } from './ports.js';
 
@@ -25,7 +26,7 @@ export async function grantModelUse(ports: ModelUseWritePorts, root: string, sco
     const { source, selected, preparation, selection } = await inspectModelUsePreparation(ports, context.source.projectRoot, context.source.scopeId);
     if (expectedPreparation && preparation.digest !== expectedPreparation) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     // Reauthorization must not overwrite an independently authored target connection or another scope's catalog.
-    const existing = modelUseProfiles(config);
+    const existing = configuredInvocationProfiles(config);
     if (existing.some(profile => profile.scopeId === scopeId && (profile.schemaVersion !== 3 || !selected.some(item => isDeepStrictEqual(item.profile.reference, profile.reference)))))
       return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     if (existing.some(profile => profile.scopeId !== scopeId) && !isDeepStrictEqual(config['provider_catalog'], source.config['provider_catalog']))
@@ -45,12 +46,12 @@ export async function grantModelUse(ports: ModelUseWritePorts, root: string, sco
     const set = (keyPath: string, value: unknown) => ports.write(target, keyPath, value, `${leaseId}.${keyPath}`);
     await set('schema_version', 6);
     if (selected.length) {
-      const own = modelUseProfiles(target.config).filter(profile => profile.scopeId !== scopeId);
+      const own = configuredInvocationProfiles(target.config).filter(profile => profile.scopeId !== scopeId);
       await set('provider_catalog', source.config['provider_catalog']);
       if (selection && selected.some(({ profile }) => isDeepStrictEqual(profile.reference, selection))) await set('terminal.chat.reference', selection);
       await set('provider_invocation_profiles', { schemaVersion: 1, profiles: [...own, ...targetProfiles] });
       const current = await ports.context(root, scopeId);
-      const app = new ModelActivationApplication({ verify: async () => current.principal },
+      const app = new ModelActivationApplication(verifiedPrincipal(current.principal),
         new ModelActivationPolicyAuthorization({ load: async () => current.document }), new ModelBindingApplication({ read: async () => current.config['provider_catalog'] }),
         () => ports.activationStore(current), Date.now);
       await carryModelUseCatalog(ports, source, current, targetProfiles, leaseId);

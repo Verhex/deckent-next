@@ -1,10 +1,10 @@
-import { persistedString, persistedInteger, persistedUuid, serializeJsonDocument, writeTextAtomic } from '#platform/index.js';
+import { persistedString, persistedUuid, serializeJsonDocument, writeTextAtomic } from '#platform/index.js';
 import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { delegationOwner, delegationPrincipalClass, type VerifiedPrincipal } from '#domain/index.js';
+import { counterSchema, delegationOwner, delegationPrincipalClass, type VerifiedPrincipal } from '#domain/index.js';
 import { personalCustodyEvidenceSchema, PersonalCustodyError, RENEWABLE_SECRET_PREFIX,
   type PersonalCustodyOwner, type SecretStore, type SecretStoreContext, type SecretStoreDescriptor } from '#engine/index.js';
 import { ENCRYPTED_FILE_SECRET_STORE_ID } from './encrypted.js';
@@ -26,7 +26,7 @@ export interface PersonalStoreContext {
   /** Explicit witnessed reconnect may adopt identical-owner token-free registration history; never a renewable session. */
   reconnect?: boolean;
 }
-const hash = z.string().regex(/^[a-f0-9]{64}$/u), text = persistedString(z.string().min(1).max(256)), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const hash = z.string().regex(/^[a-f0-9]{64}$/u), text = persistedString(z.string().min(1).max(256)), count = counterSchema;
 const bindingSchema = z.strictObject({ schemaVersion: z.literal(1), bindingId: persistedUuid(), generation: count,
   uid: count, installationId: text, principal: z.strictObject({ issuer: text, subject: text }),
   locationDigest: hash, installationLocationDigest: hash, keyIdentityDigest: hash,

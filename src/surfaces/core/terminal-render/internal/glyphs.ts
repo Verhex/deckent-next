@@ -1,7 +1,3 @@
-import { createContext, useContext } from 'react';
-import { useAnimation } from 'ink';
-import TIMING from './assistant-timing.json' with { type: 'json' };
-
 /** Deckent-owned decoration only; model text is never rewritten through this set. */
 export type RenderGlyphs = Readonly<{
   ascii: boolean; assistant: string; bullet: string; quote: string; horizontal: string; separator: string; ellipsis: string;
@@ -34,16 +30,4 @@ export function prefersAsciiGlyphs(env: Readonly<Record<string, string | undefin
   if (env['TERM'] === 'linux' || env['TERM'] === 'dumb') return true;
   const locale = env['LC_ALL'] || env['LC_CTYPE'] || env['LANG'] || '';
   return locale !== '' && !/utf-?8/i.test(locale);
-}
-
-export const RenderGlyphsContext = createContext<RenderGlyphs>(UNICODE);
-
-export function useRenderGlyphs(): RenderGlyphs {
-  return useContext(RenderGlyphsContext);
-}
-
-/** The mark of a wait that has no count of its own (an apply behind a card): the Workline's spinner glyphs at its pace; still while inactive. */
-export function useSpinnerGlyph(active: boolean): string {
-  const glyphs = useRenderGlyphs(), { frame } = useAnimation({ interval: TIMING.spinnerIntervalMs, isActive: active });
-  return glyphs.spinner[frame % glyphs.spinner.length]!;
 }

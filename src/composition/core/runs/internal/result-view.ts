@@ -1,5 +1,5 @@
 import type { RunSnapshot, VerifiedPrincipal } from '#domain/index.js';
-import type { Environment, ResolvedConfig } from '#platform/index.js';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type Environment, type ResolvedConfig } from '#platform/index.js';
 import { readMonitorRunResults } from '#adapters/index.js';
 import { runViewSchema, type DispatchIdentityAuthorization, type RunView } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -10,7 +10,7 @@ export async function observeConfiguredRunResults(config: ResolvedConfig, env: E
   const briefs = await readMonitorRunResults(config, env, run, run, async identity => {
     try { await policy.authorizeIdentity('read-output', identity, principal); return true; }
     catch (error) {
-      if (['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'APPROVAL_DENIED'].includes(queryFailure(error).code)) return false;
+      if (isAuthorizationRefusal(queryFailure(error).code, { include: PERSON_AUTHORIZATION_REFUSALS })) return false;
       throw error;
     }
   }, retained, dismissed);

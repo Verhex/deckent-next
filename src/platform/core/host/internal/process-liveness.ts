@@ -1,6 +1,9 @@
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 import { readProcessFile, type ProcessFileReader } from './service-manager.js';
 
+import { processExists } from '#platform/core/state-root/index.js';
+export { processExists };
+
 /**
  * S6R-3 N7 (lead on s6 Q: PID reuse): whether the process that recorded `startedAtMs` as its start can still be the one holding `pid`.
  * `gone` on ESRCH, a zombie, or (Linux) a holder whose kernel start time (`/proc/<pid>/stat` starttime over `/proc/stat` btime, ticks from the
@@ -8,7 +11,7 @@ import { readProcessFile, type ProcessFileReader } from './service-manager.js';
  * healthy worker is the failure this must never cause. Evidence for detection only, never termination proof.
  */
 export function recordedProcessState(pid: number, startedAtMs: number, read: ProcessFileReader = readProcessFile): 'alive' | 'gone' {
-  try { process.kill(pid, 0); } catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH' ? 'gone' : 'alive'; }
+  if (!processExists(pid)) return 'gone';
   if (process.platform !== 'linux') return 'alive';
   try {
     const stat = read(`/proc/${pid}/stat`), boot = /^btime\s+(\d+)\s*$/mu.exec(read('/proc/stat') ?? '')?.[1];

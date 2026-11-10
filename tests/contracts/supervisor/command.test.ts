@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { runNodeDockerCommand, DockerCommandFailure } from '#adapters/index.js';
+import { runNodeDockerCommand, DockerCommandFailure, DOCKER_CLIENT_ENV_NAMES } from '#adapters/index.js';
+import { dockerCommandEnvironment, DOCKER_HOST_STRIP_NAMES } from '#adapters/core/docker-supervisor/index.js';
 const command = (code: string) => ({ executable: process.execPath, args: ['-e', code], timeoutMs: 5000, outputBytes: 4096 });
 it('preserves stdout/stderr and a real nonzero child exit without pretending it was interrupted', async () => {
   expect(await runNodeDockerCommand(command('process.stdout.write("out");process.stderr.write("err")'))).toMatchObject({ stdout: 'out', stderr: 'err' });
@@ -33,4 +35,16 @@ it('A6-3: the docker client inherits only the Docker client table, never a provi
     expect(Object.keys(env).filter(name => !['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(name))).toEqual([]);
     expect(env).toMatchObject({ DOCKER_HOST: 'unix:///tmp/fake.sock', DOCKER_CONFIG: '/tmp/fake-docker', PATH: saved.PATH });
   } finally { for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name]; Object.assign(process.env, saved); }
+  // KG2 E1: a packaged worker-image asset cannot import the table, so its own copy is pinned equal to it.
+  for (const asset of ['build.mjs', 'recover.mjs']) {
+    const source = readFileSync(`assets/worker-image/${asset}`, 'utf8'), lists = source.match(/\['PATH',[^\]]*\]/gu) ?? [], strips = source.match(/!\['DOCKER_HOST',[^\]]*\]/gu) ?? [];
+    expect([lists.length, strips.length]).toEqual([1, 1]);
+    expect(JSON.parse(lists[0]!.replaceAll("'", '"'))).toEqual(DOCKER_CLIENT_ENV_NAMES);
+    expect(JSON.parse(strips[0]!.slice(1).replaceAll("'", '"'))).toEqual(DOCKER_HOST_STRIP_NAMES);
+  }
+  // A pinned local endpoint never inherits a conflicting context or TLS selector (no Docker daemon needed).
+  const selectors = { DOCKER_HOST: 'tcp://other:2376', DOCKER_CONTEXT: 'remote', DOCKER_TLS: '1', DOCKER_TLS_VERIFY: '1', DOCKER_CERT_PATH: '/certs', DOCKER_CONFIG: '/cfg', PATH: '/usr/bin' };
+  const pinned = { executable: 'docker', timeoutMs: 1, outputBytes: 1 };
+  expect(dockerCommandEnvironment({ ...pinned, args: ['--host', 'unix:///run/docker.sock', 'info'] }, selectors)).toEqual({ DOCKER_CONFIG: '/cfg', PATH: '/usr/bin' });
+  expect(dockerCommandEnvironment({ ...pinned, args: ['context', 'inspect'] }, selectors)).toEqual(selectors);
 });

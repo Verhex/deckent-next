@@ -9,10 +9,10 @@ import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type Liv
  * narration collapses into one summary unit when the answer starts (legacy 7108 collapsed reasoning fact). The clock is
  * injected so the machine stays deterministic.
  */
-export type TurnFinish = Extract<TurnDelta, { kind: 'done' }>['finish'];
-export type AnswerUnit = Segment & Readonly<{ lead: boolean }>;
-export type ReasoningUnit = Readonly<{ kind: 'reasoning'; tokens: number; approximate: boolean; elapsedMs: number }>;
-export type ContextView = Readonly<{ promptTokens: number; windowTokens: number | null; quality: Extract<TurnDelta, { kind: 'context' }>['quality'] }>;
+type TurnFinish = Extract<TurnDelta, { kind: 'done' }>['finish'];
+type AnswerUnit = Segment & Readonly<{ lead: boolean }>;
+type ReasoningUnit = Readonly<{ kind: 'reasoning'; tokens: number; approximate: boolean; elapsedMs: number }>;
+type ContextView = Readonly<{ promptTokens: number; windowTokens: number | null; quality: Extract<TurnDelta, { kind: 'context' }>['quality'] }>;
 /** The part of a turn that was running (TL-A): summarizing older messages, the model's answer, or a tool call. */
 export type TurnStage = 'compaction' | 'model' | 'tool';
 /** `cancelledDuring` (TL-A D5): only a cancelled turn carries it, derived here because the engine's note never reaches the surface on Esc. */
@@ -34,7 +34,7 @@ export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | n
  * class `read`, status ok, no approval card, no tracked or cleanup mark) and the thinking between them, settled as ONE row. Presentation only:
  * `steps` keeps every call's own unit, in order, for the expanded view; the history and the audit are untouched. */
 export type ToolGroupStep = ToolUnit | ReasoningUnit;
-export type ToolGroupUnit = Readonly<{ kind: 'tool-group'; steps: readonly ToolGroupStep[] }>;
+type ToolGroupUnit = Readonly<{ kind: 'tool-group'; steps: readonly ToolGroupStep[] }>;
 /** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. `groupable`:
  * a read-class call without an approval card, shown inside the open read group's live line. */
 export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string; groupable?: boolean }>;
@@ -44,15 +44,15 @@ export const LIVE_OUTPUT_TAIL_CHARS = 2_048;
 /** The one terminal sanitizer (platform output): untrusted text loses every escape sequence and control character but newline/tab. */
 export { terminalSafeText };
 /** The history was compacted during the turn (T-L5b): one visible line, never a silent change. */
-export type CompactionUnit = Readonly<{ kind: 'compaction'; replacedMessages: number }>;
+type CompactionUnit = Readonly<{ kind: 'compaction'; replacedMessages: number }>;
 export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | ToolGroupUnit | CompactionUnit | FooterUnit;
 export type Narration = Readonly<{ tokens: number; approximate: boolean; startedAtMs: number }>;
 /** A silent wait of the turn (TL-A D1): the model preparing its answer (measurement, prompt processing) or the service summarizing. */
 export type WaitingView = Readonly<{ kind: 'model' | 'compaction'; sinceMs: number }>;
 /** Raw reasoning kept for the preview (TL-A D6); it is sanitized only when shown, so a sequence split across deltas is still removed. */
-export const REASONING_PREVIEW_CHARS = 2_048;
+const REASONING_PREVIEW_CHARS = 2_048;
 /** Lines of the reasoning preview under the narration. */
-export const REASONING_PREVIEW_LINES = 2;
+const REASONING_PREVIEW_LINES = 2;
 
 const EMPTY_TOOL_RECORD = Object.freeze({ stdout: EMPTY_RECORD_STREAM, stderr: EMPTY_RECORD_STREAM });
 
@@ -204,6 +204,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     return step(Object.freeze({ ...state, outputRecord: Object.freeze({ ...state.outputRecord, [delta.stream]: fed.state }), activeTool: Object.freeze({ ...active, output }) }), []);
   }
   if (delta.kind === 'message') return step(noteToolLine(state, delta.message), []);
+  // v31: a `propose_work` plan's progress is the workline's /do wait and /tasks handoff, never a scrollback row here.
+  if (delta.kind === 'work') return step(state, []);
   // DENY-WORDING: the card's settlement says who refused a call; the line then says "you declined", not a policy refusal.
   // alpha.59 L6: a call that asks for approval is never grouped; the open group settles before its card.
   if (delta.kind === 'approval' && delta.phase === 'requested') {

@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { cliChildEnv } from '../support/child-env.js';
 
@@ -17,12 +17,20 @@ import { cliChildEnv } from '../support/child-env.js';
 // companion, stage). CLIENTS/ROUNDS widen the run for a stress loop (one core, busy loops: see the R6 handoff); the default stays small.
 registerProviderConfig();
 const clients = Number(process.env.DECKENT_LEDGER_STRESS_CLIENTS ?? 4), rounds = Number(process.env.DECKENT_LEDGER_STRESS_ROUNDS ?? 25);
-const storage = resolve('dist/composition/core/storage/index.js');
+const platform = resolve('dist/platform/index.js'), adapters = resolve('dist/adapters/index.js');
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 const program = `
-  const [storage, project, rounds, writer] = process.argv.slice(1); const { openConfiguredAttemptStore } = await import(storage);
+  const [platform, adapters, project, rounds, writer] = process.argv.slice(1);
+  const { loadConfig, prepareProductFile } = await import(platform);
+  const { openSqliteAttemptStore, validateExecutionSupervisorProfile } = await import(adapters);
+  const openConfiguredAttemptStore = async (projectRoot, options = {}) => {
+    const config = await loadConfig(projectRoot, { ...options, heal: false });
+    const path = await prepareProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
+    const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'allow', { validate: validateExecutionSupervisorProfile });
+    return { store };
+  };
   const failures = [];
   for (let round = 0; round < Number(rounds); round++) {
     let stage = 'open';
@@ -35,7 +43,7 @@ const program = `
   process.stdout.write(JSON.stringify(failures));`;
 /** A reader loads an absent Attempt; a writer creates one execution pool per round (a durable write, as dispatch records are). */
 function client(project: string, env: NodeJS.ProcessEnv, writer: string) {
-  const child = spawn(process.execPath, ['--input-type=module', '-e', program, storage, project, String(rounds), writer], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', program, platform, adapters, project, String(rounds), writer], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = ''; child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });
   return new Promise<{ code: number | null; stderr: string; failures: { stage: string; code: string; diagnostic: unknown }[] }>((resolveExit, reject) => {
     child.once('error', reject);
@@ -44,7 +52,8 @@ function client(project: string, env: NodeJS.ProcessEnv, writer: string) {
 }
 
 it.skipIf(process.platform !== 'linux')('client processes open the ledger beside a live service without a companion refusal or a busy refusal', async () => {
-  await access(storage).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
+  await access(platform).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
+  await access(adapters).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-ledger-stress-')); roots.push(root);
   const project = join(root, 'project'), home = join(root, 'home');
   await mkdir(project, { recursive: true }); await mkdir(home, { mode: 0o700 });

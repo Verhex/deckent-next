@@ -2,8 +2,8 @@ import { persistedString, persistedInteger } from '#platform/index.js';
 import type { Readable, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
-import { beuserBindingSchema, type BeuserBinding, verifiedPrincipalSchema } from '#domain/index.js';
-import { BEUSER_KEY_ALIASES, assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
+import { type BeuserBinding, verifiedPrincipalSchema } from '#domain/index.js';
+import { BEUSER_KEY_ALIASES, assertBeuserAccess, pinBeuserLimits, sealBeuserContext, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
 import { catalogCommand, type SurfaceCommand } from './argv.js';
 import { SurfaceCapture, surfaceDigest, type HarnessAction, type HarnessProcess, type HarnessSink } from './capture.js';
 import type { BeuserTerminalFixture } from './measurement.js';
@@ -93,8 +93,8 @@ export interface BeuserSurface extends SurfacePort {
 
 export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurface {
   const { realm, sink } = options;
-  const admitted: BeuserContext = { binding: beuserBindingSchema.parse(options.context.binding),
-    principal: verifiedPrincipalSchema.parse(options.context.principal), limits: pinBeuserLimits(options.context.limits), signal: options.context.signal };
+  const admitted = sealBeuserContext({ binding: options.context.binding,
+    principal: verifiedPrincipalSchema.parse(options.context.principal), limits: pinBeuserLimits(options.context.limits), signal: options.context.signal });
   // Node timers outside this protocol range wrap to 1 ms; never silently shorten an admitted budget.
   if ([admitted.limits.maxWallMs, admitted.limits.maxWaitMs, admitted.limits.cleanupDeadlineMs].some(ms => ms > 0x7fffffff)) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
   const bounds = Object.freeze({ ...options.bounds }), size = Object.freeze({ ...options.size });

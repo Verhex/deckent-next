@@ -5,8 +5,13 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, getConfigValue, unexpectedQueryFailure,
+  resolveLocale, getConfigValue, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent, t,
 } from '../../../src/platform/index.js';
+import { CodedError as DomainCodedError, isCodedError as isDomainCodedError, PolicyError } from '../../../src/domain/index.js';
+
+import { PolicyAuthorizationError } from '#engine/index.js';
+import { ScratchError } from '#adapters/index.js';
+import { ArtifactError } from '#capabilities/index.js';
 
 describe('errors, output and locale public contracts', () => {
   it('freezes registry authority, keeps no legacy numbered codes and returns defensive collections', () => {
@@ -17,9 +22,22 @@ describe('errors, output and locale public contracts', () => {
     expect(Object.isFrozen(ErrorRegistry.get('CONFIG_FILE_INVALID'))).toBe(true);
     expect(ErrorRegistry.createError('not-registered').message).toContain('not-registered');
     expect(ErrorRegistry.createError('DECKENT_E077').message).toContain('DECKENT_E077');
+    for (const code of ['AGENT_USE_PIN_MISMATCH', 'AGENT_USE_TASK_UNAVAILABLE', 'AGENT_USE_WORK_CLASS_REQUIRED', 'AGENT_USE_CATALOG_UNAVAILABLE', 'MCP_TOOL_SUMMARY_UNAVAILABLE']) {
+      for (const locale of ['en', 'tr'] as const) {
+        const error = ErrorRegistry.createError(code, { locale, params: { name: 'lookup' } });
+        expect(error.code).toBe(code); expect(error.message).toBe(t(`error.${code}` as Parameters<typeof t>[0], { name: 'lookup' }, locale));
+        expect(formatHumanError(error, { noColor: true, locale })).toContain(error.message);
+        expect(error.message).not.toContain('{');
+      }
+    }
+    expect(ErrorRegistry.createError('MCP_TOOL_SUMMARY_UNAVAILABLE').category).toBe('usage');
+
     expect(ErrorRegistry.get('constructor')).toBeUndefined();
     expect(Object.isFrozen(ErrorRegistry.get('CONFIG_FILE_INVALID')?.howToFix)).toBe(true);
     expect(formatHumanError(ErrorRegistry.createError('CONFIG_FILE_INVALID'), { noColor: true, locale: 'tr' })).toContain('eksik veya hatalı alanlar');
+    // KG14 F-H2c: a plain code renders its own catalog sentence (any family prefix) with the caller's params and keeps its exit category.
+    for (const locale of ['en', 'tr'] as const) expect([ErrorRegistry.get('AGENT_CATALOG_UNAVAILABLE', locale, { id: 'a' })?.message, ErrorRegistry.get('NATIVE_WORKER_F08_INVALID', locale)?.message,
+      ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND').category]).toEqual([t('error.AGENT_CATALOG_UNAVAILABLE', { id: 'a' }, locale), t('headless.agent.worker.NATIVE_WORKER_F08_INVALID', {}, locale), 'usage']);
   });
   it('rejects a legacy numbered code and a lowercase code at the registry lint pattern (negative proof)', () => {
     expect(lintErrorRegistry()).toEqual([]);
@@ -43,6 +61,23 @@ describe('errors, output and locale public contracts', () => {
     expect(exitCodeFor(ErrorRegistry.createError('CLI_USAGE'))).toBe(2);
     expect(exitCodeFor(ErrorRegistry.createError('CONFIG_FILE_INVALID'))).toBe(78);
     expect(exitCodeFor(new DeckentError('CUSTOM', 'detail'))).toBe(1);
+  });
+  it('KG14 H1: the coded-error brand passes both twins, a subclass and a separately distributed copy; a wire or spoofed { code } does not', () => {
+    class Twin extends DomainCodedError<'TWIN_REFUSED'> {}
+    class EnterpriseCopy extends Error { readonly code = 'COPY_REFUSED'; }
+    Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+    const cause = new Error('inner'), typed = new CodedError('PLATFORM_REFUSED', { params: { id: 'a' }, cause }), twin = new Twin('TWIN_REFUSED');
+    expect([typed.message, typed.name, typed.params, typed.cause, twin.name, twin.params, 'cause' in twin]).toEqual(['PLATFORM_REFUSED', 'CodedError', { id: 'a' }, cause, 'Twin', undefined, false]);
+    expect([isCodedError(typed, 'PLATFORM_REFUSED'), isDomainCodedError(typed, 'PLATFORM_REFUSED'), isCodedError(twin, 'TWIN_REFUSED'), isCodedError(new EnterpriseCopy(), 'COPY_REFUSED')]).toEqual([true, true, true, true]);
+    const wire = JSON.parse(JSON.stringify(typed)) as unknown, spoofed = Object.assign(new Error('PLATFORM_REFUSED'), { code: 'PLATFORM_REFUSED' });
+    expect([isCodedError(typed, 'OTHER'), isCodedError(wire, 'PLATFORM_REFUSED'), isCodedError(spoofed, 'PLATFORM_REFUSED'), isCodedError(null, 'X'), isCodedError('PLATFORM_REFUSED', 'PLATFORM_REFUSED')]).toEqual([false, false, false, false, false]);
+    for (const error of [ErrorRegistry.createError('POLICY_DENIED'), new PolicyError('POLICY_INVALID'), new PolicyAuthorizationError('POLICY_DENIED'),
+      new ScratchError('SCRATCH_UNSAFE'), new ArtifactError('ARTIFACT_SCOPE_DENIED')]) {
+      expect(isCodedError(error, error.code)).toBe(true); expect(isDomainCodedError(error, error.code)).toBe(true);
+    }
+    expect([errorCodeOf(wire), errorCodeOf(spoofed), errorCodeOf({ code: 7 }), errorCodeOf(undefined)]).toEqual(['PLATFORM_REFUSED', 'PLATFORM_REFUSED', null, null]);
+    const errno = (code: string) => Object.assign(new Error(code), { code });
+    expect([isAbsent(errno('ENOENT')), isAbsent(errno('ENOTDIR')), isAbsent(errno('ENOTDIR'), { notDir: true }), isAbsent(errno('EACCES'), { notDir: true }), isAbsent(null)]).toEqual([true, false, true, false, false]);
   });
   it('resolves locale explicit → LANGUAGE → LANG override → config → LC_ALL → LANG → en', () => {
     expect(resolveLocale('tr', { DECKENT_LANGUAGE: 'en' }, 'en')).toBe('tr');

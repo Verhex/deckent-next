@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { installationRegistrationSchema, projectAttachmentSchema, identitySchema, persistedUuid, type InstallationRegistration, type InstallationSource,
   type ProjectAttachment, type AttachmentLocation, type AttachmentPerson, type AttachmentPreparation } from '#domain/index.js';
@@ -27,7 +28,7 @@ export class ProjectAttachmentApplication {
   constructor(private readonly ports: ProjectAttachmentPorts) {}
   private async currentSource(registration: InstallationRegistration) {
     if (!sameAttachmentPerson(registration.source.owner, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
-    const observed = await this.ports.source(registration.source.projectRoot, registration.source.scopeId, this.ports.actor).catch((error: unknown) => { if ((error as { code?: string }).code === 'PROJECT_ATTACHMENT_READ_LIMIT') throw error; return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'); });
+    const observed = await this.ports.source(registration.source.projectRoot, registration.source.scopeId, this.ports.actor).catch((error: unknown) => { if (isCodedError(error, 'PROJECT_ATTACHMENT_READ_LIMIT')) throw error; return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'); });
     if (JSON.stringify(observed.source) !== JSON.stringify(registration.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     existingSharedIdentity(observed.identity);
     return observed.identity;

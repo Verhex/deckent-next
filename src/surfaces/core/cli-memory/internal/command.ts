@@ -67,7 +67,7 @@ async function resolveEntry(context: MemoryCommandContext, root: string, scopeId
   return listed.status === 'ok' ? inspect(requireIdPrefix(id, listed.entries.map(entry => entry.entryId))) : listed;
 }
 /** The next step of a held read (S4B-4: a purge the restored ledger lacks names its own). */
-export const heldNext = (code: MemoryHeld['code'], locale: Parameters<typeof t>[2]) => code === 'MEMORY_CORRUPT' ? t('memory.held.next.MEMORY_CORRUPT', {}, locale)
+const heldNext = (code: MemoryHeld['code'], locale: Parameters<typeof t>[2]) => code === 'MEMORY_CORRUPT' ? t('memory.held.next.MEMORY_CORRUPT', {}, locale)
   : code === 'MEMORY_PURGE_REPLAY_HELD' ? t('memory.held.next.MEMORY_PURGE_REPLAY_HELD', {}, locale) : t('memory.held.next.MEMORY_UNAVAILABLE', {}, locale);
 export async function memoryCommand(argv: readonly string[], context: MemoryCommandContext = {}): Promise<void | ExitCode> {
   const args = parse(argv), locale = commandLocale(context, args.language), sinks = sinksOf(context);

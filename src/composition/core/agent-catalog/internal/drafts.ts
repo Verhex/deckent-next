@@ -10,7 +10,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { memoryJournalFor } from '#composition/core/memory/index.js';
 import { catalogDependencies, type ScopeContext } from './application.js';
 
-export type ConfiguredCatalogDraft = Readonly<{ schemaVersion: 1; suggestion: CatalogSuggestionView; draft: CatalogDraft; digest: string; readable: number; withheld: number; aiDerived: boolean }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConfiguredCatalogDraft = Readonly<{ schemaVersion: 1; suggestion: CatalogSuggestionView; draft: CatalogDraft; digest: string; readable: number; withheld: number; aiDerived: boolean }>;
 const witnessOf = (operation: string, witness: AuthorityWitness) => assertAuthorityWitness(operation, localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), witness);
 /** Person-card-only, never stored: draft from readable pinned lessons above minLessons; hidden refs only count, a skill draft is AI output. */
 async function render(context: ScopeContext, scopeId: string, suggestionId: string): Promise<ConfiguredCatalogDraft> {

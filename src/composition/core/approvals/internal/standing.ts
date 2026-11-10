@@ -1,11 +1,10 @@
-import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_RECOVERY_RULES, FIRST_RUN_FIRST_COMMIT_OPERATION_ID, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
 /** The caller's own standing approvals for `deckent policy grants --mine` / `revoke` (G6): local OS person; a revoke is the governed `policy.administer@1` change, `confirm` is the person's own answer. */
@@ -16,12 +15,12 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
   use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore; readonly serviceIdentity?: { readonly scopeId: string; readonly serviceId: string } | null }, person: Person) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(root, scopeId, options, access);
-    const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+    const source = contextPolicySource({ layout, config });
     const denied = () => Promise.reject(new Error('read-only'));
     if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied, serviceIdentity: config.service.identity }, principal);
     const peer = localPrincipalPeer(), clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock, peer);
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), ledger = await path();
-    const effects = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid'), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
+    const effects = await openConfiguredLedger({ config, path: async () => ledger }, { migration: 'forbid' }), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     const auditStore = await openSqliteAuditStore(ledger, config.storage.sqlite, 'forbid');
     try {
       const audit = new AuditApplication(auditStore, integrity);
@@ -33,7 +32,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
         const producers = resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, undefined,
           { scopeId, principal, policyRevision: document.revision, atMs: clock.sample().wallMs }, event => { audit.record(event); });
         return new ApprovalApplication(journal.store,
-        { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
+        verifiedPrincipal(principal), sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
       return await use({ administration, approve, policy: source, effects, serviceIdentity: config.service.identity }, principal);
@@ -53,7 +52,7 @@ export async function listConfiguredAllStandingGrants(root: string, input: { rea
         return { page: (after: number, limit: number) => audit.listKind(scopeId, 'authority-change', after, limit).map(({ sequence, event }) =>
           ({ sequence, atMs: event.atMs, inputDigest: event.subject.kind === 'authority-change' ? event.subject.inputDigest : '' })), close: () => store.close() };
       } catch (error) { store.close(); throw error; } } };
-    return await new StandingGrantsInspection({ policy: createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), history })
+    return await new StandingGrantsInspection({ policy: contextPolicySource({ layout, config }), history })
       .list({ schemaVersion: 1, scopeId: input.scopeId, ...(input.after === undefined ? {} : { after: input.after }) }, principal);
   } catch (error) { throw queryFailure(error); }
 }
@@ -92,11 +91,10 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
 export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
-  readonly expect?: string; readonly reason: string }): Promise<TemplateUpgradeResult> {
+  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' }): Promise<TemplateUpgradeResult> {
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
-    new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, recoveryRules: FIRST_RUN_RECOVERY_RULES, firstCommitOperationId: FIRST_RUN_FIRST_COMMIT_OPERATION_ID, uninstallOperationIds: FIRST_RUN_TOOL_NAMES.uninstallOperationIds ?? [], serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
-      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
+    new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
+      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }));
 }
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
 export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {

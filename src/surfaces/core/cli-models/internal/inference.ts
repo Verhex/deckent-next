@@ -1,5 +1,5 @@
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceServingError, roleContextCeiling, InferenceTokenBudget, selectInferenceProfile } from '#engine/index.js';
+import { configuredInvocationProfiles, buildInferenceServingPlan, estimateReplicaCapacity, InferenceServingError, roleContextCeiling, InferenceTokenBudget, selectInferenceProfile } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ModelCommandContext } from './context.js';
 
@@ -84,7 +84,7 @@ function renderPlan(plan: ReturnType<typeof buildInferenceServingPlan>, locale: 
 
 /** Models this installation calls on this machine: invocation profiles whose endpoint is a loopback address (no provider id is assumed). */
 function localModels(config: Record<string, unknown>): { readonly model: string; readonly provider: string }[] {
-  const profiles = (config['provider_invocation_profiles'] as { profiles?: readonly unknown[] } | undefined)?.profiles ?? [];
+  const profiles = configuredInvocationProfiles(config);
   const local = profiles.flatMap(entry => {
     const profile = entry as { reference?: { providerId?: unknown; modelId?: unknown }; adapter?: { definition?: { endpoint?: unknown } } };
     const endpoint = profile.adapter?.definition?.endpoint;

@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { FileArtifactStore, GitWorkspaceBroker, DockerSupervisor, readLocalOsIdentity } from '#adapters/index.js';
 import { TaskEvaluationApplication, readAttemptHandoffEvents, recordHandoffRefusal, HandoffError } from '#engine/index.js';
 import { clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';

@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { beuserBindingSchema, executionProfileDefinitionSchema, executionRegistrySchema } from '#domain/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, beuserParametersSchema, evaluateBeuserEvidence } from '#capabilities/index.js';
-import { openSqliteAttemptStore, FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
-import { BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, beuserArrangePlan, type BeuserReport, type SandboxRequest } from '#engine/index.js';
+import { FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
+import { BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, beuserArrangePlan, sealBeuserContext, type BeuserReport, type SandboxRequest } from '#engine/index.js';
 import { sha256, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { evaluateConfiguredBeuserTask } from './evaluate.js';
@@ -28,7 +28,7 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
   await beuserPrivateRecord(await prepareProductDirectory(c.layout, 'crashes'), beuserMonitorName(input.scopeId, c.principal), c.config.artifacts.maxBytes)
     .write({ schemaVersion: 1, runId, journey: input.journey, startedAt: Date.now(), walkers: selected.map(({ profile, data }) => ({ id: profile.id,
       walker: data.choices['beuser-walker'], judge: data.choices['beuser-evaluator'], limitsRevision: data.limitsRevision, limits: beuserProfileLimits(data) })) });
-  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile });
+  const store = await openConfiguredLedger(c, { migration: 'forbid', validate: validateBeuserSupervisorProfile });
   const segments: BeuserReport['segments'] = [], unknown: BeuserReport['unknown'] = [], findings: NonNullable<BeuserReport['findings']> = [];
   const cleanup: NonNullable<BeuserReport['cleanup']> = [];
   let walked = 0, completed = 0, attempted = 0;
@@ -48,7 +48,7 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
         const start = performance.now(); attempted++;
         try {
           const dispatch = await executeConfiguredBeuserAttempt(root, request, { schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1, parameters: profile.parameters },
-            { binding: data.binding, principal, limits, signal }, store, options);
+            sealBeuserContext({ binding: data.binding, principal, limits, signal }), store, options);
           if (dispatch.walked) { walked++; intervals.push({ start, end: performance.now() }); }
           return { identity, data, limits, request, dispatch };
         } catch (error) { return { identity, error }; }
@@ -66,7 +66,7 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
           if (dispatch.reason && !finding) unknown.push({ branch: identity.taskId, reason: dispatch.reason });
           if (dispatch.judgeFailure) unknown.push({ branch: identity.taskId, reason: dispatch.judgeFailure });
           if (dispatch.kind !== 'terminal') { unknown.push({ branch: identity.taskId, reason: 'BEUSER_CLEANUP_UNPROVEN' }); continue; }
-          await evaluateConfiguredBeuserTask(root, { binding: data.binding, principal, limits, signal: new AbortController().signal }, randomUUID(), options);
+          await evaluateConfiguredBeuserTask(root, sealBeuserContext({ binding: data.binding, principal, limits, signal: new AbortController().signal }), randomUUID(), options);
           const record = await store.readDispatch(request);
           const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });
           const evidence = await readBeuserDispatchEvidence(record!, definitions.find(d => d.binding.identity.taskId === identity.taskId)!, artifacts,

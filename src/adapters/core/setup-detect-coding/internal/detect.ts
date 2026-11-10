@@ -8,12 +8,12 @@ import { findExecutable, runDetectCommand, type DetectEnvironment, type DetectRu
 import type { CodingFacts } from './family.js';
 import registry from './coding.json' with { type: 'json' };
 /** Where a coding CLI keeps its sign-in (the native connection catalog's shape); `homeOverride` names an environment variable that moves it. */
-export type CodingCredentialSpec = Readonly<{ homeOverride: string; home: string; file: string }>;
-export type PathKind = 'file' | 'directory' | 'absent' | 'unknown';
+type CodingCredentialSpec = Readonly<{ homeOverride: string; home: string; file: string }>;
+type PathKind = 'file' | 'directory' | 'absent' | 'unknown';
 /** Read-only host ports. `kind` is the only access to sign-in files: an lstat, never an open or a read (ANALYSIS §11: stat only). */
-export type CodingDetectPorts = Readonly<{ run: DetectRunner; find: typeof findExecutable; kind: (path: string) => Promise<PathKind>;
+type CodingDetectPorts = Readonly<{ run: DetectRunner; find: typeof findExecutable; kind: (path: string) => Promise<PathKind>;
   selfSource: (root: string) => Promise<boolean>; owned: (path: string) => Promise<boolean>; credential: ((id: string) => CodingCredentialSpec | null) | null; executable: (id: string) => string | null }>;
-export const HOST_CODING_PORTS: CodingDetectPorts = Object.freeze({ run: runDetectCommand, find: findExecutable, credential: null,
+const HOST_CODING_PORTS: CodingDetectPorts = Object.freeze({ run: runDetectCommand, find: findExecutable, credential: null,
   kind: (path: string) => lstat(path).then(info => info.isFile() ? 'file' as const : info.isDirectory() ? 'directory' as const : 'unknown' as const,
     (error: NodeJS.ErrnoException) => error.code === 'ENOENT' || error.code === 'ENOTDIR' ? 'absent' as const : 'unknown' as const),
   selfSource: (root: string) => isSelfSourceProject(root).catch(() => false),

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { requireLedgerVersion, EFFECT_PRODUCER_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { requireLedgerVersion, EFFECT_OPEN_STATE_SQL, EFFECT_PRODUCER_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { targetQueueRecordSchema } from '#domain/index.js';
 import type { UninstallWork } from '#engine/index.js';
@@ -11,8 +11,8 @@ const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as type
 const openReadOnly = (path: string, busyTimeoutMs: number) => new (nativeSqlite().DatabaseSync)(existsSync(`${path}-wal`) || existsSync(`${path}-shm`) ? path
   : new URL(`${pathToFileURL(path).href}?immutable=1`), { readOnly: true, timeout: busyTimeoutMs });
 const RUNNING = `SELECT scope_id s,run_id i,revision v FROM runs r WHERE CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.state.kind')='running' ELSE 1 END
-  OR EXISTS(SELECT 1 FROM dispatches d WHERE d.scope_id=r.scope_id AND json_valid(d.record) AND json_extract(d.record,'$.request.identity.runId')=r.run_id
-  AND json_extract(d.record,'$.terminal') IS NULL)`;
+  OR EXISTS(SELECT 1 FROM dispatches d WHERE d.scope_id=r.scope_id AND json_valid(d.record) AND (CASE WHEN json_valid(d.record) THEN json_extract(d.record,'$.request.identity.runId') END)=r.run_id
+  AND (CASE WHEN json_valid(d.record) THEN json_extract(d.record,'$.terminal') END) IS NULL)`;
 const UNKNOWN: UninstallWork = { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: false };
 /** Whole-installation itemized work: revoked scope grants never hide unresolved business effects or active work. Each category is bounded;
  * one past the bound makes the observation incomplete (never zero). Settled history is never read as activity, however long it is. */
@@ -31,7 +31,7 @@ export function observeUninstallWork(path: string, limits: { readonly busyTimeou
         const pin = db.prepare('SELECT company_id FROM scope_registry WHERE scope_id=?').get(ref.scopeId)?.['company_id'];
         return { scopeId: ref.scopeId, id: ref.id, revision: ref.revision, identity: record.request.identity, state: record.state,
           ...(limits.companyId ? { company: pin == null ? 'unregistered' as const : pin === limits.companyId ? 'current' as const : 'foreign' as const } : {}) }; }),
-      uncertain: [...uncertain('effect', `SELECT scope_id s,command_id i,target_kind||'/'||target_id t FROM effect_intents WHERE state NOT IN ('settled','refused')`),
+      uncertain: [...uncertain('effect', `SELECT scope_id s,command_id i,target_kind||'/'||target_id t FROM effect_intents WHERE ${EFFECT_OPEN_STATE_SQL}`),
         ...uncertain('invocation', `SELECT scope_id s,invocation_id i,NULL t FROM model_invocations WHERE state IN ('claimed','unknown')`),
         ...uncertain('reservation', `SELECT scope_id s,invocation_id i,NULL t FROM model_invocation_spend_reservations WHERE CASE WHEN json_valid(record)=0 THEN 1
           ELSE json_extract(record,'$.disposition.state')='held' AND json_extract(record,'$.reconciliation') IS NULL END`)], complete };
@@ -41,7 +41,7 @@ export function observeUninstallWork(path: string, limits: { readonly busyTimeou
 export function attemptRecords(path: string, limits: { readonly busyTimeoutMs: number; readonly maxRecords: number }, identity: { readonly scopeId: string; readonly runId: string }) {
   const db = openReadOnly(path, limits.busyTimeoutMs), json = (row: Record<string, unknown> | undefined) => row ? JSON.parse(String(Object.values(row)[0])) as unknown : null;
   try { requireLedgerVersion(db, EFFECT_PRODUCER_LEDGER_VERSION); return { run: json(db.prepare('SELECT snapshot FROM runs WHERE scope_id=? AND run_id=?').get(identity.scopeId, identity.runId)),
-    deliveries: db.prepare(`SELECT record FROM target_queue WHERE scope_id=? AND json_extract(record,'$.request.identity.runId')=? LIMIT ?`).all(identity.scopeId, identity.runId, limits.maxRecords).map(json) }; } finally { db.close(); }
+    deliveries: db.prepare(`SELECT record FROM target_queue WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.identity.runId') END)=? LIMIT ?`).all(identity.scopeId, identity.runId, limits.maxRecords).map(json) }; } finally { db.close(); }
 }
 /** Under lifecycle custody: every scope the ledger recorded data for joins the policy-named ones; the union is what the lifecycle decision
  * covers. An unreadable or unbounded scope record keeps the installation (typed refusal). Work itself is compared by the plan (D2). */

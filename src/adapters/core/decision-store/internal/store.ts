@@ -1,10 +1,9 @@
-import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import { decisionRecordSchema, encodeCommandProjection, type AuditEvent } from '#domain/index.js';
 import { DecisionApplicationError, validateDecisionSnapshot, type DecisionStore, type DecisionSnapshot, type DecisionMutationReceipt, AuditApplication } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, DECISION_PORT_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, ledgerTransaction, openSqliteLedger, requireLedgerVersion, DECISION_PORT_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 class SqliteDecisionStore implements DecisionStore {
  private readonly audit:AuditApplication;
@@ -13,11 +12,9 @@ class SqliteDecisionStore implements DecisionStore {
  private decode(input:unknown):unknown {try{const sealed=JSON.parse(String(input)) as {value:unknown;mac:string;keyId:string};
   if(!this.integrity.verify(encodeCommandProjection('decision-store:1',sealed.value),sealed.mac,sealed.keyId))throw Error();return sealed.value;
  }catch{throw new DecisionApplicationError('DECISION_CORRUPT');}}
+ // A lost commit result is resolved by the same command receipt on retry.
  private transaction<T>(work:()=>T):T {
-  this.db.exec('BEGIN IMMEDIATE');try{const result=work();
-   try{this.db.exec('COMMIT');}catch{throw new DecisionApplicationError('DECISION_OUTCOME_UNKNOWN');}
-   return result;
-  }catch(error){try{this.db.exec('ROLLBACK');}catch{/* A lost commit result is resolved by the same command receipt on retry. */}throw error;}
+  return ledgerTransaction(this.db,work,{unknown:()=>new DecisionApplicationError('DECISION_OUTCOME_UNKNOWN'),failure:error=>error});
  }
  private read(scopeId:string,decisionId:string){const row=this.db.prepare('SELECT snapshot FROM decision_cases WHERE scope_id=? AND decision_id=?').get(scopeId,decisionId);
   if(!row)return null;const value=validateDecisionSnapshot(this.decode(row.snapshot));if(value.scopeId!==scopeId||value.decisionId!==decisionId)throw new DecisionApplicationError('DECISION_CORRUPT');return value;}
@@ -49,7 +46,6 @@ class SqliteDecisionStore implements DecisionStore {
 }
 export function openSqliteDecisionStore(path:string,options:SqliteLedgerOptions,integrity:IntegrityAuthority,access:'read'|'write'):DecisionStore {
  if(access==='write')return new SqliteDecisionStore(openSqliteLedger(path,options,'forbid'),integrity);
- const {DatabaseSync:NativeDatabase}=createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
- const db=new NativeDatabase(path,{readOnly:true,timeout:options.busyTimeoutMs,enableForeignKeyConstraints:true});
+ const db=openLedgerDatabase(path,{readOnly:true,timeout:options.busyTimeoutMs,enableForeignKeyConstraints:true});
  try{requireLedgerVersion(db,DECISION_PORT_LEDGER_VERSION);return new SqliteDecisionStore(db,integrity);}catch(error){db.close();throw error;}
 }

@@ -7,8 +7,8 @@ import { PRIVATE_PERMISSION_MASK, generateEd25519Pair, ed25519Signer, signatureM
   removeEmptyPinnedDirectory, boundState, removeBoundMembers, DECKENT_DIR, type ResolvedConfig } from '#platform/index.js';
 import { policyNamedScopes, resolvePolicyBindings, type VerifiedPrincipal } from '#domain/index.js';
 import { authorizeUninstall, type UninstallPlan, type UninstallResult } from '#engine/index.js';
-import { verifyBackupSet } from '#adapters/core/backup-store/index.js';
-import { acquireLedgerLock, type LedgerLock } from '#adapters/core/local-runtime-socket/index.js';
+import { currentSetDigest, verifyBackupSet } from '#adapters/core/backup-store/index.js';
+import { withExclusiveFileLock, type ExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { forgetFolderLegacyTrust, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 import { memberStat, type DataRemovalSnapshot } from './data.js';
 import { verifyUninstallArchive } from './archive.js';
@@ -97,17 +97,18 @@ async function reconcileFinalTail(directory: string, root: string, actor: Verifi
   }
   return { plan: intent.plan, result: intent.result, ...(remaining.length ? { remaining } : {}), intent };
 }
-type Env = Readonly<Record<string, string | undefined>>; // custody: the ledger lock (never stolen: a holder is a running service; `optional`: none to take)
-function custody(config: ResolvedConfig, optional = false): LedgerLock | undefined { try { return acquireLedgerLock(`${productResourcePath(config.productLayout, 'ledger')}-lock`); }
-  catch (error) { if ((error as { code?: string }).code === 'LOCAL_RUNTIME_ALREADY_RUNNING') throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); if (!optional) throw error; } }
+type Env = Readonly<Record<string, string | undefined>>;
+/** The ledger lock, never stolen (a holder is a running service); `optional`: there may be none to take. */
+async function custody(config: ResolvedConfig, optional = false): Promise<ExclusiveFileLock | undefined> { const lock = await withExclusiveFileLock(`${productResourcePath(config.productLayout, 'ledger')}-lock`, { waitMs: 0, pollMs: 0 }).catch((error: unknown) => { if (!optional) throw error; return undefined; });
+  if (lock === null) throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); return lock; }
 /** R11: the one completion of a finished removal (normal step, resumed tail, already-absent reconcile). Keep tiers leave the retired marker (R1),
  * delete-everything forgets this folder's legacy trust (R6), both before `release` drops the hold (a failure keeps it); then the custody file goes
  * only when the plan did not keep it, Git does not track it and it is empty (R2), then emptied folders. An absent tail takes the custody here. */
-export async function completeUninstall(config: ResolvedConfig, plan: UninstallPlan, env: Env, release: () => Promise<void>, held?: LedgerLock) {
+export async function completeUninstall(config: ResolvedConfig, plan: UninstallPlan, env: Env, release: () => Promise<void>, held?: ExclusiveFileLock) {
   const root = config.productLayout.root, own = root === join(config.projectRoot, DECKENT_DIR), path = `${productResourcePath(config.productLayout, 'ledger')}-lock`;
   if (!plan.purge) await retireInstallation(root, { installationId: plan.installation.id, planDigest: plan.planDigest, tier: plan.tier });
   else if (own) await forgetFolderLegacyTrust(config.projectRoot, instructionTrustDirectory(env));
-  const lock = held ?? (plan.purge && own ? custody(config, true) : undefined);
+  const lock = held ?? (plan.purge && own ? await custody(config, true) : undefined);
   try {
     if (plan.purge) await settleAttachmentRemoval(config, plan.installation.id, env);
     await release();
@@ -125,7 +126,7 @@ export async function completeUninstall(config: ResolvedConfig, plan: UninstallP
 export async function resumeUninstallFinalTail(config: ResolvedConfig, directory: string, actor: VerifiedPrincipal, passphrase: string, env: Env = process.env): Promise<UninstallResult> {
   const layout = config.productLayout, root = layout.root, maxBytes = config.installation.profileMaxBytes;
   if (!passphrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED');
-  const lock = custody(config)!;
+  const lock = (await custody(config))!;
   try {
     const held = await reconcileFinalTail(directory, root, actor, maxBytes);
     if (!held?.remaining) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');
@@ -133,8 +134,8 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
     if (!intent.scopes) throw tailUnknown(directory, intent); // a pre-scope intent cannot have its delete authority decided again
     const verified = await verifyBackupSet(intent.snapshot.set, passphrase, config.installation.packageMeasurement);
     try {
-      if (verified.state.installationId !== intent.plan.installation.id
-        || createHash('sha256').update(await readFile(join(verified.set, 'MANIFEST.sha256'))).digest('hex') !== intent.snapshot.manifestDigest) throw tailUnknown(directory, intent);
+      verified.assertInstallation(intent.plan.installation.id, () => { throw tailUnknown(directory, intent); });
+      if (await currentSetDigest(verified.set) !== intent.snapshot.manifestDigest) throw tailUnknown(directory, intent);
       const authority = async (resource: 'policy' | 'bindings') => {
         const path = productResourcePath(layout, resource), member = intent.snapshot.members.find(item => item.path === path);
         if (!member) { const expected = intent.authority?.[resource], present = await memberStat(path).catch(() => { throw tailUnknown(directory, intent); });
@@ -152,9 +153,9 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
       const document = resolvePolicyBindings(policy, await authority('bindings'));
       const scopes = [...new Set([...intent.scopes, ...intent.plan.scopeSummary, ...policyNamedScopes(document)])];
       for (const action of ['uninstall', 'purge'] as const) authorizeUninstall(document, { ...actor, scopeIds: scopes }, intent.plan.installation.id, scopes, action);
+      if (remaining.some(member => member.archived)) await verifyUninstallArchive(verified, intent.snapshot.archive ?? { digest: '', roots: [] }, remaining, passphrase,
+        config.installation.packageMeasurement).catch(() => { throw tailUnknown(directory, intent); });
     } finally { verified.close(); }
-    if (remaining.some(member => member.archived)) await verifyUninstallArchive(intent.snapshot.set, intent.snapshot.archive ?? { digest: '', roots: [] }, remaining, passphrase,
-      config.installation.packageMeasurement).catch(() => { throw tailUnknown(directory, intent); });
     const tracked = await configuredTracking(config); // B2: what the project's VCS tracks now is the team's: the tail stays unknown
     for (const member of remaining) if (tracked(member.path) || await boundState(member) !== 'bound') throw tailUnknown(directory, intent);
     await removeBoundMembers(remaining, intent.snapshot.root, intent.snapshot.members);

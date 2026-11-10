@@ -24,7 +24,7 @@ export interface ApprovalAssuranceProducer {
   /** Called once after the decision that used this attestation committed (a single-use producer spends it here). */
   settle?(evidence: ApprovalAssuranceEvidence): void;
 }
-export interface DerivedApprovalAssurance { readonly level: string; readonly rank: number; settle(): void }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DerivedApprovalAssurance { readonly level: string; readonly rank: number; settle(): void }
 
 export class ApprovalAssuranceRegistry {
   private readonly producers: readonly ApprovalAssuranceProducer[];

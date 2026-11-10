@@ -8,7 +8,7 @@ import { createRun, holdRun, parkRunProgression, policySchema, evaluatePolicy, e
   POLICY_ADMINISTER_OPERATION, AUTHORITY_DOCUMENT_TARGET_KIND, verifiedSessionSchema, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
 import { RunLifecycleApplication, RunDecisionApprovalBroker, RunPolicyAuthorization, DispatchPolicyAuthorization, AuditApplication,
   OperationApprovalBroker, OperationPolicyAuthorization, requestAgentToolApproval, requestTaskApproval, ApprovalApplication, decideAgentToolCall } from '#engine/index.js';
-import { sha256, createHmacIntegrity } from '#platform/index.js';
+import { sha256, createHmacIntegrity, MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 const roots: string[] = [], closers: (() => void)[] = [];
@@ -162,15 +162,19 @@ it('pure hold preserves progression failure even when the actor is unknown', () 
   expect(holdRun(run, run.revision, 'hold', 50, 5000).state).toMatchObject({ reason: 'progression-failed', since: 10, deadline: 1010 });
 });
 
-it.each(['edit-floor', 'edit-authority', 'mcp-floor'])('the approval card itself refuses AI %s even with decide permission', async cell => {
-  const f = await fixture(baseRun());
-  const card = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: ai.id, issuer: ai.issuer, subject: ai.subject },
-    subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'write_file', toolVersion: 1, resource: 'protected-file', argsDigest: 'a'.repeat(64) },
-    policyRevision: 'p', summary: 'Risky protected write', createdAt: 10, expiresAt: 1010,
-    facts: { risk: { source: 'cell', cell }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'turn-bound' } });
-  await expect(f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: card.request.approvalId, commandId: 'risky-approval',
-    expectedRevision: 0, decision: 'allow', reason: 'explicit policy says allow' })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
-  expect(f.approvals.store.load('s', card.request.approvalId)).toEqual(card); expect(f.approvals.store.receipt('s', 'risky-approval')).toBeNull();
+// The AI check and the unwitnessed-decider check refuse the same cards (APPR-1: one predicate); a risk the card does not declare is never AI-answerable.
+it.each([...['edit-floor', 'edit-authority', 'mcp-floor'].map(cell => ({ source: 'cell' as const, cell })), { source: 'effect-class' as const, effectClass: 'write' as const, authority: true }, null])(
+  'the approval card itself refuses AI and an unwitnessed person %j even with decide permission', async risk => {
+  for (const person of [ai, human]) {
+    const f = await fixture(baseRun(), [], person);
+    const card = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: ai.id, issuer: ai.issuer, subject: ai.subject },
+      subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'write_file', toolVersion: 1, resource: 'protected-file', argsDigest: 'a'.repeat(64) },
+      policyRevision: 'p', summary: 'Risky protected write', createdAt: 10, expiresAt: 1010,
+      facts: { risk, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'turn-bound' } });
+    await expect(f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: card.request.approvalId, commandId: 'risky-approval',
+      expectedRevision: 0, decision: 'allow', reason: 'explicit policy says allow' })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
+    expect(f.approvals.store.load('s', card.request.approvalId)).toEqual(card); expect(f.approvals.store.receipt('s', 'risky-approval')).toBeNull();
+  }
 });
 it('script card waits for a witnessed decision, admits only its bound command and refuses expiry', async () => {
   const f = await fixture(awaiting(), [], human, false), input = command('reject', 0, { taskId: 't' });
@@ -182,6 +186,10 @@ it('script card waits for a witnessed decision, admits only its bound command an
   expect(decided.decision).toMatchObject({ deciderClass: 'human-tty', schemaVersion: 4 });
   f.witness(false);
   await expect(f.lifecycle.execute({ ...input, commandId: 'other-command' })).rejects.toMatchObject({ code: 'TASK_DECISION_APPROVAL_REQUIRED' });
+  // S1-e1: an unused allow outside its admission window, and one decided further ahead than the clock skew bound.
+  f.time(100 + 1001); await expect(f.lifecycle.execute(input)).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
+  f.time(100 - MAX_WALL_SKEW_MS - 1); await expect(f.lifecycle.execute(input)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); // owner B2-2
+  f.time(100);
   const result = await f.lifecycle.execute(input); expect(result.snapshot.progress[0]!.phase).toBe('failed');
   expect(f.audits[0]).toMatchObject({ subject: { deciderClass: 'human-tty', approvalId: record.request.approvalId } });
   f.time(10000); expect(await f.lifecycle.execute(input)).toEqual(result);
@@ -236,6 +244,22 @@ it('a legacy-shaped card (no facts, no class) is never read as human: AI and unw
       await expect(decide()).rejects.toMatchObject({ code: expected });
       expect(f.approvals.store.load('s', legacy.request.approvalId)?.status).toBe('pending');
     } else expect((await decide()).decision).toMatchObject({ deciderClass: 'human-tty' });
+    const subject = { kind: 'agent-tool-call' as const, turnId: 'worker-turn', round: 1, index: 0, tool: 'read_file', toolVersion: 1, resource: 'src/a.ts', argsDigest: 'a'.repeat(64) };
+    const worker = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: human.id, issuer: human.issuer, subject: human.subject }, subject,
+      policyRevision: 'p', summary: 'Human-readable worker call', createdAt: 100, expiresAt: 900,
+      origin: { kind: 'worker-tool-call', identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' },
+        turnId: subject.turnId, resourceDigest: sha256(subject.resource), argsDigest: subject.argsDigest },
+      preview: { schemaVersion: 1, argsDigest: subject.argsDigest, text: 'reviewed read', cut: null },
+      facts: { risk: { source: 'cell', cell: 'read' }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } });
+    for (const decision of tty && person === human ? ['allow'] as const : ['allow', 'deny'] as const) {
+      const deciding = f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: worker.request.approvalId,
+        commandId: `worker-${person.id}-${tty}-${decision}`, expectedRevision: 0, decision, reason: 'reviewed' });
+      if (person === human && tty) expect((await deciding).decision).toMatchObject({ deciderClass: 'human-tty' });
+      else {
+        await expect(deciding).rejects.toMatchObject({ code: person === ai ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED' });
+        expect(f.approvals.store.load('s', worker.request.approvalId)?.status).toBe('pending');
+      }
+    }
   }
 });
 

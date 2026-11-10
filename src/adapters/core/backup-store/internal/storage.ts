@@ -1,14 +1,15 @@
 import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
-import { acquireLedgerLock, runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
-import { PRODUCT_LAYOUT_REGISTRY, ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
+import { runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
+import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, ConfigValidationError, pathWithin, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
 import { createBackupSet, locateBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
 import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
-import { inside, ownerOnlyWritable, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
+import { ensurePrivateDirectory, ownerOnlyWritable, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const FIXED = PRODUCT_LAYOUT_REGISTRY.fixedResources;
 const STAGE_PREFIX = '.backup-restore-', KEY_TEMP_INFIX = '.restore-', UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -24,6 +25,7 @@ export async function restoreLeftovers(projectRoot: string, approvals: string, k
     const names = await readdir(directory).catch(error => { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return [] as string[]; throw error; });
     for (const name of names.filter(item => pattern.test(item)).sort()) {
       const info = await lstat(join(directory, name)).catch(() => null);
+      // Owner only, any mode: a leftover with loose bits is listed too (doctor shows it), never hidden by a private-file rule.
       if (info && info.uid === process.getuid?.() && (kind === 'directory' ? info.isDirectory() : info.isFile())) found.push(join(directory, name));
     }
   };
@@ -33,27 +35,30 @@ export async function restoreLeftovers(projectRoot: string, approvals: string, k
   return found;
 }
 
-export interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string;
+interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string;
   readonly configDocument?: () => Promise<BackupConfigLayers>;
   /** The per-user global config file of the restoring environment (S1 D1); absent: the global layer is not restored. */
   readonly globalConfigPath?: string }
 export class FileBackupStorage implements BackupStoragePort {
   constructor(private readonly source: BackupSource, private readonly limits: BackupLimits) {}
   locate(set: string): Promise<void> { return locateBackupSet(set); }
+  /** Verify keeping the handle open: a caller that binds members to the set (uninstall) never verifies it again; it closes the handle. */
+  async open(set: string, passphrase: string): Promise<VerifiedBackup> {
+    await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout); return verifyBackupSet(set, passphrase, this.limits);
+  }
   async execute(command: BackupCommand, passphrase: string): Promise<BackupResult> {
-    await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout);
-    if (command.action === 'create') return createBackupSet(this.source.layout, this.source.projectRoot, this.source.installationId,
-      this.source.keyFile, command.set, passphrase, this.limits, await this.source.configDocument?.());
-    const verified = await verifyBackupSet(command.set, passphrase, this.limits);
+    if (command.action === 'create') { await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout);
+      return createBackupSet(this.source.layout, this.source.projectRoot, this.source.installationId, this.source.keyFile, command.set, passphrase, this.limits, await this.source.configDocument?.()); }
+    const verified = await this.open(command.set, passphrase);
     try { return command.action === 'verify' ? verified.result('verify') : await this.restore(command, verified); }
     finally { verified.close(); }
   }
   private async restore(command: Extract<BackupCommand, { action: 'restore' }>, verified: VerifiedBackup): Promise<BackupResult> {
     const target = await safePath(command.target), state = verified.state;
-    if (state.installationId !== this.source.installationId) return refuse('BACKUP_TARGET_IDENTITY_MISMATCH');
-    if (inside(target, verified.set) || inside(verified.set, target)) return refuse('BACKUP_PATH_UNSAFE');
+    verified.assertInstallation(this.source.installationId, () => refuse('BACKUP_TARGET_IDENTITY_MISMATCH'));
+    if (pathWithin(target, verified.set) || pathWithin(verified.set, target)) return refuse('BACKUP_PATH_UNSAFE');
     const exists = await lstat(target).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    if (exists && (!exists.isDirectory() || exists.uid !== process.getuid?.())) return refuse('BACKUP_PATH_UNSAFE');
+    if (exists && (!exists.isDirectory() || exists.uid !== process.getuid?.())) return refuse('BACKUP_PATH_UNSAFE'); // a project root need not be private
     if (exists && (await readdir(target)).length && command.confirmTarget !== target) return refuse('BACKUP_TARGET_NOT_EMPTY');
     const same = target === resolve(this.source.projectRoot);
     const customResources = Object.fromEntries(Object.entries(state.resources).filter(([key]) => !FIXED.includes(key)));
@@ -83,21 +88,20 @@ export class FileBackupStorage implements BackupStoragePort {
     const hold = restoreHoldPath(target), paths = [...BACKUP_RESOURCES, 'ledger' as const, 'approvals' as const].map(resource => productResourcePath(layout, resource));
     // S1 D4: the stage lives in the installation's private area beside the hold (never the project root) and holds no plaintext key.
     const stage = join(dirname(hold), `${STAGE_PREFIX}${randomUUID()}`);
-    if (paths.some(path => inside(path, hold) || inside(hold, path) || inside(path, stage) || inside(stage, path))) return refuse('BACKUP_PATH_UNSAFE');
+    if (paths.some(path => pathWithin(path, hold) || pathWithin(hold, path) || pathWithin(path, stage) || pathWithin(stage, path))) return refuse('BACKUP_PATH_UNSAFE');
     // A nested/aliased resource cannot be published atomically as independent state. Refuse before any target write.
     for (let i = 0; i < paths.length; i++) for (let j = i + 1; j < paths.length; j++)
-      if (inside(paths[i]!, paths[j]!) || inside(paths[j]!, paths[i]!)) return refuse('BACKUP_PATH_UNSAFE');
+      if (pathWithin(paths[i]!, paths[j]!) || pathWithin(paths[j]!, paths[i]!)) return refuse('BACKUP_PATH_UNSAFE');
     for (const path of [...paths, productResourcePath(layout, 'ledger'), productResourcePath(layout, 'approvals')]) await safePath(path);
     // S1 D2: every existing directory this restore writes into is checked before staging, custody or any write.
     for (const directory of new Set([dirname(hold), ...paths.map(path => dirname(path)), productResourcePath(layout, 'approvals'), ...(exists ? [] : [dirname(target)])]))
       await ownerOnlyWritable(directory);
     const socket = runtimeSocketLocation(layout);
     if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
-    if (!exists) { await privateDirectory(dirname(target)); await mkdir(target, { mode: 0o700 }); }
-    await privateDirectory(dirname(productResourcePath(layout, 'ledger')));
-    let lock;
-    try { lock = acquireLedgerLock(productResourcePath(layout, 'ledger') + '-lock'); }
-    catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'LOCAL_RUNTIME_ALREADY_RUNNING') return refuse('BACKUP_SERVICE_RUNNING'); return refuse('BACKUP_CUSTODY_UNAVAILABLE'); }
+    if (!exists) { await ensurePrivateDirectory(dirname(target)); await mkdir(target, { mode: 0o700 }); }
+    await ensurePrivateDirectory(dirname(productResourcePath(layout, 'ledger')));
+    const lock = await withExclusiveFileLock(productResourcePath(layout, 'ledger') + '-lock', { waitMs: 0, pollMs: 0 }).catch(() => undefined);
+    if (!lock) return refuse(lock === null ? 'BACKUP_SERVICE_RUNNING' : 'BACKUP_CUSTODY_UNAVAILABLE');
     let published = false, holdCreated = false;
     let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalPlan: Awaited<ReturnType<typeof planGlobalLayer>> | null = null, globalConfig: BackupResult['globalConfig'] = null;
     const token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
@@ -105,7 +109,7 @@ export class FileBackupStorage implements BackupStoragePort {
       await FileInstallationIdentityStore.assertTransferAllowed(layout);
       // Recheck under the same kernel custody the service must acquire before any migration or startup.
       if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
-      await privateDirectory(stage); await writePrivate(join(stage, '.gitignore'), '*\n');
+      await ensurePrivateDirectory(stage); await writePrivate(join(stage, '.gitignore'), '*\n');
       const staged = resolveProductLayout({ projectRoot: stage, resources: customResources });
       for (const item of state.entries) {
         const isDir = directoryResources.has(item.resource);
@@ -115,7 +119,8 @@ export class FileBackupStorage implements BackupStoragePort {
           const relocate = (value: unknown, pointer: string): unknown => {
             if (typeof value === 'string') {
               const mapping = [[state.layoutRoot, layout.root], [state.projectRoot, target]] as const;
-              for (const [before, after] of mapping) if (inside(before, value) && before !== after) { changed.add(pointer); return after + value.slice(before.length); }
+              // A text rewrite of any config string, not a containment check: only the exact root or its literal `root/` prefix is moved.
+              for (const [before, after] of mapping) if ((value === before || value.startsWith(before + sep)) && before !== after) { changed.add(pointer); return after + value.slice(before.length); }
               return value;
             }
             if (Array.isArray(value)) return value.map((item, i) => relocate(item, `${pointer}/${i}`));
@@ -147,14 +152,15 @@ export class FileBackupStorage implements BackupStoragePort {
       const ledger = productResourcePath(staged, 'ledger'); await writePrivate(ledger, new Uint8Array());
       const db = openSetLedger(join(verified.set, 'ledger.db'));
       try { await backup(db, ledger); } finally { db.close(); }
-      if (ledgerFingerprint(ledger) !== ledgerFingerprint(join(verified.set, 'ledger.db'))) return refuse('BACKUP_FINGERPRINT_INVALID');
+      // The copy matches the fingerprint the manifest verified, so a set ledger swapped after verify is never restored.
+      if (ledgerFingerprint(ledger) !== verified.fingerprint) return refuse('BACKUP_FINGERPRINT_INVALID');
       // Astra 2471 R1: a durable hold precedes the first publication; config admission refuses it until the last one completed.
       if (!await lstat(hold).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
         const pending = `${hold}.${token}`; await writePrivate(pending, JSON.stringify({ schemaVersion: 1, kind: 'backup-restore', operation: token, target, startedAt: new Date().toISOString() }) + '\n');
         holdCreated = true; await rename(pending, hold); await syncDirectory(dirname(hold));
       }
       const publish = async (from: string, to: string) => {
-        await privateDirectory(dirname(to));
+        await ensurePrivateDirectory(dirname(to));
         if (await lstat(to).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
           const saved = `${to}.damaged-${token}`; await rename(to, saved); published = true; preserved.push(saved);
         }
@@ -168,7 +174,7 @@ export class FileBackupStorage implements BackupStoragePort {
           // A set taken before the project identity existed carries no record: publish nothing, so the target keeps its own identity or stays
           // not-created; an empty directory would read as a lost record and refuse every scoped operation (CI-KARARLILIK 2026-10-14).
           if (resource === 'projectIdentity' || resource === 'projectAttachment' && state.schemaVersion !== 3 || resource === 'installationIdentity' && state.schemaVersion === 3) continue;
-          if (directoryResources.has(resource)) await privateDirectory(from); else return refuse('BACKUP_SET_INVALID');
+          if (directoryResources.has(resource)) await ensurePrivateDirectory(from); else return refuse('BACKUP_SET_INVALID');
         }
         await publish(from, productResourcePath(layout, resource));
       }

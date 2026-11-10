@@ -1,10 +1,9 @@
-import { userInfo } from 'node:os';
 import { AuditError, PolicyError } from '#domain/index.js';
 import { inspectPermissionMode, PermissionModeApplication, PermissionModeError, RuntimeServiceProtocolError, runtimeServiceResultCapacity,
   type RuntimeServiceRequest } from '#engine/index.js';
 import { PolicyFileError, type LocalPeerIdentity } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 
@@ -28,7 +27,7 @@ export async function executeConfiguredRuntimePermissionModeOperation(projectRoo
       const context = await loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer, 'write');
       // A producer of audit evidence, like the approval request: the integrity key is created on first use.
       result = await withScopeAudit(context, audit => { const clock = new SystemTrustedClock();
-        return new PermissionModeApplication(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes),
+        return new PermissionModeApplication(contextPolicySource(context),
           event => { audit.record(event); }, () => clock.sample().wallMs).set(context.principal, request.input); });
     } else throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_DELIVERY_INVALID');
   } catch (error) {

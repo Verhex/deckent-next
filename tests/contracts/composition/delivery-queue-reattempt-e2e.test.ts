@@ -8,7 +8,7 @@ import { evaluateTask, prepareConfiguredWorkspacePatch } from '../../../src/inde
 import { configuredTargetQueueTerminal, startConfiguredRuntimeService } from '../../../src/composition/core/runtime-service/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { queueCommandIds, reattemptCommandIds } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';

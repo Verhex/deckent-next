@@ -3,7 +3,7 @@ import { open } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import { ErrorRegistry, DeckentError, terminalSafeText } from '#platform/index.js';
 
-export interface JsonInputErrors { readonly subject?: string; readonly limit: string; readonly invalid: string; readonly tty: string; readonly unavailable: string }
+interface JsonInputErrors { readonly subject?: string; readonly limit: string; readonly invalid: string; readonly tty: string; readonly unavailable: string }
 /** Bounded transport parsing only; the caller validates its operation schema. */
 export async function readJsonInput(source: string, maxBytes: number, errors: JsonInputErrors, stdin: Readable & { isTTY?: boolean } = process.stdin): Promise<unknown> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || !source) throw ErrorRegistry.createError('CLI_USAGE');

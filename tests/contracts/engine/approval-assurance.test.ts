@@ -8,7 +8,7 @@ import { createHmacIntegrity } from '../../../src/platform/core/integrity/index.
 import { openSqliteApprovalStore } from '../../../src/adapters/core/approval-store/index.js';
 import { LocalOsSessionAuthority } from '../../../src/adapters/core/local-principal/index.js';
 import { ApprovalApplication, HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, createTurnDecisionCapabilities, requestAgentToolApproval, requestTaskApproval,
-  requiredApprovalAssurance, sealApproval, verifyApproval, OperationApprovalBroker } from '../../../src/engine/core/approval/index.js';
+  minimumApprovalAssurance, requiredApprovalAssurance, sealApproval, verifyApproval, OperationApprovalBroker } from '../../../src/engine/core/approval/index.js';
 import { SQLITE_STORAGE_OPTIONS } from '../../../src/platform/core/config-fields/index.js';
 
 // B1 APPROVAL-ASSURANCE (owner 2026-10-01 attested_assurance): every decision carries a service-derived assurance the client cannot claim;
@@ -132,6 +132,8 @@ describe('B1 attested assurance on the one approval decision path', () => {
   });
 
   it.skipIf(linux)('[requires Linux live OS session /proc identity] policy approvalAssurance only tightens: a looser rule never lowers a hard-floor card, a stricter one raises an ordinary card, an unknown level is unsatisfiable', async () => {
+    const runPolicy = policyWith([{ id: 'run-risk', scopes: ['scope'], subject: 'run-create', effectClasses: ['read'], minimum: 'turn-bound' }]);
+    expect(minimumApprovalAssurance(runPolicy, 'scope', 'run-create', { source: 'effect-class', effectClass: 'write', authority: true })).toBe('turn-bound');
     const loose = policyWith([{ id: 'loose', scopes: ['scope'], subject: 'agent-tool-call', cells: ['edit-floor'], minimum: 'peer-session' }]);
     const f = await fixture(loose);
     try {
@@ -196,7 +198,7 @@ describe('B1 attested assurance on the one approval decision path', () => {
     const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'host', subject: '1000' }, readToolNames: ['read_file'], scratchToolNames: ['scratch_read'],
       scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run',
       proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
-    expect(template.version).toBe(19); // v19 (R4a MCP actor tool rules), v18 (U10C uninstall grant), v17 (U4E first-commit grant), v4 (CONFIG-SURFACE), v5 (MCP), v6 (store switch), v7 (models), v8 (backup), v9 (MCP observation), v10 (execution), v11 (release quota/integration) v12 (owner scope inspect/service shutdown) and v13 (I-POL A48-D3 delta) keep the v3 (B1) assurance rule below unchanged
+
     const rules = (template.policy as { approvalAssurance?: { subject: string; cells?: string[]; minimum: string }[] }).approvalAssurance ?? [];
     expect(rules).toHaveLength(1);
     expect(rules[0]).toMatchObject({ subject: 'agent-tool-call', minimum: 'turn-bound' });

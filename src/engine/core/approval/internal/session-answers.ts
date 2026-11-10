@@ -1,7 +1,7 @@
 import { ApprovalError, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { ApprovalApplication, approvalCommandFingerprint, type ApprovalCommand } from './application.js';
-import { approvalRequestDigest } from './integrity.js';
+import { agentToolApprovalLeft, approvalRequestDigest } from './integrity.js';
 import { SessionStanding } from './standing.js';
 import type { SessionApprovalResult, SessionStandingResult } from './session-contract.js';
 
@@ -31,12 +31,7 @@ export class SessionApprovalAnswers {
     if (!binding) return null;
     let end!: () => void;
     const ended = new Promise<void>(resolve => { end = resolve; });
-    const reason = (): Refusal => {
-      if (offer.signal.aborted) return 'cancelled';
-      const now = offer.clock.sample();
-      if (now.wallMs >= offer.record.request.expiresAt || now.monotonicMs - offer.started.monotonicMs >= offer.record.request.expiresAt - offer.started.wallMs) return 'expired';
-      return 'revoked';
-    };
+    const reason = (): Refusal => offer.signal.aborted ? 'cancelled' : agentToolApprovalLeft(offer.record.request.expiresAt, offer.started, offer.clock.sample()) <= 0 ? 'expired' : 'revoked';
     const valid = () => !card.closed && binding.valid() && !offer.signal.aborted && reason() !== 'expired';
     const invalidate = () => { binding.close(); end(); };
     // The original producer budget bounds the barrier; every validity check also samples both clocks.

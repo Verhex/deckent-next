@@ -4,7 +4,7 @@ import { identitySchema, ModelActivationError, parseModelActivationReference,
 import { ModelActivationStoreError, verifyModelActivationRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
-export type ActivationRow = Readonly<Record<string, unknown>>;
+type ActivationRow = Readonly<Record<string, unknown>>;
 const encoded = (value: unknown): string => JSON.stringify(value);
 export function activationIdentity(value: unknown): string {
   const parsed = identitySchema.safeParse(value);

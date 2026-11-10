@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { agentMessageContinuationSchema } from './continuation.js';
 import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
@@ -6,7 +6,7 @@ import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, approvalPreviewCutSchema, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo,
   type ApprovalPreviewCutFacts } from './card-facts.js';
 
-/** v30 steer line id: identifier-shaped and short (a UUID fits), so every accepted id fits the turn's bounded result whole (Astra 2882). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). v30 steer line id: identifier-shaped and short (a UUID fits), so every accepted id fits the turn's bounded result whole (Astra 2882). */
 export const chatTurnSteerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 /**
@@ -53,6 +53,10 @@ export type AgentTurnEvent =
   | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (T-L4 shell): presentation; the call's result stays the only history. */
   | { readonly kind: 'tool.output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
+  /** v31 (alpha.64 B, /do parity): a `propose_work` call's plan progress, as /do shows it — planning (`attempt`), a Brain quota wait (until `untilMs`, the
+   * next `attempt` of `maxAttempts`) and the admitted Run (`runId`, which /tasks follows). Progress only: no authority; the card is `approval.requested`. */
+  | { readonly kind: 'work'; readonly callId: string; readonly phase: 'planning' | 'quota-wait' | 'admitted'; readonly runId?: string; readonly untilMs?: number;
+    readonly attempt?: number; readonly maxAttempts?: number }
   | { readonly kind: 'done'; readonly finish: AgentTurnFinish; readonly note: string | null };
 
 /**
@@ -65,7 +69,7 @@ export type AgentTurnFinish = 'stop' | 'length' | 'cancelled' | 'error';
 /** `provider-count`: the provider's own tokenizer on exactly the round's request; `upper-bound`: a conservative byte-based bound. */
 export type AgentContextQuality = 'provider-count' | 'upper-bound';
 
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 const finishSchema = z.enum(['stop', 'length', 'cancelled', 'error']);
 const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']);
 /**
@@ -92,6 +96,11 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({ get kind() { return z.literal('approval.settled'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get approvalId() { return persistedString(z.string().min(1).max(256)); },
     get outcome() { return z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']); } }),
   z.strictObject({ get kind() { return z.literal('tool.output'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get stream() { return z.enum(['stdout', 'stderr']); }, get text() { return persistedString(z.string().min(1)); } }),
+  z.strictObject({ get kind() { return z.literal('work'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get phase() { return z.enum(['planning', 'quota-wait', 'admitted']); },
+    get runId() { return persistedString(z.string().min(1).max(256)).optional(); }, get untilMs() { return count.optional(); },
+    get attempt() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(); }, get maxAttempts() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(); } })
+    .refine(event => event.phase === 'admitted' ? event.runId !== undefined && event.untilMs === undefined && event.attempt === undefined && event.maxAttempts === undefined
+      : event.runId === undefined && event.attempt !== undefined && (event.phase === 'quota-wait') === (event.untilMs !== undefined) && (event.untilMs !== undefined) === (event.maxAttempts !== undefined)),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 
@@ -103,7 +112,7 @@ export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
  * `sessionId` (protocol v16, SCR-A) names the client's conversation: its scratch area lives across turns; absent, the area is the turn's.
  */
 /** Protocol vocabulary of `chatTurn.reasoning` (v16), not a configuration value. */
-export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
+const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
 export const chatTurnCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, turnId: identitySchema,
   get messages() { return z.array(agentTurnMessageSchema).min(1); }, get reasoning() { return z.enum(CHAT_TURN_REASONING).optional(); }, get sessionId() { return identitySchema.optional(); },
   /** v17 (MODES-3): the turn runs in full access — only when the person launched the terminal so and a company grant allows it; never implied. */

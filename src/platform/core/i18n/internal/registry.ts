@@ -1,7 +1,7 @@
 import { NODE_ENGINE_FLOOR_TEXT } from '#platform/core/common/index.js';
 import { families } from './families.js';
 import identicalMessages from './identical-messages.json' with { type: 'json' };
-import { LOCALES, type Catalog, type MessageFamily, type MessageRegistry, type Params } from './types.js';
+import { LOCALES, type Catalog, type Locale, type MessageFamily, type MessageRegistry, type Params } from './types.js';
 
 const placeholders = (value: string) => [...new Set([...value.matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort().join(',');
 /** The same constructor validates production catalogs and extension catalogs. No mutation authority escapes. */
@@ -29,5 +29,13 @@ export function createMessageRegistry(input: readonly MessageFamily[], defaults:
 export const MESSAGE_REGISTRY = createMessageRegistry(families, {
   'error.node_version_low': { floor: NODE_ENGINE_FLOOR_TEXT },
   'desktop.error.node_not_found': { floor: NODE_ENGINE_FLOOR_TEXT },
-}, [...identicalMessages, 'cli.version']); // Existing K0 machine identity format is intentionally identical.
+}, identicalMessages);
 export const MESSAGE_KEYS = MESSAGE_REGISTRY.keys;
+/** A key held as data; omitted params keep the raw template, missing keys return undefined. */
+export function messageText(key: string, locale: Locale, params?: Params): string | undefined {
+  const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
+  if (!Object.hasOwn(catalog, key)) return undefined;
+  if (params === undefined) return catalog[key];
+  const effective = { ...MESSAGE_REGISTRY.defaultParams[key], ...params };
+  return catalog[key]!.replace(/\{(\w+)\}/g, (_, name: string) => Object.hasOwn(effective, name) ? String(effective[name] ?? `{${name}}`) : `{${name}}`);
+}

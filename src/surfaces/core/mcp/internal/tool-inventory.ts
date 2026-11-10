@@ -29,5 +29,5 @@ export const MCP_UNGROUPED_WRITE_TOOLS = Object.freeze({
   hub_publish: 'per-tool-person-hub-grant', hub_yank: 'per-tool-person-hub-grant', hub_revoke: 'per-tool-person-hub-grant',
 } as const);
 
-export type McpWithheldTool = keyof typeof MCP_WITHHELD_TOOLS;
+type McpWithheldTool = keyof typeof MCP_WITHHELD_TOOLS;
 export const isMcpWithheldTool = (name: string): name is McpWithheldTool => Object.hasOwn(MCP_WITHHELD_TOOLS, name);

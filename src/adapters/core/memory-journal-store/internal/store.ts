@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import { encodeCommandProjection, isMemoryTombstone, memoryContestResolutionSchema, memoryContestSchema, memoryEntrySchema, memoryEvaluationRecordSchema, memoryIndexText,
@@ -6,7 +5,7 @@ import { encodeCommandProjection, isMemoryTombstone, memoryContestResolutionSche
   type MemoryState } from '#domain/index.js';
 import { AuditApplication, MemoryJournalError, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalStore, type MemoryReceipt, type MemorySupport } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openLedgerDatabase, ledgerTransaction, openSqliteLedger, requireLedgerVersion, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'memory-journal-store:1';
@@ -241,8 +240,8 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
   /** Support rows are read in order and each is re-verified (the json_extract filter is only an index, never the evidence). */
   async sourceEntryIds(scopeId: string, source: { readonly runId: string; readonly attemptId: string | null }, limit: number) {
     return this.read(() => {
-      const ids: string[] = [], rows = this.db.prepare(`SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND json_extract(record,'$.value.source.runId')=?
-        ${source.attemptId === null ? '' : `AND json_extract(record,'$.value.source.attemptId')=?`} ORDER BY rowid`).iterate(scopeId, source.runId, ...(source.attemptId === null ? [] : [source.attemptId]));
+      const ids: string[] = [], rows = this.db.prepare(`SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.source.runId') END)=?
+        ${source.attemptId === null ? '' : `AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.source.attemptId') END)=?`} ORDER BY rowid`).iterate(scopeId, source.runId, ...(source.attemptId === null ? [] : [source.attemptId]));
       for (const row of rows) {
         const support = this.supportRow(row, scopeId);
         if (support.source.runId !== source.runId || (source.attemptId !== null && support.source.attemptId !== source.attemptId)) throw corrupt();
@@ -256,18 +255,15 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
     return this.read(() => Number(this.db.prepare('SELECT count(*) AS n FROM memory_contests WHERE scope_id=? AND opened_at_ms>=?').get(scopeId, sinceMs)?.['n'] ?? 0));
   }
   private write<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const result = work(); try { this.db.exec('COMMIT'); } catch { throw new MemoryJournalError('MEMORY_OUTCOME_UNKNOWN'); } return result; }
-    catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* a lost result is resolved by the same idempotent write on retry */ } throw error; }
+    // The same command receipt resolves a lost commit result on retry.
+    return ledgerTransaction(this.db, work, { unknown: () => new MemoryJournalError('MEMORY_OUTCOME_UNKNOWN'), failure: error => error });
   }
   async commit(change: MemoryChange) {
     const next = memoryEntrySchema.parse(change.next), { receipt } = change;
     if (next.revision !== (change.previous?.revision ?? 0) + 1 || next.scopeId !== receipt.scopeId || next.entryId !== receipt.entryId || next.revision !== receipt.revision) throw corrupt();
-    return this.read(() => {
-      this.db.exec('BEGIN IMMEDIATE');
-      try { const result = this.apply(next, change); try { this.db.exec('COMMIT'); } catch { throw new MemoryJournalError('MEMORY_OUTCOME_UNKNOWN'); } return result; } catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* A lost commit result is resolved by the same command receipt on retry. */ } throw error; }
-    });
+    return this.read(() => this.write(() => this.apply(next, change)));
   }
+
   private apply(next: MemoryEntry, change: MemoryChange) {
     const { receipt } = change, prior = this.loadReceipt(receipt.scopeId, receipt.commandId);
     if (prior) {
@@ -298,8 +294,7 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
 /** `write` opens the current ledger without migrating (the service owns backed-up upgrades); `read` opens it read-only and requires the journal version. */
 export function openSqliteMemoryJournalStore(path: string, options: SqliteLedgerOptions, integrity: IntegrityAuthority, access: 'read' | 'write'): MemoryJournalStore {
   if (access === 'write') return new SqliteMemoryJournalStore(openSqliteLedger(path, options, 'forbid'), integrity);
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
+  const db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
   try { requireLedgerVersion(db, MEMORY_AUTOMATION_LEDGER_VERSION); return new SqliteMemoryJournalStore(db, integrity); } catch (error) { db.close(); throw error; }
 }
 /** S4B-1 §4.6 keyed digests: HMAC under the installation integrity key with its own label domain (`memory-purge:1/<label>`), so no content-derived

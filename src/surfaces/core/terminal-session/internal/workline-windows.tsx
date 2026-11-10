@@ -3,7 +3,7 @@ import { useWindowSize } from 'ink';
 import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { layoutWindowLines, Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { PickerWindow, QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
-import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import type { ScratchView } from '#domain/index.js';
 import type { SecretGrantQuestion, SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 
@@ -51,7 +51,7 @@ export type SlashPickSpec = Readonly<{
  * Astra 2456 P1-2: every visible word of a list window (title, status, body, rows, details) goes through the workline's known-secret /
  * human-text projection, whole, before the picker or the window cuts or wraps it; row ids (what a pick answers) stay unchanged.
  */
-export function projectSlashPickSpec(spec: SlashPickSpec, project: (text: string) => string): SlashPickSpec {
+function projectSlashPickSpec(spec: SlashPickSpec, project: (text: string) => string): SlashPickSpec {
   const line = (row: WindowLine): WindowLine => ({ ...row, spans: row.spans.map(part => ({ ...part, text: project(part.text) })),
     ...(row.label ? { label: row.label.map(part => ({ ...part, text: project(part.text) })) } : {}) });
   const body = spec.body;
@@ -125,7 +125,7 @@ export function reasoningSpec(words: SlashWindowLabels, state: Readonly<{ thinki
     { id: 'preview-off', label: mark(r.previewOff, !state.preview, r.current), detail: r.previewOffDetail },
   ] } };
 }
-export type ReasoningChoice = 'thinking-on' | 'thinking-off' | 'preview-on' | 'preview-off';
+type ReasoningChoice = 'thinking-on' | 'thinking-off' | 'preview-on' | 'preview-off';
 export function isReasoningChoice(id: string | null): id is ReasoningChoice {
   return id === 'thinking-on' || id === 'thinking-off' || id === 'preview-on' || id === 'preview-off';
 }
@@ -135,7 +135,7 @@ export function reasoningStatus(words: SlashWindowLabels | undefined, state: Rea
   return !state.thinking ? words.reasoning.statusOff : state.preview ? words.reasoning.statusOn : words.reasoning.statusOnHidden;
 }
 
-export const SCRATCH_LISTED = 20;
+const SCRATCH_LISTED = 20;
 /** `/scratch`: the area's files (newest first); Enter on a file names its path, the last row clears the area after a confirmation. */
 export function scratchSpec(words: SlashWindowLabels, view: ScratchView): SlashPickSpec {
   const s = words.scratch, shown = view.files.slice(0, SCRATCH_LISTED);

@@ -236,11 +236,10 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     const f = await fixture(true);
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b'],
-      // U4: a first launch opens the sequential onboarding before the Workline; Esc ("Later") defers each screen. U4E G2: the window closed before
-      // the profile was saved, so the pending permission screen comes first (permissions, model, first commit, instructions, then Ready!); with no
-      // coding CLI on PATH the folder is not a coding folder, so no work-kind screen.
+      // The Git folder offers worker setup even without a host CLI. Follow each card by title: Later can change the remaining step count.
       // BeUser ZEY-02: the person's management rights follow the permission screen (Esc = later).
-      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Step 5/', '\u001b'], ['Connect a model with /provider', '/exit\r']]);
+      ['Permission settings', '\u001b'], ['Your management rights', '\u001b'], ['Model connection', '\u001b'],
+      ['Choose a signed-in coding CLI', '\u001b'], ['First Git commit', '\u001b'], ['Project instructions', '\u001b'], ['Connect a model with /provider', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();

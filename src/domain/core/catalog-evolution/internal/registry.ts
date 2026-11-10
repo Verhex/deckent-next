@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import seed from '../../../../../assets/catalog-evolution/registry.json' with { type: 'json' };
 
@@ -28,12 +28,12 @@ const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: i
   inherit: z.strictObject({ recheckMinSamples: positive }).readonly(),
   rollout: z.strictObject({ minSuggestions: positive, minAgreementMicro: micro, maxReversalRateMicro: micro, minShadowNarrowings: positive }).readonly(),
   rules: z.array(ruleSchema).min(1).readonly() }).refine(value => new Set(value.rules.map(row => row.id)).size === value.rules.length).readonly();
-export const catalogEvolutionOverlaySchema = z.strictObject({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const catalogEvolutionOverlaySchema = z.strictObject({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
   rules: z.array(ruleSchema).optional() }).readonly();
 export type CatalogEvolutionRegistry = z.infer<typeof registrySchema>;
 export type CatalogEvolutionRule = CatalogEvolutionRegistry['rules'][number];
-export class CatalogEvolutionError extends Error {
-  constructor(readonly code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' | 'CATALOG_EVOLUTION_CORRUPT' | 'CATALOG_EVOLUTION_POSITION_CONFLICT') { super(code); this.name = 'CatalogEvolutionError'; }
+export class CatalogEvolutionError extends CodedError {
+  constructor(override readonly code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' | 'CATALOG_EVOLUTION_CORRUPT' | 'CATALOG_EVOLUTION_POSITION_CONFLICT') { super(code); this.name = 'CatalogEvolutionError'; }
 }
 /** Resource bounds an overlay may only lower (it can never make a pass or a read bigger than the Core seed allows). */
 const NARROW_ONLY = new Set(['windowTasks', 'modelMixMax', 'readRowsMax', 'passPageRows', 'maxKeysPerPass', 'maxOpenSuggestions']);

@@ -1,9 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { identitySchema } from '#domain/index.js';
-import { parseProviderSpendAuditReceipt, ProviderSpendError, type ProviderSpendAuditReceipt,
+import { ModelInvocationStoreError, parseProviderSpendAuditReceipt, ProviderSpendError, type ProviderSpendAuditReceipt,
   type ProviderSpendAuditResult, type ProviderSpendAuditStore, type SupervisorProfileValidator } from '#engine/index.js';
-import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { readSpendCheckpoint } from './spend-checkpoint.js';
 
 /** No full-history work occurs under this short write transaction. The application owns the scan. */
@@ -35,14 +35,12 @@ class SqliteProviderSpendAuditStore implements ProviderSpendAuditStore {
   async record(input: ProviderSpendAuditReceipt, signal?: AbortSignal): Promise<ProviderSpendAuditResult> {
     if (signal?.aborted) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
     const receipt = parseProviderSpendAuditReceipt(input), command = receipt.command;
-    try {
-      this.db.exec('BEGIN IMMEDIATE');
+    try { return ledgerTransaction(this.db, () => {
       const prior = this.read(command.scopeId, command.commandId);
       if (prior) {
         if (!isDeepStrictEqual(prior.command, command) || !isDeepStrictEqual(prior.actor, receipt.actor)) {
           throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
         }
-        this.db.exec('COMMIT');
         return Object.freeze({ schemaVersion: 1, receipt: prior, replayed: true });
       }
       const current = readSpendCheckpoint(this.db, command.scopeId);
@@ -51,12 +49,9 @@ class SqliteProviderSpendAuditStore implements ProviderSpendAuditStore {
       this.db.prepare(`INSERT INTO provider_spend_audits
         (scope_id,budget_id,budget_revision,command_id,record,digest) VALUES(?,?,?,?,?,?)`)
         .run(command.scopeId, command.budgetId, command.budgetRevision, command.commandId, JSON.stringify(receipt), receipt.digest);
-      this.db.exec('COMMIT');
       return Object.freeze({ schemaVersion: 1, receipt, replayed: false });
-    } catch (error) {
-      try { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
-      catch { throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); }
-      if (error instanceof ProviderSpendError) throw error;
+    }, { unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error }); } catch (error) {
+      if (error instanceof ProviderSpendError || error instanceof ModelInvocationStoreError) throw error;
       // A failed COMMIT response does not prove rollback; same-command replay checks durable truth.
       throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
     }

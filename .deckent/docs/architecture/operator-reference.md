@@ -751,7 +751,9 @@ revision explicitly.
 
 Patch capture compares the workspace with the base tree by Git object id and reads only changed base files; exhausted Git
 output/time or scan budgets fail as `PATCH_LIMIT` with a `detail` param (`git-output`, `git-timeout`, `time`, `bytes`,
-`entries`, `depth`, `path`). `execution.git.outputBytes` defaults to 4 MiB.
+`entries`, `depth`, `path`, `git-copy`). `execution.git.outputBytes` defaults to 4 MiB. `execution.git.copyBytes` (unset: 8 GiB) bounds the
+objects one copy streams into a Deckent-owned private repository: an integration candidate's is `PATCH_LIMIT` `git-copy`, a working-tree
+Run's base (HEAD's whole history) the permanent launch refusal `PATCH_WORKING_TREE_COPY_LIMIT`.
 
 For a retained workspace patch, `deckent task integration-check` checks the recorded base against HEAD and the affected
 index/worktree files. Use the same identity flags as `task patch-preview`. `task integration-prepare` additionally takes

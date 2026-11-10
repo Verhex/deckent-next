@@ -4,7 +4,7 @@ import { RecoveryError, recoveryEffectGateSchema, recoveryGateRefusal, type Reco
 import { checkedRun, type RunSnapshot } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
 
-/** What a continuation carries: the sealed decision id, the case's evidence signature, the gate the writer re-derived in its own transaction and the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What a continuation carries: the sealed decision id, the case's evidence signature, the gate the writer re-derived in its own transaction and the
  * signatures of the task's earlier continued cases (changed-evidence requirement, S6R-DESIGN §8). */
 export type LostContinuation = Readonly<{ decisionId: string; signature: string | null; gate: unknown; priorSignatures: readonly string[]; note?: string | null }>;
 
@@ -18,7 +18,7 @@ export function taskAttemptCeilingReached(run: RunSnapshot, taskId: string): boo
   return policy !== undefined && (run.previousBindings ?? []).filter(row => row.identity.taskId === taskId).length + 2 > policy.maxAttemptsPerTask;
 }
 
-/** alpha.56 G1: what a lost-worker case stands on — `released` (the stop step ran and released the slot with a termination proof) or `would-stop`
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). alpha.56 G1: what a lost-worker case stands on — `released` (the stop step ran and released the slot with a termination proof) or `would-stop`
  * (the explicit shadow input: a detection whose stop step did not run, decided as if it had). */
 export type LostBasis = 'released' | 'would-stop';
 /**

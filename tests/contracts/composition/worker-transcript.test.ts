@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { inspectConfiguredWorkerTranscript } from '../../../src/index.js';
 import { main as cliMain } from '#surfaces/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { FileArtifactStore, createNormalizerState, flushUnmapped, normalizeClaudeLine } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath, prepareProductDirectory } from '#platform/index.js';
 

@@ -1,43 +1,36 @@
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { realpath } from 'node:fs/promises';
-import { modelInvocationProfileDigest } from '#engine/index.js';
-import { nativeCliAgent } from '#adapters/index.js';
-import { nativeAgentFlagSetDigest, nativeCliHeadlessDefinitionSchema } from '#adapters/index.js';
-import { inspectSubscriptionReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
+import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution } from '#capabilities/index.js';
+import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
+
+/** Chat compares the seal with the profile's resolved executable only (never its recorded path). */
+async function sealedForProfile(profile: ModelInvocationProfile, execution: NativeAgentExecution) {
+  const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
+  return definition.success && await sealMatchesDefinition(execution, definition.data, () => realpath(definition.data.executable).catch(() => null));
+}
 
 export async function inspectNativeChat(profile: ModelInvocationProfile, runtime?: { readonly readiness: SubscriptionReadinessReader }) {
   if (!runtime) return { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
-  const entry = nativeCliAgent(profile.protocol.family);
-  if (!entry) return { state: 'unavailable', reason: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' } as const;
-  const readiness = await inspectSubscriptionReadiness({ surface: 'chat', scopeId: profile.scopeId, reference: profile.reference,
-    profileDigest: modelInvocationProfileDigest(profile), flagSetDigest: nativeAgentFlagSetDigest(entry) }, runtime.readiness);
+  const query = nativeReadinessQuery(profile, 'chat');
+  if (!query) return { state: 'unavailable', reason: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' } as const;
+  const readiness = await inspectSubscriptionReadiness(query, runtime.readiness);
   if (readiness.state !== 'ready') return readiness;
-  const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
-  if (!definition.success || readiness.execution.executable !== await realpath(definition.data.executable).catch(() => null) || readiness.execution.ownerUid !== definition.data.ownerUid)
-    return { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
-  return readiness;
+  return await sealedForProfile(profile, readiness.execution) ? readiness : { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
 }
 
 /** NF-7 (presentation only, never a gate): when the last tool verification still reads ready past the K16 age (R8e display read), its time. */
 export async function nativeChatVerifiedAtMs(profile: ModelInvocationProfile, display: SubscriptionReadinessReader): Promise<number | null> {
-  const entry = nativeCliAgent(profile.protocol.family);
-  if (!entry || (await inspectNativeChat(profile, { readiness: display })).state !== 'ready') return null;
-  const observed = await display.read({ surface: 'chat', scopeId: profile.scopeId, reference: profile.reference, profileDigest: modelInvocationProfileDigest(profile), flagSetDigest: nativeAgentFlagSetDigest(entry) });
+  const query = nativeReadinessQuery(profile, 'chat');
+  const observed = query && await display.read(query).catch(() => null);
+  if (!query || (await inspectNativeChat(profile, { readiness: { read: async () => observed } })).state !== 'ready') return null;
   return typeof observed?.checkedAtMs === 'number' ? observed.checkedAtMs : null;
 }
 
 /** Invocation-only eligibility: missing surface facts may be checked by the guarded first turn; false never is eligible. */
 export async function nativeChatVerificationExecution(profile: ModelInvocationProfile, runtime: { readonly readiness: SubscriptionReadinessReader }) {
-  const entry = nativeCliAgent(profile.protocol.family);
-  if (!entry) return null;
-  const query = { surface: 'chat' as const, scopeId: profile.scopeId, reference: profile.reference,
-    profileDigest: modelInvocationProfileDigest(profile), flagSetDigest: nativeAgentFlagSetDigest(entry) };
+  const query = nativeReadinessQuery(profile, 'chat');
+  if (!query) return null;
   const observed = await runtime.readiness.read(query);
-  if (!observed || [observed.plugins, observed.toolSurface, observed.bridge].some(value => value === false)) return null;
-  // Reuse the seal and prerequisite validation without presenting unknown surface facts as a ready seal.
-  const prerequisites = await inspectSubscriptionReadiness({ ...query, surface: 'brain' }, { read: async () => observed });
-  const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
-  if (prerequisites.state !== 'ready' || !definition.success || prerequisites.execution.ownerUid !== definition.data.ownerUid
-    || prerequisites.execution.executable !== await realpath(definition.data.executable).catch(() => null)) return null;
-  return prerequisites.execution;
+  const prerequisites = await inspectSubscriptionReadiness(query, { read: async () => observed }, { unknownSurfaceFacts: 'allow' });
+  return prerequisites.state === 'ready' && await sealedForProfile(profile, prerequisites.execution) ? prerequisites.execution : null;
 }

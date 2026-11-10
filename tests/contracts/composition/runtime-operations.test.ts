@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { executeConfiguredOperation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { encodeServiceFrame } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';

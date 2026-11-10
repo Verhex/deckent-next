@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { DockerSupervisor, openSqliteAuditStore, readLocalOsIdentity } from '#adapters/index.js';
 import { classifyLaunchRefusal, DependencyTreePatternCache, DispatchPreparationGuard, WORKER_TREE_SCAN_ADMISSION } from '#engine/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';

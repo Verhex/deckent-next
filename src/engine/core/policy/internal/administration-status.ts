@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { evaluatePolicy, identitySchema, matchFirstRunPolicyTemplate, policySchema, usablePolicyAdmins, type AdministrationAssurance, type VerifiedPrincipal } from '#domain/index.js';
+import { evaluatePolicy, identitySchema, matchFirstRunPolicyTemplate, usablePolicyAdmins, type AdministrationAssurance, type VerifiedPrincipal } from '#domain/index.js';
 import type { PolicySource } from './authorize.js';
 import { PolicyAuthorizationError } from './authorize.js';
 
@@ -17,7 +17,7 @@ export interface PolicyAdministrationStatus {
 export class PolicyAdministrationInspection {
   constructor(private readonly source: PolicySource, private readonly assurance?: AdministrationAssurance) {}
   async inspect(principal: VerifiedPrincipal, input: unknown): Promise<PolicyAdministrationStatus> {
-    const query = policyAdministrationQuerySchema.parse(input), policy = policySchema.parse(await this.source.load());
+    const query = policyAdministrationQuerySchema.parse(input), policy = await this.source.load();
     const admins = usablePolicyAdmins(policy, query.scopeId, this.assurance);
     const own = principal.scopeIds.includes(query.scopeId) && admins.some(ref => ref.issuer === principal.issuer && ref.subject === principal.subject);
     if (!own && evaluatePolicy(policy, { principal, scopeId: query.scopeId, action: 'inspect', resource: { kind: 'scope', id: query.scopeId } }).decision !== 'allow') {

@@ -1,6 +1,6 @@
 import type { OpenRouterMetadataFetchOptions, OpenRouterMetadataObservation } from './fetch.js';
 
-export type OpenRouterTariffAcquire = (options: OpenRouterMetadataFetchOptions, now: () => number, signal?: AbortSignal) => Promise<OpenRouterMetadataObservation>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OpenRouterTariffAcquire = (options: OpenRouterMetadataFetchOptions, now: () => number, signal?: AbortSignal) => Promise<OpenRouterMetadataObservation>;
 
 /**
  * Process-lifetime tariff cache (CATALOG-SEED pattern: acquire once, serve until the declared freshness window ends). A hit returns the

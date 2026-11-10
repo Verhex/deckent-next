@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, rm, utimes, type FileHandle } from 'node:fs/promises';
@@ -9,7 +10,7 @@ import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_READ_T
 import { ABSENT_FILE_VERSION, planWorkspaceEdit, resolveWritable, unifiedDiff, WORKSPACE_FILE_TARGET_KIND, WorkspaceFileTarget, writablePath,
   type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/core/workspace-write/index.js';
 
-export const SCRATCH_FILE_TARGET_KIND = 'scratch-file';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const SCRATCH_FILE_TARGET_KIND = 'scratch-file';
 /** Core operation of a scratch write (SCR-A). Under the `workspace` namespace Core already closes; its own id lets a company govern the
  * scratch area apart from project files (catalog data in code for the built-in Core target, like `workspace.file.write`). */
 export const SCRATCH_FILE_WRITE_OPERATION = Object.freeze({ schemaVersion: 1 as const, operation: Object.freeze({ id: 'workspace.scratch.write', version: 1 }),
@@ -29,8 +30,8 @@ const DIR_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOL
 const fdPath = (handle: FileHandle) => `/proc/self/fd/${handle.fd}`;
 const digest32 = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 32);
 
-export class ScratchError extends Error {
-  constructor(readonly code: 'SCRATCH_KEY_INVALID' | 'SCRATCH_UNSAFE' | 'SCRATCH_QUOTA_EXCEEDED', message: string = code) { super(message); this.name = 'ScratchError'; }
+export class ScratchError extends CodedError {
+  constructor(override readonly code: 'SCRATCH_KEY_INVALID' | 'SCRATCH_UNSAFE' | 'SCRATCH_QUOTA_EXCEEDED', message: string = code) { super(code, { message }); this.name = 'ScratchError'; }
 }
 
 /**

@@ -1,4 +1,4 @@
-import { ErrorRegistry } from '#platform/index.js';
+import { optionalField, ErrorRegistry } from '#platform/index.js';
 import { SECRET_NAME_PATTERN } from './port.js';
 import REGISTRY from './project-vault.json' with { type: 'json' };
 
@@ -8,14 +8,14 @@ export type SecretVault = 'main' | 'project';
 export type DeckDeclaration = SecretVault | 'undeclared';
 /** The parsed `.deck`: name → vault. References only; a value can never be expressed (no aliasing, no other right-hand side). */
 export type DeckDeclarations = ReadonlyMap<string, SecretVault>;
-/** Why a `.deck` was refused as a whole; never its content (a pasted value must not reach an error, a log or an audit record). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Why a `.deck` was refused as a whole; never its content (a pasted value must not reach an error, a log or an audit record). */
 export type DeckInvalidReason = 'too-large' | 'too-many-entries' | 'header' | 'entry' | 'reserved-name' | 'duplicate';
 
 /** `.deck` v1 limits and names, versioned registry data (law 6). */
 export const DECK_FILE = Object.freeze({ ...REGISTRY.deck });
 const ENTRY = /^([A-Z_][A-Z0-9_]*)=(main|project)$/u;
 const invalid = (reason: DeckInvalidReason, line?: number) =>
-  ErrorRegistry.createError('DECK_FILE_INVALID', { params: { reason, ...(line === undefined ? {} : { line }) } });
+  ErrorRegistry.createError('DECK_FILE_INVALID', { params: { reason, ...optionalField('line', line) } });
 
 /**
  * PRE-8 v2 (owner 2026-10-21): the project's `.deck` v1, a dotenv-like list of references that may be committed. The first entry is the

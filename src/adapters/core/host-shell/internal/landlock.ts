@@ -1,9 +1,10 @@
 import type { Dirent } from 'node:fs';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
+import { CodedError, relativeInside } from '#platform/index.js';
 import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout, ShellSandboxWriteView } from './realm.js';
 import { describeShellWritePosture, sandboxHardFloored, sandboxWriteView } from './realm.js';
@@ -11,19 +12,19 @@ import { BASH_LAUNCH, runShellProcess } from './run.js';
 import { scanGitDirectory } from './git-objects.js';
 import { fsOpsFor, type FsOps } from './fs-ops.js';
 
-/** Rule classes the native helper maps to Landlock rights: `x` read + execute, `r` read, `w` read-write (no device nodes),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Rule classes the native helper maps to Landlock rights: `x` read + execute, `r` read, `w` read-write (no device nodes),
  * `l` list the directory only, `d` a device file (read/write). */
 export type LandlockRuleClass = 'x' | 'r' | 'w' | 'l' | 'd';
-export type LandlockRule = readonly [LandlockRuleClass, string];
-export const LANDLOCK_RULE_BOUNDS = Object.freeze({ maxEntries: 20_000, maxGitEntries: 200_000, maxDepth: 32, maxRules: 8_192, maxBytes: 1_048_576 });
-export type LandlockRuleSet = { readonly ok: true; readonly rules: readonly LandlockRule[] } | { readonly ok: false; readonly reason: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type LandlockRule = readonly [LandlockRuleClass, string];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const LANDLOCK_RULE_BOUNDS = Object.freeze({ maxEntries: 20_000, maxGitEntries: 200_000, maxDepth: 32, maxRules: 8_192, maxBytes: 1_048_576 });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type LandlockRuleSet = { readonly ok: true; readonly rules: readonly LandlockRule[] } | { readonly ok: false; readonly reason: string };
 
 const HELPER = fileURLToPath(new URL('../native/build/Release/shell-sandbox', import.meta.url));
 const SYSTEM_EXEC = ['/usr', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/libx32', '/opt'];
 const SYSTEM_READ = ['/etc', '/proc'];
 const DEVICES = ['/dev/null', '/dev/zero', '/dev/full', '/dev/random', '/dev/urandom'];
 
-class BoundExceeded extends Error {}
+class BoundExceeded extends CodedError { constructor(message = '', options?: ErrorOptions) { super('BOUND_EXCEEDED', { message, ...options }); } }
 const exists = async (path: string, kind: 'dir' | 'any') => { try { const info = await stat(path); return kind === 'any' || info.isDirectory(); } catch { return false; } };
 
 /** A git worktree's `.git` file (at the project root only) opens its repository read-only, and only when it has the worktree shape:
@@ -91,7 +92,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   // protected path is not one read-write grant: it is carved — listing only, its denied entries take no rule, the ancestors of protected
   // paths are carved in turn, every other entry keeps its read-write grant unscanned (as ignored). A symbolic link on such a chain
   // cannot be carved by path → the set is refused.
-  const anchors = [...input.project.protectedAnchors, '.deckent', ...(input.hardFloor?.roots ?? []).map(path => relative(root, path)).filter(path => path && !path.startsWith('..') && !isAbsolute(path))];
+  const anchors = [...input.project.protectedAnchors, '.deckent', ...(input.hardFloor?.roots ?? []).flatMap(path => relativeInside(root, path) || [])];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const carveProtected = async (rel: string, depth: number, cls: 'w' | 'r'): Promise<readonly LandlockRule[]> => {
@@ -181,12 +182,14 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
 /** The Landlock realm (S11): each call builds its rule set, then runs `bash` through the native helper, which applies it with
  * no_new_privs and the seccomp socket filter and execs bash in the same process (the host runner's process-group, timeout,
  * cancellation, output and cleanup contract is unchanged). `HOME` is the scratch area (the real one is unreachable). */
-export function landlockShellRealm(input: ShellSandboxLayout, abi: number): ShellRealm {
+function landlockShellRealm(input: ShellSandboxLayout, abi: number): ShellRealm {
   const refuse = (reason: string): ShellRealmResult => Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null,
     output: `[deckent] sandbox: ${reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0, durationMs: 0, cleanup: 'clean' });
   return Object.freeze({
     kind: 'landlock' as const,
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
+      // KG3 F5: Landlock mounts nothing, so it cannot hide a contained workspace's state ancestor. Refused per call, not in `usable()`, where prefer-sandbox would fall back to the host.
+      if (input.containedWorkspaceRoot) return refuse('this sandbox cannot hide the installation state around a contained workspace');
       if (abi < 3) return refuse('Landlock ABI 3 is required to protect read-only files from truncation');
       if (resolve(request.cwd) !== input.project.root) return refuse('the working directory is not the sandboxed project root');
       // SHELL-OVERLAY: Landlock mounts nothing, so it cannot keep a call's writes aside (design §9); a caller that asks anyway is refused.

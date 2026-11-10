@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
-import { affectedToolchainProfiles, configWriteOperation, modelUseProfiles, modelInvocationProfileDigest } from '#engine/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { affectedToolchainProfiles, configWriteOperation, configuredInvocationProfiles, modelInvocationProfileDigest } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardOption } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
@@ -26,9 +26,9 @@ function readFlags(argv: readonly string[], from: number, allowed: readonly stri
 }
 const sinksOf = (context: AdminCommandContext) => ({ ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 const shortImage = (image: string | null | undefined) => image ? image.replace(/^sha256:/u, '').slice(0, 12) : '-';
-const runtimeLabel = (subscription: boolean, locale: Locale) => subscription ? t('k29.coding.runtime.subscription', {}, locale) : t('k29.coding.runtime.docker', {}, locale);
+const runtimeLabel = (subscription: boolean, locale: Locale) => subscription ? t('coding.runtime.subscription', {}, locale) : t('coding.runtime.docker', {}, locale);
 type Pins = ReturnType<typeof affectedToolchainProfiles>;
-type Connection = ReturnType<typeof modelUseProfiles>[number];
+type Connection = ReturnType<typeof configuredInvocationProfiles>[number];
 /** R8b/R8c: a connection's CLI comes from the native agent registry through the host (the engine still checks it); people see CLI · model, the id stays in --json. */
 type CliOf = (row: Connection) => string | null;
 const cliOf = (context: AdminCommandContext): CliOf => row => context.workerCliOf?.(row.protocol.family) ?? null;
@@ -43,7 +43,7 @@ export async function codingCommand(argv: readonly string[], context: AdminComma
   if (!help && argv[1] !== 'prepare') throw ErrorRegistry.createError('CLI_USAGE');
   const { values, flags } = help ? { values: new Map<string, string>(), flags: new Set<string>() } : readFlags(argv, 2, ['--json', '--input', '--lang']);
   const locale = commandLocale(context, values.get('--lang')), source = values.get('--input'), sinks = sinksOf(context);
-  if (help) { emit(t('k29.coding.help', {}, locale), sinks); return; }
+  if (help) { emit(t('coding.help', {}, locale), sinks); return; }
   if (!source || !context.prepareCodingProfile) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd();
   const config = await loadConfig(root, { env: context.env ?? process.env });
@@ -69,15 +69,18 @@ function preparationShape(input: unknown, locale: Locale): void {
   if (!document['invocation'] || typeof document['invocation'] !== 'object' || Array.isArray(document['invocation'])) fail('invocation');
 }
 
+/** The connection binding a coding profile names (a v2 template's `worker`, a connected worker's wrapper `binding`): one reader for list and template. */
+const workerBinding = (profile: ExecutionProfileDefinition | undefined) => (profile?.adapter.id === NATIVE_CLI_WORKER_ADAPTER_ID
+  ? nativeCliWorkerWrapperSchema.safeParse(profile.parameters).data?.binding : profile?.parameters['worker']) as { profileDigest?: string; connectionId?: string } | undefined;
 /** The coding profiles task kinds run on: kind, profile, provider and CLI pin, image. Read from the admission registry only. */
-function codingProfiles(config: DeckentConfig, pins: Pins) {
+function codingProfiles(config: DeckentConfig, pins: Pins, connections: readonly Connection[]) {
   const registry = executionRegistrySchema.safeParse(config.admission?.registry);
   if (!registry.success) return [];
-  const connections = modelUseProfiles(config);
+  const byDigest = new Map(connections.map(row => [modelInvocationProfileDigest(row), row]));
   return registry.data.kinds.map(kind => {
     const profile = registry.data.profiles.find(row => row.id === kind.profile.id && row.version === kind.profile.version);
-    const worker = (profile?.parameters['worker'] ?? (profile?.adapter.id === 'native-cli-worker' ? profile.parameters['binding'] : undefined)) as { profileDigest?: string; connectionId?: string } | undefined;
-    const connection = worker ? connections.find(row => modelInvocationProfileDigest(row) === worker.profileDigest)?.id ?? worker.connectionId ?? null : null;
+    const worker = workerBinding(profile);
+    const connection = worker ? (worker.profileDigest ? byDigest.get(worker.profileDigest)?.id : undefined) ?? worker.connectionId ?? null : null;
     const pin = pins.find(item => item.profile.id === kind.profile.id && item.profile.version === kind.profile.version);
     return { kind: kind.kind, profile: { id: kind.profile.id, version: kind.profile.version }, provider: pin?.provider ?? null, cliVersion: pin?.cliVersion ?? null,
       imageId: worker ? null : pin?.imageId ?? null, runtime: worker ? 'subscription' as const : 'container' as const, connection };
@@ -87,15 +90,15 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   const { values, flags } = readFlags(argv, 1, ['--json', '--lang']);
   const locale = commandLocale(context, values.get('--lang'));
   const config = await loadConfig(context.root ?? process.cwd(), { env: context.env ?? process.env, heal: false });
-  const profiles = codingProfiles(config, affectedToolchainProfiles(config)), configured = config.execution?.docker?.imageId ?? null;
+  const all = configuredInvocationProfiles(config), profiles = codingProfiles(config, affectedToolchainProfiles(config), all), configured = config.execution?.docker?.imageId ?? null;
   // The configured image runs none of the admitted CLIs: `coding template` without `--image` would find no toolchain there.
-  const connections = modelUseProfiles(config).filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID).map(row => ({ id: row.id, scopeId: row.scopeId, protocolFamily: row.protocol.family }));
+  const connections = all.filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID).map(row => ({ id: row.id, scopeId: row.scopeId, protocolFamily: row.protocol.family }));
   const unused = configured !== null && profiles.some(row => row.runtime === 'container' && row.provider) && !profiles.some(row => row.imageId === configured);
   emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
-    const all = modelUseProfiles(config), label = (id: string | null) => connectionLabel(cliOf(context), all.find(row => row.id === id));
-    const available = t('k29.coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
+    const label = (id: string | null) => connectionLabel(cliOf(context), all.find(row => row.id === id));
+    const available = t('coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
     if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available].join('\n');
-    const columns = t('k29.coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
+    const columns = t('coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
     return [t('clisetup.coding.title', { count: data.profiles.length }, locale),
       renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ? label(row.connection) : '-']),
         cliTableStyle(context)),
@@ -124,11 +127,10 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   const io = { locale, env, ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
     ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) };
   const person = cliMode(context, flags.has('--json')).mode === 'interactive';
-  // One choice needs no question; the preview card still shows it.
   const ask = async (title: string, options: readonly CliCardOption[]) => options.length === 1 ? options[0]!.id : await askCliCard({ title, options }, io) ?? undefined;
   const missing = (flag: string, choices: readonly string[]) => ErrorRegistry.createError('CLI_CODING_TEMPLATE_CHOICE_MISSING',
     { params: { flag, values: choices.length ? choices.join(', ') : t('clisetup.coding.noChoices', {}, locale) }, locale });
-  const connected = values.has('--connection') ? modelUseProfiles(config).find(row => row.id === values.get('--connection')) : undefined;
+  const connected = values.has('--connection') ? configuredInvocationProfiles(config).find(row => row.id === values.get('--connection')) : undefined;
   let provider = values.get('--provider') ?? (connected && cliOf(context)(connected) || undefined);
   if (!provider && !person) throw missing('--provider <id>', providers);
   if (!provider) {
@@ -162,7 +164,7 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
 }
 /** Kinds a template can bind for `provider`: the kinds already on its admitted profiles, then the conventional new ones still free. */
 function templateKinds(config: DeckentConfig, pins: Pins, provider: string): string[] {
-  const rows = codingProfiles(config, pins), taken = new Set(rows.map(row => row.kind));
+  const rows = codingProfiles(config, pins, configuredInvocationProfiles(config)), taken = new Set(rows.map(row => row.kind));
   return [...new Set([...rows.filter(row => row.provider === provider).map(row => row.kind), ...['coding', `${provider}-coding`].filter(kind => !taken.has(kind))])];
 }
 const imageLabel = (image: string, pins: Pins, provider: string) =>
@@ -175,7 +177,7 @@ async function template(context: AdminCommandContext, root: string, env: NodeJS.
 /** Root cause of CODING_TEMPLATE_TOOLCHAIN_REQUIRED on a working installation (review §coding open question): without `--image` the template
  * looks for an admitted CLI on `execution.docker.imageId`, but the admitted profiles run on other images. Named with those images and a command. */
 function unadmittedImage(error: unknown, config: DeckentConfig, request: { provider: string; kind: string; image?: string }, locale: Locale) {
-  if ((error as { code?: unknown } | null)?.code !== 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED') return null;
+  if (!isCodedError(error, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED')) return null;
   const used = request.image ?? config.execution?.docker?.imageId ?? null;
   const pins = affectedToolchainProfiles(config).filter(pin => pin.provider === request.provider && pin.imageId), images = [...new Set(pins.map(pin => pin.imageId!))];
   if (!images.length || (used && images.includes(used))) return null;
@@ -186,10 +188,10 @@ const output = (result: TemplateResult) => ({ schemaVersion: 1 as const, status:
   registryRevision: result.registry.revision, connection: result.connection ?? null, expect: result.expect, write: result.write });
 function templateLines(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf): string[] {
   const parameters = value.profile.parameters as { docker?: { imageId?: string }; invocation?: { provider?: string; cliVersion?: string; discovery?: { mode?: string } } };
-  const worker = value.profile.parameters['worker'] as { connectionId?: string; profileDigest?: string } | undefined;
+  const worker = workerBinding(value.profile);
   const discovery = parameters.invocation?.discovery?.mode;
-  const connection = modelUseProfiles(config).find(row => row.id === value.connection || !!worker && modelInvocationProfileDigest(row) === worker.profileDigest);
-  return [t('k29.coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(cli, connection) : '-' }, locale),
+  const connection = configuredInvocationProfiles(config).find(row => row.id === value.connection || !!worker && modelInvocationProfileDigest(row) === worker.profileDigest);
+  return [t('coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(cli, connection) : '-' }, locale),
     t('clisetup.coding.result.profile', { profile: `${value.profile.id}@${value.profile.version}` }, locale),
     t('clisetup.coding.result.kind', { kind: String((value.kind as { kind?: unknown } | null)?.kind ?? '-') }, locale),
     t('clisetup.coding.result.toolchain', { provider: parameters.invocation?.provider ?? '-', cli: parameters.invocation?.cliVersion ?? '-',

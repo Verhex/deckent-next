@@ -4,8 +4,8 @@ import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ModelConnectResult } from '#domain/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
+import { cells, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
 import { CardCopyContext, DECISION_ARM_DEFAULT, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
@@ -578,7 +578,7 @@ describe('stage 1 budget window (/model and /provider)', () => {
   });
 
   it('/model offers "Create budget" first (no scope step); presets, confirm, one system line; nothing is sent before the confirm', async () => {
-    const budget = budgetPort(view()), { port, pins } = modelPort(MODELS);
+    const budget = budgetPort(view({ start: 10 })), { port, pins } = modelPort(MODELS);
     const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });
     const screen = mount(element, 100, 40);
     await settle(80);
@@ -586,7 +586,11 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(ENTER);
     for (const preset of ['5 USD', '10 USD', '25 USD', '50 USD', '100 USD', 'Another amount (arrow keys)']) expect(screen.frame()).toContain(preset);
     expect(screen.frame()).not.toContain('This session only');
-    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    await screen.press(ENTER);
+    expect(screen.frame()).toContain("Set this scope's shared budget to 10 USD?");
+    expect(budget.applied).toEqual([]);
+    await screen.press(ESC);
+    await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain("Set this scope's shared budget to 25 USD?");
     expect(budget.applied).toEqual([]);
     await screen.press(ENTER, 80);
@@ -627,12 +631,15 @@ describe('stage 1 budget window (/model and /provider)', () => {
     const screen = mount(element, 100, 40);
     await settle(80);
     expect(screen.frame()).toContain('Bütçeyi değiştir'); expect(screen.frame()).toContain('Şu anki bütçe: 25 USD (revizyon 2)');
-    await screen.press(`${ENTER}${DOWN}${DOWN}${DOWN}${ENTER}`);
+    await screen.press(ENTER);
+    expect(screen.frame()).toMatch(/>.*25 USD/u);
+    await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain('Bu kapsamın ortak bütçesi 50 USD olsun mu?');
     expect(screen.frame()).toContain('Evet, ayarla ve aşım dondurmasını kaldır');
     await screen.press(`${DOWN}${DOWN}${ENTER}`);
     expect(budget.applied).toEqual([]);
-    await screen.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
+    expect(screen.frame()).toMatch(/>.*25 USD/u);
+    await screen.press(`${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
     expect(budget.applied).toEqual([{ action: 'change', usd: 50, unfreeze: true }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
@@ -1093,10 +1100,10 @@ it('K13: the provider and onboarding subscription window offers the registry met
 
 it('R2a: /model pins an unverified (unknown) subscription model; its first turn verifies the tools', async () => {
   const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
-  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
-    inspect: async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }) } };
+  const unknown = async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }) as const;
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true, inspect: unknown, inspectMany: async (_surface, refs) => Promise.all(refs.map(unknown)) } };
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
-  await until(() => ui.frame().includes(t('headless.agent.k13.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
+  await until(() => ui.frame().includes(t('headless.agent.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
   await ui.press(ENTER + ENTER);
   await until(() => model.pins.length > 0, 'unknown model pinned');
   expect(calls.errors).toEqual([]);
@@ -1105,11 +1112,11 @@ it('R2a: /model pins an unverified (unknown) subscription model; its first turn 
 it('K13: /model rechecks subscription readiness at confirmation and does not pin after capability revocation', async () => {
   const view = { ...MODELS, choices: [MODELS.choices[0]!] }, model = modelPort(view), { port: base } = providerPort();
   let ready = true;
-  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true,
-    inspect: async () => ready ? { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
-      profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } } : { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' } } };
+  const inspect: NonNullable<ProviderWindowPort['subscriptionReadiness']>['inspect'] = async () => ready ? { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
+    profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } } : { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
+  const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true, inspect, inspectMany: async (_surface, refs) => Promise.all(refs.map(inspect)) } };
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
-  await until(() => ui.frame().includes(t('headless.agent.k13.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
+  await until(() => ui.frame().includes(t('headless.agent.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
   ready = false;
   await ui.press(ENTER + ENTER);
   await until(() => calls.errors.length > 0, 'revocation reported');

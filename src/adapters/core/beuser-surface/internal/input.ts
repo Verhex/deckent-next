@@ -1,9 +1,10 @@
-// Type-only: this module also loads in a bare Node ESM context (screen rendering), so it imports no runtime module.
+import { CodedError } from '#platform/index.js';
+// The screen renderer loads this module in Node ESM; the engine dependency stays type-only.
 import type { BeuserKeyName } from '#engine/index.js';
-export type SurfaceFailure = 'BEUSER_SURFACE_UNAVAILABLE' | 'BEUSER_SURFACE_INVALID' | 'BEUSER_SURFACE_LIMIT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SurfaceFailure = 'BEUSER_SURFACE_UNAVAILABLE' | 'BEUSER_SURFACE_INVALID' | 'BEUSER_SURFACE_LIMIT'
   | 'BEUSER_SURFACE_BUSY' | 'BEUSER_CAPTURE_BLOCKED' | 'BEUSER_SURFACE_EOF' | 'BEUSER_ACTION_INVALID';
-export class BeuserSurfaceError extends Error {
-  constructor(readonly code: SurfaceFailure) { super(code); this.name = 'BeuserSurfaceError'; }
+export class BeuserSurfaceError extends CodedError {
+  constructor(override readonly code: SurfaceFailure) { super(code); this.name = 'BeuserSurfaceError'; }
 }
 export function positive(value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');

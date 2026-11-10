@@ -61,6 +61,8 @@ describe('planner (cond. 3, 6)', () => {
       [{ platform: 'other' }, 'platform', false], [{ platform: 'wsl', desktop: true }, 'desktop', true],
       [{ osRelease: { ID: 'linuxmint', ID_LIKE: 'ubuntu', UBUNTU_CODENAME: 'noble' } }, 'distribution', false], [{ osRelease: { ...ubuntu, UBUNTU_CODENAME: 'focal', VERSION_CODENAME: 'focal' } }, 'distribution', false],
       [{ architecture: 'i386' }, 'distribution', false], [{ osRelease: null }, 'distribution', false], [{ conflicts: ['docker.io', 'runc'] }, 'conflicts', true],
+      [{ osRelease: { ID: 'ubuntu', VERSION_ID: '27.04', VERSION_CODENAME: 'future' } }, 'distribution', false],
+      [{ osRelease: { ID: 'debian', VERSION_CODENAME: 'forky' } }, 'distribution', false],
       [{ existingSource: '/etc/apt/sources.list.d/docker.list' }, 'repository', true], [{ network: false }, 'network', true],
       // Astra 2672 R1: an unanswered host check refuses before conflicts/source/network are trusted.
       [{ unknown: ['dpkg-query'] }, 'probe', true], [{ unknown: ['/etc/apt/sources.list.d/docker.list'], network: true }, 'probe', true]];
@@ -73,6 +75,12 @@ describe('planner (cond. 3, 6)', () => {
     const lines = dockerPrintLines(planDockerInstall(facts({ conflicts: ['docker.io'] }), '/tmp/s') as Extract<DockerInstallPlan, { kind: 'print' }>, 'tr');
     expect(lines[0]).toContain('docker.io');
     expect(lines.slice(1)).toEqual(dockerCommandLines(install(planDockerInstall(facts(), '/tmp/s')).steps).map(line => `  $ ${line}`));
+    const future = planDockerInstall(facts({ osRelease: { ID: 'ubuntu', VERSION_ID: '27.04', VERSION_CODENAME: 'future' } }), '/tmp/s') as Extract<DockerInstallPlan, { kind: 'print' }>;
+    expect(future).toMatchObject({ kind: 'print', reason: 'distribution', source: null, steps: null });
+    for (const [locale, guidance] of [['en', 'Update Deckent'], ['tr', "Deckent'i güncelleyin"]] as const) {
+      const text = dockerPrintLines(future, locale).join('\n');
+      expect(text).toContain(guidance); expect(text).toContain(DOCKER_APT.docs); expect(text).toContain('noble'); expect(text).not.toContain('sudo');
+    }
   });
   it('the card shows every command, the source, the pinned key, the root-equivalent group, NOPASSWD and how to undo (EN and TR)', () => {
     const plan = install(planDockerInstall(facts(), '/tmp/s'));

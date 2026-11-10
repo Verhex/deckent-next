@@ -48,7 +48,7 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 | Read/resolve dahil bütün sır işlemleri | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Kimlik bilgisini okumak, değiştirmek veya taşımak sır sınırını aşar; read/resolve savunma hücreleridir, açık sır-okuma API’leri değildir. |
 | Yetki onay kartları | `approval/identity-profile/decide`, `approval/policy-mcp-capability/decide`, `approval/policy-template-upgrade/decide`, `approval/audit-rebaseline/decide`, `approval/policy-recovery/decide` | Yetki kartını karara bağlamak da yetki değiştiren bir yoldur. |
 | Inspect/verify dışındaki audit işlemleri | `audit/fixture-scope/rebaseline`, `audit/fixture-scope/write`, `audit/fixture-scope/delete`, `audit/fixture-scope/future-action` | AI yetki kaymasını saptayan referans kaydını yeniden yazamaz. |
-| edit-authority ve edit-floor araç çağrısı hücreleri | `agent-tool-call/edit-authority/invoke`, `agent-tool-call/edit-floor/invoke` | Korunan sınırı düzenlemek operasyon kapısını dolanabilir. |
+| edit-authority, edit-floor ve mcp-floor araç çağrısı hücreleri | `agent-tool-call/edit-authority/invoke`, `agent-tool-call/edit-floor/invoke`, `agent-tool-call/mcp-floor/invoke` | Korunan sınırı düzenlemek ya da sabitlenmiş MCP taban çağrısını çalıştırmak operasyon kapısını dolanabilir. |
 | Hafıza doğrulama, emekliye ayırma, itiraz ve silme | `memory/fixture-target/verify`, `memory/fixture-target/retire`, `memory/fixture-target/contest`, `memory/fixture-target/purge` | Doğrulanmış hafıza bir kişi ya da bağımsız değerlendirme kaydı ister, AI kendisi asla (kanun denetimi madde 6); emekliye ayırmak da aynı bilgi değişikliğidir; içerik silme (purge) insanındır (S4B A11); doğrulama ve itiraz tabandan yalnız hafıza değerlendirici iş kimliği için geçer (S4B-3 A5); bu hücreler onu adlandırmaz. |
 | Nervous durdurma eylemi ya da kayıp görev devamı için kalıcı onay | `recovery-action/fixture-target/apply`, `recovery-action/fixture-target/future-action`, `recovery-action/fence-attempt/apply`, `recovery-action/fence-attempt/future-action`, `recovery-action/stop-orphan/apply`, `recovery-action/stop-orphan/future-action`, `recovery-action/hand-to-human/apply`, `recovery-action/hand-to-human/future-action`, `recovery-action/continue-new-attempt/apply`, `recovery-action/continue-new-attempt/future-action` | Kurtarma aracısı mühürlü Nervous önerisini uygular, kurtarma sistemi kayıp görevi yeni Attempt ile sürdürür; ikisi de yalnız sahibin kalıcı izniyle (K-B, S6R-3/S6R-4); bu izni hiçbir AI taşımaz, Nervous yalnız önerir. |
 | Bir Nervous kuralını canlıya alma | `nervous-rule/container-gone@1/promote`, `nervous-rule/container-gone@1/future-action`, `nervous-rule/fixture-target/promote`, `nervous-rule/fixture-target/future-action` | Ölçülmüş bir kuralı ve sürümünü yalnız bir kişi canlıya alır (alpha.56 G2, owner Q-A1); bunu taşıyan bir AI kendi tespitleriyle işçileri durdurup bırakabilirdi. |
@@ -91,8 +91,15 @@ Genel `evaluate` veya `reserve`, kabul veya başarısızlıktan devam yetkisi de
 
 Yeni ilk kurulum politikası kuran insana yetki, MCP aktörüne gözlem kurallarını ve şablon v19'dan
 beri (owner 2026-11-05) kurulu kapsamda kişinin kendi araç kurallarını verir: model çağrısı, okuma ve
-karalama araçları, kartın arkasında düzenleme/kabuk araçları ve bunların üç operasyonu. Yerel ajan ve
-dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, yapılandırma, sır, politika,
+karalama araçları, kartın arkasında düzenleme/kabuk araçları ve bunların üç operasyonu. Şablon v20'den
+beri (owner 2026-11-09) aktör bir Run ve üç ayardan birini (`language`, `output_mode`,
+`terminal.responseStyle`) de önerebilir; ikisi de moda açık olmayan `require-approval` kuralıdır, bu
+yüzden kişinin `/do` plan kartı ya da `/config` önce/sonra kartı her modda açılır; önerilen Run'ın
+havuzu ve iş hedefi `allow`'dur (o kart olmadan etkisizdir). Mevcut kurulumlar bu dört kuralı bir sonraki
+servis başlangıcında bir kez ve denetim kaydıyla alır; hücresinin tamamını aktörün tek bir izninin (rol
+bağlaması da) zaten kapsadığı kural hariç. `/policy` onları kapatıp açmak için tek bir **Yapay zekâ önerileri**
+satırında gösterir ve onları kapsayan mevcut izni adlandırır. Yerel ajan ve
+dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, başka yapılandırma, sır, politika,
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 grant'lerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
 
@@ -219,7 +226,7 @@ değildir. Mevcut CLI:
 
 **“MCP salt okunur gözlemci olsun.”** Şablon v19'dan beri ilk kurulum politikası MCP aktörüne model
 çağırma ve ajan araçlarını da açar; MCP aktörü için `model-invocation` ve `agent-tool` üzerindeki şirket
-deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak v19 AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
+deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak en yeni (v20 öneri) AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
 yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
 yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol grant'lerini de inceleyin. Başka
 grant'ler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, identitySchema } from '#domain/core/primitives/index.js';
 
 const selection = z.union([z.literal('all'), z.array(identitySchema).min(1).readonly()]);
 const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
@@ -22,8 +22,8 @@ export const policyGrantSchema = markedGrant;
 export type PolicyRule = z.infer<typeof restriction>;
 export type PolicyGrant = z.infer<typeof grant> & { readonly modeEligible?: boolean | undefined };
 
-export class PolicyError extends Error {
-  constructor(readonly code: 'POLICY_INVALID' | 'POLICY_ROLE_UNKNOWN' = 'POLICY_INVALID') { super(code); this.name = 'PolicyError'; }
+export class PolicyError extends CodedError {
+  constructor(override readonly code: 'POLICY_INVALID' | 'POLICY_ROLE_UNKNOWN' = 'POLICY_INVALID') { super(code); this.name = 'PolicyError'; }
 }
 export function includes(values: 'all' | readonly string[], value: string) { return values === 'all' || values.includes(value); }
 function unique(context: z.RefinementCtx, ids: readonly string[], message: string) {
@@ -59,7 +59,7 @@ export type PolicyBinding = z.infer<typeof binding>;
  */
 const assuranceRule = z.strictObject({ id: identitySchema, scopes: selection, subject: z.enum(['task', 'agent-tool-call', 'operation', 'config-change', 'run-create']), cells: z.array(localId).min(1).readonly().optional(),
   effectClasses: z.array(z.enum(['read', 'write', 'irreversible'])).min(1).readonly().optional(), authority: z.literal(true).optional(), minimum: localId }).readonly();
-export type ApprovalAssuranceRule = z.infer<typeof assuranceRule>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ApprovalAssuranceRule = z.infer<typeof assuranceRule>;
 const v2Shape = { roles: z.array(role).readonly(), grants: z.array(markedGrant).readonly(), restrictions: z.array(restriction).readonly(),
   separationOfDuties: z.array(duty).readonly(), approvalAssurance: z.array(assuranceRule).readonly().optional() };
 /**
@@ -103,7 +103,7 @@ const modeBindingsSchema = z.strictObject({ schemaVersion: z.literal(3), revisio
   .superRefine((value, context) => checkBindings(value.bindings, context, value.modes)).readonly();
 export const bindingsFileSchema = z.union([roleBindingsSchema, legacyModeBindingsSchema, modeBindingsSchema]);
 export type BindingsFile = z.infer<typeof bindingsFileSchema>;
-export type BindingsV3 = z.infer<typeof modeBindingsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BindingsV3 = z.infer<typeof modeBindingsSchema>;
 /**
  * A bindings document as v3 (MODES-3 migration, pure): v1 has no modes; v2 `ask` becomes `standart` with `askEdits` (the person chose to be
  * asked for every edit — kept, never silently relaxed), `auto-edit` becomes `standart`, `full-auto` stays. The revision is the input's: a
@@ -127,9 +127,8 @@ const resolvedRolePolicySchema = z.strictObject({ schemaVersion: z.literal(2), r
     if (policy.bindings.entries.some(value => value.roles.some(id => !roles.has(id)))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'POLICY_ROLE_UNKNOWN' });
   }).readonly();
 
-/** Evaluator input: a v1 document (unchanged) or a resolved v2 snapshot. Every authorization consumer parses this. */
+/** Evaluator input: a v1 document (unchanged) or a resolved v2 snapshot. Sources validate before authorization. */
 export const policySchema = z.union([grantPolicySchema, resolvedRolePolicySchema]);
-/** What policy.json may contain. */
 export const policyFileSchema = z.union([grantPolicySchema, rolePolicyFileSchema]);
 export type Policy = z.infer<typeof policySchema>;
 export type PolicyFile = z.infer<typeof policyFileSchema>;

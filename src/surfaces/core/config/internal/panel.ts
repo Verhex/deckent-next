@@ -1,10 +1,10 @@
-import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { parseConfigInput, type ConfigFieldView, type ConfigWritePermission } from '#engine/index.js';
-import { CONFIG_VALUE_CHOICES, configEntryAllowed } from '#platform/index.js';
+import { ErrorRegistry, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { parseConfigInput, type ConfigWritePermission } from '#engine/index.js';
+import { CONFIG_VALUE_CHOICES, configChoiceDeclaration, parseConfigEntry, configEntryAllowed } from '#platform/index.js';
 import { configValueModel, type ConfigChoiceSourcePort, type ConfigValueModel } from './choices.js';
 export { configSchemaChoices } from './choices.js';
 import { CONFIG_RECORD_KEYS, CONFIG_IMPORT_KEYS, configRecordPort, configRecordSupported } from './records.js';
-import { configValueWord, schemaWord, sourceWord, applyWord } from './render.js';
+import { configValueWord, fieldDescription, schemaWord, sourceWord, applyWord } from './render.js';
 import { terminalConfigWrite, type ConfigCommandContext } from './command.js';
 import { applyOperationsBaseline, operationsBaselineOffer, type OperationsBaselineOffer } from './operations-baseline.js';
 import { isProtectedConfigWrite } from '#engine/index.js';
@@ -36,31 +36,20 @@ function layerLock(permission: ConfigWritePermission | undefined, readOnly: bool
 export function configPanelPort(root: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, sources?: ConfigChoiceSourcePort,
   surface: 'terminal' | 'cli' = 'terminal') {
   if (!context.configApplication) throw ErrorRegistry.createError('CLI_USAGE');
-  const application = () => context.configApplication!(root, options);
+  const application = context.configApplication(root, options);
   // The words of what each key takes, from the last inspection (the entry's reason when a value does not fit).
   const expected = new Map<string, string>(), current = new Map<string, unknown>(), sensitive = new Set<string>();
-  const described = (field: ConfigFieldView) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
   return {
     records: configRecordPort(root, context, options, locale, sources, surface),
     async inspect() {
-      const view = await application().inspect({}), readOnly = !context.resolveConfigPrincipal, notes: string[] = [];
-      const config = await loadConfig(root, options), scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+      const view = await application.inspect({ include: [...Object.entries(CONFIG_VALUE_CHOICES).filter(([parent, rule]) => !parent.includes('*') && ['document', 'container', 'reference'].includes(rule.kind)).map(([parent]) => parent), ...CONFIG_RECORD_KEYS, ...CONFIG_IMPORT_KEYS] }), readOnly = !context.resolveConfigPrincipal, notes: string[] = [];
+      const scope = view.fields.find(field => field.key === 'terminal.scopeId')?.value, scopeId = typeof scope === 'string' ? scope : undefined;
       const inspected = [...view.fields];
-      for (const [parent, rule] of Object.entries(CONFIG_VALUE_CHOICES)) {
-        if (parent.includes('*') || inspected.some(field => field.key === parent) || !inspected.some(field => field.key.startsWith(parent + '.'))) continue;
-        if (rule.kind === 'document' || rule.kind === 'container' || rule.kind === 'reference') {
-          try { inspected.push(await application().explain({ keyPath: parent })); } catch { /* Optional extension is absent. */ }
-        }
-      }
-      for (const key of [...CONFIG_RECORD_KEYS, ...CONFIG_IMPORT_KEYS]) {
-        if (inspected.some(field => field.key === key)) continue;
-        try { const field = await application().explain({ keyPath: key }); if (field.key === key) inspected.push(field); } catch { /* Uninstalled optional section. */ }
-      }
       let permissions: readonly ConfigWritePermission[] | null = null;
       if (!readOnly && scopeId) {
         try {
           const principal = await context.resolveConfigPrincipal!(root, scopeId, options);
-          permissions = await application().permissions({ principal, scopeId, keys: inspected.map(field => field.key), layers: LAYERS });
+          permissions = await application.permissions({ principal, scopeId, keys: inspected.map(field => field.key), layers: LAYERS });
         } catch (error) {
           // A policy that cannot be read shows no locks; the write decides (and refuses) on its own.
           notes.push(t('config.panel.permissionsUnread', { code: String((error as { code?: unknown })?.code ?? 'failed') }, locale));
@@ -77,7 +66,7 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
         if (model.hidden && !configRecordSupported(field.key)) return null;
         const value = configValueWord(field.value, field.redacted, locale);
         const of = (layer: Layer) => permissions?.find(item => item.keyPath === field.key && item.layer === layer);
-        return { key: field.key, section: field.key.split('.')[0]!, description: described(field), value, source: sourceWord(field.source, locale), apply: applyWord(field.apply, locale),
+        return { key: field.key, section: field.key.split('.')[0]!, description: fieldDescription(field, locale), value, source: sourceWord(field.source, locale), apply: applyWord(field.apply, locale),
           expected: schemaWord(field.schema, locale), choices: model.choices, stepper: model.stepper, readOnly: configRecordSupported(field.key) ? null : model.readOnly, records: configRecordSupported(field.key), generated: model.generated, choiceNotice: model.notice,
           free: model.free, guard: guardLines(field.key, locale), unsettable: field.source === 'project' || field.source === 'global', sensitive: field.redacted,
           locks: { project: layerLock(of('project'), readOnly, locale), global: layerLock(of('global'), readOnly, locale) } };
@@ -86,9 +75,9 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
     },
     parse(keyPath: string, text: string) {
       if (!configEntryAllowed(keyPath, sensitive.has(keyPath))) return { ok: false as const, reason: t('config.select.selectionOnly', {}, locale) };
-      if (keyPath === 'terminal.fetch.allowedHosts' && !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/iu.test(text.trim())) return { ok: false as const, reason: t('config.select.invalidHost', {}, locale) };
-      if (keyPath === 'toolchains.currency.registryEndpoint') { try { const url = new URL(text); if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error(); } catch { return { ok: false as const, reason: t('config.select.invalidUrl', {}, locale) }; } }
-      const parsed = parseConfigInput(keyPath, keyPath === 'terminal.fetch.allowedHosts' ? JSON.stringify([...new Set([...(Array.isArray(current.get(keyPath)) ? current.get(keyPath) as unknown[] : []), text.trim().toLowerCase()])]) : text);
+      const entry = parseConfigEntry(configChoiceDeclaration(keyPath), text, current.get(keyPath));
+      if (!entry.ok) return { ok: false as const, reason: ({ 'config.select.invalidHost': t('config.select.invalidHost', {}, locale), 'config.select.invalidUrl': t('config.select.invalidUrl', {}, locale) })[entry.reason] };
+      const parsed = parseConfigInput(keyPath, entry.text);
       if (parsed.ok) return parsed;
       return { ok: false as const, reason: t('config.panel.invalid', { expected: expected.get(keyPath) ?? '-' }, locale) };
     },
@@ -103,6 +92,6 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
 /** A protected key asks for confirmation; a switch whose shadow already calls a model says so (the catalog holds that text, keyed by the key). */
 function guardLines(keyPath: string, locale: Locale): readonly string[] {
   if (!isProtectedConfigWrite(keyPath)) return [];
-  const cost = (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[`config.panel.guard.${keyPath}`];
+  const cost = messageText(`config.panel.guard.${keyPath}`, locale);
   return [t('config.panel.guard.protected', {}, locale), ...(cost ? [cost] : [])];
 }

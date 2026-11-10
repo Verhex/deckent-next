@@ -11,7 +11,7 @@ import { expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { withLocalPrincipalChannel } from '#adapters/index.js';
 import { getPolicyVocabulary, inspectRun, requestRunCancellation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 it('advertises real schemas and bounds concurrent calls, response size and error disclosure', async () => {

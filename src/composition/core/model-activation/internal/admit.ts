@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { inspectConfiguredModelActivation } from './inspect.js';
 import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
-import { ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
+import { configuredInvocationProfiles, verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
   assessModelInvocationProfileDeliveries } from '#engine/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -21,11 +21,11 @@ export async function admitConfiguredChatActivation(projectRoot: string, input: 
     // and wires the real size-math implementation in as `assess` (engine/core/model-activation cannot import
     // engine/core/model-invocation directly — that package already depends back on model-activation, so a
     // direct import would cycle; composition, which depends on both, is where the two meet).
-    const app = new ModelActivationApplication({ async verify() { return principal; } },
+    const app = new ModelActivationApplication(verifiedPrincipal(principal),
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),
       new ModelBindingApplication({ async read() { return config['provider_catalog']; } }),
       async () => openSqliteModelActivationStore(await path(), config.storage.sqlite, 'forbid'), Date.now,
-      { profiles: config['provider_invocation_profiles'], surfaces: configuredModelInvocationDeliverySurfaces(config),
+      { profiles: { profiles: configuredInvocationProfiles(config) }, surfaces: configuredModelInvocationDeliverySurfaces(config),
         assess: assessModelInvocationProfileDeliveries });
     return await app.admit(command);
   } catch (error) { throw queryFailure(error); }

@@ -4,7 +4,8 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
-import { firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_VERSION, evaluatePolicy, resolvePolicyBindings } from '#domain/core/policy/index.js';
+import { evaluatePolicy, resolvePolicyBindings } from '#domain/core/policy/index.js';
+import { firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/core/policy-template/index.js';
 import { verifiedPrincipalSchema } from '#domain/core/principal/index.js';
 import { FIRST_RUN_TOOL_NAMES } from '#engine/core/installation/index.js';
 import { validateAuthorityWrite, type AuthorityRevision } from '#engine/core/policy/index.js';
@@ -46,8 +47,8 @@ function fixture(initial: Snapshot = seed()) {
 const plan = (snapshot: Snapshot, action: 'apply' | 'rollback' = 'apply', history: readonly AuthorityRevision[] = []) =>
   planSystemPolicyRows({ data: CORE_SYSTEM_POLICY_ROWS.data, target, snapshot, history, action });
 
-it('fresh install and existing v19 upgrade share the same delta, audit and replay without a template bump', async () => {
-  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(19);
+it('fresh install and existing v20 upgrade share the same delta, audit and replay without a template bump', async () => {
+  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(20);
   for (const f of [fixture(), fixture(seed())]) {
     const before = f.snapshot, preview = await reconcileSystemPolicyRows(f.store, f.input({ apply: false }));
     expect(preview.status).toBe('preview'); expect(f.writes).toBe(0); expect(f.audit).not.toHaveBeenCalled();
@@ -59,7 +60,7 @@ it('fresh install and existing v19 upgrade share the same delta, audit and repla
     expect(f.audit.mock.calls[0]).toBeDefined();
     expect(await reconcileSystemPolicyRows(f.store, f.input())).toMatchObject({ status: 'replayed' });
     expect(f.writes).toBe(1); expect(f.audit).toHaveBeenCalledTimes(1); expect(f.snapshot).toEqual(after);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(19);
+    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(20);
   }
 });
 

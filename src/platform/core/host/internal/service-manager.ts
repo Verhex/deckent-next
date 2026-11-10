@@ -46,7 +46,7 @@ export async function detectServiceManager(pid: number | undefined, mainPid: Ser
 /** The operator command that restarts the unit through its manager. */
 export const serviceManagerRestartCommand = (found: ServiceManagerUnit): string =>
   `systemctl ${found.scope === 'user' ? '--user ' : ''}restart ${found.unit}`;
-/** The operator command that stops the unit through its manager (a stop elsewhere leaves the manager believing it simply finished). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The operator command that stops the unit through its manager (a stop elsewhere leaves the manager believing it simply finished). */
 export const serviceManagerStopCommand = (found: ServiceManagerUnit): string => `systemctl ${found.scope === 'user' ? '--user ' : ''}stop ${found.unit}`;
 /**
  * F3: the one stop check every caller surface shares (the CLI unless the person's `--force`, MCP, the SDK), before any shutdown request

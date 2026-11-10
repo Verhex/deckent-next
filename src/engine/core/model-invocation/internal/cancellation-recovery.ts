@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { identitySchema, parseModelInvocationControlRecord } from '#domain/index.js';
+import { isAuthorizationRefusal } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelInvocationAuthorizer } from './application.js';
 import type { ModelInvocationControllers, ModelInvocationAbortResult } from './controllers.js';
@@ -11,8 +12,8 @@ import { ModelInvocationStoreError } from './port.js';
 
 const entrySchema = z.strictObject({ receipt: z.unknown().optional(), control: z.unknown().optional() });
 const pageSchema = z.strictObject({ entries: z.array(entrySchema), nextAfterInvocationId: identitySchema.nullable() });
-export type ModelInvocationCancellationRecoveryStatus = ModelInvocationAbortResult | 'denied' | 'failed';
-export interface ModelInvocationCancellationRecoveryOutcome { readonly invocationId: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelInvocationCancellationRecoveryStatus = ModelInvocationAbortResult | 'denied' | 'failed';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationCancellationRecoveryOutcome { readonly invocationId: string;
   readonly status: ModelInvocationCancellationRecoveryStatus }
 export interface ModelInvocationCancellationRecoveryPage { readonly nextAfterInvocationId: string | null;
   readonly outcomes: readonly ModelInvocationCancellationRecoveryOutcome[] }
@@ -75,7 +76,7 @@ export class ModelInvocationCancellationRecoveryApplication {
           status = entry.control.send.state === 'unobserved' ? 'not-live' : this.controllers.requestAbort(entry.control);
         } catch (error) {
           status = error && typeof error === 'object' && 'code' in error
-            && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN') ? 'denied' : 'failed';
+            && isAuthorizationRefusal(error.code, { include: ['policy-denied', 'approval-unsupported', 'scope-unknown'] }) ? 'denied' : 'failed';
         }
         outcomes.push(Object.freeze({ invocationId: entry.receipt.claim.invocationId, status }));
       }

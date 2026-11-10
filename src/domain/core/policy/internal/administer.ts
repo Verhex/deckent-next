@@ -1,7 +1,7 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { isAiPrincipal, isMcpPrincipal } from '#domain/core/principal/index.js';
 import { z } from 'zod';
-import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
+import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, principalGrants, resolvePolicyBindings, type Policy,
   type PolicyBinding, type PolicyFile, type PolicyGrant } from './schema.js';
 import { sameMcpCapabilityRule } from './mcp-capabilities.js';
 import { policyResources } from './vocabulary.js';
@@ -13,7 +13,7 @@ import { policyResources } from './vocabulary.js';
  * restrictions, separation of duties and permission modes retain their own contracts.
  */
 export const POLICY_CHANGE_MAX = 32;
-/** Largest number of (action × id × scope) cells one change may make the bound evaluate; an `'all'` dimension counts once. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Largest number of (action × id × scope) cells one change may make the bound evaluate; an `'all'` dimension counts once. */
 export const DELEGATION_CELL_LIMIT = 4096;
 /** The owner root is data, never a code branch: a role of this id, bound to the installing principal, evaluated like any other. */
 export const INSTALLATION_OWNER_ROLE_ID = 'installation-owner';
@@ -37,8 +37,8 @@ const profilePolicyChangeSchema = z.strictObject({ schemaVersion: z.literal(2),
 export const policyChangeSchema = z.union([legacyPolicyChangeSchema, profilePolicyChangeSchema]);
 export type PolicyChange = z.infer<typeof policyChangeSchema>;
 
-export class PolicyChangeError extends Error {
-  constructor(readonly code: 'POLICY_CHANGE_INVALID' | 'POLICY_CHANGE_TOO_LARGE' | 'POLICY_ADMINISTER_UNSUPPORTED') { super(code); this.name = 'PolicyChangeError'; }
+export class PolicyChangeError extends CodedError {
+  constructor(override readonly code: 'POLICY_CHANGE_INVALID' | 'POLICY_CHANGE_TOO_LARGE' | 'POLICY_ADMINISTER_UNSUPPORTED') { super(code); this.name = 'PolicyChangeError'; }
 }
 
 type Selection = 'all' | readonly string[];
@@ -147,7 +147,7 @@ export function kindCovers(ruleKind: string, kind: string): boolean { return rul
 
 /** The change kind the recovery policy card declares (engine input, never part of the `policy.administer@1` wire change). */
 export const POLICY_RECOVERY_CHANGE_KIND = 'policy-recovery';
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The resource kinds whose own require-approval cell a person may raise to allow inside a `policy-recovery` change (alpha.56 D1, owner 2026-10-24,
  * Jev c1d1afe9). A versioned security invariant, deliberately NOT derived from the AI floor: `secret` and `run-quota` are person-only too and stay bound.
  */
@@ -178,9 +178,8 @@ const shown = (value: Cell) => value === ALL ? 'all' : value;
  * where that rule is the one require-approval meeting the cell (so the result is allow, never a dormant allow). A `grant.add`, a role-derived,
  * broad or multi-person cell never raises; a deny or restriction meeting the cell still refuses, and a cell held neither way stays `no-grant`.
  */
-export function delegationWithin(input: Policy, actor: { readonly issuer: string; readonly subject: string; readonly assurance?: string }, touched: readonly DelegatedRule[],
+export function delegationWithin(policy: Policy, actor: { readonly issuer: string; readonly subject: string; readonly assurance?: string }, touched: readonly DelegatedRule[],
   options: DelegationOptions = {}): DelegationVerdict {
-  const policy = policySchema.parse(input);
   let total = 0;
   for (const value of touched) total += cells(value.actions).length * cells(value.resource.ids).length * cells(value.scopes).length;
   if (total > DELEGATION_CELL_LIMIT) throw new PolicyChangeError('POLICY_CHANGE_TOO_LARGE');
@@ -225,8 +224,7 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
 }
 
 /** The policy.json and bindings.json documents a resolved v2 snapshot was built from (the inverse of `resolvePolicyBindings`). */
-export function authorityDocuments(input: Policy): { readonly policy: unknown; readonly bindings: unknown } {
-  const policy = policySchema.parse(input);
+export function authorityDocuments(policy: Policy): { readonly policy: unknown; readonly bindings: unknown } {
   if (policy.schemaVersion === 1) throw new PolicyChangeError('POLICY_ADMINISTER_UNSUPPORTED');
   const { bindings, policyRevision } = policy;
   return Object.freeze({ policy: { ...omit(policy, ['bindings', 'policyRevision', 'revision']), revision: policyRevision }, bindings: bindings.modes === undefined

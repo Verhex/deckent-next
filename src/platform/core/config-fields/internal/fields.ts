@@ -6,7 +6,7 @@ import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIM
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
 import { z } from 'zod';
-import { field, mergeConfigFields } from './field.js';
+import { field, mergeConfigFields, freezeConfigDefault } from './field.js';
 import { SETUP_FIELDS } from './fields-setup.js';
 import { MODEL_FIELDS } from './fields-models.js';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -24,9 +24,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   output_mode: field('config.field.output_mode', { state: 'bound', consumers: ['src/platform/core/output'] }, 'live', z.enum(OUTPUT_MODES).prefault('standard')),
   layout: field('config.field.layout', { state: 'bound', consumers: ['src/platform/core/config'] }, 'restart', z.strictObject({ get root() { return persistedString(z.string().min(1)).nullable().prefault(null); }, get resources() { return z.record(z.string(), persistedString(z.string().min(1))).prefault({}); } }).prefault({}),
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
-  storage: field('config.field.storage', { state: 'bound', consumers: ['src/composition/core/storage'] }, 'restart', z.strictObject({ get driver() { return z.literal('sqlite').prefault('sqlite'); },
+  storage: field('config.field.storage', { state: 'bound', consumers: ['src/composition/core/workspace-patch'] }, 'restart', z.strictObject({ get driver() { return z.literal('sqlite').prefault('sqlite'); },
     /* R6: 5000 ms: with opens lock-free, 100 ms still refused 1.5–4% of writes beside 7 clients on one loaded core (alpha.47 stress). */ get sqlite() { return SQLITE_STORAGE_OPTIONS.prefault({ busyTimeoutMs: 5000, journalMode: 'wal', durability: 'full' }); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
-  artifacts: field('config.field.artifacts', { state: 'bound', consumers: ['src/composition/core/artifacts'] }, 'restart', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(64), patchPreview: z.strictObject({ get maxEntries() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(10000); }, get maxDepth() { return persistedInteger().positive().max(128).prefault(32); }, get maxPathBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1024); } }).prefault({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).prefault({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
+  artifacts: field('config.field.artifacts', { state: 'bound', consumers: ['src/engine/core/task-inputs'] }, 'restart', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(64), patchPreview: z.strictObject({ get maxEntries() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(10000); }, get maxDepth() { return persistedInteger().positive().max(128).prefault(32); }, get maxPathBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1024); } }).prefault({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).prefault({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   targetQueue: field('config.field.targetQueue', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', TARGET_QUEUE_SETTINGS.prefault({})),
   execution: field('config.field.execution', { state: 'bound', consumers: ['src/composition/core/execution', 'src/composition/core/runs'] }, 'restart', z.strictObject({ docker: DOCKER_EXECUTION_SETTINGS.optional(), git: GIT_EXECUTION_SETTINGS, get adoption() { return ADOPTION_TARGET_SETTINGS.prefault({ targets: [] }); },
     get workTargets() { return WORK_TARGET_SETTINGS.optional(); }, get workerInstructions() { return WORKER_INSTRUCTION_SETTINGS.optional(); }, get deliveryMode() { return DELIVERY_MODE.optional(); }, get retention() { return EXECUTION_RETENTION_SETTINGS.prefault({ schemaVersion: 1 }); },
@@ -197,7 +197,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** Failed build contexts kept as evidence (newest first); older ones are removed after each failure. At least one always stays. */
     failedContextsKept: persistedInteger().min(1).max(1000).prefault(3),
     intervalMs: persistedInteger().min(0).max(2_147_483_647).prefault(86_400_000),
-  }).prefault({}); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
+  }).prefault({}); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE, { 'toolchains.image.providers': 'toolchains.image.consents' }),
   projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', persistedString(z.string().min(1)).prefault('deckent-project')),
   max_workers: field('config.field.max_workers', { state: 'bound', consumers: ['src/composition/core/runs', 'src/composition/core/monitor'] }, 'restart', z.union([persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), z.literal('auto')]).prefault('auto')),
   company: field('config.field.company', { state: 'bound', consumers: ['src/composition/core/scoped-request'] }, 'restart', z.strictObject({ get id() { return z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).prefault('default'); } }).prefault({})),
@@ -212,6 +212,9 @@ export const CORE_SCHEMA = z.strictObject(Object.fromEntries(
 export const CONFIG_ENVIRONMENT_KEYS = Object.freeze([...new Set(Object.values(CONFIG_FIELDS)
   .flatMap(field => field.environment.flatMap(binding => binding.names)))]);
 
+const fieldDefaults = new Map<keyof typeof CONFIG_FIELDS, unknown>();
+export function clearConfigFieldDefaultCache(): void { fieldDefaults.clear(); }
 export function getConfigFieldDefault<K extends keyof typeof CONFIG_FIELDS>(key: K): z.output<typeof CONFIG_FIELDS[K]['schema']> {
-  return CONFIG_FIELDS[key].schema.parse(undefined) as z.output<typeof CONFIG_FIELDS[K]['schema']>;
+  if (!fieldDefaults.has(key)) fieldDefaults.set(key, freezeConfigDefault(structuredClone(CONFIG_FIELDS[key].schema.parse(undefined))));
+  return structuredClone(fieldDefaults.get(key)) as z.output<typeof CONFIG_FIELDS[K]['schema']>;
 }

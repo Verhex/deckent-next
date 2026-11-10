@@ -51,7 +51,7 @@ it('unknown timeout fails the waiting task, propagates skipped closure and close
 });
 it('cancellation prevention propagates a dependency-cancelled reason without fabricating failed tasks', () => {
   const reserved = domain.reserveRunTasks(domain.createRun({runId: identity.runId, scopeId: identity.scopeId, layoutRevision: identity.layoutRevision}, graph, 10, fixtureExecution(graph)), 0, [identity], 10);
-  const prevented = domain.preventRunAttempt(reserved, reserved.revision, domain.requestAttemptCancellation(domain.createAttempt(identity), 0), { now: 10, timeoutMs: 100 });
+  const prevented = domain.preventRunAttempt(reserved, reserved.revision, domain.requestAttemptCancellation(domain.createAttempt(identity), 0), 'none', { now: 10, timeoutMs: 100 });
   expect(prevented.progress.map(t => t.phase)).toEqual(['cancelled', 'skipped', 'skipped']);
   expect(prevented.progress[2]!.skippedReason).toBe('dependency-cancelled');
 });
@@ -107,4 +107,40 @@ it('rejecting a parked decision refreshes the visible cause while retaining its 
   expect(rejected.progress[0]!.phase).toBe('failed');
   expect(rejected.progress.some(task => task.phase === 'awaiting-decision')).toBe(false);
   expect(rejected.state).toEqual({ kind: 'parked', reason: 'dependency-failed', since: 10, deadline: 110 });
+});
+it('every park reason: kept by reconcile, outcome at its deadline (with and without live work), resume and close (S2-e1)', () => {
+  const twoTasks = { ...graph, tasks: [{ ...graph.tasks[0]!, id: 't' }, { ...graph.tasks[0]!, id: 'u' }] };
+  const created = domain.createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, twoTasks, 0, fixtureExecution(twoTasks));
+  const bind = (taskId: string) => ({ ...identity, taskId, attemptId: `attempt-${taskId}` });
+  const pinned = { ...created.execution, tasks: created.execution.tasks.map(task => ({ ...task, profile: { ...task.profile, parameters: { ...task.profile.parameters,
+    nativeSubscription: { schemaVersion: 2, provider: 'codex', model: { channelId: 'channel', modelId: 'fixture-model', auxiliaryModelIds: [] }, modelUsageEvidence: 'none' } } } })) };
+  const extras: Record<string, object> = { 'operator-hold': { note: 'hold' }, 'progression-failed': { failureCode: 'FAILED' }, 'environment-not-ready': { failureCode: 'ENV' } };
+  const parked = (reason: string, live: boolean) => {
+    const bindings = [...reason === 'environment-not-ready' ? [{ identity: bind('t'), observedRevision: 1, observedKind: 'launch-refused' }] : [],
+      ...reason === 'quota-exhausted' ? [{ identity: bind('t'), observedRevision: 1, observedKind: 'quota-exhausted' }] : [], ...live ? [{ identity: bind('u'), observedRevision: null, observedKind: null }] : []];
+    const parsed = domain.runSnapshotSchema.safeParse({ ...created, execution: reason === 'quota-exhausted' ? pinned : created.execution, bindings,
+      progress: created.progress.map(task => live && task.taskId === 'u' ? { ...task, phase: 'active' } : task), state: { kind: 'parked', reason, since: 10, deadline: 110, ...extras[reason] },
+      ...reason === 'quota-exhausted' ? { quotaWaits: [{ identity: bind('t'), channelId: 'channel', quota: { source: 'codex-text', resetsAtMs: null }, evidenceDigest: 'a'.repeat(64), since: 10, deadline: 110, maxResumes: 1 }] } : {} });
+    return parsed.success ? parsed.data : null;
+  };
+  const label = (run: domain.RunSnapshot) => run.state.kind === 'running' ? 'running' : run.state.kind === 'parked' ? run.state.reason : `${run.state.outcome}/${run.state.reason}`;
+  const outcome = (step: () => domain.RunSnapshot) => { try { const run = step(); return `${label(run)}:${run.progress.map(task => task.phase).join(',')}`; } catch (error) { return error instanceof domain.RunError ? error.code : 'invalid'; } };
+  const reasons = ['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready'];
+  const table = Object.fromEntries(reasons.map(reason => {
+    const idle = parked(reason, false)!, live = parked(reason, true);
+    return [reason, [outcome(() => domain.reconcileRunLifecycle(idle, 20, 100)), outcome(() => domain.advanceRunLifecycle(idle, idle.revision, 110, 100)),
+      live ? outcome(() => domain.advanceRunLifecycle(live, live.revision, 110, 100)) : 'live refused', outcome(() => domain.resumeParkedRun(idle, idle.revision, 20, 100)),
+      outcome(() => domain.closeParkedRun(idle, idle.revision, 20, 100)), live ? outcome(() => domain.closeParkedRun(live, live.revision, 20, 100)) : 'live refused']];
+  }));
+  // Rows: reconcile, deadline, deadline with live work, resume, close, close with live work. quota-ask at a reached deadline writes an invalid
+  // terminal (its open deadline is never reached in practice).
+  const open = 'failed/operator-close:cancelled,cancelled', ready = 'running:pending,pending', timeout = 'failed/park-timeout:cancelled,cancelled';
+  const barrier = [ready, ready, 'live refused', ready, open, 'live refused'];
+  expect(table).toEqual({ 'dependency-failed': barrier, 'dependency-cancelled': barrier, 'awaiting-decision': barrier, 'evaluation-not-ready': barrier,
+    'needs-input': [ready, timeout, 'running:cancelled,active', ready, open, 'RUN_DECISION_NOT_READY'],
+    'operator-hold': ['operator-hold:pending,pending', timeout, 'operator-hold:cancelled,active', ready, open, 'RUN_DECISION_NOT_READY'],
+    'progression-failed': ['progression-failed:pending,pending', timeout, 'progression-failed:cancelled,active', ready, open, 'RUN_DECISION_NOT_READY'],
+    'quota-exhausted': ['quota-exhausted:pending,pending', 'quota-ask:pending,pending', 'quota-ask:pending,active', 'quota-exhausted:pending,pending', open, 'RUN_DECISION_NOT_READY'],
+    'quota-ask': ['quota-ask:pending,pending', 'invalid', 'quota-ask:pending,active', 'quota-ask:pending,pending', open, 'RUN_DECISION_NOT_READY'],
+    'environment-not-ready': ['environment-not-ready:pending,pending', timeout, 'environment-not-ready:cancelled,active', ready, open, 'RUN_DECISION_NOT_READY'] });
 });

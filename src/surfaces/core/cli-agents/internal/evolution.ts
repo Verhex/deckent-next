@@ -43,7 +43,7 @@ function suggestionTable(items: readonly CatalogSuggestionView[], locale: Locale
 }
 /** Everything a card or `show` says about one suggestion: the sealed numbers beside the WorkClass and the promoted agent, every failure bucket, the labels;
  * a skill draft's lesson refs only where the reader may read them (the rest a count). Never draft or lesson text. */
-export function suggestionLines(view: CatalogSuggestionView, locale: Locale): string[] {
+function suggestionLines(view: CatalogSuggestionView, locale: Locale): string[] {
   const stats = view.stats as KeyStats | null, baseline = view.baseline as KeyStats | null, active = view.active as { agentId: string; revision: number; stats: KeyStats } | null, p = view.proposed;
   const lines = [t('agentsevo.show.head', { id: view.suggestionId, kind: kindLabel(view.kind, locale), state: stateLabel(view.state, locale) }, locale), t('agentsevo.labels', {}, locale),
     t('agentsevo.show.key', { key: keyLabel(view.key, locale) }, locale),

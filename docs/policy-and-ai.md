@@ -49,7 +49,7 @@ entries, descendants and whole-object parents such as `terminal`, `terminal.shel
 | Every secret action, including read/resolve | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Reading, changing or moving credentials would bypass the secret boundary; read/resolve are defensive cells, not public secret-read APIs. |
 | Authority approval cards | `approval/identity-profile/decide`, `approval/policy-mcp-capability/decide`, `approval/policy-template-upgrade/decide`, `approval/audit-rebaseline/decide`, `approval/policy-recovery/decide` | Deciding an authority card is another authority-changing route. |
 | Audit actions except inspect/verify | `audit/fixture-scope/rebaseline`, `audit/fixture-scope/write`, `audit/fixture-scope/delete`, `audit/fixture-scope/future-action` | An AI must not rewrite the baseline that detects authority drift. |
-| edit-authority and edit-floor tool-call cells | `agent-tool-call/edit-authority/invoke`, `agent-tool-call/edit-floor/invoke` | Editing a protected boundary would otherwise circumvent the operation gate. |
+| edit-authority, edit-floor and mcp-floor tool-call cells | `agent-tool-call/edit-authority/invoke`, `agent-tool-call/edit-floor/invoke`, `agent-tool-call/mcp-floor/invoke` | Editing a protected boundary or running a pinned MCP floor call would otherwise circumvent the operation gate. |
 | Memory verify, retire, contest and purge | `memory/fixture-target/verify`, `memory/fixture-target/retire`, `memory/fixture-target/contest`, `memory/fixture-target/purge` | Verified memory needs a person or an independent evaluation record, never the AI itself (law-audit fold 6); retiring is the same knowledge change; purging content is a person's act (S4B A11); verify and contest pass the floor only for the memory evaluator workload (S4B-3 A5), which these cells do not name. |
 | Standing approval of a Nervous stop action or a lost-task continuation | `recovery-action/fixture-target/apply`, `recovery-action/fixture-target/future-action`, `recovery-action/fence-attempt/apply`, `recovery-action/fence-attempt/future-action`, `recovery-action/stop-orphan/apply`, `recovery-action/stop-orphan/future-action`, `recovery-action/hand-to-human/apply`, `recovery-action/hand-to-human/future-action`, `recovery-action/continue-new-attempt/apply`, `recovery-action/continue-new-attempt/future-action` | The recovery broker applies a sealed Nervous proposal, and the recovery system continues a lost task in a new Attempt, only under the owner's standing grant (K-B, S6R-3/S6R-4); no AI holds it, Nervous itself only proposes. |
 | Promoting a Nervous rule to live | `nervous-rule/container-gone@1/promote`, `nervous-rule/container-gone@1/future-action`, `nervous-rule/fixture-target/promote`, `nervous-rule/fixture-target/future-action` | Only a person promotes an exact measured rule and version (alpha.56 G2, owner Q-A1); an AI holding this would let its own detections stop and release workers. |
@@ -94,8 +94,15 @@ narrowest set. Generic `evaluate` or `reserve` is not permission to accept or re
 Fresh first-run policy gives the installing human authority and the MCP actor observation
 rules plus, since template v19 (owner 2026-11-05), the person's own tool rules in the installed
 scope: model calls, read and scratch tools, edit/shell tools behind the card, and their three
-operations. The native agent and external MCP clients share this actor. No AI decision step,
-configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
+operations. Since template v20 (owner 2026-11-09) the actor may also propose a Run and one of three
+settings (`language`, `output_mode`, `terminal.responseStyle`), both `require-approval` with no mode
+eligibility, so the person's `/do` plan card or `/config` before/after card opens in every mode;
+the proposed Run's pool and work target are `allow` (inert without that card). Existing installations
+get these four rules at their next service start, once and audited, except a rule whose whole cell
+one allow of the actor (a role binding too) already covers; `/policy` shows them as one **AI proposals**
+row to turn off or on, and names the existing grant that covers them.
+The native agent and external MCP clients share this actor. No AI decision step,
+other configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.
 
 ## Inspect, grant and revoke using available surfaces
@@ -219,7 +226,7 @@ is not business acceptance. The existing CLI is
 
 **“MCP read-only observer.”** Since template v19 the first-run policy also lets the MCP actor
 call models and use agent tools; a company deny for the MCP actor on `model-invocation` and
-`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the v19 AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
+`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the newest (v20 proposal) AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
 no write groups. On an existing installation revoke each unwanted managed group
 with the preview/apply sequence above and review custom/role grants too. “No managed groups”
 does not prove read-only when other grants exist. Tool discovery is not authority; ordinary

@@ -7,7 +7,7 @@ import { workerAssignmentSchema } from './assignment.js';
 import { runRecoveryPolicySchema } from '#domain/core/recovery/index.js';
 import { taskAgentSealSchema } from '#domain/core/agent-catalog/index.js';
 /** Registry entries are product data; installed implementations own parameter semantics. */
-export const implementationReferenceSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly();
+const implementationReferenceSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly();
 export const executionProfileDefinitionSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive(),
   adapter: implementationReferenceSchema, parameters: immutableJsonObjectSchema,
 }).readonly();
@@ -18,7 +18,7 @@ export const evaluatorDefinitionSchema = z.strictObject({ id: identitySchema, ve
  * (read-only analysis/review). Additive and optional within registry v1 / snapshot v1: absent means a workspace delivery may be owed, so
  * an unmarked attempt without a retained patch is never released (fail-closed). Admission copies it into the Run's frozen snapshot only
  * when present, so unmarked Runs keep their exact pre-existing snapshot bytes. */
-export const workspaceDeliveryDeclarationSchema = z.literal('none');
+const workspaceDeliveryDeclarationSchema = z.literal('none');
 export const executionRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema,
   workClasses: workClassRegistrySchema.optional(),
   profiles: z.array(executionProfileDefinitionSchema).min(1).readonly(),
@@ -37,7 +37,7 @@ export const executionRegistrySchema = z.strictObject({ schemaVersion: z.literal
     }
   });
 }).readonly();
-export const EXECUTION_PROFILE_ENCODING_VERSION = 1;
+const EXECUTION_PROFILE_ENCODING_VERSION = 1;
 /** Deckent profile encoding v1: the criterion encoding v1 rules (sorted keys, JSON escaping, no whitespace) over a parsed
  * definition. Callers hash its UTF-8 bytes; equal encodings mean the same image, command and bounds for a task kind. */
 export function encodeExecutionProfileDefinition(input: unknown): string {
@@ -47,7 +47,7 @@ export function encodeExecutionProfileDefinition(input: unknown): string {
 export type ExecutionRegistry = z.infer<typeof executionRegistrySchema>;
 export type ExecutionProfileDefinition = z.infer<typeof executionProfileDefinitionSchema>;
 export type EvaluatorDefinition = z.infer<typeof evaluatorDefinitionSchema>;
-/** R3 (owner D4a): the silence policy frozen per watchable task at admission: warn and stop after this much host-observed silence, and at
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). R3 (owner D4a): the silence policy frozen per watchable task at admission: warn and stop after this much host-observed silence, and at
  * most `maxRetries` automatic re-runs of a stalled Attempt. Absent (older Runs, unwatchable profiles): only the profile deadline bounds it. */
 export const taskStallPolicySchema = z.strictObject({ warnAfterMs: counterSchema.positive(), stopAfterMs: counterSchema.positive(), maxRetries: counterSchema }).refine(value => value.warnAfterMs < value.stopAfterMs, 'WORKER_INACTIVITY_POLICY_INVALID').readonly();
 export type TaskStallPolicy = z.infer<typeof taskStallPolicySchema>;

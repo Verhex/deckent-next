@@ -6,7 +6,7 @@ import { exactModelIdSchema as exact, daySchema as day, cliVersionSchema as vers
 // Metadata is channel evidence, never activation or an API-to-CLI capability inference. Kept independent of document parsing.
 const text = persistedString(z.string().trim().min(1).max(512));
 const effort = z.enum(REASONING_EFFORTS);
-export const catalogProvenanceSchema = z.strictObject({ sourceUrl: persistedString(persistedUrl().startsWith('https://').max(512)).optional(),
+const catalogProvenanceSchema = z.strictObject({ sourceUrl: persistedString(persistedUrl().startsWith('https://').max(512)).optional(),
   localPath: text.optional(), fetchedOn: z.union([day, persistedDateTime({ offset: true })]), etag: text.optional(), clientVersion: version.optional(),
 }).refine(p => (p.sourceUrl !== undefined) !== (p.localPath !== undefined)).readonly();
 export const channelMetadataSchema = z.object({ client: z.enum(NATIVE_CLI_CHANNELS).nullable(),
@@ -46,7 +46,7 @@ export const modelMetadataSchema = z.object({ channelModelId: exact, vendorId: i
     .refine(terms => terms.tariff !== undefined || terms.route !== undefined).readonly().optional() });
 /** The ledger row a connected profile's tariff was taken from (M4): the catalog channel and the row's revision, sealed into the tariff's source. */
 export const catalogTariffSealSchema = z.strictObject({ channelId: identitySchema, modelRevision: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
-export type CatalogTariffSeal = z.infer<typeof catalogTariffSealSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CatalogTariffSeal = z.infer<typeof catalogTariffSealSchema>;
 /** The spend authority's re-read of a sealed tariff (security review M4): the registered row's own `connect.tariff` term when the ledger catalog
  * holds exactly that (channel, exact model id) at exactly the sealed revision, else null. A seal is never trusted on its own. */
 export type CatalogTariffLookup = (seal: CatalogTariffSeal, modelId: string, scopeId: string) => Promise<unknown>;

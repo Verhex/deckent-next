@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema, clientCommandIdSchema, createImmutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema, clientCommandIdSchema, createImmutableJsonObjectSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationBillingAxisSchema } from '#domain/core/model-invocation/index.js';
@@ -26,8 +26,8 @@ export type BrainPlanObserver = (progress: BrainPlanProgress) => void;
  * behind (a crash) expires by the store's registry bound.
  */
 export const brainQuotaWaitRecordSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema,
-  attempt: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxAttempts: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), sinceMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  resetsAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), untilMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  attempt: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxAttempts: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), sinceMs: counterSchema,
+  resetsAtMs: counterSchema, untilMs: counterSchema,
   after: z.strictObject({ commandId: persistedString(z.string().min(1).max(256)), invocationId: persistedString(z.string().min(1).max(256)) }).readonly() }).readonly();
 export type BrainQuotaWaitRecord = z.infer<typeof brainQuotaWaitRecordSchema>;
 /** The port the planning application keeps the record through (adapter: a host state file per wait). */
@@ -41,11 +41,11 @@ const contributionShape = z.strictObject({
   inputDigest: digest, contextDigest: digest, outputDigest: digest, requestDigest: digest,
   activationRevision: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), bindingDigest: digest,
   inputSummary: persistedString(z.string().max(protocol.summaryMaxCodeUnits)), outputSummary: persistedString(z.string().max(protocol.summaryMaxCodeUnits)),
-  usage: z.strictObject({ inputTokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), outputTokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-    totalTokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly().nullable(),
+  usage: z.strictObject({ inputTokens: counterSchema, outputTokens: counterSchema,
+    totalTokens: counterSchema }).readonly().nullable(),
 }).readonly();
 export const brainContributionSchema = z.discriminatedUnion('schemaVersion', [
   z.strictObject({ schemaVersion: z.literal(1), ...contributionShape.unwrap().shape }),
   contributionShape.unwrap().extend({ schemaVersion: z.literal(2), billingAxis: modelInvocationBillingAxisSchema }).strict(),
 ]).readonly();
-export type BrainContribution = z.infer<typeof brainContributionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BrainContribution = z.infer<typeof brainContributionSchema>;

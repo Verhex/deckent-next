@@ -4,20 +4,14 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, lstat } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { UninstallApplication, authorizeUninstall, authorizeUninstallSteps, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
-  EffectTargetError, type UninstallAdmission, type UninstallApplicationPorts, type UninstallInventory, type UninstallPlan, type UninstallResult } from '#engine/index.js';
+import { UninstallApplication, approvedUninstallEffects, authorizeUninstall, authorizeUninstallSteps, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
+  EffectTargetError, policyBackupAuthorization, type UninstallAdmission, type UninstallApplicationPorts, type UninstallInventory, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
 import { createHmacIntegrity, ErrorRegistry, SystemTrustedClock } from '#platform/index.js';
 import { evaluatePolicy, type VerifiedPrincipal } from '#domain/index.js';
 
-it('gates the exact uninstall behind the person and durable owners, resumes generic unknown once and keeps data on purge refusal', async () => {
-  if (process.platform !== 'linux') {
-    const app = new UninstallApplication({ channel: undefined, witness: { attest: async () => true }, principal: async () => ({ id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] }),
-      authorize: async () => {}, inventory: async () => { throw new Error('must not inspect'); }, retainedPlan: async () => { throw new Error('must not inspect'); } });
-    await expect(app.apply({ schemaVersion: 2, commandId: 'remove', planDigest: 'a'.repeat(64) }, { confirm: async () => true })).rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
-    console.info('verify-not-run: uninstall file-store positive requires Linux custody'); return;
-  }
+it.skipIf(process.platform !== 'linux')('gates the exact uninstall behind the person and durable owners, resumes generic unknown once and keeps data on purge refusal [verify-not-run: platform custody unavailable]', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-app-'));
   try {
     const cache = join(root, 'cache'), ledger = join(root, 'ledger');
@@ -55,10 +49,10 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
         version, owner: 'fixture-installation', ownership: 'exclusive', ownershipEvidence: 'a'.repeat(64), present: true, protected: false, capability: true, backup: 'covered' }],
       blockers: [], protectedPaths: [ledger], deletionRoots: [root], backupDestination: join(`${root}-recovery`, 'backup'), packageRemoval: { command: null, shared: true },
       dataBlockers: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true }, service: { running: false, unit: null, unitDisable: 'none', command: null }, managedScopes: [] };
-    let retained: UninstallPlan | null = null, observed = inventory;
+    let retained: UninstallPlan | null = null, observed = inventory, fakeEffects: UninstallAdmission['effects'] | null = null;
     const ports = (): UninstallApplicationPorts => ({ channel, witness: { attest: async () => witness }, principal: async () => principal,
       authorize: async () => { if (principal.subject === 'denied') throw new Error('denied'); }, inventory: async () => observed, retainedPlan: async () => retained,
-      withAdmission: async (_plan, _id, work) => work({ scopeId: 's', recoveryLocation: join(root, 'recovery'), effects: effects(),
+      withAdmission: async (_plan, _id, work) => work({ scopeId: 's', recoveryLocation: join(root, 'recovery'), effects: fakeEffects ?? effects(),
         revalidate: async item => { if (changed || item?.resourceId === changedResource) throw Object.assign(new Error('changed'), { code: 'UNINSTALL_PLAN_CHANGED' }); },
         prepareBackup: async () => { backupCalls++; if (!covered) throw Object.assign(new Error('coverage'), { code: 'UNINSTALL_BACKUP_COVERAGE' }); },
         approvePlan: async () => { approved = true; }, finish: async result => { finished.push(result); },
@@ -118,6 +112,19 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
     expect(partial).toMatchObject({ status: 'partial', failureCode: 'UNINSTALL_PLAN_CHANGED',
       items: [{ resourceId: 'cache', state: 'settled' }, { resourceId: 'second', state: null }] });
     expect(sends).toBe(2); expect(await readFile(ledger, 'utf8')).toBe('KEEP');
+    // S5-e3 (S5-R13): a failure the store records as claimed is unknown, never partial or a refusal.
+    let claimed = false; changedResource = null;
+    observed = { ...observed, resources: [{ ...current, resourceId: 'third' }] }; retained = createUninstallPlan({ schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false }, observed);
+    fakeEffects = { inspect: async () => claimed ? { state: 'claimed' } as never : null, execute: async () => { claimed = true; throw new Error('reply lost after the claim'); } };
+    expect(await new UninstallApplication(ports()).apply({ ...command, planDigest: retained.planDigest }, interaction)).toMatchObject({ status: 'unknown', failureCode: 'EFFECT_OUTCOME_UNKNOWN' });
+    // S5-e2 (S5-R17): the broker refuses any command the plan does not name exactly, before the effect application sees it.
+    let submits = 0; const exact = { schemaVersion: 1, commandId: 'exact', idempotencyKey: 'exact', scopeId: 's', operation: retained.items[0]!.operation,
+      target: { kind: 'installation-cache', id: 'third' }, expectedVersion: retained.items[0]!.version, input: { planDigest: retained.planDigest, resourceId: 'third' } };
+    const broker = approvedUninstallEffects(retained, 's', { submit: async () => { submits++; throw new Error('must not submit'); } } as unknown as EffectApplication, {} as never);
+    for (const wrong of [{ target: { kind: 'installation-cache', id: 'cache' } }, { target: { kind: 'installation-data', id: 'third' } }, { scopeId: 'other' }, { expectedVersion: 'other-version' },
+      { operation: { ...exact.operation, version: 2 } }, { input: { planDigest: 'f'.repeat(64), resourceId: 'third' } }, { input: { planDigest: retained.planDigest, resourceId: 'third', extra: true } }])
+      await expect(broker.execute({ ...exact, ...wrong })).rejects.toMatchObject({ code: 'UNINSTALL_INVALID' });
+    await expect(broker.execute(exact)).rejects.toThrow('must not submit'); expect(submits).toBe(1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -153,14 +160,23 @@ it('refuses purge under a company legal hold before backup/effect admission even
   expect(() => authorizeUninstall(document, principal, 'installation', ['company'], 'purge')).toThrow(/company-retention-owner/u);
 });
 
-it('admits an installation-wide administrator role while keeping a managed install closed to its ordinary member', () => {
+it('admits an installation-wide administrator role while keeping a managed install closed to its ordinary member', async () => {
   const principal: VerifiedPrincipal = { id: 'admin', issuer: 'idp', subject: 'admin', assurance: 'os-user', scopeIds: ['company'] };
   const document = { schemaVersion: 2, revision: 'p1+b1', policyRevision: 'p1', grants: [], restrictions: [], separationOfDuties: [],
-    roles: [{ id: 'installation-admin', permissions: [{ id: 'uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], resource: { kind: 'installation', ids: 'all' } }] }],
+    roles: [{ id: 'installation-admin', permissions: [{ id: 'uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], resource: { kind: 'installation', ids: 'all' } },
+      { id: 'backup', effect: 'allow', actions: ['create', 'verify'], resource: { kind: 'backup', ids: 'all' } }] }],
     bindings: { revision: 'b1', entries: [{ id: 'admins', principals: [{ issuer: 'idp', subject: 'admin' }], roles: ['installation-admin'], scopes: 'all' }] } };
   expect(authorizeUninstall(document, principal, 'installation', ['company'], 'uninstall')).toBe('p1+b1');
   expect(() => authorizeUninstall(document, { ...principal, subject: 'member' }, 'installation', ['company'], 'uninstall'))
     .toThrow(expect.objectContaining({ code: 'POLICY_DENIED' }));
+  // Owner B3 (a), M14: the purge preflight and the backup it then runs decide the role-bound installation-wide grant by one rule.
+  expect(authorizeUninstall(document, principal, 'installation', ['company'], 'purge')).toBe('p1+b1');
+  const backup = (policy: unknown, actor: VerifiedPrincipal) => policyBackupAuthorization(policy)({ schemaVersion: 1, action: 'create', scopeId: 'company', set: '/fixture/set' },
+    { principal: actor, installationId: 'installation', integrity: createHmacIntegrity('k', Buffer.alloc(32, 7)) }).then(decision => decision.effect);
+  expect(await backup(document, principal)).toBe('allow');
+  const scoped = { ...document, bindings: { ...document.bindings, entries: [{ ...document.bindings.entries[0]!, scopes: ['company'] }] } };
+  expect(() => authorizeUninstall(scoped, principal, 'installation', ['company'], 'purge')).toThrow(expect.objectContaining({ code: 'UNINSTALL_PURGE_DENIED' }));
+  expect(await backup(scoped, principal)).toBe('deny'); expect(await backup(document, { ...principal, subject: 'member' })).toBe('deny');
 });
 
 it('asks nothing when nothing would change, stops the service before custody in the K4 order, and never closes an unknown result under force', async () => {
@@ -315,4 +331,10 @@ it('K3 on the real delivery queue: delete everything refuses a queued delivery n
     expect(await app().apply({ schemaVersion: 2, commandId: 'q2', planDigest: forced.planDigest }, confirm)).toMatchObject({ status: 'completed' });
     expect(new SqliteTargetQueue(db).load('s', 'delivery-1')?.state).toBe('cancelled'); expect(asked).toEqual(['submit', 'inspect', 'cancel']); expect(custody).toEqual(['custody']);
   } finally { db.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('refuses uninstall without admission custody before reading any inventory on every host', async () => {
+  const app = new UninstallApplication({ channel: undefined, witness: { attest: async () => true }, principal: async () => ({ id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] }),
+    authorize: async () => {}, inventory: async () => { throw new Error('must not inspect'); }, retainedPlan: async () => { throw new Error('must not inspect'); } });
+  await expect(app.apply({ schemaVersion: 2, commandId: 'remove', planDigest: 'a'.repeat(64) }, { confirm: async () => true })).rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
 });

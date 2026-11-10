@@ -1,13 +1,13 @@
 import { dirname, resolve } from 'node:path';
-import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, mapBounded, HOST_LIMITS_REGISTRY, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, mapBounded, HOST_LIMITS_REGISTRY, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, inspectRecordedTaskActivity, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
-import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, readThrough,
+import { verifiedPrincipal, workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, readThrough,
   type DispatchInventoryEntry, type MonitorRecall, type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectConfiguredResources } from '#composition/core/resource-observation/index.js';
-const DENIED = ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'];
+const denied = (error: unknown) => isAuthorizationRefusal(queryFailure(error).code, { include: PERSON_AUTHORIZATION_REFUSALS });
 /** MON-CPU-FIX `walk` (the live monitor): `recall` keeps ledger/policy-derived reads of an unchanged source generation; one context and reader page a source up to `entries`. */
 export async function inspectConfiguredWorkers(root: string, input: WorkerObservationQuery, options: ConfigLoadOptions = {}, walk?: { readonly recall: MonitorRecall; readonly entries: number }): Promise<WorkerObservationReport> {
   try {
@@ -33,12 +33,12 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
           const target = await context(source.path); assertRequestCompany(target.config.company.id, c.config.company.id);
           const reader = await openSqliteInventoryReader(await inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs });
           try {
-            const inventory = new DispatchInventoryApplication(reader, { async verify() { return target.principal; } }, new DispatchInventoryPolicyAuthorization({ async load() { return target.document; } }), target.config.inspection.maxPageSize);
+            const inventory = new DispatchInventoryApplication(reader, verifiedPrincipal(target.principal), new DispatchInventoryPolicyAuthorization({ async load() { return target.document; } }), target.config.inspection.maxPageSize);
             const entries: DispatchInventoryEntry[] = [], authorization = contextDispatchAuthorization(target, target.document); let after = query.after, failed = false;
             do { const page = await inventory.inspect({ schemaVersion: 1, scopeId: query.scopeId, after, limit: Math.min(remaining - entries.length, target.config.inspection.maxPageSize) }); entries.push(...page.entries); after = page.nextAfter; }
             while (after && entries.length < remaining);
             return { target, nextAfter: after, entries: await mapBounded(entries, HOST_LIMITS_REGISTRY.observationConcurrency, async entry => {
-              const refused = await authorization.authorizeIdentity('read-output', entry.identity, target.principal).then(() => null, (error: unknown) => DENIED.includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable');
+              const refused = await authorization.authorizeIdentity('read-output', entry.identity, target.principal).then(() => null, (error: unknown) => denied(error) ? 'output-denied' : 'observation-unavailable');
               return { entry, refused, record: refused || (query.open && entry.terminal) ? null : await reader.loadBoundDispatch(entry.identity).catch(() => { failed = true; return null; }) }; }), failed };
           } finally { reader.close(); }
         }, value => !value.failed);
@@ -66,7 +66,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
         }).finally(() => opened?.then(value => value.close(), () => undefined));
         remaining -= workers.length;
         sources.push({ ...source, status: 'available', workers, nextAfter: ledger.nextAfter, truncated: ledger.nextAfter !== null });
-      } catch (error) { sources.push({ ...source, status: DENIED.includes(queryFailure(error).code) ? 'denied' : 'unavailable', workers: [], nextAfter: null, truncated: false }); }
+      } catch (error) { sources.push({ ...source, status: denied(error) ? 'denied' : 'unavailable', workers: [], nextAfter: null, truncated: false }); }
     }
     return Object.freeze({ schemaVersion: 1, observedAt: clock.sample().wallMs, scopeId: query.scopeId, sources, control: 'observe-only' });
   } catch (error) { throw queryFailure(error); }

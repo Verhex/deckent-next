@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { configuredApproval, createConfiguredRuntimeClient, inspectConfiguredOperation, inspectConfiguredWorkers, inspectModelActivation,
   inspectRun, requestRunCancellation } from '../../../src/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -110,7 +110,7 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
     ]);
     expect(await calls()).toEqual(Array(6).fill('SCOPE_UNKNOWN'));
     for (const args of [['run', 'cancel', '--scope', 's', '--id', 'absent', '--command-id', 'c', '--expected-revision', '0'],
-      ['workers', 'list', '--scope', 's'], ['inventory', '--scope', 's']]) {
+      ['workers', 'list', '--scope', 's'], ['inventory', '--scope', 's'], ['policy', 'grants', '--all', '--scope', 's']]) {
       const refused = await cli(f, args);
       expect([refused.exit, refused.code]).toEqual([1, 'SCOPE_UNKNOWN']); expect(refused.stderr).not.toContain('other');
     }

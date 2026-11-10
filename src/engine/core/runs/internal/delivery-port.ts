@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema, counterSchema, identitySchema } from '#domain/index.js';
 
@@ -25,6 +26,6 @@ export interface CancellationDeliveryStore {
   /** Token CAS: a superseded delivery can never overwrite a newer outcome. */
   finishCancellationDelivery(input: CancellationDeliveryClaim & { readonly outcome: CancellationDeliveryOutcome }): Promise<CancellationDelivery>;
 }
-export class CancellationDeliveryError extends Error {
-  constructor(readonly code: 'CANCELLATION_DELIVERY_CONFLICT' | 'CANCELLATION_DELIVERY_CORRUPT') { super(code); this.name = 'CancellationDeliveryError'; }
+export class CancellationDeliveryError extends CodedError {
+  constructor(override readonly code: 'CANCELLATION_DELIVERY_CONFLICT' | 'CANCELLATION_DELIVERY_CORRUPT') { super(code); this.name = 'CancellationDeliveryError'; }
 }

@@ -1,8 +1,9 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { resolve } from 'node:path';
 import { ArtifactError } from '#capabilities/index.js';
 import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { GitIntegrationTarget, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
+import { GitIntegrationTarget, openSqliteInventoryReader, resolveGitWorkTarget, validateExecutionSupervisorProfile } from '#adapters/index.js';
 import { WorkspaceIntegrationInspection, integrationQuerySchema, type IntegrationQuery, WorkspacePatchApplication, WorkspaceIntegrationApplication, integrationCommandSchema, type IntegrationCommand, type RunBoundDispatchStore, type RunBoundTaskStore } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
@@ -25,7 +26,7 @@ export async function prepareConfiguredWorkspaceIntegration(root: string, input:
     const command = integrationCommandSchema.parse(input);
     const c = await workspacePatchContext(root, command.identity, options, false, 'write');
     await c.authorization.authorizeIdentity('prepare-integration', command.identity, c.principal);
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openConfiguredLedger(c, { migration: 'forbid', validate: validateExecutionSupervisorProfile });
     try { return await (await application(root, c, store)).prepare(command, store); } finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
 }

@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
-import { isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition,
-  type VerifiedPrincipal, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest, type TaskGraph } from '#domain/index.js';
+import { isCodedError, isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition, type VerifiedPrincipal, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest, type TaskGraph } from '#domain/index.js';
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 import type { QueueReattemptView, TargetQueueApplication } from '#engine/core/effect/index.js';
 import type { RunAdmission, RunStore } from '#engine/core/runs/index.js';
 import type { DispatchIdentityAuthorization, RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import { WorkspacePatchApplication, type RunBoundTaskStore } from './application.js';
-import { WorkspaceIntegrationApplication, type IntegrationTarget } from './integration.js';
-import type { PatchScopeMode } from './scope.js';
+import { WorkspaceIntegrationApplication } from './integration.js';
+import type { IntegrationTarget, PatchScopeMode } from '#engine/core/workspace-patch-contract/index.js';
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Adapter-classified effect reach of a task's frozen execution profile. Anything not proven workspace-only is never re-attempted. */
 export type ReattemptEffects = 'workspace-only' | 'external' | 'unknown';
@@ -46,7 +46,7 @@ export function reattemptGraph(run: RunSnapshot, taskId: string): TaskGraph {
   return taskGraphSchema.parse({ schemaVersion: run.graph.schemaVersion, revision: 1, tasks: [{ ...frozen, dependencies: [] }],
     criterionDefinitions: run.graph.criterionDefinitions.filter(row => task.acceptanceCriteria.includes(row.id)) });
 }
-export interface DeliveryReattemptPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DeliveryReattemptPorts {
   readonly bound: number; readonly policyRevision: string; readonly ttlMs: number; now(): number;
   load(scopeId: string, commandId: string): TargetQueueRecord | null;
   forRun(scopeId: string, runId: string): readonly TargetQueueRecord[];
@@ -77,8 +77,8 @@ export async function stepDeliveryReattempt(ports: DeliveryReattemptPorts, recor
     catch (error) {
       // A Run-create card waits for a human; any other typed admission refusal (policy, pool, ceilings) is shown and retried after backoff.
       const code = (error as { code?: unknown }).code;
-      if (code === 'RUN_APPROVAL_REQUIRED') return view('awaiting-approval');
-      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(code)) return view('refused', { reason: code });
+      if (isCodedError(error, 'RUN_APPROVAL_REQUIRED')) return view('awaiting-approval');
+      if (typeof code === 'string' && isCodedError(error, code) && /^[A-Z][A-Z0-9_]{2,63}$/.test(code)) return view('refused', { reason: code });
       throw error;
     }
     return view('running');
@@ -94,7 +94,7 @@ export async function stepDeliveryReattempt(ports: DeliveryReattemptPorts, recor
     reattempt: { sourceCommandId: request.commandId, intentCommandId: request.reattempt?.intentCommandId ?? request.commandId, count: used + 1, cause: record.reason!, approvedBy: approver } });
   return view('enqueued', { commandId: ids.ticket });
 }
-export interface WorkspaceReattemptContext {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspaceReattemptContext {
   readonly principal: VerifiedPrincipal; readonly document: { readonly revision: string }; readonly artifacts: ArtifactStore; readonly scopeMode: PatchScopeMode;
   readonly config: { readonly targetQueue: { readonly reattempts: number; readonly ttlMs: number; readonly perTarget: number }; readonly artifacts: { readonly maxBytes: number } };
   readonly queue: { load(scopeId: string, commandId: string): TargetQueueRecord | null; forRun(scopeId: string, runId: string, limit: number): readonly TargetQueueRecord[] };
@@ -107,7 +107,7 @@ export function stepWorkspaceQueueReattempt(c: WorkspaceReattemptContext, store:
     /** Retains the accepted Attempt's patch when evaluation did not (a kind without work input), like a human `patch-prepare`. */
     preparePatch(identity: AttemptIdentity): Promise<void> },
   record: TargetQueueRecord, act: boolean) {
-  const verifier = { async verify() { return c.principal; } }, maxBytes = c.config.artifacts.maxBytes;
+  const verifier = verifiedPrincipal(c.principal), maxBytes = c.config.artifacts.maxBytes;
   const integration = new WorkspaceIntegrationApplication(new WorkspacePatchApplication(store, c.artifacts, verifier, c.authorization, maxBytes, c.scopeMode),
     adapter.target, verifier, c.authorization, c.artifacts, maxBytes);
   return stepDeliveryReattempt({ bound: c.config.targetQueue.reattempts, policyRevision: c.document.revision, ttlMs: c.config.targetQueue.ttlMs, now: Date.now,
@@ -115,7 +115,7 @@ export function stepWorkspaceQueueReattempt(c: WorkspaceReattemptContext, store:
     loadRun: (scopeId, runId) => store.loadRun(scopeId, runId), effects: profile => adapter.effects(profile), admit: command => adapter.admit(command),
     async baseAdvanced(ticket) {
       try { await integration.check(ticket.request.identity); return false; }
-      catch (error) { if ((error as { code?: unknown }).code === 'PATCH_BASE_ADVANCED') return true; throw error; }
+      catch (error) { if (isCodedError(error, 'PATCH_BASE_ADVANCED')) return true; throw error; }
     },
     async accepted(identity) { if (!(await store.loadBoundDispatch(identity))?.patch) await adapter.preparePatch(identity); return c.accepted(identity); },
     submit: request => c.app.submitReattempt(request, c.principal) }, record, act);

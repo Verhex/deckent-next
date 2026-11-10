@@ -5,7 +5,7 @@ import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, inspectRun, reserveRunTasks } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';

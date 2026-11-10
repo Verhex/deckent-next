@@ -12,15 +12,15 @@ import type { MemoryAutomation } from './automation.js';
  */
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
-/** One model as the catalog names it, with its canonical maker (`null`: unknown — provider-chosen, no metadata or not in the catalog). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One model as the catalog names it, with its canonical maker (`null`: unknown — provider-chosen, no metadata or not in the catalog). */
 export const memoryModelRefSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, maker: identitySchema.nullable() }).readonly();
 export type MemoryModelRef = z.infer<typeof memoryModelRefSchema>;
 const attemptRefSchema = z.strictObject({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).readonly();
-export const MEMORY_EVALUATION_VERDICTS = Object.freeze(['pass', 'fail', 'unknown'] as const);
-/** A shadow record is rollout evidence only; a live one may be a verification basis. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MEMORY_EVALUATION_VERDICTS = Object.freeze(['pass', 'fail', 'unknown'] as const);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A shadow record is rollout evidence only; a live one may be a verification basis. */
 export const MEMORY_EVALUATION_MODES = Object.freeze(['shadow', 'live'] as const);
-export type MemoryEvaluationVerdict = typeof MEMORY_EVALUATION_VERDICTS[number];
-/** What the call cost, exactly as the spend ledger settled it; `none`: no money moved (a subscription or local channel, or nothing sent);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryEvaluationVerdict = typeof MEMORY_EVALUATION_VERDICTS[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the call cost, exactly as the spend ledger settled it; `none`: no money moved (a subscription or local channel, or nothing sent);
  * `unknown`: not settled or unreadable — the evaluator then stops for the day (fail closed). */
 export const memoryEvaluationSpendSchema = z.discriminatedUnion('state', [
   z.strictObject({ state: z.literal('settled'), minorUnits: counterSchema, currency: z.string().regex(/^[A-Z]{3}$/) }),
@@ -49,7 +49,7 @@ export type MemoryContest = z.infer<typeof memoryContestSchema>;
 const answerSchema = (automation: MemoryAutomation, offered: readonly string[]) => z.strictObject({ schemaVersion: z.literal(1), entryId: identitySchema, subjectDigest: digest,
   verdict: z.enum(MEMORY_EVALUATION_VERDICTS), reasonCodes: list(automation.evaluation.reasonCodesMax).refine(codes => codes.every(code => automation.reasonCodes.includes(code))),
   conflicts: list(automation.evaluation.conflictsMax).refine(ids => ids.every(id => offered.includes(id))) });
-export type MemoryEvaluatorAnswer = { readonly verdict: MemoryEvaluationVerdict; readonly reasonCodes: readonly string[]; readonly conflicts: readonly string[]; readonly failure: string | null };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryEvaluatorAnswer = { readonly verdict: MemoryEvaluationVerdict; readonly reasonCodes: readonly string[]; readonly conflicts: readonly string[]; readonly failure: string | null };
 const unknown = (failure: string): MemoryEvaluatorAnswer => Object.freeze({ verdict: 'unknown', reasonCodes: [], conflicts: [], failure });
 /**
  * §6.2 step 3–4: the answer text is accepted only as the strict schema with the exact echo of the entry id and the keyed subject digest the

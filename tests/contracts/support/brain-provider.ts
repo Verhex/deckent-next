@@ -1,21 +1,22 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { vi } from 'vitest';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
-import { readLocalOsIdentity, openSqliteModelActivationStore, compileNativeCodingDockerProfile } from '#adapters/index.js';
+import { readLocalOsIdentity, openSqliteModelActivationStore } from '#adapters/index.js';
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { seedCatalog, SEED_CHANNEL } from './model-catalog.js';
+import { nativeClaudeWorkers } from './native-claude-worker.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
-import { fixtureDockerRegistry } from './execution-registry.js';
+import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
 export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string | ((body: string) => string); hold?: boolean;
@@ -78,16 +79,10 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     ...(options.headless ? { schemaVersion: 2, billingAxis: 'subscription', protocol: { family: options.headless.protocolFamily ?? 'claude-code-stream-json', version: 'v1' }, adapter: { id: 'native-cli-headless', version: 1,
       definition: { schemaVersion: 1, executable: options.headless.executable, configDir: options.headless.configDir, stateDir: options.headless.stateDir,
         ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: options.headless.delegatedUse ?? null } }, limits: { requestMaxBytes: 128_000, responseMaxBytes: 65_536, timeoutMs: 10_000 } } : {}) };
-  const workClasses = { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
-    proposalAdmission: { risk: 'low', standingAdmission: options.standing ?? false }, acceptanceProfile: { schemaVersion: 1, version: 1,
-      criterionTypes: ['completion'], evidenceTypes: ['verification-result'], rubric: [{ criterionType: 'completion', evidenceTypes: ['verification-result'], weight: 1 }],
-      ceilingRules: [], decisionThresholds: { rejectBelow: 0.2, acceptAt: 1 } } }], bindings: [{ kind: 'purchase', classId: 'business' }] };
+  const workClasses = businessWorkClasses(options.standing ?? false);
   const workerRegistry = fixtureDockerRegistry(['purchase']);
   const seed = options.subscription ? await seedCatalog() : null;
   const workerModel = seed?.providers[0].models.find((row: { lifecycle: { state: string }; nativeId: string }) => row.lifecycle.state === 'active' && row.nativeId === 'claude-sonnet-5-5');
-  if (options.subscription) workerRegistry.profiles[0] = compileNativeCodingDockerProfile(workerRegistry.profiles[0], { schemaVersion: 4,
-    provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
-    model: { channelId: SEED_CHANNEL, modelId: workerModel.nativeId, auxiliaryModelIds: [] }, prompt: 'Prepare a purchase and business readback.' }) as typeof workerRegistry.profiles[0];
   if (options.template) {
     const base = fixtureDockerRegistry(['purchase']).profiles[0]!;
     const docker = Object.fromEntries(Object.entries(base.parameters).filter(([key]) => key !== 'argv'));
@@ -141,6 +136,12 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-seed', scopeId: 's', action: 'register', catalog: seed }, loadOptions);
     for (const modelId of [null, workerModel.nativeId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-activate-' + modelId,
       scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }, loadOptions);
+    // Owner 2026-11-08: a Claude subscription worker runs tokenless on the person's login (v2 binding), never in Docker.
+    const workers = await nativeClaudeWorkers(project, 's', loadOptions), configPath = join(project, '.deckent', 'config.json');
+    Object.assign(config, JSON.parse(await readFile(configPath, 'utf8')));
+    if (!options.template) config.admission.registry.profiles[0] = workers.prepared(workerRegistry.profiles[0]!, { model: { channelId: SEED_CHANNEL, modelId: workerModel.nativeId,
+      auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Prepare a purchase and business readback.', scope: 'purchase', acceptance: 'The purchase has a durable business readback.' } }) as never;
+    await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
   }
   return { project, data, path, options: loadOptions, reference, config, bodies, counterBodies, get posts() { return posts; }, setOutput(value: string | ((body: string) => string)) { output = value; },
     async close() { clearConfigCache(); transport.mockRestore(); await rm(root, { recursive: true, force: true }); } };

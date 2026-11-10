@@ -1,8 +1,9 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, persistedUuid } from '#domain/index.js';
 import { z } from 'zod';
 
 const text = persistedString(z.string().min(1).max(256)), counter = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/u);
-export const personalCustodyOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const personalCustodyOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
   principal: z.strictObject({ issuer: text, subject: text }).readonly() }).readonly();
 export type PersonalCustodyOwner = z.infer<typeof personalCustodyOwnerSchema>;
 /** Named host contract v1. Never serialized to an application surface or accepted from a request. */
@@ -17,7 +18,7 @@ export type PersonalCustodyEvidence = z.infer<typeof personalCustodyEvidenceSche
 export type PersonalCustodyRefusal = 'shared-store' | 'foreign-os-owner' | 'non-person-owner' | 'remote-store' | 'unknown-locality'
   | 'unbound-store' | 'profile-unresolved' | 'binding-changed' | 'cleanup-pending' | 'unsafe-root';
 /** Safe reason only; no filesystem metadata or nested host error. */
-export class PersonalCustodyError extends Error {
-  readonly code = 'SIWC_STORE_NOT_PERSONAL';
+export class PersonalCustodyError extends CodedError {
+  override readonly code = 'SIWC_STORE_NOT_PERSONAL';
   constructor(readonly reason: PersonalCustodyRefusal) { super('SIWC_STORE_NOT_PERSONAL'); }
 }

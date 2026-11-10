@@ -1,6 +1,6 @@
 {
   "agent.shell.subscriptionHostRefused": "No sandbox is available for this subscription agent; it cannot run commands on the host. Nothing was run.",
-  "agent.shell.productStateProtected": "Deckent's own state cannot be opened by any approval. Nothing was run.",
+  "agent.shell.productStateProtected": "Deckent's own state cannot be opened by any approval. Paths naming this state through HOME, DECKENT_GLOBAL_HOME or DECKENT_HOME are protected too. Nothing was run.",
   "agent.edit.previewCounts": "(+{added} −{removed} lines)",
   "agent.shell.fullAccessUnavailable": "Full access requires an open sandbox; nothing was run.",
   "agent.shell.sandboxNotStarted": "The sandbox could not start this command: {reason}. Nothing ran and no host shell was used; `deckent doctor` runs the same sandbox self-test.",

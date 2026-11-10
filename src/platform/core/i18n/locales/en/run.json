@@ -474,5 +474,8 @@
   "docker.imageProbe.cause.deadline": "the Docker command reached its time limit",
   "docker.imageProbe.cause.exit": "the Docker command exited with an error",
   "docker.imageProbe.cause.signal": "the Docker command was stopped",
-  "docker.imageProbe.cause.parse": "the Docker answer could not be read"
+  "docker.imageProbe.cause.parse": "the Docker answer could not be read",
+  "approval.plan.workerMode.standart": "standard",
+  "approval.plan.workerMode.ask-edits": "careful",
+  "approval.plan.workerMode.full-auto": "full auto"
 }

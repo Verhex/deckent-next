@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
-import { governedPolicyDigest, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
+import { optionalField, sha256 as digestOf } from '#platform/index.js';
+import { governedPolicyDigest, policyTemplateUpgradeKey, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { delegationWithin, resolvePolicyBindings } from '#domain/index.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, systemPolicyRowsPublicationEvent } from '#engine/core/system-policy-rows/index.js';
 import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
-  namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
+  namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, proposalCoverageGrants, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
-import { uninstallOperationDescriptors } from './uninstall-plan.js';
+import { uninstallOperationDescriptors } from '#engine/core/uninstall/index.js';
 import environmentRegistry from './execution-environments.json' with { type: 'json' };
 import { NERVOUS_RULES_SEED, loadNervousRules } from '#engine/core/nervous/index.js';
 import { installerAuthorityChangeEvent } from './authority-audit.js';
@@ -41,7 +41,7 @@ export const FIRST_RUN_TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolN
   scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
   shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
   policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, recoveryRules: FIRST_RUN_RECOVERY_RULES, firstCommitOperationId: FIRST_RUN_FIRST_COMMIT_OPERATION_ID, uninstallOperationIds: uninstallOperationDescriptors().map(item => item.operation.id) });
-export interface PolicyTemplateSource { load(): Promise<unknown> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplateSource { load(): Promise<unknown> }
 /** Doctor's read-soft recognition: the application service the domain decision (`matchFirstRunPolicyTemplate`) is
  * invoked through (composition-purity), never called from composition directly. `source.load()` is the raw
  * policy.json document (`policyFileSchema`: v1 or v2 as written, never the bindings-resolved merge — its own
@@ -64,7 +64,7 @@ export function suppliedPolicyWithinTemplate(preview: { readonly scopeId: string
   const baseline = resolvePolicyBindings(template.policy, template.bindings), within = (rule: Policy['grants'][number], principal: Person) => { try { return delegationWithin(baseline, principal, [rule]).ok; } catch { return false; } };
   return preview.policy.schemaVersion === 1 && preview.policy.grants.every(rule => rule.effect === 'deny' || (rule.principals !== 'all' && rule.principals.every(principal => within(rule, principal))));
 }
-/** What the first-run installer did with `service.identity`: `written` (the audited config write, or the journaled first config), `planned` (preview),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the first-run installer did with `service.identity`: `written` (the audited config write, or the journaled first config), `planned` (preview),
  * `kept` (already configured for this scope), `other-scope` (configured for another scope: kept, never overwritten), `skipped` (the upgrade was
  * refused or conflicted: nothing written) or `not-set` (a typed refusal; the policy result stands). */
 export type FirstRunServiceIdentityResult = Readonly<{ status: 'written' | 'planned' | 'kept' | 'other-scope' | 'skipped' | 'changed' | 'not-set'; identity: ServiceIdentity | null; code?: string }>;
@@ -92,12 +92,12 @@ export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentit
     return Object.freeze({ status: 'not-set', identity: null, ...(typeof code === 'string' ? { code } : {}) });
   }
 }
-export const SKIPPED_SERVICE_IDENTITY: FirstRunServiceIdentityResult = Object.freeze({ status: 'skipped', identity: null });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const SKIPPED_SERVICE_IDENTITY: FirstRunServiceIdentityResult = Object.freeze({ status: 'skipped', identity: null });
 
-/** `gitignore` (G2-1, analysis 2026-10-18): the new data root's ignore file, so `git add -A` never commits the product state; first-session material. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `gitignore` (G2-1, analysis 2026-10-18): the new data root's ignore file, so `git add -A` never commits the product state; first-session material. */
 export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger' | 'gitignore' | 'projectAttachment';
 export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplateResource; readonly path: string; readonly content: string; readonly digest: string }
-export interface PolicyTemplatePreview {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   readonly template: { readonly id: string; readonly version: number };
@@ -107,7 +107,7 @@ export interface PolicyTemplatePreview {
   readonly systemRows?: { readonly key: string; readonly packageDigest: string; readonly before: import('#domain/index.js').Policy; readonly after: import('#domain/index.js').Policy };
 }
 export interface PreparedPolicyTemplateInstallation { readonly preview: PolicyTemplatePreview; readonly targets: readonly PolicyTemplatePublishTarget[] }
-export interface PolicyTemplateInstallationPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplateInstallationPorts {
   readonly journal: { observe(): Promise<BootstrapObservation>; write(expected: BootstrapObservation, next: BootstrapJournalPayload): Promise<BootstrapObservation> };
   inspectPreimage(target: PolicyTemplatePublishTarget): Promise<string | null>;
   publish(target: PolicyTemplatePublishTarget, transactionId: string): Promise<void>;
@@ -120,10 +120,9 @@ function canonical(input: unknown): string {
   if (!parsed.success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return JSON.stringify(parsed.data);
 }
-const digestOf = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 
-export interface PreparePolicyTemplateInput {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PreparePolicyTemplateInput {
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   readonly paths: { readonly policy: string; readonly bindings: string };
   readonly toolNames: FirstRunToolNames;
@@ -133,7 +132,7 @@ export interface PreparePolicyTemplateInput {
   readonly firstSessionTargets?: readonly PolicyTemplatePublishTarget[];
   readonly systemRows?: import('#engine/core/system-policy-rows/index.js').SystemPolicyRows;
 }
-export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
   | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId' | 'executionEnvironmentIds' | 'recoveryRules' | 'firstCommitOperationId' | 'uninstallOperationIds'>;
 /**
  * Pure preparation (SCR-B, owner 2026-09-28 option B): no I/O, deterministic in `(scopeId, principal)`, so
@@ -236,7 +235,7 @@ export class PolicyTemplateInstallationApplication {
 /** The single conditional writer of policy.json/bindings.json (structurally the policy unit's `AuthorityDocumentStore`; archived, keyed). */
 export type PolicyTemplateDocumentWriter = Pick<AuthorityDocumentStore, 'updateAuthority'>;
 type Person = { readonly issuer: string; readonly subject: string };
-export interface PolicyTemplateUpgradeResult {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplateUpgradeResult {
   readonly schemaVersion: 1;
   /** `preview`: would add `rules`; `upgraded`: written now; `current`: nothing to add; `unavailable`: not upgradable here (`reason`);
    * `conflict`: the policy moved since the previewed revision (`expect`). */
@@ -267,7 +266,7 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /** The add-only plan's names (the `--upgrade` path below and setup's anchored read share one construction). */
-const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId, ...toolNames, ...(serviceId === undefined ? {} : { serviceId }) });
+const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId, ...toolNames, ...optionalField('serviceId', serviceId) });
 /** Setup's read of an installed first-run policy whose revision a governed edit rewrote (the U4E carrier's PRE-9 full-auto grant): the
  * `first-run-read-tools` anchor naming this person keeps it installed, and the same add-only plan `--upgrade` applies decides current vs
  * upgradable. Read-only and grants nothing; no anchor, another person or an unreadable document is `null` (setup: hand-built). */
@@ -318,7 +317,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const body = { ...(current as Record<string, unknown>), grants: [...(current as { grants: readonly unknown[] }).grants, ...rules] };
     return { ...body, revision: `a-${digestOf(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
   };
-  const templatePlan = (current: unknown): Planned => {
+  const templatePlan = (current: unknown, bindings: unknown): Planned => {
     const revision = revisionOf(current);
     if (input.expect !== undefined && input.expect !== revision) return { result: result('conflict', { reason: 'revision-changed', revision }), next: null };
     const wireRules = ((current as { grants?: { id: string; resource?: { kind?: string; ids?: unknown } }[] } | null)?.grants ?? [])
@@ -331,12 +330,12 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
       return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, wireRules }), next: exact.policy };
     }
     if (exact.status === 'current') return { result: result('current', { basis: 'first-run', exact: true, revision, wireRules }), next: null };
-    const additions = firstRunTemplateAdditions(current, names);
+    const aiGrants = proposalCoverageGrants(current, bindings, principal), additions = firstRunTemplateAdditions(current, { ...names, aiGrants }); // alpha.64: role grants too
     if (additions.status === 'unavailable' && additions.reason === 'not-first-run') {
       // A hand-built policy: only for an explicitly named person (never the OS identity implicitly); refusals carry the people it names.
       const people = policyNamedPeople(current, scopeId, input.peopleLimit);
       if (person === null) return { result: result('unavailable', { reason: 'not-first-run', revision, people }), next: null };
-      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId });
+      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants });
       if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
       if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, wireRules }), next: null };
       return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, wireRules }), next: nextWith(current, revision, mine.rules) };
@@ -346,7 +345,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   const plan = (snapshot: { policy: unknown; bindings: unknown }) => {
-    const base = templatePlan(snapshot.policy), pack = input.systemRows;
+    const base = templatePlan(snapshot.policy, snapshot.bindings), pack = input.systemRows;
     if (!pack || !base.result.basis || !['preview', 'current'].includes(base.result.status)) return { ...base, bindings: null, dataKey: null };
     const key = bindSystemPolicyRows(pack.data, { scopeId, person: principal }).key;
     if (pack.history.some(entry => entry.key === key)) return { ...base, bindings: null, dataKey: null };
@@ -371,7 +370,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     if (held === null || held.status === 'applied') return result('unavailable', { reason: 'invalid' });
   }
   if (!input.apply || first.planned.result.status !== 'preview') return first.planned.result;
-  const key = first.planned.dataKey ?? `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-${digestOf(`${first.revision ?? ''}\0${canonical(first.planned.next as object)}`).slice(0, 64)}`;
+  const key = first.planned.dataKey ?? policyTemplateUpgradeKey(FIRST_RUN_POLICY_TEMPLATE_VERSION, digestOf(`${first.revision ?? ''}\0${canonical(first.planned.next as object)}`));
   return writer.updateAuthority(snapshot => {
     if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
     const again = plan(snapshot);
@@ -389,7 +388,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
 /** The `--expect` token the installer preview prints (POLICY-V12, Astra 2596): the policy revision and the runtime service identity the plan names,
  * `<revision>~<12 hex>`, so an apply on another identity is refused instead of granting a stale service id. */
 const serviceToken = (identity: ServiceIdentity, rows?: import('#engine/core/system-policy-rows/index.js').SystemPolicyRows) => digestOf(`deckent.first-run-service.v1\0${identity.scopeId}\0${identity.serviceId}${rows ? `\0${canonical(rows)}` : ''}`).slice(0, 12);
-export type InstalledPolicyTemplateUpgrade = PolicyTemplateUpgradeResult & { readonly expect: string | null; readonly serviceIdentity: FirstRunServiceIdentityResult };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstalledPolicyTemplateUpgrade = PolicyTemplateUpgradeResult & { readonly expect: string | null; readonly serviceIdentity: FirstRunServiceIdentityResult };
 /**
  * `deckent init policy --upgrade` end to end (owner 2026-10-16 v12 + option A): the service identity is read once and the plan names it; the apply
  * refuses a token naming another identity (`service-identity-unbound` without one), refuses an identity that changed since that read (typed
@@ -423,4 +422,4 @@ export async function upgradeInstalledPolicyTemplate(writer: PolicyTemplateDocum
 }
 
 /** B1 data revision is independent of template v18. Explicit init/upgrade callers share the one archived planner/writer. */
-export { reconcileSystemPolicyRows as installSystemPolicyRows, reconcileSystemPolicyRows as upgradeSystemPolicyRows } from '#engine/core/system-policy-rows/index.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ reconcileSystemPolicyRows as installSystemPolicyRows, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ reconcileSystemPolicyRows as upgradeSystemPolicyRows } from '#engine/core/system-policy-rows/index.js';

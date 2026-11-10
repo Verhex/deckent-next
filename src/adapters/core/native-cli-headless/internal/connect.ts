@@ -8,7 +8,7 @@ import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadl
 import { headlessPreflight } from './preflight.js';
 import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
-export type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
+type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
   executable?: string | undefined; configDir?: string | undefined; ownedConfigDir: string; env: Readonly<Record<string, string | undefined>>; now: () => number;
   isolation: HeadlessIsolation; signal?: AbortSignal }>;
 /** The absolute executable the person gave, else the first of the registry's CLI name in the person's PATH (bounded search). S7 (owner 2026-10-31): that
@@ -39,14 +39,18 @@ export async function prepareHeadlessConnection(input: HeadlessConnectInput): Pr
   await headlessPreflight(entry, nativeCliHeadlessDefinitionSchema.parse({ ...base, delegatedUse: null }), input.now, input.isolation, input.signal);
   return base;
 }
-/** The person's consent choice (`classes` undefined: keep the existing one; empty: withdrawn). An unchanged choice keeps its record byte for byte. */
+/** The person's consent choice (`classes` undefined: keep the existing one; empty: withdrawn); an unchanged choice keeps its record byte for byte.
+ * @deprecated KG7 F7: a pass-through of `prepareSubscriptionConsent`, unused in Core; removed after the Enterprise check. */
 export function headlessConsent(...args: Parameters<typeof prepareSubscriptionConsent>) { return prepareSubscriptionConsent(...args); }
-/** The adapter part of a subscription profile (profile v2, `billingAxis: subscription`, no tariff, no key). */
-export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinition, protocol: Readonly<{ family: string; version: string }>) => Object.freeze({
+/** B2-12: the slot bound is the registry's, never an adapter default; a family without a registry entry is refused. */
+export function headlessConnectionAdapter(definition: NativeCliHeadlessDefinition, protocol: Readonly<{ family: string; version: string }>) {
+  const entry = nativeCliHeadless(protocol.family);
+  if (!entry) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   // One run dir per connection that `send` empties: calls on one connection never overlap (registry bound).
-  maxInFlight: nativeCliHeadless(protocol.family)?.headless.connect.maxInFlight ?? 1,
-  adapter: { id: NATIVE_CLI_HEADLESS_ADAPTER.id, version: NATIVE_CLI_HEADLESS_ADAPTER.version, definition: nativeCliHeadlessDefinitionSchema.parse(definition) as unknown as JsonObject },
-  protocol: { family: protocol.family, version: protocol.version }, tariff: 'unmetered' as const, billingAxis: 'subscription' as const });
+  return Object.freeze({ maxInFlight: entry.headless.connect.maxInFlight,
+    adapter: { id: NATIVE_CLI_HEADLESS_ADAPTER.id, version: NATIVE_CLI_HEADLESS_ADAPTER.version, definition: nativeCliHeadlessDefinitionSchema.parse(definition) as unknown as JsonObject },
+    protocol: { family: protocol.family, version: protocol.version }, tariff: 'unmetered' as const, billingAxis: 'subscription' as const });
+}
 /** f5: the connection's cumulative gateway refusals (counts and host names, most refused first), or null when none was recorded. */
 async function readEgress(stateDir: string) {
   const raw = await readFile(join(stateDir, HEADLESS_EGRESS_RECORD), 'utf8').then(text => JSON.parse(text) as unknown, () => null);

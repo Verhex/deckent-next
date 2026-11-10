@@ -8,7 +8,7 @@ const entry = z.strictObject({ profile: identityProfileRefSchema, openModes: z.a
   localRunFallback: z.enum(['offer', 'closed']).optional() })
   .refine(row => row.startMode === 'standart' || row.openModes.includes(row.startMode));
 const defaults = z.strictObject({ schemaVersion: z.literal(1), entries: z.array(entry).max(64) }).parse(data);
-export type ProfilePermissionDefaults = z.infer<typeof entry>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProfilePermissionDefaults = z.infer<typeof entry>;
 /** Separate versioned defaults: saved profile definitions and their digests remain unchanged. */
 export class PermissionDefaultsRegistry {
   private entries: ProfilePermissionDefaults[] = [...defaults.entries];

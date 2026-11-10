@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';
 import { terminalProgram } from '../support/approval-terminal.js';
 import { mcpPrincipalRef } from '#domain/index.js';

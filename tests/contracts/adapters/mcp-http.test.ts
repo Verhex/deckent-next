@@ -46,10 +46,10 @@ describe('MCP HTTP entries (pure)', () => {
       headers: { Authorization: 'Bearer $DECK:GH', 'X-Region': '${REGION:-eu}' } };
     expect(await expandMcpEntry(entry, 'local', {}, secret)).toEqual({ ok: true, url: 'https://mcp.example.com/mcp', headers: { Authorization: `Bearer ${SECRET}`, 'X-Region': 'eu' },
       secrets: [SECRET] });
-    expect(await expandMcpEntry(entry, 'project', {}, secret)).toEqual({ ok: false, reason: 'secret-reference-in-project-file' });
+    expect(await expandMcpEntry(entry, 'project', {}, secret)).toEqual({ ok: false, reason: 'secret-reference-in-project-file', refusal: { kind: 'secret-reference-in-project-file' } });
     expect(await expandMcpEntry({ type: 'http', url: 'https://x/mcp', headers: { 'X-Token': '${API_TOKEN}' } }, 'project', { API_TOKEN: 'leak' }, secret))
       .toMatchObject({ ok: true, headers: { 'X-Token': '' } });
-    expect(await expandMcpEntry({ type: 'http', url: 'https://x/mcp', headers: { A: '$DECK:NOPE' } }, 'user', {}, secret)).toEqual({ ok: false, reason: 'secret-unresolved:NOPE' });
+    expect(await expandMcpEntry({ type: 'http', url: 'https://x/mcp', headers: { A: '$DECK:NOPE' } }, 'user', {}, secret)).toEqual({ ok: false, reason: 'secret-unresolved:NOPE', refusal: { kind: 'secret-unresolved', key: 'NOPE' } });
     expect(await expandMcpEntry({ type: 'http', url: 'http://${HOST}/mcp' }, 'user', { HOST: 'mcp.example.com' }, secret)).toEqual({ ok: false, reason: 'url-insecure-remote' });
   });
 });
@@ -88,14 +88,14 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     const view = await loadMcpRegistry(w.context), settings = mcpClientSettings(view, { inputMaxBytes: 65_536 })!, pool = new McpClientPool(new AbortController().signal); closers.push(() => pool.close());
     const offered = await openMcpAgentTools(pool, settings, { cwd: w.project, environment: w.env, sandboxes: [] });
     const whoami = [...offered.values()].find(entry => entry.tool === 'whoami')!;
-    const answer = await pool.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal });
+    const answer = await pool.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal, admit: 'probe-only' });
     expect(answer).toMatchObject({ outcome: 'answered' });
     const model = describeMcpResult(answer, whoami.display, 4_096, whoami);
     expect(model.text).toContain('called with: Bearer '); expect(model.text).not.toContain(SECRET);
     const preview = mcpTurnTools(offered).preview(whoami.spec.name, {});
     expect(preview).toContain(server.url);
     const echo = [...offered.values()].find(entry => entry.tool === 'echo')!, sentBefore = server.requests.length;
-    expect(await pool.call(echo.server, 'echo', echo.digest, { payload: 'x'.repeat(100_000) }, { timeoutMs: 10_000, signal: new AbortController().signal }))
+    expect(await pool.call(echo.server, 'echo', echo.digest, { payload: 'x'.repeat(100_000) }, { timeoutMs: 10_000, signal: new AbortController().signal, admit: 'probe-only' }))
       .toMatchObject({ outcome: 'unknown', reason: 'failed' });
     expect(server.requests.length - sentBefore).toBe(1); // An oversized answer can follow an effect; never replay it.
     await w.run({ verb: 'add', scope: 'local', name: 'web-two', entry: { type: 'http', url: server.url } });
@@ -165,7 +165,7 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
       const before = hostile.requests.length;
       if (method === 'tools/list') expect(await guarded.open(target, cfg, { cwd: w.project, environment: w.env, sandboxes: [] }), JSON.stringify({ method, accepted }))
         .toMatchObject(accepted ? { ok: true } : { ok: false, reason: 'list-failed', detail: 'MCP_INPUT_LIMIT' });
-      else expect(await guarded.call(target.id, 'whoami', whoami.digest, {}, { timeoutMs: 3_000, signal: new AbortController().signal }))
+      else expect(await guarded.call(target.id, 'whoami', whoami.digest, {}, { timeoutMs: 3_000, signal: new AbortController().signal, admit: 'probe-only' }))
         .toMatchObject(accepted ? { outcome: 'answered' } : { outcome: 'unknown' });
       expect(hostile.requests.length - before).toBe(1); await guarded.close();
     }
@@ -183,12 +183,13 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
       requestTtlMs: 1_000, inputMaxBytes: 65_536, resultMaxBytes: 65_536, scopeId: 'scope', turnId: 'turn', sessionId: 'http-notice-session', signal, emit: () => undefined, ledgerPath: async () => '',
       requestPolicy: async () => { if (pending) return { revision: 'p', trustFacts: agentToolApprovalFacts(null, 'scope', null) }; throw new Error('no card expected'); }, describeNotice: notice => notice.kind === 'not-decided' ? renderMcpStartNotice(notice, 'en') : JSON.stringify(notice) });
     const before = await open(), whoami = [...before.offered.values()].find(entry => entry.tool === 'whoami')!;
-    expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'answered' });
+    expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal, admit: 'probe-only' })).toMatchObject({ outcome: 'answered' });
     granted = false;
     const after = await open();
     expect(after.offered.size).toBe(0); expect(after.notices).toEqual([JSON.stringify({ kind: 'secret-refused', name: 'web-docs', code: 'SECRET_GRANT_REQUIRED', key: 'GH', scope: 'scope' })]);
-    expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'refused', reason: 'not-connected' });
-    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH' }] });
+    expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal, admit: 'probe-only' })).toMatchObject({ outcome: 'refused', reason: 'not-connected' });
+    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH',
+      refusal: { kind: 'secret-refused', code: 'SECRET_GRANT_REQUIRED', key: 'GH' } }] });
     expect((await open()).notices).toEqual([]); // Same refusal, even in a later turn, says nothing twice.
     granted = true;
     expect((await open()).offered.size).toBe(2);
@@ -245,7 +246,7 @@ it('Astra D11-R1: every project-vault refusal keeps its own kind through stdio e
     const secret = async () => { throw Object.assign(new Error('refused'), { code }); };
     const stdio = await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, secret);
     const http = await expandMcpEntry({ type: 'http', url: 'https://mcp.example/v1', headers: { authorization: 'Bearer $DECK:KEY' } } as never, 'user', {}, secret);
-    expect([stdio, http]).toEqual([{ ok: false, reason: `secret-refused:${code}:KEY` }, { ok: false, reason: `secret-refused:${code}:KEY` }]);
+    expect([stdio, http]).toEqual([{ ok: false, reason: `secret-refused:${code}:KEY`, refusal: { kind: 'secret-refused', code, key: 'KEY' } }, { ok: false, reason: `secret-refused:${code}:KEY`, refusal: { kind: 'secret-refused', code, key: 'KEY' } }]);
   }
-  expect(await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, async () => undefined)).toEqual({ ok: false, reason: 'secret-unresolved:KEY' });
+  expect(await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, async () => undefined)).toEqual({ ok: false, reason: 'secret-unresolved:KEY', refusal: { kind: 'secret-unresolved', key: 'KEY' } });
 });

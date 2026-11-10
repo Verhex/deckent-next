@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 import type { VerifiedPrincipal } from '#domain/index.js';
 import type { ModelBindingDefinition, ModelInvocationProfile, ModelReference } from '#domain/index.js';
 import { parseModelActivationCommand, modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationProfileSchema,
@@ -11,7 +13,7 @@ export interface ModelActivationAuthorizer {
   authorize(action: 'activate' | 'deactivate' | 'inspect', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelActivationAuthorization>;
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * SESSION-RESULT-LIMIT-2026-09-28: optional — omitted, `admit` behaves exactly as before. When supplied, `admit`
  * refuses to activate a reference for which an already-declared invocation profile could never deliver its
  * worst-case result on any surface. `assess` is injected rather than imported directly: engine/core/model-invocation
@@ -20,12 +22,12 @@ export interface ModelActivationAuthorizer {
  * the accept/reject decision itself here while the size-math implementation stays in model-invocation, single-sourced.
  */
 export interface ModelActivationDeliverySurface { readonly maxResultBytes: number }
-export interface ModelActivationDeliveryTarget {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelActivationDeliveryTarget {
   readonly profile: ModelInvocationProfile;
   readonly definition: ModelBindingDefinition;
   readonly catalogRevision: string;
 }
-export interface ModelActivationInvocationDelivery {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelActivationInvocationDelivery {
   /** Raw `provider_invocation_profiles` config value, as composition read it (parsed here, never by the caller). */
   readonly profiles: unknown;
   readonly surfaces: readonly (readonly [string, ModelActivationDeliverySurface])[];
@@ -75,7 +77,7 @@ export class ModelActivationApplication {
         }
       }
       const admission = parseModelActivationAdmission({ command, actor, authorization, admittedAtMs: this.now(),
-        ...(definition === undefined ? {} : { definition }) });
+        ...optionalField('definition', definition) });
       const result = await store.admit(admission), receipt = verifyModelActivationReceipt(result.receipt);
       if (typeof result.replayed !== 'boolean' || !sameModelActivationRequest(receipt, command, actor)
         || (!result.replayed && (JSON.stringify(receipt.authorization) !== JSON.stringify(authorization)

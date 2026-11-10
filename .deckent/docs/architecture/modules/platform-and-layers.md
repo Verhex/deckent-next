@@ -63,8 +63,7 @@ servers and, since T3 (2026-10-07), Streamable HTTP servers (https; plain http o
 connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
 **SDK-IMPORT-FIX (landed in alpha.27).** Model invocability decisions and their shared TR/EN text formatter
-belong to `engine/core/model-invocation`. Composition's config choices import the formatter from engine;
-`surfaces/core/model-invocability` re-exports it for existing callers. The SDK's runtime graph must reach
+belong to `engine/core/model-invocation`. Callers import the formatter from engine. The SDK's runtime graph must reach
 no surfaces module (including lazy imports), Ink or React; surface contract types remain type-only imports.
 The compiled graph is checked by `tests/contracts/composition/sdk-import-graph.test.ts`.
 

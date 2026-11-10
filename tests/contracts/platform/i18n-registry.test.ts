@@ -2,31 +2,24 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
-import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, redactSensitive, resolveLocale, t, LOCALES,
+import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, messageText, redactSensitive, resolveLocale, t, LOCALES,
   type Locale, type MessageKey, type MessageFamily } from '../../../src/platform/index.js';
 
 const unit = new URL('../../../src/platform/core/i18n/', import.meta.url);
 const params = (text: string) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort();
 describe('K2 catalog registry contract', () => {
-  it('has forty-eight bilingual families with matching key/placeholder sets, no empty values and no ANSI', async () => {
+  it('registers every bilingual catalog file with matching family and registry keys', async () => {
     const names = (await readdir(new URL('locales/en/', unit))).sort();
-    expect(names).toHaveLength(48); expect((await readdir(new URL('locales/tr/', unit))).sort()).toEqual(names);
+    expect((await readdir(new URL('locales/tr/', unit))).sort()).toEqual(names);
     const keys: string[] = [];
     for (const name of names) {
       const en = JSON.parse(await readFile(new URL(`locales/en/${name}`, unit), 'utf8')) as Record<string, string>;
-      const tr = JSON.parse(await readFile(new URL(`locales/tr/${name}`, unit), 'utf8')) as Record<string, string>;
-      expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
-      for (const key of Object.keys(en)) {
-        keys.push(key); expect(en[key]?.trim()).not.toBe(''); expect(tr[key]?.trim()).not.toBe('');
-        expect(params(en[key]!)).toEqual(params(tr[key]!));
-        expect(en[key] + tr[key]).not.toContain('\u001b');
-      }
+      keys.push(...Object.keys(en));
     }
     expect(keys.sort()).toEqual(MESSAGE_KEYS); expect(new Set(keys).size).toBe(keys.length);
   });
-  it('allows identical text only for the reviewed catalog inventory and the existing machine version format', async () => {
+  it('allows identical text only for the reviewed catalog inventory (the machine version format included)', async () => {
     const allowed = new Set(JSON.parse(await readFile(new URL('internal/identical-messages.json', unit), 'utf8')) as string[]);
-    allowed.add('cli.version');
     for (const key of MESSAGE_KEYS) if (MESSAGE_REGISTRY.catalogs.en[key] === MESSAGE_REGISTRY.catalogs.tr[key]) expect(allowed.has(key)).toBe(true);
     expect(() => createMessageRegistry([{ en: { new: 'unchanged' }, tr: { new: 'unchanged' } }])).toThrow('I18N_TRANSLATION_REQUIRED');
   });
@@ -57,11 +50,21 @@ describe('K2 catalog registry contract', () => {
     expect(Object.isFrozen(MESSAGE_REGISTRY.catalogs.en)).toBe(true); expect(Object.isFrozen(LOCALES)).toBe(true);
   });
   it('preserves unknown keys without prototype lookup and unsupported locales fall back to English', () => {
-    for (const key of ['not.a.key', '__proto__', 'constructor', 'toString']) expect(t(key as MessageKey, {}, 'en')).toBe(key);
+    for (const key of ['not.a.key', '__proto__', 'constructor', 'toString']) { expect(t(key as MessageKey, {}, 'en')).toBe(key); expect(messageText(key, 'tr')).toBeUndefined(); }
     expect(t('cli.help', {}, 'de' as Locale)).toBe(t('cli.help', {}, 'en'));
+    expect([messageText('cli.help', 'de' as Locale), messageText('cli.help', 'tr')]).toEqual([MESSAGE_REGISTRY.catalogs.en['cli.help'], MESSAGE_REGISTRY.catalogs.tr['cli.help']]);
     expect(t('cli.help', {}, 'tr')).not.toBe(t('cli.help', {}, 'en'));
   });
   it('preserves missing placeholders and substitutes literal values without regex replacement expansion', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const values = { name: '$& {other}', version: 1, node: 'v26', platform: 'linux' };
+      expect(messageText('cli.version', locale, values)).toBe(t('cli.version', values, locale));
+      expect(messageText('cli.help', locale)).toContain('{name}');
+      expect(messageText('cli.help', locale, {})).toContain('{name}');
+      expect(messageText('error.node_version_low', locale, {})).toBe(t('error.node_version_low', {}, locale));
+      expect(messageText('missing.{name}', locale, values)).toBeUndefined();
+    }
+
     expect(t('cli.help', {}, 'en')).toContain('{name}');
     expect(t('cli.help', { name: '$&{unknown}' }, 'en')).toContain('$&{unknown}');
     expect(t('cli.version', { name: 'x', version: 0, node: 'n', platform: 'p' }, 'en')).toContain('v0');

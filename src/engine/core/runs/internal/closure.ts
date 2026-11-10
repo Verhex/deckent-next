@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_TIMED_OUT_CODE, ENVIRONMENT_UNCERTAIN_CODE, applyAttemptObservation, sameAttemptIdentity, type AttemptIdentity, type AttemptObservation } from '#domain/index.js';
+import { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE, applyAttemptObservation, sameAttemptIdentity, type AttemptIdentity, type AttemptObservation } from '#domain/index.js';
+import { launchRefusal } from '#platform/index.js';
 import { AttemptStoreError, type AttemptStore } from '#engine/core/attempts/index.js';
 import type { RunStore } from './store.js';
 
@@ -25,29 +26,26 @@ export async function recordAttemptClosure(store: AttemptStore & Pick<RunStore, 
     runId: identity.runId, attemptId: identity.attemptId, expectedRevision: run.revision });
 }
 
-/** Refusal codes that recur deterministically for the same pinned attempt before any dispatch claim: retrying them each turn cannot
- * succeed, so the attempt closes as `launch-refused`. Every other code (store contention, policy, credentials, daemon, workspace
- * locks, unclassified adapter errors) stays transient: the turn fails as before and the runtime's failure backoff applies. */
-const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_CONFIGURED', 'EXECUTION_HOST_UNSUPPORTED', 'EXECUTION_PROFILE_INVALID', 'DISPATCH_ARTIFACT_REQUIRED',
-  // S6: the Run's base commit is pinned, so the same tree is refused on every turn; the person fixes it in a new Run (or raises a bound).
-  // A `time` bound depends on load, not on the tree (R2, D3a 2026-10-18): the gate throws it as WORKER_TREE_SCAN_DEFERRED, deliberately absent
-  // here (transient), until the Attempt's `maxTimeRefusals` are spent; only the refusal after that arrives here as WORKER_TREE_SCAN_INCOMPLETE.
-  'HUB_SKILL_FILES_UNAVAILABLE', 'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
-  /* R9n working-tree base: the place in the repository, the unignored file list and the platform recur every turn */ 'PATCH_WORKING_TREE_SUBFOLDER', 'PATCH_WORKING_TREE_FILTER', 'PATCH_WORKING_TREE_LISTING_LIMIT', 'PATCH_WORKING_TREE_UNSUPPORTED',
-  // PRE-7: Deckent's preflight found a declared requirement unmet. It carries the requirement; the Run parks for the operator (no turn retries it).
-  ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE, /* U9-7 relay worker gate: closes before any workspace or container, never another route */ 'SIWC_WORKER_ISOLATION_UNAVAILABLE', 'SIWC_APP_SERVER_AUTH_UNAVAILABLE']);
-/** E1: refusals that hold the Run (the existing progression park, failure code = the refusal code) instead of closing the attempt: no answer
+/** S2-e4: the error registry's `launch` field decides. `permanent` codes recur deterministically for the same pinned attempt before any dispatch
+ * claim: retrying them each turn cannot succeed, so the attempt closes as `launch-refused`. Every other code (store contention, policy, credentials,
+ * daemon, workspace locks, unclassified adapter errors) stays transient: the turn fails as before and the runtime's failure backoff applies.
+ * - S6: the Run's base commit is pinned, so the same tree is refused on every turn; the person fixes it in a new Run (or raises a bound).
+ *   A `time` bound depends on load, not on the tree (R2, D3a 2026-10-18): the gate throws it as WORKER_TREE_SCAN_DEFERRED, deliberately transient,
+ *   until the Attempt's `maxTimeRefusals` are spent; only the refusal after that arrives here as WORKER_TREE_SCAN_INCOMPLETE.
+ * - R9n working-tree base: the place in the repository, the unignored file list and the platform recur every turn.
+ * - PRE-7: Deckent's preflight found a declared requirement unmet. It carries the requirement; the Run parks for the operator (no turn retries it).
+ * - U9-7 relay worker gate: closes before any workspace or container, never another route.
+ * E1: `held` refusals hold the Run (the existing progression park, failure code = the refusal code) instead of closing the attempt: no answer
  * was obtained, so nothing is recorded on the attempt (its record shape is unchanged) and the operator re-runs it explicitly (resume), which
  * prepares the same reserved attempt and probes again. Never retried automatically, never an installation-defect park. */
-const HELD_LAUNCH_REFUSALS: ReadonlySet<string> = new Set([ENVIRONMENT_TIMED_OUT_CODE]);
 export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: 'permanent'; code: string; requirement?: string; probe?: string }>
   | Readonly<{ disposition: 'held'; code: string; requirement: string }> | Readonly<{ disposition: 'transient' }> {
-  const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
-  if (code !== null && HELD_LAUNCH_REFUSALS.has(code)) {
+  const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null, launch = launchRefusal(code);
+  if (code !== null && launch === 'held') {
     const requirement = (error as { params?: Record<string, unknown> }).params?.['requirement'];
     return Object.freeze(typeof requirement === 'string' ? { disposition: 'held' as const, code, requirement } : { disposition: 'transient' as const });
   }
-  if (code === null || !PERMANENT_LAUNCH_REFUSALS.has(code)) return Object.freeze({ disposition: 'transient' as const });
+  if (code === null || launch !== 'permanent') return Object.freeze({ disposition: 'transient' as const });
   if (code !== ENVIRONMENT_NOT_READY_CODE && code !== ENVIRONMENT_UNCERTAIN_CODE) return Object.freeze({ disposition: 'permanent' as const, code });
   const params = (error as { params?: Record<string, unknown> }).params, requirement = params?.['requirement'], probe = params?.['probe'];
   // REVISE 2693: an uncertain refusal must carry its probe (the hold's identity), else it is not recordable as one.

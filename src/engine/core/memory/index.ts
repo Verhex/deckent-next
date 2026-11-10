@@ -3,14 +3,14 @@ export { MemoryJournalApplication } from './internal/application.js';
 export { assertNoPendingMemoryPurge } from './internal/purge.js';
 export { MemoryPolicyAuthorization } from './internal/authorization.js';
 export { memoryReportClaimsOf, type MemoryReportClaims, memoryExtractionSourceOf, memoryDistillerFor, memoryWorkClassView, memoryEvaluatorFor, memoryEvaluationSourceOf } from './internal/source.js';
-export { MemoryEvaluationApplication, memoryEvaluationResolver, memoryEvaluationDigest, selectMemoryEvaluator, rederiveMemorySourceModels, memoryEvaluationSpendOf } from './internal/evaluate.js';
-export type { MemoryEvaluationDependencies } from './internal/evaluate.js';
-export { MEMORY_EVALUATOR_ROLE, memoryCatalogFacts, memoryCatalogKey, memoryEvaluatorReference, memoryEvaluatorRows, memoryEvaluationDue, memoryEvaluatorView } from './internal/evaluator-models.js';
-export type { MemoryCatalogFact, MemoryEvaluatorPrice } from './internal/evaluator-models.js';
-export { selectMemoryContext, memoryContextTasks, memoryPlanningRequest, MEMORY_CONTEXT_HEADER, type MemoryContextRequest, type MemoryContextSelection, type MemoryContextTaskPart, type MemoryContextEntryRef,
+export { MemoryEvaluationApplication, memoryEvaluationResolver, memoryEvaluationDigest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ selectMemoryEvaluator, rederiveMemorySourceModels, memoryEvaluationSpendOf } from './internal/evaluate.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryEvaluationDependencies } from './internal/evaluate.js';
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MEMORY_EVALUATOR_ROLE, memoryCatalogFacts, memoryCatalogKey, memoryEvaluatorReference, memoryEvaluatorRows, memoryEvaluationDue, memoryEvaluatorView } from './internal/evaluator-models.js';
+export type { MemoryCatalogFact, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryEvaluatorPrice } from './internal/evaluator-models.js';
+export { selectMemoryContext, memoryContextTasks, memoryPlanningRequest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MEMORY_CONTEXT_HEADER, type MemoryContextRequest, type MemoryContextSelection, type MemoryContextTaskPart, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type MemoryContextEntryRef,
   type MemoryPlanningRequest, type MemoryPlanningRow, type MemoryPlanningSelection } from './internal/context.js';
-export { MEMORY_ROLLOUT, MEMORY_ROLLOUT_METRICS, MEMORY_ROLLOUT_SECTIONS, MEMORY_INJECTION_CORPUS, memoryCorpusContent, memoryRolloutCriterionMet, memoryRolloutView, memoryRolloutGated,
+export { MEMORY_ROLLOUT, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MEMORY_ROLLOUT_METRICS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MEMORY_ROLLOUT_SECTIONS, MEMORY_INJECTION_CORPUS, memoryCorpusContent, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ memoryRolloutCriterionMet, memoryRolloutView, memoryRolloutGated,
   measureMemoryRollout } from './internal/rollout.js';
-export type { MemoryRolloutMetric, MemoryRolloutSection, MemoryRolloutModes, MemoryRolloutRegistry, MemoryRolloutCriterion, MemoryRolloutMeasure, MemoryRolloutMeasures,
-  MemoryRolloutCriterionView, MemoryRolloutPhaseView, MemoryRolloutView, MemoryRolloutPorts, MemoryRolloutRetention, MemoryRolloutStatus } from './internal/rollout.js';
+export type { MemoryRolloutMetric, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryRolloutSection, MemoryRolloutModes, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryRolloutRegistry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryRolloutCriterion, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryRolloutMeasure, MemoryRolloutMeasures,
+  MemoryRolloutCriterionView, MemoryRolloutPhaseView, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryRolloutView, MemoryRolloutPorts, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MemoryRolloutRetention, MemoryRolloutStatus } from './internal/rollout.js';
 export { screenMemoryCandidate } from './internal/distil.js';

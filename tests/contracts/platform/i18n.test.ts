@@ -16,9 +16,10 @@ describe('kernel/i18n contract', () => {
   it('renders Turkish when asked', () => {
     expect(t('cli.unknownCommand', { command: 'x', name: 'deckent' }, 'tr')).toContain('Bilinmeyen komut');
   });
-  it.each(['en', 'tr'] as const)('keeps upgrade explanations independent of the template number in %s', locale => {
+  it.each(['en', 'tr'] as const)('keeps %s product copy free of developer notes and upgrade template numbers', locale => {
     const catalog = MESSAGE_REGISTRY.catalogs[locale];
     for (const [key, value] of Object.entries(catalog)) {
+      expect(value, key).not.toMatch(/Placeholder|lane/iu);
       if (key.startsWith('cli.init.policyUpgrade.') || key.startsWith('cli.policy.upgrade.')) {
         expect(value).not.toMatch(/v\d+\s+(?:rules|kurallar)|v\d+\s*→\s*v\d+/u);
       }

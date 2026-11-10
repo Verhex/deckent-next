@@ -1,0 +1,95 @@
+{
+  "renames": {
+    "k29.coding.help": "coding.help",
+    "k29.coding.template.help": "coding.template.help",
+    "k29.coding.columns": "coding.columns",
+    "k29.coding.runtime.docker": "coding.runtime.docker",
+    "k29.coding.runtime.subscription": "coding.runtime.subscription",
+    "k29.coding.result.runtime": "coding.result.runtime",
+    "k29.coding.connections": "coding.connections",
+    "k29.coding.connection.unsupported": "coding.connection.unsupported",
+    "k29.coding.connection.discoveryUnsupported": "coding.connection.discoveryUnsupported",
+    "headless.agent.k18.reconnectRequired": "headless.agent.connection.reconnectRequired",
+    "headless.agent.k15c.hostUnresolved": "headless.agent.host.chatWarning",
+    "headless.agent.k15b.hostUnresolved": "headless.agent.host.unresolved",
+    "headless.agent.k13.tui.provider.kind.claudeCliSubscription": "headless.agent.tui.provider.kind.claudeCliSubscription",
+    "headless.agent.k13.tui.provider.kind.codexCli": "headless.agent.tui.provider.kind.codexCli",
+    "headless.agent.k13.login.methodTitle": "headless.agent.login.methodTitle",
+    "headless.agent.k13.login.methodHint": "headless.agent.login.methodHint",
+    "headless.agent.k13.login.method.browser": "headless.agent.login.method.browser",
+    "headless.agent.k13.login.method.device-auth": "headless.agent.login.method.device-auth",
+    "headless.agent.k13.login.method.claudeai": "headless.agent.login.method.claudeai",
+    "headless.agent.k13.readiness.ready": "headless.agent.readiness.ready",
+    "headless.agent.k13.readiness.unknown": "headless.agent.readiness.unknown",
+    "headless.agent.k13.readiness.unavailable": "headless.agent.readiness.unavailable",
+    "headless.agent.k13.agents.help": "headless.agent.agents.help",
+    "headless.agent.k13.agents.preview": "headless.agent.agents.preview",
+    "headless.agent.k13.agents.pins": "headless.agent.agents.pins",
+    "headless.agent.k13.agents.notAdmitted": "headless.agent.agents.notAdmitted",
+    "headless.agent.k13.agents.useHint": "headless.agent.agents.useHint",
+    "headless.agent.k13.skills.viaAgent": "headless.agent.skills.viaAgent",
+    "headless.agent.k13.unknown.cli": "headless.agent.unknown.cli",
+    "headless.agent.k13.unknown.login": "headless.agent.unknown.login",
+    "headless.agent.k13.unknown.tools": "headless.agent.unknown.tools",
+    "headless.agent.k13.unknown.plugins": "headless.agent.unknown.plugins",
+    "headless.agent.k13.unknown.bridge": "headless.agent.unknown.bridge",
+    "headless.agent.k13.unknown.environment": "headless.agent.unknown.environment",
+    "headless.agent.k13.unknown.sealed": "headless.agent.unknown.sealed",
+    "headless.agent.k13.unknown.earlier": "headless.agent.unknown.earlier",
+    "headless.agent.k13.surfaceStopped": "headless.agent.surfaceStopped",
+    "headless.agent.k13.cliNotices": "headless.agent.cliNotices",
+    "headless.agent.k13.worker.NATIVE_PROJECTION_RETIRED": "headless.agent.worker.NATIVE_PROJECTION_RETIRED",
+    "headless.agent.k13.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE": "headless.agent.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE",
+    "headless.agent.k13.worker.NATIVE_SUBSCRIPTION_OTHER_PERSON": "headless.agent.worker.NATIVE_SUBSCRIPTION_OTHER_PERSON",
+    "headless.agent.k13.worker.NATIVE_RELAY_LIMIT": "headless.agent.worker.NATIVE_RELAY_LIMIT",
+    "headless.agent.k13.worker.NATIVE_WORKER_F08_REQUIRED": "headless.agent.worker.NATIVE_WORKER_F08_REQUIRED",
+    "headless.agent.k13.worker.NATIVE_WORKER_CAPACITY_WAIT": "headless.agent.worker.NATIVE_WORKER_CAPACITY_WAIT",
+    "headless.agent.k13.worker.NATIVE_CLI_WORKER_PROFILE_INVALID": "headless.agent.worker.NATIVE_CLI_WORKER_PROFILE_INVALID",
+    "headless.agent.k13.worker.NATIVE_CLI_WORKER_UNAVAILABLE": "headless.agent.worker.NATIVE_CLI_WORKER_UNAVAILABLE",
+    "headless.agent.k13.worker.NATIVE_WORKER_TERMINATION_UNKNOWN": "headless.agent.worker.NATIVE_WORKER_TERMINATION_UNKNOWN",
+    "headless.agent.k13.worker.NATIVE_WORKER_OUTPUT_LIMIT": "headless.agent.worker.NATIVE_WORKER_OUTPUT_LIMIT",
+    "headless.agent.k13.worker.NATIVE_WORKER_STOP_UNCONFIRMED": "headless.agent.worker.NATIVE_WORKER_STOP_UNCONFIRMED",
+    "headless.agent.k13.worker.NATIVE_WORKER_EFFECTS_UNKNOWN": "headless.agent.worker.NATIVE_WORKER_EFFECTS_UNKNOWN",
+    "headless.agent.k13.worker.NATIVE_WORKER_NOT_STARTED": "headless.agent.worker.NATIVE_WORKER_NOT_STARTED",
+    "headless.agent.k13.worker.NATIVE_WORKER_CUSTODY_UNKNOWN": "headless.agent.worker.NATIVE_WORKER_CUSTODY_UNKNOWN",
+    "headless.agent.k13.resource.waiting": "headless.agent.resource.waiting",
+    "headless.agent.k13.resource.legacy": "headless.agent.resource.legacy",
+    "headless.agent.k13.agents.action": "headless.agent.agents.action",
+    "headless.agent.k20.verifying": "headless.agent.readiness.verifying",
+    "headless.agent.k22.worker.NATIVE_WORKER_VERIFICATION_WAIT": "headless.agent.worker.NATIVE_WORKER_VERIFICATION_WAIT",
+    "headless.agent.k22.worker.NATIVE_WORKER_F08_INVALID": "headless.agent.worker.NATIVE_WORKER_F08_INVALID",
+    "headless.agent.k22.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "headless.agent.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED",
+    "headless.agent.k22.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "headless.agent.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED",
+    "headless.agent.k22.worker.NATIVE_WORKER_INPUT_REFUSED": "headless.agent.worker.NATIVE_WORKER_INPUT_REFUSED",
+    "headless.agent.k27.containedWorkspaceRefused": "headless.agent.workspace.containedWorkspaceRefused",
+    "terminal.approval.k23.assurance": "terminal.approval.background.assurance",
+    "terminal.approval.k23.call": "terminal.approval.background.call",
+    "terminal.approval.k23.wait": "terminal.approval.background.wait",
+    "terminal.approval.k23.expired": "terminal.approval.background.expired",
+    "cli.coding.help": "coding.prepare.help"
+  },
+  "removed": {
+    "en": {
+      "cli.coding.template.help": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved. On a terminal the missing choices are asked and a preview card is confirmed; elsewhere a missing choice lists the admitted values. Without --image the configured worker image is used; when no admitted CLI runs there, the error names the admitted images. Without --discovery the template keeps the discovery mode of the admitted profiles it derives from; --discovery disabled hides repository instructions from the worker.",
+      "clisetup.coding.columns": "Task kind|Profile|Provider|CLI|Image"
+    },
+    "tr": {
+      "cli.coding.template.help": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur ve önizleme kartı onaylanır; başka yerde eksik seçim kabul edilmiş değerleri listeler. --image verilmezse yapılandırılmış işçi imajı kullanılır; orada kabul edilmiş CLI yoksa hata kabul edilmiş imajları söyler. --discovery verilmezse şablon, türetildiği kabul edilmiş profillerin discovery modunu korur; --discovery disabled repo talimatlarını işçiden gizler.",
+      "clisetup.coding.columns": "Görev türü|Profil|Sağlayıcı|CLI|İmaj"
+    }
+  },
+  "changed": {
+    "en": {
+      "coding.prepare.help": {
+        "before": "deckent coding [--json] [--lang en|tr]\nLists the coding profiles task kinds run on (kind · profile · provider · CLI · image) and the configured worker image.\ndeckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--preview|--apply] [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved. On a terminal the missing choices are asked (admitted provider, task kind, admitted image) and a preview card is confirmed before writing; elsewhere --provider, --kind and --preview|--apply are required and a missing choice lists the admitted values.\ndeckent coding prepare --input <file|-> [--json] [--lang en|tr]\nPrepare a native coding Docker profile; does not start a worker or change configuration. Input fields: schemaVersion 1, template (an execution profile) and invocation (a native coding invocation); the first field that does not fit is named.",
+        "after": "deckent coding prepare --input <file|-> [--json] [--lang en|tr]\nPrepare a native coding Docker profile; does not start a worker or change configuration. Input fields: schemaVersion 1, template (an execution profile) and invocation (a native coding invocation); the first field that does not fit is named."
+      }
+    },
+    "tr": {
+      "coding.prepare.help": {
+        "before": "deckent coding [--json] [--lang en|tr]\nGörev türlerinin çalıştığı kodlama profillerini (görev türü · profil · sağlayıcı · CLI · imaj) ve yapılandırılmış işçi imajını listeler.\ndeckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur (kabul edilmiş sağlayıcı, görev türü, kabul edilmiş imaj) ve yazmadan önce önizleme kartı onaylanır; başka yerde --provider, --kind ve --preview|--apply gerekir, eksik seçim kabul edilmiş değerleri listeler.\ndeckent coding prepare --input <file|-> [--json] [--lang en|tr]\nNative kodlama Docker profili hazırlar; işçi başlatmaz veya config değiştirmez. Girdi alanları: schemaVersion 1, template (yürütme profili) ve invocation (native kodlama çağrısı); uymayan ilk alan adıyla söylenir.",
+        "after": "deckent coding prepare --input <file|-> [--json] [--lang en|tr]\nNative kodlama Docker profili hazırlar; işçi başlatmaz veya config değiştirmez. Girdi alanları: schemaVersion 1, template (yürütme profili) ve invocation (native kodlama çağrısı); uymayan ilk alan adıyla söylenir."
+      }
+    }
+  }
+}

@@ -2,10 +2,9 @@ import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, writeJsonAtomic } from '#platform/index.js';
 import { retainedWorkerHistory } from '../../../../../assets/worker-image/receipts.mjs';
-import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
+import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { privateDirectory } from './build.js';
 import { writeWorkerLeases } from './references.js';
 import limits from './limits.json' with { type: 'json' };
@@ -26,17 +25,8 @@ export async function withWorkerBuilder<T>(input: { root: string; packageRoot: s
   const directory = join(input.root, createHash('sha256').update(input.daemonId).digest('hex'));
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await privateDirectory(input.root); await privateDirectory(directory);
-  const deadline = performance.now() + input.budgetMs;
-  let lock;
-  for (;;) {
-    input.signal?.throwIfAborted();
-    try { lock = acquireLedgerLock(join(directory, limits.custody.lock)); break; }
-    catch (error) {
-      if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
-      if (performance.now() >= deadline) refuse('WORKER_IMAGE_BUILDING');
-      await wait(limits.custody.waitMs, undefined, input.signal ? { signal: input.signal } : undefined);
-    }
-  }
+  const lock = await withExclusiveFileLock(join(directory, limits.custody.lock), { waitMs: input.budgetMs, pollMs: limits.custody.waitMs, signal: input.signal });
+  if (!lock) return refuse('WORKER_IMAGE_BUILDING');
   const ownerPath = join(directory, limits.custody.owner), now = new Date().toISOString(), expiresAt = new Date(Date.now() + input.budgetMs).toISOString(); let published = false;
   try {
     const previous = await readRecord(ownerPath) as Owner | null;

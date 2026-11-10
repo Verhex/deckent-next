@@ -1,9 +1,10 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { workerEffortSchema, modelUsageEvidenceSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile } from '#adapters/core/native-cli-worker/index.js';
 
-export class NativeWorkerBindingError extends Error {
+export class NativeWorkerBindingError extends CodedError {
   constructor() { super('WORKER_MODEL_BINDING_MISMATCH'); this.name = 'NativeWorkerBindingError'; }
 }
 const pinnedSchema = z.looseObject({ schemaVersion: z.literal(2), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),

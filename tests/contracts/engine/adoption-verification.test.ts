@@ -1,7 +1,11 @@
 import { expect, it } from 'vitest';
 import { adoptionNotApplied, adoptionVerificationPhaseOutcome, executionProfileFingerprint, integrationAdoptionCommandSchema, type IntegrationAdoptionRecord } from '#engine/index.js';
+import { adoptionVerificationPhaseOutcome as legacyPhaseOutcome, integrationAdoptionCommandSchema as legacyCommandSchema } from '#engine/core/workspace-patch/index.js';
+import { adoptionVerificationPhaseOutcome as adoptionPhaseOutcome, integrationAdoptionCommandSchema as adoptionCommandSchema } from '#engine/core/workspace-adoption/index.js';
 
 it('maps every verification task phase to one outcome (design §5.4): only accepted verifies', () => {
+  expect(legacyPhaseOutcome).toBe(adoptionVerificationPhaseOutcome);
+  expect(adoptionPhaseOutcome).toBe(legacyPhaseOutcome);
   expect({
     accepted: adoptionVerificationPhaseOutcome('accepted'),
     failed: adoptionVerificationPhaseOutcome('failed'),
@@ -27,6 +31,8 @@ it('fingerprints a profile definition independently of key order and sensitive t
 it('accepts the v2 adoption command with both verification fields or neither, and no v1 command', () => {
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
   const base = { schemaVersion: 2, commandId: 'c', identity, deliveryCommandId: 'd', targetRef: 'refs/heads/main' };
+  expect(legacyCommandSchema).toBe(integrationAdoptionCommandSchema);
+  expect(adoptionCommandSchema).toBe(legacyCommandSchema);
   expect(integrationAdoptionCommandSchema.parse(base)).toEqual(base);
   expect(integrationAdoptionCommandSchema.parse({ ...base, verificationRunId: 'v', verificationKind: 'verify' })).toMatchObject({ verificationRunId: 'v' });
   expect(() => integrationAdoptionCommandSchema.parse({ ...base, verificationRunId: 'v' })).toThrow();

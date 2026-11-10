@@ -7,7 +7,7 @@ import { RunAdmissionApplication, RunCreationAuthority, systemOrderedGraph, type
 import { isRunIntent, proposalIdentity, parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore, type RunIntentRecord } from './proposal-contract.js';
 import { intentResult, type RunPlanningResult } from './intent-application.js';
 import { stableRunProposalBasis, unrecognisedRunProposalPermissions, validateRunProposal } from './proposal-validation.js';
-export interface RunProposalContext {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RunProposalContext {
   readonly registry?: WorkClassRegistry | undefined;
   readonly clock: TrustedClock;
   loadBudget(scopeId: string, principal: VerifiedPrincipal): Promise<ProviderSpendCheckpoint | Readonly<{ checkpoint: ProviderSpendCheckpoint | null; source?: 'configured' }> | null>;

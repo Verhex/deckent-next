@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { personEnv } from '../support/person-env.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';

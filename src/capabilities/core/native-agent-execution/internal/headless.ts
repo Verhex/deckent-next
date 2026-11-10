@@ -1,9 +1,8 @@
 import { z } from 'zod';
-import { persistedString, persistedInteger, promptFramingAllowanceSchema } from '#domain/index.js';
-const argument = persistedString(z.string().min(1)).refine(value => !value.includes('\0'));
-const flag = z.string().regex(/^--[a-z][a-z-]*$/);
+import { persistedInteger, promptFramingAllowanceSchema } from '#domain/index.js';
+import { text as argument, positive, envName, flag, args } from './schema-parts.js';
 const argumentsSchema = z.array(argument).readonly();
-const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), names = z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).readonly(), words = z.array(argument).readonly();
+const names = z.array(envName).readonly(), words = z.array(argument).readonly();
 const loginEntry = z.string().regex(/^[A-Za-z0-9._-]+$/).refine(value => value !== '.' && value !== '..');
 /** Proxy variables are read in both spellings (`HTTPS_PROXY`, `https_proxy`). */
 const proxyNames = z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/)).readonly();
@@ -21,14 +20,14 @@ const guardsSchema = z.union([z.strictObject({ apiKeySources: words, permissionM
 export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal(1), revision: argument, source: argument,
   /** The profile's protocol family when it is not the event-stream name (a catalog family named before the headless step existed). */
   protocolFamily: argument.optional(),
-  args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive,
+  args, maxTurns: positive,
   /** `stream`: the CLI has no turn flag; one turn is enforced by the line guard (the call refuses a second turn). Absent: the capability's flag. */
   turnBound: z.literal('stream').optional(),
   /** S3-3 connect: the bounded PATH search for the executable; s3c (owner 2026-10-24): the default login dir is the Brain's own (layout data, not here).
    * `login`: the CLI's own sign-in the person runs in their terminal (argv, SSO switch, bound, inherited and fixed names; never a deny name). */
   connect: z.strictObject({ configDirSource: argument, pathSearchDirectories: positive, pathSearchTimeoutMs: positive,
     maxInFlight: positive, maxInFlightSource: argument }).readonly(), login: z.strictObject({ args: argumentsSchema, ssoFlag: flag.nullable(), timeoutMs: positive,
-    env: z.strictObject({ inherit: names, fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly() }).readonly(),
+    env: z.strictObject({ inherit: names, fixed: z.record(envName, z.string().refine(value => !value.includes('\0'))).readonly() }).readonly(),
     source: argument }).readonly(), systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
   /** The prompt-file argv when it is not `<systemPromptFlag> <file>` (`{file}` = the run dir's prompt file; the flag stays the one help must list). */
   systemPromptArgs: argumentsSchema.refine(value => value.some(arg => arg.includes('{file}'))).optional(),
@@ -41,8 +40,8 @@ export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal
   preflight: z.strictObject({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema, hiddenFlagsSource: argument,
     hiddenFlags: z.array(z.strictObject({ flag, probe: z.union([z.literal('max-turns-capability'), z.strictObject({ args: argumentsSchema, refusal: z.array(argument).min(1).readonly() }).readonly()]) }).readonly()).max(8).readonly() }).readonly(),
   auth: authSchema,
-  env: z.strictObject({ fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly(), runDir: names,
-    configDir: z.string().regex(/^[A-Z][A-Z0-9_]*$/), deny: names.refine(value => value.length > 0) }).readonly(),
+  env: z.strictObject({ fixed: z.record(envName, z.string().refine(value => !value.includes('\0'))).readonly(), runDir: names,
+    configDir: envName, deny: names.refine(value => value.length > 0) }).readonly(),
   guards: guardsSchema,
   /** `stderrSummaryBytes`: the redacted stderr tail kept when the CLI ends before a complete turn (an unknown outcome's evidence, inside the profile's response bound). */
   limits: z.strictObject({ stdinMaxBytes: positive, maxLineBytes: positive, stderrMaxBytes: positive, stderrSummaryBytes: positive, preflightTimeoutMs: positive, preflightOutputBytes: positive,
@@ -70,7 +69,7 @@ export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal
   return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name)) && value.isolation.refreshLock.names.every(name => value.isolation.configVisible.includes(name))
     && (value.isolation.configEphemeral?.files.every(name => value.isolation.configVisible.includes(name) && !value.isolation.refreshLock.names.includes(name)
       && !['auth.json', '.credentials.json', '.claude.json'].includes(name)) ?? true)
-    && new Set(login).size === login.length && !login.some(name => value.env.deny.includes(name)) && value.login.timeoutMs < value.isolation.refreshLock.staleMs
+    && new Set(login).size === login.length && !login.some(name => value.env.deny.includes(name))
     && !value.args.some(arg => value.forbiddenFlags.some(forbidden => arg === forbidden || arg.startsWith(forbidden + '=')));
 }).readonly();
 export type NativeCliHeadless = z.infer<typeof nativeCliHeadlessSchema>;

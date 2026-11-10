@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { InstallationIdentity, InstallationBinding, InstallationBindingCapture, InstallationBindingSourceKind, InstallationBindingStrength,
   InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
 
@@ -5,7 +6,7 @@ import type { IdentityRead } from './project-identity.js';
 
 /** What this host can bind now. Posix hosts reach at least `weak`; `unsupported` remains for a host without any binding mechanism. */
 export type InstallationBindingCapability = InstallationBindingCapture | { readonly status: 'unsupported' };
-/** Additive read observation: strength and source kind of the current capture, never a machine value or digest. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Additive read observation: strength and source kind of the current capture, never a machine value or digest. */
 export interface InstallationBindingObservation { readonly strength: InstallationBindingStrength; readonly source: InstallationBindingSourceKind }
 export type InstallationIdentityRead = IdentityRead<InstallationIdentity> & {
   readonly bindingCapability: 'supported' | 'unsupported' | 'not-observed';
@@ -23,15 +24,15 @@ export interface InstallationIdentityStore {
   resolveRelocation(choice: InstallationIdentityChoice, principal: { readonly issuer: string; readonly subject: string }): Promise<InstallationIdentityResolution>;
 }
 export interface InstallationBindingSource { capture(): Promise<InstallationBindingCapability> }
-/** `MASKED` (B5): the record is hidden by a Deckent shell sandbox (the command runs inside one), not lost. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `MASKED` (B5): the record is hidden by a Deckent shell sandbox (the command runs inside one), not lost. */
 export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE' | 'INSTALLATION_IDENTITY_MASKED'
   | 'INSTALLATION_IDENTITY_LOCKED' | 'INSTALLATION_IDENTITY_UNSUPPORTED' | 'INSTALLATION_IDENTITY_RELOCATED'
   | 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' | 'INSTALLATION_IDENTITY_SOURCE_INVALID' | 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED';
-export class InstallationIdentityError extends Error {
-  constructor(readonly code: InstallationIdentityErrorCode) { super(code); this.name = 'InstallationIdentityError'; }
+export class InstallationIdentityError extends CodedError {
+  constructor(override readonly code: InstallationIdentityErrorCode) { super(code); this.name = 'InstallationIdentityError'; }
 }
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Pure comparison of a retained binding with the current capture; every store path uses it.
  * - `match`: same evidence at the recorded strength; nothing to write.
  * - `strengthen`: a weak record whose root, device and inode match a machine-strength capture; the write path records machine strength.

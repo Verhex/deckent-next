@@ -1,17 +1,17 @@
-import { criterionWithin } from '#capabilities/index.js';
-import type { ArtifactStore } from '#capabilities/index.js';
+import { criterionWithin, type ArtifactStore } from '#capabilities/index.js';
+import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { candidateEvidenceSchema, CandidateBindingError, type TargetQueueRecord, type VerifiedPrincipal } from '#domain/index.js';
 import { PrivateCandidateRunAdmission, type PrivateCandidateWorkspace, type RunAdmissionApplication, type RunStore } from '#engine/core/runs/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { TargetQueuePreparation, TargetQueueStore } from '#engine/core/effect/index.js';
 import { WorkspacePatchApplication } from './application.js';
-import { WorkspaceIntegrationApplication, type IntegrationStore, type IntegrationTarget } from './integration.js';
+import { WorkspaceIntegrationApplication } from './integration.js';
+import type { IntegrationStore, IntegrationTarget, IntegrationDeliveryTarget } from '#engine/core/workspace-patch-contract/index.js';
 import { queueCommandIds } from './queue-git.js';
 import { queueCommitMetadata } from './queue-custody.js';
 import { bindIntegrationCandidate } from './candidate-binding.js';
 import { queueVerificationGraph, assertQueueVerification } from './queue-verification.js';
-import type { AdoptionVerificationStore, AdoptionVerificationRequirement } from './verification.js';
-import type { IntegrationDeliveryTarget } from './delivery.js';
+import type { AdoptionVerificationStore, AdoptionVerificationRequirement } from '#engine/core/workspace-adoption/index.js';
 import { createHash } from 'node:crypto';
 const queueDigest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 interface QueuePreparationContext {
@@ -29,7 +29,7 @@ interface QueuePreparationPorts {
 }
 export function createWorkspaceQueuePreparation(c: QueuePreparationContext, store: IntegrationStore & Pick<RunStore, 'loadRun'> & AdoptionVerificationStore,
   patches: WorkspacePatchApplication, ports: QueuePreparationPorts): TargetQueuePreparation {
-  const verifier = { async verify() { return c.principal; } };
+  const verifier = verifiedPrincipal(c.principal);
   const expected = async (record: TargetQueueRecord) => {
     const original = await store.loadRun(record.request.identity.scopeId, record.request.identity.runId);
     if (!original || !c.registry) throw new CandidateBindingError('CANDIDATE_MISMATCH');
@@ -43,12 +43,12 @@ export function createWorkspaceQueuePreparation(c: QueuePreparationContext, stor
       const target = await ports.target(predecessor);
       const integrations = new WorkspaceIntegrationApplication(patches, target, verifier, c.authorization, c.artifacts, c.maxBytes);
       const checked = await integrations.check(record.request.identity), ids = queueCommandIds(record), proof = await expected(record);
-      const preview = await patches.preview(record.request.identity);
+      const preview = await patches.preview(record.request.identity, undefined, true);
       if (checked.observation.head !== preview.patch.baseCommit && c.bounds.revalidations === 0) throw new CandidateBindingError('CANDIDATE_MISMATCH');
       const prepared = await integrations.prepare({ schemaVersion: 1, identity: record.request.identity, commandId: ids.candidate, proposal: checked.proposal, ...(record.request.replacesCommandId ? { replacesCommandId: record.request.replacesCommandId } : {}) }, store);
       const plan = await ports.delivery.plan({ schemaVersion: 1, commandId: ids.delivery, identity: record.request.identity, integrationCommandId: ids.candidate },
-        prepared.manifest, (await patches.preview(record.request.identity)).patch, queueCommitMetadata(record, proof.original));
-      return bindIntegrationCandidate(record.request.target, (await patches.preview(record.request.identity)).patch, prepared.manifest, prepared.receipt, plan, proof.criteria, proof.profileFingerprint);
+        prepared.manifest, (await patches.preview(record.request.identity, undefined, true)).patch, queueCommitMetadata(record, proof.original));
+      return bindIntegrationCandidate(record.request.target, (await patches.preview(record.request.identity, undefined, true)).patch, prepared.manifest, prepared.receipt, plan, proof.criteria, proof.profileFingerprint);
     },
     async admitVerification(record) {
       const proof = await expected(record), ids = queueCommandIds(record), candidate = record.candidate!;

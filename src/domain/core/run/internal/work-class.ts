@@ -1,4 +1,4 @@
-import { persistedInteger, persistedString, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedInteger, persistedString, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { exactModelIdSchema, MODEL_TIERS, REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import asset from '../../../../../assets/native-coding/work-classes.json' with { type: 'json' };
@@ -66,7 +66,7 @@ const extendedRegistrySchema = currentRegistrySchema.extend({ schemaVersion: z.l
 const exactCandidateSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, effort: z.enum(REASONING_EFFORTS).optional() }).readonly();
 const tierRank = (tier: typeof MODEL_TIERS[number]) => MODEL_TIERS.indexOf(tier);
 const selectorList = (max: number) => z.array(identitySchema).min(1).max(max).readonly().refine(unique);
-/** M3 (MODEL-INDEPENDENCE-AUDIT, owner 2026-10-23 "model bağımsız"): a candidate SELECTOR names no model. Assignment expands it, in the tier/role
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). M3 (MODEL-INDEPENDENCE-AUDIT, owner 2026-10-23 "model bağımsız"): a candidate SELECTOR names no model. Assignment expands it, in the tier/role
  * registry's order, to the exact catalog models that hold `role` (S2 `model_roles`, the only tier/role owner), pass the optional tier, maker
  * (canonical, via the maker registry) and channel filters, are in the scope's catalog and active there; each expanded model then goes through
  * the same admission check as an exact candidate and the seal records the concrete id plus the expansion digest. A model that is new data
@@ -77,7 +77,7 @@ export const candidateSelectorSchema = z.strictObject({ role: identitySchema, mi
 }).refine(value => (value.makerIn === undefined || value.makerNotIn === undefined)
   && (value.minTier === undefined || value.maxTier === undefined || tierRank(value.minTier) <= tierRank(value.maxTier))).readonly();
 export type CandidateSelector = z.infer<typeof candidateSelectorSchema>;
-export type ExactCandidate = z.infer<typeof exactCandidateSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ExactCandidate = z.infer<typeof exactCandidateSchema>;
 export const isCandidateSelector = (entry: ExactCandidate | CandidateSelector): entry is CandidateSelector => 'role' in entry;
 const candidateKey = (entry: ExactCandidate | CandidateSelector) => isCandidateSelector(entry) ? JSON.stringify(entry) : JSON.stringify([entry.channelId, entry.modelId]);
 const policyShape = <T extends z.ZodTypeAny>(candidate: T) => z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
@@ -87,9 +87,9 @@ const policyShape = <T extends z.ZodTypeAny>(candidate: T) => z.strictObject({ i
   && (value.override === undefined || value.override.previousVersion < value.version)).readonly();
 /** Registry v4 lists: exact candidates only (kept readable unchanged). */
 const exactCandidatePolicySchema = policyShape(exactCandidateSchema);
-/** Registry v5 lists (M3): exact candidates and selectors, in one declared order. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Registry v5 lists (M3): exact candidates and selectors, in one declared order. */
 export const candidatePolicySchema = policyShape(z.union([exactCandidateSchema, candidateSelectorSchema]));
-export type CandidatePolicy = z.infer<typeof candidatePolicySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CandidatePolicy = z.infer<typeof candidatePolicySchema>;
 /** The tier/role registry role a system-assigned worker must hold, exact candidates included (M3 closes the list-only bypass); registry data. */
 export const WORK_CLASS_WORKER_ROLE: string = identitySchema.parse(assignmentData.workerRole);
 /** Bounds of candidate lists and their selector expansion (`work-class-limits.json`). */
@@ -109,16 +109,16 @@ export const workClassRegistrySchema = z.discriminatedUnion('schemaVersion', [le
     && (value.schemaVersion < 4 || ('candidatePolicies' in value && unique(value.candidatePolicies.map(row => row.id))))
     && (value.schemaVersion >= 3 || value.schemaVersion === 1 || value.classes.every(row => row.acceptanceProfile.evidenceTypes.every(type => !type.startsWith('ext:'))))).readonly();
 export type WorkClassRegistry = z.infer<typeof workClassRegistrySchema>;
-export type WorkClassAcceptanceProfile = z.infer<typeof workClassAcceptanceProfileSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkClassAcceptanceProfile = z.infer<typeof workClassAcceptanceProfileSchema>;
 /** Compatibility seed until the lead admits canonical business-neutral Core identities. */
 export const CORE_WORK_CLASSES: WorkClassRegistry = workClassRegistrySchema.parse(asset);
-export class WorkerEffortError extends Error {
-  constructor(readonly code: 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED' = 'WORKER_EFFORT_UNSUPPORTED') {
+export class WorkerEffortError extends CodedError {
+  constructor(override readonly code: 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED' = 'WORKER_EFFORT_UNSUPPORTED') {
     super(code); this.name = 'WorkerEffortError';
   }
 }
-export class WorkClassRegistryError extends Error {
-  constructor(readonly code: 'WORK_CLASS_OVERRIDE_DENIED' | 'WORK_CLASS_PARENT_INVALID' | 'WORK_CLASS_REGISTRY_LIMIT'
+export class WorkClassRegistryError extends CodedError {
+  constructor(override readonly code: 'WORK_CLASS_OVERRIDE_DENIED' | 'WORK_CLASS_PARENT_INVALID' | 'WORK_CLASS_REGISTRY_LIMIT'
     | 'WORK_CLASS_REVISION_INVALID' | 'WORK_CLASS_EVIDENCE_NOT_REGISTERED' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'WORK_CLASS_CANDIDATES_NOT_REGISTERED') { super(code); this.name = 'WorkClassRegistryError'; }
 }
 export type WorkClassPolicy = Readonly<{ revision: string; classes: readonly WorkClassRegistry['classes'][number][];

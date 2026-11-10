@@ -37,7 +37,7 @@ export function approvalWhat(record: ApprovalRecord, locale: Locale): string {
 }
 const actor = (record: ApprovalRecord) => terminalSafeText(`${record.request.requester.issuer}/${record.request.requester.subject}`);
 /** The state column: time left while waiting, the decision and how long ago, or expired. */
-export function approvalState(record: ApprovalRecord, nowMs: number, locale: Locale): string {
+function approvalState(record: ApprovalRecord, nowMs: number, locale: Locale): string {
   if (isPending(record, nowMs)) return t('cli.approval.state.pending', { left: formatDuration(record.request.expiresAt - nowMs, locale) }, locale);
   if (record.status === 'pending' || record.status === 'expired') return t('cli.approval.state.expired', {}, locale);
   const decision = record.decision!;

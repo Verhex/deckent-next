@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/index.js';
+import { counterSchema, persistedString, identitySchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { z } from 'zod';
 import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
@@ -12,12 +12,12 @@ const name = z.string().regex(SECRET_NAME_PATTERN);
 export const secretSetCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name,
   value: persistedString(z.string().min(1).max(SECRET_VALUE_MAX_BYTES)) }).readonly();
 export const secretDeleteCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name }).readonly();
-/** The answer: which backend changed; `removed` is whether a delete found the secret (null for a set). Never a value. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The answer: which backend changed; `removed` is whether a delete found the secret (null for a set). Never a value. */
 export const secretChangeResultSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name, action: z.enum(['set', 'delete']),
   backend: persistedString(z.string().min(1).max(128)), removed: z.boolean().nullable() }).readonly();
 export type SecretSetCommand = z.infer<typeof secretSetCommandSchema>;
 export type SecretDeleteCommand = z.infer<typeof secretDeleteCommandSchema>;
-export type SecretChangeResult = z.infer<typeof secretChangeResultSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SecretChangeResult = z.infer<typeof secretChangeResultSchema>;
 
 /** The client's check before anything is sent: typed name/value refusals that never echo the argument (`CLI_USAGE` for any other shape). */
 export function prepareSecretChange(operation: 'setSecret' | 'deleteSecret', input: SecretSetCommand | SecretDeleteCommand): SecretSetCommand | SecretDeleteCommand {
@@ -39,9 +39,9 @@ export function acceptSecretChangeResult(operation: 'setSecret' | 'deleteSecret'
 const storeId = persistedString(z.string().max(128)).regex(SECRET_STORE_ID_PATTERN);
 export const secretStoreSwitchCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
   confirmDowngrade: z.boolean(), confirmEnvMissing: z.boolean().optional() }).readonly();
-/** The answer names stores and counts only: never a secret name or value. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The answer names stores and counts only: never a secret name or value. */
 export const secretStoreSwitchResultSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, status: z.enum(['switched', 'current']),
-  from: storeId, to: storeId, entries: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), downgrade: z.boolean(), cleaned: z.boolean() }).readonly();
+  from: storeId, to: storeId, entries: counterSchema, downgrade: z.boolean(), cleaned: z.boolean() }).readonly();
 export type SecretStoreSwitchCommand = z.infer<typeof secretStoreSwitchCommandSchema>;
 /** An answer is trusted only for the switch that was asked (same scope and target); anything else is null (a transport fault). */
 export function acceptSecretStoreSwitchResult(command: SecretStoreSwitchCommand, answer: unknown) {

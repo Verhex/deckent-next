@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema, BEUSER_EVALUATOR_ALLOWED_PAIRS, policyRoleSchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -5,7 +6,7 @@ import asset from '../../../../../assets/beuser/system-policy-rows.json' with { 
 
 const localId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,25}$/u);
 const unique = (values: readonly string[]) => new Set(values).size === values.length;
-/** Fixed workload ceiling is code; an asset cannot grant another principal or relax the AI floor. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Fixed workload ceiling is code; an asset cannot grant another principal or relax the AI floor. */
 export const systemPolicyRowsSchema = z.strictObject({ schemaVersion: z.literal(1), id: identitySchema, revision: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   roles: z.array(policyRoleSchema).min(1).readonly(), bindings: z.array(z.strictObject({ id: localId, actor: z.literal('beuser-evaluator'),
     roles: z.array(localId).min(1).readonly() }).readonly()).min(1).readonly(),
@@ -37,6 +38,6 @@ export function loadSystemPolicyRows(input: unknown, expectedDigest?: string): R
   return Object.freeze({ data, digest });
 }
 export const CORE_SYSTEM_POLICY_ROWS = loadSystemPolicyRows(asset);
-export class SystemPolicyRowsError extends Error {
-  constructor(readonly code: 'SYSTEM_POLICY_ROWS_DIGEST' | 'SYSTEM_POLICY_ROWS_INVALID') { super(code); this.name = 'SystemPolicyRowsError'; }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class SystemPolicyRowsError extends CodedError {
+  constructor(override readonly code: 'SYSTEM_POLICY_ROWS_DIGEST' | 'SYSTEM_POLICY_ROWS_INVALID') { super(code); this.name = 'SystemPolicyRowsError'; }
 }

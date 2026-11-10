@@ -6,12 +6,16 @@ const fail = () => { throw new Error('WORKER_IMAGE_BUILD_INTERRUPTED'); };
 if (!isAbsolute(context) || !daemonId) fail();
 const plan = JSON.parse(readFileSync(join(context, 'plan.json'), 'utf8'));
 if (!/^[a-f0-9-]{36}$/.test(plan.probeOwner ?? '')) fail();
+// The docker-supervisor client table, pinned equal by tests/contracts/supervisor/command.test.ts; a pinned `--host` drops its conflicting selectors.
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(key)));
+const hostEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_TLS'].includes(key)));
 const run = args => {
-  const result = spawnSync('docker', args, { env, timeout: 5000, encoding: 'utf8', maxBuffer: 65536 });
+  const result = spawnSync('docker', args, { env: args[0] === '--host' ? hostEnv : env, timeout: 5000, encoding: 'utf8', maxBuffer: 65536 });
   if (result.error || result.status !== 0) fail(); return result.stdout.trim();
 };
 const endpoint = JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}']));
+// Only a local unix socket is pinned (choices.ts): the --host calls drop the TLS selectors, which a tcp endpoint would need.
+if (typeof endpoint !== 'string' || !endpoint.startsWith('unix:///') || endpoint.includes('\0')) fail();
 const docker = args => run(['--host', endpoint, ...args]);
 if (docker(['info', '--format', '{{.ID}}']) !== daemonId) fail();
 for (const name of readdirSync(context).filter(name => /^probe-\d+\.cid$/.test(name))) {

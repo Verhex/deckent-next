@@ -14,7 +14,7 @@ export const mcpPrincipalRef = (owner: { readonly issuer: string; readonly subje
   Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/mcp`), subject: identitySchema.parse(owner.subject) });
 export const isMcpPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/mcp');
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S5 (AUDITOR-MODEL, owner 2026-10-17 Q4): the read-only auditor, a workload identity only the composition root issues (no client channel
  * names it; a new principal kind waits for OG5). Its issuer suffix is the identity: a forged `os-user` auditor is still the auditor.
  */
@@ -85,8 +85,14 @@ export const catalogAggregatorPrincipal = (owner: { readonly issuer: string; rea
 export const beuserEvaluatorPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
   Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/beuser-evaluator`), subject: identitySchema.parse(owner.subject) });
 export const isBeuserEvaluatorPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/beuser-evaluator');
-/** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller or evaluator, recovery, catalog aggregator): never an installing person. */
+/** A reference that names a non-person actor by its transport identity (any workload issuer suffix above): never an installing person. */
 export const isWorkloadPrincipalRef = (ref: { readonly issuer: string }) => isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref)
   || isMemoryEvaluatorPrincipal(ref) || isRecoveryPrincipal(ref) || isCatalogAggregatorPrincipal(ref) || isBeuserEvaluatorPrincipal(ref);
-/** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous, memory-distiller/evaluator or recovery os-user is still AI. */
+/** Transport identity dominates assurance: a forged legacy `os-user` workload reference is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) => isWorkloadPrincipalRef(actor) || actor.assurance !== 'os-user';
+/**
+ * X4 (A39): the one principal comparison, with today's strict meaning: every field, in the same key and scope order. An order-free match
+ * would loosen it. Same only when both sides carry the same fields; a caller projects to the reference shape first.
+ */
+export const samePrincipalRef = (a: { readonly issuer: string; readonly subject: string }, b: { readonly issuer: string; readonly subject: string }) =>
+  JSON.stringify(a) === JSON.stringify(b);

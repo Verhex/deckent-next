@@ -10,7 +10,7 @@ export const MODEL_INGRESS_UNICODE_IDENTITY = Object.freeze({
 type Range = readonly [number, number];
 type EmojiProperty = 'Emoji' | 'Emoji_Presentation' | 'Emoji_Modifier' | 'Emoji_Modifier_Base';
 type JoiningType = 'D' | 'L' | 'R' | 'T' | 'C';
-export interface ModelIngressUnicodeData {
+interface ModelIngressUnicodeData {
   readonly schemaVersion: 1;
   readonly ucdVersion: '17.0.0';
   readonly emojiVersion: '17.0';
@@ -33,12 +33,12 @@ export interface ModelIngressUnicodeData {
 
 declare const contextBrand: unique symbol;
 /** Supplier-owned, deeply frozen facts for later pure-domain injection. No classifier/policy callback or raw text. */
-export type ModelIngressUnicodeContext = {
+type ModelIngressUnicodeContext = {
   readonly identity: typeof MODEL_INGRESS_UNICODE_IDENTITY;
   readonly data: ModelIngressUnicodeData;
   readonly [contextBrand]: true;
 };
-export type ModelIngressContextResult =
+type ModelIngressContextResult =
   | { readonly status: 'ready'; readonly context: ModelIngressUnicodeContext }
   | { readonly status: 'unavailable'; readonly reason: 'missing-data' | 'invalid-input' | 'data-hash-mismatch' | 'invalid-data' };
 

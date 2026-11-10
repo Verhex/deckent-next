@@ -9,7 +9,7 @@ import type { ToolchainCurrencyReport } from './contract.js';
  * profile versions a built image yields. Nothing here names a vendor: providers come from the proposal, which comes from the registry.
  */
 export type ToolchainRefreshTrigger = 'startup' | 'interval';
-export type ToolchainRefreshPolicy = Readonly<{ mode: 'off' | 'propose' | 'auto'; atStartup: boolean; intervalMs: number }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainRefreshPolicy = Readonly<{ mode: 'off' | 'propose' | 'auto'; atStartup: boolean; intervalMs: number }>;
 /** A build is started only in `auto` mode; a start trigger also needs `atStartup`, an interval trigger a positive `intervalMs` (0 = off). */
 export function refreshTriggerAllowed(policy: ToolchainRefreshPolicy, trigger: ToolchainRefreshTrigger): boolean {
   if (policy.mode !== 'auto') return false;
@@ -31,7 +31,7 @@ export function failedContextsToPrune(names: readonly string[], keep: number): s
   return failed.slice(Math.max(1, keep)).map(entry => entry.name);
 }
 
-export type WorkerLineage = Readonly<{ recipe: unknown; dockerfile: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerLineage = Readonly<{ recipe: unknown; dockerfile: string }>;
 const counterOf = (recipe: unknown): number => { const id = (recipe as { imageVersion?: unknown } | null)?.imageVersion; const match = typeof id === 'string' ? /^r([1-9][0-9]*)-/.exec(id) : null; return match ? Number(match[1]) : 0; };
 const stripVersions = (recipe: unknown) => JSON.stringify({ ...(recipe as object), imageVersion: null, previousVersion: null });
 const stripHistory = (dockerfile: string) => dockerfile.split('\n').filter(line => !line.startsWith('# version ')).join('\n');
@@ -70,7 +70,7 @@ export const toolchainRefreshStateSchema = z.strictObject({ schemaVersion: z.lit
   imageVersion: z.string().nullable(), imageId: imageDigest.nullable(), staleProviders: z.array(identitySchema).readonly(),
   appliedProfiles: persistedInteger().min(0).min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), reason: persistedString(z.string().max(128)).nullable() }).readonly();
 export type ToolchainRefreshState = z.infer<typeof toolchainRefreshStateSchema>;
-export type ToolchainRefreshStatus = 'updating' | 'current' | 'failed' | 'unknown';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainRefreshStatus = 'updating' | 'current' | 'failed' | 'unknown';
 
 /** True while a refresh is in flight and still inside its own bound: admission then carries a warning instead of refusing a stale pin. */
 export function refreshInProgress(state: ToolchainRefreshState | null, nowMs: number): boolean {
@@ -104,7 +104,7 @@ function repinParameters(parameters: Record<string, JsonValue>, to: { cliVersion
   if (preflight && typeof view.imageId === 'string') { view.imageId = to.imageId; preflight['cliVersion'] = to.cliVersion; return true; }
   return false;
 }
-export type RegistryRevision = Readonly<{ registry: ExecutionRegistry; applied: readonly Readonly<{ profile: string; from: number; to: number }>[] }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RegistryRevision = Readonly<{ registry: ExecutionRegistry; applied: readonly Readonly<{ profile: string; from: number; to: number }>[] }>;
 /**
  * The exact new execution registry for a built image: every proposed profile gets a NEW version (highest existing + 1) carrying the new
  * image id and CLI pin, and the task kinds that used the old version point at the new one. Old versions stay registered, so Runs already

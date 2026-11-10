@@ -730,6 +730,22 @@ it('K15C: host warning is localized and survives long previews; sandbox and abse
     const shell = make(language);
     // A separate state directory keeps the project itself outside the named-root hard floor.
     const global = join(scope.root, `k15c-global-${language}`); await mkdir(global);
+    const previousHome = process.env['DECKENT_HOME'];
+    try {
+      process.env['DECKENT_HOME'] = global;
+      const protectedShell = make(language, [global]);
+      for (const command of ['cat "$DECKENT_HOME/new"', 'cat "${DECKENT_HOME}/new"', 'printf x > "$DECKENT_HOME/new"',
+        'target=${DECKENT_HOME}/new printf x', 'cat $DECKENT_HOME/headless/*/auth.json']) {
+        expect(await protectedShell.plan('run_shell', { command }), command).toMatchObject({ ok: false,
+          text: expect.stringContaining(language === 'en' ? "PRODUCT_STATE_PROTECTED; Deckent's own state cannot be opened by any approval."
+            : 'PRODUCT_STATE_PROTECTED; Hiçbir onay Deckent durumunu açamaz.') });
+      }
+      for (const command of ['cat "$DECKENT_HOME_SUFFIX/new"', 'printf DECKENT_HOME', 'DECKENT_HOME=ordinary printf ok']) {
+        expect(await protectedShell.plan('run_shell', { command }), command).toMatchObject({ ok: true });
+      }
+    } finally {
+      if (previousHome === undefined) delete process.env['DECKENT_HOME']; else process.env['DECKENT_HOME'] = previousHome;
+    }
     const planned = make(language, [global]), args = { command: `printf '%s' '$UNRESOLVED${'x'.repeat(16_000)}'` };
     expect(await planned.plan('run_shell', args)).toMatchObject({ ok: true });
     expect(planned.tier('run_shell', args)).toBe('always-ask');

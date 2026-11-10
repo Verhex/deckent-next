@@ -13,7 +13,7 @@ import { createTargetQueueService, targetQueueKey, RUNTIME_SERVICE_SCHEMA_VERSIO
   queueGenerationRef, type QueueServiceContext, type TargetBatchEffects, type TargetQueuePreparation } from '#engine/index.js';
 import { candidateBindingSchema, candidateEvidenceSchema, type TargetQueueRecord } from '#domain/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { queueConfigRefusal } from '#surfaces/core/terminal-delivery/index.js';
+import { queueConfigRefusal } from '#surfaces/core/delivery-port/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 // Astra 2607 F1/F2 at the real boundary: a real Git target repository with the shipped generation producer (GitQueueTarget) and a

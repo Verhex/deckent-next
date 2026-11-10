@@ -1,5 +1,5 @@
 import { persistedString, persistedUuid, environmentRequirementsSchema, executionProfileDefinitionSchema, frozenHiddenPaths, type ExecutionProfileDefinition } from '#domain/index.js';
-import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { CodedError, DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
@@ -11,9 +11,9 @@ const person = z.strictObject({ issuer: persistedString(z.string().min(1).max(25
 /** U9-7 (v1): the worker's model traffic goes through the person's own Sign in with ChatGPT connection via the private host relay, never through a
  * credential in the worker. Nonsecret only: the connection and the person whose plan it is. Instruction discovery is the compiled native profile's
  * own (U9F: no relay-specific hidden set; one resolver, `frozenHiddenPaths`). */
-export const siwcWorkerProfileSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(), owner: person }).readonly();
+const siwcWorkerProfileSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(), owner: person }).readonly();
 
-const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
+const taskParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
   nativeSubscription: nativeSubscriptionSchema.optional(), billingAxis: z.literal('local').optional(), siwcWorker: siwcWorkerProfileSchema.optional(),
   outputFiles: dockerOutputFilesSchema.optional(),
   readOnlyMounts: dockerReadOnlyMountsSchema.optional(),
@@ -21,10 +21,13 @@ const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ execu
   environment: environmentRequirementsSchema.optional(),
   argv: z.array(z.string().refine(value => !value.includes(String.fromCharCode(0)))).min(1)
     .refine(argv => (argv[0]?.length ?? 0) > 0).readonly(),
-}).strict().readonly();
+}).strict();
+/** R8b (owner D1b): a CLI worker runs in the host sandbox, never an image, so its base is the same task data with `imageId` optional. */
+const hostSandboxTaskParametersSchema = taskParametersSchema.extend({ imageId: taskParametersSchema.shape.imageId.optional() }).readonly();
 
-export class DockerTaskProfileError extends Error {
-  constructor(readonly code = 'DOCKER_TASK_PROFILE_INVALID') { super(code); this.name = 'DockerTaskProfileError'; }
+const DOCKER_TASK_ADAPTER = Object.freeze({ id: 'docker', version: 2 });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class DockerTaskProfileError extends CodedError {
+  constructor(override readonly code = 'DOCKER_TASK_PROFILE_INVALID') { super(code); this.name = 'DockerTaskProfileError'; }
 }
 
 /** Installed registry validator for task templates. Host executable, workspace and OS identity are
@@ -34,13 +37,19 @@ export function validateDockerTaskProfile(input: ExecutionProfileDefinition): un
   return undefined;
 }
 
-/** Materialize only pinned task data. Host executable and OS/workspace custody stay in composition. */
+/** Materialize only pinned task data. Host executable and OS/workspace custody stay in composition. A Docker task always names its image. */
 export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
+  const resolved = resolveHostSandboxTaskProfile(input);
+  if (resolved.options.imageId === undefined) throw new DockerTaskProfileError();
+  return resolved as typeof resolved & { readonly options: { readonly imageId: string } };
+}
+/** The same pinned task data for a base the host sandbox runs (a connected CLI worker's): the image is optional. */
+export function resolveHostSandboxTaskProfile(input: ExecutionProfileDefinition) {
   const profile = executionProfileDefinitionSchema.safeParse(input);
-  if (!profile.success || profile.data.adapter.id !== 'docker' || profile.data.adapter.version !== 2) {
+  if (!profile.success || profile.data.adapter.id !== DOCKER_TASK_ADAPTER.id || profile.data.adapter.version !== DOCKER_TASK_ADAPTER.version) {
     throw new DockerTaskProfileError();
   }
-  const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
+  const parsed = hostSandboxTaskParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
   // `billingAxis: 'local'` declares no provider connection (spending class only); a subscription binding opens one, so both are refused.
   const { argv, nativeSubscription, readOnlyMounts, billingAxis, environment, siwcWorker, ...options } = parsed.data;

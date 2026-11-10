@@ -1,12 +1,16 @@
 {
- "note": "SHA-256 of JSON.stringify(connectionAdapter(...)) for every shipped seed model of every seeded kind at its default address, captured on a55/integrate 59723255d before M4 (new profile and reconnect with an existing definition); error rows name the typed refusal.",
+ "note": "SHA-256 of JSON.stringify(connectionAdapter(...)) for every shipped seed model of every seeded kind at its default address, captured on a55/integrate 59723255d before M4 (new profile and reconnect with an existing definition); error rows name the typed refusal. alpha.64 CATALOG adds only the unpriced Sonnet 4.5 retirement row's existing TARIFF_UNKNOWN refusals; all pre-M4 digests remain unchanged. FABLE52 adds only the two 5.2 connection digests from the official 2026-11-09 flat tariff; no old digest changes.",
  "outputs": {
   "anthropic-api|claude-fable-5-1|new": "0f3aa2d92cb4ca28969d6e99f192477ffef24b12b31a2f4824feb5409349d55e",
   "anthropic-api|claude-fable-5-1|existing": "7bbae28338e4f83a4fdd5d5387154647f86ee86ba7f849be20db27459b3e8968",
+  "anthropic-api|claude-fable-5-2|new": "6442d797b560d6a1024acdd5c508459e8679726678e8ba155e99f863c3b69330",
+  "anthropic-api|claude-fable-5-2|existing": "95d74d9a885bcbcd8a1560703c98ea9c49e34094a97c1148d4652247ba595164",
   "anthropic-api|claude-haiku-5-5|new": "32e107d64cdacbb37fabb578aeb27e7b8494336ab1f98e51cb5e0e1a90e171d2",
   "anthropic-api|claude-haiku-5-5|existing": "cb0018bcdd9cef59758bc40e0e2d1752713873052cf2a43a6f021327fd145809",
   "anthropic-api|claude-opus-5-5|new": "1df15a87cd05ffca4f68ea686bd1273fc3a37a69dc8bcdad1ab0c5f278714d49",
   "anthropic-api|claude-opus-5-5|existing": "58ec158413ff49d630c2e76433a4b6841a5e02c96d996154d4dd5677c5b41548",
+  "anthropic-api|claude-sonnet-4-5-20250929|new": "error:MODEL_CONNECT_TARIFF_UNKNOWN",
+  "anthropic-api|claude-sonnet-4-5-20250929|existing": "error:MODEL_CONNECT_TARIFF_UNKNOWN",
   "anthropic-api|claude-sonnet-5-5|new": "d25d6baec58d1526efa861f0771f8f15e9489059800a9c12c1220fcb231196b7",
   "anthropic-api|claude-sonnet-5-5|existing": "39b7323d81aec09c23de508f17512ce8eda3ed16281835db2a8474087a1c54bf",
   "openai-api|gpt-6-astra|new": "2cb004513b5e2b343267818936136587828ecd73c69fb47fd1205bad21fc511a",

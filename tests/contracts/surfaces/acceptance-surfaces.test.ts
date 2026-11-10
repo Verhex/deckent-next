@@ -68,7 +68,7 @@ it.skipIf(process.platform === 'win32').each([{ present: true, refused: false },
   const { join } = await import('node:path');
   const { DatabaseSync } = await import('node:sqlite');
   const { inspectRun } = await import('../../../src/index.js');
-  const { openConfiguredAttemptStore } = await import('../../../src/composition/core/storage/index.js');
+  const { openConfiguredAttemptStore } = await import('../support/configured-open.js');
   const { readMonitorLedger } = await import('#adapters/index.js');
   const { clearConfigCache } = await import('#platform/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-acceptance-surface-')), project = join(root, 'project'), data = join(root, 'data');

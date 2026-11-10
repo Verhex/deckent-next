@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { once } from 'node:events';
 
@@ -11,11 +12,11 @@ export function refuseBridge(response: ServerResponse, status: number, reason: s
 /** Bounded before JSON parsing, including chunked uploads; never retain a rejected body. */
 export async function bridgeBody(request: IncomingMessage, maxBytes: number, count: (bytes: number) => boolean): Promise<unknown> {
   const length = request.headers['content-length'];
-  if (length !== undefined && (!/^\d+$/u.test(length) || Number(length) > maxBytes)) throw new Error('NATIVE_BRIDGE_BODY_LIMIT');
+  if (length !== undefined && (!/^\d+$/u.test(length) || Number(length) > maxBytes)) throw new CodedError('NATIVE_BRIDGE_BODY_LIMIT');
   const chunks: Buffer[] = []; let size = 0;
   await new Promise<void>((resolve, reject) => {
     const clean = () => { request.off('data', data); request.off('end', end); request.off('error', error); request.off('aborted', aborted); };
-    const error = () => { clean(); reject(new Error('NATIVE_BRIDGE_BODY_LIMIT')); };
+    const error = () => { clean(); reject(new CodedError('NATIVE_BRIDGE_BODY_LIMIT')); };
     const aborted = () => error();
     const end = () => { clean(); resolve(); };
     const data = (bytes: Buffer) => {

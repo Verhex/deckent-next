@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '#platform/index.js';
 import type { BeuserTranscriptEntry } from '#domain/index.js';
 import type { BeuserContext } from '#engine/index.js';
 import type { RenderedScreen } from './screen.js';
@@ -8,7 +8,8 @@ export interface HarnessAction { readonly kind: 'look' | 'type' | 'press' | 'wai
 export interface HarnessProcess { readonly state: 'ready' | 'eof'; readonly exitCode: number | null }
 export interface HarnessEvent { readonly entry: BeuserTranscriptEntry; readonly screen?: RenderedScreen; readonly action?: HarnessAction; readonly process?: HarnessProcess }
 export type HarnessSink = (context: BeuserContext, event: HarnessEvent) => Promise<void>;
-export const surfaceDigest = (text: string): string => createHash('sha256').update(text).digest('hex');
+/** @deprecated Use sha256 from the platform; retained for one release. */
+export const surfaceDigest = sha256;
 export class SurfaceCapture {
   private sequence = 0;
   private bytes = 0;

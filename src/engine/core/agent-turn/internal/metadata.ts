@@ -4,7 +4,7 @@ export function canonicalTurnRequest(value: unknown): string {
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalTurnRequest((value as Record<string, unknown>)[key])}`).join(',')}}`;
   return JSON.stringify(value);
 }
-export const TURN_NOTE_MAX_CHARS = 4_096; // The result note's bound (`chatTurnResultSchema`).
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const TURN_NOTE_MAX_CHARS = 4_096; // The result note's bound (`chatTurnResultSchema`).
 const resultBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 /**
  * A turn result within `capacity` serialized bytes (Astra 2888/2889). The note is held to its bound; then, while the whole result does not
@@ -34,7 +34,7 @@ export function chatTurnRoundFailureState(outcome: ModelInvocationOutcome, rejec
     : `${evidence.reason}${evidence.httpStatus !== null ? `, HTTP ${evidence.httpStatus}` : ''}`}${kind ? ` (${kind})` : ''}`;
 }
 
-/** Why a provider refused a call, when it says so in a known way (SECRET-AT-REST, owner 2026-10-08): the API key was refused (invalid,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Why a provider refused a call, when it says so in a known way (SECRET-AT-REST, owner 2026-10-08): the API key was refused (invalid,
  * expired or revoked), the key may not use this model/workspace, the account's spend limit is reached, or the rate limit is hit. Without
  * the error body (a turn sees only the evidence summary) a 429 is `limit-reached` — spend or rate, not guessed — and a 400 stays
  * unclassified. The names are stable tokens shared by the turn note, the terminal hint and the T4 connection test; limits stay the

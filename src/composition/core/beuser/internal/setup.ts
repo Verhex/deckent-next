@@ -1,3 +1,4 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -5,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import personas from '../../../../../assets/beuser/personas.json' with { type: 'json' };
 import calibration from '../../../../../assets/beuser/calibration/manifest.json' with { type: 'json' };
 import controllerData from '../../../../../assets/beuser/controller.json' with { type: 'json' };
-import { executionRegistrySchema, modelInvocationProfileSchema } from '#domain/index.js';
+import { executionRegistrySchema } from '#domain/index.js';
 import { inspectPackagedBeuserJourney, readInstallationProfileFile, readBeuserCandidate, readMeasuredBeuserRecord, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
-import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest, PoolControlPolicyAuthorization, assertPoolControlAllowed } from '#engine/index.js';
+import { configuredInvocationProfiles, inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest, PoolControlPolicyAuthorization, assertPoolControlAllowed } from '#engine/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { CONFIG_FIELDS, ErrorRegistry, globalStateRoot, loadConfig, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { configPersonWitness, createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -19,9 +20,9 @@ import { withConfiguredBeuserWalkCustody } from './custody.js';
 
 /** This package's own build: the default candidate of `deckent beuser walk` (owner S9). A source checkout has no staged manifest and is refused. */
 export const BEUSER_PACKAGE_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
-export interface BeuserSetupInput { readonly scopeId: string; readonly profile: string; readonly apply: boolean; readonly expect?: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserSetupInput { readonly scopeId: string; readonly profile: string; readonly apply: boolean; readonly expect?: string }
 /** One-command walk (owner S9): the controller is a private Deckent installation at `<global state root>/beuser-controller`; its person connects models there. */
-export interface BeuserWalkSetupInput { readonly journey: string; readonly candidate?: string | undefined; readonly scopeId?: string | undefined;
+interface BeuserWalkSetupInput { readonly journey: string; readonly candidate?: string | undefined; readonly scopeId?: string | undefined;
   readonly walkers?: readonly { readonly channelId: string; readonly modelId: string }[] | undefined;
   readonly evaluator?: { readonly channelId: string; readonly modelId: string } | undefined; readonly apply: boolean; readonly expect?: string | undefined }
 /** Person-selected, bounded execution data. ConfigApplication remains the only config writer; no model or policy grants are created here. */
@@ -55,8 +56,8 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
   await withConfiguredBeuserWalkCustody(root, scopeId, options, async () => undefined);
   const models = await modelSources(c, async sources => {
     const rows = (await inspectRoleModelsInScope(sources, 'beuser-walker', scopeId, Date.now())).models;
-    const profiles = ((c.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
-    const available = rows.filter(row => row.active && roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], scopeId, row));
+    const profiles = configuredInvocationProfiles(c.config);
+    const available = rows.filter(row => row.active && roleModelInvocationReference(sources, { profiles: configuredInvocationProfiles(c.config) }, scopeId, row));
     const suggestions = new Set<string>(), seeds = await readdir(join(BEUSER_PACKAGE_ROOT, 'assets', 'model-catalog'));
     for (const channelId of new Set(available.map(row => row.channelId))) {
       const catalog = seeds.includes(`${channelId}.json`)
@@ -67,7 +68,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
       suggestions.add(JSON.stringify([channelId, modelId]));
     }
     return available.map(({ channelId, modelId }) => {
-      const reference = roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], scopeId, { channelId, modelId });
+      const reference = roleModelInvocationReference(sources, { profiles: configuredInvocationProfiles(c.config) }, scopeId, { channelId, modelId });
       const profile = profiles.find(row => row.scopeId === scopeId && isDeepStrictEqual(row.reference, reference, { skipPrototype: true }));
       return { channelId, modelId, recommended: suggestions.has(JSON.stringify([channelId, modelId])), subscription: !!profile && profile.schemaVersion !== 1 && profile.billingAxis === 'subscription' };
     });
@@ -145,7 +146,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
       for (const role of ['beuser-walker', 'beuser-evaluator'] as const) {
         const target = p.choices[role], held = await inspectRoleModelsInScope(sources, role, input.scopeId, Date.now());
         if (!held.models.some(row => row.channelId === target.channelId && row.modelId === target.modelId && row.active)
-          || !roleModelInvocationReference(sources, c.config['provider_invocation_profiles'], input.scopeId, target)) throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE');
+          || !roleModelInvocationReference(sources, { profiles: configuredInvocationProfiles(c.config) }, input.scopeId, target)) throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE');
       }
     }
   });
@@ -166,7 +167,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   return withConfiguredBeuserWalkCustody(root, input.scopeId, options, async () => {
   const capacity = { executionSlots: installed.executionSlots, inFlightSlots: installed.inFlightSlots };
   if (replace && heldPool && !isDeepStrictEqual(heldPool.capacity, capacity, { skipPrototype: true })) {
-    assertPoolControlAllowed(await new PoolControlPolicyAuthorization({ load: async () => c.document })
+    assertPoolControlAllowed(await new PoolControlPolicyAuthorization(contextPolicySource(c, c.document))
       .decide('set-capacity', admitted.poolId, input.scopeId, c.principal));
   }
   let status = 'current';

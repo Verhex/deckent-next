@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { existsSync } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -69,10 +70,11 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
     const args = bubblewrapArguments((view as { view: Parameters<typeof bubblewrapArguments>[0] }).view);
     expect(args.join(' ')).toContain(`--overlay-src ${f.project} --overlay ${f.writeSet.upper} ${f.writeSet.work} ${f.project}`);
     expect(args.join(' ')).not.toContain(`--bind ${f.project} ${f.project}`);
-    const inside = join(f.project, '.deckent-writes');
-    await mkdir(join(inside, 'upper'), { recursive: true, mode: 0o700 }); await mkdir(join(inside, 'work'), { mode: 0o700 });
-    expect(await resolveBubblewrapView(f.layout, {}, {}, { writeSet: { upper: join(inside, 'upper'), work: join(inside, 'work') } }))
-      .toEqual({ ok: false, reason: 'the write set directories overlap the project' });
+    for (const inside of [join(f.project, '.deckent-writes'), join(f.project, '..x-writes')]) { // KG12 F2: a child named `..x` is inside too
+      await mkdir(join(inside, 'upper'), { recursive: true, mode: 0o700 }); await mkdir(join(inside, 'work'), { mode: 0o700 });
+      expect(await resolveBubblewrapView(f.layout, {}, {}, { writeSet: { upper: join(inside, 'upper'), work: join(inside, 'work') } }))
+        .toEqual({ ok: false, reason: 'the write set directories overlap the project' });
+    }
   }, 60_000);
 
   it('writes stay aside; the scan reads creations, changes, deletions, opaque directories, renames and refuses what cannot be applied', async () => {
@@ -403,4 +405,20 @@ describe('ensureWorkspaceParents makes only decided, non-floor directories — a
     // Existing directories are no decision: nothing new is needed, `admit` is never asked.
     expect(await ensureWorkspaceParents(scope, 'n1/n2/g', () => 0o755, () => { throw new Error('asked'); })).toBe(true);
   });
+});
+
+
+it('ERR-M: an unbranded uncertain effect stops the write set; a coded refusal still skips only its entry', async () => {
+  const run = async (failure: unknown) => {
+    const executed: string[] = [];
+    const report = await applySandboxWriteSet({ scan: { ok: true, refused: [], conflicts: [], emptyDirectories: [], directoryModes: new Map(), newDirectories: new Set(),
+      changes: ['one', 'two'].map(rel => ({ kind: 'delete' as const, rel, lowerVersion: 'v' })) }, signal: new AbortController().signal,
+      classify: () => 'edit', ensureParents: async () => true, decider: { decide: async () => ({ ok: true, gate: { async admit() {} } }) },
+      execute: async change => { executed.push(change.rel); if (change.rel === 'one') throw failure; } });
+    return { executed, applied: report.applied, unknown: report.unknown, stopped: report.stopped, notApplied: report.notApplied };
+  };
+  for (const failure of [new CodedError('EFFECT_OUTCOME_UNKNOWN'), { code: 'EFFECT_OUTCOME_UNKNOWN' }])
+    expect(await run(failure)).toEqual({ executed: ['one'], applied: [], unknown: ['one'], stopped: true, notApplied: [] });
+  expect(await run(new CodedError('POLICY_DENIED'))).toEqual({ executed: ['one', 'two'], applied: ['two'], unknown: [], stopped: false,
+    notApplied: [{ rel: 'one', reason: 'denied-by-policy' }] });
 });

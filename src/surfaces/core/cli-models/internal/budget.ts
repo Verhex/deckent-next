@@ -10,7 +10,7 @@ import choices from './budget-choices.json' with { type: 'json' };
  * 2026-10-25): the preset a first budget card offers highlighted; the person confirms or changes it.
  */
 export const SCOPE_BUDGET_CHOICES: Readonly<{ presetsUsd: readonly number[]; defaultPresetUsd: number; minUsd: number; maxUsd: number; stepUsd: number; minorUnitsPerUsd: number }> = Object.freeze(choices);
-export type ScopeBudgetSurface = 'cli' | 'terminal';
+type ScopeBudgetSurface = 'cli' | 'terminal';
 
 /** Whole dollars within the bounds, or null. */
 export function scopeBudgetUsd(value: unknown): number | null {

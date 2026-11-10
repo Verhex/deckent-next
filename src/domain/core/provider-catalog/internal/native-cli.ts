@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import registry from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
-import { workspaceHiddenPathsSchema, type WorkspaceHiddenPaths } from '#domain/core/primitives/index.js';
+import { CodedError, workspaceHiddenPathsSchema, type WorkspaceHiddenPaths } from '#domain/core/primitives/index.js';
 
 /** Pure provider vocabulary from the versioned registry asset; no adapter dependency or I/O. */
 export function providerIdSchema<const Id extends string>(ids: readonly Id[]) {
@@ -8,8 +8,8 @@ export function providerIdSchema<const Id extends string>(ids: readonly Id[]) {
   return z.enum(ids as [Id, ...Id[]]);
 }
 /** The vocabulary checks the registry envelope before startup derives ids; stale assets get the same typed refusal as capability loading. */
-export class NativeCliRegistryError extends Error {
-  readonly code = 'NATIVE_CLI_REGISTRY_INVALID';
+export class NativeCliRegistryError extends CodedError {
+  override readonly code = 'NATIVE_CLI_REGISTRY_INVALID';
   constructor() { super('NATIVE_CLI_REGISTRY_INVALID'); this.name = 'NativeCliRegistryError'; }
 }
 const vocabularyEnvelope = z.strictObject({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.unknown().optional())
@@ -21,7 +21,7 @@ export function nativeCliVocabulary(input: unknown): readonly string[] {
   if (!parsed.success) throw new NativeCliRegistryError();
   return Object.freeze(Object.keys(parsed.data.adapters));
 }
-/** Registry-derived id (a string whose values come from the asset at load); the published declaration must not reference the JSON
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Registry-derived id (a string whose values come from the asset at load); the published declaration must not reference the JSON
  * module (consumers resolve our `.d.ts` with `resolveJsonModule: false`), so the type is the vocabulary's element type, not `keyof typeof`. */
 export type NativeCliId = string;
 export const nativeCliIds: readonly [NativeCliId, ...NativeCliId[]] = nativeCliVocabulary(registry) as readonly [NativeCliId, ...NativeCliId[]];

@@ -49,12 +49,8 @@ export function nativeWorkerToolLifetime() {
   let ready!: (session: ToolSessionPort) => void, failed!: (error: unknown) => void, finish!: () => void;
   const opened = new Promise<ToolSessionPort>((resolve, reject) => { ready = resolve; failed = reject; });
   const finished = new Promise<void>(resolve => { finish = resolve; });
-  return { opened, finished, ready, failed, async close<K extends 'cancelled' | 'revoked'>(session: ToolSessionPort, turn: Promise<unknown>, kind: K) {
-    await session.cancel(); finish(); await turn;
-    return { ...await session.cancel(), kind };
+  return { opened, finished, ready, failed, async close<T>(close: () => Promise<T>, turn: Promise<unknown>) {
+    await close(); finish(); await turn;
+    return close();
   } };
 }
-
-/** Policy rechecks spend the original wall/monotonic approval budget too. */
-export const nativeWorkerApprovalExpired = (expiresAt: number, started: { wallMs: number; monotonicMs: number }, now: { wallMs: number; monotonicMs: number }) =>
-  now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs;

@@ -1,6 +1,5 @@
 import { recordConfiguredProviderFailure } from './diagnostic.js';
-import { modelInvocationProfileSchema } from '#domain/index.js';
-import { ModelInvocationPolicyAuthorization, openInvocationWorkspaceSelection } from '#engine/index.js';
+import { configuredInvocationProfiles, ModelInvocationPolicyAuthorization, openInvocationWorkspaceSelection } from '#engine/index.js';
 import { listProviderWorkspaces, ProviderModelListError, providerProfileWorkspaceOffer, PROVIDER_CONNECT_KINDS } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { projectCredentialResolver } from '#composition/core/secrets/index.js';
@@ -11,7 +10,7 @@ export async function openConfiguredProviderWorkspaces(root: string, scopeId: st
   return openInvocationWorkspaceSelection(scopeId, {
     async read() { const current = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true, heal: false }, 'read');
       return { ...current, identity: JSON.stringify([current.layout, current.installationId, current.projectId]),
-        profiles: ((current.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value)) }; },
+        profiles: configuredInvocationProfiles(current.config) }; },
     eligible: profile => PROVIDER_CONNECT_KINDS.some(kind => kind.connect?.workspaceList && kind.connect.adapter === profile.adapter.id
       && kind.endpoint.default !== null && new URL(kind.connect.chatPath!, kind.endpoint.default).href === profile.adapter.definition['endpoint']),
     authorize: async (profile, current) => { await new ModelInvocationPolicyAuthorization({ async load() { return current.document; } }).authorize('invoke', { scopeId, reference: profile.reference }, current.principal); },

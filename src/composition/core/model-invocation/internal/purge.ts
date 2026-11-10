@@ -1,5 +1,5 @@
 import { ModelInvocationError, modelInvocationPurgeCommandInputSchema, type ModelInvocationPurgeCommand } from '#domain/index.js';
-import { ModelInvocationPurgeApplication, ModelInvocationPolicyAuthorization, type ModelInvocationDelivery } from '#engine/index.js';
+import { verifiedPrincipal, ModelInvocationPurgeApplication, ModelInvocationPolicyAuthorization, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, type LocalPeerIdentity } from '#adapters/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -13,7 +13,7 @@ export async function purgePeerConfiguredModelInvocationContent(projectRoot: str
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data as ModelInvocationPurgeCommand;
     const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write'), clock = new SystemTrustedClock();
-    return await new ModelInvocationPurgeApplication({ async verify() { return context.principal; } },
+    return await new ModelInvocationPurgeApplication(verifiedPrincipal(context.principal),
       new ModelInvocationPolicyAuthorization(context.policy),
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
       { now: () => clock.sample().wallMs }).purge(command, undefined, delivery);

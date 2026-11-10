@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import catalogData from './catalog.json' with { type: 'json' };
@@ -6,10 +7,10 @@ const version = z.string().regex(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/);
 const npmMechanism = z.strictObject({ get mechanism() { return z.literal('npm'); }, get package() { return z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/); },
   get versionPattern() { return persistedString(z.string().min(1)); }, get update() { return persistedString(z.string().min(1)); }, get selfUpdateControl() { return persistedString(z.string().min(1)); } });
 const installerMechanism = z.strictObject({ get mechanism() { return z.literal('installer-script'); }, get versionPattern() { return persistedString(z.string().min(1)); }, get update() { return persistedString(z.string().min(1)); }, get note() { return persistedString(z.string().min(1)); } });
-export const toolchainCatalogSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get note() { return z.string(); },
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const toolchainCatalogSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get note() { return z.string(); },
   get providers() { return z.record(identitySchema, z.discriminatedUnion('mechanism', [npmMechanism, installerMechanism])); } }).readonly();
-export type ToolchainCatalog = z.infer<typeof toolchainCatalogSchema>;
-export type ToolchainMechanism = ToolchainCatalog['providers'][string];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainCatalog = z.infer<typeof toolchainCatalogSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainMechanism = ToolchainCatalog['providers'][string];
 export const toolchainCatalog: ToolchainCatalog = toolchainCatalogSchema.parse(catalogData);
 
 /** One admitted worker toolchain pin: the CLI version string a prepared profile requires at preflight. */
@@ -18,30 +19,30 @@ export const admittedToolchainSchema = z.strictObject({ profile: profileReferenc
   provider: identitySchema, get cliVersion() { return persistedString(z.string().min(1).max(128)); } }).readonly();
 export type AdmittedToolchain = z.infer<typeof admittedToolchainSchema>;
 
-export const publishedVersionSchema = z.strictObject({ version, get source() { return persistedString(z.string().min(1)); }, get observedAt() { return persistedDateTime(); } }).readonly();
-export type PublishedVersion = z.infer<typeof publishedVersionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const publishedVersionSchema = z.strictObject({ version, get source() { return persistedString(z.string().min(1)); }, get observedAt() { return persistedDateTime(); } }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type PublishedVersion = z.infer<typeof publishedVersionSchema>;
 /** Latest-version lookup outcome per provider. `unavailable` carries a bounded reason code only. */
 export type LatestLookup = Readonly<{ kind: 'published'; published: PublishedVersion } | { kind: 'unavailable'; reason: string } | { kind: 'disabled' } | { kind: 'unsupported' }>;
 
-export const toolchainStatusSchema = z.enum(['fresh', 'stale', 'ahead', 'unparsed', 'unknown-offline', 'unsupported', 'disabled', 'not-admitted']);
-export type ToolchainStatus = z.infer<typeof toolchainStatusSchema>;
-export const toolchainCurrencyEntrySchema = z.strictObject({
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const toolchainStatusSchema = z.enum(['fresh', 'stale', 'ahead', 'unparsed', 'unknown-offline', 'unsupported', 'disabled', 'not-admitted']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainStatus = z.infer<typeof toolchainStatusSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const toolchainCurrencyEntrySchema = z.strictObject({
   provider: identitySchema, get mechanism() { return z.enum(['npm', 'installer-script']); }, get package() { return z.string().optional(); },
   get admitted() { return z.array(z.strictObject({ profile: profileReferenceSchema, cliVersion: z.string(), version: version.nullable() })).readonly(); },
   get latest() { return publishedVersionSchema.nullable(); }, status: toolchainStatusSchema, get reason() { return z.string().optional(); },
   get update() { return z.string(); }, get selfUpdateControl() { return z.string().optional(); },
 }).readonly();
-export type ToolchainCurrencyEntry = z.infer<typeof toolchainCurrencyEntrySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainCurrencyEntry = z.infer<typeof toolchainCurrencyEntrySchema>;
 export const toolchainCurrencyReportSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get measuredAt() { return persistedDateTime(); },
   // The mode value is registry vocabulary (toolchains.currency.mode); it is carried, not redeclared, here.
   get mode() { return persistedString(z.string().min(1)); }, get registryEndpoint() { return z.string().nullable(); }, get providers() { return z.array(toolchainCurrencyEntrySchema).readonly(); },
   get basis() { return z.string(); } }).readonly();
 export type ToolchainCurrencyReport = z.infer<typeof toolchainCurrencyReportSchema>;
 
-export class ToolchainCurrencyError extends Error {
-  constructor(readonly code: 'TOOLCHAIN_CATALOG_INVALID' | 'TOOLCHAIN_PROVIDER_UNKNOWN') { super(code); this.name = 'ToolchainCurrencyError'; }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class ToolchainCurrencyError extends CodedError {
+  constructor(override readonly code: 'TOOLCHAIN_CATALOG_INVALID' | 'TOOLCHAIN_PROVIDER_UNKNOWN') { super(code); this.name = 'ToolchainCurrencyError'; }
 }
-export function toolchainMechanism(provider: string): ToolchainMechanism {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function toolchainMechanism(provider: string): ToolchainMechanism {
   const mechanism = toolchainCatalog.providers[provider];
   if (!mechanism) throw new ToolchainCurrencyError('TOOLCHAIN_PROVIDER_UNKNOWN');
   return mechanism;

@@ -1,20 +1,20 @@
+import { sha256 } from '#platform/index.js';
 import { persistedString } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import BINARIES from './dependency-binaries.json' with { type: 'json' };
 import { embeddedArchive } from './embedded-archive.js';
 
-const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const cacheSchema = z.strictObject({ schemaVersion: z.literal(1), scope: digestSchema,
   files: z.record(persistedString(z.string().min(1).max(BINARIES.maxCachePathLength)), z.tuple([digestSchema, persistedString(z.string().min(1).max(600)).nullable()])) });
 const signatures = BINARIES.signatures.map(row => ({ kind: row.kind, bytes: Buffer.from(row.hex, 'hex') }));
-/** The lifting entry of every exception a declared dependency tree records: `dependencyTree:<container target>`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The lifting entry of every exception a declared dependency tree records: `dependencyTree:<container target>`. */
 export const dependencyTreeLifting = (target: string) => `dependencyTree:${target}`;
 /** Per declared dependency tree of one scan: pattern results reused from the cache and evaluated anew, and whether the cache was saved. */
 export interface DependencyTreeStatistics { readonly label: string; readonly reused: number; readonly evaluated: number; readonly saved: boolean }
 
-/** Where a tree's cache lives: product data the adapter reads and writes atomically (`readJsonFile` / `writeTextAtomic`). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Where a tree's cache lives: product data the adapter reads and writes atomically (`readJsonFile` / `writeTextAtomic`). */
 export interface DependencyTreeCacheStore { readonly read: () => Promise<Readonly<{ kind: string; value?: unknown }>>; readonly write: (text: string) => Promise<void> }
 
 /**
@@ -63,9 +63,9 @@ export class DependencyTreePatternCache {
   }
 }
 
-/** One open file above the text bound, read only through bounded windows (fewer bytes than asked means the file changed: refused). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One open file above the text bound, read only through bounded windows (fewer bytes than asked means the file changed: refused). */
 export interface DependencyBinarySource { readonly size: number; readonly read: (offset: number, length: number) => Promise<Buffer> }
-/** What the class needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the class needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
 export interface DependencyValueSnapshot { readonly spans: (text: string) => readonly unknown[]; readonly pendingStart: (text: string) => number }
 /**
  * The gate's own readers for one file: its decoder (`decodedTexts`), the bytes of its reading that drops bytes (`withoutNul`; a projection, so
@@ -80,7 +80,7 @@ export interface DependencyTextChecks {
 /** A dependency-class hit: `refuse` findings stop the dispatch; the others are audited exceptions. */
 export type DependencyHit = Readonly<{ rule: string; refuse: boolean }>;
 const partialEscape = /\\(?:u[0-9a-fA-F]{0,3}|x[0-9a-fA-F]?)?$/u, refusing = new Set(BINARIES.refuseInNativeFiles);
-/** The native format a header claims (a listed signature and a NUL byte within `headerBytes`), or null. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The native format a header claims (a listed signature and a NUL byte within `headerBytes`), or null. */
 export function nativeBinaryKind(bytes: Uint8Array): string | null {
   const header = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.length, BINARIES.headerBytes));
   return header.includes(0) ? signatures.find(row => header.subarray(0, row.bytes.length).equals(row.bytes))?.kind ?? null : null;

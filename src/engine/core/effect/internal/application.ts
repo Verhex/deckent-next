@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { describeOperationInput, effectCommandSchema, effectIntentSchema, effectProducerSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
   evaluatePolicy, policyResources, type EffectCommand, type EffectIntentApproval, type EffectRecord, type EffectTargetRef, type OperationDescriptor, type OperationRef,
@@ -13,8 +14,8 @@ export const operationInputDescriber = (catalog: OperationCatalog, redact: (text
   async (command: EffectCommand, budget: number) => describeOperationInput(command.input, (await catalog.resolve(command.operation))?.inputLabels, redact, sensitive, budget, more);
 /** Failure classes a target reports: the precondition no longer holds (412-like), the request was refused before any effect,
  * or the outcome is unknown (transport/timeout/5xx after sending). */
-export class EffectTargetError extends Error {
-  constructor(readonly code: 'EFFECT_TARGET_PRECONDITION' | 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_UNKNOWN', options?: ErrorOptions) {
+export class EffectTargetError extends CodedError {
+  constructor(override readonly code: 'EFFECT_TARGET_PRECONDITION' | 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_UNKNOWN', options?: ErrorOptions) {
     super(code, options); this.name = 'EffectTargetError';
   }
 }
@@ -55,7 +56,7 @@ export class OperationPolicyAuthorization {
     return decision.decision;
   }
 }
-/** The open approval request a pending outcome reports: enough for a surface to decide it and resubmit the same command. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The open approval request a pending outcome reports: enough for a surface to decide it and resubmit the same command. */
 export type EffectApprovalPendingRequest = Readonly<{ approvalId: string; revision: number; expiresAt: number; summary: string }>;
 /** What the gate asks against (C12 G2): the command's stored record (null before the first claim), the descriptor + endpoint binding the
  * intent pins, and the canonical input digest the intent records. A terminal record is replayed, never re-approved. */
@@ -73,10 +74,10 @@ export interface EffectApprovalGate {
 export const refuseRequiredApproval: EffectApprovalGate = {
   async admit(descriptor, decision) { if (descriptor.approval === 'required' || decision === 'require-approval') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); },
 };
-/** Settled outcome (contract v1, unchanged byte for byte on every surface). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Settled outcome (contract v1, unchanged byte for byte on every surface). */
 export type EffectResult = Readonly<{ schemaVersion: 1; status: 'settled'; commandId: string; scopeId: string; operation: OperationRef; target: EffectTargetRef;
   sequence: number; version: string | null; compensates: string | null; evidence: 'idempotency-record' | 'fence' }>;
-/** Pending outcome (contract v2, C12 G2): the command needs a decision on `approval`; nothing was sent and no intent exists for it. The
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Pending outcome (contract v2, C12 G2): the command needs a decision on `approval`; nothing was sent and no intent exists for it. The
  * same command (same `commandId`, same input) is resubmitted after an `allow`; a deny or an unused allow is a typed refusal. */
 export type EffectApprovalPending = Readonly<{ schemaVersion: 2; status: 'approval-pending'; commandId: string; scopeId: string; operation: OperationRef;
   target: EffectTargetRef; approval: EffectApprovalPendingRequest }>;

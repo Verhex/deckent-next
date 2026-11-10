@@ -16,7 +16,7 @@ import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
 
 /** MONITOR v1.1 bounds: recorded outputs larger than this are not parsed for a first failure; events kept per attempt; live tail bytes. */
-export const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MONITOR_EVENT_TAIL_BYTES = 65_536, MONITOR_FAILED_TESTS = limits.maxFailedTests;
+const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MONITOR_EVENT_TAIL_BYTES = 65_536, MONITOR_FAILED_TESTS = limits.maxFailedTests;
 // Content-addressed outputs never change, so a first failure is computed once per (scope, digest) and kept in a small bounded cache.
 const failures = new Map<string, { readonly line: string | null; readonly failedTests: MonitorFailedTests | null }>();
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';

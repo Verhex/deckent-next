@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -5,12 +6,12 @@ import { identitySchema, modelReferenceSchema } from '#domain/index.js';
 import { nativeAgentExecutionSchema, type NativeAgentExecution } from './contract.js';
 import type { NativeCliWorkerBinding } from './worker-profile.js';
 
-export const nativeWorkerRefusalSchema = z.enum(['NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_PLUGIN_UNEXPECTED']);
-export type NativeWorkerRefusal = z.infer<typeof nativeWorkerRefusalSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const nativeWorkerRefusalSchema = z.enum(['NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_PLUGIN_UNEXPECTED']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeWorkerRefusal = z.infer<typeof nativeWorkerRefusalSchema>;
 export const nativeWorkerEvidenceTargetSchema = z.strictObject({ scopeId: identitySchema, reference: modelReferenceSchema,
   connectionId: identitySchema, execution: nativeAgentExecutionSchema }).readonly();
-export type NativeWorkerEvidenceTarget = z.infer<typeof nativeWorkerEvidenceTargetSchema>;
-export const nativeWorkerEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), target: nativeWorkerEvidenceTargetSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeWorkerEvidenceTarget = z.infer<typeof nativeWorkerEvidenceTargetSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const nativeWorkerEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), target: nativeWorkerEvidenceTargetSchema,
   attemptId: identitySchema, checkedAtMs: z.number().int().nonnegative(), verdict: z.discriminatedUnion('state', [
     z.strictObject({ state: z.literal('verified') }), z.strictObject({ state: z.literal('refused'), reason: nativeWorkerRefusalSchema })]) }).readonly();
 export type NativeWorkerEvidenceVerdict = z.infer<typeof nativeWorkerEvidenceSchema>['verdict'];
@@ -20,8 +21,8 @@ export interface NativeWorkerEvidenceFile {
   claim(): Promise<null | { release(): Promise<void> }>;
   write(record: unknown): Promise<void>;
 }
-export class NativeWorkerVerificationError extends Error {
-  constructor(readonly code: NativeWorkerRefusal | 'NATIVE_WORKER_F08_INVALID') { super(code); }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class NativeWorkerVerificationError extends CodedError {
+  constructor(override readonly code: NativeWorkerRefusal | 'NATIVE_WORKER_F08_INVALID') { super(code); }
 }
 /** Unknown storage never becomes an unsealed first run. A known negative stays negative for this exact binding and seal. */
 export async function readNativeWorkerEvidence(file: NativeWorkerEvidenceFile, target: NativeWorkerEvidenceTarget): Promise<NativeAgentExecution | null> {

@@ -25,3 +25,10 @@ export function fixtureDockerRegistry(kinds: readonly string[]) {
     evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }],
   };
 }
+/** The `business` WorkClass (low risk) bound to the `purchase` kind, for a configured proposal admission (`proposalFixture('business')`). */
+export function businessWorkClasses(standingAdmission = false) {
+  return { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
+    proposalAdmission: { risk: 'low', standingAdmission }, acceptanceProfile: { schemaVersion: 1, version: 1,
+      criterionTypes: ['completion'], evidenceTypes: ['verification-result'], rubric: [{ criterionType: 'completion', evidenceTypes: ['verification-result'], weight: 1 }],
+      ceilingRules: [], decisionThresholds: { rejectBelow: 0.2, acceptAt: 1 } } }], bindings: [{ kind: 'purchase', classId: 'business' }] };
+}

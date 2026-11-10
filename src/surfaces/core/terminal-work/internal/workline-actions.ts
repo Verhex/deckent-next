@@ -1,9 +1,9 @@
-import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
+import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
 import type { JobWindowLabels } from './job-windows.js';
 import type { RunAnswerLabels, RunControlLabels } from './run-control.js';
 import type { ActiveWorkLabels } from './active-work.js';
 import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
-import type { ApprovalWindowLabels } from './approval-window.js';
+import type { ApprovalSurfaceLabels } from '#surfaces/core/terminal-approval/index.js';
 import { transcriptPage, type TranscriptPageLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { shortId } from '#platform/index.js';
 import { slashHelpText, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
@@ -32,7 +32,7 @@ export interface WorklineActionLabels {
 }
 
 /** Catalog strings for the work surface (P4). Templates use `{name}` placeholders. */
-export interface WorkSurfaceLabels {
+export interface WorkSurfaceLabels extends ApprovalSurfaceLabels {
   readonly jobs?: JobWindowLabels;
   /** Y1: the Runs window's hold/resume/close keys and cards; absent: `/runs` stays the read-only list. */
   readonly runControl?: RunControlLabels;
@@ -42,7 +42,6 @@ export interface WorkSurfaceLabels {
   readonly activeWork?: ActiveWorkLabels;
   /** Live windows (`/monitor`, `/tasks`); absent means those commands are not offered as windows. */
   readonly live?: LiveWindowLabels;
-  readonly workerLine: WorkerLineLabels;
   readonly panel: WorkerPanelLabels;
   readonly unavailable: string;
   readonly transcriptUsage: string;
@@ -54,69 +53,11 @@ export interface WorkSurfaceLabels {
   /** `{task}` and `{attempt}` in full: the headline carries their short forms. */
   readonly transcriptDetail?: string;
   readonly sessionStandingClear?: { readonly cleared: string; readonly unconfirmed: string };
-  readonly approvalsNone: string;
-  readonly approvalItem: string;
-  readonly approvalsTruncated: string;
-  readonly approvalNotFound: string;
-  readonly approvalTitle: string;
-  readonly approvalSubject: string;
-  /** `{count}` more preview lines of a tool-call approval are not shown on the card. */
-  readonly approvalPreviewMore: string;
-  readonly approvalExpires: string;
-  readonly approvalPrompt: string;
-  readonly approvalPending: string;
-  readonly approvalAllowed: string;
-  readonly approvalDenied: string;
-  /** `{id}`: the service could not confirm closing a tool-call approval request; the call did not run. */
-  readonly approvalUnsettled: string;
-  /** `{id}`: the full approval identity on a detail line under a decision notice (whose first line carries the short form). Absent: no line. */
-  readonly approvalIdentity?: string;
-  readonly approvalMore: string;
-  readonly approvalNotify: string;
-  readonly approvalPollFailed: string;
-  /** Single card lines (B1): `risk` with `{risk}`/`{undo}`; nothing runs on expiry; assurance turn-bound here / elsewhere / peer-session / other `{level}`. */
-  readonly approvalCard: { readonly risk: string; readonly notDeclared: string; readonly onExpiry: string; readonly assuranceTurnHere: string; readonly assuranceTurnElsewhere: string; readonly assurancePeer: string; readonly assuranceOther: string };
-  /** Standing scopes on an approval card (PERSISTENT-APPROVALS G6); absent = the plain y/N card only. */
-  readonly approvalStanding?: {
-    /** `{pattern}`: exactly what a standing answer covers (the command, or the directory pattern). */
-    readonly covers: string;
-    readonly promptBoth: string;
-    readonly promptSession: string;
-    readonly promptAlways: string;
-    /** `{id}`: the approval was allowed and the standing answer saved; `notSaved…` adds `{reason}` (the call was allowed once either way). */
-    readonly savedSession: string;
-    readonly savedAlways: string;
-    readonly unconfirmedSession: string;
-    readonly notSavedSession: string;
-    readonly notSavedAlways: string;
-  };
-  /** Bounded windows (TS-WINDOW): `position` has `{from}`, `{to}`, `{total}`; `pick` is a list window's key hints; titles of the list
-   * windows; the `/service-restart` confirmation (title, what happens, keys, kept). */
-  readonly window: Readonly<{ position: string; pick: string; approvalsTitle: string; resumeTitle: string;
-    restartTitle: string; restartDetail: string; restartPrompt: string; restartKept: string }>;
-  /** The approval window's labelled fields (T-APPROVAL-WINDOW). */
-  readonly approvalWindow: ApprovalWindowLabels;
-  readonly cancelUsage: string;
-  readonly cancelTitle: string;
-  readonly cancelDetail: string;
-  readonly cancelAlreadyRequested: string;
-  readonly cancelPrompt: string;
-  readonly cancelPending: string;
-  readonly cancelKept: string;
-  /** `{run}`: the full run identity on its own detail line (the title carries the short form). Absent: no identity line. */
-  readonly cancelIdentity?: string;
-}
-
-/** Commands owned by the work surface; they need its labels and their port. */
-export const WORK_SURFACE_COMMANDS = Object.freeze(['transcript', 'approvals', 'cancel'] as const);
-export type WorkSurfaceCommand = typeof WORK_SURFACE_COMMANDS[number];
-export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCommand {
-  return (WORK_SURFACE_COMMANDS as readonly string[]).includes(command);
 }
 
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
 
-export interface WorklineActionContext {
+interface WorklineActionContext {
   readonly followDelivery?: SurfaceDeliveryMode;
   readonly ledger: WorklineLedgerPorts | undefined;
   readonly labels: WorklineActionLabels;
@@ -128,33 +69,34 @@ export interface WorklineActionContext {
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
 /** `window`: the live window the command opens. */
-export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
+type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
 
-/** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
-export function immediateSlashAction(command: string, context: WorklineActionContext, args = ''): WorklineActionResult | null {
-  const { labels, watch, ledger } = context;
-  if (command === 'beuser') return { entries: [notice('error', fillTemplate(labels.commandUnavailable ?? labels.ledgerUnavailable, { part: command }))] };
-  if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
-  if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS, args))] };
-  if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'tasks') {
-    if (!ledger || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
+type ImmediateAction = (context: WorklineActionContext, args: string, command: string) => WorklineActionResult | null;
+const failed = (text: string): WorklineActionResult => ({ entries: [notice('error', text)] });
+const statusLine: ImmediateAction = ({ labels }) => ({ entries: [notice('info', labels.statusLine)] });
+const needsLedger: ImmediateAction = ({ ledger, labels }) => ledger ? null : failed(labels.ledgerUnavailable);
+const workSurface = (wired: (ledger: WorklineLedgerPorts | undefined) => unknown): ImmediateAction => ({ ledger, labels }) =>
+  labels.work && wired(ledger) ? null : failed(labels.work?.unavailable ?? labels.ledgerUnavailable);
+const IMMEDIATE: Readonly<Record<string, ImmediateAction | undefined>> = {
+  beuser: ({ labels }, _args, command) => failed(fillTemplate(labels.commandUnavailable ?? labels.ledgerUnavailable, { part: command })),
+  exit: () => ({ entries: [], exit: true }), quit: () => ({ entries: [], exit: true }), status: statusLine, 'chat-backend': statusLine,
+  help: ({ labels }, args) => ({ entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS, args))] }),
+  tasks: ({ ledger, labels, watch }) => {
+    if (!ledger || !labels.work?.live) return failed(labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable));
     // `/tasks` follows both feeds (runs only where the ledger can list them); a feed already on is not announced again, its window just opens.
     const next: WatchState = { workers: true, runs: watch.runs || Boolean(ledger.listRunIds) };
     if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: 'tasks' };
     return { entries: [], watch: next, window: 'tasks' };
-  }
-  if (command === 'runs') {
-    if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return null;
-  }
-  if (command === 'workers' || command === 'run') return ledger ? null : { entries: [notice('error', labels.ledgerUnavailable)] };
-  if (command === 'service-restart') return context.canRestartService ? null : { entries: [notice('error', labels.serviceRestartUnavailable)] };
-  if (isWorkSurfaceCommand(command)) {
-    const wired = command === 'transcript' ? ledger?.inspectTranscript : command === 'approvals' ? ledger?.listApprovalPage && ledger.decideApproval : ledger?.cancelRun;
-    return labels.work && wired ? null : { entries: [notice('error', labels.work?.unavailable ?? labels.ledgerUnavailable)] };
-  }
-  return { entries: [notice('error', `${labels.unknownCommand}: /${command}`)] };
+  },
+  runs: ({ ledger, labels }) => ledger?.listRunIds ? null : failed(labels.ledgerUnavailable),
+  workers: needsLedger, run: needsLedger,
+  'service-restart': ({ canRestartService, labels }) => canRestartService ? null : failed(labels.serviceRestartUnavailable),
+  transcript: workSurface(ledger => ledger?.inspectTranscript), approvals: workSurface(ledger => ledger?.listApprovalPage && ledger.decideApproval), cancel: workSurface(ledger => ledger?.cancelRun),
+};
+/** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
+export function immediateSlashAction(command: string, context: WorklineActionContext, args = ''): WorklineActionResult | null {
+  const action = Object.hasOwn(IMMEDIATE, command) ? IMMEDIATE[command] : undefined;
+  return action ? action(context, args, command) : failed(`${context.labels.unknownCommand}: /${command}`);
 }
 
 /** `n` is the worker number shown by `/workers` and the live panel; anything else is an attempt id. */

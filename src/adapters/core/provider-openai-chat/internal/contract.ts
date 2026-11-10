@@ -1,3 +1,5 @@
+import { optionalField } from '#platform/index.js';
+
 import { persistedString, persistedInteger, persistedUrl, openAiChatDialectSchema, type OpenAiChatDialect, parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest, OpenAiChatHttpError as ProtocolHttpError, wellFormedModelJson, type JsonObject } from '#domain/index.js';
 
 export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from '#domain/index.js';
@@ -6,7 +8,7 @@ export const openAiChatWireObjectSchema = protocolWireObjectSchema;
 export { openAiChatUsageSchema, parseOpenAiChatHttpLimits, type OpenAiChatHttpLimits } from '#domain/index.js';
 export const OpenAiChatHttpError = ProtocolHttpError;
 export type OpenAiChatHttpError = InstanceType<typeof ProtocolHttpError>;
-export { OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOLS, OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatHttpErrorCode, type OpenAiReasoningEffort, type OpenAiChatToolCall, type OpenAiChatTextMessage, type OpenAiChatToolDefinition } from '#domain/index.js';
+export { OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatHttpErrorCode, type OpenAiChatTextMessage, type OpenAiChatToolDefinition } from '#domain/index.js';
 import { openAiCompatiblePublishedTariffSchema, type OpenAiCompatiblePublishedTariff } from './pricing-catalog.js';
 import { z } from 'zod';
 
@@ -29,7 +31,7 @@ export type OpenAiChatHttpAuthentication = Readonly<{ type: 'none' } | { type: '
  * non-zero USD cents/MTok, fractional cents as exact decimal strings. */
 export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1 | 2; currency: string;
   inputMinorUnitsPerMillionTokens: number | string; outputMinorUnitsPerMillionTokens: number | string; cachedInputMinorUnitsPerMillionTokens?: number | string }>;
-export const openRouterEndpointTariffSchema = z.strictObject({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
+const openRouterEndpointTariffSchema = z.strictObject({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
   metadataEndpoint: persistedUrl(), endpointTag: persistedString(z.string().min(1).max(1024)),
   metadataLimits: z.strictObject({ maxAgeMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxResponseBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
     timeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
@@ -74,7 +76,7 @@ export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDef
   return Object.freeze({ endpoint: parsed.data.endpoint, maxOutputTokens: parsed.data.maxOutputTokens, authentication,
     ...(dialect ? { dialect: Object.freeze({ ...dialect, toolChoice: Object.freeze([...dialect.toolChoice]) }) } : {}),
     ...(parsed.data.tls ? { tls: Object.freeze({ ...parsed.data.tls }) } : {}), tariff: Object.freeze({ ...parsed.data.tariff }),
-    ...(tokenize !== undefined ? { tokenizeEndpoint: tokenize } : {}) });
+    ...optionalField('tokenizeEndpoint', tokenize) });
 }
 
 function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer', hasTls: boolean): boolean {

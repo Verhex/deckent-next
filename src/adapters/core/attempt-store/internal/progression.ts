@@ -1,7 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptIdentitySchema, counterSchema } from '#domain/index.js';
+import { attemptIdentitySchema, counterSchema, RUN_LIVE_PHASES, RUN_PARKS } from '#domain/index.js';
 import { progressionQuerySchema, progressionCursorSchema, type ProgressionQuery, type ProgressionCursor } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+/** SQL `IN` lists generated from the domain's Run phase vocabulary (constants, never data). */
+const sqlList = (values: Iterable<string>) => `(${[...values].map(value => `'${value}'`).join(',')})`;
 /** Trusted local host discovery. Actor selection is identity matching, not an execution grant. */
 export class SqliteRunProgression {
   constructor(private readonly db: DatabaseSync) {}
@@ -14,10 +16,10 @@ export class SqliteRunProgression {
           AND (? IS NULL OR (i.scope_id,i.run_id)>(?,?)) AND (? IS NULL OR EXISTS (SELECT 1 FROM scope_registry s WHERE s.scope_id=i.scope_id AND s.company_id=?))
           AND json_extract(r.snapshot,'$.cancelRequested')=0
           AND (json_extract(r.snapshot,'$.state.kind')='running'
-            OR (json_extract(r.snapshot,'$.state.kind')='parked' AND json_extract(r.snapshot,'$.state.reason') IN ('operator-hold','needs-input')
-              AND EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ('active','evaluating','reconciling'))))
+            OR (json_extract(r.snapshot,'$.state.kind')='parked' AND json_extract(r.snapshot,'$.state.reason') IN ${sqlList(RUN_PARKS.turn)}
+              AND EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${sqlList(RUN_LIVE_PHASES)})))
           AND EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p
-            WHERE json_extract(p.value,'$.phase') IN ('pending','active','evaluating','reconciling'))
+            WHERE json_extract(p.value,'$.phase') IN ${sqlList(['pending', ...RUN_LIVE_PHASES])})
         ORDER BY i.scope_id,i.run_id LIMIT ?`).all(query.actor.id, query.actor.issuer, query.actor.subject,
         query.after?.scopeId ?? null, query.after?.scopeId ?? null, query.after?.runId ?? null, query.companyId ?? null, query.companyId ?? null, query.limit + 1);
       const items = rows.slice(0, query.limit).map(row => progressionCursorSchema.parse({ scopeId: row.scope_id, runId: row.run_id }));
@@ -33,7 +35,7 @@ export class SqliteRunProgression {
         JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id
         WHERE i.actor_id=? AND i.issuer=? AND i.subject=?
           AND (? IS NULL OR (i.scope_id,i.run_id)>(?,?)) AND (? IS NULL OR EXISTS (SELECT 1 FROM scope_registry s WHERE s.scope_id=i.scope_id AND s.company_id=?))
-          AND json_extract(r.snapshot,'$.state.kind')!='terminal'
+          AND (CASE WHEN json_valid(r.snapshot) THEN json_extract(r.snapshot,'$.state.kind') END)!='terminal'
           AND ((json_extract(r.snapshot,'$.state.kind')='parked' AND json_extract(r.snapshot,'$.state.deadline')<=?)
             OR EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p
               WHERE json_extract(p.value,'$.phase')='awaiting-decision' AND json_extract(p.value,'$.decision.deadline')<=?))
@@ -46,7 +48,7 @@ export class SqliteRunProgression {
   /** Scopes of this actor's unfinished Runs not registered to `companyId` (one row per scope, bounded), for one typed note. */
   async listForeignProgressionScopes(input: { readonly actor: ProgressionQuery['actor']; readonly companyId: string; readonly limit: number }) {
     const { actor, companyId, limit } = progressionQuerySchema.required({ companyId: true }).parse({ ...input, after: null });
-    try { return Object.freeze(this.db.prepare(`SELECT DISTINCT i.scope_id AS scope_id, s.company_id AS company_id FROM run_execution_intents i JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id LEFT JOIN scope_registry s ON s.scope_id=i.scope_id WHERE i.actor_id=? AND i.issuer=? AND i.subject=? AND json_extract(r.snapshot,'$.state.kind')!='terminal' AND (s.company_id IS NULL OR s.company_id!=?) ORDER BY i.scope_id LIMIT ?`).all(actor.id, actor.issuer, actor.subject, companyId, limit)
+    try { return Object.freeze(this.db.prepare(`SELECT DISTINCT i.scope_id AS scope_id, s.company_id AS company_id FROM run_execution_intents i JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id LEFT JOIN scope_registry s ON s.scope_id=i.scope_id WHERE i.actor_id=? AND i.issuer=? AND i.subject=? AND (CASE WHEN json_valid(r.snapshot) THEN json_extract(r.snapshot,'$.state.kind') END)!='terminal' AND (s.company_id IS NULL OR s.company_id!=?) ORDER BY i.scope_id LIMIT ?`).all(actor.id, actor.issuer, actor.subject, companyId, limit)
       .map(row => Object.freeze({ scopeId: progressionCursorSchema.shape.scopeId.parse(row.scope_id), reason: row.company_id === null ? 'unregistered' as const : 'foreign' as const }))); }
     catch (error) { throw sqliteFailure(error); }
   }

@@ -1,7 +1,8 @@
-import { persistedString, persistedInteger, brainPlanCommandSchema, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { persistedString, persistedInteger, exactModelIdSchema, MODEL_ROLE_LIMITS, brainPlanCommandSchema, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { toInputJsonSchema, ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
+import { brainContextLimitsSchema } from './internal/context.js';
 import templates from './internal/templates.json' with { type: 'json' };
 const selected = z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 /** `modelAssignment: 'system'` (ATAMA-1, owner ASS1): the plan names tasks and WorkClasses only; the worker comes from the WorkClass candidate
@@ -18,10 +19,7 @@ export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.litera
   selected: selected.prefault(templates.selected), templates: z.array(template).min(1).max(256).prefault(z.array(template).parse(templates.templates)),
   maxCompletionTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable().prefault(templates.maxCompletionTokens),
   reasoning: reasoning.prefault(reasoning.parse(templates.reasoning)),
-  context: z.strictObject({ maxKinds: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxModels: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-    maxEvaluators: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-    requestMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), tokenFramingAllowance: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  }).prefault(templates.context),
+  context: brainContextLimitsSchema,
   /** f3 (owner Q-H4): a planning call the subscription refuses for quota waits visibly until the known reset plus `marginMs` only when that is at
    * most `maxWaitMs` away, and plans again as a new derived attempt; `maxAttempts` counts the first call. 0 ms or 1 attempt: never wait. A short
    * wait by definition: both times stay within the registry ceiling (which also keeps one timer delay inside its limit). */
@@ -32,14 +30,20 @@ export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.litera
   /** R9b (owner D3, 2026-11-06): the person's own Brain model, an exact catalog reference; a project value wins over the user's. Absent: the Brain
    * tries the chat model. The tier/role gate still decides; nothing ever chooses another model. Additive optional key (schemaVersion stays 1). */
   reference: brainPlanCommandSchema.unwrap().shape.reference, // the plan command's own exact-reference contract
+  /** Owner 2026-11-06 ("can be Brain", default on): catalog models (channel id, exact model id) the person switched off as Brain. They are not
+   * offered as Brain and never plan; nothing else about the model changes. Additive optional key (schemaVersion stays 1); arrays replace per layer. */
+  excluded: z.array(z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema })).max(MODEL_ROLE_LIMITS.models)
+    .refine(rows => new Set(rows.map(row => JSON.stringify([row.channelId, row.modelId]))).size === rows.length).optional(),
 });
+export const brainModelSwitchedOff = (config: unknown, target: Readonly<{ channelId: string; modelId: string }>) =>
+  (brainPlannerConfigSchema.parse(config ?? {}).excluded ?? []).some(row => row.channelId === target.channelId && row.modelId === target.modelId);
 /** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
 export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
-export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
-export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
 export { boundBrainContext } from './internal/context.js';
-export type { BrainRegistryContext, BrainMemoryContext, BrainMemoryEntry } from './internal/context.js';
-export type BrainDraft = z.infer<typeof brainDraftSchema>;
+export type { BrainRegistryContext, BrainMemoryContext, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BrainMemoryEntry } from './internal/context.js';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BrainDraft = z.infer<typeof brainDraftSchema>;
 export const prepareBrainEvaluatorParameters = (evaluator: EvaluatorDefinition) => toInputJsonSchema(installedEvaluatorParameters(evaluator));
 function redactJson(input: unknown, known?: KnownSecretSnapshot): unknown {
   if (typeof input === 'string') return redactForRecord(input, known);

@@ -88,6 +88,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'execution.git.gitExecutable': { kind: 'reference', source: 'git-executables' },
   'execution.git.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'execution.git.outputBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
+  'execution.git.copyBytes': { kind: 'numeric', unit: 'bytes', step: 1073741824, presets: [1073741824, 4294967296, 8589934592, 17179869184] },
   // Delivery commit author (name + email): an operator record set in the config file, shown read-only — never a hand-typed picker value.
   'execution.git.deliveryIdentity': { kind: 'document' },
   'execution.adoption.targets': { kind: 'reference', source: 'branches', multiple: true },
@@ -261,6 +262,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'brain_planner.reference.providerVersion': { kind: 'hidden' },
   'brain_planner.reference.modelId': { kind: 'hidden' },
   'brain_planner.reference.modelVersion': { kind: 'hidden' },
+  'brain_planner.excluded': { kind: 'hidden' }, 'brain_planner.excluded.*.channelId': { kind: 'hidden' }, 'brain_planner.excluded.*.modelId': { kind: 'hidden' }, // owner 2026-11-06: /model or `deckent models catalog brain`
   'brain_planner.context.tokenFramingAllowance': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 256, 512, 1024, 2048, 4096] },
   'provider_invocation_profiles.schemaVersion': { kind: 'schema' },
   'provider_invocation_profiles.profiles': { kind: 'document' },
@@ -350,8 +352,20 @@ export function configChoiceDeclaration(key: string): ConfigChoiceDeclaration | 
   if (['execution.adoption.targets', 'execution.adoption.protectedTargets', 'cancellationRuntime.scopeIds', 'reconciliationRuntime.scopeIds', 'terminal.shell.environment', 'terminal.fetch.allowedHosts'].some(parent => key.startsWith(parent + '.'))) return { kind: 'hidden' };
   return undefined;
 }
-export const CONFIG_ALLOWED_ENTRY_FIELDS = Object.freeze(['terminal.fetch.allowedHosts', 'toolchains.currency.registryEndpoint']);
-export const CONFIG_SECRET_ENTRY_NAMES = Object.freeze(['password', 'token', 'apiKey', 'secret', 'credential']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CONFIG_ALLOWED_ENTRY_FIELDS = Object.freeze(['terminal.fetch.allowedHosts', 'toolchains.currency.registryEndpoint']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const CONFIG_SECRET_ENTRY_NAMES = Object.freeze(['password', 'token', 'apiKey', 'secret', 'credential']);
 export function configEntryAllowed(key: string, sensitive = false): boolean {
   return CONFIG_ALLOWED_ENTRY_FIELDS.includes(key) || sensitive && key.split('.').some(part => CONFIG_SECRET_ENTRY_NAMES.some(name => name.toLowerCase() === part.toLowerCase()));
+}
+
+export function parseConfigEntry(rule: ConfigChoiceDeclaration | undefined, text: string, current: unknown):
+  { ok: true; text: string } | { ok: false; reason: 'config.select.invalidHost' | 'config.select.invalidUrl' } {
+  if (rule?.kind !== 'entry') return { ok: true, text };
+  if (rule.format === 'host') {
+    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/iu.test(text.trim())) return { ok: false, reason: 'config.select.invalidHost' };
+    return { ok: true, text: rule.multiple ? JSON.stringify([...new Set([...(Array.isArray(current) ? current : []), text.trim().toLowerCase()])]) : text };
+  }
+  try { const url = new URL(text); if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error(); }
+  catch { return { ok: false, reason: 'config.select.invalidUrl' }; }
+  return { ok: true, text };
 }

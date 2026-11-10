@@ -10,7 +10,7 @@ import { DockerCommandFailure, DockerSupervisor, identifyDockerRequest, type Doc
 import { AuditApplication, DispatchPreparationGuard, RecoveryApplication, nervousCaseId, recoveryContinuationApproval } from '#engine/index.js';
 import { RECOVERY_POLICY_SEED, freezeRecoveryPolicy, loadRecoveryPolicy, recoveryPrincipal } from '#domain/index.js';
 import { openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteRecoveryStore } from '#adapters/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { prepareConfiguredReconciliationRuntime } from '../../../src/composition/core/runtime/index.js';
 import { registerConfiguredScopesAtStart } from '../../../src/composition/core/scoped-request/index.js';
 import { admitRunAttempts } from '../support/admission.js';

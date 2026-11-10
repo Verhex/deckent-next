@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger } from '#domain/index.js';
 import { request as httpRequest } from 'node:http';
 import { open, readFile, realpath } from 'node:fs/promises';
@@ -16,9 +17,9 @@ const inspection = z.object({ Id: z.string(), Config: z.object({ Labels: z.recor
 // bracketed by matching inspections; a supplied contradictory id still refuses the sample.
 const stats = z.object({ id: z.string().optional(), read: z.string(), cpu_stats: z.object({ cpu_usage: z.object({ total_usage: counter }) }),
   memory_stats: z.object({ usage: counter.optional(), limit: counter.optional(), max_usage: counter.optional() }) });
-class ResourceReadError extends Error { constructor(readonly reason: ResourceSample['gap']) { super('RESOURCE_READ'); } }
+class ResourceReadError extends CodedError { constructor(readonly reason: ResourceSample['gap']) { super('RESOURCE_READ'); } }
 /** Fixed local socket; no credentials, redirects, arbitrary paths or unbounded body. */
-export function readDockerResourceJson(endpoint: string, path: string, settings: ResourceObservationSettings, signal: AbortSignal): Promise<unknown> {
+function readDockerResourceJson(endpoint: string, path: string, settings: ResourceObservationSettings, signal: AbortSignal): Promise<unknown> {
   const socketPath = dockerEndpointSchema.parse(endpoint).slice('unix://'.length);
   return new Promise((resolveValue, reject) => {
     const req = httpRequest({ socketPath, path, method: 'GET', signal, agent: false }, res => {

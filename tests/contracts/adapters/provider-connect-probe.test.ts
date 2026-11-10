@@ -70,9 +70,16 @@ describe('provider connection check', () => {
         const build = () => connectionAdapter(kind, { endpoint: `${checked.base}${kind.connect!.chatPath}`, credentialRef: kind.key!.secretName, nativeId: model.nativeId,
           maxOutputTokens: (model as { maxOutputTokens?: number | null }).maxOutputTokens ?? 32768, currency: 'USD' });
         // Stage 1: a remote model is connected only with a verified published price (the table is pinned in provider-connect-tariff.test.ts).
-        if (!providerConnectModelPriced(kind, model.nativeId)) { expect(build).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED'); continue; }
+        if (!providerConnectModelPriced(kind, model.nativeId)) {
+          // Anthropic's existing refusal for an unknown tariff also applies to retiring catalog-only rows.
+          expect(build).toThrow(kind.connect!.adapter === 'anthropic-messages-http' ? 'MODEL_CONNECT_TARIFF_UNKNOWN' : 'MODEL_CONNECT_TARIFF_UNVERIFIED');
+          continue;
+        }
         const built = build();
         expect(built.tariff).toBe('published');
+        // FABLE52: connecting the new exact id uses the verified 2026-11-09 prices and its full output bound.
+        if (model.nativeId === 'claude-fable-5-2') expect(built.adapter.definition).toMatchObject({ maxOutputTokens: 128_000,
+          tariff: { modelId: model.nativeId, usdPerMTok: { input: '8', cacheWrite5m: '10', cacheWrite1h: '16', cacheRead: '0.2', output: '40' } } });
         expect(JSON.stringify(built.adapter.definition)).toContain(kind.key!.secretName!);
       }
     }

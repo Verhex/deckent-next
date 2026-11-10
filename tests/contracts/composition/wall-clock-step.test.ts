@@ -11,7 +11,7 @@ import { openSqliteAttemptStore, openSqliteApprovalStore, LocalOsSessionAuthorit
 import { ApprovalApplication, RunReservationApplication, TaskApprovalAdmission } from '#engine/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { fixtureDockerRegistry, fixtureExecution } from '../support/execution-registry.js';
 
 // I40 time contract. A host wall clock steps backwards (measured 2.0-2.2 s on WSL2). Inside one process the platform
@@ -86,7 +86,7 @@ describe.skipIf(process.platform !== 'linux')('task approval decided by another 
       { id: 'decide', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } },
     ] };
     const integrity = createHmacIntegrity('key', randomBytes(32));
-    const gate = new TaskApprovalAdmission(policy, principal, journal.store, integrity, 60_000); store.setRunAdmissionFilter(gate);
+    const gate = new TaskApprovalAdmission(policy, principal, journal.store, integrity, 60_000, 60_000); store.setRunAdmissionFilter(gate);
     const run = (await store.loadRun('scope', 'run'))!;
     await gate.prepare(run, principal, decidedAtWall);
     const pending = journal.store.list('scope', null, 10)[0]!;

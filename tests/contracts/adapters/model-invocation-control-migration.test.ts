@@ -68,7 +68,7 @@ async function seedV17(path: string) {
     db.exec(`CREATE TABLE model_invocations_v17(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,invocation_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
       state TEXT NOT NULL CHECK(state IN ('claimed','responded','unknown','rejected')),record TEXT NOT NULL,
       PRIMARY KEY(scope_id,invocation_id),UNIQUE(scope_id,command_id));
-      INSERT INTO model_invocations_v17 SELECT * FROM model_invocations;
+      INSERT INTO model_invocations_v17 SELECT scope_id,command_id,invocation_id,allocation_id,state,record FROM model_invocations;
       DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocations;
       ALTER TABLE model_invocations_v17 RENAME TO model_invocations;
       CREATE INDEX model_invocations_allocation_state ON model_invocations(scope_id,allocation_id,state);
@@ -79,7 +79,7 @@ async function seedV17(path: string) {
 function inventory(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
   try { return { version: db.prepare('PRAGMA user_version').get()?.user_version,
-    invocations: db.prepare('SELECT * FROM model_invocations ORDER BY invocation_id').all(),
+    invocations: db.prepare('SELECT scope_id,command_id,invocation_id,allocation_id,state,record FROM model_invocations ORDER BY invocation_id').all(),
     allocations: db.prepare('SELECT * FROM model_invocation_allocations').all(),
     contents: db.prepare('SELECT * FROM model_invocation_contents ORDER BY invocation_id').all(),
     purges: db.prepare('SELECT * FROM model_invocation_content_purges').all() }; }

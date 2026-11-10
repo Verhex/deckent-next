@@ -1,4 +1,4 @@
-import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, ErrorRegistry, DeckentError, type ExitCode, type Locale, type MessageKey, type Params } from '#platform/index.js';
+import { t, resolveLocale, LOCALES, messageText, ErrorRegistry, DeckentError, type ExitCode, type Locale, type MessageKey, type Params } from '#platform/index.js';
 import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec, type CliInstallationContract } from './command-catalog.js';
 
 interface CliHelpSpec extends CliCommandSpec {
@@ -11,7 +11,7 @@ export interface RegisteredCliCommand<C> extends CliHelpSpec {
   readonly run: (argv: readonly string[], context: C) => Promise<void | ExitCode>;
 }
 /** The context fields catalog dispatch reads: the language of a refusal (an already resolved host locale wins over the environment). */
-export interface CliDispatchContext { readonly env?: NodeJS.ProcessEnv; readonly locale?: Locale; readonly onLocale?: (locale: Locale) => void }
+interface CliDispatchContext { readonly env?: NodeJS.ProcessEnv; readonly locale?: Locale; readonly onLocale?: (locale: Locale) => void }
 
 /** Children a family dispatches and shows now; a `planned` name is reserved only. */
 const live = (spec: CliCommandSpec) => (spec.children ?? []).filter(child => !child.planned);
@@ -124,11 +124,11 @@ export function wrapHelp(text: string, width = 80): string {
 /** The action column of a family: at least 22 columns, and always one name plus two spaces so a long action never runs into its summary. */
 const childColumn = (children: readonly { readonly name: string }[]) => Math.max(22, ...children.map(child => child.name.length + 2));
 /** Catalog-owned messages contain no interpolation; their keys are validated in both locales. */
-function message(key: MessageKey, locale: Locale): string { return MESSAGE_REGISTRY.catalogs[locale][key]!; }
+function message(key: MessageKey, locale: Locale): string { return messageText(key, locale)!; }
 /** CLI syntax keeps flags verbatim; `<word>` placeholders are shown in the reader's language when the help family names them. */
 function placeholders(syntax: string, locale: Locale): string {
   return syntax.replace(/<([a-z]+)/g, (whole, word: string) => {
-    const text = MESSAGE_REGISTRY.catalogs[locale][`cli.help.placeholder.${word}`];
+    const text = messageText(`cli.help.placeholder.${word}`, locale);
     return text ? `<${text}` : whole;
   });
 }
@@ -174,7 +174,7 @@ export function renderTopHelp(locale: Locale = resolveLocale(), catalog: readonl
 }
 
 export function renderCommandHelp(command: CliHelpSpec, locale: Locale, params: Params = {}): string {
-  const examples = MESSAGE_REGISTRY.catalogs[locale][`${command.detail}.examples`];
+  const examples = messageText(`${command.detail}.examples`, locale);
   const family = command.parent, children = live(command);
   // `picks: true` = a person on a terminal picks everything listed; a list = only those (the rest is required on a terminal too).
   const picked = command.picks === true ? command.requires ?? [] : command.picks ?? [];

@@ -1,10 +1,10 @@
 export { verifyEvaluationEvidence, EvaluationEvidenceError } from './internal/verify.js';
 export type { EvaluationEvidenceLimits } from './internal/verify.js';
-export { PROCESS_EXIT_EVALUATOR, processExitTerminalEvaluator, evaluateProcessExit, validateProcessExitCriterion, validateInstalledProcessExitEvaluator, processExitWithin, criterionWithin } from './internal/process-exit.js';
-export type { ProcessExitParameters } from './internal/process-exit.js';
+export { PROCESS_EXIT_EVALUATOR, processExitTerminalEvaluator, evaluateProcessExit, validateProcessExitCriterion, validateInstalledProcessExitEvaluator, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ processExitWithin, criterionWithin } from './internal/process-exit.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProcessExitParameters } from './internal/process-exit.js';
 export { OPERATION_EVIDENCE_EVALUATOR, evaluateOperationEvidence, createInstalledTerminalEvaluator, validateInstalledEvaluator, validateInstalledCriterion, installedEvaluatorParameters } from './internal/operation-evidence.js';
-export type { OperationEvidenceReader, OperationEvidenceResult, OperationSettlementReference } from './internal/operation-evidence.js';
+export type { OperationEvidenceReader, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ OperationEvidenceResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ OperationSettlementReference } from './internal/operation-evidence.js';
 export { evaluatorEvidence } from './internal/evidence-kind.js';
-export type { EvaluatorEvidence, EvaluatorEvidenceKind } from './internal/evidence-kind.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EvaluatorEvidence, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EvaluatorEvidenceKind } from './internal/evidence-kind.js';
 export { BEUSER_EVALUATOR, beuserReadbackSchema, beuserEvidenceSchema, beuserParametersSchema, beuserCalibrationSchema, beuserDigest, evaluateBeuserEvidence, validateInstalledBeuserEvaluator, validateBeuserCriterion } from './internal/beuser.js';
-export type { BeuserEvidence, BeuserReadback, BeuserParameters, BeuserCalibration } from './internal/beuser.js';
+export type { BeuserEvidence, BeuserReadback, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BeuserParameters, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BeuserCalibration } from './internal/beuser.js';

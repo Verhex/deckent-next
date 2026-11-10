@@ -1,10 +1,10 @@
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { HeadlessEgress } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
 import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
-import { buildHeadlessEnv, codexAgentArgv, codexAgentTurn } from '#adapters/core/native-cli-headless/index.js';
+import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
 import { nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
@@ -23,8 +23,6 @@ export interface NativeCliWorkerTransport {
   readonly profile: Prepared['profile'];
   preflight(signal: AbortSignal): Promise<{ execution: NativeAgentExecution; preflight: Preflight }>;
   claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number }): ClaudeDriver;
-  claudeRun(entry: Entry, session: ToolSessionPort['session'], input: { runDir: string; model: string; system: string; turnToken: string; effort?: string }): Promise<{
-    args: readonly string[]; configFile: string; promptFile: string; dispose(): Promise<void> }>;
   runIsolated(entry: Entry, spawn: { executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
     promptFile: string; mcpConfigFile?: string; mcp: Bridge; now: () => number }, bounds: Bounds, signal: AbortSignal,
     line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null }>;
@@ -61,26 +59,14 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         if (!turn?.accepts(call)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
         return input.tools.propose(call, correlation, callSignal);
       } });
-      let args: readonly string[], configFile: string | undefined, promptFile = join(runDir, entry.headless.systemPromptFile);
-      if (claude) {
-        const files = await transport.claudeRun(entry, tools.session, { runDir, model: input.model, system: input.system, turnToken: bridge.turnToken,
-          ...(input.effort?.level ? { effort: input.effort.level } : {}) });
-        args = [...files.args, ...(input.maxTurns === undefined ? [] : [entry.command.capabilities.maxTurns!.flag, String(input.maxTurns)])];
-        promptFile = files.promptFile; configFile = files.configFile; dispose = () => files.dispose();
-      } else {
-        args = codexAgentArgv(entry, tools.session, runDir, input.model, effortArgs, bridge.url);
-        await writeFile(promptFile, input.system, { mode: 0o600, flag: 'wx' });
-      }
+      const launch = await nativeAgentLaunch(entry, { session: tools.session, runDir, configDir: input.binding.definition.configDir, model: input.model, system: input.system,
+        user: input.user, effortArgs, ...(input.maxTurns === undefined ? {} : { maxTurns: input.maxTurns }), turnToken: bridge.turnToken, bridgeUrl: bridge.url,
+        timeoutMs: input.deadlineMs, outputMaxBytes: input.outputBytes }); dispose = launch.dispose;
       const state = createNormalizerState([bridge.turnToken], Date.now(), undefined, bridgeToolClasses(entry.bridge.toolPrefix, tools.session.tools)), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
         events => input.onEvents?.(events as import('#domain/index.js').WorkerEvent[]));
       let refused = false;
-      const evidence = await transport.runIsolated(entry, { executable: checked.preflight.executable, args,
-        env: { ...buildHeadlessEnv(entry.headless, runDir, input.binding.definition.configDir), ...(claude ? {} : { [bridge.tokenEnvName]: bridge.turnToken }) },
-        stateDir: input.binding.definition.stateDir, runDir, configDir: input.binding.definition.configDir, promptFile,
-        ...(configFile ? { mcpConfigFile: configFile } : {}), mcp: bridge, now: Date.now },
-      { timeoutMs: input.deadlineMs, outputBytes: 2 * input.outputBytes + entry.headless.limits.responseFramingBytes, stderrBytes: entry.headless.limits.stderrMaxBytes,
-        maxLineBytes: entry.headless.limits.maxLineBytes, interruptGraceMs: entry.headless.limits.killGraceMs, stdinBase64: Buffer.from(input.user).toString('base64') },
-      AbortSignal.any([combined, gate.signal, ...(claude ? [claude.signal] : [])]), raw => {
+      const evidence = await transport.runIsolated(entry, { ...launch.spawn, executable: checked.preflight.executable, stateDir: input.binding.definition.stateDir,
+        mcp: bridge, now: Date.now }, launch.bounds, AbortSignal.any([combined, gate.signal, ...(claude ? [claude.signal] : [])]), raw => {
         const stop = claude ? claude.line(raw) === 'stop' : !!turn!.line(raw);
         if (stop) { refused = true; return 'stop'; }
         observer.observe(Buffer.from(raw + '\n'));

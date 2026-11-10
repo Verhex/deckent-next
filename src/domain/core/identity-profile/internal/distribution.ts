@@ -11,7 +11,7 @@ export const identityDistributionSelectionSchema = identityProfileJsonSchema.pip
     scopeIds: z.array(identitySchema).min(1).max(128).readonly() }).readonly()).max(32).readonly(),
   removeBindingIds: z.array(identitySchema).max(32).readonly(),
 }).readonly());
-export type IdentityDistributionSelection = z.infer<typeof identityDistributionSelectionSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type IdentityDistributionSelection = z.infer<typeof identityDistributionSelectionSchema>;
 /** Retain this exact envelope to replay its C11 command, including after settlement or process restart. */
 export const identityDistributionSubmissionSchema = identityProfileJsonSchema.pipe(z.strictObject({ schemaVersion: z.literal(1),
   selection: identityDistributionSelectionSchema, registryDigest: z.string().regex(/^[a-f0-9]{64}$/),

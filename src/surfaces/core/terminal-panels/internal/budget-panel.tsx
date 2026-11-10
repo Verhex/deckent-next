@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import type { PickerResult, PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { PICKER_INITIAL, type PickerResult, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { ConfigNumberWindow } from './config-stepper.js';
 import { PickerWindow } from './picker-window.js';
 import type { BudgetPanelLabels, BudgetPanelPort, BudgetPanelView, PanelLabels, PanelNotice } from './contract.js';
@@ -14,12 +14,12 @@ export function budgetEntry(view: BudgetPanelView | null, words: BudgetPanelLabe
   return view.action === 'create' ? { label: words.create, detail: view.note ?? '' } : { label: words.change, detail: fillTemplate(words.changeDetail, { current: view.current ?? '-' }) };
 }
 /** The amount list: the presets, then the bounded arrow-key step (no free entry anywhere). */
-export function budgetAmountTree(view: BudgetPanelView, words: BudgetPanelLabels): PickerTree {
+function budgetAmountTree(view: BudgetPanelView, words: BudgetPanelLabels): PickerTree {
   return { title: view.action === 'change' ? fillTemplate(words.changeDetail, { current: view.current ?? '-' }) : words.create,
     items: [...view.presets.map(usd => ({ id: `usd:${usd}`, label: fillTemplate(words.preset, { usd }) })), { id: OTHER, label: words.other }] };
 }
 /** The confirm list: send (and, for a frozen account, send and lift the freeze), or cancel. */
-export function budgetConfirmTree(view: BudgetPanelView, usd: number, words: BudgetPanelLabels): PickerTree {
+function budgetConfirmTree(view: BudgetPanelView, usd: number, words: BudgetPanelLabels): PickerTree {
   return { title: fillTemplate(words.confirmTitle, { usd }), items: [{ id: CONFIRM, label: words.confirm },
     ...(view.action === 'change' && view.frozen ? [{ id: UNFREEZE, label: words.confirmUnfreeze }] : []), { id: 'cancel', label: words.cancel }] };
 }
@@ -59,5 +59,6 @@ export function BudgetWindow({ port, view, labels, push, onDone }: { readonly po
   // The confirm step's question is its title (the embedded list draws no title of its own); the body keeps the current budget and the warning.
   return <PickerWindow title={step.kind === 'confirm' ? [span(tree.title, { bold: true })] : title}
     body={[...(view.current ? [{ spans: [span(fillTemplate(words.changeDetail, { current: view.current }), { role: 'muted' })] }] : []), ...warning]} bodyRows={BODY_ROWS}
-    tree={tree} labels={labels.picker} position={labels.position} pickerKey={step.kind} onResult={answer} />;
+    tree={tree} labels={labels.picker} position={labels.position} pickerKey={step.kind}
+    initial={{ ...PICKER_INITIAL, pos: step.kind === 'amount' ? Math.max(0, view.presets.indexOf(view.start)) : 0 }} onResult={answer} />;
 }

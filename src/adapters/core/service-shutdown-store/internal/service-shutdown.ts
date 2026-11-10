@@ -11,7 +11,7 @@ import {
   type ShutdownAdmission,
   type ShutdownOutcome,
 } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 type StoredRow = Readonly<{ record: unknown }>;
 
@@ -21,20 +21,16 @@ export class SqliteServiceShutdownJournal {
   async admitServiceShutdown(input: ShutdownAdmission): Promise<ServiceShutdownAdmissionResult> {
     const admission = this.admission(input, 'SERVICE_SHUTDOWN_INVALID');
     const key = this.key({ scopeId: admission.scopeId, serviceId: admission.command.serviceId, commandId: admission.command.commandId });
-    let transaction = false;
-    try {
-      this.db.exec('BEGIN IMMEDIATE'); transaction = true;
+    return ledgerTransaction(this.db, () => {
       const existing = this.readAdmission(key);
       if (existing) {
         if (!sameShutdownAdmission(existing, admission)) throw new ServiceShutdownError('SERVICE_SHUTDOWN_CONFLICT');
-        this.db.exec('COMMIT'); transaction = false;
         return Object.freeze({ admission: existing, replayed: true });
       }
       this.db.prepare('INSERT INTO service_shutdown_commands(scope_id,service_id,command_id,record) VALUES(?,?,?,?)')
         .run(key.scopeId, key.serviceId, key.commandId, JSON.stringify(admission));
-      this.db.exec('COMMIT'); transaction = false;
       return Object.freeze({ admission, replayed: false });
-    } catch (error) { this.fail(error, transaction); }
+    }, { failure: error => this.fail(error) });
   }
 
   async readServiceShutdown(input: ServiceShutdownKey): Promise<ServiceShutdownReceipt | null> {
@@ -53,29 +49,25 @@ export class SqliteServiceShutdownJournal {
       }
       if (outcome && outcome.instanceId !== admission.command.instanceId) throw new ServiceShutdownError('SERVICE_SHUTDOWN_CORRUPT');
       return Object.freeze({ admission, outcome });
-    } catch (error) { this.fail(error, false); }
+    } catch (error) { this.fail(error); }
   }
 
   async retainServiceShutdownOutcome(input: ShutdownOutcome): Promise<ShutdownOutcome> {
     const outcome = this.outcome(input, 'SERVICE_SHUTDOWN_INVALID');
     const key = this.key(outcome);
-    let transaction = false;
-    try {
-      this.db.exec('BEGIN IMMEDIATE'); transaction = true;
+    return ledgerTransaction(this.db, () => {
       const admission = this.readAdmission(key);
       if (!admission) throw new ServiceShutdownError('SERVICE_SHUTDOWN_NOT_ADMITTED');
       if (admission.command.instanceId !== outcome.instanceId) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INSTANCE');
       const existing = this.readOutcome(key);
       if (existing) {
         if (JSON.stringify(existing) !== JSON.stringify(outcome)) throw new ServiceShutdownError('SERVICE_SHUTDOWN_OUTCOME_CONFLICT');
-        this.db.exec('COMMIT'); transaction = false;
         return existing;
       }
       this.db.prepare('INSERT INTO service_shutdown_outcomes(scope_id,service_id,command_id,record) VALUES(?,?,?,?)')
         .run(key.scopeId, key.serviceId, key.commandId, JSON.stringify(outcome));
-      this.db.exec('COMMIT'); transaction = false;
       return outcome;
-    } catch (error) { this.fail(error, transaction); }
+    }, { failure: error => this.fail(error) });
   }
 
   private key(input: ServiceShutdownKey): ServiceShutdownKey {
@@ -127,11 +119,7 @@ export class SqliteServiceShutdownJournal {
     catch { throw new ServiceShutdownError(code); }
   }
 
-  private fail(error: unknown, transaction: boolean): never {
-    if (transaction) {
-      try { this.db.exec('ROLLBACK'); }
-      catch { throw new ServiceShutdownError('SERVICE_SHUTDOWN_CORRUPT'); }
-    }
+  private fail(error: unknown): never {
     const mapped = sqliteFailure(error);
     if (mapped instanceof ServiceShutdownError) throw mapped;
     throw new ServiceShutdownError('SERVICE_SHUTDOWN_AUDIT_UNAVAILABLE');

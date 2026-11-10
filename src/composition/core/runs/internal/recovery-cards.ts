@@ -1,11 +1,10 @@
-import { userInfo } from 'node:os';
 import { RECOVERY_ROLLOUT, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
 import { AuditApplication, DispatchInventoryPolicyAuthorization, NERVOUS_EXECUTABLE_ACTIONS, NERVOUS_RULES_SEED, PolicyAdministrationInspection, RecoveryPolicyCard, RecoveryReviewApplication,
   loadNervousRules, readRecoveryRollout, type RecoveryPolicyCommand, type RecoveryRolloutPorts } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteAuditStore, openSqliteRecoveryStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { withPolicyAdministration } from '#composition/core/approvals/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
@@ -37,7 +36,7 @@ export async function configuredRecoveryReview<T>(projectRoot: string, scopeId: 
   use: (review: RecoveryReviewApplication, person: VerifiedPrincipal) => Promise<T>): Promise<T> {
   try {
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write');
-    const inspection = new PolicyAdministrationInspection(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes));
+    const inspection = new PolicyAdministrationInspection(contextPolicySource(c));
     return await withRecords(c, true, (ports, ledger) => use(new RecoveryReviewApplication({ ...ports, load: (scope, eventId) => ledger.load(scope, eventId),
       record: event => ledger.record(event), authorize: async (principal, scope) => { await inspection.inspect(principal, { schemaVersion: 1, scopeId: scope }); }, interactive,
       policyRevision: c.document.revision, now: Date.now }), c.principal));

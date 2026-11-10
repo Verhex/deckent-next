@@ -78,7 +78,7 @@ export function startScratchSweeper(input: { readonly root: () => Promise<string
   input.signal.addEventListener('abort', () => clearInterval(timer), { once: true });
 }
 
-export interface ScratchContents {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ScratchContents {
   readonly path: string; readonly exists: boolean; readonly bytes: number; readonly truncated: boolean;
   readonly files: readonly { readonly path: string; readonly bytes: number; readonly modifiedAtMs: number }[];
 }

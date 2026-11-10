@@ -48,7 +48,7 @@ const shellHasNetwork = (posture: AgentTurnShellPosture | null | undefined) => p
  */
 export const AGENT_TURN_REPLY_LANGUAGES = Object.freeze({ en: 'English', tr: 'Turkish (Türkçe)' } as const);
 export type AgentTurnReplyLanguage = keyof typeof AGENT_TURN_REPLY_LANGUAGES;
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The reply-language rule (LANG-CRASH, owner 2026-09-29: "tamamen Türkçe iletişim"): the person's locale, stated explicitly, because a model
  * otherwise drifts to the language of an English system text, English files and tool results. The same words close the compaction instruction.
  */

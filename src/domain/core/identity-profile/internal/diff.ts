@@ -1,8 +1,8 @@
 import { evaluatePolicy, principalGrants, type Policy, type PolicyDecision } from '#domain/core/policy/index.js';
 import { IDENTITY_PROFILE_LIMITS, IdentityProfileError, type IdentityPreviewInput } from './schema.js';
 
-export type IdentityCellSelection = { readonly values: readonly string[] } | { readonly except: readonly string[] };
-export interface IdentityPermissionDifference {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type IdentityCellSelection = { readonly values: readonly string[] } | { readonly except: readonly string[] };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface IdentityPermissionDifference {
   readonly memberId: string; readonly scopeId: string; readonly resourceKind: string;
   readonly actions: IdentityCellSelection; readonly resourceIds: IdentityCellSelection;
   readonly before: PolicyDecision; readonly after: PolicyDecision; readonly change: 'gain' | 'loss' | 'unchanged';

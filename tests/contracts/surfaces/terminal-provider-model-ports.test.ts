@@ -11,8 +11,7 @@ import { modelInvocationProfileSchema, type ModelConnectCommand, type ModelConne
 import { providerModelTree, providerPanelTree, subscriptionModelView, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import type { NativeAgentReadiness } from '#capabilities/index.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
-import { ModelInvocableNowApplication, modelInvocationProfileDigest, type ModelInvocability, type InvocableModels } from '#engine/index.js';
+import { ModelInvocableNowApplication, modelInvocationProfileDigest, modelInvocabilityText, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { main as runConfiguredCli } from '#composition/core/cli/index.js';
 import * as cliSurface from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
@@ -427,7 +426,7 @@ describe('/model source', () => {
       configApplication: (() => ({
         submit: async (action: string, input: Record<string, unknown>) => { writes.push({ action, ...input }); return { status: 'applied', approvalId: null,
           result: { keyPath: input['keyPath'], layer: input['layer'], beforeDigest: null, afterDigest: 'a'.repeat(64), backupPath: null, overridden: false } }; },
-        explain: async () => ({ apply: 'live' }),
+        explain: async () => ({ apply: 'live' }), inspectValue: async () => ({ value: (JSON.parse(await readFile(join(root, '.deckent/config.json'), 'utf8')) as { brain_planner?: { excluded?: unknown } }).brain_planner?.excluded }),
       })) as never,
     };
     const source = modelPanelSource(root, 'scope', host, options, 'en'), view = await source.inspect(), row = (id: string) => view.choices.find(choice => choice.reference.modelId === id)!;
@@ -446,6 +445,15 @@ describe('/model source', () => {
     // J1: the chosen Brain model is marked on its row (`brain`), not in the detail line the list does not show.
     const brainRow = after.choices.find(choice => choice.reference.modelId === 'chat')!; expect(brainRow.brain).toBe(true); expect(brainRow.detail).not.toContain('plans /do work');
     expect(after.notes.some(note => note.startsWith('No Brain model chosen'))).toBe(false);
+    // Owner 2026-11-06 ("can be Brain", default on): a runnable row offers "Don't offer as Brain"; a switched-off row is not offered as Brain (no
+    // "Use as Brain", no recommendation) and offers "Offer as Brain", written to brain_planner.excluded on the layer that holds it.
+    expect(row('coder').fixes!.map(fix => fix.id)).toContain('brain-off');
+    await writeFile(configPath, JSON.stringify({ ...config, brain_planner: { reference: ref('chat'), excluded: [{ channelId: 'local-openai', modelId: 'native-coder' }] } })); clearConfigCache();
+    const off = (await source.inspect()).choices.find(choice => choice.reference.modelId === 'coder')!;
+    expect(off.fixes!.filter(fix => fix.id.startsWith('brain')).map(fix => fix.id)).toEqual(['brain-on']);
+    expect(off.detail).toContain('switched off as Brain'); expect(off.detail).not.toContain('recommended for planning');
+    expect((await source.setBrainOffer!(off, true)).lines[0]).toBe('native-coder can be chosen as Brain again.');
+    expect(writes.at(-1)).toMatchObject({ action: 'set', keyPath: 'brain_planner.excluded', layer: 'project', value: [] });
     { // F2-14 (owner walk 2026-11-08): /model lists the higher registry tier first, then the catalog's own priority, not the declared (alphabetical) order
     // The tier comes from the tier/role registry overlay; `keyless` is frontier, the rest are not registered. The catalog has no release date.
     const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'tiers-1', roles: [], exceptions: [],
@@ -545,20 +553,33 @@ describe('/model source', () => {
     // Astra D10-M1: without a provider port there is no "Connect a model…" row, so the note names the CLI instead.
     const bare = await modelPanelSource(root, 'scope', empty as never, options, 'en').inspect();
     expect(bare.notes[0]).toContain('deckent models connect'); expect(bare.notes[0]).not.toContain('Connect a model…');
+    expect(bare.title).toBe(t('tui.model.title', { scope: 'scope' }, 'en')); // an own installation keeps its scope
+    // a64 (owner walk): an attached project (generated scope id) titles /model with its folder name; the scope id stays in a note.
+    const scopeId = '0d9e3a52-6b1f-4c7a-9a43-2f5c8e7d1b60', attached = await project({ schema_version: 5, installation: { sharedRegistrationId: '8b2d4f6a-1c3e-4a5b-9d7f-0e1a2b3c4d5e' } });
+    const shown = await modelPanelSource(attached.root, scopeId, empty as never, attached.options, 'en').inspect(), folder = attached.root.split(/[\\/]/u).at(-1)!;
+    expect(shown.title).toBe(t('tui.model.title', { scope: folder }, 'en')); expect(shown.notes[0]).toBe(t('tui.model.scopeNote', { scope: scopeId }, 'en'));
   });
 });
 
 it('U1 provider port blocks unknown/grantless keys and renders custody refusal or retained-key administrator action without the value', async () => {
   const { root, options } = await project({}), store = secrets(['DECKENT_ANTHROPIC_KEY']);
-  let ready = false;
-  const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connectHost('ok'),
+  let ready = false, grantFailure: unknown = ErrorRegistry.createError('SECRET_GRANT_REQUIRED');
+  const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connectHost('ok'), connectModel: async () => { throw grantFailure; },
     prepareMainSecret: async () => ready ? { state: 'ready', backend: 'core.secret-store.encrypted-file@1' }
       : { state: 'refused', backend: null, code: 'SECRET_STORE_UNSAFE', path: root },
     connectProviderSecret: async (_root, input) => ({ name: input.name, backend: 'core.secret-store.encrypted-file@1', custody: { state: 'ready' },
       key: { state: 'stored' }, grant: { state: 'admin', code: 'SECRET_GRANT_REQUIRED' } }),
   }, options, 'tr', errorText, { offer: async () => false, grant: async () => {}, question: () => ({ title: '', lines: [], prompt: '' }),
-    check: async () => { throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED'); } });
+    check: async () => { throw grantFailure; } });
   expect((await port.inspect()).kinds[0]).toMatchObject({ modelBlocked: 'ERR:SECRET_GRANT_REQUIRED', grantRequired: true });
+  class EnterpriseCopy extends Error { readonly code = 'SECRET_GRANT_REQUIRED'; }
+  Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+  grantFailure = new EnterpriseCopy();
+  await expect(port.connectModel!({ kind: 'anthropic-api', endpoint: null, model: 'seed:fixture' })).rejects.toBe(grantFailure);
+  expect((await port.inspect()).kinds[0]).toMatchObject({ grantRequired: true });
+  grantFailure = { code: 'SECRET_GRANT_REQUIRED' };
+  await expect(port.connectModel!({ kind: 'anthropic-api', endpoint: null, model: 'seed:fixture' })).resolves.toMatchObject({ connected: false });
+  expect((await port.inspect()).kinds[0]).toMatchObject({ grantRequired: false, modelBlocked: 'ERR:SECRET_GRANT_REQUIRED' });
   await expect(port.prepareKey!('anthropic-api', null)).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE', params: { path: root } });
   expect(store.sets).toEqual([]);
   ready = true;
@@ -815,38 +836,40 @@ it('K13: text invocability never mints agent readiness; the model and provider s
   const choice = { reference, label: 'Fixture', detail: 'OLD TEXT READY', group: native.id, blocked: null, configured: false, exact: 'fixture', command: null };
   let state: NativeAgentReadiness | undefined;
   const host = { providerConnect: { ...base, kinds: [native] }, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } }] }) as never,
-    inspectSubscriptionReadiness: async (_root: string, query: unknown) => { calls.push(query); return state as NativeAgentReadiness; } };
+    inspectSubscriptionReadiness: async (_root: string, query: { references: readonly unknown[] }) => { calls.push(query); return query.references.map(() => state as NativeAgentReadiness); } };
   const plain = { title: 'models', choices: [choice, { ...choice, reference: { ...reference, providerId: 'api-fixture' } }], notes: [], defaultBlocked: null };
   for (const locale of ['en', 'tr'] as const) {
     const port = providerPanelPort(root, 'scope', host, options, locale, errorText);
     state = undefined;
     // R2a: unknown stays selectable (the guarded first turn verifies it); only unavailable blocks.
     const unknown = await subscriptionModelView(plain, port, locale);
-    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
     expect(unknown.choices[0]!.detail).not.toContain('OLD TEXT READY'); expect(unknown.choices[1]).toEqual(plain.choices[1]);
     expect((await port.inspect()).notes.join('\n')).toContain(unknown.choices[0]!.detail);
     state = { state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
     const unchecked = await subscriptionModelView(plain, port, locale);
-    expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.k13.unknown.cli', {}, locale));
+    expect(unchecked.choices[0]!.detail).toContain(t('headless.agent.unknown.cli', {}, locale));
     expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale)); expect(unchecked.choices[0]!.blocked).toBeNull();
     state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
     state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
       profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
     const ready = await subscriptionModelView(plain, port, locale);
-    expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.k13.readiness.ready', {}, locale));
-    expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', reference });
-    // A later missing observation cannot retain an earlier ready projection.
-    state = undefined;
-    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.readiness.ready', {}, locale));
+    expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', references: [reference] });
+    // A later missing observation cannot retain an earlier ready projection: every view build reads again (no cross-build cache).
+    state = undefined; const builds = calls.length;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
+    expect(calls).toHaveLength(builds + 1);
     const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
-    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.k13.unknown.sealed', {}, locale));
+    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
   }
   // R3c: a login with several models gives one note (onboarding pushes notes to scrollback), not one per model.
-  state = undefined;
+  state = undefined; calls.length = 0;
   const two = await providerPanelPort(root, 'scope', { ...host, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } },
     { reference: { ...reference, modelId: 'fixture-2' }, nativeId: 'fixture-2', availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText).inspect();
   expect(two.notes.filter(note => note.startsWith(two.kinds[0]!.label))).toEqual([`${two.kinds[0]!.label} · 2 model(s) connected: ${subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en')}`]);
+  expect(calls).toEqual([{ scopeId: 'scope', surface: 'chat', references: [reference, { ...reference, modelId: 'fixture-2' }] }]); // KG6 F5: one host read per view build
   // R8e: the production CLI host reads the seal a guarded turn wrote, so /provider says ready (without the host wiring it stayed "unknown").
   const sealedRoot = await mkdtemp(join(tmpdir(), 'deckent-r8e-')); roots.push(sealedRoot);
   const global = join(sealedRoot, 'global'), bin = join(sealedRoot, 'bin'), configDir = join(global, 'headless', 'logins', 'claude'), stateDir = join(global, 'headless', 'connections', 'r8e');
@@ -864,7 +887,7 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     expect(await runConfiguredCli(['--lang', 'en'])).toBe(0);
     const sealedPort = providerPanelPort(f.project, 's', { ...cliHost!, providerConnect: { ...base, kinds: [{ ...native, id: f.reference.providerId, catalogProviderId: f.reference.providerId }] } },
       sealedOptions, 'en', errorText);
-    expect(subscriptionReadinessText(await sealedPort.subscriptionReadiness!.inspect('chat', f.reference), 'en')).toBe(t('headless.agent.k13.readiness.ready', {}, 'en'));
+    expect(subscriptionReadinessText(await sealedPort.subscriptionReadiness!.inspect('chat', f.reference), 'en')).toBe(t('headless.agent.readiness.ready', {}, 'en'));
     expect(observation).toHaveBeenCalled();
   } finally { entry.mockRestore(); cwd.mockRestore(); observation.mockRestore(); await f.close(); }
 });

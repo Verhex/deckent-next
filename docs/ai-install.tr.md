@@ -11,7 +11,9 @@ Son yayımlanan sürümün kaynaktan kurulum yolu README'dedir.
 
 x86_64 üzerinde Linux ya da WSL2 kullanın. Native Windows desteklenmez; macOS çalışma zamanı desteği eksiktir.
 Mevcut paket Node.js `>=24.22.1 <25 || >=26.12.1` ve npm ister. Kurulumdan önce dosyanın `package.json` engines alanını
-yeniden kontrol edin; Node 25 kapsam dışıdır. Kod işçileri ve imaj derlemek için Docker kurulu, çalışıyor ve erişilebilir olmalıdır.
+yeniden kontrol edin; Node 25 kapsam dışıdır. [Resmî Node.js indirme sayfasını](https://nodejs.org/en/download) kullanın;
+WSL2 içinde Linux seçin. npm `EBADENGINE` bildirirse (örneğin Ubuntu'nun Node 18'inde), Node'u yükseltin, terminali yeniden
+açın, `node --version` ve `npm --version` kontrolünden sonra kurulumu tekrarlayın. Kod işçileri ve imaj derlemek için Docker kurulu, çalışıyor ve erişilebilir olmalıdır.
 Yerel model sohbeti kendi başına kod işçisi gerektirmez. İşletim sistemi izinlerini değiştirmek ya da Docker'ı yükseltilmiş
 yetkiyle kurmak gerekiyorsa yönetici adımını kişiye bırakın.
 
@@ -32,6 +34,9 @@ deckent init --yes --scope my-project --json
 deckent doctor --json
 ```
 
+İlk ekrandan itibaren Türkçe için `deckent init` ve `deckent` komutlarına `--lang tr` ekleyin; tercih
+`deckent config set --global language tr` ile kaydedilir. İngilizce için `en` kullanılır.
+
 JSON'un tamamını ve süreç çıkışını okuyun. Kurulumun bitmesi başlangıç adımlarının bitmesinden ayrıdır.
 Başsız kurulum yetkiyi beklemede bırakır; kişinin tanıklı ilk terminal açılışı profil ve izin varsayılanlarını önizler.
 Kurulum sıfır döndü diye “hazır” demeyin. Doctor eksik model, işçi yapılandırması, uyarı ya da sınanmamış denetim bildirebilir.
@@ -48,7 +53,9 @@ Kişinin bu klasörde `deckent` açıp başlangıç ekranlarını tamamlamasın�
 - Profil, izin kipi ve izin/onay kartlarını gerçek terminalde incelemek. AI, MCP, pipe ve JSON kişinin kararına tanıklık
   etmez. Terminal taklit etmeyin, politika dosyası değiştirmeyin ve reddi aşmak için komut değiştirmeyin.
 - Ücretli API bütçesine karar vermek. İlk kurulum bütçesi sıfır USD'dir; önce harcamasız yollar sunulur. API bütçe ekranı
-  kişinin kabul edebileceği ya da değiştirebileceği 10 USD seçeneği sunar; kişi adına kabul etmeyin.
+  ortak [varsayılan tutarı](../src/surfaces/core/cli-models/internal/budget-choices.json) (10 USD) seçili sunar; kişi kabul
+  edebilir ya da değiştirebilir, kişi adına kabul etmeyin. `/provider` içinde bütçe satırı bağlantılardan sonra gelir;
+  `bütçe` yazarak süzebilirsiniz.
 - İlk kurulum şablonundan geniş kurallı bir kurulum profilini (`init apply --profile`, `init resume`) kendisi uygulamak: bu
   kişiyi terminalinde ister (`AUTHORITY_WITNESS_REQUIRED`). Yukarıdaki şablon içi `init --yes` terminalsiz kalır.
 - Kaldırmayı, kademesini, `--force`, `--disable-unit` ve yedek parolasını kendisi onaylamak. Kurulum adını bilmek yetki

@@ -2,6 +2,9 @@ import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import * as localPrincipal from '#adapters/core/local-principal/index.js';
+import * as childProcess from 'node:child_process';
+import { main as cliMain } from '#composition/core/cli/index.js';
+import * as surface from '#surfaces/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 import { carryConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
@@ -9,6 +12,7 @@ import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/
 import { resolveConfiguredModelUse, configuredModelProfiles } from '#composition/core/model-use/index.js';
 import { ModelBindingApplication } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
+import * as fs from 'node:fs/promises';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,13 +20,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle } from '#adapters/index.js';
+import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle, captureAttachmentLocation, prepareAttachmentDirectory } from '#adapters/index.js';
 import { ProjectAttachmentApplication } from '#engine/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { clearConfigCache, productResourcePath, DeckentError } from '#platform/index.js';
 
 const personEffectWitness = vi.hoisted(() => ({ allowed: false }));
 // Synthetic disposable-person fixture only. The effect still uses the real session, broker and removal owners.
 vi.mock('#adapters/core/local-principal/internal/interactive.js', () => ({ attestLocalInteractiveTerminal: async () => personEffectWitness.allowed }));
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, lstat: vi.fn(actual.lstat) };
+});
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  const execFile = vi.fn(actual.execFile);
+  for (const symbol of Object.getOwnPropertySymbols(actual.execFile)) Object.defineProperty(execFile, symbol, Object.getOwnPropertyDescriptor(actual.execFile, symbol)!);
+  return { ...actual, execFile };
+});
+vi.mock('#surfaces/index.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('#surfaces/index.js')>();
+  return { ...actual, askCliCard: vi.fn(async () => 'no') };
+});
 const roots: string[] = [];
 afterEach(async () => { personEffectWitness.allowed = false; vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function snapshotBytes(root: string, prefix = ''): Promise<Record<string, string>> {
@@ -134,6 +152,71 @@ async function exerciseAttachedLifecycle(input: { f: AttachmentFixture; target: 
   await expect(attachmentLifecycle(await loadComposedConfig(f.a, f.options), f.options).assert()).resolves.toBeUndefined();
   expect(await attachmentLifecycle(await loadComposedConfig(f.b, f.options), f.options).identityId()).toBe(installationId);
 }
+it.skipIf(process.platform === 'win32')('ATTACH F1: the 0022 floor refuses writable folders without subprocess proof', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-floor-')); roots.push(root);
+  for (const mode of [0o775, 0o757, 0o777]) {
+    await fs.chmod(root, mode); vi.mocked(childProcess.execFile).mockClear();
+    await expect(captureAttachmentLocation(root)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED', params: { reason: 'location-write', path: root } });
+    expect(childProcess.execFile).not.toHaveBeenCalled();
+    expect((await fs.lstat(root)).mode & 0o777).toBe(mode); expect(await readdir(root)).toEqual([]);
+  }
+});
+it.skipIf(process.platform === 'win32')('ATTACH F2: every 0775 folder asks once before narrowing, with no account subprocess', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-narrow-')); roots.push(root); await fs.chmod(root, 0o775);
+  vi.mocked(childProcess.execFile).mockClear();
+  const confirm = vi.fn(async () => { expect((await fs.lstat(root)).mode & 0o777).toBe(0o775); expect(await readdir(root)).toEqual([]); return true; });
+  await prepareAttachmentDirectory(root, async () => {}, confirm);
+  expect(confirm).toHaveBeenCalledExactlyOnceWith(root); expect(childProcess.execFile).not.toHaveBeenCalled();
+  expect((await fs.lstat(root)).mode & 0o777).toBe(0o755);
+});
+it.skipIf(process.platform === 'win32')('ATTACH F3: real initCommand/createCliHost refuse --json on a TTY without asking or writing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-json-')); roots.push(root);
+  const project = join(root, 'project'), global = join(root, 'global'); await mkdir(project); await mkdir(global); await fs.chmod(project, 0o775);
+  vi.stubEnv('DECKENT_GLOBAL_HOME', global); vi.stubEnv('HOME', root); vi.stubEnv('TERM', 'xterm');
+  for (const key of [...(await loadComposedConfig(project)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  const streams = [process.stdin, process.stdout], descriptors = streams.map(stream => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
+  streams.forEach(stream => Object.defineProperty(stream, 'isTTY', { configurable: true, value: true }));
+  personEffectWitness.allowed = true; vi.mocked(surface.askCliCard).mockClear();
+  let output = '';
+  vi.spyOn(process, 'cwd').mockReturnValue(project);
+  const writes = [vi.spyOn(process.stdout, 'write'), vi.spyOn(process.stderr, 'write')];
+  writes.forEach(write => write.mockImplementation(((text: string) => { output += text; return true; }) as typeof process.stdout.write));
+  try {
+    // Public CLI composition loads the real createCliHost and dispatches the real initCommand.
+    expect(await cliMain(['init', 'policy', '--scope', 's', '--apply', '--json'])).toBe(78);
+    expect(surface.askCliCard).not.toHaveBeenCalled(); expect(output).toContain('PROJECT_ATTACHMENT_DENIED');
+    expect((await fs.lstat(project)).mode & 0o777).toBe(0o775);
+    expect(await readdir(project)).toEqual([]); expect(await readdir(global)).toEqual([]);
+  } finally { writes.forEach(write => write.mockRestore()); streams.forEach((stream, index) => { const descriptor = descriptors[index]; if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor); else Reflect.deleteProperty(stream, 'isTTY'); }); }
+});
+it.skipIf(process.platform !== 'linux')('ATTACH owner repair pins the folder and witness across the answer; never follows replacements or recurses', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-permission-')); roots.push(root);
+  const folder = join(root, 'folder'), child = join(folder, 'child'); await mkdir(folder); await mkdir(child); await fs.chmod(child, 0o777);
+  const authorize = vi.fn(async () => {}), confirm = vi.fn(async () => true);
+  for (const mode of [0o775, 0o777]) {
+    await fs.chmod(folder, mode);
+    await expect(prepareAttachmentDirectory(folder, authorize)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    await expect(prepareAttachmentDirectory(folder, async () => { throw new Error('no witness'); }, confirm)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    expect(confirm).not.toHaveBeenCalled();
+    await expect(prepareAttachmentDirectory(folder, authorize, async () => false)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    expect((await fs.lstat(folder)).mode & 0o777).toBe(mode); expect(await readdir(folder)).toEqual(['child']);
+    await prepareAttachmentDirectory(folder, authorize, confirm);
+    expect((await fs.lstat(folder)).mode & 0o777).toBe(0o755); expect((await fs.lstat(child)).mode & 0o777).toBe(0o777);
+    confirm.mockClear();
+  }
+  await fs.chmod(folder, 0o775);
+  let afterCalls = 0;
+  await expect(prepareAttachmentDirectory(folder, async () => { if (++afterCalls === 3) throw new Error('witness lost after chmod'); }, async () => true)).rejects.toThrow('witness lost after chmod');
+  expect((await fs.lstat(folder)).mode & 0o777).toBe(0o755); expect(await readdir(folder)).toEqual(['child']);
+  await fs.chmod(folder, 0o777);
+  let calls = 0;
+  await expect(prepareAttachmentDirectory(folder, async () => { if (++calls === 2) throw new Error('witness lost'); }, async () => true)).rejects.toThrow('witness lost');
+  expect((await fs.lstat(folder)).mode & 0o777).toBe(0o777);
+  await expect(prepareAttachmentDirectory(folder, authorize, async () => {
+    await rename(folder, join(root, 'original')); await symlink(join(root, 'original'), folder); return true;
+  })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect((await fs.lstat(join(root, 'original'))).mode & 0o777).toBe(0o777);
+});
 it.skipIf(process.platform !== 'linux')('registers only a fresh witnessed first install, keeps an existing source and leaves legacy installs explicit', async () => {
   const base = await mkdtemp(join(tmpdir(), 'deckent-first-registration-')); roots.push(base);
   const env = { HOME: join(base, 'home'), DECKENT_GLOBAL_HOME: join(base, 'global') }, options = { env };
@@ -148,6 +231,12 @@ it.skipIf(process.platform !== 'linux')('registers only a fresh witnessed first 
   expect(registered?.source).toMatchObject({ projectRoot: a, scopeId: 'source' });
   expect((await executeConfiguredProjectAttachment(b, { action: 'offer', scopeId: 'target' }, options)).kind).toBe('ready');
   const before = await snapshotBytes(env.DECKENT_GLOBAL_HOME);
+  await fs.chmod(c, 0o775);
+  await expect(applyPolicyTemplateInstallationWithSecretDefault(c, 'third', options)).rejects.toMatchObject({
+    code: 'PROJECT_ATTACHMENT_DENIED', message: expect.stringContaining('chmod go-w .') });
+  expect(await readdir(c)).toEqual([]);
+  expect(await snapshotBytes(env.DECKENT_GLOBAL_HOME)).toEqual(before);
+  await fs.chmod(c, 0o700);
   await applyPolicyTemplateInstallationWithSecretDefault(c, 'third', options);
   expect(await snapshotBytes(env.DECKENT_GLOBAL_HOME)).toEqual(before);
   expect(await store.registration()).toEqual(registered);
@@ -165,6 +254,37 @@ it.skipIf(process.platform !== 'linux')('registers only a fresh witnessed first 
   vi.mocked(localPrincipal.attestLocalInteractiveTerminal).mockResolvedValue(false);
   await applyPolicyTemplateInstallationWithSecretDefault(headless, 'headless', headlessOptions);
   expect(await configuredAttachmentStore(await loadComposedConfig(headless, headlessOptions), headlessOptions).registration()).toBeNull();
+  const { registerFreshInstallation } = await import('../../../src/composition/core/installation/internal/attachment.js');
+  class EnterpriseCopy extends Error { readonly code = 'AUTHORITY_WITNESS_REQUIRED'; }
+  Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+  const preview = vi.spyOn(ProjectAttachmentApplication.prototype, 'registrationPreview');
+  const branded = new EnterpriseCopy(); preview.mockRejectedValue(branded);
+  await expect(registerFreshInstallation(headless, 'headless', headlessOptions)).resolves.toEqual({ status: 'witness-required' });
+  const spoof = { code: 'AUTHORITY_WITNESS_REQUIRED' }; preview.mockRejectedValue(spoof);
+  await expect(registerFreshInstallation(headless, 'headless', headlessOptions)).rejects.toBe(spoof);
+  preview.mockRestore();
+});
+
+it.skipIf(process.platform !== 'linux')('ATTACH review P2 carries location guidance in EN/TR for direct and raced ancestry symlinks', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-attachment-link-')); roots.push(root);
+  const real = join(root, 'real'), link = join(root, 'link'); await mkdir(real); await symlink(real, link);
+  const assertGuidance = async (path: string) => {
+    const error: unknown = await captureAttachmentLocation(path).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(DeckentError);
+    expect(error).toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED', params: { reason: 'location', path } });
+    const failure = error as DeckentError;
+    for (const [locale, guidance] of [['en', 'Use a real folder you own'], ['tr', 'Size ait gerçek bir klasör kullanın']] as const) {
+      const message = failure.localize!(locale).message;
+      expect(message).toContain(guidance); expect(message).toContain(path);
+      expect(message).not.toContain('/provider'); expect(message).not.toContain('chmod');
+    }
+  };
+  await assertGuidance(link);
+  const stat = (await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')).lstat;
+  // The canonical path was checked, but an ancestor becomes a symlink before the no-follow walk.
+  vi.mocked(fs.lstat).mockImplementation(async (...args) => args[0] === root
+    ? stat(link, args[1]) : stat(...args));
+  try { await assertGuidance(real); } finally { vi.mocked(fs.lstat).mockReset(); }
 });
 
 describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {
@@ -276,6 +396,7 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
     const link = join(f.root, 'link'); await symlink(f.b, link);
+    await expect(captureAttachmentLocation(link)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
     await expect(f.make(link)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
     expect((await recovery.store.registration())?.entries.find(entry => entry.attachment.projectId === attached.attachment.projectId)?.state).toBe('active');
     // A live WAL contains the newest company pin. Preview must consume it without changing any source byte or sidecar.

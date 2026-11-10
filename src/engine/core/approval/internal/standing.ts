@@ -1,7 +1,7 @@
-import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, POLICY_RECOVERY_CHANGE_KIND, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
-  planPolicyChange, policySchema, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
+import { type Policy, AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, POLICY_RECOVERY_CHANGE_KIND, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
+  planPolicyChange, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
   type DelegationOptions, type VerifiedPrincipal } from '#domain/index.js';
-import { hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
+import { CodedError, isCodedError, hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import type { AgentToolCallDecision, PolicySource } from '#engine/core/policy/index.js';
 import type { EffectOutcome } from '#engine/core/effect/index.js';
 
@@ -17,17 +17,17 @@ export function standingCallKey(call: { readonly tool: string; readonly cell: st
   return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, pattern: found.pattern.text, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
 }
 
-/** Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
 export type StandingCellName = SessionCell;
 
 /** Typed refusals of the standing-approval application (never a silent no-op: the card tells the person what was not saved). */
-export class StandingApprovalError extends Error {
-  constructor(readonly code: 'STANDING_UNSUPPORTED' | 'STANDING_LIMIT' | 'STANDING_DELEGATION' | 'STANDING_NOT_FOUND' | 'STANDING_NOT_SETTLED', readonly detail: string | null = null) {
+export class StandingApprovalError extends CodedError {
+  constructor(override readonly code: 'STANDING_UNSUPPORTED' | 'STANDING_LIMIT' | 'STANDING_DELEGATION' | 'STANDING_NOT_FOUND' | 'STANDING_NOT_SETTLED', readonly detail: string | null = null) {
     super(code); this.name = 'StandingApprovalError';
   }
 }
 
-/** Opaque process-local custody for one pending remembered audit; only its SessionStanding owner can commit it. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Opaque process-local custody for one pending remembered audit; only its SessionStanding owner can commit it. */
 export interface SessionStandingBinding { valid(): boolean; close(): void }
 
 /**
@@ -105,7 +105,7 @@ export async function rememberSessionStanding(input: { readonly memory: SessionS
 }
 
 export interface StandingGrantView { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
-/** What the card may offer for "in this project always": the person's own persisted grant, or why not. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the card may offer for "in this project always": the person's own persisted grant, or why not. */
 export type StandingOffer = { readonly available: true } | { readonly available: false; readonly reason: 'unsupported' | 'limit' | 'delegation' };
 
 export interface PersistentStandingDependencies {
@@ -133,12 +133,12 @@ export class PersistentStanding {
   constructor(private readonly deps: PersistentStandingDependencies) {}
   private async snapshot() {
     let policy;
-    try { policy = policySchema.parse(await this.deps.policy.load()); } catch (error) { throw new StandingApprovalError('STANDING_UNSUPPORTED', error instanceof Error ? error.message : null); }
+    try { policy = await this.deps.policy.load(); } catch (error) { throw new StandingApprovalError('STANDING_UNSUPPORTED', error instanceof Error ? error.message : null); }
     // Role-based authority (policy v2 + bindings) is what the governed change and its bound are made of; a v1 policy has neither.
     if (policy.schemaVersion !== 2) throw new StandingApprovalError('STANDING_UNSUPPORTED', 'policy v1');
     return policy;
   }
-  private mine(policy: ReturnType<typeof policySchema.parse>, principal: { readonly issuer: string; readonly subject: string }) {
+  private mine(policy: Policy, principal: { readonly issuer: string; readonly subject: string }) {
     return policy.grants.filter(grant => grant.resource.kind === STANDING_GRANT_KIND && isStandingGrantId(grant.id) && grant.principals !== 'all'
       && grant.principals.length === 1 && grant.principals[0]!.issuer === principal.issuer && grant.principals[0]!.subject === principal.subject);
   }
@@ -184,8 +184,8 @@ export class PersistentStanding {
     try { await administerOwnPolicyChange(this.deps, { ...input, revision: (await this.snapshot()).revision, kind: 'standing-change' }); }
     catch (error) {
       // The decider's authority is the bound (I3): a person cannot persist what their own rules do not hold.
-      if ((error as { code?: unknown } | null)?.code === 'POLICY_DELEGATION_EXCEEDS') throw new StandingApprovalError('STANDING_DELEGATION', (error as { detail?: string | null }).detail ?? null);
-      if (error instanceof Error && error.message === 'NOT_SETTLED') throw new StandingApprovalError('STANDING_NOT_SETTLED');
+      if (isCodedError(error, 'POLICY_DELEGATION_EXCEEDS')) throw new StandingApprovalError('STANDING_DELEGATION', (error as { detail?: string | null }).detail ?? null);
+      if (isCodedError(error, 'NOT_SETTLED')) throw new StandingApprovalError('STANDING_NOT_SETTLED');
       throw error;
     }
   }
@@ -209,7 +209,7 @@ export async function administerOwnPolicyChange(deps: Pick<PersistentStandingDep
     await deps.approve({ approvalId: outcome.approval.approvalId, revision: outcome.approval.revision }, `${commandId}-approve`, input.reason);
     outcome = await deps.administration.submit(command, undefined, options);
   }
-  if (outcome.status !== 'settled') throw new Error('NOT_SETTLED');
+  if (outcome.status !== 'settled') throw new CodedError('NOT_SETTLED');
 }
 
 type AuditedStanding = { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null };

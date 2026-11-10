@@ -68,12 +68,15 @@ export type TurnDelta =
     readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */
   | { readonly kind: 'output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
+  /** v31 (/do parity): a `propose_work` call's plan progress, shown as `/do` shows it (the quota wait, then /tasks for the admitted Run). */
+  | { readonly kind: 'work'; readonly callId: string; readonly phase: 'planning' | 'quota-wait' | 'admitted'; readonly runId?: string; readonly untilMs?: number;
+    readonly attempt?: number; readonly maxAttempts?: number }
   /** `note` is the engine's deterministic closure text when the turn ended without a model answer. v30: `notices` — the turn's MCP start
    * notices, each with its text in the person's language and a `key` (kind, server, code) the surface shows once per key; `steer` — the
    * added lines that joined and those the turn returned unsent (the person's to send again). */
   | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null; readonly notices?: readonly TurnNotice[];
     readonly steer?: Readonly<{ joined: readonly string[]; returned: readonly string[] }> };
-export type TurnNotice = Readonly<{ key: string; text: string }>;
+type TurnNotice = Readonly<{ key: string; text: string }>;
 /** v30 steer (owner S5): adds one person line to the bound running turn at its next model-call boundary (never into an approval or witness
  * wait). `queued`: it joins (a `message` delta with this `steerId`) or comes back in `done.steer.returned`; `not-running`/`full`: nothing kept. */
 export type TurnSteer = (steerId: string, content: string) => Promise<'queued' | 'not-running' | 'full'>;
@@ -84,7 +87,7 @@ export const TURN_STEER_LINES = CHAT_TURN_STEER_LINES;
 /** `turn.sessionId` (v16, SCR-A) names the conversation: the service keeps its scratch area across the conversation's turns. */
 /** `turn.fullAccess` (v17, MODES-3): the session was launched in full access; absent otherwise. */
 /** `turn.reference` (v23, T4 MODEL-SWITCH): the model this session pinned with `/model`; the service uses exactly it or refuses. */
-export type WorklineModelReference = Readonly<{ providerId: string; providerVersion: number; modelId: string; modelVersion: number }>;
+type WorklineModelReference = Readonly<{ providerId: string; providerVersion: number; modelId: string; modelVersion: number }>;
 export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true;
   reference?: WorklineModelReference; onTurnBound?: (binding: PanelTurnBinding, steer?: TurnSteer) => void }>) => AsyncIterable<TurnDelta>;
 

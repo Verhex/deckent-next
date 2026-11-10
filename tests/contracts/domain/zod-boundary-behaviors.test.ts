@@ -8,6 +8,8 @@ import { z as v3 } from 'zod/v3';
 import { workerEventSchema } from '#domain/index.js';
 import { agentToolSpecSchema, effectCommandSchema, identitySchema, immutableJsonObjectSchema, operationDescriptorSchema, sanitizeIssues } from '#domain/index.js';
 import { ConfigApplication, parseConfigInput, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, runtimeServiceLifecycleRequestSchema } from '#engine/index.js';
+import { optionalField } from '#platform/core/utils/index.js';
+
 import { CORE_SCHEMA, registerConfigSection, createDefaultConfig, validateConfig } from '#platform/core/config/index.js';
 import { operationsConfigSchema, registerProviderConfig } from '#adapters/core/contract/index.js';
 import { nativeCodingInvocationSchema } from '#adapters/core/native-coding/index.js';
@@ -35,6 +37,8 @@ describe('z.unknown() keys at public boundaries (v4 ≥ 4.4 makes them required)
   it('an effect command (MCP/SDK execute_operation) without `input` is admitted and keeps the key absent', () => {
     const parsed = effectCommandSchema.parse(command);
     expect(Object.hasOwn(parsed, 'input')).toBe(false);
+    expect(optionalField('input', undefined)).toEqual({});
+    for (const value of [0, '', false, null]) expect(optionalField('input', value)).toEqual({ input: value });
     expect(Object.isFrozen(parsed)).toBe(true);
   });
 
@@ -151,6 +155,13 @@ describe('readonly defaults and string formats', () => {
     for (const scalars of [domainScalars, platformScalars]) {
       for (const factory of [scalars.persistedInteger, scalars.persistedUuid, scalars.persistedEmail, scalars.persistedUrl]) expect(factory()).toBe(factory());
       const integer = scalars.persistedInteger();
+      const counter = scalars.persistedCounter();
+      for (const value of [0, Number.MAX_SAFE_INTEGER]) expect(counter.parse(value)).toBe(value);
+      for (const [value, codes] of [[-1, ['too_small']], [Number.MIN_SAFE_INTEGER - 1, ['too_small', 'too_small']],
+        [Number.MAX_SAFE_INTEGER + 1, ['too_big']], [0.5, ['invalid_type']], [NaN, ['invalid_type']], [Infinity, ['invalid_type']], ['0', ['invalid_type']]] as const) {
+        expect(sanitizeIssues(counter.safeParse(value).error!.issues).map(issue => issue.code)).toEqual(codes);
+        expect(sanitizeIssues(domainScalars.counterSchema.safeParse(value).error!.issues).map(issue => issue.code)).toEqual(codes);
+      }
       expect(integer.positive().safeParse(0).success).toBe(false);
       expect(integer.safeParse(0).success).toBe(true);
     }

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileArtifactStore } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { openConfiguredArtifactStore } from '../../../src/composition/core/artifacts/index.js';
+import { openConfiguredArtifactStore } from '../support/configured-open.js';
 const roots: string[] = [];
 const scopePath = (root: string, scope: string) => join(root, createHash('sha256').update(scope).digest('hex'));
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

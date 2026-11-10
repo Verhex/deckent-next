@@ -20,7 +20,7 @@ export function systemOrderedGraph(graph: RunAdmission['graph'], branch?: unknow
 /** Local SDK ingress for a Run pinned to a completed delivery of the same scope; the commit is resolved by trusted composition. */
 export const runDeliveryAdmissionSchema = runAdmissionSchema.extend({ deliveryCommandId: identitySchema }).strict();
 export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
-/** Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */

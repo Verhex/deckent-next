@@ -11,7 +11,7 @@ export async function assertNoUninstallHold(dataRoot: string): Promise<void> {
 }
 /** §5.4 (owner 2026-10-27): a folder whose installation was removed keeping its data. The service does not start while it exists; the
  * person's own terminal reopens the folder (one card) and only that removes it. */
-export const uninstallRetiredPath = (dataRoot: string) => join(dataRoot, 'installation', 'retired.json');
+const uninstallRetiredPath = (dataRoot: string) => join(dataRoot, 'installation', 'retired.json');
 export const uninstallRetired = (dataRoot: string) => lstat(uninstallRetiredPath(dataRoot)).then(() => true, error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; });
 export async function assertNotRetired(dataRoot: string) { if (await uninstallRetired(dataRoot)) throw ErrorRegistry.createError('UNINSTALL_RETIRED', { params: { path: dataRoot } }); }
 /** R1: the marker is written and removed only through its pinned parent (a linked `installation/` folder is refused, nothing outside is written)

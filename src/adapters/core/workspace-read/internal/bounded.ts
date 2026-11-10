@@ -21,7 +21,7 @@ export function splitLines(text: string): string[] {
   return lines;
 }
 
-export interface BoundedLine { readonly text: string; readonly elidedBytes: number }
+interface BoundedLine { readonly text: string; readonly elidedBytes: number }
 
 function alignUtf8Start(buf: Buffer, offset: number): number {
   let start = Math.min(Math.max(0, offset), buf.byteLength);
@@ -45,8 +45,8 @@ export function boundLine(line: string, lineNumber: number, byteOffset: number, 
   return { text: `${prefix}${head} ${marker(total - next, next)}`, elidedBytes: total - next };
 }
 
-export type ReadSkipKind = 'binary' | 'too-large' | 'read-error' | 'cancelled';
-export type BoundedRead = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly kind: ReadSkipKind; readonly detail: string };
+type ReadSkipKind = 'binary' | 'too-large' | 'read-error' | 'cancelled';
+type BoundedRead = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly kind: ReadSkipKind; readonly detail: string };
 
 const BINARY_PROBE_BYTES = 8192, READ_CHUNK_BYTES = 1 << 20;
 /**

@@ -2,15 +2,15 @@ import { previewFirstCommit, observeFirstCommitRecovery } from '#adapters/index.
 import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { userInfo } from 'node:os';
-import { onboardingNeedsBudget, type OnboardingBillingProfile } from './onboarding-budget.js';
-import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
+import { onboardingNeedsBudget } from './onboarding-budget.js';
+import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
+import { configuredInvocationProfiles, planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { loadModelsSurface } from '#surfaces/index.js';
 import type { TerminalLaunchContext } from '#surfaces/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { consentConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
 import { startConfiguredRunIntent, transitionConfiguredRunIntent } from '#composition/core/run-planner/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -45,7 +45,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     const planned = planSetup(observed.observation, { schemaVersion: 2, values }, observed.registry, { phase: 'onboarding' });
     const worker = (observed.observation.families?.['execution'] as { worker?: { acquisition?: { images: { provider: string; imageId: string }[] } | null } } | undefined)?.worker;
     const selectedImage = worker?.acquisition?.images.find(row => row.provider === values['work:kind'])?.imageId ?? null;
-    const eligible = coding?.repository === 'present' && coding.hosts.some(row => row.cli === 'found');
+    const eligible = coding?.repository === 'present';
     const stages = planned.stages;
     const names: string[] = []; let inspected = false;
     try { const dir = await opendir(directory); inspected = true; for await (const entry of dir) { if (names.length >= 64) break; if (entry.isFile() || entry.isDirectory()) names.push(entry.name); } } catch { /* unknown remains explicit */ }
@@ -55,9 +55,9 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options);
     // Connection is distinct from permission/budget: the normal turn still enforces every invocation gate.
     const modelUsable = chat?.status === 'ready' && chat.reference !== null;
-    const profiles = config['provider_invocation_profiles'] as { profiles?: readonly OnboardingBillingProfile[] } | undefined;
+    const profiles = configuredInvocationProfiles(config);
     const legacyMetered = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId)?.billing === 'metered';
-    const needsAccount = onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, null);
+    const needsAccount = onboardingNeedsBudget(profiles, scopeId, chat?.reference ?? null, legacyMetered, null);
     let budgetReason: string | undefined; const { SCOPE_BUDGET_CHOICES } = await loadModelsSurface();
     const account = needsAccount && terminal.inspectProviderSpendAccount ? await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options)
       .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; budgetReason = typeof code === 'string' && ErrorRegistry.has(code) ? code : 'INVENTORY_UNAVAILABLE'; return null; }) : null;
@@ -65,7 +65,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     signal?.throwIfAborted(); const pending: RunIntentRecord[] = [];
     const reader = await openSqliteRunProposalReader(await context.path(), config.storage.sqlite);
     try {
-      const auth = new RunPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, config.inspection.policyMaxBytes));
+      const auth = new RunPolicyAuthorization(contextPolicySource({ layout: context.layout, config }));
       for (const intent of await reader.listIntents(scopeId)) {
         if (JSON.stringify(intent.proposer) !== JSON.stringify({ id: context.principal.id, issuer: context.principal.issuer, subject: context.principal.subject })) continue;
         await auth.authorize('inspect', { scopeId, runId: intent.runId }, context.principal);
@@ -76,10 +76,10 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       modelUsable, localRun: await terminal.localRunOffer?.(root, scopeId, options).catch(() => false) ?? false, folder, folderFacts: { kind, entries: visible }, scopeId,
       connections: work?.connections ?? [], ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : work?.connection?.provider ?? null, connection: work?.connection?.id ?? null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: work?.providers ?? [],
-      hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles?.profiles ?? [], scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
+      hosts: coding?.hosts ?? [], budget: { needed: onboardingNeedsBudget(profiles, scopeId, chat?.reference ?? null, legacyMetered, currentUsd), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
         presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending, ...await rights() };
   };
-  const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: ['mcp-delegable'], apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card
+  const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: OWNER_BASELINE_DEFAULT_FAMILIES, apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card
   const rights = async () => { const view = terminal.openOwnerBaselineInstallation ? await baseline(false).catch(() => null) : null; return view ? { rights: { state: view.status === 'preview' ? 'needed' as const : view.status === 'current' ? 'current' as const : 'unavailable' as const, ...(view.expect ? { digest: view.expect } : {}), rules: view.added.length } } : {}; };
   return { observe, assertPerson, async rights(digest: string) { await assertPerson(); return { status: (await baseline(true, digest)).status }; },
     async previewFirstCommit(message: string, include: readonly string[] = []) {

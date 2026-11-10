@@ -1,5 +1,6 @@
-import { modelInvocationProfileSchema, type SubscriptionConnectionInspection } from '#domain/index.js';
-import { ModelInvocationPolicyAuthorization, OAuthConnectionError } from '#engine/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { type SubscriptionConnectionInspection } from '#domain/index.js';
+import { configuredInvocationProfiles, ModelInvocationPolicyAuthorization, OAuthConnectionError } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, SIWC_INFERENCE } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -8,11 +9,11 @@ import { siwcConnectionView, withConfiguredSiwcModel } from '#composition/core/s
 /** Doctor projection only: no browser, renewal, profile change or email. Each row retains the caller's inspect authority. */
 export async function inspectConfiguredSiwcConnections(root: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<readonly SubscriptionConnectionInspection[]> {
   const config = await loadComposedConfig(root, { ...options, heal: false });
-  const profiles = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value))
+  const profiles = configuredInvocationProfiles(config)
     .filter(profile => profile.scopeId === scopeId && profile.adapter.id === SIWC_INFERENCE.adapter.id);
   if (!profiles.length) return [];
   const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
-  const authorization = new ModelInvocationPolicyAuthorization({ load: async () => context.document });
+  const authorization = new ModelInvocationPolicyAuthorization(contextPolicySource(context, context.document));
   const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id);
   if (!kind) return [];
   const rows: SubscriptionConnectionInspection[] = [];

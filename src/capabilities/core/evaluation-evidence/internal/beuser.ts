@@ -31,8 +31,8 @@ export const beuserEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1)
 }).readonly();
 export type BeuserEvidence = z.infer<typeof beuserEvidenceSchema>;
 export type BeuserReadback = z.infer<typeof beuserReadbackSchema>;
-export type BeuserParameters = z.infer<typeof beuserParametersSchema>;
-export type BeuserCalibration = z.infer<typeof beuserCalibrationSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BeuserParameters = z.infer<typeof beuserParametersSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BeuserCalibration = z.infer<typeof beuserCalibrationSchema>;
 export function beuserDigest(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 export function validateInstalledBeuserEvaluator(input: EvaluatorDefinition): undefined {
   const value = evaluatorDefinitionSchema.parse(input);

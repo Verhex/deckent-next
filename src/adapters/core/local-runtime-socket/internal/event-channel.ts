@@ -17,7 +17,7 @@ export interface RuntimeServiceTurnChannel {
   room(): number;
   readonly signal: AbortSignal;
 }
-export interface ServerTurnChannel extends RuntimeServiceTurnChannel { finish(): void }
+interface ServerTurnChannel extends RuntimeServiceTurnChannel { finish(): void }
 
 type Piece = AgentTurnStreamEvent;
 const textual = (event: Piece): event is Extract<Piece, { kind: 'text' | 'reasoning' }> => event.kind === 'text' || event.kind === 'reasoning';

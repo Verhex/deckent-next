@@ -1,7 +1,7 @@
 import { configSections } from './schema.js';
 import { CONFIG_FIELDS, type ConfigBinding, type ConfigApplyMode } from '#platform/core/config-fields/index.js';
 import { createDefaultConfig } from './defaults.js';
-export interface ConfigMetadata {
+interface ConfigMetadata {
   readonly key: string; readonly owner: string; readonly defaultValue: unknown;
   readonly descriptionKey: string; readonly tier: string; readonly since: string;
   readonly binding: ConfigBinding; readonly apply: ConfigApplyMode;

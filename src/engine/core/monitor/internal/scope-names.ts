@@ -1,4 +1,4 @@
-import { delegationWithin, policyResources, policySchema, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, delegationWithin, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 const { kind, actions: [action] } = policyResources.monitor;
@@ -11,7 +11,7 @@ const { kind, actions: [action] } = policyResources.monitor;
  */
 export function monitorScopeDiagnosticsAllowed(policy: unknown, principal: Pick<VerifiedPrincipal, 'issuer' | 'subject'>): boolean {
   try {
-    return delegationWithin(policySchema.parse(policy), principal, [{ id: 'monitor-scope-diagnostics', effect: 'allow', actions: [action], scopes: 'all',
+    return delegationWithin(asPolicy(policy), principal, [{ id: 'monitor-scope-diagnostics', effect: 'allow', actions: [action], scopes: 'all',
       resource: { kind, ids: 'all' } }]).ok;
   } catch { throw ErrorRegistry.createError('POLICY_UNAVAILABLE'); }
 }

@@ -4,7 +4,7 @@ import type { ApprovalSubject, AuditEvent, VerifiedPrincipal } from '#domain/ind
 import type { DeckentConfig } from '#platform/index.js';
 import type { Environment } from '#platform/index.js';
 export type ConfigLayer = 'project' | 'global';
-export type ConfigSource = 'default' | ConfigLayer | 'env';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConfigSource = 'default' | ConfigLayer | 'env';
 export interface ConfigFieldView {
   readonly key: string; readonly value: unknown; readonly defaultValue: unknown; readonly source: ConfigSource;
   readonly descriptionKey: string; readonly description: string; readonly schema: unknown;
@@ -23,7 +23,7 @@ export interface ConfigWriteResult {
   readonly keyPath: string; readonly layer: ConfigLayer; readonly beforeDigest: string | null; readonly afterDigest: string;
   readonly backupPath: string | null; readonly overridden: boolean;
 }
-export interface ConfigPlan { readonly document: Record<string, unknown>; readonly event: AuditEvent }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfigPlan { readonly document: Record<string, unknown>; readonly event: AuditEvent }
 export interface ConfigDocumentPort {
   snapshot(layer: ConfigLayer): Promise<ConfigSnapshot>;
   publish(input: ConfigWriteInput, plan: (snapshot: ConfigSnapshot) => Promise<ConfigPlan>): Promise<ConfigWriteResult>;
@@ -44,12 +44,12 @@ export interface ConfigAuthorityPort {
 }
 /** The policy decision of one config write (`deny` is thrown, never returned); `ruleId` names the rule that decided. */
 export interface ConfigAuthorization { readonly decision: 'allow' | 'require-approval'; readonly revision: string; readonly ruleId: string | null }
-/** A decision read for display (T3 L4 `/config` locks): `deny` included; writes nothing and grants nothing — `submit` decides again. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A decision read for display (T3 L4 `/config` locks): `deny` included; writes nothing and grants nothing — `submit` decides again. */
 export type ConfigPermissionDecision = Readonly<{ decision: 'allow' | 'require-approval' | 'deny'; ruleId: string | null }>;
 /** One key on one layer as the `/config` panel shows it: what policy says now, or `refused` (a section no write reaches, e.g. `secrets`). */
 export type ConfigWritePermission = Readonly<{ keyPath: string; layer: ConfigLayer; decision: ConfigPermissionDecision['decision'] | 'refused'; ruleId: string | null }>;
 export type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
-export type ConfigApprovalAdmission =
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ConfigApprovalAdmission =
   | { readonly pending: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } }
   | { readonly approved: { readonly approvalId: string; readonly actionDigest: string } };
 /**
@@ -60,7 +60,7 @@ export interface ConfigApprovalPort {
   evaluate(input: ConfigWriteInput): Promise<ConfigAuthorization>;
   /** T3 L4: the same decision for many writes of one scope under one policy read (display only: `deny` is returned, not thrown). */
   evaluateMany?(inputs: readonly ConfigWriteInput[]): Promise<readonly ConfigPermissionDecision[]>;
-  admit(input: ConfigWriteInput, subject: ConfigChangeSubject, authorization: ConfigAuthorization): Promise<ConfigApprovalAdmission>;
+  admit(input: ConfigWriteInput, subject: ConfigChangeSubject, authorization: ConfigAuthorization, personDecision?: boolean): Promise<ConfigApprovalAdmission>;
 }
 /** What `submit` did: applied (with the approval it consumed, if one was needed) or nothing written and an approval pending. */
 export type ConfigChangeOutcome =
@@ -74,5 +74,5 @@ export class ConfigApplicationError extends DeckentError {
     this.name = 'ConfigApplicationError';
   }
 }
-export interface ConfigDefinition { readonly schema: ConfigSchemaNode; readonly descriptionKey: string;
+export interface ConfigDefinition { readonly derivedFrom?: Readonly<Record<string, string>>; readonly schema: ConfigSchemaNode; readonly descriptionKey: string;
   readonly binding: ConfigFieldView['binding']; readonly apply: ConfigFieldView['apply'] }

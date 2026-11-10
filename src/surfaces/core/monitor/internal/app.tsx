@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
-import { useWorklinePalette, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
+import { type WorklineInkPalette, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
 import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
@@ -70,7 +70,11 @@ function useConfigRead(load: MonitorAppProps['loadConfigView'], errorText: (erro
   return { view, failure, read };
 }
 /** The snapshot with the local time it arrived and its change marks against the previous one (shown until the next snapshot). */
-interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; readonly marks: ReadonlyMap<string, string>; readonly signatures: ReadonlyMap<string, string> }
+interface Received { readonly snapshot: MonitorSnapshot; readonly view: ReturnType<typeof buildMonitorView>; readonly project: (snapshot: MonitorSnapshot) => ReturnType<typeof buildMonitorView>; readonly at: number; readonly marks: ReadonlyMap<string, string>; readonly signatures: ReadonlyMap<string, string> }
+function receive(snapshot: MonitorSnapshot, project: Received['project'], at: number): Received {
+  const view = project(snapshot), current = signatures(view.tabs);
+  return { snapshot, view, project, at, signatures: current, marks: new Map() };
+}
 
 /**
  * The fullscreen monitor (MONITOR-SURFACE, htop/k9s class): a fixed header (installs, builds, snapshot age, filter), a tab bar, one scrollable
@@ -85,8 +89,8 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const tabs = props.loadConfigView ? [...MONITOR_TABS, 'config' as const] : MONITOR_TABS;
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
   const width = Math.max(20, columns || 80), height = Math.max(props.minRows ?? 10, rows || 24), ellipsis = ascii ? '...' : '…';
-  const [received, setReceived] = useState<Received | null>(() => props.initial
-    ? { snapshot: props.initial, at: now(), marks: new Map(), signatures: signatures(buildMonitorView(filterSnapshot(props.initial, filters ?? {}), locale, ascii, verbose).tabs) } : null);
+  const project = useCallback((snapshot: MonitorSnapshot) => buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii, verbose), [ascii, filters, locale, verbose]);
+  const [received, setReceived] = useState<Received | null>(() => props.initial ? receive(props.initial, project, now()) : null);
   const snapshot = received?.snapshot ?? null;
   const [failure, setFailure] = useState<Failure | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -109,14 +113,14 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
       const [observed] = await Promise.allSettled([Promise.resolve().then(() => load(memo.current ??= new MonitorSourceMemo())), configShown.current ? readConfig() : undefined]);
       if (alive.current) {
         if (observed.status === 'fulfilled') {
-          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii, verbose).tabs);
-          setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
+          const next = receive(observed.value, project, now());
+          setReceived(previous => ({ ...next, marks: changeMarks(previous?.signatures ?? null, next.signatures, CHANGE_GLYPHS) }));
           setFailure(null);
         } else setFailure({ text: errorText(observed.reason), at: now() });
       }
     } catch (error) { if (alive.current) setFailure({ text: errorText(error), at: now() }); }
     finally { inFlight.current = false; if (alive.current) { setGeneration(value => value + 1); setClock(now()); } }
-  }, [ascii, errorText, filters, load, locale, now, readConfig]);
+  }, [errorText, load, now, project, readConfig]);
   useEffect(() => { alive.current = true; if (!props.initial) void refresh(); return () => { alive.current = false; }; }, []);
   // One read timer at a time: re-armed only after a read settled (generation) and never while paused.
   useEffect(() => {
@@ -127,7 +131,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   // The age indicator ticks once per interval even when reads hang or are paused (no per-second churn).
   useEffect(() => { const handle = setInterval(() => setClock(now()), intervalMs); return () => clearInterval(handle); }, [intervalMs, now]);
 
-  const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii, verbose) : null, [ascii, filters, locale, snapshot, verbose]);
+  const view = useMemo(() => received ? received.project === project ? received.view : project(received.snapshot) : null, [project, received]);
   const current = tabs[tab]!;
   useEffect(() => { configShown.current = current === 'config'; if (configShown.current) void readConfig(); }, [current, readConfig]);
   const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure

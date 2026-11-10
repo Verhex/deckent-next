@@ -1,9 +1,10 @@
+import { CodedError } from '#platform/core/errors/index.js';
 import { createHash } from 'node:crypto';
 import { posix, win32 } from 'node:path';
 import { hasGlobWildcard, PRODUCT_LAYOUT_REGISTRY as registry } from '#platform/core/common/index.js';
 
 export type ProductResource = keyof typeof registry.resources;
-export interface ProductLayoutInput {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ProductLayoutInput {
   readonly projectRoot: string;
   readonly bootstrapConfigPath?: string;
   readonly root?: string;
@@ -18,11 +19,11 @@ export interface ProductLayout {
   readonly platform: 'posix' | 'win32';
   readonly resources: Readonly<Record<ProductResource, string>>;
 }
-export class LayoutError extends Error {
+export class LayoutError extends CodedError {
   /** `LAYOUT_PATH_UNEXPRESSIBLE` (Astra 2166): the project root, the data root or the bootstrap configuration path holds a `*` or `?`, which the
    * workspace deny language cannot name literally — the product state under it could not be protected, so the layout is refused (brackets and
    * braces are literal in that language and stay accepted). */
-  constructor(readonly code: 'LAYOUT_VERSION_UNSUPPORTED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_RESOURCE_INVALID' | 'LAYOUT_RESOURCE_UNKNOWN' | 'LAYOUT_PATH_UNEXPRESSIBLE') { super(code); }
+  constructor(override readonly code: 'LAYOUT_VERSION_UNSUPPORTED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_RESOURCE_INVALID' | 'LAYOUT_RESOURCE_UNKNOWN' | 'LAYOUT_PATH_UNEXPRESSIBLE') { super(code); }
 }
 const hasControl = (value: string) => [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const isFixedResource = (resource: string) => registry.fixedResources.includes(resource);

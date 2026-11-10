@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createUninstallPlan, assertUninstallPlanCurrent, uninstallPlanDrift, uninstallRegistry, uninstallOperationDescriptors, type UninstallInventory, type UninstallResource } from '#engine/core/installation/index.js';
+import { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallRegistry, uninstallOperationDescriptors, type UninstallInventory, type UninstallResource } from '#engine/core/uninstall/index.js';
 const resource = (resourceId: string, contribution: string, locator: string, extra: Partial<UninstallResource> = {}): UninstallResource => ({
   resourceId, contribution, locator, version: 'v1', owner: 'installation', ownership: 'exclusive', ownershipEvidence: 'a'.repeat(64),
   present: true, protected: false, capability: true, backup: 'covered', ...extra,
@@ -95,4 +95,34 @@ it('binds D0 to every member, location, version and owner evidence; guards the r
   expect(createUninstallPlan(query('keep-work', { force: true }), managed).blockers).toContain('uncertain-managed');
   expect(createUninstallPlan(query('keep-work'), managed).blockers).toContain('uncertain-effects');
   expect(createUninstallPlan(query('keep-data'), managed).blockers).toEqual([]);
+  // S5-e1 (S5-R1..R3): the first matching keep reason decides and nothing unproven is removed; a blocked or manual item is a purge blocker.
+  const precedence: [Partial<UninstallResource>, string, string][] = [[{}, 'remove', 'owned'], [{ ownershipEvidence: null }, 'keep', 'ownership'],
+    [{ owner: 'other-installation' }, 'keep', 'ownership'], [{ protected: true, ownership: 'unknown', present: null }, 'keep', 'protected'],
+    [{ owner: 'other-installation', present: null }, 'keep', 'ownership'], [{ present: null, capability: false }, 'blocked', 'observation-unknown'],
+    [{ capability: false, backup: 'missing' }, 'manual', 'unsupported'], [{ backup: 'missing' }, 'blocked', 'backup-coverage'], [{ keep: 'not-backed-up' }, 'keep', 'not-backed-up'],
+    ...['relative/durable', '/', '/elsewhere/durable', '/fixture/data'].map(locator => [{ locator }, 'blocked', 'unsafe-path'] as [Partial<UninstallResource>, string, string])];
+  for (const [change, action, reason] of precedence) {
+    const plan = createUninstallPlan(query('all'), { ...base, resources: [resource('durable', 'durable', '/fixture/data/durable', change)] });
+    expect([change, plan.items[0]!.action, plan.items[0]!.reason]).toEqual([change, action, reason]);
+    if (action === 'blocked' || action === 'manual') expect(plan.blockers).toContain(`durable:${reason}`);
+  }
+  expect(createUninstallPlan(query('keep-data'), { ...base, resources: [resource('service', 'service', 'fixture.service', { ownership: 'unknown' })] }).items[0]).toMatchObject({ action: 'keep', reason: 'service-unresolved' });
+  // The table decides: authority paths first, then the remaining registered blockers in precedence order.
+  expect(uninstallBlockerError(createUninstallPlan(query('all'), { ...base, recoveryUnsafe: true, work: { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 1 }] } }))).toMatchObject({ code: 'UNINSTALL_RECOVERY_LOCATION' });
+  // The whole order: an authority path first (before archive-limit), then alphabetical; a resource or policy blocker alone takes the fallback.
+  const order = [['authority-relocated:/r', 'UNINSTALL_AUTHORITY_UNVERIFIED'], ['authority-unsafe:/u', 'UNINSTALL_AUTHORITY_UNVERIFIED'], ['archive-limit', 'UNINSTALL_BACKUP_COVERAGE'],
+    ['backup-destination', 'UNINSTALL_RECOVERY_LOCATION'], ['delivery-queued', 'UNINSTALL_DELIVERY_QUEUED'], ['service-managed', 'UNINSTALL_SERVICE_RUNNING'],
+    ['uncertain-effects', 'UNINSTALL_UNCERTAIN_EFFECTS'], ['uncertain-managed', 'UNINSTALL_UNCERTAIN_MANAGED'], ['work-active', 'UNINSTALL_WORK_ACTIVE'],
+    ['work-pending', 'UNINSTALL_WORK_ACTIVE'], ['work-unverified', 'UNINSTALL_SCOPE_UNVERIFIED'], ['policy:POLICY_DENIED', 'UNINSTALL_OWNERSHIP'], ['durable:backup-coverage', 'UNINSTALL_OWNERSHIP']];
+  const work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 1 }], deliveries: [{ scopeId: 'd', id: 'del-1', revision: 1 }], uncertain: [{ kind: 'effect' as const, scopeId: 'u', id: 'e-1', target: null }] };
+  const refusal = (blockers: string[], purge = false) => uninstallBlockerError({ blockers: blockers.sort(), work, service: stopped, purge, installation: base.installation, backup: { destination: '/r/set' } });
+  order.forEach(([, code], at) => expect([at, refusal(order.slice(at).map(([blocker]) => blocker!))?.code]).toEqual([at, code]));
+  expect([refusal(['durable:backup-coverage'], true)?.code, refusal([])]).toEqual(['UNINSTALL_BACKUP_COVERAGE', null]);
+  expect(refusal(['authority-unsafe:/u:v', 'work-active'])?.params).toEqual({ path: '/u:v' });
+  const params = { runs: '1', approvals: '0', workspaces: '0', reason: 'manager-conditions-or-separate-consent', unit: '', command: '', path: '/fixture/data', recovery: '/r/set' };
+  expect(refusal(['delivery-queued', 'work-active'])?.params).toEqual({ ...params, count: '1', list: 'del-1', owner: 'd' });
+  expect(refusal(['work-active'], true)?.params).toEqual({ ...params, count: '1', list: 'effect e-1', owner: 'u' });
+  const mixed = createUninstallPlan(query('all'), { ...base, dataBlockers: ['archive-limit', 'authority-unsafe:/u:v'] });
+  expect(mixed.tiers.all.blocker).toBe('authority-unsafe:/u:v');
+  expect(uninstallBlockerError(mixed)).toMatchObject({ code: 'UNINSTALL_AUTHORITY_UNVERIFIED', params: { path: '/u:v' } });
 });

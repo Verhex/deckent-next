@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
@@ -51,7 +52,7 @@ function fixture(options: { effects?: ReattemptEffects; advanced?: boolean; appr
     forRun: (scopeId: string, runId: string) => queue.forRun(scopeId, runId, 8), loadRun: async (_scope: string, runId: string) => runs.get(runId) ?? null,
     effects: () => options.effects ?? 'workspace-only', baseAdvanced: vi.fn(async () => options.advanced ?? true),
     admit: vi.fn(async (command: { runId: string; commandId: string; graph: unknown }) => {
-      if (approval) throw Object.assign(new Error('RUN_APPROVAL_REQUIRED'), { code: 'RUN_APPROVAL_REQUIRED' });
+      if (approval) throw new CodedError('RUN_APPROVAL_REQUIRED');
       if (!runs.has(command.runId)) { admitted.push(command); runs.set(command.runId, run(command.runId, [{ id: 't', phase: 'active' }])); } }),
     accepted: context.accepted, submit: async (request: unknown) => { const record = await app.submitReattempt(request, human); submitted.push(record); return record; } };
   let mcp = false;
@@ -207,7 +208,10 @@ describe('delivery re-attempt after the target base advanced (D1a/D2b)', () => {
       await f.enqueue('first', 'r'); f.conflict('first'); await f.tick(); await f.tick();
       expect(f.ports.admit).not.toHaveBeenCalled();
       expect(await f.inspect('first')).toMatchObject({ nextAction: 'wait-service', responsibility: 'service', reattempt: { state: 'waiting-base' } });
-      f.ports.baseAdvanced.mockResolvedValue(true); await f.tick();
+      f.ports.baseAdvanced.mockResolvedValue(true);
+      const spoof = { code: 'RUN_APPROVAL_REQUIRED' };
+      await expect(stepDeliveryReattempt({ ...f.ports, admit: async () => { throw spoof; } }, f.queue.load('s', 'first')!, true)).rejects.toBe(spoof);
+      expect(f.admitted).toEqual([]); await f.tick();
       // The re-attempt Run asks for its normal Run-create card: no card bypass, a human approves it.
       expect(f.ports.admit).toHaveBeenCalledOnce(); expect(f.admitted).toEqual([]);
       expect(await f.inspect('first')).toMatchObject({ nextAction: 'approve-run', responsibility: 'human', reattempt: { state: 'awaiting-approval' } });

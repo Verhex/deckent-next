@@ -1,9 +1,9 @@
 import type { Transport } from '@modelcontextprotocol/client';
-import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
+import { CodedError, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 
 /** A rejected message may follow an effect: close without forwarding it or replaying the request. */
-export class McpInputLimitError extends Error {
-  readonly code = 'MCP_INPUT_LIMIT';
+class McpInputLimitError extends CodedError {
+  override readonly code = 'MCP_INPUT_LIMIT';
   constructor() { super('MCP_INPUT_LIMIT'); this.name = 'McpInputLimitError'; }
 }
 /** Runs after the SDK's JSON-RPC envelope parse, before discovery, era codecs and result/schema validators.

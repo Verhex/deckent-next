@@ -18,7 +18,7 @@ export type SurfaceNotInitialized = {
   readonly scopeId: string;
   readonly stopped: true;
 };
-/** Each newly opened producer starts at these cursors after capturing its baseline. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Each newly opened producer starts at these cursors after capturing its baseline. */
 export type SurfaceStreamStart = {
   readonly control: 'start'; readonly scopeId: string;
   readonly cursors: Readonly<Record<SurfacePublicationKind, number>>;

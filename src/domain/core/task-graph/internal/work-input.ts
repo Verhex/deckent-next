@@ -2,10 +2,10 @@ import { persistedString, persistedInteger, identitySchema } from '#domain/core/
 import { z } from 'zod';
 import limits from './work-input-limits.json' with { type: 'json' };
 import { exactModelIdSchema, REASONING_EFFORTS } from '#domain/core/provider-catalog/index.js';
-/** Owner 2026-09-30 K3 = A: the typed input of one coding task (task graph v3). A registry TEMPLATE supplies everything else;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Owner 2026-09-30 K3 = A: the typed input of one coding task (task graph v3). A registry TEMPLATE supplies everything else;
  * admission compiles template + input once into the Run's frozen execution snapshot. Task text never lives in the registry. */
 export const WORK_INPUT_SCHEMA_VERSION = 1;
-export const WORK_INPUT_TEXT_MAX_BYTES = 16_384;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORK_INPUT_TEXT_MAX_BYTES = 16_384;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 const workText = persistedString(z.string().min(1)).refine(value => value.trim().length > 0 && !value.includes('\0') && bytes(value) <= WORK_INPUT_TEXT_MAX_BYTES);
 /** Repository-relative POSIX path or glob; K6 enforces it later on patch preparation. No absolute, parent, empty or control segment. */

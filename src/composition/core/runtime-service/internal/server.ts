@@ -1,7 +1,7 @@
 import { createTargetQueueHost } from './queue-host.js';
 import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
 import { AuditCheckpointMonitor, requireAuthorityWitness, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateExecutionSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
@@ -22,11 +22,12 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, scratchResource } from '#composition/core/agent-turn/index.js';
+import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, scratchResource, type AgentProposalViews, type PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
 import { executeConfiguredRuntimeSecretOperation } from './secret.js';
+import { upgradeProposalPolicyAtStart } from './proposal-policy.js';
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver, ToolchainRefreshObserver, BackupScheduleObserver {
   onAuditIntegrity?(status: AuditServiceStatus): void | Promise<void>;
   onQueryFailure?(event: { readonly code: string; readonly diagnosticId: string; readonly detail: string }): void | Promise<void>;
@@ -50,7 +51,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return undefined; throw error; }
   const upgrade = await upgradeExistingProductLedger(path, config.storage.sqlite, await prepareProductDirectory(config.productLayout, 'ledgerBackups'),
-    new Date(), { validate: validateDockerSupervisorProfile }, config.company.id, await loadConfiguredInstallationIdentity(config.projectRoot, options).then(identity => identity.status === 'available' ? identity.value : undefined));
+    new Date(), { validate: validateExecutionSupervisorProfile }, config.company.id, await loadConfiguredInstallationIdentity(config.projectRoot, options).then(identity => identity.status === 'available' ? identity.value : undefined));
   if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
   return path;
 }
@@ -93,7 +94,7 @@ const closeAnchor = (anchor: LedgerAnchor) => { const db = anchor.db; delete anc
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
   config: Awaited<ReturnType<typeof loadComposedConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts, anchor: LedgerAnchor) {
   await prepareScheduledBackup(projectRoot, options, observer);
-  const ledger = await upgradeLedgerAtStart(config, observer, options); if (ledger) anchor.db = openSqliteLedgerAnchor(ledger, config.storage.sqlite);
+  const ledger = await upgradeLedgerAtStart(config, observer, options); if (ledger) anchor.db = openSqliteLedgerAnchor(ledger, config.storage.sqlite); /* Owner S6: the v20 proposal rules on an installed first-run policy (once, audited); a failure is reported and never blocks the start. */ await upgradeProposalPolicyAtStart(config).catch(error => reportQueryError(queryFailure(error), async () => getConfigKnownSecrets(config), observer.onQueryFailure));
   /* H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start). KAPANIS-KIMLIK-YARISI: the project identity's first publication is awaited here, before the listener: from a background page an incomplete stop's exit could cut it off. */ const scopes = await registerConfiguredScopesAtStart(config); await loadConfiguredProjectIdentity(projectRoot, options, 'write');
   const installation = await loadConfiguredInstallationIdentity(projectRoot, options);
   const auditMonitor = new AuditCheckpointMonitor(() => checkpointConfiguredAudit(projectRoot, installation.status === 'available' ? installation.value.installationId : null, options),
@@ -112,7 +113,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     ...(ports.modelInvocationClock ? { clock: ports.modelInvocationClock } : {}) };
   /* Service stop cancels running turns (they close as cancelled, not interrupted). */ const turnStop = new AbortController();
   const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport, ports.shellSandboxes, config.mcp.maxServers,
-    createConfiguredNativeChatRuntime(projectRoot, options));
+    createConfiguredNativeChatRuntime(projectRoot, options), ports.planWork, ports.proposalViews);
   const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, { onPage: (command, result) => observer.onModelCancellationPage?.(command, result), onError: (command, error) => observer.onModelCancellationError?.(command, error), }, options);
   const build = readBuildIdentity();
@@ -171,7 +172,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           : isRuntimeServiceSecretOperation(request.operation)
           ? executeConfiguredRuntimeSecretOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
           : isRuntimeServiceQueueOperation(request.operation) ? targetQueue.execute(request, peer, config.service.responseMaxBytes)
-          : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
+          : executeConfiguredRuntimeOperation(projectRoot, request, options, controller.signal), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error), report = reportFailure(failure).catch(() => undefined); reports.add(report); void report.then(() => reports.delete(report));
@@ -243,9 +244,10 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   }).catch(error => rejectDone(queryFailure(error)));
   /* `done` is the host outcome (rejects at the grace deadline); `settled` never rejects: after a stop, all service work and custody release ended. */ return Object.freeze({ endpoint: server.endpoint, layout: config.productLayout, done, settled, stop, get auditIntegrity() { return auditMonitor.status; } });
 }
-/** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport, `shellSandboxes` to the shipped sandbox providers (S9 bubblewrap). */ export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies;
+/** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport, `shellSandboxes` to the shipped sandbox providers (S9 bubblewrap). */ interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies;
   /** One trusted clock for model tariff freshness, quote/send validation and durable invocation times (default: SystemTrustedClock). */ readonly modelInvocationClock?: TrustedClock;
-  /** Clock and wait of the idle stop (default: monotonic clock and timer). */ readonly idleClock?: Pick<RuntimeServiceIdleOptions, 'now' | 'wait'> }
+  /** Clock and wait of the idle stop (default: monotonic clock and timer). */ readonly idleClock?: Pick<RuntimeServiceIdleOptions, 'now' | 'wait'>; /** alpha.64 B: the plan a chat turn's `propose_work` runs (absent: not offered). */ readonly planWork?: PlanServiceRun;
+  /** alpha.64 B/C: the proposal card and choice views (the CLI host lends them; composition never imports surfaces). */ readonly proposalViews?: () => Promise<AgentProposalViews> }
 export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   try { return await startService(projectRoot, observer, options, ports); }

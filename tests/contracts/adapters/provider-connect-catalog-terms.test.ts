@@ -174,7 +174,7 @@ describe('catalog v3 connect terms', () => {
       .toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
   });
 
-  it('every shipped seed model connects byte-identically to the pre-M4 base, with and without its registered (term-less) row', async () => {
+  it('keeps pre-M4 seed connections byte-identical and refuses added unpriced retirement rows, with and without their registered (term-less) row', async () => {
     const fixture = JSON.parse(await readFile(new URL('../../fixtures/provider-connect/connect-adapter-a55-base.json', import.meta.url), 'utf8')) as { outputs: Record<string, string> };
     const outputs: Record<string, string> = {};
     for (const kind of PROVIDER_CONNECT_KINDS) {

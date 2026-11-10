@@ -71,7 +71,7 @@ Modeller:
       binding | activation | activate | deactivate | invoke | invocation |
       purge-content | cancel | spending | reconcile-spending | create-budget |
       revise-budget | audit-spending | connect | login | logout |
-      catalog list|register|activate|deactivate | roles show|set
+      catalog list|register|activate|deactivate|brain | roles show|set
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Onaylar:
@@ -82,8 +82,9 @@ Onaylar:
       review
       [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
-      vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | recovery | mcp list|grant|revoke|narrow | scopes
+      vocabulary | status | show | delegations | delegate | undelegate |
+      grants | revoke | upgrade | recovery | mcp list|grant|revoke|narrow |
+      scopes
       [--scope <id>]
 
 Kurulum/Bakım:

@@ -3,9 +3,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CallToolResult, Tool, RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
-import { nativeAgentBridgeSchema, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
+import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
-import { PACKAGE_VERSION, DeckentJsonSchemaValidator, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
+import { isCodedError, PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { bridgeBody, bridgeResponse, refuseBridge } from './http.js';
 
 export interface NativeToolBridgeLimits {
@@ -14,7 +14,7 @@ export interface NativeToolBridgeLimits {
   readonly replayMaxEntries: number;
   readonly replayMaxBytes: number;
 }
-export interface NativeToolBridgeOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface NativeToolBridgeOptions {
   /** Composition supplies K1's AI/MCP session, never a human application port. */
   readonly port: ToolSessionPort;
   readonly bridge: NativeAgentBridge;
@@ -35,7 +35,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   if ([limits.idleMs, limits.maxConnections, limits.replayMaxEntries, limits.replayMaxBytes].some(value => !Number.isSafeInteger(value) || value <= 0)
     || limits.idleMs <= 1 || limits.replayMaxBytes < bridge.frameMaxBytes || !nodeDelaySchema.safeParse(session.approvalTtlMs).success) throw new Error('NATIVE_BRIDGE_LIMITS_INVALID');
   const { Server, WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
-  const turnToken = randomBytes(32).toString('base64url'), tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken);
+  const turnToken = `~${randomBytes(32).toString('base64url')}`, tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken); // '~' head (RFC 6750 b64token): a field ending in a known-secret prefix is masked, and ordinary text practically never ends in '~'
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
   const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Set<string>();
   let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;
@@ -43,8 +43,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID,
     onsessioninitialized: id => { sessionId = id; }, keepAliveMs: progressIntervalMs, maxRequestBodySize: bridge.bodyMaxBytes });
   const server = new Server({ name: bridge.serverName, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new DeckentJsonSchemaValidator() });
-  // Project values through the already-resolved secret snapshots, without discovering or reading credentials.
-  const safe = (value: string) => redactForRecord(input.knownSecrets ? redactForRecord(value, input.knownSecrets) : value, known);
+  // KG8 P12/P13: the turn token's one snapshot and one combined projection (the configured snapshot plus the token); callers reuse both.
+  const projected = input.knownSecrets ? combineKnownSecrets(input.knownSecrets, known) : known, safe = (value: string) => redactForRecord(value, projected);
   const envelope = (deckentCallId: string, code: string) => ({ schemaVersion: 1 as const, turnId: session.turnId, generation: session.generation,
     deckentCallId, outcome: { status: 'error' as const, text: code } });
   const result = (value: unknown, isError: boolean): CallToolResult => ({ content: [{ type: 'text', text: safe(JSON.stringify(value)) }], isError });
@@ -57,9 +57,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   server.setRequestHandler('tools/list', async () => ({ tools }));
   server.setRequestHandler('tools/call', async (request, context) => {
     const meta = request.params._meta ?? {}, deckentCallId = randomUUID();
-    const correlation = nativeAgentCorrelationSchema.safeParse(input.correlationKind === 'claude-tool-use'
-      ? { kind: input.correlationKind, toolUseId: meta['claudecode/toolUseId'], deckentCallId }
-      : { kind: input.correlationKind, callId: meta['callId'], itemId: meta['itemId'], deckentCallId });
+    const correlation = nativeAgentCorrelationSchema.safeParse(nativeAgentCorrelationMeta(input.correlationKind, meta, deckentCallId));
     if (!correlation.success) return failure(deckentCallId, 'NATIVE_BRIDGE_CORRELATION_INVALID');
     const call = agentToolCallSchema.safeParse({ id: deckentCallId, name: request.params.name, argumentsJson: JSON.stringify(request.params.arguments ?? {}) });
     if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN');
@@ -133,14 +131,14 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
       await bridgeResponse(source, response, bridge.frameMaxBytes, count, safe);
       if (request.method === 'DELETE' && source.ok) await close();
     } catch (error) {
-      if (!response.destroyed) refuseBridge(response, error instanceof Error && error.message === 'NATIVE_BRIDGE_BODY_LIMIT' ? 413 : 400,
-        error instanceof Error && error.message === 'NATIVE_BRIDGE_BODY_LIMIT' ? 'NATIVE_BRIDGE_BODY_LIMIT' : 'NATIVE_BRIDGE_REQUEST_INVALID');
+      if (!response.destroyed) refuseBridge(response, isCodedError(error, 'NATIVE_BRIDGE_BODY_LIMIT') ? 413 : 400,
+        isCodedError(error, 'NATIVE_BRIDGE_BODY_LIMIT') ? 'NATIVE_BRIDGE_BODY_LIMIT' : 'NATIVE_BRIDGE_REQUEST_INVALID');
     }
     finally { active--; responses.delete(response); if (rpcKey !== undefined) inFlight.delete(rpcKey); }
   }
   return Object.freeze({ sentinelHost: bridge.sentinelHost, path: bridge.path, maxConnections: limits.maxConnections, url,
     toJSON: () => ({ url, turnId: session.turnId, generation: session.generation }),
     /** Only put these into the private Claude MCP file or the explicitly built Codex environment. Never log this object. */
-    turnToken, tokenHeader, tokenEnvName: bridge.tokenEnvName, progressIntervalMs, handle, close,
+    turnToken, tokenHeader, tokenEnvName: bridge.tokenEnvName, known, project: safe, progressIntervalMs, handle, close,
     cancel: async () => { await close(); return input.port.cancel(); }, revoke: async () => { await close(); return input.port.revoke(); } });
 }

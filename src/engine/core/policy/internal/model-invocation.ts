@@ -1,6 +1,7 @@
 import { evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
 import { modelInvocationTargetId, type ModelInvocationAuthorizer } from '#engine/core/model-invocation/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
+import { policyVerdictRefusal } from './verdict.js';
 
 /** Invocation has its own effect authority; activation never implies permission to send a request. */
 export class ModelInvocationPolicyAuthorization implements ModelInvocationAuthorizer {
@@ -12,9 +13,8 @@ export class ModelInvocationPolicyAuthorization implements ModelInvocationAuthor
       decision = evaluatePolicy(await this.source.load(), { principal, scopeId: target.scopeId, action,
         resource: { kind: policyResources.modelInvocation.kind, id: modelInvocationTargetId(target.reference) } });
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
-    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+    const refusal = policyVerdictRefusal(decision.decision, { deny: 'POLICY_DENIED' });
+    if (refusal) throw new PolicyAuthorizationError(refusal);
     if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
     return Object.freeze({ revision: decision.revision, ruleId: decision.ruleId });
   }

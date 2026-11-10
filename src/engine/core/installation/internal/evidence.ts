@@ -1,8 +1,8 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { InstallationPreview } from './application.js';
-
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const packageSchema = z.strictObject({ name: identitySchema, version: identitySchema, measurementDigest: hex,
   fileCount: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), totalBytes: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
@@ -21,8 +21,8 @@ const previewEvidenceSchema = z.looseObject({ schemaVersion: z.literal(1), statu
 });
 export type InstallationPackageEvidence = z.infer<typeof packageSchema>;
 export type InstallationImageEvidence = z.infer<typeof imageSchema>;
-export class InstallationEvidenceError extends Error {
-  constructor(readonly code: 'INSTALLATION_EVIDENCE_INVALID' | 'INSTALLATION_EVIDENCE_IMAGES' | 'INSTALLATION_EVIDENCE_CHANGED') {
+export class InstallationEvidenceError extends CodedError {
+  constructor(override readonly code: 'INSTALLATION_EVIDENCE_INVALID' | 'INSTALLATION_EVIDENCE_IMAGES' | 'INSTALLATION_EVIDENCE_CHANGED') {
     super(code); this.name = 'InstallationEvidenceError';
   }
 }
@@ -60,7 +60,7 @@ export function createInstallationEvidencePreview(preview: InstallationPreview,
 }
 export type InstallationEvidencePreview = ReturnType<typeof createInstallationEvidencePreview>;
 
-export interface InstallationEvidencePorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface InstallationEvidencePorts {
   preview(): Promise<InstallationPreview>;
   measurePackage(): Promise<InstallationPackageEvidence>;
   inspectImage(imageId: string): Promise<InstallationImageEvidence>;

@@ -9,7 +9,7 @@ it('admission stores one profile per Run, including tasks selected through the k
   const frozen = execution(many);
   expect(frozen.workClassProfiles).toHaveLength(1);
   expect(frozen.tasks[0]!.acceptance).toEqual(frozen.tasks[1]!.acceptance);
-  expect(frozen.tasks[0]!.acceptance?.policyRevision).toBe('["work-classes-2026-11-08","business-r1"]');
+  expect(frozen.tasks[0]!.acceptance?.policyRevision).toBe('["work-classes-2026-11-09","business-r1"]');
   expect(JSON.stringify(frozen.tasks[0])).not.toContain('ceilingRules');
   expect(assertRunExecution(many, JSON.parse(JSON.stringify(frozen)))).toEqual(frozen);
 });

@@ -7,10 +7,13 @@ import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, Supervis
   type SupervisorProfile, type SupervisorProfileSource, type SandboxRequest } from '#engine/index.js';
 import { collectDockerOutputFiles } from '#adapters/core/docker-supervisor/index.js';
 import { validateNativeCliWorkerSupervisorProfile } from './supervisor.js';
-import { resolveNativeCliWorkerProfile } from './profile.js';
+import { NATIVE_CLI_WORKER_ADAPTER, resolveNativeCliWorkerProfile } from './profile.js';
 
 const active = new Map<string, ExecutionSupervisor & SupervisorProfileSource>();
 const key = (request: SandboxRequest) => createHash('sha256').update(JSON.stringify(sandboxRequestSchema.parse(request))).digest('hex');
+const digest = (profile: SupervisorProfile) => createHash('sha256').update(JSON.stringify(profile)).digest('hex');
+/** The one handle a native worker's Attempt has, live or recovered. */
+export const nativeCliWorkerHandle = (identity: SandboxRequest['identity']) => `${NATIVE_CLI_WORKER_ADAPTER.id}-${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}`;
 const recordSchema = z.strictObject({ schemaVersion: z.literal(1), request: sandboxRequestSchema, profileDigest: z.string(), result: sandboxResultSchema });
 /** This record is outside the tool workspace; it contains redacted, process-confirmed output only. No PID inference or relaunch. */
 export const nativeWorkerCustodyFile = (request: SandboxRequest) => jsonRecordDirectory(dirname(request.workspace))('native-worker-custody');
@@ -21,7 +24,7 @@ export function retainActiveNativeWorker(request: SandboxRequest, supervisor: Ex
   return () => { if (active.get(id) === supervisor) active.delete(id); };
 }
 export async function retainNativeWorkerResult(file: JsonRecordFile, request: SandboxRequest, profile: SupervisorProfile, result: unknown) {
-  await file.write(recordSchema.parse({ schemaVersion: 1, request, profileDigest: createHash('sha256').update(JSON.stringify(profile)).digest('hex'), result }));
+  await file.write(recordSchema.parse({ schemaVersion: 1, request, profileDigest: digest(profile), result }));
 }
 /** Same-process cancel reaches its actual owner. Restart can recover confirmed retained output; missing custody stays unknown. */
 export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): ExecutionSupervisor & SupervisorProfileSource & {
@@ -29,12 +32,12 @@ export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): E
 } {
   validateNativeCliWorkerSupervisorProfile(profile);
   const resolved = resolveNativeCliWorkerProfile(profile.parameters['task'] as import('#domain/index.js').ExecutionProfileDefinition);
-  const digest = createHash('sha256').update(JSON.stringify(profile)).digest('hex');
+  const profileDigest = digest(profile);
   const read = async (request: SandboxRequest) => {
     const record = await nativeWorkerCustodyFile(request).read();
     if (record.kind !== 'ready') return null;
     const checked = recordSchema.safeParse(record.value);
-    if (!checked.success || !sameSandboxRequest(checked.data.request, request) || checked.data.profileDigest !== digest) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+    if (!checked.success || !sameSandboxRequest(checked.data.request, request) || checked.data.profileDigest !== profileDigest) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
     return checked.data.result;
   };
   const get = async (request: SandboxRequest) => {
@@ -42,7 +45,7 @@ export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): E
     if (owner && !isDeepStrictEqual(await owner.captureProfile(), profile)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
     return owner;
   };
-  const unknown = (request: SandboxRequest) => ({ handle: `native-cli-worker-${createHash('sha256').update(JSON.stringify(request.identity)).digest('hex')}`,
+  const unknown = (request: SandboxRequest) => ({ handle: nativeCliWorkerHandle(request.identity),
     result: { kind: 'unknown' as const, reasonCode: 'NATIVE_WORKER_CUSTODY_UNKNOWN' } });
   const observe = async (request: SandboxRequest) => {
     const owner = await get(request); if (owner) return owner.observe(request);

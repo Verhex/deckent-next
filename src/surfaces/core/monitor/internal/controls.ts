@@ -4,7 +4,7 @@ import type { MonitorBlock, MonitorRow, MonitorSortKey } from '#surfaces/core/mo
  * The fullscreen view's own controls over the one view model (k9s/agent-view style, observe-only): `/` filter, `s`/`S` sort, `g` grouping and
  * the one-refresh change marks. Pure functions: the same blocks in, narrowed/reordered blocks out; the snapshot is never touched.
  */
-export type MonitorGroup = 'install' | 'state';
+type MonitorGroup = 'install' | 'state';
 export interface MonitorControls {
   readonly filter: string;
   readonly sort: { readonly key: MonitorSortKey; readonly reverse: boolean } | null;
@@ -36,7 +36,7 @@ function compare(a: MonitorRow, b: MonitorRow, key: MonitorSortKey): number {
   return key === 'age' ? right - left : left - right;
 }
 
-export interface ControlLabels { readonly noMatch: string; readonly arrows: { readonly down: string; readonly up: string } }
+interface ControlLabels { readonly noMatch: string; readonly arrows: { readonly down: string; readonly up: string } }
 /** Applies the controls to every table of one tab; grouping only where it means something (Runs, Workers). */
 export function applyControls(blocks: readonly MonitorBlock[], controls: MonitorControls, groupable: boolean, marks: ReadonlyMap<string, string>,
   labels: ControlLabels): MonitorBlock[] {

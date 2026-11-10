@@ -1,42 +1,34 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeCommandProjection, runSnapshotSchema } from '#domain/index.js';
+import { encodeCommandProjection } from '#domain/index.js';
 import { parseRunProposalEnvelope, isRunIntent, proposalIdentity, recheckRunProposalBudget, classifyWorkSpending, proposalRunGraph, type RunProposalRecord, type RunProposalEnvelope, type RunCreate, type RunReceipt } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-import { requireLedgerVersion, RUN_PROPOSAL_LEDGER_VERSION, RUN_INTENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { decodeLedgerRunSnapshot, ledgerTransaction, requireLedgerVersion, RUN_PROPOSAL_LEDGER_VERSION, RUN_INTENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+const corrupt = () => ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
 export function readRunProposal(db: DatabaseSync, scopeId: string, commandId: string): RunProposalEnvelope | null {
   requireLedgerVersion(db, RUN_PROPOSAL_LEDGER_VERSION);
   const row = db.prepare('SELECT proposal_id,run_id,revision,record FROM run_proposals WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
   if (!row) return null;
   let record: RunProposalEnvelope;
-  try { record = parseRunProposalEnvelope(JSON.parse(String(row.record))); } catch { throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT'); }
+  try { record = parseRunProposalEnvelope(JSON.parse(String(row.record))); } catch { throw corrupt(); }
   if (record.schemaVersion === 2) requireLedgerVersion(db, RUN_INTENT_LEDGER_VERSION);
   const identity = proposalIdentity(record);
   const receipt = db.prepare('SELECT record FROM run_proposal_receipts WHERE scope_id=? AND command_id=? AND revision=?').get(scopeId, commandId, record.revision);
   if (identity.scopeId !== scopeId || identity.commandId !== commandId || identity.proposalId !== row.proposal_id
     || identity.runId !== row.run_id || record.revision !== row.revision
-    || receipt?.record !== row.record) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
+    || receipt?.record !== row.record) throw corrupt();
   if (!isRunIntent(record) && record.status === 'accepted') {
-    try {
-      const admitted = db.prepare('SELECT snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
-      const snapshot = runSnapshotSchema.parse(JSON.parse(String(admitted?.snapshot)));
-      if (snapshot.identity.scopeId !== scopeId || snapshot.identity.runId !== record.proposal.runId
-        || encodeCommandProjection('binding', snapshot.proposal) !== encodeCommandProjection('binding', record.binding)
-        || encodeCommandProjection('authority', snapshot.authority) !== encodeCommandProjection('authority', record.authority)) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
-    } catch { throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT'); }
+    let admitted; try { admitted = db.prepare('SELECT snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId)?.snapshot; } catch { throw corrupt(); }
+    decodeLedgerRunSnapshot(admitted, scopeId, record.proposal.runId, corrupt, snapshot =>
+      encodeCommandProjection('binding', snapshot.proposal) === encodeCommandProjection('binding', record.binding)
+      && encodeCommandProjection('authority', snapshot.authority) === encodeCommandProjection('authority', record.authority));
   }
   return record;
 }
 export class SqliteRunProposals {
   constructor(private readonly db: DatabaseSync) {}
   private transaction<T>(work: () => T): T {
-    let active = false, committing = false;
-    try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); committing = true; this.db.exec('COMMIT'); return value; }
-    catch (error) {
-      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN'); } }
-      if (committing) throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN');
-      if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && ErrorRegistry.has(error.code)) throw error;
-      throw ErrorRegistry.createError('RUN_PROPOSAL_STORE_UNAVAILABLE');
-    }
+    return ledgerTransaction(this.db, work, { unknown: () => ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN'), failure: error =>
+      error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && ErrorRegistry.has(error.code) ? error : ErrorRegistry.createError('RUN_PROPOSAL_STORE_UNAVAILABLE') });
   }
   async listIntents(scopeId: string) {
     requireLedgerVersion(this.db, RUN_INTENT_LEDGER_VERSION);
@@ -47,7 +39,7 @@ export class SqliteRunProposals {
   async recordProposal(input: RunProposalEnvelope) {
     const record = parseRunProposalEnvelope(input), identity = proposalIdentity(record);
     if (record.schemaVersion === 2) requireLedgerVersion(this.db, RUN_INTENT_LEDGER_VERSION);
-    if (record.revision !== 0 || !(isRunIntent(record) ? record.status === 'parked' : ['recorded', 'rejected'].includes(record.status))) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
+    if (record.revision !== 0 || !(isRunIntent(record) ? record.status === 'parked' : ['recorded', 'rejected'].includes(record.status))) throw corrupt();
     return this.transaction(() => {
       const previous = readRunProposal(this.db, proposalIdentity(record).scopeId, proposalIdentity(record).commandId);
       if (previous) { if (previous.digest !== record.digest) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT'); return previous; }
@@ -103,7 +95,7 @@ export class SqliteRunProposals {
     // The same writer lock protects the admission-time monetary snapshot. No reservation or runtime ceiling is created.
     const budget = record.binding.admission.budget;
     if (record.binding.admission.budgetSemantics === 'not-metered') return record;
-    if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
+    if (!budget) throw corrupt();
     const account = this.db.prepare('SELECT record,revision,reservation_count,digest FROM provider_spend_accounts WHERE scope_id=?').get(create.identity.scopeId);
     if (budget.source === 'configured' && !account) return record;
     if (budget.source === 'configured' || !account) throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
@@ -113,7 +105,7 @@ export class SqliteRunProposals {
   }
   acceptWithin(previous: RunProposalRecord | null, receipt: RunReceipt): void {
     if (!previous) return;
-    if (!receipt.snapshot.authority) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
+    if (!receipt.snapshot.authority) throw corrupt();
     this.transitionWithin(previous, { ...previous, revision: previous.revision + 1, status: 'accepted', reason: null, approval: null, authority: receipt.snapshot.authority });
   }
 }

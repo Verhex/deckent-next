@@ -1,12 +1,12 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { CodedError, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { verifiedPrincipalSchema } from '#domain/core/principal/index.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, modelReferenceSchema, parseModelBindingDefinition,
   type ModelBindingDefinition, type ModelReference } from '#domain/core/provider-catalog/index.js';
 
-export const MODEL_ACTIVATION_SCHEMA_VERSION = 1;
-export const MODEL_ACTIVATION_TARGET_ENCODING_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_ACTIVATION_SCHEMA_VERSION = 1;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_ACTIVATION_TARGET_ENCODING_VERSION = 1;
 export const MODEL_ACTIVATION_TARGET_PREFIX = 'deckent.model-activation-target.v1\n';
 
 export const modelActivationBindingSchema = z.strictObject({ encodingVersion: z.literal(1), algorithm: z.literal('sha256'),
@@ -41,7 +41,7 @@ export const modelActivationRecordSchema = z.strictObject({ schemaVersion: z.lit
 }).readonly();
 
 export const modelActivationAuthorizationSchema = z.strictObject({ revision: identitySchema, ruleId: identitySchema }).readonly();
-export const modelActivationReceiptSchema = z.strictObject({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelActivationReceiptSchema = z.strictObject({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION),
   command: modelActivationCommandSchema, actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema,
   previousRevision: counterSchema.positive().nullable(), record: modelActivationRecordSchema, admittedAtMs: counterSchema,
 }).superRefine((receipt, context) => {
@@ -70,10 +70,10 @@ function copied(input: unknown): Readonly<Record<string, unknown>> {
   if (!parsed.success) throw new ModelActivationError('MODEL_ACTIVATION_INVALID');
   return parsed.data;
 }
-export type ModelActivationErrorCode = 'MODEL_ACTIVATION_INVALID' | 'MODEL_ACTIVATION_REVISION_CONFLICT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelActivationErrorCode = 'MODEL_ACTIVATION_INVALID' | 'MODEL_ACTIVATION_REVISION_CONFLICT'
   | 'MODEL_ACTIVATION_NOT_FOUND' | 'MODEL_ACTIVATION_NOT_ACTIVE' | 'MODEL_ACTIVATION_BINDING_CONFLICT';
-export class ModelActivationError extends Error {
-  constructor(readonly code: ModelActivationErrorCode) { super(code); this.name = 'ModelActivationError'; }
+export class ModelActivationError extends CodedError {
+  constructor(override readonly code: ModelActivationErrorCode) { super(code); this.name = 'ModelActivationError'; }
 }
 export function parseModelActivationCommand(input: unknown): ModelActivationCommand {
   const parsed = modelActivationCommandSchema.safeParse(copied(input));

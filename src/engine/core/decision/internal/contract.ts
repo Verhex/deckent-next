@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedDateTime, persistedInteger, clientCommandIdSchema, createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema, modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -21,7 +22,7 @@ export type DecisionQuery=z.infer<typeof decisionQuerySchema>;
 export type DecisionListQuery=z.infer<typeof decisionListQuerySchema>;
 export type DecisionRecordCommand=z.infer<typeof decisionRecordCommandSchema>;
 export type DecisionOutcomeCommand=z.infer<typeof decisionOutcomeCommandSchema>;
-export type DecisionStatus='advised'|'below-threshold'|'unknown'|'cancelled'|'unavailable';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type DecisionStatus='advised'|'below-threshold'|'unknown'|'cancelled'|'unavailable';
 export const decisionSnapshotSchema=z.strictObject({schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema,
   command:decisionAskCommandSchema,requestDigest:digest,caseDigest:digest,policy:decisionPolicySchema,principal:verifiedPrincipalSchema,
   policyRevision:identitySchema,claimedAtMs:persistedInteger().nonnegative(),status:z.enum(['pending','advised','below-threshold','unknown','cancelled','unavailable']),
@@ -52,4 +53,4 @@ export interface DecisionDependencies {readonly verifier:PrincipalVerifier;
  readonly policy:()=>Promise<DecisionPolicy|null>;readonly openStore:(access:'read'|'write')=>Promise<DecisionStore>;
  readonly invoke:(command:ModelInvocationCommand,credential?:unknown,signal?:AbortSignal)=>Promise<ModelInvocationResult>;
  readonly now:()=>number;readonly eventId:()=>string;}
-export class DecisionApplicationError extends Error {constructor(readonly code:'DECISION_INVALID'|'DECISION_UNAVAILABLE'|'DECISION_COMMAND_CONFLICT'|'DECISION_CORRUPT'|'DECISION_RECORD_REQUIRED'|'DECISION_OUTCOME_UNKNOWN') {super(code);this.name='DecisionApplicationError';}}
+export class DecisionApplicationError extends CodedError {constructor(override readonly code:'DECISION_INVALID'|'DECISION_UNAVAILABLE'|'DECISION_COMMAND_CONFLICT'|'DECISION_CORRUPT'|'DECISION_RECORD_REQUIRED'|'DECISION_OUTCOME_UNKNOWN') {super(code);this.name='DecisionApplicationError';}}

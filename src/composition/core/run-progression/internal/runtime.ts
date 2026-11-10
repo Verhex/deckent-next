@@ -1,6 +1,7 @@
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, inspectProductFile, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
-import { openSqliteAttemptStore, readLocalOsIdentity } from '#adapters/index.js';
+import { readLocalOsIdentity } from '#adapters/index.js';
 import { RunLifecycleRuntimeLoop, RunProgressionFailure, type ProgressionCursor } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { advanceConfiguredRunLifecycle, parkConfiguredRunProgression } from '#composition/core/runs/index.js';
@@ -18,7 +19,7 @@ export async function prepareConfiguredRunRuntime(projectRoot: string, observer:
   return new RunLifecycleRuntimeLoop({
     async discover(after, dueAfter, now) {
       const current = await loadConfig(projectRoot, { ...options, heal: false });
-      const store = await openSqliteAttemptStore(await inspectProductFile(current.productLayout, 'ledger', ['-wal', '-shm', '-journal']), current.storage.sqlite, { now: Date.now, timeoutMs: current.runRuntime.parking.timeoutMs }, 'forbid');
+      const store = await openConfiguredLedger({ config: current, path: () => inspectProductFile(current.productLayout, 'ledger', ['-wal', '-shm', '-journal']) }, { migration: 'forbid' });
       const companyId = current.company.id;
       try {
         const result = { due: await store.listRunLifecycleDue({ actor, after: dueAfter, limit: settings.pageSize, now, companyId }),

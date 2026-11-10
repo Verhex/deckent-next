@@ -1,11 +1,10 @@
-import { userInfo } from 'node:os';
 import { providerSpendAuditCommandInputSchema, type ProviderSpendAuditCommand } from '#domain/index.js';
-import { ProviderSpendAuditApplication, ProviderSpendAccountPolicyAuthorization, ProviderSpendError } from '#engine/index.js';
+import { ProviderSpendAuditApplication, ProviderSpendAccountPolicyAuthorization, ProviderSpendError, verifiedPrincipal } from '#engine/index.js';
 import { openSqliteProviderSpendAuditStore, openSqliteProviderSpendIntegrityReader, providerSpendAuditConfigSchema,
   type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 export async function auditConfiguredProviderSpendAccount(projectRoot: string, input: ProviderSpendAuditCommand,
@@ -26,8 +25,8 @@ async function audit(input: ProviderSpendAuditCommand, maxResultBytes: number,
     const configured = providerSpendAuditConfigSchema.safeParse(context.config['provider_spend_audit']);
     if (!configured.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
     const { pageSize, maxReservations, timeoutMs } = configured.data;
-    return await new ProviderSpendAuditApplication({ async verify() { return context.principal; } },
-      new ProviderSpendAccountPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes)),
+    return await new ProviderSpendAuditApplication(verifiedPrincipal(context.principal),
+      new ProviderSpendAccountPolicyAuthorization(contextPolicySource(context)),
       async () => openSqliteProviderSpendAuditStore(await context.path(), context.config.storage.sqlite, 'forbid'),
       async () => openSqliteProviderSpendIntegrityReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),
       { pageSize, maxReservations, timeoutMs, maxResultBytes }).audit(command);

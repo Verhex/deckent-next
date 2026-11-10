@@ -1,3 +1,4 @@
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { encodeModelBindingDefinition, modelInvocationProfileSchema, resolveModelBindingDefinition, type ModelReference, type ModelBindingDefinition } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -6,8 +7,7 @@ import { ConfigApplicationError, type ConfigSnapshot, type ConfigWriteInput } fr
 /** A catalog write cannot silently invalidate profiles. Rebinding is a separate governed choice, never implicit config authority. */
 export function assertCatalogProfileBindings(snapshot: ConfigSnapshot, document: Record<string, unknown>, effective: Record<string, unknown>): void {
   const check = (before: Record<string, unknown>, after: Record<string, unknown>) => {
-    const section = after['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
-    for (const value of section?.profiles ?? []) {
+    for (const value of configuredInvocationProfiles(after)) {
       const profile = modelInvocationProfileSchema.parse(value);
       const binding = (config: Record<string, unknown>) => {
         const catalog = config['provider_catalog'];
@@ -37,7 +37,7 @@ export function capabilityProfileChange(snapshot: ConfigSnapshot, input: ConfigW
     protocols: binding.model.protocols.map(protocol => ({ ...protocol, capabilities: [] })) } });
   const section = snapshot.document['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined;
   let changed = false;
-  const profiles = (section?.profiles ?? []).map(value => {
+  const profiles = configuredInvocationProfiles(snapshot.document).map(value => {
     const profile = modelInvocationProfileSchema.parse(value);
     if (profile.scopeId !== input.scopeId || !isDeepStrictEqual(profile.reference, target.reference)) return value;
     if (changed || !isDeepStrictEqual(identity(previous), identity(next)) || profile.bindingDigest !== sha256(encodeModelBindingDefinition(previous))

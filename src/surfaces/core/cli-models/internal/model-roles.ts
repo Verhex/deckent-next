@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, EXIT_CODES, MESSAGE_REGISTRY, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, messageText, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { MODEL_TIERS, type ModelTier } from '#domain/index.js';
 import type { ModelRoleAssignCommand, ModelRoleAssignResult, ModelRoleEntry, ModelRoleInspection, ModelRoleQuery } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -42,7 +42,7 @@ function parse(argv: readonly string[]): Parsed {
 
 /** What a role lets a model do, in the catalogs' words (`climodels.roles.unlock.<role id>`: role ids are registry data); a role an overlay added
  * with no text in this release shows its id. */
-const roleText = (role: string, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[`climodels.roles.unlock.${role}`]
+const roleText = (role: string, locale: Locale) => messageText(`climodels.roles.unlock.${role}`, locale)
   ?? t('climodels.roles.unlock.other', { role: terminalSafeText(role) }, locale);
 const tierWord = (tier: ModelTier | null, locale: Locale) => tier === null ? '-'
   : tier === 'frontier' ? t('climodels.roles.tier.frontier', {}, locale) : t('climodels.roles.tier.worker', {}, locale);

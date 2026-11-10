@@ -16,9 +16,9 @@ function parse<T>(schema: z.ZodType<T>, input: unknown, code: DecisionErrorCode)
   return parsed.data;
 }
 export const parseDecisionPolicy = (input: unknown): DecisionPolicy => parse(decisionPolicySchema, input, 'DECISION_POLICY_INVALID');
-export const parseDecisionCase = (input: unknown): DecisionCase => parse(decisionCaseSchema, input, 'DECISION_CASE_INVALID');
-export const parseDecisionAdvice = (input: unknown): DecisionAdvice => parse(decisionAdviceSchema, input, 'DECISION_ADVICE_INVALID');
-export const parseDecisionRecord = (input: unknown): DecisionRecord => parse(decisionRecordSchema, input, 'DECISION_RECORD_INVALID');
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const parseDecisionCase = (input: unknown): DecisionCase => parse(decisionCaseSchema, input, 'DECISION_CASE_INVALID');
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const parseDecisionAdvice = (input: unknown): DecisionAdvice => parse(decisionAdviceSchema, input, 'DECISION_ADVICE_INVALID');
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const parseDecisionRecord = (input: unknown): DecisionRecord => parse(decisionRecordSchema, input, 'DECISION_RECORD_INVALID');
 function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;

@@ -1,21 +1,27 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
-import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
+import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
+import { validateDockerTaskProfile, resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, nativeDiscoverySupported, NativeCodingProfileError } from './command.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, promptPartSchema } from './composition.js';
 import { nativeCodingTemplateEnvironment } from './environment.js';
-import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, nativeCliWorkerTaskBase, nativeCliWorkerStoredBase, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
-import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, type NativeCliWorkerBinding } from '#adapters/core/native-cli-worker/index.js';
+import { optionalField, DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { assertNativeDockerSubscription } from '#adapters/core/native-connection/index.js';
 
-/**
+/** Owner 2026-11-08: a CLI whose Docker subscription path is prohibited (registry data) gets no new Docker template; an existing one refuses at Run admission. */
+function dockerSubscription(provider: Parameters<typeof assertNativeDockerSubscription>[0]) {
+  try { assertNativeDockerSubscription(provider); } catch { throw new NativeCodingProfileError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE'); }
+}
+
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * K3 = A (owner 2026-09-30): a reusable native coding TEMPLATE is an ordinary registry profile of this adapter identity. It holds
  * everything of a prepared profile except the per-task input: the Docker task parameters (no argv, no binding) and the invocation
  * without model, prompt or task text. The Docker resolver refuses this adapter identity, so a template can never run by itself;
  * Run admission compiles it with a task's typed work input through the same pure compiler `coding prepare` uses.
  */
-export const NATIVE_CODING_TEMPLATE_ADAPTER = Object.freeze({ id: 'native-coding-template', version: 1 });
+export const NATIVE_CODING_TEMPLATE_ADAPTER = Object.freeze({ id: NATIVE_CODING_TEMPLATE_ADAPTER_ID, version: 1 });
 const TEMPLATE_ARGV = '__DECKENT_TEMPLATE__';
 const templateParametersSchema = z.strictObject({ schemaVersion: z.literal(1), docker: immutableJsonObjectSchema,
   worker: nativeCliWorkerBindingSchema.optional(),
@@ -36,9 +42,9 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   if (maxTurns !== undefined && !command.capabilities.maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
   if (Number(parameters.data.docker['outputBytes']) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   // The compiler replaces argv; the placeholder only lets the Docker validator check every other parameter now.
-  const parsed = executionProfileDefinitionSchema.parse({ id: profile.id, version: profile.version, adapter: { id: 'docker', version: 2 },
-    parameters: { argv: [TEMPLATE_ARGV], ...parameters.data.docker } }), docker = parameters.data.worker ? nativeCliWorkerTaskBase(parsed) : parsed;
-  try { validateDockerTaskProfile(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
+  const docker = executionProfileDefinitionSchema.parse({ id: profile.id, version: profile.version, adapter: { id: 'docker', version: 2 },
+    parameters: { argv: [TEMPLATE_ARGV], ...parameters.data.docker } });
+  try { (parameters.data.worker ? resolveHostSandboxTaskProfile : validateDockerTaskProfile)(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   return { docker, invocation: parameters.data.invocation, worker: parameters.data.worker };
 }
 /** Only invocation identity for planning; never task prompts, composition or Docker parameters. */
@@ -52,7 +58,7 @@ export function nativeCodingTemplateTurnLimit(profile: ExecutionProfileDefinitio
 }
 
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
-export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return nativeCliWorkerStoredBase(parseTemplate(profile).docker); }
+export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }
 
 /** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. PRE-7: a template
  * that declares no environment gets the adapter's default requirements (registry data), so they are part of its content identity. */
@@ -61,6 +67,7 @@ export function createNativeCodingTemplate(limits: unknown, invocation: unknown,
   const resourceLimits = limits ?? (worker ? DOCKER_EXECUTION_SETTINGS.omit({ executable: true, imageId: true }).parse({}) : limits), declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits, worker?.protocolFamily) } : resourceLimits;
   const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: declared, invocation, ...(worker ? { worker } : {}) });
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
+  if (!worker) dockerSubscription(parsed.data.invocation.provider);
   const parameters = immutableJsonObjectSchema.parse(parsed.data);
   const profile = executionProfileDefinitionSchema.parse({ id: `native-coding-template-${createHash('sha256').update(JSON.stringify(parameters)).digest('hex')}`,
     version: 1, adapter: { ...NATIVE_CODING_TEMPLATE_ADAPTER, version: worker ? 2 : 1 }, parameters });
@@ -69,7 +76,7 @@ export function createNativeCodingTemplate(limits: unknown, invocation: unknown,
 }
 
 /** Deterministic scope text: one repository path per line, in the author's order. A hand-prepared profile with this text is identical. */
-export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
+const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
 
 /** Pure admission compilation of template + typed work input: invocation v4 with the exact pinned model, the work input's turn limit
  * (else the template's) and the template's prompt parts plus task/scope/acceptance. Keeps the template id/version as provenance.
@@ -89,15 +96,16 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   if (agent && nativePromptCompositionSchema.safeParse(plain).success && !nativePromptCompositionSchema.safeParse(base).success) throw new NativeCodingProfileError('NATIVE_CODING_AGENT_OVERFLOW');
   const admitted = context.length ? { ...base, context: [...(composition?.context ?? []), ...context] } : base;
   if (context.length && nativePromptCompositionSchema.safeParse(base).success && !nativePromptCompositionSchema.safeParse(admitted).success) throw new NativeCodingProfileError('NATIVE_CODING_CONTEXT_OVERFLOW');
-  const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
+  const compiled = compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...optionalField('maxTurns', turns),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
-    model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence);
-  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(nativeCliWorkerStoredBase(compiled), worker), id: template.id, version: template.version }) : compiled;
+    model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence, !!worker);
+  return worker ? executionProfileDefinitionSchema.parse({ ...createNativeCliWorkerProfile(compiled, worker), id: template.id, version: template.version }) : compiled;
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_UNASSIGNED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'AGENT_PROMPT_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_UNASSIGNED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'AGENT_PROMPT_TOO_LARGE' | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
+  if (error.code === 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') return error.code;
   if (error.code === 'NATIVE_CODING_CONTEXT_OVERFLOW') return 'WORKER_INSTRUCTIONS_TOO_LARGE';
   if (error.code === 'NATIVE_CODING_AGENT_OVERFLOW') return 'AGENT_PROMPT_TOO_LARGE';
   return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED' || error.code === 'WORKER_MODEL_UNASSIGNED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'

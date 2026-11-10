@@ -70,7 +70,7 @@ describe('config binding ratchet', () => {
     // Consumer exists but reads a different config field.
     const file = join(root, 'src/platform/core/config-fields/internal/fields.ts');
     const before = await readFile(file, 'utf8');
-    await writeFile(file, before.replace("consumers: ['src/composition/core/storage']", "consumers: ['src/platform/core/output']"));
+    await writeFile(file, before.replace("consumers: ['src/composition/core/workspace-patch']", "consumers: ['src/platform/core/output']"));
     lintConfigBindings(root, (rule: string) => errors.push(rule));
     expect(errors).toContain('config-binding-consumer');
   });

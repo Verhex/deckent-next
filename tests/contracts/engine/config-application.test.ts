@@ -1,24 +1,26 @@
-import { describe, expect, it } from 'vitest';
-import { ConfigApplication, ConfigApplicationError, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
-import { createDefaultConfig, validateConfig } from '../../../src/platform/core/config/index.js';
+import { z } from 'zod';
+import { describe, expect, it, vi } from 'vitest';
+import { ConfigApplication, ConfigApplicationError, configDefinitions, definitionFor, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
+import { createDefaultConfig, validateConfig, registerConfigSection } from '../../../src/platform/core/config/index.js';
 import { ModelBindingApplication } from '#engine/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { parseModelInvocationProfile } from '#domain/index.js';
 import type { ConfigSnapshot, ConfigApprovalPort, ConfigChangeSubject } from '#engine/core/config/index.js';
 import { digestText } from '../../../src/platform/core/utils/index.js';
+import { DeckentJsonSchemaValidator, type ConfigSectionSchema } from '#platform/index.js';
 
 const principal = { id: 'test', issuer: 'local-os', subject: 'test', assurance: 'os-user', scopeIds: ['test'] } as const;
 const command = { keyPath: 'max_workers', value: 2, principal, scopeId: 'test', commandId: 'config-test' };
-function fixture() {
+function fixture(approvals?: ConfigApprovalPort) {
   const document = {}, effective = createDefaultConfig();
   const snapshot = { document, global: {}, project: {}, effective, digest: null, layer: 'project' as const, env: {} };
   const events: unknown[] = [];
-  let published: unknown;
+  let published: unknown; let reads = 0;
   const app = new ConfigApplication({
-    async snapshot() { return snapshot; },
+    async snapshot() { reads++; return snapshot; },
     async publish(input, planner) { const plan = await planner(snapshot); published = plan.document; return { keyPath: input.keyPath, layer: 'project', beforeDigest: null, afterDigest: digestText(JSON.stringify(plan.document)), backupPath: null, overridden: false }; },
-  }, { async authorize() { return 'test-policy'; }, async audit(event) { events.push(event); } });
-  return { app, events, published: () => published };
+  }, { ...(approvals ? { approvals } : {}), async authorize() { return 'test-policy'; }, async audit(event) { events.push(event); } });
+  return { app, events, reads: () => reads, published: () => published };
 }
 describe('registry config application', () => {
   it('rejects invalid fields before publish', async () => {
@@ -32,13 +34,73 @@ describe('registry config application', () => {
     const f = fixture(); await f.app.set(command); expect(f.published()).toMatchObject({ max_workers: 2 }); expect(f.events).toHaveLength(1);
     expect(JSON.stringify(f.events)).not.toContain('"value"'); validateConfig({ ...createDefaultConfig(), ...f.published() as object });
   });
+  it('PROPFIX: a proposal needs an exact approval under allow, again under the write lock; ordinary writes keep allow', async () => {
+    let allow = false, deny = false, withdraw = false, admissions = 0;
+    const f = fixture({ evaluate: async () => {
+      if (deny) throw new ConfigApplicationError('POLICY_DENIED');
+      return { decision: 'allow', revision: 'test-policy', ruleId: 'old-ai-allow' };
+    }, admit: async () => {
+      admissions++;
+      return allow && !(withdraw && admissions === 2) ? { approved: { approvalId: 'person-card', actionDigest: 'exact-change' } }
+        : { pending: { approvalId: 'person-card', revision: 0, expiresAt: 1000, summary: 'Person decides' } };
+    } });
+    await expect(f.app.propose(command)).resolves.toMatchObject({ status: 'approval-pending' });
+    expect(f.published()).toBeUndefined(); expect(f.events).toEqual([]);
+    deny = true;
+    await expect(f.app.propose(command)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(f.published()).toBeUndefined(); expect(f.events).toEqual([]);
+    deny = false; allow = true; withdraw = true; admissions = 0;
+    await expect(f.app.propose(command)).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_REQUIRED' });
+    expect(f.published()).toBeUndefined(); expect(f.events).toEqual([]);
+    withdraw = false;
+    await expect(f.app.propose(command)).resolves.toMatchObject({ status: 'applied', approvalId: 'person-card' });
+    expect(f.events).toMatchObject([{ subject: { approvalId: 'person-card' } }]);
+    const ordinary = fixture({ evaluate: async () => ({ decision: 'allow', revision: 'test-policy', ruleId: 'old-ai-allow' }),
+      admit: async () => { throw Error('ordinary allow must not ask'); } });
+    await expect(ordinary.app.submit('set', command)).resolves.toMatchObject({ status: 'applied', approvalId: null });
+    const unsupported = fixture();
+    await expect(unsupported.app.propose(command)).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_REQUIRED' });
+    expect(unsupported.published()).toBeUndefined(); expect(unsupported.events).toEqual([]);
+  });
   it('denies unauthorized writes before audit and publication', async () => {
     const f = fixture(); const app = new ConfigApplication({ snapshot: async () => { throw Error('should not read'); }, publish: async () => { throw Error('should not publish'); } }, { authorize: async () => { throw new ConfigApplicationError('POLICY_DENIED'); }, audit: async () => { throw Error('should not audit'); } });
     await expect(app.set(command)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); expect(f.published()).toBeUndefined();
   });
   it('shows environment provenance and redacts secret-like fields', async () => {
     const f = fixture(); const view = await f.app.inspect(); expect(view.fields.find(field => field.key === 'max_workers')?.value).toBe('auto');
+    const count = f.reads();
+    expect(await f.app.explainMany({ keys: ['max_workers', 'language'] })).toMatchObject([{ key: 'max_workers', value: 'auto' }, { key: 'language' }]);
+    expect(f.reads() - count).toBe(1);
+    await expect(f.app.explain({ keyPath: 'not_a_key' })).rejects.toMatchObject({ code: 'CONFIG_KEY_UNKNOWN' });
+    const before = configDefinitions();
+    registerConfigSection('cfg_characterization', z.strictObject({ enabled: z.boolean().default(false) }), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/engine/core/config'] }, apply: 'live' } });
+    expect(before.has('cfg_characterization')).toBe(false);
+    expect(definitionFor('cfg_characterization.enabled').schema.safeParse(true).success).toBe(true);
+    const copy = configDefinitions() as Map<string, unknown>; copy.clear();
+    expect(configDefinitions().has('max_workers')).toBe(true);
   });
+});
+
+it('preserves foreign section issue order and projected validation across recreated nodes and distinct reference roots', () => {
+  const leaf = { $ref: '#/$defs/value' }, issues = [{ message: 'first', path: ['a'] }, { message: 'second', path: ['b'] }];
+  for (const [name, type] of [['cfg_projected_text', 'string'], ['cfg_projected_count', 'integer']] as const) {
+    const projection = { type: 'object', additionalProperties: false, properties: { value: leaf }, $defs: { value: { type } } };
+    const schema: ConfigSectionSchema = { '~standard': { version: 1, vendor: 'leftover-fixture',
+      validate: value => value === 'bad' ? { issues } : { value: value ?? {} }, jsonSchema: { input: () => projection, output: () => projection } } };
+    registerConfigSection(name, schema, { optional: true, metadata: { descriptionKey: 'config.section', tier: 'custom', since: '1',
+      binding: { state: 'bound', consumers: ['src/engine/core/config'] }, apply: 'live' } });
+    expect(definitionFor(name).schema.safeParse('bad')).toEqual({ success: false, error: { issues } });
+  }
+  const spy = vi.spyOn(DeckentJsonSchemaValidator.prototype, 'getValidator');
+  try {
+    for (let repeat = 0; repeat < 3; repeat++) {
+      for (const [name, valid, invalid] of [['cfg_projected_text', 'kept', 4], ['cfg_projected_count', 4, 'kept']] as const) {
+        expect(definitionFor(`${name}.value`).schema.safeParse(valid)).toEqual({ success: true, data: valid });
+        expect(definitionFor(`${name}.value`).schema.safeParse(invalid)).toEqual({ success: false, error: { issues: [{ message: 'SECTION_INVALID' }] } });
+      }
+    }
+    expect(spy).toHaveBeenCalledTimes(2);
+  } finally { spy.mockRestore(); }
 });
 
 it('never exposes a secret-like registered nested value', async () => {
@@ -222,4 +284,20 @@ it('a masked global catalog write cannot stale another scope profile; identical 
   document.provider_invocation_profiles.profiles = [mine];
   // A masking project catalog cannot be silently rebound through a global write.
   Object.assign(own, { layer: 'global', global: document, project: { provider_catalog: catalog } }); await refuse();
+});
+
+it('ERR-M: config permissions accepts branded refusals from either package and refuses a foreign code before any write', async () => {
+  const { CodedError, ErrorRegistry } = await import('#platform/index.js');
+  const { CodedError: DomainCodedError } = await import('#domain/index.js');
+  class EnterpriseCopy extends Error { readonly code = 'POLICY_DENIED'; }
+  Object.defineProperty(EnterpriseCopy.prototype, Symbol.for('deckent.coded-error'), { value: true });
+  let failure: unknown;
+  const app = new ConfigApplication({ snapshot: async () => { throw Error('unexpected read'); }, publish: async () => { throw Error('unexpected write'); } }, {
+    authorize: async () => { throw Error('unexpected authorize'); }, audit: async () => { throw Error('unexpected audit'); },
+    approvals: { evaluate: async () => { throw failure; }, admit: async () => { throw Error('unexpected approval'); } } });
+  const input = { principal, scopeId: 'test', keys: ['max_workers'], layers: ['project'] as const };
+  for (failure of [ErrorRegistry.createError('POLICY_DENIED'), new CodedError('POLICY_DENIED'), new DomainCodedError('POLICY_DENIED'), new EnterpriseCopy()])
+    await expect(app.permissions(input)).resolves.toEqual([{ keyPath: 'max_workers', layer: 'project', decision: 'deny', ruleId: null }]);
+  for (failure of [{ code: 'POLICY_DENIED' }, Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }), new Error('POLICY_DENIED')])
+    await expect(app.permissions(input)).rejects.toBe(failure);
 });

@@ -6,7 +6,7 @@ const MARK_CLASSES = policy.markClasses.map(name => new RegExp(`^\\p{${name}}$`,
  * ZWNJ, LRM and RLM are marked, never removed from the raw field and never treated as a natural-language allow. */
 const KEPT = new Set<number>(policy.keptCodePoints);
 
-export type ModelIngressDisposition = 'unchanged' | 'note' | 'quarantine';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelIngressDisposition = 'unchanged' | 'note' | 'quarantine';
 export type ModelIngressProjection = {
   readonly modelText: string;
   readonly withheld: string;

@@ -1,22 +1,22 @@
-import { migrateCapacityResources } from '#adapters/core/sqlite-ledger-migrations/index.js';
+import { migrateCapacityResources, migrateLedgerIndexes } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateProviderSpendPeriods, migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
+import { effectStateSchema, isEffectOpen } from '#domain/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
 export const RUN_LEDGER_VERSION = 12;
-export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
-export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
-export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
+const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
 export const MODEL_INVOCATION_LEDGER_VERSION = 18;
 export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 74;
+export const LOOKUP_INDEX_LEDGER_VERSION = 75;
+export const CURRENT_LEDGER_VERSION = LOOKUP_INDEX_LEDGER_VERSION;
 export const CAPACITY_RESOURCE_LEDGER_VERSION = 74;
 // alpha.56 BP budget periods: each period-less spend checkpoint is archived once (append-only history) and gets its first local month boundary.
 // Older binaries refuse v72; rollback restores the pre-switch backup (the rewritten account records carry the period).
@@ -52,6 +52,8 @@ export const AGENT_CATALOG_LEDGER_VERSION = 64;
 // S6R-1 effect producer (v63 after s1's v62): every new effect intent records its producer (Attempt | principal) in the record; the step adds
 // only the producer-Attempt index (migration-v63.ts). Older intents stay as written. Downgrade = restore the pre-switch backup.
 export const EFFECT_PRODUCER_LEDGER_VERSION = 63;
+/** KG10 F1: the one `effect_intents` open-state filter, from the domain set; "not terminal", so a state outside the enum counts as open (fail closed). */
+export const EFFECT_OPEN_STATE_SQL = `state NOT IN(${effectStateSchema.options.filter(state => !isEffectOpen(state)).map(state => `'${state}'`).join(',')})`;
 // ATAMA-1 system assignment (lane v62; the lead renumbers at landing): Run graphs may hold work input v2 (no model), Run execution snapshots a
 // sealed `assignment` per task, and metric rows its summary. Additive: every v61 record parses unchanged, nothing is read or rewritten; the
 // version step alone keeps an older build (which refuses a newer ledger) from reading the new records. Downgrade = restore the pre-switch backup.
@@ -79,8 +81,7 @@ export const RUN_INTENT_LEDGER_VERSION = 73;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
-export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
-export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
+const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const AUDIT_EVENT_LEDGER_VERSION = 41;
 // B06-2b: adoption intent v2 (verification binding); exact v1 adopt records are rewritten, the table is unchanged.
 export const ADOPTION_VERIFICATION_LEDGER_VERSION = 42;
@@ -409,7 +410,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
   // Older custody validators inspect the current Run shape. Prove and convert old eligibility
   // before those validators, inside the same transaction; never skip their independent checks.
   if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
-  const codeSteps: Readonly<Record<number, () => void>> = { [CAPACITY_RESOURCE_LEDGER_VERSION]: () => migrateCapacityResources(db), [PROVIDER_SPEND_PERIOD_LEDGER_VERSION]: () => migrateProviderSpendPeriods(db), 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
+  const codeSteps: Readonly<Record<number, () => void>> = { [LOOKUP_INDEX_LEDGER_VERSION]: () => migrateLedgerIndexes(db), [CAPACITY_RESOURCE_LEDGER_VERSION]: () => migrateCapacityResources(db), [PROVIDER_SPEND_PERIOD_LEDGER_VERSION]: () => migrateProviderSpendPeriods(db), 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
     8: () => requireLedgerV8ExecutionRegistry(db), 15: () => migrateModelInvocationEvidence(db), 16: () => migrateModelInvocationContents(db),
     17: () => migrateModelInvocationPurge(db), 18: () => migrateModelInvocationControl(db), 19: () => migrateModelAllocationCheckpoints(db),
     20: () => migrateProviderSpend(db), 21: () => migrateProviderReportedSpend(db), [SCOPE_REGISTRY_LEDGER_VERSION]: () => migrateScopeRegistry(db, companyId),

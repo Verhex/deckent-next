@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema, taskEvaluationSchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -5,8 +6,8 @@ import { artifactReceiptSchema, ArtifactError, type ArtifactStore } from '#capab
 const itemSchema = z.strictObject({ evidenceId: identitySchema, receipt: artifactReceiptSchema }).readonly();
 const limitsSchema = z.strictObject({ maxEvidenceItems: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxTotalBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type EvaluationEvidenceLimits = z.infer<typeof limitsSchema>;
-export class EvaluationEvidenceError extends Error {
-  constructor(readonly code: 'EVALUATION_EVIDENCE_INVALID' | 'EVALUATION_EVIDENCE_INCOMPLETE' | 'EVALUATION_EVIDENCE_SCOPE'
+export class EvaluationEvidenceError extends CodedError {
+  constructor(override readonly code: 'EVALUATION_EVIDENCE_INVALID' | 'EVALUATION_EVIDENCE_INCOMPLETE' | 'EVALUATION_EVIDENCE_SCOPE'
     | 'EVALUATION_EVIDENCE_LIMIT' | 'EVALUATION_EVIDENCE_CORRUPT' | 'EVALUATION_EVIDENCE_UNAVAILABLE') { super(code); this.name = 'EvaluationEvidenceError'; }
 }
 /** Content/reference validation only. Caller must authenticate, authorize and bind producer/attempt provenance.

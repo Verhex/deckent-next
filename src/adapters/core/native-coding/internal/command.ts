@@ -1,6 +1,7 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, executionProfileDefinitionSchema, INSTRUCTION_SURFACE_PATHS, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { z } from 'zod';
-import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
+import { validateDockerTaskProfile, resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
 import { assertNativeWorkerBinding } from './binding.js';
@@ -30,7 +31,7 @@ export const nativeCodingInvocationFields = z.strictObject({
 });
 export const nativeCodingInvocationSchema = nativeCodingInvocationFields.refine(value => value.schemaVersion >= 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined))
   .refine(value => (value.schemaVersion === 4) === (typeof value.model === 'object')).readonly();
-export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 
 /** One rule for templates and compilation: `disabled` needs a registered realisation (argv or checkout), hook settings need `repository`,
  * and a project hidden set only exists for a checkout-realised `disabled`. */
@@ -40,9 +41,10 @@ export function nativeDiscoverySupported(command: ReturnType<typeof nativeCliCom
     || (settings && (!command.capabilities.settings || mode !== 'repository'))
     || (hiddenPaths && (mode !== 'disabled' || !realisation?.checkout)));
 }
-export class NativeCodingProfileError extends Error {
-  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE'
-    | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'NATIVE_CODING_CONTEXT_OVERFLOW' | 'NATIVE_CODING_AGENT_OVERFLOW' | 'WORKER_MODEL_UNASSIGNED') {
+export class NativeCodingProfileError extends CodedError {
+  constructor(override readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE'
+    | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'NATIVE_CODING_CONTEXT_OVERFLOW' | 'NATIVE_CODING_AGENT_OVERFLOW' | 'WORKER_MODEL_UNASSIGNED'
+    | 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE') {
     super(code); this.name = 'NativeCodingProfileError';
   }
 }
@@ -51,11 +53,14 @@ export class NativeCodingProfileError extends Error {
  * Prompts are ordinary task data persisted in argv; never put credentials in this field.
  * Structured composition carries explicit selected content; it never discovers repository instructions.
  * `evidence` (owner K1/K2 2026-10-22): the catalog's session-start names / provider-choice flag, frozen into a pinned model only when present.
+ * `hostSandbox` (R8b, owner D1b): a connected CLI worker's base, which runs in the host sandbox, so its image is optional.
  */
-export function compileNativeCodingDockerProfile(template: ExecutionProfileDefinition, input: unknown, selectedEffort?: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition {
+export function compileNativeCodingDockerProfile(template: ExecutionProfileDefinition, input: unknown, selectedEffort?: WorkerEffort, evidence?: CatalogPinModelEvidence,
+  hostSandbox = false): ExecutionProfileDefinition {
   const parsed = nativeCodingInvocationSchema.safeParse(input);
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
-  try { validateDockerTaskProfile(template); }
+  const validate = hostSandbox ? resolveHostSandboxTaskProfile : validateDockerTaskProfile;
+  try { validate(template); }
   catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   const invocation = parsed.data;
   const command = nativeCliCommand(invocation.provider);
@@ -94,7 +99,7 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
         ...(mode === 'disabled' ? command.capabilities.discovery!.requiredFlags : []),
         ...(settings ? [command.capabilities.settings!.flag] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
     } } } });
-  validateDockerTaskProfile(profile);
+  validate(profile);
   assertNativeWorkerBinding(profile); // the compiler's own output always satisfies the admission binding check
   return profile;
 }

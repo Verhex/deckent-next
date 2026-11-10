@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyShellAuthority, checkAwkProgram, checkSedScript, classifyReadOnlyShellCommand, classifyShellRisk, type ShellPathContext, type ShellReasonCode,
+import { classifyShellAuthority, classifyShellContainment, classifyShellMutation, scanShellCommand, shellNamedPaths, checkAwkProgram, checkSedScript, classifyReadOnlyShellCommand, classifyShellRisk, type ShellPathContext, type ShellReasonCode,
   type ShellRisk } from '#engine/index.js';
 
 // Legacy parity (deckent-dev tests/core/shell-readonly-classifier.test.ts and tests/agent/shell-risk.test.ts @a4ed4ea47^): grammar and
@@ -64,6 +64,10 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
 
   it('refuses the PowerShell dialect as not ported, so a Windows host asks for every shell command', async () => {
     expect(await classifyReadOnlyShellCommand('Get-Content f', anyPath, 'powershell')).toMatchObject({ readOnly: false, reasonCode: 'UNSUPPORTED_DIALECT' });
+    const shared = scanShellCommand('cat f');
+    expect(await classifyReadOnlyShellCommand('cat f', anyPath, 'powershell', shared)).toMatchObject({ readOnly: false, reasonCode: 'UNSUPPORTED_DIALECT' });
+    expect(await classifyShellMutation('cat f', anyPath, { async checkWrite() { return { ok: true }; } }, 'powershell', shared)).toMatchObject({ tier: 'always-ask', reasonCode: 'UNSUPPORTED_DIALECT' });
+    expect(classifyShellContainment('cat f', () => false, 'powershell', undefined, shared)).toMatchObject({ contained: false, reasonCode: 'UNSUPPORTED_DIALECT' });
   });
 
   it('asks the path check about every path argument, input redirection and path-valued option, and stops at its refusal', async () => {
@@ -76,6 +80,12 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
     // With -f the patterns come from the file, so the first positional (x) is a path too.
     expect(asked).toEqual(['in', 'pats.txt', 'x', 'a', 'b', 'sub', 'p']);
     expect(await classifyReadOnlyShellCommand('cat ok secret later', recording)).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED', detail: 'secret' });
+    const command = 'cat mutable', shared = scanShellCommand(command);
+    let protectedPath = false;
+    const changing: ShellPathContext = { async check() { return protectedPath ? { ok: false, reasonCode: 'PATH_PROTECTED', detail: 'mutable' } : { ok: true }; } };
+    expect(await classifyReadOnlyShellCommand(command, changing, 'posix', shared)).toMatchObject({ readOnly: true });
+    protectedPath = true;
+    expect(await classifyReadOnlyShellCommand(command, changing, 'posix', shared)).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED', detail: 'mutable' });
   });
 
   // G2-2 (analysis 2026-10-18): jq's `--rawfile`/`--slurpfile` take a name and a file, `--arg`/`--argjson` a name and a value. Modelled as one
@@ -141,6 +151,38 @@ describe('shell risk tiers (legacy parity)', () => {
     }
     for (const [command, expected] of [['[ -f a ] && rm a', 'modify'], ['test -f a && rm -rf a', 'destructive'], ['od -c f > out', 'destructive'], ['sha256sum f >> log', 'modify']] as const)
       expect(classifyShellRisk(command, await classify(command), true).risk, command).toBe(expected);
+    // SHELL / owner Tur 2 Q4: sharing tables must preserve each classifier's existing floor and reason.
+    for (const [command, terminalReason, workerReason, contained] of [
+      ['test -f x', 'shell.modify.unknown-command', 'shell.safe-read.test', true],
+      ['[ -f x ]', 'shell.modify.unknown-command', 'shell.safe-read.test', true],
+      ['git blame f', 'shell.modify.git-command', 'shell.modify.git-command', true],
+      ['git branch -l', 'shell.modify.git-command', 'shell.modify.git-command', true],
+      ['git branch --contains main', 'shell.safe-read.git', 'shell.safe-read.git', true],
+      ['find . -ok echo x', 'shell.modify.mutating-flag', 'shell.modify.mutating-flag', false],
+      ['find . -okdir echo x', 'shell.modify.mutating-flag', 'shell.modify.mutating-flag', false],
+      ['find . -fprint out', 'shell.modify.mutating-flag', 'shell.modify.mutating-flag', true],
+      ['find . -exec echo x', 'shell.modify.find-action', 'shell.modify.find-action', false],
+      ['hash -p ./tool cat', 'shell.modify.unknown-command', 'shell.modify.unknown-command', false],
+      ['enable -f ./tool cat', 'shell.modify.unknown-command', 'shell.modify.unknown-command', false],
+    ] as const) {
+      const read = await classify(command);
+      expect(classifyShellRisk(command, read), command).toEqual({ risk: terminalReason.startsWith('shell.safe-read.') ? 'safe-read' : 'modify', reason: terminalReason });
+      expect(classifyShellRisk(command, read, true), command).toEqual({ risk: workerReason.startsWith('shell.safe-read.') ? 'safe-read' : 'modify', reason: workerReason });
+      expect(classifyShellContainment(command, () => false).contained, command).toBe(contained);
+      const shared = scanShellCommand(command);
+      expect(classifyShellRisk(command, read, false, shared), command).toEqual({ risk: terminalReason.startsWith('shell.safe-read.') ? 'safe-read' : 'modify', reason: terminalReason });
+      expect(classifyShellRisk(command, read, true, shared), command).toEqual({ risk: workerReason.startsWith('shell.safe-read.') ? 'safe-read' : 'modify', reason: workerReason });
+      expect(classifyShellContainment(command, () => false, 'posix', undefined, shared).contained, command).toBe(contained);
+    }
+    const otherCommand = scanShellCommand('ls');
+    const destructive = 'rm -rf x', read = await classifyReadOnlyShellCommand(destructive, anyPath, 'posix', otherCommand);
+    expect(read).toMatchObject({ readOnly: false, reasonCode: 'PROGRAM_NOT_ALLOWLISTED' });
+    expect(classifyShellRisk(destructive, read, false, otherCommand)).toEqual({ risk: 'destructive', reason: 'shell.destructive.rm-recursive-or-force' });
+    expect(await classifyShellMutation('curl https://example.test', anyPath, { async checkWrite() { return { ok: true }; } }, 'posix', otherCommand))
+      .toMatchObject({ tier: 'always-ask', reasonCode: 'NETWORK_TOOL' });
+    expect(classifyShellAuthority('deckent secret grant key', otherCommand)).toBe(true);
+    expect(classifyShellContainment('python -c x', () => false, 'posix', undefined, otherCommand)).toMatchObject({ contained: false, reasonCode: 'PROGRAM_FLOOR', detail: 'python' });
+    expect(shellNamedPaths('cat protected', name => name === 'protected', otherCommand)).toEqual(['protected']);
   });
 });
 

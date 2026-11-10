@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { clientCommandIdSchema, counterSchema, identitySchema, policyHasResourceRules, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { clientCommandIdSchema, counterSchema, identitySchema, policyHasResourceRules, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, parseRun, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { diagnoseReservationWave, planSchedulingWave, type ResourceCapacityInput } from '#engine/core/scheduling/index.js';
@@ -10,7 +10,7 @@ import { projectRunView } from './view.js';
 
 export const runReservationCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema }).strict();
 export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
-export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
   loadRunResourceCapacity?(run: RunSnapshot): Promise<ResourceCapacityInput>;
   quotaHeldTasks?(run: RunSnapshot, now: number): Promise<readonly string[]>;
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;
@@ -27,7 +27,7 @@ export interface ReservationRuntime { now(): number; attemptId(taskId: string): 
 export function policyGatesTaskAdmission(policy: unknown): boolean { return policyHasResourceRules(policy, 'task'); }
 const recordedReservation = runReservationSchema.extend({ action: z.literal('reserve-run-tasks') }).strict();
 function checkedSnapshot(input: unknown) {
-  try { const run = runSnapshotSchema.parse(input); assertRunExecution(run.graph, run.execution); return run; }
+  try { const run = parseRun(input); assertRunExecution(run.graph, run.execution); return run; }
   catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
 }
 

@@ -53,4 +53,4 @@ export function freezeTaskAcceptance(task: TaskDefinition, definitions: readonly
   return { frozen, reference };
 }
 export type FrozenWorkClassProfile = z.infer<typeof frozenWorkClassProfileSchema>;
-export type TaskAcceptanceReference = z.infer<typeof taskAcceptanceReferenceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type TaskAcceptanceReference = z.infer<typeof taskAcceptanceReferenceSchema>;

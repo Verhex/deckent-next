@@ -1,9 +1,8 @@
-import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { CatalogEvolutionError, encodeDeckentJson, type JsonValue } from '#domain/index.js';
 import { catalogEvolutionPassSchema, catalogEvolutionWindowSchema, type CatalogEvolutionPass, type CatalogEvolutionStore, type CatalogEvolutionWindow } from '#engine/index.js';
 import { sha256 } from '#platform/index.js';
-import { openSqliteLedger, readCurrentMetricRows, requireLedgerVersion, CATALOG_EVOLUTION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, openLedgerDatabase, openSqliteLedger, readCurrentMetricRows, requireLedgerVersion, CATALOG_EVOLUTION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 const corrupt = () => new CatalogEvolutionError('CATALOG_EVOLUTION_CORRUPT');
 /**
@@ -40,8 +39,7 @@ class SqliteCatalogEvolutionStore implements CatalogEvolutionStore {
   }
   async recordPass(record: CatalogEvolutionPass, expected: number, windows: readonly CatalogEvolutionWindow[] = []) {
     const value = catalogEvolutionPassSchema.parse(record), sealed = JSON.stringify({ record: value, digest: sha256(encodeDeckentJson(value as unknown as JsonValue)) });
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    ledgerTransaction(this.db, () => {
       const current = this.db.prepare('SELECT position FROM catalog_evolution_positions WHERE scope_id=?').get(value.scopeId);
       if (Number(current?.['position'] ?? 0) !== expected || value.previousPosition !== expected || value.position <= expected) throw new CatalogEvolutionError('CATALOG_EVOLUTION_POSITION_CONFLICT');
       this.db.prepare(current ? 'UPDATE catalog_evolution_positions SET position=?,record=? WHERE scope_id=?' : 'INSERT INTO catalog_evolution_positions(position,record,scope_id) VALUES(?,?,?)')
@@ -52,15 +50,13 @@ class SqliteCatalogEvolutionStore implements CatalogEvolutionStore {
         if (window.scopeId !== value.scopeId) throw corrupt();
         upsert.run(window.scopeId, window.keyDigest, JSON.stringify({ record: window, digest: sha256(encodeDeckentJson(window as unknown as JsonValue)) }));
       }
-      this.db.exec('COMMIT');
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    }, { failure: error => error });
   }
   close() { this.db.close(); }
 }
 /** Reads never migrate or take the write lock; the pass (the runtime service) is the only writer. */
 export function openSqliteCatalogEvolutionStore(path: string, options: SqliteLedgerOptions, access: 'read' | 'write'): CatalogEvolutionStore {
   if (access === 'write') return new SqliteCatalogEvolutionStore(openSqliteLedger(path, options, 'forbid'));
-  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-  const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
+  const db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
   try { requireLedgerVersion(db, CATALOG_EVOLUTION_LEDGER_VERSION); return new SqliteCatalogEvolutionStore(db); } catch (error) { db.close(); throw error; }
 }

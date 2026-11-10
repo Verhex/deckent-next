@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=380 floor=279 policy=2280 steps=48 uyumlu=2328 İHLAL=0
+ai-floor: routes=381 floor=280 policy=2286 steps=48 uyumlu=2334 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -99,6 +99,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | agent-tool-call / fixture-target / invoke | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | agent-tool-call / fixture-target / invoke | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | agent-tool-call / fixture-target / invoke | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-tool-call / mcp-floor / invoke | tools | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-tool-call / mcp-floor / invoke | tools | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| agent-tool-call / mcp-floor / invoke | tools | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | approval / audit-rebaseline / decide | cards | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | approval / audit-rebaseline / decide | cards | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | approval / audit-rebaseline / decide | cards | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -2351,98 +2357,82 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 ## Source custody (LF-normalized SHA-256)
 
-- `src/domain/core/agent-tool/index.ts`: `ee21687140f2ad66c4dc91b70c2047cbac9a97890fda524b69f7100395270549`
-- `src/domain/core/agent-tool/internal/contract.ts`: `4c587623e4e422972c3256b7de84d99ab9f7b38a919b1ae18a061b5ad5200735`
+- `src/domain/core/agent-tool/index.ts`: `5fca1d65a69303f1a78c15d7e5e7479659364a69b93669ec57ca70c7a009cd68`
+- `src/domain/core/agent-tool/internal/ai-proposals.ts`: `59ea095ddd7df0c9fef5f196a55ddaea54974a55b8ddd3b2d0f9292584a1b1d6`
+- `src/domain/core/agent-tool/internal/contract.ts`: `db8926a0ed593318c401c79645cc54374b3d23e3f3ad1953db9e0d32d7b27616`
 - `src/domain/core/agent-tool/internal/text.ts`: `9ee5a731b6745d74c261e71c0f805494ca206474a632513f237e792e308192d2`
-- `src/domain/core/agent-turn/index.ts`: `a2eaa7a3fae83e76dfbf80e957d8fe2770a76e728246753189289697013c1a3b`
-- `src/domain/core/agent-turn/internal/card-facts.ts`: `639d6a00c50c9f5a15ed5822cb7dfcbfdd3487480c20ab00d389aebf24376930`
+- `src/domain/core/agent-turn/index.ts`: `a1855b1e86d68766c3d98e99dfd2bfff76172da0d2d40249ea8fe937373d05db`
+- `src/domain/core/agent-turn/internal/card-facts.ts`: `e6be8440881672abcd9feade18bc73aec0bbd56d371c493945bcacff471f1979`
 - `src/domain/core/agent-turn/internal/continuation.ts`: `29d689f7e5f0f1ad5eb4baa2d15ea69c06030e0dd359f1de8d011c197d859c35`
-- `src/domain/core/agent-turn/internal/contract.ts`: `199e57c9d672f85fd45ebe6a88a516463703c0ee3e7b26a42292b949b1ab0ee4`
-- `src/domain/core/agent-turn/internal/scratch.ts`: `e3823e693b8452d50006bdd95d1b2f65d37530b499802c32739a73dfc787a4f4`
-- `src/domain/core/agent-turn/internal/workspace-files.ts`: `ae38afcf5d38a97f0b4f468c70091ce1e449c2d3e10f11677a2116eb2fcfeb31`
-- `src/domain/core/approval/index.ts`: `b017f44bb846ccf6f962cf5ba4238efa5f7354f64bef3126521f32c834cdc4ed`
-- `src/domain/core/approval/internal/contract.ts`: `589aca1b2c0d09283ee1abcc20d335064931c4aefe21ae7249d1987910755527`
-- `src/domain/core/attempt/index.ts`: `a2234fa31bde2aa77747a7ffe545103827e75935bcf3762be241cdd0928873a9`
-- `src/domain/core/attempt/internal/contract.ts`: `b22f69acb87323015b0f971f7137b2ad8b7ace0d2924434fcb6514f28bf765b0`
+- `src/domain/core/agent-turn/internal/contract.ts`: `6cb78d50d5dee9a273016b9a68f9f467786994c8a69d77aaa56582e185a55a9f`
+- `src/domain/core/agent-turn/internal/scratch.ts`: `309f7e4222cedc665efdb97ae21f7dac32e26db9627635268fb231b725e33d04`
+- `src/domain/core/agent-turn/internal/workspace-files.ts`: `246d8587821d717da9ecd3db34845c252bfceae0e44acb1beeaee0bce9c22c21`
+- `src/domain/core/approval/index.ts`: `b9765ec9a3ccfee203b72b8cab35edfa4d842325d04b2749e7241f0c2e9b8563`
+- `src/domain/core/approval/internal/ai-cells.ts`: `15dcacecb46fad2f2609ee1ebf78e2001b1a0161c1a0d837ba4cf50a7566a59d`
+- `src/domain/core/approval/internal/contract.ts`: `a023fbb93c94475e453f9bfbf4cce01aba929ce1ae92d37aa409c4d69ecd348f`
+- `src/domain/core/attempt/index.ts`: `2ef16bfdc5d5645c3c84b87832bdf81f4139ee06bfece6a309f62eb49f807fd5`
+- `src/domain/core/attempt/internal/contract.ts`: `b0439ca3825487d7ffeb418ff56bd1c51a7aa8c61eefbd7a4c66d141b5567cf8`
 - `src/domain/core/attempt/internal/dispatch-loss.ts`: `d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f`
 - `src/domain/core/attempt/internal/isolation.ts`: `7e55bc6c8f2fe8cb86ae4ab1fa8782ad262064ffb84b43aeb0d7cefb4121cdd0`
 - `src/domain/core/attempt/internal/reduce.ts`: `c658466002047df6178eabff46ae069c9dbee9d075a4fa95181ba191a754d98c`
-- `src/domain/core/audit/index.ts`: `d9c5969bbd2bebfe163fe6af7f406622180a44bcfd3b8f0568069a40b0c3523a`
-- `src/domain/core/audit/internal/authority-decision.ts`: `b5f08e4469690230080daf67076d4031dc10d067f5caa8c3f027456cd529965d`
-- `src/domain/core/audit/internal/checkpoint.ts`: `c722e6d1c3dc88659787c02935e4e51a9017dae814d9cf3d901cabd079b3159c`
-- `src/domain/core/audit/internal/contract.ts`: `04fb01e678e8e9dd16aeaffcdcef09327fd259ba5c4da8ad55f25c78dfdb7bde`
-- `src/domain/core/audit/internal/follow.ts`: `cacdcb809b11e1adbc771abb152e5370a8940c33ea51211024592d2f3b595665`
-- `src/domain/core/command/index.ts`: `720255d242c75b6e1b82cef56eda2997afccfcb429185d340bd0ce5d36159723`
-- `src/domain/core/command/internal/command.ts`: `506b6aef4f3b00b190d9328056273ca099d0751c2c3b2941585498155172bd0e`
-- `src/domain/core/effect/index.ts`: `a0de61e4c13a1c6aafbf0011a2afefa5823ce3ae306d23e9a56af0af8c559f52`
-- `src/domain/core/effect/internal/candidate.ts`: `af2c5c1ce41923a36b5451841fa231805d23fc6cd855d4012916d727a24b5fdb`
-- `src/domain/core/effect/internal/contract.ts`: `5a77a060cdd1f24d1ac26e4bd0837c37103099abced89e18cfc78a0e08ad2e59`
-- `src/domain/core/effect/internal/operation-input.ts`: `a70ab4e9d030af5576ea27c068213cbf594736f3cbef5c296304cc7ca5447504`
-- `src/domain/core/effect/internal/queue.ts`: `f408237a4c7eac31eb1df284872eecdd8c673aac6f00371a0791c35263a49c34`
-- `src/domain/core/model-activation/index.ts`: `7de4042b3f42dcd25f0e2d0761b8d5badf145b8728c9f43305f1532c12f67d24`
-- `src/domain/core/model-activation/internal/catalog.ts`: `e54b82759947f853ef3efa9707d1b7a8fa1a69010c93144517130f05160bbfb0`
-- `src/domain/core/model-activation/internal/connect.ts`: `4f43f9531e6592ef328eb0b478eeb9ff2f029182f305299ffb46768bd09d4859`
-- `src/domain/core/model-activation/internal/contract.ts`: `bb4a3c52119219751e36c872631f3b356b6bfcc2efc0852d3bdca4e5ea0f9a3a`
+- `src/domain/core/model-activation/index.ts`: `5fc222f01d12f2f6b687a8a21c9138d85ecac49ae65b58f87050ea3bc4ba65c7`
+- `src/domain/core/model-activation/internal/catalog.ts`: `1a0843d848f19a65eaa12664a3fa128be0f94952558580971ea127716e73e1c1`
+- `src/domain/core/model-activation/internal/connect.ts`: `e1b91f8a68c52e31abd3ab96e96e560cc04f6ed6601f76396b4ff64ec53e983c`
+- `src/domain/core/model-activation/internal/contract.ts`: `7dc2207f6f75c5f258c474865bf37b6ba8167c79a2400a80368f0c8bf83fdf68`
 - `src/domain/core/model-activation/internal/query.ts`: `0bb322eac9c158a10361d080b3d226b201a86e8ec3f1ea9dafc45e2b301f5386`
 - `src/domain/core/model-activation/internal/transition.ts`: `e59b1cee0249011fae07d8bbba9fe147dc92b389d9481433b51a1a5c84c6e8c4`
-- `src/domain/core/model-invocation/index.ts`: `8ad9ef8e595116122d6a57365d5521143be08e14e568d99add5e42681c9718bd`
-- `src/domain/core/model-invocation/internal/cancellation.ts`: `c4b9a97fc8cf59ff5119e5f798f8e11f550e82065d51047ad86bb4dca598ab00`
-- `src/domain/core/model-invocation/internal/chat-request.ts`: `b64e903c1c0f4d76a1c6167362b53003ec346572419d0fed4cd442c7e9e9ff27`
-- `src/domain/core/model-invocation/internal/contract.ts`: `ca9e705e68b303f87f4543cac107cfcb1037cb29b3ecebb36223f0f498063027`
-- `src/domain/core/model-invocation/internal/delegation.ts`: `461ebff6b044aba8e3c27fa2322d1b98b8b59decbf73f2740f758da2ef74c930`
+- `src/domain/core/model-invocation/index.ts`: `fd50cf3a29aea7510742def53bf38b1ebae124870c554e4ce088b6ea9303d2a7`
+- `src/domain/core/model-invocation/internal/cancellation.ts`: `ffac93eb154957856a20f47e0e40db88e35bf1ae2e5a84ebef53a18bfeaf1747`
+- `src/domain/core/model-invocation/internal/chat-request.ts`: `e1eae53114ff69068b5dcc20da130d4008b9c3a08fe383272734225edd6cbba8`
+- `src/domain/core/model-invocation/internal/contract.ts`: `2d292ac70bb494a56cc0d11f83e1774712ac0cce7cfd6e03810c1dc712e60649`
+- `src/domain/core/model-invocation/internal/delegation.ts`: `10caf6fbefef2e4af27925055c3b1c7c9fe8919e3d7ba0d87e9e9a175c175b81`
 - `src/domain/core/model-invocation/internal/delta.ts`: `b4597026961baa1951dc00db8df5eadf7398d8e07a3af43ea4a00f1dc43b33a6`
-- `src/domain/core/model-invocation/internal/headless-rejection.ts`: `a9f7d53e4f9ec8e51770997f288e9f497a90f8bf808dfcf26b2fb82b516c984c`
+- `src/domain/core/model-invocation/internal/headless-rejection.ts`: `27c08079f5794bdde03bec1a29c9995cf4c1382f3dce2816f08e1a9a1cf33a4d`
 - `src/domain/core/model-invocation/internal/plan-usage.ts`: `38fd6eb92cb63cbec1e5c5f168a0845c700c82f9a3b0cc6db97f1910f760070c`
-- `src/domain/core/model-invocation/internal/response-evidence.ts`: `d4301b490989dfa21af479b13bf5a8ee966d607a3de218bb0b97e84cd00c60d2`
-- `src/domain/core/policy/index.ts`: `1dc2a50e569e944b552fdf474935f62ae34c02bb23e6b1a9ff9080ed44519a3c`
-- `src/domain/core/policy/internal/administer.ts`: `ee739d69d7090ed64479adf55e9e7d16e3c1c86f222608e62c20adabb410c99b`
-- `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
-- `src/domain/core/policy/internal/ai-floor.ts`: `02a5bac3124c900cd3aec2a24faa80e6c22d609c75a7079f76d4cb9e337868ac`
-- `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
-- `src/domain/core/policy/internal/delegations.ts`: `4d25449ab3e8d129c6969c0f7a57ecab657c8e4c034b16460fb142821113db60`
-- `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
-- `src/domain/core/policy/internal/evaluate.ts`: `fe3a96a8833ebf599ff2cdfa408979817413f044468dfc38d98c897e7e692cbd`
-- `src/domain/core/policy/internal/first-run-template.ts`: `ee112302432a354dac96b328909f580ef7a0f7c46ede0cb0f13641dedede208a`
-- `src/domain/core/policy/internal/mcp-capabilities.ts`: `4d86bea76446cf118025ed9e207e3bf6ea73163e3b9a3b153a81ec1aa411c90a`
-- `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
-- `src/domain/core/policy/internal/mode.ts`: `a8fe9c7e856e448a08c4fbfaf8faadf790457aaf53e699df43f9d7a2328fc117`
-- `src/domain/core/policy/internal/owner-baseline.ts`: `ad5d430c4ccc90cc405dcc3a4daf69c4303da2f06680fb62e77fed4427e35e24`
-- `src/domain/core/policy/internal/permission-mode-grant.ts`: `cb8e1567461e8a4cc9a384e4b02fe9edb8b583d2fbee565383bb534c6d540505`
-- `src/domain/core/policy/internal/schema.ts`: `82ac99e4ffbc9f47e1b214b6181002b129a44b51b26b0b79170e4ae31d939c26`
+- `src/domain/core/model-invocation/internal/response-evidence.ts`: `29119cf5487a24b78bbec35915149903cfa3c25f8242db9c00ab563ccd048045`
+- `src/domain/core/policy/index.ts`: `b10998dffb19f3ce5d17be02211a79f70946ff6ce7d596c33017eba170efd0a4`
+- `src/domain/core/policy/internal/administer.ts`: `dd4c879dab610bf6fe3479bef0075f1401310133fda48a967cd0bc01ae98d5d6`
+- `src/domain/core/policy/internal/administration.ts`: `1614326b89d61c3a380563923731058e1441f5087335bfa07dbb47017e452ce9`
+- `src/domain/core/policy/internal/ai-floor.ts`: `30675d0dc5b244c9a0f6656df437803f81e23e9fea248049cdc2bff4499e34a9`
+- `src/domain/core/policy/internal/decision-step.ts`: `14cb20fd04e31b6f36df54e00c9194ddcb8c5ec05bee44053d36137c650f3b42`
+- `src/domain/core/policy/internal/delegations.ts`: `6546b036e43863772a916e0e84fc81cdaebc0d07f23ca88739a14d865a146cb0`
+- `src/domain/core/policy/internal/describe.ts`: `bd6021e452de650d9a6e7bbc40bbd9eb8df91d6b2fd4609a249cbab6709d75f9`
+- `src/domain/core/policy/internal/evaluate.ts`: `f2ec39b32a15f374867c8b91cbeac47c986535366b6526ec9877b6fef52163d6`
+- `src/domain/core/policy/internal/mcp-capabilities.ts`: `786b00828728799abfa6543043ab9dcdded8866f5c1b17a097a9ee63d5b3b20c`
+- `src/domain/core/policy/internal/mcp-grant.ts`: `a05b34671f9dd88b6c0b6ebbb9d7b05d81b9fc0a6c49675ff25946fdc29f6d23`
+- `src/domain/core/policy/internal/mode.ts`: `c3e88a117c928df28ba8305b7f766f59c91f158cd01d2e051ad491967048d9dc`
+- `src/domain/core/policy/internal/owner-baseline.ts`: `201714958e1ea63db9dad9e57a12b09c2cb9941591413cf514ced3655b7bbc75`
+- `src/domain/core/policy/internal/people.ts`: `f83fd64af0eda7701190c581c2934be7645e6367a4b9b181135d116275ffe158`
+- `src/domain/core/policy/internal/permission-mode-grant.ts`: `f1d1d090fdebcd82c58a3d08c75f93d81f18375a08b796e6b9987b5f4bb28ae8`
+- `src/domain/core/policy/internal/schema.ts`: `ec3e94268422ee7798f05b1ce5ab51c70ce1658758f39074077adcfb6deabff6`
 - `src/domain/core/policy/internal/scope.ts`: `83aae1c222a28bcc1897fa9791fb2bf161f07ad9155c4b26155a70829287ef26`
-- `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `7c3898d398aa39b4d0548cf26eb18f5bc55d987ddb125e5d60355100b33eee48`
-- `src/domain/core/primitives/index.ts`: `1219c370affc304e22468acc310ab3a09231f86e49c29bd9ebe2cd9daa06699a`
-- `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
-- `src/domain/core/primitives/internal/hidden-paths.ts`: `7b1caed16bde5e58724f1613234068f329eed79f59b2c9170522241359b226b8`
+- `src/domain/core/policy/internal/standing.ts`: `ed351fe03eec554d61a2ff881d2735218da8b74a70d608eecf92b6c8beb767ea`
+- `src/domain/core/policy/internal/vocabulary.ts`: `4ee0b8c760ef85bc22bd9b3f3319dc9200c468be71195ee40bb936ef528044b4`
+- `src/domain/core/primitives/index.ts`: `fb259c3984f2b9b28df918516db509b267e3f8fba554b8eaabbed198c517d865`
+- `src/domain/core/primitives/internal/coded-error.ts`: `5a28f30f2ca3f0675eaf1dc1f33bcb8835c544124b5e3db1fa69078169fb1ce4`
+- `src/domain/core/primitives/internal/command-id.ts`: `bbc5912a26d45bd9fcd6d8fc6638686d0f5c8662a6063169b59ac6434f64e5f2`
+- `src/domain/core/primitives/internal/hidden-paths.ts`: `67896abeacb126b909190bec1c0337e6e508011ff64216155832bd0b656ec6d8`
 - `src/domain/core/primitives/internal/installation-identity.ts`: `760e9602ec890d86933263bcb53ba171a21ed300eef3561b51cea81ee8692098`
-- `src/domain/core/primitives/internal/json.ts`: `b4c383524ec4c40ded45c55f1cfea53ed10e1b644038508075225d6edb5b0475`
-- `src/domain/core/primitives/internal/persisted-schema.ts`: `276b4e071eac56978c3a0e2a08b771dcadffbb786088d41e502fcdf1012324a6`
+- `src/domain/core/primitives/internal/json.ts`: `c634bc38c8639b080a0f758f28ee6fec30c6a95b4e1cfdcbe3af776bc841a14b`
+- `src/domain/core/primitives/internal/persisted-schema.ts`: `18e9077657a87b04e44664330d13f5ab1da1ca0563dc09498f32456667692d31`
 - `src/domain/core/primitives/internal/project-identity.ts`: `0694258226a60829c63baa856cc5bf20ad3d1eced65a50d24be0e272dcc4f903`
-- `src/domain/core/primitives/internal/rollout.ts`: `e0e11f641b0499d6c585b8469523f4fa5732b40bce7a1d21236c1437b1b39eca`
-- `src/domain/core/primitives/internal/values.ts`: `d368013bb7151b9c47908844d1e3e9d59cd88708dc1ea1f4693f1bd346bb944b`
-- `src/domain/core/principal/index.ts`: `4813e3cd070eff97bb251b95152cd918a1ea9c35685d51bad10ac1bf4f2136c8`
-- `src/domain/core/principal/internal/principal.ts`: `79118105ae867d2cb064bd460cca563e918a31c65fef0cad3e7dc02941c79148`
-- `src/domain/core/provider-catalog/index.ts`: `607a743d2980e278d4ba0b4e35724cf7cc328a124073597d50b7161ebb905d75`
-- `src/domain/core/provider-catalog/internal/binding.ts`: `41890d663c3828cfaa576fa2d0914de712c73b218e808366c2b43ed6510aa983`
-- `src/domain/core/provider-catalog/internal/catalog-document.ts`: `998fb77510176fa3bcd70b48d6788e65e278f338e7b19e93501a7d277cfe63df`
-- `src/domain/core/provider-catalog/internal/catalog-metadata.ts`: `853930e70367d99a404762537dacdf9ef4b3186d0bd4973885de958762055153`
-- `src/domain/core/provider-catalog/internal/catalog-values.ts`: `d937612c5af9ef019fbf9273faa83acd5d394d32cd41ad6e48f04532f9e8ac93`
-- `src/domain/core/provider-catalog/internal/catalog.ts`: `978b87e2a13a939c73042b4e1cb1774d0c9a3260c286c3f552eb87543414eeb1`
+- `src/domain/core/primitives/internal/rollout.ts`: `0d579d0e19df13a0523ae4f1a9e9411c52e20feb13ba8bb032adbae2ae4100fe`
+- `src/domain/core/primitives/internal/values.ts`: `a3fac69f055866b7387f6a69f289c76a06b238e3bd45785874947ac05652a4a1`
+- `src/domain/core/principal/index.ts`: `34d34e7172aebce0ed53aae46ef2adaa6bfd62d734b21ad7b24332506e7bc13e`
+- `src/domain/core/principal/internal/principal.ts`: `cd65d09e087f956157342ea8f14b58745bc13fa0fcad60dd987673dcbfd654a7`
+- `src/domain/core/provider-catalog/index.ts`: `090e97a7583286232a06e54dac361cc4a4b4f65bed809ee0e2bdd8330681af97`
+- `src/domain/core/provider-catalog/internal/binding.ts`: `15a686c4b0e89acaae0baab060eac59c394490f2d2d21c0b46d39e1c45c5cdd8`
+- `src/domain/core/provider-catalog/internal/catalog-document.ts`: `587f0ec51d56f08530014b6ce52da49ef4eca7dddbad3ddc8d3cee840dab9c61`
+- `src/domain/core/provider-catalog/internal/catalog-metadata.ts`: `0fd6ec004fe800fff33c610bb024260c19a954e5f5e3d6ede5d2e70dc13e4a33`
+- `src/domain/core/provider-catalog/internal/catalog-values.ts`: `05a8df094661a9f8c98b6d5ab46a5df85e0fde93b6310ffa28372eeae50f7ce0`
+- `src/domain/core/provider-catalog/internal/catalog.ts`: `09b94bbf4b85ec0449791d776627dbae1eed9be6d065e40f2e900ac6d2c35612`
 - `src/domain/core/provider-catalog/internal/endpoint-key.ts`: `c8dd1bc19a4d4a92776062154ebd4b367930cdee6a682e16e5726f756fea258a`
 - `src/domain/core/provider-catalog/internal/model-maker.ts`: `f21deeedab722f6f50bb21f268d9aa9bbd1f31049683bd9e85cbeeaf9d8c019c`
-- `src/domain/core/provider-catalog/internal/model-role.ts`: `6e46ed55632273ae8d5f5ad5e7242246c3b65b3940b8708248ddef289c5a0f16`
-- `src/domain/core/provider-catalog/internal/native-cli.ts`: `0f0de18486e9abe7c6a7bee0132e291f93e9fceb9c6789af48188086b1bdfedb`
+- `src/domain/core/provider-catalog/internal/model-role.ts`: `ecfa20cf4b8197c3c130d6e63784bc3780db7dfaa8c4d8ae9ffa7c3a49828688`
+- `src/domain/core/provider-catalog/internal/native-cli.ts`: `497c444e81e3cfe299f88a339a3287fa697943a3934553b8b5145278e1d42f0a`
 - `src/domain/core/provider-catalog/internal/worker-effort.ts`: `18072f14a324e255c663dec0e94fb29199e2d58304f5532222b95399208b2458`
-- `src/domain/core/recovery/index.ts`: `8dba4782e7fe0c7cd7ba1b22e3a08a4dfa6ca40391fa419bfeefe9e4db350fa7`
-- `src/domain/core/recovery/internal/case.ts`: `28f46f6e1ebc68b7e028ea9e429f528e4e4109d976cd87a27df212f235c5fdaf`
-- `src/domain/core/recovery/internal/decision.ts`: `214bee67075803be48082d1ef5596c9e9848c10efcd94ad92dbc403eb506adeb`
-- `src/domain/core/recovery/internal/gate.ts`: `f4c6fa268547e90bb4b06050c58a674c1ac1cc8e03a88b0c1d0fee55726fc3a3`
-- `src/domain/core/recovery/internal/hold-note.ts`: `e6b900015b11ff80ecbfe0ef8afd696fdbbbdf27a902939bc8dc5d79b22e56ce`
-- `src/domain/core/recovery/internal/policy.ts`: `eda53aff41c8819cf9e3e6d86ae9ed7a84f3813596916550082b8816b9c67c8a`
-- `src/domain/core/recovery/internal/rollout.ts`: `a87b41b87cf318005c140e200ca166dd3f0b62858f7d9b4212565714ce50e9b3`
-- `src/domain/core/worker-event/index.ts`: `9ce6ebec3f207fe86e9347ffb6fc6718a840e26dcb786189f18783235e61848a`
-- `src/domain/core/worker-event/internal/contract.ts`: `b8b3ca24ec2fa15b9f9f037ab3bbcd4b4aa2c1640b81103497ebcbee5bc330ab`
-- `src/domain/core/worker-event/internal/models.ts`: `fa02a493b17d14be5136dc82b9439df12ad4dfb323ab91851175b5b5c7704ae7`
-- `src/domain/core/worker-event/internal/quota.ts`: `30587994086aa7f9b8639bc37f187cfaa3aabe5f2ab48088b1fb527abcf79e7b`
-- `src/domain/core/worker-event/internal/report.ts`: `801aeb9141aeca8d2b4adf8f3c9ed1368221a2d4c06659c504db09a6bb3c509d`
+- `src/domain/core/worker-event/index.ts`: `a1d585a33302d2002820a7a3e36b27a92cdd4a2172794c5189361620a0ca4a2a`
+- `src/domain/core/worker-event/internal/contract.ts`: `303dcc940c9bcf38c25c5bf879a03b999a353f3b8345d35c0cf2dad76ac0420e`
+- `src/domain/core/worker-event/internal/models.ts`: `dfb5da588f12141160445ad0aedaa0299764b1861a0a84975f4a2e2429b64328`
+- `src/domain/core/worker-event/internal/quota.ts`: `7f795cb7dfaece7c6bb0e0d08a4d67c59641d17c66532c65b373423f37b99fe7`
+- `src/domain/core/worker-event/internal/report.ts`: `8272967d525547ded3bc7efae9647726690acffec0ca885f289e04b6cbec7ac8`

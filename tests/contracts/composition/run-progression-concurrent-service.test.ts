@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { ErrorRegistry, clearConfigCache, productResourcePath } from '#platform/index.js';
 import { startConfiguredRuntimeService, createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import * as execution from '#composition/core/execution/index.js';
 import { RuntimeServiceLifecycle } from '#engine/index.js';
@@ -55,8 +55,10 @@ async function fixture(maxConcurrentExecutions: number, parkAuthority = false) {
 it('[requires built Linux peer_credentials.node] governed service shutdown drains both concurrent Run turns before releasing custody (controlled execution port)', async context => {
   if (!nativeAvailable) context.skip('LOCAL_RUNTIME_UNSUPPORTED: requires built Linux peer_credentials.node');
   const f = await fixture(2), gates = [deferred(), deferred()], started = deferred();
+  const signals: (AbortSignal | undefined)[] = [];
   const starts: string[] = [], observed: string[] = [], errors: string[] = [], firstPublished = deferred();
-  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_project, identity) => {
+  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_project, identity, _options, signal) => {
+    signals.push(signal);
     const index = starts.length; starts.push(identity.runId); if (starts.length === 2) started.resolve();
     await gates[index]!.promise;
     return undefined as unknown as Awaited<ReturnType<typeof execution.executeConfiguredTask>>;
@@ -67,8 +69,10 @@ it('[requires built Linux peer_credentials.node] governed service shutdown drain
   }, { env: f.env });
   try {
     await bounded(started.promise); expect([...starts].sort()).toEqual(['a', 'b']);
+    for (const signal of signals) expect(signal).toBeInstanceOf(AbortSignal);
     const client = createConfiguredRuntimeClient(f.project, { env: f.env }), descriptor = await client.describeService();
     await client.shutdownService({ schemaVersion: 1, commandId: 'stop-concurrent', serviceId: 'runtime', instanceId: descriptor.instanceId, reason: 'test both turns' });
+    await expect.poll(() => signals.every(signal => signal?.aborted)).toBe(true);
     let done = false; void service.done.then(() => { done = true; });
     gates[0]!.resolve(); await bounded(firstPublished.promise); expect(done).toBe(false); expect(observed).toEqual([starts[0]!]);
     gates[1]!.resolve(); await bounded(service.done); expect(observed).toEqual(starts); expect(errors).toEqual([]);

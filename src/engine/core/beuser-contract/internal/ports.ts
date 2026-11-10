@@ -15,7 +15,11 @@ export function pinBeuserWalkerSummary(input: unknown): BeuserWalkerSummary {
   return summary;
 }
 /** Issued by admission, never deserialized from a client request. Every port must recheck this exact binding. */
-export interface BeuserContext { readonly binding: BeuserBinding; readonly principal: VerifiedPrincipal; readonly limits: BeuserLimits; readonly signal: AbortSignal }
+export interface BeuserContext { readonly binding: BeuserBinding; readonly principal: VerifiedPrincipal; readonly limits: BeuserLimits; readonly signal: AbortSignal; readonly bindingText?: string }
+export function sealBeuserContext(input: Omit<BeuserContext, 'bindingText'>): BeuserContext {
+  const binding = beuserBindingSchema.parse(input.binding);
+  return { ...input, binding, bindingText: JSON.stringify(binding) };
+}
 /** Wire ingress may select only an already admitted binding and action; a finish is persona testimony, never a verdict. */
 export const beuserSurfaceCommandSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
   action: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('look') }),
@@ -35,11 +39,11 @@ export const BEUSER_KEY_ALIASES: ReadonlyMap<string, BeuserKeyName> = new Map([[
 export function assertBeuserAccess(admitted: BeuserContext, requested: unknown, actor: unknown, resource: { readonly kind: string; readonly id: string }, action: string): void {
   admitted.signal.throwIfAborted();
   const binding = beuserBindingSchema.safeParse(requested), principal = verifiedPrincipalSchema.safeParse(actor);
-  const own = admitted.binding, expected = admitted.principal;
+  const own = admitted.binding, expected = admitted.principal, ownText = admitted.bindingText ?? JSON.stringify(beuserBindingSchema.parse(own));
   if (!binding.success || !principal.success || !isBeuserEvaluatorPrincipal(principal.data) || principal.data.assurance !== 'workload-verified'
     || principal.data.id !== expected.id || principal.data.issuer !== expected.issuer || principal.data.subject !== expected.subject
     || !principal.data.scopeIds.includes(own.identity.scopeId) || !sameAttemptIdentity(binding.data.identity, own.identity)
-    || JSON.stringify(binding.data) !== JSON.stringify(beuserBindingSchema.parse(own)) || aiAuthorityFloor(principal.data, resource, action)
+    || JSON.stringify(binding.data) !== ownText || aiAuthorityFloor(principal.data, resource, action)
     || resource.kind === 'run' && resource.id !== own.identity.runId
     || resource.kind === 'attempt' && resource.id !== own.identity.attemptId
     || resource.kind === 'beuser-transcript' && resource.id !== own.transcriptId
@@ -74,7 +78,7 @@ export interface SurfacePort {
 export type BeuserModelRole = 'beuser-walker' | 'beuser-evaluator';
 export type BeuserModelResult = Readonly<{ state: 'invoked'; receipt: BeuserModelReceipt }>
   | Readonly<{ state: 'unavailable'; code: 'BEUSER_MODEL_UNAVAILABLE'; reason: RoleModelRefusal | 'maker-unknown' | 'independence' }>;
-export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
 /** The walker's own last actions, oldest first, whether its last action left the screen unchanged (walk17 S2), and (walk18) the persona's
  * model decisions left including this one and wait patience left. */
 export type BeuserWalkerHistory = Readonly<{ recentActions: readonly unknown[]; screenUnchanged: boolean; remainingSteps: number; remainingWaitMs: number }>;
@@ -101,10 +105,10 @@ export interface EvidencePort {
 export interface EvaluationPort {
   evaluate(context: BeuserContext, command: TaskEvaluationCommand): ReturnType<TaskEvaluationApplication['execute']>;
 }
-export interface BeuserTargetRefusal {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserTargetRefusal {
   readonly code: 'BEUSER_TARGET_NOT_SANDBOX'; readonly binding: BeuserBinding;
 }
-export interface BeuserObservationPort {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserObservationPort {
   audit(event: AuditEvent & { readonly subject: Extract<AuditEvent['subject'], { kind: 'beuser-target-refusal' }> }): Promise<void>;
   nervous(refusal: BeuserTargetRefusal): Promise<void>;
 }

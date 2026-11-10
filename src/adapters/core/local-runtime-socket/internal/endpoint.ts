@@ -1,13 +1,14 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { lstat, realpath, rm, rmdir } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
-export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_NATIVE_UNAVAILABLE' | 'LOCAL_RUNTIME_OPTIONS'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_NATIVE_UNAVAILABLE' | 'LOCAL_RUNTIME_OPTIONS'
   | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 /** Which custody check refused (alpha.56.1): a closed token for LOCAL_RUNTIME_ENDPOINT_UNSAFE, never a path or file content. */
-export type LocalRuntimeUnsafeReason = 'parent-create' | 'parent-stat' | 'parent-type' | 'parent-link' | 'parent-owner' | 'parent-mode' | 'parent-realpath'
+type LocalRuntimeUnsafeReason = 'parent-create' | 'parent-stat' | 'parent-type' | 'parent-link' | 'parent-owner' | 'parent-mode' | 'parent-realpath'
   | 'parent-mode-kept' | 'socket-stat' | 'socket-type' | 'socket-link' | 'socket-owner' | 'socket-mode' | 'ledger-lock' | 'endpoint-remove';
-export class LocalRuntimeSocketError extends Error {
-  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
+export class LocalRuntimeSocketError extends CodedError {
+  constructor(override readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
 }
 /** An unsafe-endpoint refusal naming the check that refused. */
 export const unsafeEndpoint = (reason: LocalRuntimeUnsafeReason, cause?: unknown) => new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', cause === undefined ? undefined : { cause }, undefined, reason);

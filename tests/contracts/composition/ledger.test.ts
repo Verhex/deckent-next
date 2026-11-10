@@ -2,7 +2,9 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, stat, chmod, symlink, link } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
+import { loadConfig } from '#platform/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, resolveProductLayout, prepareProductFile } from '#platform/index.js';
 import type { SqliteAttemptStore } from '#adapters/index.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
@@ -29,6 +31,12 @@ describe.skipIf(process.platform === 'win32')('layout-selected ledger preflight'
     await writeFile(f.configPath, JSON.stringify({ layout: { root: join(f.root, 'other') } })); clearConfigCache();
     expect(opened.path).toBe(join(f.data, 'execution/state.db'));
     expect(Object.isFrozen(opened.layout)).toBe(true);
+    const config = await loadConfig(f.project, { env: f.env }), path = join(f.root, 'migration.db'), context = { config, path: async () => path };
+    await expect(openConfiguredLedger(context, { migration: 'forbid' })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+    const initialized = await openConfiguredLedger(context, { migration: 'allow' }); initialized.close();
+    const reopened = await openConfiguredLedger(context, { migration: 'forbid' }); reopened.close();
+    await expect(openConfiguredLedger({ ...context, path: async () => { throw new Error('path custody refused'); } }, { migration: 'allow' })).rejects.toThrow('path custody refused');
+    await expect(openConfiguredLedger({ config: { ...config, storage: { ...config.storage, sqlite: { ...config.storage.sqlite, busyTimeoutMs: -1 } } }, path: context.path }, { migration: 'allow' })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_OPTIONS' });
   });
   it('refuses symlink root and sidecars without writing through them', async () => {
     const f = await fixture(); const outside = join(f.root, 'outside'); await mkdir(outside);

@@ -1,16 +1,17 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, counterSchema, identitySchema } from '#domain/index.js';
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
 
 
-export type NativeJsonHttpErrorCode = 'NATIVE_JSON_HTTP_DEFINITION_INVALID' | 'NATIVE_JSON_HTTP_REQUEST_INVALID'
+type NativeJsonHttpErrorCode = 'NATIVE_JSON_HTTP_DEFINITION_INVALID' | 'NATIVE_JSON_HTTP_REQUEST_INVALID'
   | 'NATIVE_JSON_HTTP_REQUEST_TOO_LARGE' | 'NATIVE_JSON_HTTP_RESPONSE_TOO_LARGE' | 'NATIVE_JSON_HTTP_TIMEOUT'
   | 'NATIVE_JSON_HTTP_CANCELLED' | 'NATIVE_JSON_HTTP_TRANSPORT_UNKNOWN'
   | 'NATIVE_JSON_HTTP_CREDENTIAL_UNAVAILABLE' | 'NATIVE_JSON_HTTP_CREDENTIAL_ECHO';
 
 /** Error details deliberately exclude provider bodies, prompts, headers, and credentials. */
-export class NativeJsonHttpError extends Error {
-  constructor(readonly code: NativeJsonHttpErrorCode, readonly status?: number) { super(code); this.name = 'NativeJsonHttpError'; }
+export class NativeJsonHttpError extends CodedError {
+  constructor(override readonly code: NativeJsonHttpErrorCode, readonly status?: number) { super(code); this.name = 'NativeJsonHttpError'; }
 }
 
 /** `header` carries the credential value verbatim in one named request header (for example `x-api-key`), never in an Authorization header. */
@@ -32,7 +33,7 @@ export const nativeJsonHttpCertificateSchema = persistedString(z.string().min(1)
 });
 /** Header names the transport owns or that would change routing/framing; a caller-chosen name can never shadow them. */
 const RESERVED_HEADER = /^(authorization|x-api-key|accept|content-.*|host|cookie|set-cookie|proxy-.*|connection|transfer-encoding|te|upgrade|expect|forwarded|x-forwarded-.*)$/;
-export const nativeJsonHttpHeaderNameSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).refine(name => !RESERVED_HEADER.test(name));
+const nativeJsonHttpHeaderNameSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).refine(name => !RESERVED_HEADER.test(name));
 const headerValue = z.string().regex(/^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7e])?$/);
 /** Static, non-secret request headers (for example a pinned API version). Bounded; secrets never belong here. */
 export const nativeJsonHttpStaticHeadersSchema = z.record(nativeJsonHttpHeaderNameSchema, headerValue)

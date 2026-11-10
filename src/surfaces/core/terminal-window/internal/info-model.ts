@@ -14,11 +14,11 @@ export type InfoChip = Readonly<{ state: InfoChipState; text: string }>;
 /** One aligned key/value row (bold key). `muted` de-emphasises the value; `exact` keeps a command or path character for character. */
 export type InfoRow = Readonly<{ key: string; value: string; identity?: ModelProviderLabel; chip?: InfoChip; id?: string; muted?: boolean; exact?: boolean }>;
 /** One list item (bullet). */
-export type InfoItem = Readonly<{ text: string; chip?: InfoChip; id?: string; muted?: boolean }>;
+type InfoItem = Readonly<{ text: string; chip?: InfoChip; id?: string; muted?: boolean }>;
 /** A small table: one header row of column names, then rows of cells. */
-export type InfoTable = Readonly<{ columns: readonly string[]; rows: readonly (readonly string[])[] }>;
+type InfoTable = Readonly<{ columns: readonly string[]; rows: readonly (readonly string[])[] }>;
 /** A row the person can pick with the arrow keys and Enter; the window answers its `id`. */
-export type InfoChoice = Readonly<{ id: string; label: string; detail?: string; chip?: InfoChip }>;
+type InfoChoice = Readonly<{ id: string; label: string; detail?: string; chip?: InfoChip }>;
 /** One section, drawn in this order: header (title and chip), rows, items, table, choices, notes. */
 export type InfoSection = Readonly<{ title?: string; chip?: InfoChip; rows?: readonly InfoRow[]; items?: readonly InfoItem[]; table?: InfoTable;
   choices?: readonly InfoChoice[]; notes?: readonly string[] }>;
@@ -26,7 +26,7 @@ export type InfoSection = Readonly<{ title?: string; chip?: InfoChip; rows?: rea
 export type InfoWindowModel = Readonly<{ title: string; chips?: readonly InfoChip[]; sections: readonly InfoSection[]; summary: string }>;
 
 /** The shapes that carry a chip's state next to its word. */
-export type InfoGlyphs = Readonly<{ chip: Readonly<Record<InfoChipState, string>>; section: string; bullet: string; selected: string; ellipsis: string }>;
+type InfoGlyphs = Readonly<{ chip: Readonly<Record<InfoChipState, string>>; section: string; bullet: string; selected: string; ellipsis: string }>;
 export const INFO_GLYPHS_UNICODE: InfoGlyphs = Object.freeze({ chip: Object.freeze({ ok: '✓', warn: '!', fail: '✗', info: 'i', neutral: '·' }),
   section: '▸', bullet: '•', selected: '›', ellipsis: '…' });
 export const INFO_GLYPHS_ASCII: InfoGlyphs = Object.freeze({ chip: Object.freeze({ ok: '+', warn: '!', fail: 'x', info: 'i', neutral: '-' }),
@@ -42,7 +42,7 @@ export function shortenIdentity(value: string, ellipsis = INFO_GLYPHS_UNICODE.el
 }
 
 /** `[✓ ready]`: the shape and the word, in the chip's colour role. */
-export function chipSpans(chip: InfoChip, glyphs: InfoGlyphs = INFO_GLYPHS_UNICODE): Span[] {
+function chipSpans(chip: InfoChip, glyphs: InfoGlyphs = INFO_GLYPHS_UNICODE): Span[] {
   return [span(`[${glyphs.chip[chip.state]} ${chip.text}]`, { role: CHIP_ROLE[chip.state] })];
 }
 
@@ -84,7 +84,7 @@ export interface InfoWindowLabelsShape {
   readonly position: string;
 }
 
-export type InfoLayout = Readonly<{ lines: readonly WindowLine[]; choiceLines: readonly number[] }>;
+type InfoLayout = Readonly<{ lines: readonly WindowLine[]; choiceLines: readonly number[] }>;
 
 /** Lays the model out as window body lines (labels in the key column); `choiceLines[i]` is the body line of the i-th choice. */
 export function infoWindowLines(model: InfoWindowModel, selected: number | null = null, glyphs: InfoGlyphs = INFO_GLYPHS_UNICODE): InfoLayout {

@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { DecisionApplication, DecisionPolicyAuthorization, decisionPrepareInputSchema, decisionAskCommandSchema, decisionRecordCommandSchema, decisionOutcomeCommandSchema, decisionQuerySchema, decisionListQuerySchema, type DecisionAction } from '#engine/index.js';
+import { verifiedPrincipal, DecisionApplication, DecisionPolicyAuthorization, decisionPrepareInputSchema, decisionAskCommandSchema, decisionRecordCommandSchema, decisionOutcomeCommandSchema, decisionQuerySchema, decisionListQuerySchema, type DecisionAction } from '#engine/index.js';
 import { openSqliteDecisionStore, readDecisionPolicy, openLocalIntegrityAuthority } from '#adapters/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { invokeConfiguredFeatureModel } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { userInfo } from 'node:os';
+
 async function execute(projectRoot:string,action:DecisionAction|'list',input:unknown,options:ConfigLoadOptions,signal?:AbortSignal){
  try{
   const parsed=(action==='list'?decisionListQuerySchema:action==='prepare'?decisionPrepareInputSchema:action==='ask'?decisionAskCommandSchema:action==='record'?decisionRecordCommandSchema:action==='outcome'?decisionOutcomeCommandSchema:decisionQuerySchema).parse(input);
   const scopeId='scopeId'in parsed?parsed.scopeId:parsed.case.scope; const access=action==='prepare'||action==='inspect'||action==='list'?'read':'write';
   const context=await loadConfiguredScopeContext(projectRoot,scopeId,{...options,heal:false},access);
-  const source=createLayoutPolicySource(context.layout,userInfo().uid,context.config.inspection.policyMaxBytes); const clock=new SystemTrustedClock(); const app=new DecisionApplication({verifier:{verify:async()=>context.principal},policy:async()=>readDecisionPolicy(context.config),
+  const source=contextPolicySource(context); const clock=new SystemTrustedClock(); const app=new DecisionApplication({verifier:verifiedPrincipal(context.principal),policy:async()=>readDecisionPolicy(context.config),
    authorize:(...args)=>new DecisionPolicyAuthorization(source).authorize(...args),openStore:async(mode)=>{
     // Queries never create an integrity key, a database or a migration. The service owns backed-up upgrades.
     const integrity=await openLocalIntegrityAuthority(context.layout,context.config.approvals.keyFile,mode==='write');

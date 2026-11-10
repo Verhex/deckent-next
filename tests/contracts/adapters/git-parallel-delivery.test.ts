@@ -2,15 +2,19 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, open, readFile, readdir, rename, rm, utimes, writeFile, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
   GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
+import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
+import { workingTreeRemovalPatterns } from '#adapters/core/git-patch/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
   targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
+import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
+import { homeEnv } from '../support/host-platform.js';
 
 // F1 (Astra 3015): the person's save is injected exactly between the working-tree writer's steps; every other call is the real one.
 type Hook = null | ((from: string, to: string) => Promise<void>);
@@ -21,7 +25,9 @@ vi.mock('node:fs/promises', async importOriginal => {
     rename: (async (from: string, to: string) => { await fsHook.rename?.(String(from), String(to)); return actual.rename(from, to); }) as typeof actual.rename,
     open: (async (path: string, ...rest: unknown[]) => { await fsHook.open?.(String(path), ''); return (actual.open as (...args: unknown[]) => unknown)(path, ...rest); }) as typeof actual.open };
 });
-const exec = promisify(execFile), roots: string[] = [];
+const exec = promisify(execFile), roots: string[] = [], json = async (path: string) => JSON.parse(await readFile(new URL(`../../../src/adapters/core/${path}`, import.meta.url), 'utf8'));
+const format = await json('git-patch/internal/working-tree-format.json') as Record<'locks' | 'pending' | 'deliveries' | 'journal' | 'rollback' | 'lockOwner', string> & { journalVersion: number };
+const removal = await json('installation-removal/internal/paths.json') as { archive: { members: string[] } };
 const once = (kind: 'link' | 'rename' | 'open', match: (from: string, to: string) => boolean, run: () => Promise<void>) => { fsHook[kind] = async (from, to) => { if (match(from, to)) { fsHook[kind] = null; await run(); } }; };
 afterEach(async () => { vi.restoreAllMocks(); fsHook.link = fsHook.rename = fsHook.open = null; for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const limits = { maxBytes: 65536, maxEntries: 1000, maxDepth: 32, maxPathBytes: 1024 };
@@ -59,7 +65,7 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
     await target.verify(manifest, p);
     return { manifest, receipt };
   };
-  const deliver = async (p: WorkspacePatch, candidate?: Awaited<ReturnType<typeof prepare>>) => {
+  const deliver = async (p: WorkspacePatch, candidate?: Awaited<ReturnType<typeof prepare>>, ask = confirmation) => {
     const { manifest, receipt } = candidate ?? await prepare(p);
     const command = { schemaVersion: 1 as const, commandId: p.identity.runId, identity: p.identity, integrationCommandId: manifest.command.commandId };
     let record: IntegrationDeliveryRecord | null = null;
@@ -69,7 +75,7 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
     const patches = { async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; }, assertScope() {} };
     const inspection = { async inspect() { return { manifest, receipt }; } };
     const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, workingTree ? files : delivery, store, sessions,
-      { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, confirmation);
+      { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, ask);
     const result = await app.deliver(command), plan = result.plan;
     expect(result.status).toBe(workingTree ? 'working-tree-delivered' : 'reference-delivered'); expect(await (workingTree ? files : delivery).delivered(plan)).toBe(true);
     expect(record!.delivered).toBe(true);
@@ -406,7 +412,8 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     // The person's repository (refs, HEAD, status, index bytes, object files); Deckent's own workspace root is not part of it.
     const person = async () => { const { candidates, ...state } = await f.state(); void candidates; return [state, await readFile(join(s, '.git/index')), await objects(s)]; }, before = await person();
     const base = await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'r9n' }, limits, workerTreeDenied);
-    expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual([['.env', 'patch-excluded'], ['hard.txt', 'hard-link'], ['link.txt', 'symlink'], ['secret.pem', 'deny-path:**/*.pem']]);
+    // DENY: credential-table exclusions precede the caller's deny-path rule; the files and their order stay pinned.
+    expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual([['.env', 'patch-excluded'], ['hard.txt', 'hard-link'], ['link.txt', 'symlink'], ['secret.pem', 'patch-excluded']]);
     const identity = { scopeId: 's', runId: 'r9n', taskId: 't', attemptId: 'w', layoutRevision: 'l', generation: 1 };
     const lease = await new GitWorkspaceBroker(base.options).allocate({ schemaVersion: 1, identity, baseCommit: base.commit });
     expect(lease.sourceBase.adapter.version).toBe(2); expect((await readdir(lease.workspace)).filter(name => name !== '.git').sort()).toEqual(['a.txt', 'b.txt', 'old.txt', 'todo.txt']);
@@ -422,7 +429,9 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     await expect(captureWorkingTreeBase({ ...f.options, sourceRoot: join(s, 'sub') }, { scopeId: 's', runId: 'sub' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_SUBFOLDER' });
     await expect(captureWorkingTreeBase({ ...f.options, outputBytes: s.length + 200 }, { scopeId: 's', runId: 'big' }, limits, workerTreeDenied))
       .rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_LISTING_LIMIT', params: { limit: s.length + 200, maxEntries: limits.maxEntries } });
-    expect([classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_SUBFOLDER')).disposition, classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_LISTING_LIMIT')).disposition]).toEqual(['permanent', 'permanent']);
+    // A6-6: the copy of HEAD's objects into the private repository stops at `copyBytes` (both Git processes end), a typed permanent refusal.
+    await expect(captureWorkingTreeBase({ ...f.options, copyBytes: 64 }, { scopeId: 's', runId: 'copy' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_COPY_LIMIT', params: { limit: 64 } });
+    expect(['PATCH_WORKING_TREE_SUBFOLDER', 'PATCH_WORKING_TREE_LISTING_LIMIT', 'PATCH_WORKING_TREE_COPY_LIMIT'].map(code => classifyLaunchRefusal(new WorkspacePatchError(code as never)).disposition)).toEqual(['permanent', 'permanent', 'permanent']);
     expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases); await rm(join(s, 'build'), { recursive: true });
     // L1c lifecycle: a settled Run's base goes (verified, detached, removed); its later use is typed; a stale capture remnant is swept, a fresh one kept.
     const stale = join(f.workspaceRoot, 'run-bases', '.00000000-0000-4000-8000-000000000000'), young = join(f.workspaceRoot, 'run-bases', '.00000000-0000-4000-8000-000000000001');
@@ -437,20 +446,45 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery (owner 2026
     try { await expect(captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'mac' }, limits, workerTreeDenied)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_UNSUPPORTED' }); }
     finally { Object.defineProperty(process, 'platform', platform); }
   });
-  it('A6-1: a repository filter driver never runs in the service; the base is a typed permanent refusal before any file content is read', async () => {
+  it('A6-1 (alpha.64): no filter driver runs in the service; a filtered path keeps its HEAD blob in every attribute view, is withheld, and a patch writing it is refused', async () => {
     const f = await fixture(false, 'sha1', true), s = f.sourceRoot, marker = join(f.workspaceRoot, 'ran'), git = (...args: string[]) => exec('/usr/bin/git', ['-C', s, ...args]);
-    // A racy entry: the file's mtime equals both its index stamp and the index file's mtime, so `diff-index` compares content through the driver.
-    const at = new Date(Math.floor(Date.now() / 1000) * 1000); await utimes(join(s, 'a.txt'), at, at); await git('update-index', '--refresh');
-    const config = await readFile(join(s, '.git/config'), 'utf8'), bases = await readdir(join(f.workspaceRoot, 'run-bases'));
-    // Astra 3038: an empty driver name (`[filter ""]`, attribute `filter=`) is a driver too.
-    for (const [section, attribute, drivers] of [['filter "x"', 'filter=x', 'x'], ['filter ""', 'filter=', '""']] as const) {
-      await writeFile(join(s, '.git/config'), `${config}[${section}]\n\tclean = "sh -c 'echo ran >> ${marker}; cat'"\n`); await writeFile(join(s, '.git/info/attributes'), `* ${attribute}\n`);
-      await utimes(join(s, '.git/index'), at, at);
-      const refusal = await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'a61' }, limits, workerTreeDenied).catch((error: unknown) => error);
-      expect(refusal).toMatchObject({ code: 'PATCH_WORKING_TREE_FILTER', params: { drivers } }); expect(JSON.stringify(refusal)).not.toContain(marker);
-    }
-    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases);
-    expect(classifyLaunchRefusal(new WorkspacePatchError('PATCH_WORKING_TREE_FILTER')).disposition).toBe('permanent');
+    const capture = (runId: string, options = f.options) => captureWorkingTreeBase(options, { scopeId: 's', runId }, limits, workerTreeDenied);
+    // An encrypting driver (base64, standing in for git-crypt) and an LFS path (pointer committed, real bytes in the file; git-lfs is not installed).
+    const plain = 'TOKEN=synthetic-plaintext\n', pointer = 'version https://git-lfs.github.com/spec/v1\noid sha256:' + '0'.repeat(64) + '\nsize 10\n';
+    await git('config', 'filter.crypt.clean', `sh -c 'echo ran >> ${marker}; base64'`); await git('config', 'filter.crypt.smudge', `sh -c 'echo ran >> ${marker}; base64 -d'`);
+    await writeFile(join(s, '.gitattributes'), '*.sec filter=crypt\n*.bin filter=lfs\n'); await writeFile(join(s, 'key.sec'), plain); await writeFile(join(s, 'big.bin'), pointer);
+    await exec('ln', ['-s', 'a.txt', join(s, 'same.lnk')]); // an unchanged tracked symlink is HEAD's own entry, never withheld (F2: the reader names it with its target)
+    await git('add', '.'); await git('commit', '-qm', 'filtered');
+    const cipher = (await git('cat-file', 'blob', 'HEAD:key.sec')).stdout; expect(cipher).toBe(Buffer.from(plain).toString('base64') + '\n');
+    // A racy filtered entry: `diff-index` (alpha.63) hashes it through the driver (proved below on the same fixture).
+    const at = new Date(Math.floor(Date.now() / 1000) * 1000); await utimes(join(s, 'key.sec'), at, at); await git('update-index', '--refresh'); await utimes(join(s, '.git/index'), at, at);
+    await rm(marker); await writeFile(join(s, 'big.bin'), 'real bytes'); // the test's own Git ran the driver above; from here only Deckent runs Git
+    const withheld = [['big.bin', 'filter:lfs'], ['key.sec', 'filter:crypt']];
+    const holdsHead = async (runId: string) => {
+      const base = await capture(runId); expect(base.excluded.map(entry => [entry.path, entry.rule])).toEqual(withheld);
+      const lease = await new GitWorkspaceBroker(base.options).allocate({ schemaVersion: 1, identity: { scopeId: 's', runId, taskId: 't', attemptId: runId, layoutRevision: 'l', generation: 1 }, baseCommit: base.commit });
+      expect([await readFile(join(lease.workspace, 'key.sec'), 'utf8'), await readFile(join(lease.workspace, 'big.bin'), 'utf8')]).toEqual([cipher, pointer]);
+      for (const root of [s, base.options.runBase!, lease.workspace]) await expect(exec('/usr/bin/git', ['-C', root, 'cat-file', '-e', gitBlobOid(Buffer.from(plain), 'sha1')])).rejects.toBeDefined();
+      return base;
+    };
+    const base = await holdsHead('a61');
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' }); await git('diff-index', '--name-only', 'HEAD');
+    await readFile(marker); await rm(marker); // the fixture is armed: Git's own `diff-index` ran the driver here
+    // M2: attributes removed in the worktree, `.git/info/attributes` and `core.attributesFile` still leave HEAD's view: the path stays filtered.
+    await rm(join(s, '.gitattributes')); await writeFile(join(s, '.git/info/attributes'), '* -filter\n'); await writeFile(join(f.workspaceRoot, 'attributes'), '* !filter\n');
+    await git('config', 'core.attributesFile', join(f.workspaceRoot, 'attributes')); await holdsHead('a61-removed');
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    // K-1: a patch writing a filtered path is refused before delivery reads or writes any file.
+    const refused = workspacePatchSchema.parse({ ...f.patch('a61', 'key.sec', cipher, 'edited\n'), baseCommit: base.commit });
+    await expect(f.prepare(refused)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_FILTERED', params: { count: 1, paths: 'key.sec', omitted: 0 } });
+    expect(await readFile(join(s, 'key.sec'), 'utf8')).toBe(plain);
+    // A configured driver no attribute names (Astra 3038: an empty name is one too) and a Git below the `check-attr --source` floor are typed permanent refusals.
+    const bases = await readdir(join(f.workspaceRoot, 'run-bases')); await writeFile(join(s, '.git/config'), `${await readFile(join(s, '.git/config'), 'utf8')}[filter ""]\n\tclean = cat\n`);
+    await expect(capture('orphan')).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_FILTER', params: { drivers: '""' } });
+    const old = join(f.workspaceRoot, 'git-2.39'); await writeFile(old, `#!/bin/sh\nfor a; do last=$a; done\n[ "$last" = version ] && { echo 'git version 2.39.0'; exit 0; }\nexec /usr/bin/git "$@"\n`, { mode: 0o700 });
+    await expect(capture('old', { ...f.options, gitExecutable: old })).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_GIT_VERSION', params: { found: '2.39.0', required: '2.40.0' } });
+    expect(await readdir(join(f.workspaceRoot, 'run-bases'))).toEqual(bases); await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(['PATCH_WORKING_TREE_FILTER', 'PATCH_WORKING_TREE_GIT_VERSION'].map(code => classifyLaunchRefusal(new WorkspacePatchError(code as never)).disposition)).toEqual(['permanent', 'permanent']);
   });
 });
 describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, crash recovery and rollback (R9p, L1c, Astra 3015)', () => {
@@ -509,24 +543,28 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     p.changes.push(f.patch('wt', 'link/x.txt', null, 'escaped\n').changes[0]!);
     await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
     expect(await readdir(outside)).toEqual([]); expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
+    // B2-6 (owner 2026-11-09): a file carrying a setuid, setgid or sticky bit is refused before anything is written; its bits and bytes stay.
+    p.changes.pop(); for (const bits of ['4644', '2644', '1644']) { await exec('chmod', [bits, join(f.sourceRoot, 'a.txt')]); await expect(f.files.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
+      expect([(await exec('stat', ['-c', '%a', join(f.sourceRoot, 'a.txt')])).stdout.trim(), await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')]).toEqual([bits, 'a before\n']); }
   });
   it('serializes deliveries into one checkout: a held lock is waited for, and still held at the bound it is a typed refusal', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'), { manifest, plan } = await planned(f, p);
-    const lock = join(f.workspaceRoot, 'working-tree-locks', patchDigest(f.sourceRoot)); await mkdir(lock, { recursive: true });
-    const quick = new GitWorkingTreeDelivery({ ...f.options, timeoutMs: 150 }, limits);
+    // B1-12 (owner 2026-11-09): the shared kernel lock; held by another description it is waited for, and still held at the bound it is BUSY.
+    const lock = join(f.workspaceRoot, format.locks, patchDigest(f.sourceRoot)); await mkdir(join(f.workspaceRoot, format.locks), { recursive: true });
+    const holder = (await withExclusiveFileLock(lock, { waitMs: 0, pollMs: 0 }))!, quick = new GitWorkingTreeDelivery({ ...f.options, timeoutMs: 150 }, limits);
     await expect(quick.publish(plan, manifest, p)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_BUSY' });
     expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
-    const waiting = f.files.publish(plan, manifest, p); setTimeout(() => void rm(lock, { recursive: true }), 200); await waiting;
+    const waiting = f.files.publish(plan, manifest, p); setTimeout(() => holder.release(), 200); await waiting;
     expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a after\n'); expect(await f.files.delivered(plan)).toBe(true);
-    // L1c: a lock whose recorded holder is gone (a crash mid-write) is taken over; its `writing` journal is classified from the files first, never rewritten.
+    // L1c: a holder that died mid-write left its journal `writing` and its custody entry (written before `writing`); the next holder classifies it from the files first, never rewritten.
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt2' }, limits, workerTreeDenied);
-    const gone = (await exec('sh', ['-c', 'echo $$'])).stdout.trim(), other = f.patch('wt2', 'b.txt', 'b before\n', 'b after\n'), second = await planned(f, other);
-    const crashed = join(f.workspaceRoot, 'working-tree-deliveries', 'c'.repeat(64)); await mkdir(crashed, { recursive: true });
-    // F2/F3 (Astra 3015): the owner record names the operation it ran; its journal keeps each path's full state (existence, digest, Git mode).
-    const seen = (text: string, mode = '100644') => ({ digest: patchDigest(text), mode }), journal = async () => JSON.parse(await readFile(join(crashed, 'journal.json'), 'utf8'));
-    const crash = async (changes: object[]) => { await mkdir(lock);
-      await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: `refs/deckent/deliveries/${'c'.repeat(64)}`, operation: 'deliver' }));
-      await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 2, state: 'writing', written: [], changes })); return f.files.publish(second.plan, second.manifest, other); };
+    const other = f.patch('wt2', 'b.txt', 'b before\n', 'b after\n'), second = await planned(f, other), custody = join(f.workspaceRoot, format.pending, patchDigest(f.sourceRoot));
+    const crashed = join(f.workspaceRoot, format.deliveries, 'c'.repeat(64)); await mkdir(crashed, { recursive: true });
+    // F2/F3 (Astra 3015): the journal keeps each path's full state (existence, digest, Git mode).
+    const seen = (text: string, mode = '100644') => ({ digest: patchDigest(text), mode }), journal = async () => JSON.parse(await readFile(join(crashed, format.journal), 'utf8'));
+    const died = async (changes: object[], version = format.journalVersion) => { await mkdir(custody, { recursive: true }); await writeFile(join(custody, 'c'.repeat(64)), '');
+      await writeFile(join(crashed, format.journal), JSON.stringify({ schemaVersion: version, state: 'writing', written: [], changes }), { mode: 0o600 }); };
+    const crash = async (changes: object[]) => { await died(changes); return f.files.publish(second.plan, second.manifest, other); };
     await writeFile(join(f.sourceRoot, 'a.txt'), 'a third\n'); // the crashed delivery wrote a.txt, not yet old.txt: mixed
     await expect(crash([{ path: 'a.txt', before: seen('a after\n'), after: seen('a third\n') }, { path: 'old.txt', before: seen('remove\n'), after: null }]))
       .rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
@@ -545,22 +583,23 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect([await readFile(join(f.sourceRoot, 'a.txt'), 'utf8'), await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')]).toEqual(['a third\n', 'b after\n']);
     expect((await readdir(f.sourceRoot)).filter(name => name.startsWith('.deckent-'))).toEqual([]); expect(await readdir(crashed)).toContain(`.deckent-${token(1)}.aside`);
     await f.files.publish(second.plan, second.manifest, other); // the lock is free again
-    // R2 (Astra 3017): A died mid-write (mixed); B took A's lock over and died too before settling A, leaving its own record that names only B's delivery.
-    // A's operation stayed in durable custody, so C finds and settles it: PARTIAL, and C writes nothing.
-    const custody = join(f.workspaceRoot, 'working-tree-pending', patchDigest(f.sourceRoot)), owner = (n: number, ref: string, operation?: string) =>
-      writeFile(join(lock, `owner-00000000-0000-4000-8000-00000000000${n}.json`), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref, ...operation ? { operation } : {} }));
-    once('open', path => path === f.sourceRoot, () => Promise.reject(new Error('B died before settling A'))); // B's first open after taking the lock is A's settle
+    // R2 (Astra 3017): A died mid-write (mixed); B took the lock and died too before settling A. A's operation stayed in durable custody, so C finds
+    // and settles it: PARTIAL, and C writes nothing.
+    once('open', path => path === f.sourceRoot, () => Promise.reject(new Error('B died before settling A'))); // B's first open under the lock is A's settle
     await expect(crash([{ path: 'a.txt', before: seen('a after\n'), after: seen('a third\n') }, { path: 'old.txt', before: seen('remove\n'), after: null }])).rejects.toThrow('B died');
     expect([await readdir(custody), (await journal()).state]).toEqual([['c'.repeat(64)], 'writing']);
-    await mkdir(lock); await owner(1, second.plan.ref, 'deliver');
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt5' }, limits, workerTreeDenied);
     await writeFile(join(f.sourceRoot, 'b.txt'), 'b before\n'); const late = f.patch('wt5', 'b.txt', 'b before\n', 'b fifth\n'), third = await planned(f, late);
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'old.txt' } });
     expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), (await journal()).state, await readdir(custody)]).toEqual(['b before\n', 'partial', []]);
-    // R3017: a journal or a gone holder's record of another version is an explicit typed refusal (nothing settled or written) naming what to check and remove.
-    await mkdir(lock); await owner(2, `refs/deckent/deliveries/${'c'.repeat(64)}`, 'deliver'); await writeFile(join(crashed, 'journal.json'), JSON.stringify({ schemaVersion: 1, state: 'writing', changes: [] }));
+    // R3017: a journal of another version, an earlier version's lock directory, and (F3, A6-5) a journal path outside the patch form are
+    // an explicit typed refusal naming what to check and remove: nothing settled, walked or written.
+    await died([], 1);
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: crashed } });
-    await rm(crashed, { recursive: true }); await mkdir(lock); await owner(3, second.plan.ref);
+    const escape = join(f.sourceRoot, '..', `.deckent-${token(3)}.aside`); await writeFile(escape, 'outside\n'); await died([{ path: '../escape.txt', token: token(3), before: seen('outside\n'), after: null }]);
+    await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: crashed } });
+    await expect(readFile(join(f.sourceRoot, '..', 'escape.txt'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(escape, 'utf8')).toBe('outside\n');
+    await rm(crashed, { recursive: true }); await rm(lock); await mkdir(lock); await writeFile(join(lock, `${format.lockOwner}${token(4)}.json`), '{}');
     await expect(f.files.publish(third.plan, third.manifest, late)).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED', params: { path: lock } });
     await rm(lock, { recursive: true }); await f.files.publish(third.plan, third.manifest, late);
     expect([await readFile(join(f.sourceRoot, 'b.txt'), 'utf8'), await readdir(custody)]).toEqual(['b fifth\n', []]);
@@ -571,10 +610,25 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     finally { await exec('chmod', ['700', custody]); }
     expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b before\n'); await f.files.publish(blocked.plan, blocked.manifest, sixth);
     expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b sixth\n');
+    // F7: the uninstall inventory rows of these files are the formats' own (paths.json pinned equal), and every file left here matches one.
+    const rows = workingTreeRemovalPatterns(), left = (await exec('find', [f.workspaceRoot, '-type', 'f', '(', '-path', '*/working-tree-*', '-o', '-path', '*/run-bases/*', ')'])).stdout.split('\n').filter(Boolean);
+    expect([removal.archive.members.filter(row => /^\^workspaces\/(run-bases|working-tree-)/u.test(row)), left.filter(file => !rows.some(row => new RegExp(`^${row}`, 'u').test(relative(f.workspaceRoot, file))))])
+      .toEqual([rows.map(row => `^workspaces/${row}`), []]);
   });
   it('L1c rollback: the yes puts the delivery\'s originals back with the delivery\'s card and authority; a file changed since is refused and nothing is written', async () => {
     const f = await fixture(false, 'sha1', true), p = f.patch('wt', 'a.txt', 'a before\n', 'a after\n'); p.changes.push(f.patch('wt', 'dir/new.txt', null, 'added\n').changes[0]!);
-    const { record } = await f.deliver(p), receipt = record.intent.patch, clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, cards: import('#engine/index.js').EffectConfirmationView[] = [];
+    const cards: import('#engine/index.js').EffectConfirmationView[] = [];
+    const root = join(f.workspaceRoot, 'preview'); await mkdir(join(root, '.deckent'), { recursive: true });
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
+      logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 } } }));
+    const port = terminalDeliveryPort(root, { inspectInventory: async () => ({ page: { entries: [{ identity: p.identity }], nextAfter: null } }),
+      previewWorkspacePatch: async () => ({ patch: p }), checkWorkspaceIntegration: async () => ({ observation: { source: 'source', head: p.baseCommit }, proposal: 'proposal', scope: { status: 'unscoped' } }),
+      prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: () => '', interactiveDelivery: () => ({}) } as never, { env: homeEnv(join(root, 'home')) })!;
+    const shown = await port.preview({ key: 'k', title: 't', ...p.identity });
+    const { record } = await f.deliver(p, undefined, { async assertAvailable() {}, async confirm(card) { cards.push(card); return async () => {}; } });
+    const forward = [{ path: 'a.txt', before: patchDigest('a before\n'), after: patchDigest('a after\n') }, { path: 'dir/new.txt', before: null, after: patchDigest('added\n') }];
+    expect(shown.changes).toEqual(forward); expect(cards[0]!.changes).toEqual(forward);
+    const receipt = record.intent.patch, clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) };
     const store = { async findDelivery() { return record; }, async loadRun() { return { revision: 1, graph: { tasks: [{ id: 't', acceptanceCriteria: ['exit'] }] }, progress: [{ taskId: 't', phase: 'accepted' }] } as RunSnapshot; } };
     const app = new WorkingTreeRollbackApplication({ async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; } } as never, f.files, store, await LocalOsSessionAuthority.create(['s'], 10000, clock),
       { async authorizeIdentity(action) { expect(action).toBe('deliver-integration'); } }, clock, { async assertAvailable() {}, async confirm(card) { cards.push(card); return async () => {}; } });
@@ -589,17 +643,17 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect(await app.rollback({ ...command, commandId: 'undo-again' })).toMatchObject({ status: 'working-tree-rolled-back' }); // already back: nothing rewritten
     await expect(new WorkingTreeRollbackApplication({} as never, f.files, store, await LocalOsSessionAuthority.create(['s'], 10000, clock), { async authorizeIdentity() {} }, clock, undefined).rollback(command))
       .rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
-    // F3 (Astra 3015): a rollback that died after its first file. The lock record names the rollback, so another delivery taking over settles the
+    // F3 (Astra 3015): a rollback that died after its first file. Its custody entry names the rollback's journal, so the next delivery settles the
     // rollback's own journal (mixed: PARTIAL and stops; all before: interrupted; all after: written), never the delivery's written one.
     await captureWorkingTreeBase(f.options, { scopeId: 's', runId: 'wt3' }, limits, workerTreeDenied);
-    const other = f.patch('wt3', 'b.txt', 'b before\n', 'b after\n'), next = await planned(f, other), lock = join(f.workspaceRoot, 'working-tree-locks', patchDigest(f.sourceRoot));
-    const seen = (text: string) => ({ digest: patchDigest(text), mode: '100644' }), gone = (await exec('sh', ['-c', 'echo $$'])).stdout.trim();
-    const journal = async (suffix: string) => JSON.parse(await readFile(join(f.workspaceRoot, 'working-tree-deliveries', record.intent.plan.ref.split('/').pop()! + suffix, 'journal.json'), 'utf8'));
+    const other = f.patch('wt3', 'b.txt', 'b before\n', 'b after\n'), next = await planned(f, other), custody = join(f.workspaceRoot, format.pending, patchDigest(f.sourceRoot));
+    const seen = (text: string) => ({ digest: patchDigest(text), mode: '100644' }), id = record.intent.plan.ref.split('/').pop()!;
+    const journal = async (suffix: string) => JSON.parse(await readFile(join(f.workspaceRoot, format.deliveries, id + suffix, format.journal), 'utf8'));
     for (const [a, added, state] of [['a before\n', 'added\n', 'partial'], ['a after\n', 'added\n', 'interrupted'], ['a before\n', null, 'written']] as const) {
       await writeFile(join(f.sourceRoot, 'a.txt'), a); await (added ? writeFile(join(f.sourceRoot, 'dir/new.txt'), added) : rm(join(f.sourceRoot, 'dir/new.txt'), { force: true }));
-      await mkdir(lock); await writeFile(join(lock, 'owner-00000000-0000-4000-8000-000000000000.json'), JSON.stringify({ schemaVersion: 1, pid: Number(gone), atMs: 0, ref: record.intent.plan.ref, operation: 'rollback' }));
-      await writeFile(join(f.workspaceRoot, 'working-tree-deliveries', record.intent.plan.ref.split('/').pop()! + '.rollback', 'journal.json'), JSON.stringify({ schemaVersion: 2, state: 'writing', written: [],
-        changes: [{ path: 'a.txt', before: seen('a after\n'), after: seen('a before\n') }, { path: 'dir/new.txt', before: seen('added\n'), after: null }] }));
+      await mkdir(custody, { recursive: true }); await writeFile(join(custody, id + format.rollback), '');
+      await writeFile(join(f.workspaceRoot, format.deliveries, id + format.rollback, format.journal), JSON.stringify({ schemaVersion: format.journalVersion, state: 'writing', written: [],
+        changes: [{ path: 'a.txt', before: seen('a after\n'), after: seen('a before\n') }, { path: 'dir/new.txt', before: seen('added\n'), after: null }] }), { mode: 0o600 });
       const taken = f.files.publish(next.plan, next.manifest, other);
       if (state === 'partial') { await expect(taken).rejects.toMatchObject({ code: 'PATCH_WORKING_TREE_PARTIAL', params: { written: 'a.txt', pending: 'dir/new.txt' } }); expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('b before\n'); }
       else await taken;

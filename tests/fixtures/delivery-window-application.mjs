@@ -6,7 +6,7 @@
 // stands in for the person's other shell: it creates the verification Run on that delivery (`run create --delivery-command-id`'s application),
 // executes and evaluates it, before the window shows the delivered stage. The adoption itself is the window's, with the real port.
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
-import { terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
+import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { terminalComposerLabels, terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 import { checkConfiguredWorkspaceIntegration, interactiveDeliveryHandlers, prepareConfiguredWorkspaceIntegration, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';

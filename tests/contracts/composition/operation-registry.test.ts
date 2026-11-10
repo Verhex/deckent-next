@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { executeConfiguredOperation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { operationsConfigSchema, registerOperationAdapterModule, registerProviderConfig, httpConditionalAdapterModule } from '#adapters/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
+import { operationsConfigSchema, registerOperationAdapterModule, registerSecretGrantStore, httpConditionalAdapterModule } from '#adapters/index.js';
+import { composeCore } from '#composition/core/root/index.js';
 import { AdapterRegistry, EffectTargetError, type EffectTarget, type EffectApplyRequest, type AdapterModuleRegistration } from '#engine/index.js';
 import { CORE_API_VERSION, adapterModuleManifestSchema, type AdapterModuleManifest, type EffectTargetRef } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -40,7 +41,7 @@ const descriptor = (id: string, targetKind: string, precondition: 'record-versio
 
 it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] resolves a registry-registered (non-Core) adapter from an unchanged operations config shape and executes through it; Core http-conditional stays a registry entry', async () => {
   registerOperationAdapterModule(module());
-  registerProviderConfig();
+  composeCore();
   const root = await mkdtemp(join(tmpdir(), 'dn-registry-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const options = { env: { HOME: join(root, 'home') } };
@@ -63,8 +64,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
   const result = await executeConfiguredOperation(project, command, options);
   expect(result).toMatchObject({ status: 'settled', version: '"m1"', evidence: 'idempotency-record', target: { kind: 'memo', id: 'M-1' } });
   const target = targets.get('memo'); expect(target?.records.get('M-1')).toBe(1); expect(target?.writes).toHaveLength(1);
-  // Registration is sealed once configuration is registered: a late module cannot change what a validated config means.
+  // Registration is sealed once Core is composed: a late module cannot change what a validated config means.
   expect(() => registerOperationAdapterModule(module(manifest({ id: 'test.late', namespace: 'late' }), 'late.x'))).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
+  // The grant store registry seals with it: a late store can never take over where project grants live.
+  expect(() => registerSecretGrantStore({ id: 'late.secret-grant.store@1', create: () => { throw new Error('unreachable'); } })).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
 });
 
 it('refuses out-of-range Core API, namespace shadowing, duplicate id@version, operation redefinition (adds-only), unverified signatures and factory mismatch with typed codes', () => {

@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { AuditError, type AuditEvent } from '#domain/index.js';
 import { AuditApplication, verifyAuditRecord } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
+import { openSqliteAuditStore, SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { AUDIT_EVENT_LEDGER_VERSION, CURRENT_LEDGER_VERSION, openSqliteLedger, readScopeCompanies } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
 import { DOWNGRADE_TO_V40_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
@@ -37,7 +37,7 @@ function event(scopeId: string, n: number, cell: 'edit-non-floor' | 'shell-modif
 
 it('upgrades a real v40 ledger to v41 (audit events): backup at v40 first, every row kept, then the append-only audit table admits events', async () => {
   const { path, backups } = await ledger();
-  expect(CURRENT_LEDGER_VERSION).toBe(74); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41);
+  expect(CURRENT_LEDGER_VERSION).toBe(75); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41);
   const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V40_LEDGER_SQL);
   db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
     .run('scope', 'op', 'operation', null, null, 'b'.repeat(64), 0, '{"op":1}');
@@ -175,6 +175,24 @@ it('propagates a failed write as a typed error so the caller applies no effect (
   expect(() => relax(2)).toThrow(expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }));
   expect(applied).toBe(1);
   expect(rows(path, 'SELECT count(*) AS n FROM audit_events').at(0)).toEqual({ n: 1 });
+});
+
+it('keeps snapshot failure identity, rollback attempts and caller-owned transaction boundaries', () => {
+  for (const write of [false, true]) for (const at of ['begin', 'work', 'commit', 'rollback', 'joined'] as const) {
+    const calls: string[] = [], original = Object.assign(new Error(`injected-${at}`), { code: `INJECTED_${at.toUpperCase()}` });
+    const db = { isTransaction: at === 'joined', exec(sql: string) {
+      calls.push(sql);
+      if (at === 'begin' && sql.startsWith('BEGIN') || at === 'commit' && sql === 'COMMIT' || at === 'rollback' && sql === 'ROLLBACK') throw original;
+    } } as unknown as DatabaseSync;
+    const store = new SqliteAuditStore(db);
+    const workError = new AuditError('AUDIT_INTEGRITY');
+    const work = () => { if (['work', 'rollback', 'joined'].includes(at)) throw workError; return 42; };
+    let caught: unknown;
+    try { store.snapshot(write, work); } catch (error) { caught = error; }
+    expect(caught, `${write}:${at}`).toBe(['begin', 'commit'].includes(at) ? original : workError);
+    expect(calls, `${write}:${at}`).toEqual(at === 'joined' ? [] : at === 'begin' ? [write ? 'BEGIN IMMEDIATE' : 'BEGIN']
+      : [write ? 'BEGIN IMMEDIATE' : 'BEGIN', ...(at === 'commit' ? ['COMMIT'] : []), 'ROLLBACK']);
+  }
 });
 
 it.skipIf(process.platform === 'win32')('requires POSIX private file modes: ledger upgrade creates a 0600 backup', async () => {

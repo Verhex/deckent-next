@@ -1,9 +1,9 @@
-import { persistedString, persistedInteger } from '#domain/index.js';
+import { counterSchema, persistedString } from '#domain/index.js';
 import { z } from 'zod';
 import type { ModelInvocationNativeResponse } from '#domain/index.js';
 import { openRouterChatJsonSchema } from './contract.js';
 
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = counterSchema;
 const usageSchema = z.looseObject({ prompt_tokens: count, completion_tokens: count, total_tokens: count });
 const responseSchema = z.looseObject({ id: persistedString(z.string().min(1)), object: z.literal('chat.completion'), created: count,
   model: persistedString(z.string().min(1)), choices: z.array(z.looseObject({ index: z.literal(0), finish_reason: z.enum(['stop', 'length', 'content_filter']),

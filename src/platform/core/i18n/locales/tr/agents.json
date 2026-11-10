@@ -73,6 +73,7 @@
   "error.AGENT_STANDING_REFUSED": "Bu ajan durumu değişikliğine mevcut durumdan ya da bu kimlikle izin verilmiyor. Hiçbir şey değişmedi.",
   "error.AGENT_STANDING_CONFLICT": "Ajanın durumu gösterildikten sonra değişti. Hiçbir şey değişmedi; yeniden bakıp güncel duruma göre karar verin.",
   "agent.card.selected": "  ajan: {agentId} (sürüm {revision}, {standing})",
+  "agent.card.selectedNamed": "  ajan: {name} (kimlik {agentId}, sürüm {revision}, {standing})",
   "agent.card.skills": "    skill'ler: {skills}",
   "agent.card.skill": "{skillId} (sürüm {revision})",
   "agent.standing.active": "terfili",
@@ -89,5 +90,9 @@
   "error.AGENT_WORK_CLASS_UNKNOWN.known": "Bir WorkClass bu kurulumun kayıt defterinde yok. Şunlardan birini kullanın: {known}. Örnek: deckent agents define --example",
   "agents.card.diff": "{field} değişir: {before} → {after}",
   "agents.card.diff.persona": "Persona metni değişir (yukarıda).",
-  "agents.card.diff.none": "Şu anki revizyona göre hiçbir şey değişmiyor."
+  "agents.card.diff.none": "Şu anki revizyona göre hiçbir şey değişmiyor.",
+  "error.AGENT_USE_PIN_MISMATCH": "Seçilen ajan bu göreve uygun değil veya sabitlenen revizyonu ya da içeriği artık eşleşmiyor. Ajanı inceleyip yeni bir sabitleme hazırlayın; başka ajan seçilmedi.",
+  "error.AGENT_USE_TASK_UNAVAILABLE": "Seçilen görev yok veya iş girdisi içermiyor. Ajan sabitlemesi hazırlamadan önce iş girdisi olan bir görev seçin.",
+  "error.AGENT_USE_WORK_CLASS_REQUIRED": "Seçilen görevin çözümlenmiş bir WorkClass değeri yok. Sabitlenen ajanı kullanmadan önce kayıtlı bir WorkClass atayın.",
+  "error.AGENT_USE_CATALOG_UNAVAILABLE": "Ajan seçimi kataloğu açamıyor. Sabitlenen ajanı kullanmadan önce katalog erişimini sağlayın; ajan seçilmedi."
 }

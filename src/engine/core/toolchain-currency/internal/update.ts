@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { layeredWorkerRecipeSchema } from './image-plan.js';
@@ -8,26 +9,26 @@ const imageVersion = z.string().regex(/^r[1-9][0-9]*-\d{8}$/);
 const legacyRecipeSchema = z.looseObject({ schemaVersion: z.literal(2), repository: persistedString(z.string().min(1)), imageVersion,
   previousVersion: imageVersion.nullable(), baseImage: persistedString(z.string().min(1)) });
 export const workerImageRecipeSchema = z.union([layeredWorkerRecipeSchema, legacyRecipeSchema]);
-export type WorkerImageRecipe = z.infer<typeof workerImageRecipeSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerImageRecipe = z.infer<typeof workerImageRecipeSchema>;
 const profileReference = z.strictObject({ id: identitySchema, version: counterSchema.positive() });
-export const affectedProfileSchema = z.strictObject({ profile: profileReference, provider: identitySchema, cliVersion: persistedString(z.string().min(1)),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const affectedProfileSchema = z.strictObject({ profile: profileReference, provider: identitySchema, cliVersion: persistedString(z.string().min(1)),
   imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/).nullable() }).readonly();
 export type AffectedProfile = z.infer<typeof affectedProfileSchema>;
-export const toolchainUpdatePlanSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('toolchain-update-plan'), plannedAt: persistedDateTime(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const toolchainUpdatePlanSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('toolchain-update-plan'), plannedAt: persistedDateTime(),
   decision: z.enum(['no-change', 'build']), staleProviders: z.array(identitySchema).readonly(), report: toolchainCurrencyReportSchema,
   current: z.strictObject({ imageVersion, repository: z.string() }),
   next: z.strictObject({ imageVersion, previousVersion: imageVersion, historyLine: persistedString(z.string().min(1)), recipe: workerImageRecipeSchema }).nullable(),
   affectedProfiles: z.array(affectedProfileSchema).readonly(),
   basis: z.string() }).readonly();
 export type ToolchainUpdatePlan = z.infer<typeof toolchainUpdatePlanSchema>;
-export const profileRevisionProposalSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('profile-revision-proposal'), proposedAt: persistedDateTime(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const profileRevisionProposalSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('profile-revision-proposal'), proposedAt: persistedDateTime(),
   imageVersion, imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), tag: z.string().nullable(),
   profiles: z.array(z.strictObject({ profile: profileReference, provider: identitySchema,
     changes: z.strictObject({ cliVersion: z.strictObject({ from: z.string(), to: z.string() }), imageId: z.strictObject({ from: z.string().nullable(), to: z.string() }) }) })).readonly(),
   application: z.literal('not-applied'), basis: z.string() }).readonly();
 export type ProfileRevisionProposal = z.infer<typeof profileRevisionProposalSchema>;
-export class ToolchainUpdateError extends Error {
-  constructor(readonly code: 'TOOLCHAIN_RECIPE_INVALID' | 'TOOLCHAIN_HISTORY_INVALID' | 'TOOLCHAIN_RECEIPT_INVALID' | 'TOOLCHAIN_PLAN_INVALID') { super(code); this.name = 'ToolchainUpdateError'; }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export class ToolchainUpdateError extends CodedError {
+  constructor(override readonly code: 'TOOLCHAIN_RECIPE_INVALID' | 'TOOLCHAIN_HISTORY_INVALID' | 'TOOLCHAIN_RECEIPT_INVALID' | 'TOOLCHAIN_PLAN_INVALID') { super(code); this.name = 'ToolchainUpdateError'; }
 }
 const HISTORY_LINE = /^# version r[1-9][0-9]*-\d{8} \| /m;
 const counterOf = (version: string) => { const match = /^r([1-9][0-9]*)-\d{8}$/.exec(version); if (!match) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID'); return Number(match[1]); };

@@ -1,4 +1,4 @@
-import { clientCommandIdSchema, identitySchema, counterSchema, runSnapshotSchema, type RunSnapshot, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import { clientCommandIdSchema, identitySchema, counterSchema, safeParseRun, parseRun, type RunSnapshot, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
 import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { readWorkerTreeExclusions, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
@@ -15,7 +15,7 @@ export const runCommandSchema = runQuerySchema.extend({ commandId: clientCommand
 export type RunQuery = z.infer<typeof runQuerySchema>;
 export type RunCommand = z.infer<typeof runCommandSchema>;
 export interface RunAuthorization { authorize(action: CorePolicyAction<'run'>, query: RunQuery, principal: VerifiedPrincipal): Promise<void> }
-/** Sealed worker evidence ports for the pinned model rows of `run inspect` (WORKER-CURRENCY-2); each attempt needs `read-output`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Sealed worker evidence ports for the pinned model rows of `run inspect` (WORKER-CURRENCY-2); each attempt needs `read-output`. */
 export interface RunModelEvidence {
   readonly store: Pick<WorkerEventLogStore, 'loadWorkerEventLog'>; readonly artifacts: WorkerEventArtifacts; readonly authorization: DispatchIdentityAuthorization;
 }
@@ -27,9 +27,9 @@ export class RunInspectionApplication {
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
   async inspectWithModels(input: unknown, credential?: unknown) {
     const { run, snapshot, principal, evaluations } = await this.load(input, credential);
-    const models = run && this.models ? await describeRunWorkerModels(runSnapshotSchema.parse(snapshot), principal, this.models.store, this.models.artifacts,
+    const models = run && this.models ? await describeRunWorkerModels(parseRun(snapshot), principal, this.models.store, this.models.artifacts,
       this.models.authorization) : Object.freeze([]);
-    const costReport = run && this.costs && this.models ? await inspectRunWorkCosts(runSnapshotSchema.parse(snapshot), evaluations ?? [], principal, this.costs,
+    const costReport = run && this.costs && this.models ? await inspectRunWorkCosts(parseRun(snapshot), evaluations ?? [], principal, this.costs,
       (identity, actor) => this.models!.authorization.authorizeIdentity('read-output', identity, actor)) : undefined;
     return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models });
   }
@@ -40,7 +40,7 @@ export class RunInspectionApplication {
     const evidence = this.readStore.loadRunPoolEvidence ? await this.readStore.loadRunPoolEvidence(query.scopeId, query.runId) : null;
     const snapshot = evidence ? evidence.snapshot : await this.readStore.loadRun(query.scopeId, query.runId);
     if (!snapshot) return { run: null, snapshot, principal };
-    const decoded = runSnapshotSchema.safeParse(snapshot);
+    const decoded = safeParseRun(snapshot);
     if (!decoded.success) throw new RunStoreError('RUN_STORE_CORRUPT');
     const parsed = decoded.data;
     if (parsed.identity.scopeId !== query.scopeId || parsed.identity.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');

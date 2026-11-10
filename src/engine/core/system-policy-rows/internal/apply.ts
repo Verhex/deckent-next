@@ -12,7 +12,7 @@ export interface ReconcileSystemPolicyRowsInput {
   readonly data?: unknown; readonly expectedDigest?: string; readonly expect: string; readonly apply: boolean;
   readonly action: 'apply' | 'rollback'; readonly audit: (event: AuditEvent) => void; readonly now: () => number;
 }
-export interface SystemPolicyRowsResult {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SystemPolicyRowsResult {
   readonly status: 'preview' | 'applied' | 'rolled-back' | 'current' | 'replayed' | 'conflict' | 'unavailable' | 'unknown';
   readonly reason: string | null; readonly key: string | null; readonly revision: string | null;
   readonly plan: SystemPolicyRowsPlan | null;

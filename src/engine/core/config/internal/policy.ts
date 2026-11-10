@@ -1,4 +1,5 @@
-import { delegationWithin, evaluatePolicy, policyResources, policySchema, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, delegationWithin, evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { ConfigApplicationError, type ConfigAuthorization, type ConfigWriteInput } from './contract.js';
 /**
  * Existing policy engine decides the exact layer/key resource; a global change requires authority in every scope. The write is bound to the
@@ -8,9 +9,9 @@ import { ConfigApplicationError, type ConfigAuthorization, type ConfigWriteInput
 export function evaluateConfigWrite(document: unknown, principal: VerifiedPrincipal, input: ConfigWriteInput): ConfigAuthorization {
   if (principal.issuer !== input.principal.issuer || principal.subject !== input.principal.subject || !input.principal.scopeIds.includes(input.scopeId)) throw new ConfigApplicationError('POLICY_DENIED');
   const resource = { kind: policyResources.config.kind, id: `${input.layer ?? 'project'}:${input.keyPath}` }, action = policyResources.config.actions[0];
-  const decision = evaluatePolicy(document, { principal, scopeId: input.scopeId, action, resource });
+  const decision = evaluatePolicy(asPolicy(document), { principal, scopeId: input.scopeId, action, resource });
   if (decision.decision === 'deny') throw new ConfigApplicationError('POLICY_DENIED', decision.ruleId ? { ruleId: decision.ruleId } : undefined);
-  if (input.layer === 'global' && !delegationWithin(policySchema.parse(document), principal,
+  if (input.layer === 'global' && !delegationWithin(asPolicy(document), principal,
     [{ id: 'config-global', effect: decision.decision, actions: [action], scopes: 'all', resource: { kind: resource.kind, ids: [resource.id] } }]).ok) throw new ConfigApplicationError('POLICY_DENIED');
   return Object.freeze({ decision: decision.decision, revision: decision.revision, ruleId: decision.ruleId ?? null });
 }
@@ -18,6 +19,7 @@ export function evaluateConfigWrite(document: unknown, principal: VerifiedPrinci
 export function authorizeConfigWrite(document: unknown, principal: VerifiedPrincipal, input: ConfigWriteInput): string {
   if (principal.issuer !== input.principal.issuer || principal.subject !== input.principal.subject || !input.principal.scopeIds.includes(input.scopeId)) throw new ConfigApplicationError('POLICY_DENIED');
   const resource = { kind: policyResources.config.kind, id: `${input.layer ?? 'project'}:${input.keyPath}` }, action = policyResources.config.actions[0];
-  if (evaluatePolicy(document, { principal, scopeId: input.scopeId, action, resource }).decision === 'require-approval') throw new ConfigApplicationError('POLICY_APPROVAL_UNSUPPORTED');
+  const refusal = policyVerdictRefusal(evaluatePolicy(asPolicy(document), { principal, scopeId: input.scopeId, action, resource }).decision, { deny: 'POLICY_DENIED' });
+  if (refusal === 'POLICY_APPROVAL_UNSUPPORTED') throw new ConfigApplicationError(refusal);
   return evaluateConfigWrite(document, principal, input).revision;
 }

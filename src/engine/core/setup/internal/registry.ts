@@ -13,9 +13,9 @@ const STAGE_TABLE = z.strictObject({ $comment: z.string().optional(), schemaVers
   order: z.array(z.string()).refine(ids => new Set(ids).size === ids.length && CORE_SETUP_STAGES.every(id => ids.includes(id))),
   phases: z.record(z.string(), z.enum(SETUP_PHASES)).refine(phases => CORE_SETUP_STAGES.every(stage => phases[stage] !== undefined)) }).parse(stageTable);
 
-export type SetupFamilyStage = Readonly<{ id: string; namespace: string; after: CoreSetupStageId; title: string; phase: SetupPhase;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SetupFamilyStage = Readonly<{ id: string; namespace: string; after: CoreSetupStageId; title: string; phase: SetupPhase;
   evaluate: (context: SetupStageContext) => SetupDecision }>;
-export type SetupFamilyEntry = Readonly<{ namespace: string; source: string; parseFacts: (value: unknown) => unknown; factsSchema: z.ZodTypeAny; stages: readonly SetupFamilyStage[] }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SetupFamilyEntry = Readonly<{ namespace: string; source: string; parseFacts: (value: unknown) => unknown; factsSchema: z.ZodTypeAny; stages: readonly SetupFamilyStage[] }>;
 
 /** Immutable stage registry. Core holds the generic stages; adapter families (execution environment, source control, Enterprise,
  * business systems) add stages and facts under their own namespace and never replace Core or another family (as identity profiles). */

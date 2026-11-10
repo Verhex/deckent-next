@@ -58,7 +58,7 @@ export interface BubblewrapView {
   readonly open?: { readonly sealed: readonly string[]; readonly hidden: readonly string[] };
 }
 
-/** Size of each tmpfs (`/tmp`, HOME): a runaway write fills the sandbox, never the host. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Size of each tmpfs (`/tmp`, HOME): a runaway write fills the sandbox, never the host. */
 export const BUBBLEWRAP_TMPFS_BYTES = 64 * 1024 * 1024;
 /** Directories a system toolchain lives in; bound read-only when they exist. `/var`, `/run`, `/mnt` (WSL drives), `/media`, `/root`,
  * `/home` and `/srv` are not among them: sockets, other users, removable and foreign drives stay outside. */
@@ -79,7 +79,7 @@ export const BUBBLEWRAP_ANCESTOR_PIN_MAX = 1_024;
  * self-bind) — a directory under such a mount can be renamed; under any other (read-only bind, tmpfs, `/dev/null`) it cannot or it vanishes
  * with the call. */
 interface ViewMount { readonly target: string; readonly args: readonly string[]; readonly hostWritable: boolean; readonly protective: boolean }
-const within = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+const within = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`); // kept (KG12 F2): this file runs standalone (shell-ancestor-pin-platform test); its targets are canonical
 
 /** The mounts after the root (and `/proc`, `/dev`) in the order bubblewrap applies them: a later mount covers an earlier one. */
 function viewMounts(view: BubblewrapView): ViewMount[] {

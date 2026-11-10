@@ -1,8 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { openSqliteLedger, sqliteEngineMeetsFloor, assertSqliteEngineSupported, SQLITE_ENGINE_FLOOR } from '#adapters/core/sqlite-ledger/index.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { existsSync } from 'node:fs';
+import { ledgerTransaction, openLedgerDatabase, openSqliteLedger, sqliteEngineMeetsFloor, assertSqliteEngineSupported, SQLITE_ENGINE_FLOOR } from '#adapters/core/sqlite-ledger/index.js';
+import { openMemoryEvaluationSourceReader } from '#adapters/core/memory-journal-store/index.js';
 import { AttemptStoreError } from '#engine/index.js';
 
 // DEPS-P0: 3.51.3 fixed the WAL-reset corruption bug present in every SQLite release from 3.7.0 through 3.51.2
@@ -49,6 +51,11 @@ describe('sqlite engine floor (DEPS-P0)', () => {
       try {
         expect(() => openSqliteLedger(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }))
           .toThrow(AttemptStoreError);
+        // The raw opener behind every other open (installer, inventory, backup copy and checkpoint, memory sources) refuses the same way.
+        expect(() => openLedgerDatabase(join(root, 'ledger.db'))).toThrow(AttemptStoreError);
+        await expect(openMemoryEvaluationSourceReader(join(root, 'ledger.db'), { busyTimeoutMs: 20 }, () => null, () => true))
+          .rejects.toMatchObject({ code: 'ATTEMPT_STORE_SQLITE_UNSUPPORTED' });
+        expect(existsSync(join(root, 'ledger.db'))).toBe(false);
       } finally { Object.defineProperty(process.versions, 'sqlite', { value: real, configurable: true, enumerable: true, writable: false }); }
     });
 
@@ -58,7 +65,37 @@ describe('sqlite engine floor (DEPS-P0)', () => {
       Object.defineProperty(process.versions, 'sqlite', { value: SQLITE_ENGINE_FLOOR, configurable: true, enumerable: true, writable: false });
       try {
         const db = openSqliteLedger(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' });
-        db.close();
+        try {
+          db.exec('CREATE TABLE sql_m_pin(value TEXT)');
+          expect(ledgerTransaction(db, () => {
+            db.prepare('INSERT INTO sql_m_pin VALUES(?)').run('retained');
+            return ledgerTransaction(db, () => db.prepare('SELECT value FROM sql_m_pin').get()?.value, { join: true, mode: 'read' });
+          })).toBe('retained');
+          const rejected = new Error('SQL_M_REJECTED');
+          expect(() => ledgerTransaction(db, () => {
+            db.prepare('INSERT INTO sql_m_pin VALUES(?)').run('rolled-back'); throw rejected;
+          }, { failure: error => error })).toThrow(rejected);
+          expect(db.prepare('SELECT value FROM sql_m_pin').all()).toEqual([{ value: 'retained' }]);
+          expect(db.isTransaction).toBe(false);
+          await expect(ledgerTransaction(db, async () => {
+            await Promise.resolve(); expect(db.isTransaction).toBe(true);
+            db.prepare('INSERT INTO sql_m_pin VALUES(?)').run('awaited'); return 'settled';
+          })).resolves.toBe('settled');
+          await expect(ledgerTransaction(db, async () => {
+            db.prepare('INSERT INTO sql_m_pin VALUES(?)').run('async-rolled-back');
+            await Promise.resolve(); throw rejected;
+          }, { failure: error => error })).rejects.toBe(rejected);
+          expect(db.prepare('SELECT value FROM sql_m_pin ORDER BY rowid').all()).toEqual([{ value: 'retained' }, { value: 'awaited' }]);
+          const exec = db.exec.bind(db), unknown = new Error('SQL_M_OUTCOME_UNKNOWN');
+          const fault = vi.spyOn(db, 'exec').mockImplementation(sql => { if (sql === 'COMMIT') throw rejected; exec(sql); });
+          try {
+            expect(() => ledgerTransaction(db, () => 'value', { unknown: () => unknown })).toThrow(unknown);
+            await expect(ledgerTransaction(db, async () => { await Promise.resolve(); return 'value'; }, { unknown: () => unknown })).rejects.toBe(unknown);
+            expect(db.isTransaction).toBe(false);
+            fault.mockImplementation(sql => { if (sql === 'ROLLBACK') throw rejected; exec(sql); });
+            expect(() => ledgerTransaction(db, () => { throw rejected; }, { unknown: () => unknown })).toThrow(unknown);
+          } finally { fault.mockRestore(); if (db.isTransaction) exec('ROLLBACK'); }
+        } finally { db.close(); }
       } finally { Object.defineProperty(process.versions, 'sqlite', { value: real, configurable: true, enumerable: true, writable: false }); }
     });
   });

@@ -1,5 +1,4 @@
-import { modelInvocationProfileSchema } from '#domain/index.js';
-import { assessModelInvocationProfileDeliveries, ModelBindingApplication, runtimeServiceResultCapacity,
+import { configuredInvocationProfiles, assessModelInvocationProfileDeliveries, ModelBindingApplication, runtimeServiceResultCapacity,
   type ModelInvocationDelivery, type ModelInvocationDeliveryFinding, type ModelInvocationDeliverySurface,
   type ModelInvocationDeliveryProfileTarget } from '#engine/index.js';
 import { mcpToolDeliveryCapacityForProbe } from '#adapters/index.js';
@@ -34,8 +33,7 @@ export function configuredModelInvocationDeliverySurfaces(config: LoadedConfig):
 export async function assessConfiguredModelInvocationDelivery(projectRoot: string,
   options: ConfigLoadOptions = {}): Promise<readonly ModelInvocationDeliveryFinding[]> {
   const config = await loadConfig(projectRoot, options);
-  const configured = config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
-  const profiles = (configured?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+  const profiles = configuredInvocationProfiles(config);
   if (profiles.length === 0) return [];
   const bindings = new ModelBindingApplication({ async read() { return config['provider_catalog']; } });
   const targets: ModelInvocationDeliveryProfileTarget[] = [];

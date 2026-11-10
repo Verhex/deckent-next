@@ -9,11 +9,11 @@ export const WORKER_EVENT_SCHEMA_VERSION = 1;
 const count = z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const text = (max: number) => persistedString(z.string().max(max));
 const MAX_MODELS = 16;
-export const workerToolClassSchema = z.enum(['read', 'edit', 'write', 'shell', 'search', 'network', 'agent', 'other']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const workerToolClassSchema = z.enum(['read', 'edit', 'write', 'shell', 'search', 'network', 'agent', 'other']);
 export type WorkerToolClass = z.infer<typeof workerToolClassSchema>;
 export const workerProviderSchema = nativeCliIdSchema;
 const tokens = z.strictObject({ input: count, output: count, cacheRead: count, cacheWrite: count, get thinking() { return count.nullable(); } }).readonly();
-export type WorkerTokens = z.infer<typeof tokens>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerTokens = z.infer<typeof tokens>;
 const base = { schemaVersion: z.literal(WORKER_EVENT_SCHEMA_VERSION), sequence: z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), atMs: count };
 const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...base, get kind() { return z.literal('session.started'); }, provider: workerProviderSchema, get model() { return text(128).nullable(); }, get cliVersion() { return text(64).nullable(); } }),
@@ -36,11 +36,11 @@ const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
   /** Host-generated when caps drop events; never produced by a worker. */
   z.strictObject({ ...base, get kind() { return z.literal('dropped'); }, get reason() { return z.enum(['event-cap', 'byte-cap', 'invalid', 'order']); }, get count() { return z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }),
 ]);
-/** Only the host model-verification evidence advances; worker-reported protocol events remain v1. Recorded v1 verdicts stay readable. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Only the host model-verification evidence advances; worker-reported protocol events remain v1. Recorded v1 verdicts stay readable. */
 export const WORKER_MODEL_VERIFICATION_SCHEMA_VERSION = 2;
-/** v3 (owner K1/K2 2026-10-22) carries only the two session-start-name verdicts, so every verdict a v2 reader knows is still written as v2. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). v3 (owner K1/K2 2026-10-22) carries only the two session-start-name verdicts, so every verdict a v2 reader knows is still written as v2. */
 export const WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION = 3;
-/** v4 (owner Q4 2026-10-23) carries only the two client-reported verdicts, by the same rule. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). v4 (owner Q4 2026-10-23) carries only the two client-reported verdicts, by the same rule. */
 export const WORKER_MODEL_VERIFICATION_CLIENT_REPORTED_SCHEMA_VERSION = 4;
 const LEGACY_VERIFICATION_STATUSES = ['verified', 'substituted', 'unverified'] as const;
 const START_NAME_VERIFICATION_STATUSES = ['start-name-matched', 'provider-chosen'] as const;

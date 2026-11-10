@@ -1,18 +1,18 @@
+import { configuredInvocationProfiles } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
 import { openSiwcWorkerRelay, siwcWorkerConnections, type SiwcWorkerConnection } from '#adapters/index.js';
 import { DECKENT_VERSION, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredSiwcModel } from './model-use.js';
-import { configuredModelProfiles } from '#composition/core/model-use/index.js';
 const modelProfile = (config: Readonly<Record<string, unknown>>, scopeId: string, id: string) => {
-  const profile = configuredModelProfiles(config).find(item => item.scopeId === scopeId && item.adapter.definition['connectionId'] === id);
+  const profile = configuredInvocationProfiles(config).find(item => item.scopeId === scopeId && item.adapter.definition['connectionId'] === id);
   if (!profile) throw ErrorRegistry.createError('OAUTH_CONNECTION_DENIED'); return profile;
 };
 
 type Context = Readonly<{ config: Readonly<Record<string, unknown>>; principal: VerifiedPrincipal }>;
 /** U9-7 producer input at Run admission: the admitting person's consented connections whose personal custody holds now (U9-1 lease check). */
-export const configuredSiwcWorkerConnections = (root: string, context: Context, options: ConfigLoadOptions) => siwcWorkerConnections({ profiles: context.config['provider_invocation_profiles'],
+export const configuredSiwcWorkerConnections = (root: string, context: Context, options: ConfigLoadOptions) => siwcWorkerConnections({ profiles: { profiles: configuredInvocationProfiles(context.config) },
   scopeIds: context.principal.scopeIds, actor: context.principal, custody: (scopeId, id) => withConfiguredSiwcModel(root, modelProfile(context.config, scopeId, id), context.principal, options, 'inspect',
     async (app, caller) => !!await app.inspectForLease(id, caller)) });
 /**
@@ -28,7 +28,7 @@ export async function openConfiguredSiwcWorker(root: string, options: ConfigLoad
   const { scopeId } = input.identity, { connectionId, owner } = input.connection;
   const current = async () => { const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
     const view = await withConfiguredSiwcModel(root, modelProfile(context.config, scopeId, connectionId), input.principal, options, 'inspect', (app, caller) => app.inspectForLease(connectionId, caller));
-    const row = (await siwcWorkerConnections({ profiles: context.config['provider_invocation_profiles'], scopeIds: [scopeId], actor: owner, custody: async (_, id) => id === connectionId }))
+    const row = (await siwcWorkerConnections({ profiles: { profiles: configuredInvocationProfiles(context.config) }, scopeIds: [scopeId], actor: owner, custody: async (_, id) => id === connectionId }))
       .find(entry => entry.connectionId === connectionId && entry.modelId === input.model);
     return row && context.installationId ? { context, installationId: context.installationId, generation: view.generation, consent: row.consentAtMs } : null; };
   const start = await current();

@@ -7,7 +7,7 @@ import { projectModelIngressField, type ModelIngressProjection } from './model-i
 import { checkModelIngressArguments, projectModelIngressSchema } from './model-ingress-json.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
-import { LOCALES, t, type Locale } from '#platform/index.js';
+import { optionalField, LOCALES, t, type Locale } from '#platform/index.js';
 import { agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
   type AgentTurnMessage, type AgentMessageContinuation, type AgentProviderStop, type ChatTurnSteerOutcome } from '#domain/index.js';
 
@@ -116,7 +116,7 @@ function outcomeState(state: string, language: Locale = LOCALES[0]): string {
   return name && labels[name] ? labels[name] + state.slice(name.length) : state;
 }
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * What the model is told about a call of a round that reached its output limit (TRUNCATED-TOOLCALL, live 2026-09-30: large write_file / run_shell
  * arguments cut at exactly 8192 completion tokens, streamed by vLLM v0.30.0 as finish_reason "tool_calls"). Protocol text like every `[deckent]`
  * result: English, in code; the call is labelled `invalid-arguments` (its arguments are incomplete; Jev 6192a348, safest reversible option).
@@ -134,7 +134,7 @@ export function agentTurnTruncatedCallsNote(count: number, limitTokens: number |
 }
 
 /** A tool call's position in its turn: the model round and its index in that round's response. */
-export interface AgentToolExecution { readonly round: number; readonly index: number }
+interface AgentToolExecution { readonly round: number; readonly index: number }
 
 export interface AgentTurnInput {
   /** Explicit push mode; pinned by admission, never inferred from a provider identity. */
@@ -254,10 +254,10 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
       const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
       carry.observed(message, call, round, index, invoked, status, cleanup);
       emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
-        ...(cleanup !== undefined ? { cleanup } : {}) });
+        ...optionalField('cleanup', cleanup) });
       await ports.settled?.({ round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
       return { message, progressed, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
-        ...(cleanup !== undefined ? { cleanup } : {}), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
+        ...optionalField('cleanup', cleanup), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
     };
     if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`); }
     // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.

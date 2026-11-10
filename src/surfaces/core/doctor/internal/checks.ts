@@ -1,4 +1,4 @@
-import { ErrorRegistry, MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
@@ -11,15 +11,18 @@ import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recov
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
-export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools' | 'data';
+type DoctorGroup = 'setup' | 'security' | 'work' | 'tools' | 'data';
 /** A row's verdict as a word, never colour alone: tamam / uyarı / hata / sınanmadı. */
-export type DoctorCheckState = 'ok' | 'warning' | 'error' | 'untested';
+type DoctorCheckState = 'ok' | 'warning' | 'error' | 'untested';
 /** One row: what was measured in plain words, and for a warning or error the one next command (or step) that resolves it. `fix` names a
  * registry fix the interactive doctor may offer on a terminal; it is offered only when its port is wired and it is not a hard-floor item. */
-export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: DoctorCheckState; text: string; next?: string; fix?: string }>;
+export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: DoctorCheckState; text: string; next?: string; fix?: string;
+  /** Unverified health needs attention even when there is no installation error. */
+  needsAttention?: true }>;
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
   readonly providerSpending?: ProviderSpendAccountInspection | null;
   readonly budgetPeriodText?: string | null;
   readonly catalogDiagnostics?: readonly string[] | null;
@@ -66,9 +69,9 @@ export interface DoctorCheckFacts {
   /** BeUser S-11: where data can leave this machine, read from configuration (hosts and names only, never a path, key or value). */
   readonly egress?: DoctorEgress | null;
 }
-export type DoctorEgress = Readonly<{ models: readonly Readonly<{ name: string; host: string | null; local: boolean }>[]; fetch: Readonly<{ mode: string; hosts: readonly string[] }>;
+type DoctorEgress = Readonly<{ models: readonly Readonly<{ name: string; host: string | null; local: boolean }>[]; fetch: Readonly<{ mode: string; hosts: readonly string[] }>;
   toolchainCheck: string | null; mcp: readonly Readonly<{ name: string; host: string | null; realm: string | null }>[] | null }>;
-export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
+type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
@@ -123,9 +126,9 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   if (f.catalogDiagnostics === null) rows.push(row('security', 'security.catalogSigner', 'untested', t('agentstats.signer.unavailable', {}, l)));
   const audit = r.auditIntegrity;
   if (audit) rows.push(audit.status === 'match' ? row('security', 'security.audit', 'ok', t('doctor.check.audit.ok', {}, l))
-    // A new installation has no checkpoint to compare with yet: nothing to fix, nothing verified.
-    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? row('security', 'security.audit', 'untested', t('doctor.check.audit.noCheckpoint', {}, l))
-    : row('security', 'security.audit', audit.status === 'unknown' ? 'warning' : 'error', t('doctor.check.audit.problem', { status: renderAuditStatus(audit.status, l), reason: renderAuditReason(audit.reason, l) }, l), scoped('deckent audit verify', f), fix('security.audit')));
+    // A fresh scope cannot prove integrity yet, but has no checkpoint failure that blocks installation.
+    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? { ...row('security', 'security.audit', 'untested', t('doctor.check.audit.noCheckpoint', {}, l)), needsAttention: true }
+    : row('security', 'security.audit', 'error', t('doctor.check.audit.problem', { status: renderAuditStatus(audit.status, l), reason: renderAuditReason(audit.reason, l) }, l), scoped('deckent audit verify', f), fix('security.audit')));
   const directory = r.recoveryFiles?.installationDirectory;
   if (directory) rows.push((parseInt(directory.mode, 8) & 0o077)
     ? row('security', 'security.directory', 'warning', t('doctor.check.directory.open', { mode: directory.mode }, l), `chmod 700 ${directory.path}`, fix('security.directory'))
@@ -169,9 +172,9 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText));
-  // Not set up yet (no registry, or no ledger row): a warning naming the first onboarding stage the first job still needs, set up on the first open.
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
-  rows.push(f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
+  rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
+    : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
       f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
@@ -242,8 +245,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
 
 /** The setup family's reason in the catalogs' words (the same `setup.execution.*` text `deckent init` shows); an unknown key stays visible as itself. */
 function setupReasonText(key: string, params: Readonly<Record<string, string | number>>, l: Locale): string {
-  const text = (MESSAGE_REGISTRY.catalogs[l] as Readonly<Record<string, string>>)[key];
-  return text === undefined ? key : text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? terminalSafeText(String(params[name])) : whole);
+  return messageText(key, l, Object.fromEntries(Object.entries(params).map(([name, value]) => [name, terminalSafeText(String(value))]))) ?? key;
 }
 /** PRE-34: Docker (the execution environment) through the same detection and decision `deckent init` uses: ready is ok; not reachable is an
  * error when work is configured to run in it, else a warning; no answer in time is "not tested". The reason text is the setup's own. */
@@ -303,12 +305,15 @@ const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doc
 const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doctor.group.setup', {}, l) : group === 'security' ? t('doctor.group.security', {}, l)
   : group === 'work' ? t('doctor.group.work', {}, l) : group === 'data' ? t('doctor.group.data', {}, l) : t('doctor.group.tools', {}, l);
 
-/** "Durum: hazır · 2 uyarı": the summary line; any error row reads as needing attention. Every condition behind the JSON report's
- * `degraded` verdict is an error row, except an audit chain with no checkpoint yet (a new installation), which is "not tested". */
+/** One health verdict for JSON and the human summary; unverified health is never ready. */
+export function doctorNeedsAttention(checks: readonly DoctorCheck[]): boolean {
+  return checks.some(check => check.state === 'error' || check.needsAttention === true);
+}
+
 export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): string {
   const count = (state: DoctorCheckState) => checks.filter(check => check.state === state).length;
   const errors = count('error'), warnings = count('warning'), untested = count('untested');
-  return [errors ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale),
+  return [doctorNeedsAttention(checks) ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale),
     ...(errors ? [t('doctor.summary.errors', { n: errors }, locale)] : []), ...(warnings ? [t('doctor.summary.warnings', { n: warnings }, locale)] : []),
     ...(untested ? [t('doctor.summary.untested', { n: untested }, locale)] : []), ...(!errors && !warnings ? [t('doctor.summary.clean', {}, locale)] : [])].join(' · ');
 }

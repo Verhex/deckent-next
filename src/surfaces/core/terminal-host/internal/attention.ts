@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 /** What needs the person: a running piece of work finished, or a card is waiting for an answer. */
-export interface AttentionSignals { readonly working: boolean; readonly awaitingAnswer: boolean }
+interface AttentionSignals { readonly working: boolean; readonly awaitingAnswer: boolean }
 
 /**
  * T2: calls `notify` once when the work stops (working true to false) and once when a card starts waiting (awaitingAnswer false to true).

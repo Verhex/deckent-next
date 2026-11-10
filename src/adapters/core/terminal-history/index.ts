@@ -1,4 +1,4 @@
-export { openTerminalHistoryFile, TERMINAL_HISTORY_LIMITS, type TerminalHistoryEntry, type TerminalHistoryFile } from './internal/file.js';
-export { openTerminalSessionStore, TERMINAL_SESSION_LIMITS, type TerminalSessionSnapshot, type TerminalSessionStore, type TerminalSessionSummary } from './internal/sessions.js';
+export { openTerminalHistoryFile, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TERMINAL_HISTORY_LIMITS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalHistoryEntry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalHistoryFile } from './internal/file.js';
+export { openTerminalSessionStore, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ TERMINAL_SESSION_LIMITS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalSessionSnapshot, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalSessionStore, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TerminalSessionSummary } from './internal/sessions.js';
 
-export { openOnboardingDeferrals, type OnboardingDeferral } from './internal/onboarding.js';
+export { openOnboardingDeferrals, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type OnboardingDeferral } from './internal/onboarding.js';

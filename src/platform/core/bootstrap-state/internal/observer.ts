@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 import { persistedString, persistedInteger } from '#platform/core/validate/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
@@ -6,7 +7,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { productResourcePath, resolveProductLayout } from '#platform/core/host/index.js';
 
-export const BOOTSTRAP_JOURNAL_MAX_BYTES = 262_144;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const BOOTSTRAP_JOURNAL_MAX_BYTES = 262_144;
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const resource = z.strictObject({
   resource: persistedString(z.string().min(1).max(256)),
@@ -44,10 +45,10 @@ export const bootstrapJournalSchema = z.strictObject({ ...journalShape, checksum
 export type BootstrapJournalPayload = z.infer<typeof journalPayloadSchema>;
 export type BootstrapJournal = z.infer<typeof bootstrapJournalSchema>;
 export interface BootstrapObservation { readonly generation: string; readonly record: BootstrapJournal | null }
-export type BootstrapStateErrorCode = 'BOOTSTRAP_STATE_INVALID' | 'BOOTSTRAP_STATE_UNSAFE' | 'BOOTSTRAP_STATE_CHANGED'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BootstrapStateErrorCode = 'BOOTSTRAP_STATE_INVALID' | 'BOOTSTRAP_STATE_UNSAFE' | 'BOOTSTRAP_STATE_CHANGED'
   | 'BOOTSTRAP_INSTALLATION_INCOMPLETE' | 'BOOTSTRAP_STATE_UNAVAILABLE' | 'BOOTSTRAP_STATE_UNSUPPORTED';
-export class BootstrapStateError extends Error {
-  constructor(readonly code: BootstrapStateErrorCode) { super(code); this.name = 'BootstrapStateError'; }
+export class BootstrapStateError extends CodedError {
+  constructor(override readonly code: BootstrapStateErrorCode) { super(code); this.name = 'BootstrapStateError'; }
 }
 
 function canonical(input: unknown): string {

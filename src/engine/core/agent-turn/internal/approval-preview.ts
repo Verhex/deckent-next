@@ -35,9 +35,9 @@ function utf8Prefix(text: string, maxBytes: number): string {
 export function boundApprovalPreview(text: string, fullAt: string | null = null, maxBytes = APPROVAL_PREVIEW_MAX_BYTES): string {
   return boundApprovalPreviewFacts(text, fullAt, maxBytes).text;
 }
-/** What a cut preview's marker states, as data for a card (Astra 2431: the surface never parses the preview text). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What a cut preview's marker states, as data for a card (Astra 2431: the surface never parses the preview text). */
 export interface ApprovalPreviewCut { readonly shown: number; readonly total: number; readonly bytes: number; readonly totalBytes: number; readonly digest: string; readonly kept: string | null }
-/** `boundApprovalPreview` with the facts of its cut (null: shown whole). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `boundApprovalPreview` with the facts of its cut (null: shown whole). */
 export function boundApprovalPreviewFacts(text: string, fullAt: string | null = null, maxBytes = APPROVAL_PREVIEW_MAX_BYTES):
   { readonly text: string; readonly cut: ApprovalPreviewCut | null } {
   const total = Buffer.byteLength(text, 'utf8');

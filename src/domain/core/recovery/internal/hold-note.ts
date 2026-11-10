@@ -11,10 +11,10 @@ export type NervousHoldCode = typeof NERVOUS_HOLD_CODES[number];
 type MissingDispatchReason = Exclude<DispatchHoldReason, NervousHoldCode>;
 export const NERVOUS_HOLD_CODES_COMPLETE: [MissingDispatchReason] extends [never] ? true : never = true;
 
-/** The first characters of a case id a hold note carries, so a person can find the case (`run inspect`, audit). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The first characters of a case id a hold note carries, so a person can find the case (`run inspect`, audit). */
 export const HOLD_NOTE_CASE_CHARS = 12;
 const CASE = /^[a-f0-9]{12}$/u, RULE = /^[a-z0-9][a-z0-9-]{0,63}$/u;
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S6R-6: the one structured reading of a system safety-hold note (written by the recovery decision and the Nervous broker, s5b hold source
  * `nervous`). `recovery`/`nervous`: a known code; `system`: a note of either family this release does not know (a newer writer) — shown as a
  * generic safety hold, never as raw text; `text`: anything else (an operator's own words, shown as they are).

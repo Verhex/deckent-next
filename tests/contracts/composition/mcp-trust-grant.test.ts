@@ -5,10 +5,10 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, registerProviderConfig, withLocalPrincipalChannel } from '#adapters/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
-import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID } from '#domain/index.js';
-import { decideAgentToolCall } from '#engine/index.js';
+import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, policySchema } from '#domain/index.js';
+import { decideAgentToolCall, McpToolGrants } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 
@@ -65,7 +65,7 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
 }
 
 describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s tool grant (K1)', () => {
-  it('approve → the server\'s mcp-server grant (require-approval, mode-eligible; this scope, this person), audited; revoke takes trust and grant together', async () => {
+  it('approve → the server\'s mcp-server grant (require-approval, mode-eligible; this scope, this person), audited; revoke (and reset) takes trust and grant together', async () => {
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', pinnedTools: 1, grant: { status: 'granted' } });
     const grants = f.mcpGrants();
@@ -81,6 +81,10 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(f.mcpGrants()).toEqual([]);
     expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
+    // Decision 14 (b): `reset` forgets the decision and takes the grant exactly as `revoke` does (keeping it would be a separate product decision).
+    expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, grant: { status: 'granted' } });
+    expect(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
+    expect(f.mcpGrants()).toEqual([]);
   }, 90_000);
 
   it('pin drift: a changed tool list offers nothing new until re-approval, which replaces the grant (never a second one); remove takes it away; a re-added name has none until approved', async () => {
@@ -157,6 +161,12 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     // Without any authority the call is denied by policy (no mcp-server rule for this person).
     expect(await f.decide('mcp__fx__echo')).toBe('deny');
     expect(await f.run({ verb: 'list', health: false })).toMatchObject({ servers: [{ name: 'fx', status: 'trusted' }] });
+    // S6-e6: the grant decides on one loaded snapshot; a v1 snapshot or an unreadable policy cannot carry it and nothing is administered.
+    const v1 = policySchema.parse({ schemaVersion: 1, revision: 'v1', restrictions: [], grants: [] }), unreached = () => { throw new Error('unreached'); };
+    for (const load of [async () => v1, async () => { throw new Error('POLICY_FILE_UNSAFE'); }]) {
+      expect(await new McpToolGrants({ policy: { load }, administration: { submit: unreached }, approve: unreached })
+        .grant({ scopeId: 'proj', principal: me, server: { scope: 'local', name: 'fx' }, tools: ['echo'], reason: 'Trusted' })).toEqual({ status: 'refused', reason: 'unsupported' });
+    }
   }, 90_000);
 });
 

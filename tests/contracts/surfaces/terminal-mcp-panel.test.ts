@@ -38,11 +38,11 @@ describe('/mcp window port', () => {
       { status: 'trusted', health: 'timed-out', expected: 'timed-out' }, { status: 'trusted', health: 'tools-changed', expected: 'tools-changed' },
       { status: 'pending-approval', health: 'connected', expected: 'pending-approval' },
       { status: 'declined', expected: 'declined' }, { status: 'changed', expected: 'changed' },
-      { status: 'invalid-launch', reason: 'secret-refused:SECRET_PROJECT_MISSING:KEY', expected: 'secret-project-missing' },
-      { status: 'invalid-launch', reason: 'secret-refused:DECK_DECLARATION_REQUIRED:KEY', expected: 'secret-undeclared' },
-      { status: 'invalid-launch', reason: 'secret-refused:SECRET_PROJECT_IDENTITY_REQUIRED:KEY', expected: 'secret-no-identity' },
-      { status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:KEY', expected: 'secret-refused' },
-      { status: 'invalid-launch', reason: 'secret-unresolved:KEY', expected: 'secret-unresolved' },
+      { status: 'invalid-launch', refusal: { kind: 'secret-refused', code: 'SECRET_PROJECT_MISSING', key: 'KEY' }, expected: 'secret-project-missing' },
+      { status: 'invalid-launch', refusal: { kind: 'secret-refused', code: 'DECK_DECLARATION_REQUIRED', key: 'KEY' }, expected: 'secret-undeclared' },
+      { status: 'invalid-launch', refusal: { kind: 'secret-refused', code: 'SECRET_PROJECT_IDENTITY_REQUIRED', key: 'KEY' }, expected: 'secret-no-identity' },
+      { status: 'invalid-launch', refusal: { kind: 'secret-refused', code: 'SECRET_GRANT_REQUIRED', key: 'KEY' }, expected: 'secret-refused' },
+      { status: 'invalid-launch', refusal: { kind: 'secret-unresolved', key: 'KEY' }, expected: 'secret-unresolved' },
       { status: 'invalid-launch', expected: 'invalid-launch' }, { status: 'trust-store-unavailable', expected: 'trust-store-unavailable' },
     ];
     for (const locale of ['en', 'tr'] as const) {
@@ -56,6 +56,7 @@ describe('/mcp window port', () => {
       expect(received).toBe(controller.signal);
       expect(checked.servers.map(server => server.state)).toEqual(states.map(item => item.expected));
       expect(checked.servers.find(server => server.state === 'failed')!.status).toContain('ENOENT (PATH)');
+      for (const state of ['secret-project-missing', 'secret-unresolved']) expect(checked.servers.find(server => server.state === state)!.status).toContain('KEY');
       expect(checked.servers.find(server => server.state === 'timed-out')!.status).toContain(locale === 'tr' ? 'bilinmiyor' : 'unknown');
       controller.abort(); await expect(check.list({ health: true, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
       const waiting = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'trusted' }] } }).run, {}, locale).list({ checking: true });

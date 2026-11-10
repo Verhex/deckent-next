@@ -3,7 +3,7 @@ import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS, slashSearc
 import { PickerWindow } from '#surfaces/core/terminal-panels/index.js';
 import { PICKER_INITIAL, pickerView, projectPickerTree, type PickerLabels, type PickerState } from '#surfaces/core/terminal-picker/index.js';
 import { NEUTRAL_PICKER_LABELS } from '#surfaces/core/terminal-session/index.js';
-import { projectHumanPickerText, useHumanTextSecrets, span, fillTemplate } from '#surfaces/core/terminal-render/index.js';
+import { projectHumanPickerText, span, fillTemplate, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { InfoWindow, type ContextInfoLabels, type InfoSurfaceLabels, type InfoView, type InfoViewCommand, type InfoViewInput, type InfoViewPorts,
   type InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';

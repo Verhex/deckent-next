@@ -1,16 +1,15 @@
 import { ArtifactError } from '#capabilities/index.js';
-import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { executionTaskHiddenPaths, FileArtifactStore, GitWorkspaceBroker, GitWorkspacePatchSource, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, selectWorkTarget, validateExecutionSupervisorProfile, recordedTaskSupervisor, taskProfileObservesWorker, gitDockerAttemptCustody } from '#adapters/index.js';
-import { AttemptCustodyReleaseApplication, assertSameWorkSource, DispatchPolicyAuthorization, WorkspacePatchApplication, workTargetAttemptAuthorization, type ScopeAccess } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { executionTaskHiddenPaths, FileArtifactStore, GitWorkspaceBroker, GitWorkspacePatchSource, openSqliteInventoryReader, resolveGitWorkTarget, selectWorkTarget, validateExecutionSupervisorProfile, recordedTaskSupervisor, taskProfileObservesWorker, gitDockerAttemptCustody } from '#adapters/index.js';
+import { verifiedPrincipal, AttemptCustodyReleaseApplication, assertSameWorkSource, DispatchPolicyAuthorization, WorkspacePatchApplication, workTargetAttemptAuthorization, type ScopeAccess } from '#engine/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function workspacePatchContext(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean, access: ScopeAccess, readsTarget = true) {
   const identity = attemptIdentitySchema.parse(input), context = await loadConfiguredScopeContext(root, identity.scopeId, options, access);
-  const { config, layout, principal } = context, policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null, readsTarget);
+  const { config, layout, principal } = context, policy = contextPolicySource({ layout, config }), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null, readsTarget);
   await authorization.authorizeIdentity('read-output', identity, principal);
   if (preparing) await authorization.authorizeIdentity('recover-output', identity, principal);
   const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
@@ -24,13 +23,13 @@ export async function workspacePatchContext(root: string, input: unknown, option
     const fingerprint = (sourceRoot: string) => new GitWorkspaceBroker({ ...execution.git, sourceRoot, workspaceRoot }).captureSourceBase().then(base => base.sourceFingerprint);
     await assertSameWorkSource(recorded, { now, project: resolve(root) }, fingerprint);
   };
-  return { ...context, identity, artifacts, authorization, policy, sameWorkSource, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
+  return { ...context, identity, artifacts, authorization, policy, sameWorkSource, verifier: verifiedPrincipal(principal), scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
 }
 async function preparePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions, release: boolean) {
   try {
     const c = await workspacePatchContext(root, input, options, true, 'write'), execution = c.config.execution;
     if (!execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateExecutionSupervisorProfile });
+    const store = await openConfiguredLedger(c, { migration: 'forbid', validate: validateExecutionSupervisorProfile });
     try {
       const git = { ...execution.git, ...(await resolveGitWorkTarget(resolve(root), execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
       // C2: the attempt's pinned checkout shaping comes from the Run's frozen task profile, never from a file beside the checkout.

@@ -48,7 +48,7 @@ export function osc52Copy(text: string): string {
   return `\u001b]52;c;${Buffer.from(text, 'utf8').toString('base64')}\u0007`;
 }
 
-export type WheelListener = (step: number) => void;
+type WheelListener = (step: number) => void;
 export type WheelSource = Readonly<{ subscribe: (listener: WheelListener) => () => void }>;
 export type PointerListener = (event: PointerEvent) => void;
 export type PointerSource = Readonly<{ subscribe: (listener: PointerListener) => () => void }>;

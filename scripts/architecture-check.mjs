@@ -292,6 +292,7 @@ for (const file of [...srcFiles, ...appFiles]) {
           const dstRank = tierRank.get(dst.tier);
           if (srcRank !== undefined && dstRank !== undefined && dstRank > srcRank) fail('tier-direction', `${rel(file)}:${imp.line}`, `${src.tier} may not import ${dst.tier} (order: ${tiers.order.join(' ← ')})`);
           const sameUnit = src.tier === dst.tier && src.unit === dst.unit && src.unit !== null;
+          if (sameUnit && targetRel === `${unitId(src)}/index.ts`) fail('self-index', `${rel(file)}:${imp.line}`, `a unit may not import its own public index.ts; import the internal module directly (got ${imp.spec})`);
           if (!sameUnit && !/^src\/[^/]+\/[^/]+\/[^/]+\/index\.ts$/.test(targetRel)) fail('unit-api', `${rel(file)}:${imp.line}`, `cross-unit import must target the unit index.ts (got ${imp.spec})`);
           if (!sameUnit && arch.imports?.enforce && !imp.aliased) fail('import-style', `${rel(file)}:${imp.line}`, `cross-unit import must use the ${arch.imports.aliasPrefix}<pkg>/<tier>/<unit>/index.js alias (got ${imp.spec})`);
         }
@@ -341,6 +342,48 @@ for (const [unit, declaration] of Object.entries(declaredUnits)) {
   }
   for (const dependency of declared) if (!observed.has(dependency)) fail('unit-dependency', unit, `stale dependency ${dependency}`);
 }
+// Runtime imports define the Ink boundary; erased types and explicit lazy edges do not load a renderer.
+const runtimeEdges = new Map();
+function staticRuntimeEdges(file) {
+  if (runtimeEdges.has(file)) return runtimeEdges.get(file);
+  const edges = [], source = program.getSourceFile(file);
+  for (const statement of source?.statements ?? []) {
+    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+    const specifier = statement.moduleSpecifier;
+    if (!specifier || !ts.isStringLiteral(specifier)) continue;
+    if (ts.isImportDeclaration(statement)) {
+      const clause = statement.importClause, bindings = clause?.namedBindings;
+      if (clause?.isTypeOnly || clause && !clause.name && bindings && ts.isNamedImports(bindings)
+        && bindings.elements.length > 0 && bindings.elements.every(element => element.isTypeOnly)) continue;
+    } else if (statement.isTypeOnly || statement.exportClause && ts.isNamedExports(statement.exportClause)
+      && statement.exportClause.elements.length > 0 && statement.exportClause.elements.every(element => element.isTypeOnly)) continue;
+    const spec = specifier.text;
+    if (/^(ink|react)(\/|$)/u.test(spec)) edges.push(spec);
+    else if (spec.startsWith('#') || spec.startsWith('.')) {
+      const base = dependencyTarget(file, spec);
+      const target = existsSync(base) ? base : base.replace(/\.ts$/u, '.tsx');
+      if (existsSync(target) && /\.tsx?$/u.test(target)) edges.push(target);
+    }
+  }
+  runtimeEdges.set(file, edges);
+  return edges;
+}
+function reachesInk(entry) {
+  const seen = new Set(), stack = [entry];
+  while (stack.length) {
+    const file = stack.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (/^(ink|react)(\/|$)/u.test(file) || file.endsWith('.tsx')) return true;
+    stack.push(...staticRuntimeEdges(file));
+  }
+  return false;
+}
+for (const unit of discoveredUnits) {
+  const ink = declaredUnits[unit]?.ink;
+  if (reachesInk(join(ROOT, unit, 'index.ts')) && ink !== true) fail('ink-boundary', unit, 'an index that statically loads Ink/React or TSX must declare ink: true; pure units use an Ink unit or a lazy edge');
+}
+
 const visitState = new Map(), visitStack = [];
 function visitUnit(unit) {
   visitState.set(unit, 1); visitStack.push(unit);
@@ -359,7 +402,8 @@ for (const unit of discoveredUnits) if (!visitState.has(unit)) visitUnit(unit);
 // Composition may validate schemas and carry domain types, but domain decision functions belong behind
 // application services. Resolve re-exports with the TypeScript checker so aliases cannot hide their origin.
 if (arch.composition?.enforceDomainDecisionImports) {
-  const isDomainCallable = (symbol, node) => Boolean(symbol && (symbol.declarations ?? []).some(declaration => rel(declaration.getSourceFile().fileName).startsWith('src/domain/'))
+  const isDomainCallable = (symbol, node) => Boolean(symbol && (symbol.declarations ?? []).some(declaration => rel(declaration.getSourceFile().fileName).startsWith('src/domain/')
+    && !(rel(declaration.getSourceFile().fileName) === 'src/domain/core/policy/internal/evaluate.ts' && ['asPolicy', 'safePolicy'].includes(declaration.name?.getText())))
     && checker.getTypeOfSymbolAtLocation(symbol, node).getCallSignatures().length);
   for (const sourceFile of program.getSourceFiles()) {
     if (!rel(sourceFile.fileName).startsWith('src/composition/')) continue;
@@ -468,6 +512,8 @@ if (existsSync(identicalPath)) for (const key of JSON.parse(readFileSync(identic
   if (!knownKeys.has(key)) fail('i18n-identical-stale', rel(identicalPath), `identical-text exemption "${key}" names no catalog key`);
 }
 const T_CALL = new RegExp(`(?<![\\w.])${arch.i18n.callee}\\(\\s*([^)]*?)\\s*[,)]`, 'g');
+// KG14 F-H2c: plainErrors() builds `<prefix><CODE>` in its one t() call; the keys of each plainErrors('<prefix>', { CODE: ... }) call are checked instead.
+const PLAIN_ERRORS_FILE = 'src/platform/core/errors/internal/definition.ts', PLAIN_ERRORS_CALL = /plainErrors\(\s*'([^']*)',\s*\{([^}]*)\}\)/g;
 const OUTPUT_CALL = /(?:console\.(?:log|error|warn|info)|process\.(?:stdout|stderr)\.write)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
 for (const file of srcFiles) {
   if (rel(file).startsWith(`${arch.i18n.catalogDir}/`)) continue; // the t() implementation itself
@@ -476,8 +522,13 @@ for (const file of srcFiles) {
     const arg = m[1].trim();
     const lit = arg.match(/^(['"])([^'"]+)\1$/);
     const line = src.slice(0, m.index).split('\n').length;
+    if (!lit && rel(file) === PLAIN_ERRORS_FILE && arg === 'key') continue;
     if (!lit) { fail('i18n-dynamic', `${rel(file)}:${line}`, `t() key must be a string literal (got ${arg || 'empty'})`); continue; }
     if (!knownKeys.has(lit[2])) fail('i18n-key', `${rel(file)}:${line}`, `unknown i18n key "${lit[2]}"`);
+  }
+  const uncommented = src.replace(/\/\/.*$/gm, ''); // a comment inside a call may hold '}'; newlines stay, so line numbers hold
+  for (const m of uncommented.matchAll(PLAIN_ERRORS_CALL)) for (const code of m[2].matchAll(/\b([A-Z][A-Z0-9_]+):/g)) {
+    if (!knownKeys.has(m[1] + code[1])) fail('i18n-key', `${rel(file)}:${uncommented.slice(0, m.index).split('\n').length}`, `unknown i18n key "${m[1] + code[1]}"`);
   }
   if (rel(file).startsWith('src/surfaces/')) {
     for (const m of src.matchAll(OUTPUT_CALL)) {
@@ -583,6 +634,8 @@ function hardcodeInventory(sources, sourceChecker, policy) {
       const value = string || numeric ? scalar(numeric && ts.isPrefixUnaryExpression(parent) ? parent : node) : undefined;
       if (string || ts.isIdentifier(node)) {
         const slug = node.text;
+        const vendor = slugs.has(slug) ? slug : string ? [...slugs].find(id => slug.startsWith(`${id}-`) || slug.startsWith(`${id}/`))
+          ?? (policy.namespaces ?? []).find(entry => slug.startsWith(entry.prefix))?.slug : undefined;
         // Only climb the expression side: type references and registry property reads
         // are not slug literals. Keep the original node for existing fingerprints.
         let expression = node, contextParent = parent;
@@ -597,7 +650,8 @@ function hardcodeInventory(sources, sourceChecker, policy) {
           || (ts.isPropertyAssignment(contextParent) || ts.isShorthandPropertyAssignment(contextParent) || ts.isMethodDeclaration(contextParent)) && contextParent.name === expression
           || ts.isElementAccessExpression(contextParent) && contextParent.argumentExpression === expression
           || ts.isCallExpression(contextParent) && ts.isPropertyAccessExpression(contextParent.expression) && ['has', 'includes', 'indexOf'].includes(contextParent.expression.name.text);
-        if (slugs.has(slug) && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(slug))) add('G1', node, slug);
+        if (vendor && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(vendor)))
+          add('G1', node, slug, slugs.has(slug) ? '' : 'vendor-namespace');
       }
       if (string && familyPatterns.length > 0 && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent) && !ts.isExternalModuleReference(parent)) {
         const hit = familyPatterns.find(({ pattern }) => pattern.test(node.text));
@@ -660,7 +714,12 @@ function hardcodeInventory(sources, sourceChecker, policy) {
   }
   return findings.sort((a, b) => a.file.localeCompare(b.file) || a.fingerprint.localeCompare(b.fingerprint));
 }
-function lintHardcode(findings, policy) {
+function lintHardcode(findings, policy, slugCaps = arch.guards?.vendorSlugCaps ?? {}) {
+  // Owner Q15 opens a new detector scope, never the original frozen admission or its history.
+  if (policy.namespaceRatchet) {
+    lintHardcode(findings.filter(row => row.detail === 'vendor-namespace'), { ...policy, ...policy.namespaceRatchet, namespaceRatchet: undefined }, {});
+    findings = findings.filter(row => row.detail !== 'vendor-namespace');
+  }
   const identity = row => JSON.stringify({ file: row.file, fingerprint: row.fingerprint, rule: row.rule });
   const hash = row => createHash('sha256').update(identity(row)).digest('hex');
   // Fingerprints are file-independent; admission identity is not. A relocated entry names its
@@ -720,8 +779,8 @@ function lintHardcode(findings, policy) {
     const moved = unlisted.find(other => lineage(other) === lineage(row));
     fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}${moved ? ` (or relocate it to ${moved.file} with origin)` : ''}`);
   }
-  // Per-layer vendor-slug cap: G1 findings in domain/engine are frozen debt that can only shrink.
-  for (const [layer, cap] of Object.entries(arch.guards?.vendorSlugCaps ?? {})) {
+  // Original exact-slug G1 debt keeps its per-layer cap; namespaces have their own frozen admission.
+  for (const [layer, cap] of Object.entries(slugCaps)) {
     if (!packageNames.includes(layer)) continue;
     const count = findings.filter(row => row.rule === 'G1' && row.file.startsWith(`src/${layer}/`)).length;
     if (count > cap) fail('slug-cap', `src/${layer}`, `${count} vendor-slug findings > cap ${cap}; derive provider/CLI ids from the registry (commands.json, nativeCliIdSchema) instead of literals`);
@@ -772,6 +831,12 @@ if (arch.guards) {
   // A6-3 (owner 2026-11-08): no child process inherits the whole service environment; the listed sites are a shrink-only allowlist.
   if (guards.childEnv) wordRatchet('child-env', 'childEnv', guards.childEnv, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p)),
     (word, count) => `"${word}" passes a whole environment (${count} hit(s)); use inheritedEnvironment(env, names), serviceEnvironment or an explicit env`);
+  // KG9 F5: catalog text is read through t or messageText; only the i18n unit reads .catalogs[ directly.
+  if (guards.catalogRead) wordRatchet('catalog-read', 'catalogRead', guards.catalogRead, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p) && !rel(p).startsWith('src/platform/core/i18n/')),
+    (word, count) => `"${word}" reads a message catalog directly (${count} hit(s)); use messageText(key, locale) or t from #platform`);
+  // KG12 F2: containment goes through pathWithin or relativeInside; owner A25 retains the listed over-refusals.
+  if (guards.parentPrefix?.enforce) wordRatchet('parent-prefix', 'parentPrefix', guards.parentPrefix, anyFiles('src', p => /\.(ts|tsx|mts|mjs|js)$/.test(p)),
+    (word, count) => `"${word}" decides containment by a bare prefix (${count} hit(s)); a child named ..x is not a parent: use pathWithin or relativeInside`);
   // G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; the five legacy flows are a shrink-only list.
   if (guards.effectFlows) {
     const { owner, pattern, frozen } = guards.effectFlows, flowRe = new RegExp(pattern, 'i'), frozenSet = new Set(frozen);
@@ -831,6 +896,53 @@ for (const file of srcFiles) {
   for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'markdown write from product source; documentation is not written by src');
 }
 
+// X2: derive classified codes from the error dictionary; wire enums describe a protocol, not a classifier.
+const classifiedCodes = new Set();
+const classificationAllow = (arch.guards?.errorClassification?.allow ?? []).map(entry => ({ ...entry, seen: 0 }));
+for (const file of srcFiles.filter(file => rel(file).startsWith('src/platform/core/errors/'))) {
+  const source = program.getSourceFile(file);
+  const visit = node => {
+    if (ts.isPropertyAssignment(node) && ts.isObjectLiteralExpression(node.initializer)
+      && node.initializer.properties.some(property => ts.isPropertyAssignment(property) && ['refusal', 'launch'].includes(property.name.getText(source))))
+      classifiedCodes.add(ts.isStringLiteralLike(node.name) ? node.name.text : node.name.getText(source));
+    ts.forEachChild(node, visit);
+  };
+  if (source) visit(source);
+}
+// Policy parsing and construction each have one owner; consumers receive a typed snapshot or a context source.
+for (const file of srcFiles) {
+  const path = rel(file), source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const names = new Map();
+  for (const statement of source.statements) if (ts.isImportDeclaration(statement) && statement.importClause?.namedBindings
+    && ts.isNamedImports(statement.importClause.namedBindings)) for (const entry of statement.importClause.namedBindings.elements)
+    names.set(entry.name.text, entry.propertyName?.text ?? entry.name.text);
+  const name = expression => ts.isPropertyAccessExpression(expression) ? expression.name.text : names.get(expression.getText(source)) ?? expression.getText(source);
+  const visit = node => {
+    if (ts.isArrayLiteralExpression(node) && !path.startsWith('src/platform/core/errors/')
+      && !(ts.isCallExpression(node.parent) && ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'enum')
+      && new Set(node.elements.filter(ts.isStringLiteralLike).map(element => element.text).filter(code => classifiedCodes.has(code))).size > 1) {
+      let declaration = node.parent;
+      while (declaration && !ts.isVariableDeclaration(declaration) && !ts.isSourceFile(declaration)) declaration = declaration.parent;
+      const exception = classificationAllow.find(entry => entry.file === path && entry.symbol === declaration?.name?.getText(source));
+      if (exception) exception.seen++;
+      else fail('error-classification', `${path}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`, 'copied refusal/launch code set; use isAuthorizationRefusal or launchRefusal from the error registry');
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && name(node.expression.expression) === 'policySchema' && ['parse', 'safeParse'].includes(node.expression.name.text)
+      && !path.startsWith('src/domain/core/policy/')) fail('policy-owner', path, 'raw policy parsing belongs to domain/core/policy');
+    if ((ts.isCallExpression(node) && name(node.expression) === 'createLayoutPolicySource'
+      || ts.isNewExpression(node) && name(node.expression) === 'FilePolicySource')
+      && !path.startsWith('src/composition/core/policy/')
+      // Existing adapter-only read probes cannot depend on composition; neither admits work or writes authority.
+      && !['src/adapters/core/installation-files/internal/startability.ts', 'src/adapters/core/monitor-ledger/internal/install.ts'].includes(path))
+      fail('policy-owner', path, 'policy sources belong to contextPolicySource');
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+}
+for (const entry of classificationAllow) if (!entry.reason || !Number.isInteger(entry.count) || entry.count < 1 || entry.seen !== entry.count)
+  fail('error-classification', entry.file, `errorClassification.allow ${entry.symbol} needs a reason and its exact positive count (observed ${entry.seen}, allowed ${entry.count}); remove stale entries or lower shrinking counts`);
+
 // ---- 6: budgets
 const { fileRoots, textExtensions, maxLinesPerFile, designTargetLines } = arch.budgets;
 if (!Array.isArray(fileRoots) || !fileRoots.length || !Array.isArray(textExtensions) || !textExtensions.length
@@ -870,7 +982,8 @@ for (const [pkg, budget] of Object.entries(arch.budgets.packageLines)) {
   if ((perPackage[pkg] ?? 0) > budget) fail('package-budget', `src/${pkg}`, `${perPackage[pkg]} lines > budget ${budget}`);
 }
 if (total > arch.budgets.totalSrcLines) fail('total-budget', 'src', `${total} lines > budget ${arch.budgets.totalSrcLines}`);
-const TEST_CASE = /^\s*(?:it|test)(?:\.(?:each|skip|only|todo|concurrent))*\(/gm;
+// Count a conditional/parameterized declaration once, at its first call, irrespective of its rows or predicate.
+const TEST_CASE = /^\s*(?:it|test)(?:\.(?:each|skip|skipIf|runIf|only|todo|concurrent))*\(/gm;
 let testCases = 0;
 for (const file of walk(join(ROOT, 'tests'), (p) => /\.test\.tsx?$/.test(p))) testCases += (readFileSync(file, 'utf8').match(TEST_CASE) ?? []).length;
 if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCases} test cases > budget ${arch.budgets.testCases}`);

@@ -11,15 +11,15 @@ export type ExactContext = Readonly<{
   sessionId: string; sessionRevision: number;
 }>;
 export type PanelContext = TerminalLocalContext | ExactContext;
-export type PanelLocalHistory =
+type PanelLocalHistory =
   | Readonly<{ kind: 'enabled'; port: ConversationSessionPort }>
   | Readonly<{ kind: 'disabled' | 'unavailable'; port: null }>;
 /** No service history schema/producer is introduced by the controller-only slice. */
-export type PanelServiceHistory = Readonly<{ kind: 'unavailable'; read: null }>;
+type PanelServiceHistory = Readonly<{ kind: 'unavailable'; read: null }>;
 export type PanelSubmission<C extends PanelContext> = Readonly<{
   context: C; inputId: string; text: string; mentions: readonly string[];
 }>;
-export type PanelApprovalIntent = Readonly<{ cardHandle: string; decision: 'allow' | 'deny'; reason: string }>;
+type PanelApprovalIntent = Readonly<{ cardHandle: string; decision: 'allow' | 'deny'; reason: string }>;
 export type PanelInput<C extends PanelContext> =
   | Readonly<{ kind: 'submit'; context: C; inputId: string; text: string; mentions?: readonly string[] }>
   | Readonly<{ kind: 'edit-queued'; context: C; inputId: string; text: string; mentions?: readonly string[] }>
@@ -40,7 +40,7 @@ export type PanelApprovalView<C extends PanelContext> = Readonly<{
   context: C; turnId: string; approvalId: string; revision: number; expiresAt: number;
   cardHandle: string; presentationHandle: string;
 }>;
-export type PanelApprovalSettlement<C extends PanelContext> = PanelApprovalView<C> & Readonly<{ outcome: AgentToolApprovalSettlement }>;
+type PanelApprovalSettlement<C extends PanelContext> = PanelApprovalView<C> & Readonly<{ outcome: AgentToolApprovalSettlement }>;
 export type PanelPickerView = Readonly<{ pickerHandle: string;
   items: readonly Readonly<{ itemHandle: string; presentationHandle: string }>[] }>;
 export type PanelExecution<C extends PanelContext> = Readonly<{
@@ -65,9 +65,7 @@ export interface PanelPort<C extends PanelContext> {
   decideApproval(view: PanelApprovalView<C>, intent: PanelApprovalIntent): Promise<void>;
   retireApproval(view: PanelApprovalView<C>): void;
 }
-export type TerminalLocalPanelPort = PanelPort<TerminalLocalContext>;
-export type ServicePanelPort = PanelPort<ExactContext>;
-/** No submitted text, messages, exceptions, decision reasons or raw renderer DTOs are exported. */
+export type TerminalLocalPanelPort = PanelPort<TerminalLocalContext>;/** No submitted text, messages, exceptions, decision reasons or raw renderer DTOs are exported. */
 export interface PanelSnapshot<C extends PanelContext> {
   readonly context: C;
   readonly phase: 'idle' | 'running' | 'cancelling' | 'closed';

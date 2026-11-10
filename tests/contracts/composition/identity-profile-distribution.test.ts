@@ -7,7 +7,7 @@ import { readLocalOsIdentity } from '#adapters/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 

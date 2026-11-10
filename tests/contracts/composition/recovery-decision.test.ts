@@ -7,7 +7,7 @@ import { modelInvocationTargetId } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAttemptStore, readLocalOsIdentity, type SqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { prepareConfiguredRecovery } from '#composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { admitRunAttempts } from '../support/admission.js';

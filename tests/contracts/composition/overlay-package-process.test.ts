@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { composeCore } from '#composition/core/root/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { cliChildEnv } from '../support/child-env.js';
 
 // ENTERPRISE-EXT-1 acceptance (owner K7 = A): tests/fixtures/overlay-package is a non-Core package that imports only `deckent/extensions`

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
-import { AuditApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryContextTasks, type AuditStore, type MemoryContextTaskPart, type RunAdmissionContext,
+import { verifiedPrincipal, AuditApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryContextTasks, type AuditStore, type MemoryContextTaskPart, type RunAdmissionContext,
   type WorkerAdmissionWarning } from '#engine/index.js';
 import { memoryKeyedDigest, openSqliteMemoryJournalStore, selectWorkTarget } from '#adapters/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, SystemTrustedClock, type IntegrityAuthority } from '#platform/index.js';
@@ -11,7 +11,7 @@ type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 type Part = Readonly<{ id: string; version: number; text: string }>;
 type Withheld = Extract<WorkerAdmissionWarning, { code: 'MEMORY_CONTEXT_WITHHELD' }>;
 /** The admission's memory hook: `wrap` reads and seals around the admission resolve, `compile` adds a task's part to its prompt, `warnings` the visible caveats. */
-export interface MemoryContextHook {
+interface MemoryContextHook {
   wrap(inner: RunAdmissionContext): RunAdmissionContext;
   compile(taskId: string | undefined, build: (extra: readonly Part[]) => ExecutionProfileDefinition): ExecutionProfileDefinition;
   warnings(): readonly WorkerAdmissionWarning[];
@@ -39,7 +39,7 @@ export function prepareMemoryContext(context: ScopeContext, sealing: { readonly 
     const tasks = memoryContextTasks(admitted.graph, workClasses(), config.memoryAutomation.overlay);
     if (!tasks.length) return null;
     const policy = new MemoryPolicyAuthorization({ async load() { return context.document; } }), path = await context.path();
-    const journal = new MemoryJournalApplication({ verifier: { verify: async () => principal }, authorize: (...args) => policy.authorize(...args), readFilter: (...args) => policy.readFilter(...args),
+    const journal = new MemoryJournalApplication({ verifier: verifiedPrincipal(principal), authorize: (...args) => policy.authorize(...args), readFilter: (...args) => policy.readFilter(...args),
       openStore: async access => openSqliteMemoryJournalStore(path, config.storage.sqlite, sealing.integrity, access), keyedDigest: memoryKeyedDigest(sealing.integrity),
       purgeJournal: memoryPurgeJournalOf(layout, async () => sealing.integrity), automation: config.memoryAutomation.overlay, knownSecrets: getConfigKnownSecrets(config),
       now: () => clock.sample().wallMs, eventId: randomUUID });

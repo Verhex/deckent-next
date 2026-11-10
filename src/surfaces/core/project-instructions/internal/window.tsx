@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Text } from 'ink';
 import { Window } from '#surfaces/core/terminal-window/index.js';
 import { projectHumanText, span } from '#surfaces/core/terminal-render/index.js';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import type { ProjectInstructionLabels } from './labels.js';
 
 /** A single bounded window/focus owner; Up/Down choose, paging reads the preview, Esc declines. */

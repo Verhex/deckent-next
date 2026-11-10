@@ -1,17 +1,9 @@
 import { z } from 'zod';
 import { identitySchema, operationDescriptorSchema, OperationCatalogError, RegistryError } from '#domain/index.js';
-import { AdapterRegistry, type AdapterModuleRegistration, type EffectTargets, type UnifiedOperationCatalog } from '#engine/index.js';
+import type { EffectTargets, UnifiedOperationCatalog } from '#engine/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
-import { httpConditionalAdapterModule } from '#adapters/core/http-conditional-effect/index.js';
-import { coreHostShellModule, coreMcpToolCallModule, coreNetworkFetchModule, corePolicyAdministerModule, coreScratchWriteModule, coreWorkspaceWriteModule } from './core-operations.js';
+import { operationAdapters as registry } from '#adapters/core/extension-registry/index.js';
 
-/** Process-wide target adapter registry (same lifetime as the config-section registry it feeds). Core entries are passed at
- * construction (the generic HTTP adapter and the Core code operations of the workspace-file and host-shell targets); overlays register
- * through `registerOperationAdapterModule` until `registerOperationsConfig` seals it, so a configuration validated against the registry
- * never changes meaning afterwards. */
-const registry = AdapterRegistry.create([httpConditionalAdapterModule, coreWorkspaceWriteModule, coreHostShellModule, coreScratchWriteModule, coreNetworkFetchModule,
-  corePolicyAdministerModule, coreMcpToolCallModule]);
-export function registerOperationAdapterModule(registration: AdapterModuleRegistration): void { registry.register(registration); }
 /** Operation catalog and effect targets are business policy data. Empty by default: no operation can run until an operator
  * declares it. `targets[].adapter` names a registry entry (Core `http-conditional` or a registered module adapter), never a literal. */
 const operationsSectionSchema = z.strictObject({
@@ -43,7 +35,7 @@ export const operationsConfigSchema = operationsSectionSchema.superRefine((value
   try { registry.catalog(value.catalog, [...kinds]); }
   catch (error) { if (!(error instanceof OperationCatalogError)) throw error; context.addIssue({ code: 'custom', message: error.code }); }
 });
-export type OperationsConfig = z.infer<typeof operationsConfigSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OperationsConfig = z.infer<typeof operationsConfigSchema>;
 export function readOperationsConfig(config: Record<string, unknown>): OperationsConfig {
   return operationsConfigSchema.parse(config['operations'] ?? {});
 }
@@ -56,10 +48,8 @@ export function resolveOperationCatalog(config: OperationsConfig): UnifiedOperat
     return options.value.kind;
   }));
 }
-/** Builds the installation's effect targets from validated configuration through the registry. */
 export function resolveOperationTargets(config: OperationsConfig): EffectTargets { return registry.targets(config.targets); }
 export function registerOperationsConfig(): void {
-  registry.seal();
   registerConfigSection('operations', operationsSectionSchema, {
     optional: true,
     validateValue: value => {

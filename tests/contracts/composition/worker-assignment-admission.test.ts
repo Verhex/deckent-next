@@ -1,16 +1,17 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { applyModelCatalog, createRun, proposeRun } from '../../../src/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { classifyConfiguredRunSpending } from '../../../src/composition/core/runs/index.js';
-import { openSqliteModelCatalogReader, readLocalOsIdentity } from '#adapters/index.js';
+import { isNativeCliWorkerProfile, openSqliteModelCatalogReader, readLocalOsIdentity } from '#adapters/index.js';
 import { readWorkerModelPin } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
+import { nativeClaudeWorkers } from '../support/native-claude-worker.js';
 
 // ATAMA-1 end to end on the product admission path: the configured registry, the ledger catalog and the scope's activation rows decide the
 // worker of a work input v2 task; the Run freezes the seal; a refusal creates no Run; a replay is the same Run.
@@ -18,10 +19,9 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const claude = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
-const registry = { schemaVersion: 1, revision: 'atama-1', profiles: [{ id: 'coding', version: 1, adapter: { id: 'native-coding-template', version: 1 },
-  parameters: { schemaVersion: 1, docker, invocation: claude } }], kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }],
-  evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] };
+// Owner 2026-11-08: the Claude candidates run tokenless on the person's login, so the kind is bound to the v2 template (`coding template --connection`).
+const registry = (template: object) => ({ schemaVersion: 1, revision: 'atama-1', profiles: [template], kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }],
+  evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] });
 const input = { schemaVersion: 2, task: 'Append the line "done" to note.txt.', scope: { paths: ['note.txt'] }, acceptance: 'note.txt ends with "done".' };
 const run = (runId: string, workClass?: string) => ({ schemaVersion: 1 as const, commandId: `create-${runId}`, scopeId: 's', runId, graph: { schemaVersion: 4, revision: 1,
   tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], ...(workClass ? { workClass } : {}), workInput: input }],
@@ -29,9 +29,8 @@ const run = (runId: string, workClass?: string) => ({ schemaVersion: 1 as const,
 
 async function seeded() {
   const project = await mkdtemp(join(tmpdir(), 'dn-assignment-')); roots.push(project); const data = join(project, 'd');
-  await mkdir(join(project, '.deckent'), { recursive: true }); const options = { env: { HOME: join(project, 'h') } };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
-    ordering: 'input-order', registry }, cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 } }));
+  await mkdir(join(project, '.deckent'), { recursive: true }); const options = { env: { HOME: join(project, 'h') } }, configPath = join(project, '.deckent/config.json');
+  await writeFile(configPath, JSON.stringify({ layout: { root: data }, cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 } }));
   const { store, path } = await openConfiguredAttemptStore(project, options);
   try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); } finally { store.close(); }
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
@@ -41,6 +40,10 @@ async function seeded() {
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
     { id: 'catalog', effect: 'allow', actions: ['activate', 'deactivate'], scopes: 'all', principals, resource: { kind: 'model-activation', ids: 'all' } },
   ] }), { mode: 0o600 });
+  // FABLE52: this fixture must admit both candidates before exercising stale-proposal refusal, including Fable's new CLI minimum.
+  const workers = await nativeClaudeWorkers(project, 's', options, '2.1.321'), config = JSON.parse(await readFile(configPath, 'utf8'));
+  await writeFile(configPath, JSON.stringify({ ...config, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order',
+    registry: registry(workers.template('coding', { ...docker })) } })); clearConfigCache();
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
   const activate = (modelId: string | null, action = 'activate', expectedRevision = 0) => catalog({ action, channelId: SEED_CHANNEL, modelId, expectedRevision });
@@ -67,7 +70,8 @@ it('small work takes the active listed model; the Run freezes the pin and its se
   const created = await createRun(f.project, run('small', 'small'), f.options);
   const task = f.execution('small');
   expect(readWorkerModelPin(task.profile.parameters)!.pin).toEqual({ channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] });
-  expect(task.assignment).toMatchObject({ workClass: 'small', workClassRevision: 'work-classes-2026-11-08', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 0,
+  expect(isNativeCliWorkerProfile(task.profile as never)).toBe(true); // the tokenless worker on the person's login, never a Docker profile
+  expect(task.assignment).toMatchObject({ workClass: 'small', workClassRevision: 'work-classes-2026-11-09', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 0,
     modelId: 'claude-sonnet-5-5', effort: { level: null, source: 'cli-default' }, skipped: [] });
   const replay = await createRun(f.project, run('small', 'small'), f.options);
   expect(replay.admission).toEqual(created.admission); expect(f.runs()).toBe(1);
@@ -105,7 +109,7 @@ it('a proposal no listed worker can run is rejected with the task, class and eve
   expect(f.runs()).toBe(0);
 });
 it('a pending proposal whose assignment would change is parked as stale on resubmission, never re-assigned to the next listed model', async () => {
-  const f = await seeded(); await f.activate('claude-opus-5-5'); await f.activate('claude-fable-5-1');
+  const f = await seeded(); await f.activate('claude-opus-5-5'); await f.activate('claude-fable-5-2');
   const first = await proposeRun(f.project, proposal('deep', 'design'), f.options);
   expect(first.proposal.status).toBe('pending');
   await f.activate('claude-opus-5-5', 'deactivate', 1);

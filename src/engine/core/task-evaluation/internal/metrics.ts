@@ -1,4 +1,4 @@
-import { deriveDeckentMetrics, deriveAcceptanceView, sameAttemptIdentity, runSnapshotSchema, readWorkerModelPin, taskEvaluationSchema, taskModelConclusion, type AttemptIdentity, type TaskEvaluation,
+import { deriveDeckentMetrics, deriveAcceptanceView, sameAttemptIdentity, parseRun, readWorkerModelPin, taskEvaluationSchema, taskModelConclusion, type AttemptIdentity, type TaskEvaluation,
   type DeckentMetrics, type DeckentMetricsMeasurements, type CurrentDeckentMetrics, type RunSnapshot, type METRIC_EVIDENCE_KINDS, type FAILURE_CAUSES } from '#domain/index.js';
 import { evaluatorEvidence } from '#capabilities/index.js';
 import { RunStoreError, runLifecycleWriteSchema } from '#engine/core/runs/index.js';
@@ -13,7 +13,7 @@ const UNREACHABLE = new Set(['OPERATION_EVIDENCE_UNAVAILABLE', 'OPERATION_COMPEN
  * source → infra; a model substitution or mismatch → model; an invalid handoff → dependency; an installed evaluator's fail → criteria-failed; the
  * worker's own report (not passed, missing, invalid, oversized) → worker-report-failed, its acceptance checks not run → infra; else unattributed.
  */
-export function deriveFailureCause(evaluation: TaskEvaluation, dispatch: TaskEvaluationCommit['dispatch']): FailureCause {
+function deriveFailureCause(evaluation: TaskEvaluation, dispatch: TaskEvaluationCommit['dispatch']): FailureCause {
   const end = dispatch.terminal, report = evaluation.report;
   if (dispatch.cancellation) return 'operator';
   if (evaluation.stall || !end || end.signal !== undefined || end.interrupted === true || end.exitCode !== 0) return 'infra';
@@ -32,7 +32,7 @@ type Row = Readonly<{ identity: AttemptIdentity; outcome: CurrentDeckentMetrics[
 /** Metadata comes from the producer's canonical evaluation or lifecycle command and resulting Run, never the metrics table.
  * `prior` is the current task row of the decided Attempt (adapter-read, digest-checked): a human decision carries its measurements. */
 export function deriveAcceptanceMetrics(command: string, input: RunSnapshot, prior?: DeckentMetrics | null): readonly CurrentDeckentMetrics[] {
-  const run = runSnapshotSchema.parse(input);
+  const run = parseRun(input);
   const payload = JSON.parse(command) as Record<string, unknown>;
   const none = { actualModel: null, acceptanceScore: null };
   const rows: Row[] = [];
@@ -101,7 +101,7 @@ export function deriveAcceptanceMetrics(command: string, input: RunSnapshot, pri
 
 /** Select canonical receipt evaluations at or before the inspected Run revision; never sample a later transition. */
 export function selectRunAcceptanceEvaluations(snapshot: RunSnapshot, receipts: readonly Readonly<{ commandId: string; command: string }>[]): readonly TaskEvaluation[] {
-  const run = runSnapshotSchema.parse(snapshot);
+  const run = parseRun(snapshot);
   const selected = new Map<string, { revision: number; evaluation: TaskEvaluation }>();
   const seen = new Set<string>();
   try {

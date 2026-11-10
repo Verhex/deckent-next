@@ -17,7 +17,7 @@ const stateText = (entry: Entry, locale: Locale) => states(locale)[entry.status]
 const accepted = (entry: Entry, locale: Locale) => [...new Set(entry.admitted.map(item => item.version ?? item.cliVersion))].map(text => terminalSafeText(text)).join(', ') || t('cli.toolchains.none', {}, locale);
 
 /** Owner CLI review 2026-10-19 (`toolchains`): network use first, then tool · accepted · newest · state, then whether updates run by themselves. */
-export function renderToolchainStatus(report: ToolchainCurrencyReport, updateMode: string, intervalMs: number, locale: Locale, style: CliTableStyle): string {
+function renderToolchainStatus(report: ToolchainCurrencyReport, updateMode: string, intervalMs: number, locale: Locale, style: CliTableStyle): string {
   const network = report.mode === 'off' ? t('cli.toolchains.network.off', {}, locale) : t('cli.toolchains.network.on', { endpoint: terminalSafeText(report.registryEndpoint ?? '-') }, locale);
   const columns = [t('cli.toolchains.column.tool', {}, locale), t('cli.toolchains.column.accepted', {}, locale), t('cli.toolchains.column.latest', {}, locale),
     t('cli.toolchains.column.state', {}, locale)].map(header => ({ header }));

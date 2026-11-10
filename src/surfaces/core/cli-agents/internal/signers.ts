@@ -23,7 +23,7 @@ const purposeLabel = (purpose: SignerKey['purpose'], locale: Locale) => purpose 
 const custodyLabel = (custody: SignerKey['custody'], locale: Locale) => custody === 'host' ? t('agentsign.custody.host', {}, locale) : t('agentsign.custody.external', {}, locale);
 const stateLabel = (state: SignerKey['state'], locale: Locale) => state === 'active' ? t('agentsign.state.active', {}, locale) : t('agentsign.state.revoked', {}, locale);
 /** The signer table (public facts only): key id, purpose, principal, custody, state, label and the catalog rows the key signed. */
-export function signerTable(items: SignerListing['items'], locale: Locale, context: AgentsCommandContext): string {
+function signerTable(items: SignerListing['items'], locale: Locale, context: AgentsCommandContext): string {
   return renderCliTable([{ header: t('agentsign.column.key', {}, locale) }, { header: t('agentsign.column.purpose', {}, locale) }, { header: t('agentsign.column.principal', {}, locale) },
     { header: t('agentsign.column.custody', {}, locale), shrink: true }, { header: t('agentsign.column.state', {}, locale) }, { header: t('agentsign.column.label', {}, locale), shrink: true },
     { header: t('agentsign.column.signed', {}, locale) }],

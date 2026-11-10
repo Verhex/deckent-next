@@ -1,4 +1,4 @@
-import { agentToolApprovalFacts } from '#engine/index.js';
+import { agentToolApprovalFacts, aiProposalRequester } from '#engine/index.js';
 import { SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { mcpCardApprovalAsker, MCP_PROPOSAL_SECRETS_REFUSED, openLocalIntegrityAuthority, planMcpProposal, PROPOSE_MCP_SERVER_TOOL, type McpCardAskerInput, type McpProposal } from '#adapters/index.js';
 import type { AgentToolOutcome } from '#domain/index.js';
@@ -30,7 +30,7 @@ export function createMcpProposals(input: { readonly projectRoot: string; readon
   const ask = input.ask ?? (async (text: string, name: string) => {
     const policy = await context.policy.load().catch(() => null);
     return mcpCardApprovalAsker({ ledgerPath: () => context.path(), sqlite: context.config.storage.sqlite, integrity: () => openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true),
-      clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: { id: context.principal.id, issuer: context.principal.issuer, subject: context.principal.subject },
+      clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: aiProposalRequester(context.principal),
       policyRevision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), facts: agentToolApprovalFacts(policy, scopeId, null), ttlMs: context.config.approvals.requestTtlMs,
       signal: input.signal, emit: input.emit }, 2_000_000)({ tool: PROPOSE_MCP_SERVER_TOOL, name, phase: 'proposal', text });
   });

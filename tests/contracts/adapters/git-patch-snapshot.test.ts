@@ -11,7 +11,7 @@ import { nativeWorkerCustodyFile, resolveNativeCliWorkerProfile } from '#adapter
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { WorkspacePatchError, type DispatchRecord } from '#engine/index.js';
 import type { GitWorkspaceLease, GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { GitWorkspacePatchSource, diffAgainstBase, gitBlobOid, gitFailure, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace, snapshotDigest, SnapshotBudget } from '#adapters/core/git-patch/index.js';
+import { GitWorkspacePatchSource, captureWorkingTreeBase, diffAgainstBase, gitBlobOid, gitFailure, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace, snapshotDigest, SnapshotBudget } from '#adapters/core/git-patch/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
@@ -57,7 +57,19 @@ describe.skipIf(process.platform !== 'linux')('git patch snapshot on a repositor
     expect(budget.bytes).toBe(Buffer.byteLength('content 1\n') + Buffer.byteLength('content 3\n'));
     expect(gitBlobOid(Buffer.from('content 1\n'), 'sha1')).toBe(listing.get('dir1/file1.txt')!.oid);
   });
-  it('maps Git failures and budget exhaustion to bounded limit details that reach the typed error surface', () => {
+  it('maps Git failures and budget exhaustion to bounded limit details that reach the typed error surface', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-copy-diagnostic-')); roots.push(root);
+    const gitExecutable = join(root, 'git-fixture'), outputBytes = 128, r = await repository(1);
+    const options = { ...r.options(outputBytes), gitExecutable, workspaceRoot: join(root, 'workspaces') };
+    for (const failing of ['pack-objects', 'index-pack']) {
+      await writeFile(gitExecutable, `#!${process.execPath}\nif (process.argv.includes('${failing}')) {\nprocess.stdin.resume();\nprocess.stderr.write('discarded-prefix' + 'x'.repeat(4096));\nprocess.stderr.write('\\nfatal: token=secret-copy-marker \\u001b[31mcopy-failed-${failing}\\n', () => process.exit(1));\n} else process.exit(require('node:child_process').spawnSync('/usr/bin/git', process.argv.slice(2), { stdio: 'inherit' }).status ?? 1);\n`, { mode: 0o700 });
+      const error = await captureWorkingTreeBase(options, { scopeId: 's', runId: failing }, limits).catch((error: unknown) => error);
+      expect(error).toMatchObject({ code: 'PATCH_CONFLICT', params: { detail: expect.stringContaining(`copy-failed-${failing}`) } });
+      const detail = (error as WorkspacePatchError).params!['detail'] as string;
+      expect(detail.length).toBeLessThanOrEqual(outputBytes);
+      expect(detail).not.toContain('discarded-prefix'); expect(detail).not.toContain('secret-copy-marker'); expect(detail).not.toContain('\u001b');
+      expect(queryFailure(error).params).toEqual({ detail });
+    }
     expect(gitFailure({ code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' })).toMatchObject({ code: 'PATCH_LIMIT', detail: 'git-output' });
     expect(gitFailure({ killed: true })).toMatchObject({ code: 'PATCH_LIMIT', detail: 'git-timeout' });
     expect(gitFailure({ code: 'ENOENT' })).toMatchObject({ code: 'PATCH_UNAVAILABLE' });

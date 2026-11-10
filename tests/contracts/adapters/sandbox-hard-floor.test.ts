@@ -147,6 +147,29 @@ it('without a turn hard floor: authority, unknown .deckent files and the data ro
   expect(sandboxHardFloored(layoutWith('/elsewhere/data'), 'src/a.ts')).toBe(false);
 });
 
+// KG12 F2 (PRIV-M1): a state root in a project child named `..x` lies inside the project; a bare startsWith('..') took it for outside (fail open).
+it('a state root in a project child named ..x is inside the project at every floor, sandbox and write-set site', async () => {
+  const { sandboxHardFloored, sandboxWriteSetRoot } = await import('#adapters/core/host-shell/index.js');
+  const { agentAuthorityPaths, agentDataRootRel, agentProductStateDeny, sealedRootEntryRefused } = await import('#adapters/core/agent-workspace-floor/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-dotdot-')); roots.push(root);
+  const project = join(root, 'project'), data = join(project, '..x'), home = join(root, 'home'), elsewhere = join(root, 'elsewhere', 'state');
+  await Promise.all([mkdir(data, { recursive: true, mode: 0o700 }), mkdir(home, { mode: 0o700 }), mkdir(elsewhere, { recursive: true })]);
+  await symlink(dirname(elsewhere), join(project, '..y'));
+  const layout = resolveProductLayout({ projectRoot: project, root: data, bootstrapConfigPath: join(data, 'config.json') }), hardFloor = { roots: [data], homeDenied: () => false };
+  expect(agentDataRootRel(project, layout)).toBe('..x');
+  expect(agentAuthorityPaths(project, layout)('..x/config.json')).toBe(true);
+  expect(agentProductStateDeny(project, layout, { HOME: home, DECKENT_GLOBAL_HOME: join(project, '..g') })).toEqual(expect.arrayContaining(['..x/policy.json*', '..g', '..g/**']));
+  expect(sealedRootEntryRefused(project, hardFloor)('..x/new.txt')).toBe(true);
+  const scope = await createWorkspaceScope(project), bare = { project: scope, scratchDir: null, writeFloor: null };
+  expect(sandboxHardFloored({ ...bare, hardFloor }, '..x/a')).toBe(true);
+  for (const dataRoot of ['..x', data]) expect(sandboxHardFloored({ ...bare, dataRoot }, '..x/state/ledger.db'), dataRoot).toBe(true);
+  // A protected root behind the link `..y` refuses both realms' views; the write set never lives in the project.
+  const linked = { ...bare, hardFloor: { roots: [join(project, '..y', 'state')], homeDenied: () => false } };
+  expect(await buildLandlockRules(linked)).toMatchObject({ ok: false, reason: expect.stringContaining('symbolic link') });
+  expect(await resolveBubblewrapView(linked, { HOME: home, PATH: '/usr/bin' })).toMatchObject({ ok: false, reason: expect.stringContaining('symbolic link') });
+  expect((await sandboxWriteSetRoot(project, layout, { HOME: home }))?.startsWith(project)).toBe(false);
+});
+
 // Astra 2486 P1: the owner-Y `.deckent/docs` subtree is a writable HOST bind only over the plain writable host project. Over an overlay (a
 // write set) it stays inside the overlay and the in-project sealed root is not bound over it; a read-only project (the write set's
 // allocation-failure posture) keeps docs read-only, even for an approved call with the ordinary floor writable.

@@ -1,17 +1,16 @@
-import { userInfo } from 'node:os';
-import { AgentCatalogPolicyAuthorization, AgentStandingApplication, PolicyAuthorizationError, catalogAggregatorFor, CatalogEvolutionApplication, agentStatsQuerySchema, catalogModelFacts, composeModelRolePolicy, memoryCatalogFacts, memoryCatalogKey,
+import { verifiedPrincipal, AgentCatalogPolicyAuthorization, AgentStandingApplication, PolicyAuthorizationError, catalogAggregatorFor, CatalogEvolutionApplication, agentStatsQuerySchema, catalogModelFacts, composeModelRolePolicy, memoryCatalogFacts, memoryCatalogKey,
   type AgentStatsView, type CatalogEvolutionDependencies } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAgentCatalogStore, openSqliteCatalogEvolutionStore, openSqliteModelCatalogReader } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { memoryJournalFor } from '#composition/core/memory/index.js';
 import { catalogDependencies } from './application.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-const application = (c: Context, path: string, aggregator: Pick<CatalogEvolutionDependencies, 'writer' | 'lessons'> = {}) => new CatalogEvolutionApplication({ ...aggregator, verifier: { verify: async () => c.principal },
-  authorize: (...args) => new AgentCatalogPolicyAuthorization(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes)).authorize(...args),
+const application = (c: Context, path: string, aggregator: Pick<CatalogEvolutionDependencies, 'writer' | 'lessons'> = {}) => new CatalogEvolutionApplication({ ...aggregator, verifier: verifiedPrincipal(c.principal),
+  authorize: (...args) => new AgentCatalogPolicyAuthorization(contextPolicySource(c)).authorize(...args),
   openCatalog: async () => openSqliteAgentCatalogStore(path, c.config.storage.sqlite, await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, false), 'read'),
   openStore: async access => openSqliteCatalogEvolutionStore(path, c.config.storage.sqlite, access), overlay: c.config.catalogEvolution.overlay,
   modelFacts: async () => {

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { immutableJsonObjectSchema, type RunExecutionSnapshot, type VerifiedPrincipal } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelUseProfiles, resolveModelUse, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
+import { modelInvocationProfileDigest, configuredInvocationProfiles, pinCurrentModelUse, sameModelUseOwner, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
 import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile, withMcpPrincipal,
   headlessCapacityBinding, openSqliteInventoryReader, type SqliteAttemptStore, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -11,18 +11,20 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function resolveNativeWorkerUse(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions) {
   return withMcpPrincipal(async () => {
     const ports = modelUseReadPorts(options), context = await ports.context(root, scopeId);
-    const profile = modelUseProfiles(context.config).find(value => value.scopeId === scopeId && value.protocol.family === binding.protocolFamily
+    const profile = configuredInvocationProfiles(context.config).find(value => value.scopeId === scopeId && value.protocol.family === binding.protocolFamily
       && modelInvocationProfileDigest(value) === binding.profileDigest);
     if (!profile || !isDeepStrictEqual(profile.adapter.definition, binding.definition)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
-    const pin = await resolveModelUse(ports, root, profile, context.principal, { action: 'pin' });
+    const pin = await pinCurrentModelUse(ports, root, profile, context.principal, context);
     if (!pin) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED');
     const catalog = await new ModelBindingApplication({ read: async () => context.config.provider_catalog }).inspect(profile.reference);
     if (catalog.status !== 'declared' || catalog.binding.digest !== profile.bindingDigest) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
     return { context, profile, pin, nativeId: catalog.definition.model.nativeId };
   });
 }
-export async function nativeWorkerResource(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions) {
-  const current = await resolveNativeWorkerUse(root, scopeId, binding, options);
+export type NativeWorkerUse = Awaited<ReturnType<typeof resolveNativeWorkerUse>>;
+/** `use`: this check point's own fresh resolution of the same binding; the point then reads one snapshot. */
+async function nativeWorkerResource(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions, use?: NativeWorkerUse) {
+  const current = use ?? await resolveNativeWorkerUse(root, scopeId, binding, options);
   const reader = await openSqliteInventoryReader(await current.context.path(), { busyTimeoutMs: current.context.config.storage.sqlite.busyTimeoutMs });
   try {
     const resource = await reader.findCapacityResource(headlessCapacityBinding(current.profile.adapter.definition));
@@ -31,16 +33,15 @@ export async function nativeWorkerResource(root: string, scopeId: string, bindin
   } finally { reader.close(); }
 }
 /** Admission and each spawn/tool compare the frozen K5 pin with a fresh, authorized snapshot. */
-export async function recheckNativeWorkerUse(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions) {
-  const current = await nativeWorkerResource(root, scopeId, binding, options);
+export async function recheckNativeWorkerUse(root: string, scopeId: string, binding: NativeCliWorkerBinding, options: ConfigLoadOptions, use?: NativeWorkerUse) {
+  const current = await nativeWorkerResource(root, scopeId, binding, options, use);
   if (!binding.modelUsePin || !isDeepStrictEqual(current.pin, binding.modelUsePin)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
   return current;
 }
 export function nativeWorkerAdmission(root: string, scopeId: string, options: ConfigLoadOptions) {
   const owner = async (principal: VerifiedPrincipal) => {
     const context = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read');
-    if (principal.id !== context.principal.id || principal.issuer !== context.principal.issuer || principal.subject !== context.principal.subject
-      || principal.assurance !== context.principal.assurance) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
+    if (!sameModelUseOwner(principal, context.principal)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
   };
   return {
     modelUse: {

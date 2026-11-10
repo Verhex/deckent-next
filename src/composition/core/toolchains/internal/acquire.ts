@@ -11,7 +11,7 @@ import { configuredWorkerBuilder } from './builder.js';
 import { writeArtifact } from './update.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 const failure = (error: unknown) => (error as { code?: string }).code ?? 'WORKER_IMAGE_BUILD_FAILED';
-export type WorkerAcquisitionDependencies = Readonly<{ packageRoot?: string; runner?: WorkerImageBuildRunner; fetcher?: NpmLatestVersionFetcher; instanceId: string; signal?: AbortSignal }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerAcquisitionDependencies = Readonly<{ packageRoot?: string; runner?: WorkerImageBuildRunner; fetcher?: NpmLatestVersionFetcher; instanceId: string; signal?: AbortSignal }>;
 const inflight = new Map<string, Promise<WorkerImageState | null>>();
 /** S3 emits image facts only: no proposal, initial execution settings, registry or pool writer is held here. */
 export function acquireConfiguredWorkerImage(projectRoot: string, options: ConfigLoadOptions, dependencies: WorkerAcquisitionDependencies): Promise<WorkerImageState | null> {

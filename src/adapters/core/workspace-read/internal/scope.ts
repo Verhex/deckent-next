@@ -1,31 +1,22 @@
 import { nativeCliLoginReadDeny } from '#adapters/core/native-cli-registry/index.js';
-import CREDENTIAL_PATHS from './credential-paths.json' with { type: 'json' };
 import { existsSync } from 'node:fs';
 import { constants, open, readdir, readFile, readlink, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { createGlobMatcher, globLiteralHead, PRODUCT_LAYOUT_REGISTRY } from '#platform/index.js';
+import { createGlobMatcher, globLiteralHead, PRODUCT_LAYOUT_REGISTRY, WORKSPACE_CREDENTIAL_DENY } from '#platform/index.js';
 
 /** Generated/vendored directory names skipped by walks (legacy baseline), plus unambiguous directory names from the root .gitignore. */
 export const BASELINE_IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build', 'out', 'coverage',
   '.nyc_output', '.next', '.nuxt', '.svelte-kit', '.turbo', '.cache', '__pycache__', '.venv', 'venv']);
 
 /** Paths no read tool returns, matched against the workspace-relative real path (registry data; the default is the Core floor). Details: agent-turn-engine module note. */
-export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.env', '.env.*', '**/.env', '**/.env.*', '**/*.pem', '**/*.key',
-  '**/*.p12', '**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/.credentials.json', '**/.npmrc', '**/.netrc', '.git/**', '**/.git/**',
-  '.deckent/host/**', '.deckent/audit-key/**', '.deckent/approvals/**',
-  // Credential carriers the legacy shell classifier protected (T-L4 slice 3a): one protected set for read tools, shell and edits.
-  ...CREDENTIAL_PATHS, ...nativeCliLoginReadDeny(PRODUCT_LAYOUT_REGISTRY.resources.headlessLogins),
-  '**/*.pfx', '**/*.keystore', '**/*.jks', '**/.pypirc', '**/credentials', '**/credentials.json', '**/secrets.json', '**/secrets.sealed.json', '.brain/memory.db*',
-  // The repository directory itself, not only its content: listing `.git` is refused too.
-  '.git', '**/.git']);
+export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze([...WORKSPACE_CREDENTIAL_DENY,
+  ...nativeCliLoginReadDeny(PRODUCT_LAYOUT_REGISTRY.resources.headlessLogins), '.git/**', '**/.git/**', '.git', '**/.git']);
 /** The repository internals of the default deny (MODES-3): the only entries a full-access turn opens (commit, branch, push); credentials stay. */
 export const REPOSITORY_INTERNALS_DENY: readonly string[] = Object.freeze(['.git/**', '**/.git/**', '.git', '**/.git']);
 /** The read floor without the repository internals: the credential and product-state paths that stay closed everywhere — a full-access turn, the shell hard floor and the S6 pre-dispatch gate over a worker's tree (a clone legitimately carries `.git`). Details: agent-turn-engine module note. */
 export const CREDENTIAL_WORKSPACE_DENY: readonly string[] = Object.freeze(DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)));
 
-/** Exact known HOME locations, derived from the shared credential registry rather than a second protection policy. */
-export const HOME_CREDENTIAL_PATHS: readonly string[] = Object.freeze(CREDENTIAL_PATHS.map(pattern => pattern.replace(/^\*\*\//u, ''))
-  .filter(path => !path.includes('*') && !path.includes('?')));
+export { HOME_CREDENTIAL_PATHS } from '#platform/index.js';
 
 // Matcher, anchors and layout admission share the platform glob grammar; bracketed path heads stay literal (Astra 2164/2166).
 export { createGlobMatcher, globLiteralHead } from '#platform/index.js';
@@ -35,10 +26,10 @@ export type WorkspacePathError = 'path-invalid' | 'path-outside-workspace' | 'pa
 /** B4 diagnosis (owner terminal test 2026-10-07): the step a `not-found` / `path-changed` came from and its system error code — never a path. */
 export interface WorkspacePathDiagnostic { readonly step: string; readonly errno?: string }
 type Refused = { readonly ok: false; readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic };
-export type ResolvedPath = { readonly ok: true; readonly rel: string } | Refused;
-export type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | Refused;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ResolvedPath = { readonly ok: true; readonly rel: string } | Refused;
+type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | Refused;
 /** Why a walk did not cover everything: never reported as "not there" (Astra 2072 R4). */
-export interface WalkIncomplete { depthLimited: number; unreadable: number; changed: number; special: number }
+interface WalkIncomplete { depthLimited: number; unreadable: number; changed: number; special: number }
 
 export interface WorkspaceScope {
   readonly root: string;

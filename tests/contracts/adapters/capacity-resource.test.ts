@@ -73,6 +73,13 @@ it('keeps custody on restart and elapsed time; a missing resource rolls back adm
   const reopened = await openSqliteAttemptStore(f.path, options, { now: () => 1_000_000, timeoutMs: 1000 }); stores.push(reopened);
   await reopened.createRun(create('two'), undefined, undefined, f.bindings);
   await expect(reopened.reserveRunTasks({ ...claim('two'), now: 1_000_000 })).rejects.toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER' });
+  // KG10 F3: two bound tasks of one Run both count (the Run is decoded once per resource read).
+  const pair = { ...graph, tasks: [graph.tasks[0]!, { ...graph.tasks[0]!, id: 'b' }] }, base = create('pair'), writer = openSqliteLedger(f.path, options, 'forbid');
+  let pairKey: string; try { pairKey = bindCapacityResource(writer, { kind: 'fixture-login', id: 'pair-login' }, { executionSlots: 2, inFlightSlots: 2 }).resourceKey; } finally { writer.close(); }
+  await reopened.createRun({ ...base, graph: pair, execution: fixtureExecution(pair), policy: { ...base.policy, ordering: ['a', 'b'] } }, undefined, undefined, ['a', 'b'].map(taskId => ({ taskId, resourceKey: pairKey })));
+  await reopened.reserveRunTasks({ ...claim('pair'), now: 1_000_000, identities: ['a', 'b'].map(taskId => ({ ...claim('pair').identities[0]!, taskId, attemptId: taskId })) });
+  const reader = openSqliteLedger(f.path, options, 'forbid');
+  try { expect(readCapacityResourceOccupancy(reader, pairKey)).toEqual({ execution: 2, inFlight: 2 }); } finally { reader.close(); }
 });
 
 it('joins its caller transaction without committing a new legacy resource on rollback', async () => {

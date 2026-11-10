@@ -11,7 +11,7 @@ pid, terminal = pty.fork()
 if pid == 0:
     os.chdir(spec['cwd'])
     os.execve(spec['argv'][0], spec['argv'], spec['env'])
-seen, answers, deadline, mark = b'', list(spec['answers']), time.time() + 30, 0
+seen, answers, deadline, mark, sent = b'', list(spec['answers']), time.time() + 30, 0, []
 while time.time() < deadline:
     ready, _, _ = select.select([terminal], [], [], 0.05)
     if ready:
@@ -19,24 +19,29 @@ while time.time() < deadline:
         except OSError: data = b''
         if not data: break
         seen += data
-    if answers and answers[0]['when'].encode() in seen[mark:]:
+    pending = seen[mark:]
+    if answers and answers[0]['when'].encode() in pending and (not answers[0].get('ready') or answers[0]['ready'].encode() in pending[pending.rfind(answers[0]['when'].encode()):]):
         time.sleep(0.3)
-        os.write(terminal, answers.pop(0)['send'].encode())
+        answer = answers.pop(0)
+        sent.append(answer['when'])
+        os.write(terminal, answer['send'].encode())
         mark = len(seen)
+else:
+    os.kill(pid, 9)
 _, status = os.waitpid(pid, 0)
-sys.stdout.write(json.dumps({ 'code': os.waitstatus_to_exitcode(status), 'output': seen.decode('utf-8', 'replace') }))
+sys.stdout.write(json.dumps({ 'code': os.waitstatus_to_exitcode(status), 'output': seen.decode('utf-8', 'replace'), 'answered': sent }))
 `;
 
-export interface TerminalAnswer { readonly when: string; readonly send: string }
+export interface TerminalAnswer { readonly when: string; readonly send: string; readonly ready?: string }
 /** Runs `argv` (argv[0] an absolute executable) on its own PTY; output is stdout and stderr as the terminal showed them, CR LF normalized. */
-export function runInTerminal(argv: readonly string[], cwd: string, env: NodeJS.ProcessEnv, answers: readonly TerminalAnswer[] = []): Promise<{ code: number; output: string }> {
+export function runInTerminal(argv: readonly string[], cwd: string, env: NodeJS.ProcessEnv, answers: readonly TerminalAnswer[] = []): Promise<{ code: number; output: string; answered: readonly string[] }> {
   return new Promise((resolve, reject) => {
     const child = spawn('python3', ['-c', DRIVER, JSON.stringify({ argv, cwd, env, answers })], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '';
     child.stdout.on('data', chunk => { out += String(chunk); }); child.stderr.on('data', chunk => { err += String(chunk); });
     child.once('error', reject);
     child.once('close', () => {
-      try { const parsed = JSON.parse(out) as { code: number; output: string }; resolve({ code: parsed.code, output: parsed.output.replace(/\r\n/gu, '\n') }); }
+      try { const parsed = JSON.parse(out) as { code: number; output: string; answered: readonly string[] }; resolve({ code: parsed.code, output: parsed.output.replace(/\r\n/gu, '\n'), answered: parsed.answered }); }
       catch { reject(new Error(`terminal run: no result (${err || out})`)); }
     });
   });

@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cliMode, cliTableStyle, renderCliTable } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { RunCommandContext } from './context.js';
@@ -13,7 +13,7 @@ function stateText(entry: Entry, locale: Locale): string {
 }
 
 /** The page as a person reads it: short Run and attempt ids among the page's own (`--verbose`: full), owner, launch/exit state, cancellation, output. */
-export function renderInventory(data: InventoryPage, context: RunCommandContext, locale: Locale, verbose: boolean, notice: readonly string[]): string {
+function renderInventory(data: InventoryPage, context: RunCommandContext, locale: Locale, verbose: boolean, notice: readonly string[]): string {
   const entries = data.page.entries, runs = entries.map(entry => entry.identity.runId), attempts = entries.map(entry => entry.identity.attemptId);
   const id = (value: string, among: readonly string[]) => verbose ? value : shownId(value, among);
   return terminalSafeText([...notice, t('inventory.heading', { count: entries.length }, locale),
@@ -65,7 +65,7 @@ export async function inventoryCommand(argv: readonly string[], context: RunComm
     result = await context.inspectInventory(root, { schemaVersion: 1, scopeId: scope.scopeId, after: values.get('--after') ?? null, ...(rawLimit === undefined ? {} : { limit: Number(rawLimit) }) }, options);
   } catch (error) {
     // The runtime refused the page against its own configured bound: the same code, with the bound a person can use.
-    if ((error as { code?: unknown } | null)?.code === 'DISPATCH_INVENTORY_LIMIT') throw limitError();
+    if (isCodedError(error, 'DISPATCH_INVENTORY_LIMIT')) throw limitError();
     throw error;
   }
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderInventory(data, context, locale, verbose, scopeLine(scope, locale)) });

@@ -3,7 +3,7 @@ import { ModelInvocationError } from '#domain/index.js';
 import { ModelInvocationStoreError } from './port.js';
 import type { ModelBindingInspection } from '#engine/core/provider-catalog/index.js';
 
-export interface ModelSwitchPreview { readonly command: ModelInvocationCommand; readonly activation: ModelActivationRecord; readonly refreshRequired: boolean }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelSwitchPreview { readonly command: ModelInvocationCommand; readonly activation: ModelActivationRecord; readonly refreshRequired: boolean }
 export interface ModelSwitchPorts {
   snapshot(reference: ModelReference): Promise<{ readonly binding: ModelBindingInspection; readonly outputTokens: number }>;
   preview(command: ModelInvocationCommand): Promise<{ readonly activation: ModelActivationRecord; readonly refreshRequired: boolean }>;

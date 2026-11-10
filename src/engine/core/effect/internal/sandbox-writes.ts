@@ -1,3 +1,4 @@
+import { isCodedError } from '#platform/index.js';
 import type { EffectApprovalGate } from './application.js';
 
 /** One change the sandboxed command made to the project, as the lower (the real project) must receive it. `lowerVersion`: the sha256 of the
@@ -46,7 +47,7 @@ export function sandboxWriteClockVerdict(mark: SandboxWriteClockReading, scanned
 
 /** The edit cell a write-set entry is decided under (the same three an edit tool call can be), or a path the edit rules deny. */
 export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority' | 'edit-self-source';
-export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
   | { readonly ok: false; readonly reason: 'write-floor' | 'configuration-file' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable' };
 /** Decides one entry exactly like an edit of that path (design §6); the decision's owner audits a relaxation before handing out the gate. */
 export interface SandboxWriteDecider { decide(rel: string, cell: SandboxWriteCell): Promise<SandboxWriteDecision> }
@@ -165,9 +166,10 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
       try { await input.execute(change, decision.gate); report.applied.push(shown(change)); }
       catch (error) {
         const code = (error as { code?: unknown } | null)?.code;
-        if (code === 'EFFECT_PRECONDITION_CHANGED') { report.notApplied.push({ rel: shown(change), reason: 'conflict' }); report.stopped = true; }
-        else if (code === 'EFFECT_OUTCOME_UNKNOWN') { report.unknown.push(shown(change)); report.stopped = true; }
-        else report.notApplied.push({ rel: shown(change), reason: code === 'POLICY_DENIED' ? 'denied-by-policy' : code === 'EFFECT_APPROVAL_REQUIRED' ? 'approval-required' : 'rejected' });
+        if (typeof code !== 'string' || !isCodedError(error, code)) { report.unknown.push(shown(change)); report.stopped = true; }
+        else if (isCodedError(error, 'EFFECT_PRECONDITION_CHANGED')) { report.notApplied.push({ rel: shown(change), reason: 'conflict' }); report.stopped = true; }
+        else if (isCodedError(error, 'EFFECT_OUTCOME_UNKNOWN')) { report.unknown.push(shown(change)); report.stopped = true; }
+        else report.notApplied.push({ rel: shown(change), reason: isCodedError(error, 'POLICY_DENIED') ? 'denied-by-policy' : isCodedError(error, 'EFFECT_APPROVAL_REQUIRED') ? 'approval-required' : 'rejected' });
       }
     }
   }

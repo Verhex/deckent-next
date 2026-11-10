@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, policySchema, ApprovalError, type ApprovalActor, type ApprovalRecord,
+import { type Policy, approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffectOpen, ApprovalError, type ApprovalActor, type ApprovalRecord,
   type ApprovalSubject, type EffectCommand, type EffectIntentApproval, type OperationDescriptor, type VerifiedPrincipal } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
+import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
 import type { EffectAdmission, EffectApprovalContext, EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, approvalRequestDigest, expireDue, sealApproval, verifyApproval } from './integrity.js';
 import { operationApprovalFacts } from './assurance.js';
 import { CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION } from './config-change.js';
 import { RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './run-create.js';
@@ -16,7 +16,7 @@ type OperationSubject = Extract<ApprovalSubject, { kind: 'operation' }>;
 export const operationApprovalActionDigest = (scopeId: string, subject: OperationSubject, requester: ApprovalActor) =>
   sha256(encodeCommandProjection('operation-approval:1', { scopeId, subject, requester }));
 
-export interface OperationApprovalBrokerOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface OperationApprovalBrokerOptions {
   /** Pending request lifetime (`approvals.requestTtlMs`). */
   readonly requestTtlMs: number;
   /** Admission window of an `allow` when the descriptor declares no `admitWithinMs`. */
@@ -43,8 +43,7 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     context: EffectApprovalContext): Promise<EffectAdmission | void> {
     if (descriptor.approval !== 'required' && decision === 'allow') return;
     const { record } = context;
-    // A terminal record replays its outcome: no approval is read or opened for it.
-    if (record && (record.state === 'settled' || record.state === 'refused')) return;
+    if (record && !isEffectOpen(record.state)) return;
     if (record?.intent.approval) return { approval: this.consumed(record.intent.approval, command) };
     const requester: ApprovalActor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     const subject: OperationSubject = { kind: 'operation', operation: command.operation, target: command.target, commandId: command.commandId,
@@ -53,16 +52,9 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     const now = this.clock.sample().wallMs;
     const found = this.store.findOperation(command.scopeId, actionDigest);
     if (!found) return { pending: this.pending(await this.open(descriptor, command, subject, requester, actionDigest, now)) };
-    let current = verifyApproval(found, this.integrity);
-    if (current.status === 'pending' && now >= current.request.expiresAt) current = expireApproval(this.store, this.integrity, current);
+    const current = expireDue(this.store, this.integrity, verifyApproval(found, this.integrity), now);
     if (current.status === 'pending') return { pending: this.pending(current) };
-    if (current.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const stored = current.decision!;
-    if (stored.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (stored.requestDigest !== approvalRequestDigest(current.request)) throw new ApprovalError('APPROVAL_INTEGRITY');
-    // Another process may have decided on a clock ahead of this one; only the bounded skew is tolerated (I40), never a window extension.
-    if (stored.decidedAt > now + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
-    if (now > stored.decidedAt + (descriptor.admitWithinMs ?? this.options.defaultAdmitWithinMs)) throw new ApprovalError('APPROVAL_EXPIRED');
+    admitDecided(current, { now, window: descriptor.admitWithinMs ?? this.options.defaultAdmitWithinMs });
     return { approval: { approvalId: current.request.approvalId, actionDigest } };
   }
 
@@ -79,8 +71,8 @@ export class OperationApprovalBroker implements EffectApprovalGate {
   }
 
   private async open(descriptor: OperationDescriptor, command: EffectCommand, subject: OperationSubject, requester: ApprovalActor, actionDigest: string, now: number): Promise<ApprovalRecord> {
-    let policy: ReturnType<typeof policySchema.parse>;
-    try { policy = policySchema.parse(await this.policy.load()); } catch { throw new ApprovalError('APPROVAL_INVALID'); }
+    let policy: Policy;
+    try { policy = await this.policy.load(); } catch { throw new ApprovalError('APPROVAL_INVALID'); }
     const scopeId = command.scopeId;
     const binding = `${subject.operation.id}@${subject.operation.version} · ${subject.target.kind}/${subject.target.id} · ${subject.inputDigest.slice(0, 12)}`.slice(0, 2048);
     let described: string | null = null;
@@ -122,7 +114,7 @@ export function approvalSubjectsHiddenFromProtocol(version: number): readonly Ap
     ...(version >= RUN_CREATE_SUBJECT_PROTOCOL_VERSION ? [] : ['run-create' as const])];
 }
 
-export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';
 /**
  * Optional wait of a surface (SDK/terminal) for the decision of one operation approval: `allow`/`deny` as decided, `expired` when the
  * stored request expired (or vanished), `timeout` at `deadline`, `cancelled` on `signal`. The request belongs to the command, not to the

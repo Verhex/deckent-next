@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, loadConfig, t, terminalSafeText, isCodedError, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, formatClock, formatDuration, formatKnown, formatUsd, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { renderWorkersView, sourceStatusText } from './workers-view.js';
@@ -30,7 +30,7 @@ function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
 export const renderWorkerRow = (w: WorkerObservation, locale: Locale) => { const x = w.terminal, id = w.identity; return t('cli.workers.row', { ref: `${id?.runId ?? '-'}/${w.taskId}`, attempt: id?.attemptId.slice(0, 8) ?? '-', generation: id?.generation ?? '-', process: processExitText(w.process, x, locale), heartbeat: renderHeartbeat(w, locale), provider: formatKnown(w.provider, locale) }, locale); };
 // PRE-34: `running` in a usage summary only means no session end was reported; a finished worker says so instead of "still running".
 /** `subscription`: a pinned native worker on the person's subscription; its usage names no price (owner F2-8). */
-export const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, locale: Locale, finished = false, subscription = false) => {
+const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, locale: Locale, finished = false, subscription = false) => {
   const outcomes = { success: t('monitor.human.usageOutcomeSuccess', {}, locale), error: t('monitor.human.usageOutcomeError', {}, locale), limit: t('monitor.human.usageOutcomeLimit', {}, locale),
     running: finished ? t('monitor.human.usageOutcomeUnreported', {}, locale) : t('monitor.human.usageOutcomeRunning', {}, locale) };
   const d = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v); const usageParams = { turns: d(u.turns), duration: u.durationMs === null || u.durationMs === undefined ? '-' : formatDuration(u.durationMs, locale), input: u.tokenUsageRecorded === true ? d(u.tokens?.input) : '-', output: u.tokenUsageRecorded === true ? d(u.tokens?.output) : '-', cost: u.costUsd === null || u.costUsd === undefined ? '-' : formatUsd(u.costUsd, locale), outcome: u.outcome ? outcomes[u.outcome] : '-' };
@@ -94,7 +94,7 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
     interactive: mode.mode === 'interactive', listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) return;
   const query = { schemaVersion: 1 as const, scopeId: scope.scopeId, ...(values.has('--source') ? { source: values.get('--source')! } : {}),
-    after: values.get('--after') ?? null, ...(limit === undefined ? {} : { limit }) };
+    after: values.get('--after') ?? null, ...optionalField('limit', limit) };
   const live = action === 'watch' && mode.mode === 'interactive', style = cliTableStyle(context);
   // PRE-5: the next page is a command the person can run as is: the same scope, view and bounds, one source, after its cursor.
   const nextPage = (source: string, after: string) => ['deckent workers', '--scope', scope.scopeId, '--source', source, '--after', after,
@@ -108,7 +108,7 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
       const result = await context.inspectWorkers(root, query, options).catch(async (error: unknown) => {
         // The refusal keeps its code (SCOPE_UNKNOWN, company-aware authorization); a person also gets the scopes they can read (`--json`
         // keeps one typed error object on stderr).
-        if (!json && (error as { code?: unknown }).code === 'SCOPE_UNKNOWN') {
+        if (!json && isCodedError(error, 'SCOPE_UNKNOWN')) {
           const scopes = await scopeLister(context, root, options)().catch(() => []);
           emit(t('cli.workers.validScopes', { scope: terminalSafeText(scope.scopeId), scopes: scopes.map(item => terminalSafeText(item)).join(', ') || '-' }, locale),
             { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });

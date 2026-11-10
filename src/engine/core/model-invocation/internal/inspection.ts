@@ -10,7 +10,7 @@ import { verifyModelInvocationRecord } from './content.js';
 import { ModelInvocationStoreError, type ModelInvocationRecord } from './port.js';
 import { checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 
-export interface ModelInvocationInspectionRecord { readonly record: ModelInvocationRecord; readonly control: ModelInvocationControlRecord; readonly spending: ProviderSpendReservation | null; readonly planUsage?: ModelInvocationPlanUsage | null }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationInspectionRecord { readonly record: ModelInvocationRecord; readonly control: ModelInvocationControlRecord; readonly spending: ProviderSpendReservation | null; readonly planUsage?: ModelInvocationPlanUsage | null }
 export interface ModelInvocationInspectionReader {
   loadReceipt?(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;

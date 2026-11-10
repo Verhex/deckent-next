@@ -1,10 +1,11 @@
-import { scanPosixCommand, type ShellReasonCode, type ShellStage, type ShellWord } from './scanner.js';
+import type { ShellReasonCode, ShellStage, ShellWord } from './scanner.js';
+import { strictShellScan, type ShellCommandScan } from './scan.js';
 import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PROGRAM_ALIASES, TEE_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
 import type { ShellDialect, ShellReadOnlyVerdict } from './classify.js';
 import type { ShellPathContext, ShellPathVerdict } from './grammar.js';
 import type { ShellRiskClassification } from './risk.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Narrow mutating tier (T-L4 slice 4a, owner 2026-09-27 q1). A separate layer beside the read-only classifier: it recognizes the
  * few programs that change workspace files in a checkable way (`mkdir`, `touch`, `cp`, `mv`), each with a small option grammar and
  * every path checked — sources through the read check, targets through the write check (inside the workspace, not denied, not on
@@ -15,8 +16,8 @@ import type { ShellRiskClassification } from './risk.js';
 export type ShellWriteKind = 'new-directory' | 'file' | 'existing-file';
 /** Write-target check (port; the composition implements it over the workspace scope and the write floor). */
 export interface ShellWritePathContext { checkWrite(word: ShellWord, kind: ShellWriteKind): Promise<ShellPathVerdict> }
-export type ShellMutationReason = ShellReasonCode | 'NARROW' | 'PACKAGE_MANAGER' | 'NETWORK_TOOL' | 'NOT_NARROW';
-export interface ShellMutationVerdict {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ShellMutationReason = ShellReasonCode | 'NARROW' | 'PACKAGE_MANAGER' | 'NETWORK_TOOL' | 'NOT_NARROW';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ShellMutationVerdict {
   readonly tier: 'narrow' | 'always-ask' | 'unrecognized';
   readonly reasonCode: ShellMutationReason;
   readonly detail?: string;
@@ -96,10 +97,10 @@ async function classifyStage(stage: ShellStage, reads: ShellPathContext, writes:
  * floor that no mode lowers (decided over every part of any command first); `unrecognized` is any other modifying command (it asks).
  */
 export async function classifyShellMutation(command: string, reads: ShellPathContext, writes: ShellWritePathContext,
-  dialect: ShellDialect = 'posix'): Promise<ShellMutationVerdict> {
+  dialect: ShellDialect = 'posix', shared?: ShellCommandScan): Promise<ShellMutationVerdict> {
   if (dialect !== 'posix') return verdict('always-ask', 'UNSUPPORTED_DIALECT', dialect);
   if (typeof command !== 'string' || command.trim().length === 0) return verdict('always-ask', 'EMPTY_COMMAND');
-  const scan = scanPosixCommand(command);
+  const scan = strictShellScan(command, shared);
   if (!scan.ok) return verdict('always-ask', scan.reasonCode, scan.detail);
   if (scan.pipelines.length === 0) return verdict('always-ask', 'EMPTY_COMMAND');
   // The floor is decided over every stage first, so a narrow stage never hides an always-ask one.

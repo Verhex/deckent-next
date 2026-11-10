@@ -26,7 +26,7 @@ it('atomically initializes schema ownership and pool, then replays the exact tra
   } finally { db.close(); }
 });
 
-it('rejects foreign transactions, markerless current ledgers, and nonempty schema-zero databases', async () => {
+it('rejects foreign transactions, markerless current ledgers, nonempty schema-zero databases and a ledger another writer holds', async () => {
   const initialized = await path(); await initializeInstallationLedger(initialized, options, ownership, pool);
   await expect(initializeInstallationLedger(initialized, options, { ...ownership, transactionId: 'tx-2' }, pool))
     .rejects.toMatchObject({ code: 'INSTALLATION_LEDGER_CONFLICT' });
@@ -40,6 +40,9 @@ it('rejects foreign transactions, markerless current ledgers, and nonempty schem
   const missingPool = await path(); await initializeInstallationLedger(missingPool, options, ownership, pool);
   const damaged = new DatabaseSync(missingPool); damaged.exec('DELETE FROM execution_pools'); damaged.close();
   await expect(initializeInstallationLedger(missingPool, options, ownership, pool)).rejects.toMatchObject({ code: 'INSTALLATION_LEDGER_CONFLICT' });
+  const held = await path(), holder = new DatabaseSync(held); holder.exec('BEGIN IMMEDIATE'); // busy before COMMIT: nothing written, not unknown
+  try { await expect(initializeInstallationLedger(held, { ...options, busyTimeoutMs: 0 }, ownership, pool)).rejects.toMatchObject({ code: 'INSTALLATION_LEDGER_UNAVAILABLE' }); }
+  finally { holder.exec('ROLLBACK'); holder.close(); }
 });
 
 it('rejects accessor-bearing inputs without invoking them or creating a database', async () => {

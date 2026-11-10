@@ -1,8 +1,8 @@
-import { sameAttemptIdentity, deriveAcceptanceView, readWorkerModelPin, summarizeWorkerEvents, summarizeWorkCosts, workCostSchema,
+import { sameAttemptIdentity, deriveAcceptanceView, readWorkerModelPin, workerTaskParameters, summarizeWorkerEvents, summarizeWorkCosts, workCostSchema,
   type RunSnapshot, type AttemptIdentity, type VerifiedPrincipal, type DeckentMetrics, type WorkerEvent, type WorkerEventSummary, type WorkCost } from '#domain/index.js';
 import type { ResourceView } from './contract.js';
 import { recommendRunWorkCosts } from './recommendations.js';
-export interface WorkCostDispatch { readonly request: { readonly identity: AttemptIdentity };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkCostDispatch { readonly request: { readonly identity: AttemptIdentity };
   readonly terminal: { readonly container?: { readonly startedAt: string | null; readonly finishedAt: string | null } | undefined } | null }
 export interface WorkCostEvidence {
   readonly comparison?: { readonly registry: unknown; readonly policy: import('#domain/index.js').CostRecommendationPolicy };
@@ -23,7 +23,7 @@ export function projectAttemptWorkCost(run: RunSnapshot, identity: AttemptIdenti
   const wallMs = start && end && Date.parse(end) > Date.parse(start) ? Date.parse(end) - Date.parse(start) : null;
   const matchingMetric = metric?.identity.scopeId === identity.scopeId && metric.identity.runId === identity.runId
     && metric.identity.taskId === identity.taskId && metric.identity.attemptId === identity.attemptId ? metric : undefined;
-  const subscription = profile.parameters['nativeSubscription'] !== undefined;
+  const subscription = (workerTaskParameters(profile.parameters) as Record<string, unknown> | undefined)?.['nativeSubscription'] !== undefined; // a tokenless worker's task base
   // ATAMA-0: a v2 row says whether a person decided the Task and what the worker reported; a substituted model is never shown as the request.
   const current = matchingMetric?.schemaVersion === 2 && matchingMetric.outcome.kind === 'task' ? matchingMetric : undefined;
   const verdict = current?.actualModel?.evidence === 'sealed' ? current.actualModel.verdict : undefined;

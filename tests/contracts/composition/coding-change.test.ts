@@ -6,7 +6,7 @@ import { FileArtifactStore, readMonitorLedger, openSqliteAttemptStore } from '#a
 import { patchDigest, patchExclusions, projectMonitorRun } from '#engine/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { inspectRun } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main } from '#surfaces/index.js';
 import { inspectMonitor } from '../../../src/composition/core/monitor/index.js';
 import { t } from '#platform/index.js';

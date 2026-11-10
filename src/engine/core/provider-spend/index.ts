@@ -1,8 +1,8 @@
 export { createProviderSpendAccount, parseProviderSpendAccount, parseProviderSpendReservation,
   reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendQuoteDigest, providerSpendEvidenceDigest } from './internal/account.js';
-export type { ProviderSpendAccount, ProviderSpendReservation, ProviderSpendSettlement } from './internal/account.js';
+export type { ProviderSpendAccount, ProviderSpendReservation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderSpendSettlement } from './internal/account.js';
 export { ProviderSpendError } from './internal/error.js';
-export type { ProviderSpendErrorCode, ProviderSpendNextAction } from './internal/error.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderSpendErrorCode, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderSpendNextAction } from './internal/error.js';
 export { parseProviderSpendReportedMeasurement } from './internal/reported.js';
 export type { ProviderSpendReportedMeasurement } from './internal/reported.js';
 export { subtractProviderSpendExactMinorUnits, addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits,
@@ -16,29 +16,29 @@ export { ProviderSpendAccountInspectionApplication, parseProviderSpendAccountIns
 export type { ProviderSpendAccountAuthorizer, ProviderSpendAccountInspection,
   ProviderSpendAccountReader, ProviderSpendHoldPage } from './internal/inspection.js';
 export { createProviderSpendAuditReceipt, parseProviderSpendAuditReceipt } from './internal/audit-receipt.js';
-export type { ProviderSpendAuditReceipt, ProviderSpendAuditReceiptInput } from './internal/audit-receipt.js';
+export type { ProviderSpendAuditReceipt, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderSpendAuditReceiptInput } from './internal/audit-receipt.js';
 export { ProviderSpendAuditApplication, providerSpendAuditWorkLimitsSchema } from './internal/audit-application.js';
 export { parseProviderSpendAuditResultForCommand } from './internal/audit-result.js';
 export type { ProviderSpendAuditResult } from './internal/audit-result.js';
-export type { ProviderSpendAuditAuthorization, ProviderSpendAuditLimits,
+export type { ProviderSpendAuditAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderSpendAuditLimits,
   ProviderSpendAuditStore } from './internal/audit-application.js';
 export { OPERATOR_TARIFF_PRICING_ID, operatorTariffLocalSettlement } from './internal/operator-tariff.js';
 
 export { parseProviderSpendMeasurement, parseProviderSpendTariffMeasurement, measuredTariffExactMinorUnits } from './internal/measured.js';
 export type { ProviderSpendMeasurement, ProviderSpendTariffMeasurement } from './internal/measured.js';
 export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt, parseProviderSpendManagementResultForCommand, reconcileProviderSpend, reviseProviderSpendBudget, createGovernedProviderSpendAccount } from './internal/management.js';
-export type { ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';
-export { settledProviderCacheUsage, type SettledProviderCacheUsage } from './internal/cache-usage.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';
+export { settledProviderCacheUsage, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type SettledProviderCacheUsage } from './internal/cache-usage.js';
 
 export { providerSpendHasZeroTariff, providerSpendLocalZeroTariff, certifyProviderSpendNoCharge, providerSpendNoChargeRegistry, registerProviderSpendNoChargeCertification,
   ProviderSpendNoChargeRegistry } from './internal/no-charge.js';
 export { classifyWorkSpending, workSpendingBasis, configuredProviderSpendCheckpoint, providerSpendRemaining } from './internal/work-spending.js';
-export type { WorkSpending } from './internal/work-spending.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkSpending } from './internal/work-spending.js';
 export { providerSpendLocalZeroTariffProfile } from './internal/no-charge.js';
 export { recoverProviderSpendHold } from './internal/recovery.js';
 export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './internal/recovery.js';
 
-export { modelInvocationBillingAxis } from './internal/work-spending.js';
+export { modelInvocationBillingAxis, isolatesAsSubscription } from './internal/work-spending.js';
 export { workerBillingAxis } from './internal/work-spending.js';
 
 export { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from './internal/period.js';

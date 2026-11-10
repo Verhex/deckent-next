@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { inspectMonitor } from '#composition/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openSqliteAttemptStore, readMonitorLedger } from '#adapters/index.js';
 import { AuditApplication, ExecutionPoolHoldApplication, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { clearConfigCache, createHmacIntegrity, productResourcePath } from '#platform/index.js';

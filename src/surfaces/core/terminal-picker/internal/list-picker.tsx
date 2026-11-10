@@ -6,9 +6,9 @@
  */
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { useCardCopyOptions, useWindowLayer, useWindowReserve, useWindowInputGuard, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
-import { cells, fillTemplate, truncateEnd, useRenderGlyphs, wrapCells, modelProviderSpans, spanStyle } from '#surfaces/core/terminal-render/index.js';
+import { cells, fillTemplate, truncateEnd, wrapCells, modelProviderSpans, useRenderGlyphs, spanStyle } from '#surfaces/core/terminal-render-ink/index.js';
 import { ARROW_PICKER_ROWS } from './arrow-picker.js';
 import { PICKER_INITIAL, pickerActionOf, pickerFirstRow, pickerReduce, pickerView, type PickerOutcome, type PickerResult, type PickerState, type PickerTree, type PickerView } from './picker-core.js';
 
@@ -32,7 +32,7 @@ export const LIST_PICKER_EMBEDDED_CHROME_ROWS = 2;
 /** Border and inner padding columns of the hosting window (terminal-window's frame): an embedded list measures its rows in the window's width. */
 const EMBEDDED_FRAME_COLUMNS = 4;
 
-export function listPickerPageSize(terminalRows: number, reserved: number): number {
+function listPickerPageSize(terminalRows: number, reserved: number): number {
   return Math.max(LIST_PICKER_MIN_ROWS, Math.min(ARROW_PICKER_ROWS, terminalRows - reserved - CHROME_ROWS));
 }
 

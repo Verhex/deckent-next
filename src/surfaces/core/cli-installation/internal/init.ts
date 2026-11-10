@@ -2,22 +2,22 @@ import { ownerBaselineCommand, parseBaseline } from './owner-baseline.js';
 import { identityCommand } from './identity.js';
 import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
-import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { policyPreviewText } from './policy-preview.js';
 import { parseModes, policyModesCommand, typedMode } from './policy-modes.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
-export interface InstallationPreviewInput { readonly profilePath: string; readonly allowShutdown: boolean }
+interface InstallationPreviewInput { readonly profilePath: string; readonly allowShutdown: boolean }
 export type InstallationPreviewHandler = (projectRoot: string, input: InstallationPreviewInput) => Promise<InstallationPreview>;
 export type InstallationInspectionHandler = (projectRoot: string, input: InstallationPreviewInput & { readonly dockerExecutable: string }) => Promise<InstallationEvidencePreview>;
-export interface InstallationApplyInput extends InstallationPreviewInput {
+interface InstallationApplyInput extends InstallationPreviewInput {
   readonly profilePath: string; readonly dockerExecutable: string; readonly proposalDigest: string; readonly acceptCustom: true;
 }
-export interface InstallationResumeInput {
+interface InstallationResumeInput {
   readonly allowShutdown: boolean; readonly dockerExecutable: string; readonly proposalDigest: string; readonly acceptCustom: true;
 }
-export type InstallationPublicationResult = Awaited<ReturnType<InstallationPublicationApplication['apply']>>;
+type InstallationPublicationResult = Awaited<ReturnType<InstallationPublicationApplication['apply']>>;
 export type InstallationApplyHandler = (projectRoot: string, input: InstallationApplyInput) => Promise<InstallationPublicationResult>;
 export type InstallationResumeHandler = (projectRoot: string, input: InstallationResumeInput) => Promise<InstallationPublicationResult>;
 // SCR-B (owner 2026-09-28, checkpoint option B): a Docker/pool-free installation of just policy.json + bindings.json,
@@ -25,7 +25,7 @@ export type InstallationResumeHandler = (projectRoot: string, input: Installatio
 // versioned default template is product-fixed (proof/SCR-B-2026-09-28/review.md), the only input is which scope
 // it is granted for.
 export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
-export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
+export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string, interaction?: { readonly json: boolean }) => Promise<unknown>;
 type Person = { readonly issuer: string; readonly subject: string };
 /** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. `person` (lead 2026-10-08): the person a hand-built
  * policy's file owner names (`--person <issuer>/<subject>`). */
@@ -147,10 +147,10 @@ export async function initCommand(argv: readonly string[], context: Installation
       throw ErrorRegistry.createError('CLI_USAGE');
     }
     if (families !== undefined) return ownerBaselineCommand(context, { root, scopeId, families, apply: policyApply, json, locale, sinks,
-      ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
+      ...optionalField('expect', expect), ...optionalField('person', person) });
     if (modes !== undefined) {
       return policyModesCommand(context, { root, scopeId, modes, modesText: modesText!, apply: policyApply, json, locale, sinks,
-        ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
+        ...optionalField('expect', expect), ...optionalField('person', person) });
     }
     if (policyUpgrade) {
       if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');
@@ -160,7 +160,7 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     if (policyApply) {
       if (!context.applyPolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
-      const result = await context.applyPolicyTemplateInstallation(root, scopeId);
+      const result = await context.applyPolicyTemplateInstallation(root, scopeId, { json });
       emit(result, { ...sinks, json, render: value => formatValue(value) });
       return;
     }

@@ -9,7 +9,7 @@ export interface NativeCliWorkerFenceReader {
   loadRunReceipt(scopeId: string, commandId: string): Promise<unknown>;
 }
 export async function nativeCliWorkerFence(reader: NativeCliWorkerFenceReader, identity: AttemptIdentity): Promise<boolean> {
-  const run = await reader.loadRun(identity.scopeId, identity.runId), attempt = await reader.load(identity.scopeId, identity.attemptId), dispatch = await reader.loadBoundDispatch(identity);
+  const [run, attempt, dispatch] = await Promise.all([reader.loadRun(identity.scopeId, identity.runId), reader.load(identity.scopeId, identity.attemptId), reader.loadBoundDispatch(identity)]);
   return run?.state.kind === 'running' && !run.cancelRequested && !!attempt && sameAttemptIdentity(attempt.identity, identity) && !attempt.cancelRequested
     && !dispatch?.cancellation && !dispatch?.terminal && (!dispatch || !await reader.loadRunReceipt(identity.scopeId, dispatchFenceReceiptId(identity, dispatch.owner)));
 }

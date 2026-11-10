@@ -2,7 +2,7 @@ import { t, type Locale } from '#platform/index.js';
 import type { WorklineStartup } from '#surfaces/core/terminal/index.js';
 
 /** Static opening facts. The mutable permission mode belongs to the live status strip (SMALL-FIXES, owner 2026-10-08). */
-export interface StartupFacts {
+interface StartupFacts {
   readonly version: string;
   readonly project: string;
   readonly path: string;

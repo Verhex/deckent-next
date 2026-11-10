@@ -23,17 +23,59 @@
       "homeOverride": "CODEX_HOME",
       "home": ".codex",
       "file": "auth.json",
+      "dockerCustody": "relayed",
       "destinations": [
         "chatgpt.com",
         "auth.openai.com",
         "api.openai.com"
       ],
-      "environment": {}
+      "environment": {},
+      "relay": {
+        "source": "https://learn.chatgpt.com/docs/config-file/config-reference (model_providers.<id>.auth.*, read 2026-11-09); routes observed with codex-cli 0.166.0 placeholders 2026-11-08",
+        "origin": "https://chatgpt.com",
+        "basePath": "/backend-api/codex",
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/models",
+            "query": true
+          },
+          {
+            "method": "POST",
+            "path": "/responses",
+            "query": false,
+            "exclusive": true
+          }
+        ],
+        "accountHeader": "chatgpt-account-id",
+        "placeholder": "deckent-relay-placeholder",
+        "capabilityBytes": 32,
+        "requestBytes": 8388608,
+        "responseBytes": 67108864,
+        "maxRequests": 1024,
+        "maxAbandoned": 4,
+        "config": {
+          "model_provider": "deckent_relay",
+          "model_providers.deckent_relay.name": "Deckent relay",
+          "model_providers.deckent_relay.base_url": "http://127.0.0.1:{shimPort}/backend-api/codex",
+          "model_providers.deckent_relay.wire_api": "responses",
+          "model_providers.deckent_relay.supports_websockets": false,
+          "model_providers.deckent_relay.requires_openai_auth": false,
+          "model_providers.deckent_relay.auth.command": "node",
+          "model_providers.deckent_relay.auth.args": [
+            "-e",
+            "process.stdout.write(\"deckent-relay-placeholder\")"
+          ],
+          "model_providers.deckent_relay.auth.timeout_ms": 5000,
+          "model_providers.deckent_relay.auth.refresh_interval_ms": 0
+        }
+      }
     },
     "claude": {
       "homeOverride": "CLAUDE_CONFIG_DIR",
       "home": ".claude",
       "file": ".credentials.json",
+      "dockerCustody": "prohibited",
       "destinations": [
         "api.anthropic.com",
         "platform.claude.com"
@@ -47,6 +89,7 @@
       "homeOverride": "",
       "home": ".config/cursor",
       "file": "auth.json",
+      "dockerCustody": "projected",
       "destinations": [
         "api2.cursor.sh",
         "api3.cursor.sh",

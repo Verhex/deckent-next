@@ -235,9 +235,12 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] A
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   const globalPath = resolveGlobalConfigPaths(f.options.env).platformPath; await mkdir(dirname(globalPath), { recursive: true, mode: 0o700 });
   await writeFile(globalPath, JSON.stringify({ projectName: '$DECK:SERVICE_FIXTURE_KEY' }), { mode: 0o600 });
-  const env = { ...f.options.env, PATH: '/usr/bin:/bin', SERVICE_FIXTURE_KEY: 'referenced', UNRELATED_TOKEN: 'leak', DECKENT_OPENAI_KEY: 'product', CLAUDECODE: '1', [RUNTIME_SERVICE_AUTOSTART_ENV]: 'stale' };
+  // A personal MCP server's `${VAR}` is read by the service (KG8 OQ1): its name passes; a project file's would not.
+  await mkdir(f.options.env.DECKENT_GLOBAL_HOME, { recursive: true, mode: 0o700 });
+  await writeFile(join(f.options.env.DECKENT_GLOBAL_HOME, 'mcp.json'), JSON.stringify({ mcpServers: { fixture: { command: 'node', args: ['-e', ''], env: { TOKEN: '${MCP_FIXTURE_TOKEN}' } } } }), { mode: 0o600 });
+  const env = { ...f.options.env, PATH: '/usr/bin:/bin', SERVICE_FIXTURE_KEY: 'referenced', MCP_FIXTURE_TOKEN: 'mcp', UNRELATED_TOKEN: 'leak', DECKENT_OPENAI_KEY: 'product', CLAUDECODE: '1', [RUNTIME_SERVICE_AUTOSTART_ENV]: 'stale' };
   const launches: Array<{ env: Record<string, string> }> = [];
   await ensureConfiguredRuntimeService(f.project, { env }, async input => { launches.push(input); return { pid: 1 }; }, fileURLToPath(import.meta.url)).catch((error: unknown) => { if (!launches.length) throw error; });
-  expect(launches[0]?.env).toMatchObject({ PATH: '/usr/bin:/bin', SERVICE_FIXTURE_KEY: 'referenced', DECKENT_OPENAI_KEY: 'product', CLAUDECODE: '1', [RUNTIME_SERVICE_AUTOSTART_ENV]: '1' });
+  expect(launches[0]?.env).toMatchObject({ PATH: '/usr/bin:/bin', SERVICE_FIXTURE_KEY: 'referenced', MCP_FIXTURE_TOKEN: 'mcp', DECKENT_OPENAI_KEY: 'product', CLAUDECODE: '1', [RUNTIME_SERVICE_AUTOSTART_ENV]: '1' });
   expect(launches[0]?.env).not.toHaveProperty('UNRELATED_TOKEN');
 });

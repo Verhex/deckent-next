@@ -20,6 +20,14 @@ it('classifies every bounded reservation diagnostic reason without changing the 
 
   const exhausted = wave(pending, 0); expect(exhausted.selectedTaskIds).toEqual([]);
   expect(diagnoseReservationWave(exhausted, 'application-empty', 0, { executionSlots: 0, inFlightSlots: 0 })).toMatchObject({ reason: 'capacity-exhausted', readyCount: 1, selectedCount: 0 });
+  const resourceWaits = [{ resourceKey: 'private-resource' }];
+  for (const blocked of [exhausted, wave({ ...pending, eligibility: { kind: 'not-before', at: 11 } })]) {
+    const diagnostic = diagnoseReservationWave({ ...blocked, resourceWaits }, 'transaction-wave-mismatch', 1, { executionSlots: 0, inFlightSlots: 0 });
+    expect(diagnostic).toMatchObject({ reason: 'resource-capacity-exhausted', resourceWaitingCount: 1 });
+    expect(JSON.stringify(diagnostic)).not.toContain('private-resource');
+    expect(diagnoseReservationWave({ ...blocked, resourceWaits: [] }, 'transaction-wave-mismatch', 1, { executionSlots: 0, inFlightSlots: 0 }).reason).toBe('store-wave-mismatch');
+  }
+  expect(diagnoseReservationWave({ ...ready, resourceWaits }, 'transaction-wave-mismatch', 1, { executionSlots: 1, inFlightSlots: 1 }).reason).toBe('store-wave-mismatch');
 
   const delayed = wave({ ...pending, eligibility: { kind: 'not-before', at: 11 } });
   expect(diagnoseReservationWave(delayed, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 })).toMatchObject({ reason: 'delayed', delayedCount: 1, now: 10, eligibilityGapMs: 1 });

@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import limits from './limits.json' with { type: 'json' };
@@ -42,9 +42,9 @@ export const recoveryEvidenceSchema = z.strictObject({ get activity() { return z
   get launcherPhase() { return z.enum(DISPATCH_PREPARATION_PHASES).nullable(); }, absentObservations: counterSchema, get absentForMs() { return counterSchema.nullable(); },
   get unavailableForMs() { return counterSchema.nullable(); }, get containerRecorded() { return z.boolean().nullable(); }, get workerRecorded() { return z.boolean().nullable(); },
   get source() { return z.strictObject({ kind: z.enum(['dispatch-preparation-aborted', 'policy-turn', 'beuser-target-refusal']), eventId: identitySchema, sequence: counterSchema.positive() }).nullable(); } });
-/** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * What the event summarizes — never the raw command or file content (design note §4): an edit names its workspace-relative
  * path; a shell call keeps the first `AUDIT_SHELL_HEAD_MAX_CHARS` characters (the approval subject's head) and the argument digest;
  * an MCP call its `mcp:<server>/<tool>` name and the argument digest (additive members, schema version 1 unchanged).
@@ -382,7 +382,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     || subject.kind === 'recovery-verdict' && (subject.choice === null) !== (subject.detection === 'not-lost')
     || subject.kind === 'siwc-relay' && (subject.counters === null) === (subject.action === 'closed')) context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
 });
-/** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   z.strictObject({ get kind() { return z.literal('beuser-target-refusal'); }, get code() { return z.literal('BEUSER_TARGET_NOT_SANDBOX'); },
     get identity() { return z.strictObject({ scopeId: identitySchema, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
@@ -411,6 +411,8 @@ export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
     template: z.strictObject({ id: identitySchema, version: counterSchema.positive() }), person: auditPrincipalSchema }); },
     commandId: identitySchema, inputDigest: digest, get revision() { return z.strictObject({ before: identitySchema, after: identitySchema }); },
     get counts() { return z.strictObject({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }); },
+    /** Lead 2026-11-09 (v20 side effect B): template rules left out because an allow already held their cell; ids only. */
+    get skipped() { return z.array(z.strictObject({ ruleId: identitySchema, heldBy: identitySchema })).min(1).max(8).optional(); },
     get policyDigestBefore() { return digest.optional(); }, get policyDigest() { return digest.optional(); } }),
 ]);
 export const auditEventSchema = z.strictObject({ get schemaVersion() { return z.literal(AUDIT_EVENT_SCHEMA_VERSION); }, eventId: identitySchema, scopeId: identitySchema,
@@ -423,6 +425,6 @@ export type AuditEvent = z.infer<typeof auditEventSchema>;
 export type AuditSubject = z.infer<typeof auditSubjectSchema>;
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
 export type AuditCounter = z.infer<typeof auditCounterSchema>;
-export class AuditError extends Error {
-  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED' | 'AUDIT_REBASELINE_STALE') { super(code); this.name = 'AuditError'; }
+export class AuditError extends CodedError {
+  constructor(override readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED' | 'AUDIT_REBASELINE_STALE') { super(code); this.name = 'AuditError'; }
 }

@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './acceptance.js';
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
-import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
-import { runSnapshotSchema, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
+import { safeParseRun, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema, workerReportEvidenceSchema, workerReportRefusal } from '#domain/core/worker-event/index.js';
 const modelText = persistedString(z.string().min(1).max(256));
 /**
@@ -54,8 +54,8 @@ export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fa
   return model.evidenceCapability === 'session-events' && model.verdict !== 'verified' ? 'unknown' : null;
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
-export class TaskEvaluationError extends Error {
-  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_OTHER_RUN') {
+export class TaskEvaluationError extends CodedError {
+  constructor(override readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_OTHER_RUN') {
     super(code); this.name = 'TaskEvaluationError';
   }
 }
@@ -63,7 +63,7 @@ export class TaskEvaluationError extends Error {
  * Application/store must establish provenance and fresh attempt/Run evidence before an atomic transition.
  */
 export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
-  const run = runSnapshotSchema.safeParse(runInput); const parsed = taskEvaluationSchema.safeParse(input);
+  const run = safeParseRun(runInput); const parsed = taskEvaluationSchema.safeParse(input);
   if (!run.success || !parsed.success) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const evaluation = parsed.data; const binding = run.data.bindings.find(value => value.identity.taskId === evaluation.identity.taskId);
   if (!binding || !sameAttemptIdentity(binding.identity, evaluation.identity) || evaluation.graphRevision !== run.data.graph.revision

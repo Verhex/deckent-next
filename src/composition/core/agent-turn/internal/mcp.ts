@@ -2,14 +2,11 @@ import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, assertAuthorityWitness, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
-import { ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
-  McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand,
-  type LocalPeerIdentity, type McpImportFrom,
-  type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
+import { getConfigKnownSecrets, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes, McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand, type LocalPeerIdentity, type McpImportFrom, type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { projectCredentialResolver } from '#composition/core/secrets/index.js'; import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { projectCredentialResolver } from '#composition/core/secrets/index.js'; import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { configuredMcpToolGrants } from '#composition/core/approvals/index.js';
 /**
  * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
@@ -35,7 +32,7 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   return `${why} ${next}`;
 }
 /** Why a trusted server's tools got no policy grant (K1), in the owner's words; an unknown code is shown as it is. */
-export function mcpGrantReasonText(reason: string, locale: Locale): string {
+function mcpGrantReasonText(reason: string, locale: Locale): string {
   if (reason === 'delegation') return t('mcp.grant.reason.delegation', {}, locale);
   if (reason === 'unsupported') return t('mcp.grant.reason.unsupported', {}, locale);
   if (reason === 'administer') return t('mcp.grant.reason.administer', {}, locale);
@@ -54,7 +51,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const locale = resolveLocale(undefined, environment, config.language), notices: McpStartNotice[] = [];
   const credentials = projectCredentialResolver(context, scopeId, input.options), resolveSecret = (name: string) => credentials.resolve(name); // SECRET-K1 + KER-17: `$DECK:` via the PRE-8 decision (grant)
   // K1: a trust card's yes also writes the answering person's grant for the pinned tools (their own authority; the governed policy chain).
-  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
+  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name), knownSecrets: getConfigKnownSecrets(config), // P21/F30
     grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId, ...(input.sessionId ? { sessionId: input.sessionId } : {}),
@@ -72,7 +69,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
       admit: call => authority({ ...call, binding: call.server === entry.server ? entry.binding : null }) });
     const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-    const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger(context, { migration: 'forbid' });
     try {
       await new EffectApplication({ async resolve(ref) { return ref.id === MCP_TOOL_CALL_OPERATION.operation.id && ref.version === 1 ? MCP_TOOL_CALL_OPERATION : null; } },
         { resolve: kind => kind === MCP_TOOL_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
@@ -85,7 +82,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
 }
 /** `deckent mcp import` (L1 item 2): the servers another MCP client declares, each added untrusted through the registry's own `add` (its audited
  * `reset` included), so an import never carries trust; a name or entry Deckent cannot take is listed with its reason, never renamed. */
-export type McpConfiguredRequest = McpCommandRequest | { readonly verb: 'import'; readonly from: McpImportFrom; readonly scope?: 'local' | 'user' };
+type McpConfiguredRequest = McpCommandRequest | { readonly verb: 'import'; readonly from: McpImportFrom; readonly scope?: 'local' | 'user' };
 async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: 'import' }>, context: McpCommandContext) {
   const projectKey = await realpath(context.projectRoot).catch(() => context.projectRoot);
   const read = await readMcpImportSources({ projectRoot: projectKey, projectKeys: [context.projectRoot, projectKey], from: request.from, environment: context.environment,
@@ -111,7 +108,7 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   // `--yes` included, and before any start, audit or write; the MCP actor never decides. In-turn cards are already witnessed by `decideApproval`.
   const peer = localPrincipalPeer(), channel = localPrincipalChannel(), witnessed: McpCommandContext['ask'] = async card => {
     await assertAuthorityWitness('mcpTrust', channel, { attest: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) }); return ask(card); };
-  const context: McpCommandContext = { ...(signal ? { signal } : {}), projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
+  const context: McpCommandContext = { ...(signal ? { signal } : {}), projectRoot, scopeId, layout: config.productLayout, environment, knownSecrets: getConfigKnownSecrets(config), sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
     grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: async name => projectCredentialResolver(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, options).resolve(name), limits: { inputMaxBytes: config.mcp.inputMaxBytes, maxServers: config.mcp.maxServers }, // KER-17: as a turn

@@ -1,13 +1,12 @@
 import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
-import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
-import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, parseRetainedOutputEnvelope,
+import { FileArtifactStore } from '#adapters/index.js';
+import { verifiedPrincipal, authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, parseRetainedOutputEnvelope,
   type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchStore, type RunBoundDispatchStore } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
 /** Recover bounded retained logs under recorded execution custody. Recovered evidence stays partial;
  * this operation neither relaunches a worker nor evaluates or accepts the Task.
@@ -17,12 +16,12 @@ export async function recoverConfiguredAttemptOutput(projectRoot: string, input:
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
-    const verifier = { async verify() { return principal; } };
+    const verifier = verifiedPrincipal(principal);
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(
-      createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
+      contextPolicySource({ layout, config }));
     const actor = await authenticate(verifier, undefined, identity.scopeId);
     await authorization.authorizeIdentity('recover-output', identity, actor);
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
     try {
       const dispatchStore: DispatchStore & RunBoundDispatchStore = store;
       const recorded = await dispatchStore.loadBoundDispatch(identity);

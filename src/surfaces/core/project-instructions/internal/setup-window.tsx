@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Text, useApp, useWindowSize } from 'ink';
 import { colorCapability, loadConfigTerminalLaunch } from '#platform/index.js';
 import { QuestionRows, Window, WindowStackProvider, questionStep, type QuestionOption, type QuestionState } from '#surfaces/core/terminal-window/index.js';
-import { prefersAsciiGlyphs, span, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { prefersAsciiGlyphs, span, truncateEnd, wrapCells, useSpinnerGlyph } from '#surfaces/core/terminal-render-ink/index.js';
 import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
 
 import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';

@@ -1,6 +1,12 @@
 import { ErrorRegistry } from '#platform/index.js';
-import type { BrainPlannerConfig } from '../index.js';
-/** S4B-6 (§7.2): one verified memory entry as the Brain reads it (data; redacted and projected by the memory engine). */
+import { counterSchema, persistedInteger } from '#domain/index.js';
+import { z } from 'zod';
+import templates from './templates.json' with { type: 'json' };
+export const brainContextLimitsSchema = z.strictObject({ maxKinds: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxModels: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  maxEvaluators: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  requestMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), tokenFramingAllowance: counterSchema,
+}).prefault(templates.context);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). S4B-6 (§7.2): one verified memory entry as the Brain reads it (data; redacted and projected by the memory engine). */
 export interface BrainMemoryEntry { readonly entryId: string; readonly revision: number; readonly kind: 'fact' | 'lesson'; readonly title: string; readonly body: string }
 /** The memory block of context v3: the selected entries and how many eligible entries the memory registry bounds left out. */
 export interface BrainMemoryContext { readonly entries: readonly BrainMemoryEntry[]; readonly omitted: number }
@@ -20,7 +26,7 @@ type Truncation = { reason: 'none' | 'count' | 'bytes'; omittedKinds: number; om
 /** Counts and byte limit apply to the complete context envelope. No raw JSON substring cuts. Under the byte limit memory entries leave first
  * (advisory data; kinds, evaluators and models make the plan valid), counted in `truncation.omittedMemory`; then the largest list loses its last row,
  * but a list keeps its first row: a context without any kind or evaluator it was offered can plan nothing valid, so that is a typed refusal instead. */
-export function boundBrainContext(scopeId: string, workClasses: unknown, input: BrainRegistryContext, limits: BrainPlannerConfig['context']) {
+export function boundBrainContext(scopeId: string, workClasses: unknown, input: BrainRegistryContext, limits: z.infer<typeof brainContextLimitsSchema>) {
   const memory = input.schemaVersion === 3 && input.memory ? { entries: [...input.memory.entries], omitted: input.memory.omitted } : null;
   const truncation: Truncation = { reason: 'none', omittedKinds: 0, omittedEvaluators: 0, omittedModels: 0, ...(input.schemaVersion === 3 ? { omittedMemory: 0 } : {}) };
   const context = { ...input, kinds: input.kinds.slice(0, limits.maxKinds), evaluators: input.evaluators.slice(0, limits.maxEvaluators),

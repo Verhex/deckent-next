@@ -4,16 +4,18 @@ import { ErrorRegistry } from '#platform/index.js';
 import type { AgentToolOutcome, ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/core/artifacts/index.js';
 
-export type NativeWorkerResources = Readonly<{ inputs?: readonly Readonly<{ name: string; sourceAttemptId: string; receipt: ArtifactReceipt; path: string }>[] | undefined;
+type NativeWorkerResources = Readonly<{ inputs?: readonly Readonly<{ name: string; sourceAttemptId: string; receipt: ArtifactReceipt; path: string }>[] | undefined;
   handoffInputs?: readonly Readonly<{ target: string; receipt: ArtifactReceipt; path: string }>[] | undefined;
   readOnlyMounts?: readonly Readonly<{ source: string; target: string }>[] | undefined }>;
-export type NativeWorkerInputBounds = Readonly<{ maxFiles: number; maxFileBytes: number; maxTotalBytes: number; timeoutMs: number; maxDepth: number }>;
-type FileInfo = Readonly<{ size: number; nlink: number; isDirectory(): boolean; isFile(): boolean }>;
-export interface NativeWorkerInputIO {
+type NativeWorkerInputBounds = Readonly<{ maxFiles: number; maxFileBytes: number; maxTotalBytes: number; timeoutMs: number; maxDepth: number }>;
+type FileInfo = Readonly<{ size: number; nlink: number; mode: number; dev: number; ino: number; mtimeMs: number; ctimeMs: number; isDirectory(): boolean; isFile(): boolean }>;
+interface NativeWorkerInputIO {
   admitInput(row: NonNullable<NativeWorkerResources['inputs']>[number]): void;
   admitMount(row: NonNullable<NativeWorkerResources['readOnlyMounts']>[number]): Promise<void>;
   realpath(path: string): Promise<string>; lstat(path: string): Promise<FileInfo>; readdir(path: string): Promise<string[]>;
   open(path: string): Promise<{ stat(): Promise<FileInfo>; read(bytes: Buffer, offset: number, length: number, position: number): Promise<{ bytesRead: number }>; close(): Promise<void> }>;
+  copy(path: string, bytes: Buffer | null, mode?: number): Promise<string>;
+  readCopy(path: string, maxBytes: number): Promise<Buffer>; directorySeal(path: string): Promise<string>; checkCopyCustody(): Promise<void>;
   readTools(root: string, options: { limits: { maxFileBytes?: number; maxResultBytes: number } }): Promise<{ execute(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> }>;
 }
 const ENTRY_COUNT_INCREMENT = 1, SINGLE_FILE_LINK = 1, READ_SENTINEL_BYTES = 1, C_STRING_TERMINATOR_BYTES = 1;
@@ -40,29 +42,48 @@ export async function nativeWorkerInputViews(resources: NativeWorkerResources, s
   }
   if (views.some((view, index) => views.some((other, otherIndex) => index !== otherIndex && overlap(view.target, other.target)))
     || views.some(view => overlap(view.target, workspace) || overlap(view.target, stateRoot))) throw refused();
-  const validateTree = async () => {
-    if (!views.length) return;
-    if (!limits) throw refused();
+  const copies: { path: string; digest: string; byteLength: number }[] = [], directories: string[] = [];
+  const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+  try {
+    if (views.length && !limits) throw refused();
     let files = 0, bytes = 0, inputs = 0; const started = performance.now();
-    const walk = async (path: string, depth: number): Promise<void> => {
-      if ((files += ENTRY_COUNT_INCREMENT) > limits.maxFiles || depth > limits.maxDepth || performance.now() - started > limits.timeoutMs || await io.realpath(path) !== path) throw refused();
+    const walk = async (path: string, target: string, depth: number, expected?: View): Promise<string> => {
+      if (!limits || (files += ENTRY_COUNT_INCREMENT) > limits.maxFiles || depth > limits.maxDepth || performance.now() - started > limits.timeoutMs || await io.realpath(path) !== path) throw refused();
       const info = await io.lstat(path);
-      if (info.isDirectory()) { for (const name of await io.readdir(path)) await walk(join(path, name), depth + ENTRY_COUNT_INCREMENT); }
-      else if (!info.isFile() || info.nlink !== SINGLE_FILE_LINK || info.size > limits.maxFileBytes || (bytes += info.size) > limits.maxTotalBytes) throw refused();
-    };
-    for (const view of views) {
-      await walk(view.source, 0);
-      if (!view.file) continue;
-      if ((inputs += view.byteLength!) > maxInputBytes) throw refused();
-      const file = await io.open(view.source);
+      if (info.isDirectory()) {
+        if (expected?.file) throw refused();
+        const copy = await io.copy(target, null); directories.push(copy);
+        for (const name of await io.readdir(path)) await walk(join(path, name), join(target, name), depth + ENTRY_COUNT_INCREMENT);
+        return copy;
+      }
+      if (!info.isFile() || info.nlink !== SINGLE_FILE_LINK || info.size > limits.maxFileBytes || (bytes += info.size) > limits.maxTotalBytes) throw refused();
+      if (expected?.file && (info.size !== expected.byteLength || (inputs += info.size) > maxInputBytes)) throw refused();
+      const file = await io.open(path);
       try {
-        const info = await file.stat(); if (!info.isFile() || info.nlink !== SINGLE_FILE_LINK || info.size !== view.byteLength) throw refused();
-        const data = Buffer.alloc(info.size + READ_SENTINEL_BYTES), read = await file.read(data, 0, data.length, 0);
-        if (read.bytesRead !== view.byteLength || createHash('sha256').update(data.subarray(0, read.bytesRead)).digest('hex') !== view.digest) throw refused();
+        const opened = await file.stat();
+        if (!opened.isFile() || opened.nlink !== SINGLE_FILE_LINK || opened.dev !== info.dev || opened.ino !== info.ino || opened.size !== info.size) throw refused();
+        const data = Buffer.alloc(info.size + READ_SENTINEL_BYTES);
+        let length = 0;
+        for (let read = 1; read && length < data.length;) { read = (await file.read(data, length, data.length - length, length)).bytesRead; length += read; }
+        const after = await file.stat(), named = await io.lstat(path), digest = hash(data.subarray(0, length));
+        if (length !== info.size || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs || named.dev !== info.dev || named.ino !== info.ino
+          || expected?.file && digest !== expected.digest || performance.now() - started > limits.timeoutMs) throw refused();
+        const copy = await io.copy(target, data.subarray(0, length), info.mode);
+        if (performance.now() - started > limits.timeoutMs) throw refused();
+        copies.push({ path: copy, digest, byteLength: length }); return copy;
       } finally { await file.close(); }
+    };
+    for (const [index, view] of views.entries()) views[index] = { ...view, source: await walk(view.source, String(index), 0, view) };
+  } catch { throw refused(); }
+  const seals = await Promise.all(directories.map(async path => ({ path, seal: await io.directorySeal(path) }))).catch(() => { throw refused(); });
+  const validate = async () => { try {
+    if (views.length) await io.checkCopyCustody();
+    for (const { path, seal } of seals) if (await io.directorySeal(path) !== seal) throw refused();
+    for (const copy of copies) {
+      const data = await io.readCopy(copy.path, copy.byteLength);
+      if (data.length !== copy.byteLength || hash(data) !== copy.digest) throw refused();
     }
-  };
-  const validate = async () => { try { await validateTree(); } catch { throw refused(); } };
+  } catch { throw refused(); } };
   await validate();
   const readers = await Promise.all(views.map(async view => ({ view, tools: await io.readTools(view.file ? dirname(view.source) : view.source,
     { limits: { ...(limits ? { maxFileBytes: limits.maxFileBytes } : {}), maxResultBytes } }) })));

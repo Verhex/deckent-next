@@ -7,8 +7,8 @@ import { SIWC_PROTOCOL, createSiwcOAuthTransport, siwcBrowserAuthorization, crea
 import { localInstallationBindingSource } from '#adapters/core/installation-files/index.js';
 import { localPrincipalChannel, localPrincipalPeer, withLocalPrincipalChannel, attestLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
 import { resolveGlobalConfigPaths, type ConfigLoadOptions, type ResolvedConfig, type ProductLayout } from '#platform/index.js';
-export type SiwcBrowserPresentation = Readonly<{ fallback?: (url: string) => void; signal?: AbortSignal }>;
-export interface SiwcConnectionContext { readonly installationId: string | null; readonly config: ResolvedConfig; readonly layout: ProductLayout;
+type SiwcBrowserPresentation = Readonly<{ fallback?: (url: string) => void; signal?: AbortSignal }>;
+interface SiwcConnectionContext { readonly installationId: string | null; readonly config: ResolvedConfig; readonly layout: ProductLayout;
   readonly principal: VerifiedPrincipal; readonly document: ReturnType<typeof policySchema.parse> }
 /** Host OAuth owner; scoped context and audit remain the caller's existing application owners. */
 export async function withSiwcConnection<T, C extends SiwcConnectionContext>(scopeId: string, options: ConfigLoadOptions,

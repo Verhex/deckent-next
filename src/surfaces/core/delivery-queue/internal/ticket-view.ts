@@ -1,11 +1,11 @@
-import { ErrorRegistry, MESSAGE_REGISTRY, redactForRecord, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, messageText, redactForRecord, t, type Locale } from '#platform/index.js';
 import type { DeliverySummary, TargetBatchExecution, TargetQueueView } from '#engine/index.js';
 import { ticketSummaryBlock, type AutonomyShadowView } from '#surfaces/core/delivery-summary/index.js';
 /** Catalog lookup for the typed view's enum and adapter-owned keys (the same words as the list table and the terminal queue window). */
-const word = (key: string, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[key] ?? key;
+const word = (key: string, locale: Locale) => messageText(key, locale) ?? key;
 const cell = (value: string) => redactForRecord(value).replace(/[\p{Cc}\p{Cf}]/gu, ' ');
 /** TESLIM-KARTI-OZET: a ticket's summary (undefined = not read) and, on inspect only, the rule-off shadow line. */
-export type TicketExtras = Readonly<{ summary?: DeliverySummary | null; shadow?: AutonomyShadowView | null }>;
+type TicketExtras = Readonly<{ summary?: DeliverySummary | null; shadow?: AutonomyShadowView | null }>;
 const verificationWord = (phase: NonNullable<TargetQueueView['verification']>['phase'], locale: Locale) => ({ accepted: () => t('queue.cli.ticket.verification.accepted', {}, locale),
   failed: () => t('queue.cli.ticket.verification.failed', {}, locale), pending: () => t('queue.cli.ticket.verification.pending', {}, locale),
   cancelled: () => t('queue.cli.ticket.verification.cancelled', {}, locale), unknown: () => t('queue.cli.ticket.verification.unknown', {}, locale) })[phase]();

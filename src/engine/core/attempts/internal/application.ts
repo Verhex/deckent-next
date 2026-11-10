@@ -6,7 +6,7 @@ import { attemptIdentitySchema, attemptObservationSchema, createAttempt, applyAt
 import { AttemptStoreError, type AttemptReceipt, type AttemptStore } from './port.js';
 
 const id = identitySchema;
-export const ATTEMPT_COMMAND_SCHEMA_VERSION = 2;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const ATTEMPT_COMMAND_SCHEMA_VERSION = 2;
 export const attemptCommandSchema = z.strictObject({
   schemaVersion: z.literal(ATTEMPT_COMMAND_SCHEMA_VERSION), commandId: clientCommandIdSchema, scopeId: id,
   action: z.discriminatedUnion('kind', [
@@ -15,8 +15,8 @@ export const attemptCommandSchema = z.strictObject({
     z.strictObject({ kind: z.literal('cancel'), attemptId: id }),
   ]),
 });
-export type AttemptCommand = z.infer<typeof attemptCommandSchema>;
-export interface AttemptAuthorization {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AttemptCommand = z.infer<typeof attemptCommandSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AttemptAuthorization {
   /** Trusted ingress supplies principal; implementations must enforce scope and action authority. */
   authorize(command: AttemptCommand, principal: VerifiedPrincipal): Promise<void>;
 }

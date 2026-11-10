@@ -1,18 +1,18 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema, type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ExecutionPool } from '#engine/core/runs/index.js';
 import { hashInstallationProfilePayload, installationProfileSchema, profilePayload, type InstallationProfile } from './profile.js';
-
-export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INSTALLATION_PROFILE_DIGEST'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INSTALLATION_PROFILE_DIGEST'
   | 'INSTALLATION_PROFILE_CONFIG' | 'INSTALLATION_PROFILE_REGISTRY' | 'INSTALLATION_PROFILE_ADAPTER'
   | 'INSTALLATION_PROFILE_EVALUATOR' | 'INSTALLATION_PROFILE_POOL' | 'INSTALLATION_PROFILE_POLICY'
   | 'INSTALLATION_PROFILE_SHUTDOWN' | 'INSTALLATION_PROFILE_PATHS'
   // C12 Q8 follow-up (owner 2026-09-27): installation's own typed require-approval refusal, config category, exit 78 —
-  // no longer the shared cross-module 'POLICY_APPROVAL_UNSUPPORTED' code the other 9 authorization points use.
+  // instead of the shared cross-module POLICY_APPROVAL_UNSUPPORTED the other authorization points outside the operation catalog use.
   | 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED';
-export class InstallationProfileError extends Error {
-  constructor(readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }
+export class InstallationProfileError extends CodedError {
+  constructor(override readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }
 }
 
 const choicesSchema = z.strictObject({ principal: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(),
@@ -60,7 +60,7 @@ export interface InstallationPreview {
   readonly blockers: readonly ['INSTALL_PACKAGE_TRUST_UNVERIFIED', 'INSTALL_IMAGE_PROVENANCE_UNVERIFIED', 'INSTALL_IMAGE_AVAILABILITY_UNCHECKED'];
 }
 
-/** Private recovery material. Never render this configuration snapshot through a surface. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Private recovery material. Never render this configuration snapshot through a surface. */
 export interface InstallationMaterial {
   readonly schemaVersion: 1;
   readonly authoredProfile: InstallationProfile;

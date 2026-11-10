@@ -1,13 +1,13 @@
 import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { CONFIG_VALUE_CHOICES, configChoiceDeclaration, configEntryAllowed, configNumberText, configStepper, type ConfigChoiceSource, type ConfigStepper } from '#platform/index.js';
+import { isCodedError, CONFIG_VALUE_CHOICES, configChoiceDeclaration, configEntryAllowed, configNumberText, configStepper, type ConfigChoiceSource, type ConfigStepper } from '#platform/index.js';
 import { t, type Locale } from '#platform/index.js';
 import type { ConfigFieldView } from '#engine/index.js';
 import { configValueWord } from './render.js';
 
 export type ConfigValueChoice = Readonly<{ id: string; label: string; value: unknown; detail?: string; blocked?: string }>;
 /** What cut a source's discovery short: its time limit, or a size bound with entries left unread. */
-export type ConfigChoiceCut = 'time' | 'size';
+type ConfigChoiceCut = 'time' | 'size';
 /** A source's choices; `partial` names the cut when one ended the discovery early (the ones found are still offered). Still an array for list readers. */
 export interface ConfigChoiceList extends ReadonlyArray<ConfigValueChoice> { readonly partial?: ConfigChoiceCut | false }
 /** Read-only, principal-scoped reference discovery. Implementations belong to trusted composition. */
@@ -51,7 +51,7 @@ export async function configValueModel(field: ConfigFieldView, root: string, loc
       : await sources?.list(declaration.source, field.key) ?? [];
     } catch (error) {
       // J2d: no installation in this folder is "nothing to offer" (as before J2d), not an unavailable source.
-      if ((error as { code?: unknown } | null)?.code !== 'CLI_INSTALLATION_MISSING') sourceState = t('config.select.unavailable', {}, locale);
+      if (!isCodedError(error, 'CLI_INSTALLATION_MISSING')) sourceState = t('config.select.unavailable', {}, locale);
     }
     // CONFIG-PARTIAL-NOTICE/-CLI: a list cut short (time limit or size bound) says which, with how to set a value it did not reach; the cut stays data.
     if (discovered.partial) partial = { reason: discovered.partial, found: discovered.length };

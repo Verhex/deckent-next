@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { authorizeWorkTargetUse, PolicyAuthorizationError, workTargetAttemptAuthorization } from '#engine/index.js';
+import { authorizeWorkTargetUse, DispatchPolicyAuthorization, PolicyAuthorizationError, workingTreeDeliveryAuthorization, workTargetAttemptAuthorization } from '#engine/index.js';
+import { policySchema } from '#domain/index.js';
 import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
 
 // Sol WT-R1: attempt:execute never substitutes for work-target:use on the consumed target; the attempt gate is never bypassed; a
@@ -19,6 +20,47 @@ function harness(document: unknown, attemptRefusal: Error | null = null) {
 }
 
 describe('workTargetAttemptAuthorization (engine)', () => {
+  it('checks attempt authority before the company working-tree deny or approval rule, and fails closed on unavailable policy', async () => {
+    const document = policySchema.parse({ ...policy(null), grants: [{ id: 'attempt', effect: 'allow', actions: ['deliver-integration'], scopes: ['s'],
+      principals: [{ issuer: 'host', subject: '1' }], resource: { kind: 'attempt', ids: ['a'] } }] });
+    for (const effect of ['deny', 'require-approval'] as const) {
+      const source = { load: async () => policySchema.parse({ ...document, grants: [...document.grants, { ...document.grants[0], id: 'company', effect, actions: ['deliver-working-tree'] }] }) };
+      await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(source), source).authorizeIdentity('deliver-integration', identity, principal))
+        .rejects.toMatchObject({ code: effect === 'deny' ? 'DELIVERY_WORKING_TREE_DENIED' : 'DELIVERY_WORKING_TREE_APPROVAL_UNSUPPORTED' });
+      await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(source), source).authorizeIdentity('deliver-integration', identity, { ...principal, scopeIds: ['other'] }))
+        .rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    }
+    // Owner B1-3(b): rollback has its own cell; the company delivery lever never grants or denies it.
+    const rollbackPolicy = policySchema.parse({ ...document, grants: [...document.grants,
+      { ...document.grants[0], id: 'rollback', actions: ['rollback-integration'] },
+      { ...document.grants[0], id: 'company', effect: 'deny', actions: ['deliver-working-tree'] }] });
+    for (const effect of ['allow', 'deny', 'require-approval'] as const) {
+      const source = { load: async () => policySchema.parse({ ...rollbackPolicy,
+        grants: rollbackPolicy.grants.map(grant => grant.id === 'rollback' ? { ...grant, effect } : grant) }) };
+      const result = workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(source), source).authorizeIdentity('rollback-integration', identity, principal);
+      if (effect === 'allow') await expect(result).resolves.toBeUndefined();
+      else await expect(result).rejects.toMatchObject({ code: effect === 'deny' ? 'POLICY_DENIED' : 'POLICY_APPROVAL_UNSUPPORTED' });
+    }
+    const deliveryOnly = { load: async () => document };
+    await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(deliveryOnly), deliveryOnly).authorizeIdentity('rollback-integration', identity, principal))
+      .rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    const unavailable = { load: async () => { throw new Error('unreadable'); } };
+    await expect(workingTreeDeliveryAuthorization(new DispatchPolicyAuthorization(unavailable), unavailable).authorizeIdentity('deliver-integration', identity, principal))
+      .rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
+    const target = { id: 'target', effect: 'allow', actions: ['use'], scopes: ['s'], principals: [{ issuer: 'host', subject: '1' }], resource: { kind: 'work-target', ids: ['n1'] } };
+    const closed = policySchema.parse({ ...document, grants: [...document.grants, target, { ...document.grants[0], id: 'company', effect: 'deny', actions: ['deliver-working-tree'] }] });
+    for (const first of [closed, policySchema.parse({ ...document, grants: [...document.grants, target] })]) {
+      let loads = 0;
+      const source = { load: async () => ++loads === 1 ? first : closed };
+      const attempts = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(source), source, 'n1');
+      const gate = workingTreeDeliveryAuthorization(attempts, source);
+      if (first === closed) await expect(gate.authorizeIdentity('deliver-integration', identity, principal)).rejects.toMatchObject({ code: 'DELIVERY_WORKING_TREE_DENIED' });
+      else await expect(gate.authorizeIdentity('deliver-integration', identity, principal)).resolves.toBeUndefined();
+      expect(loads).toBe(1);
+      await expect(gate.authorizeIdentity('deliver-integration', identity, principal)).rejects.toMatchObject({ code: 'DELIVERY_WORKING_TREE_DENIED' });
+      expect(loads).toBe(2);
+    }
+  });
   it('requires work-target:use for execute on both entry points after the attempt gate; allow passes', async () => {
     const h = harness(policy('allow'));
     await h.authorization.authorizeIdentity('execute', identity, principal);

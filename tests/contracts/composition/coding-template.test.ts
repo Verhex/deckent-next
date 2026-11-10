@@ -5,13 +5,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyModelCatalog, createRun, inspectModelCatalog } from '../../../src/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingTemplateBase } from '#adapters/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { encodeExecutionProfileDefinition } from '#domain/index.js';
 import { main } from '#surfaces/core/cli/index.js';
-import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
+import { seedCatalog } from '../support/model-catalog.js';
+const SEED_CHANNEL = 'codex-cli-subscription'; // owner 2026-11-08: Claude has no Docker template; the template journey runs on Codex
 
 const roots: string[] = [];
 /** alpha.55.1: an apply writes the protected `admission` root, so these cases run as the witnessed person at a terminal. */
@@ -23,12 +24,12 @@ const docker = { executable: 'docker', imageId, memoryBytes: 268435456, cpus: 1,
 const { executable, ...taskDocker } = docker; void executable;
 const pin = compileNativeCodingDockerProfile({ id: 'admitted', version: 1, adapter: { id: 'docker', version: 2 },
   parameters: { ...taskDocker, argv: ['unused'] } },
-{ schemaVersion: 4, provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' },
-  permissionMode: 'unattended', model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] },
+{ schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' },
+  permissionMode: 'unattended', model: { channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', auxiliaryModelIds: [] },
   composition: { schemaVersion: 1, task: 'fixture', scope: 'note.txt', acceptance: 'fixture' } });
 const registry = { schemaVersion: 1, revision: 'before-template', profiles: [pin], kinds: [{ kind: 'prepared', profile: { id: pin.id, version: 1 } }],
   evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] };
-const request = { provider: 'claude', kind: 'feature', apply: false };
+const request = { provider: 'codex', kind: 'feature', apply: false };
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'coding-template-')); roots.push(root);
   const options = { env: { DECKENT_GLOBAL_HOME: join(root, 'global') } };
@@ -59,7 +60,7 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     expect(preview.status).toBe('preview'); expect(preview.write).toBeNull();
     expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.auditCount()).toBe(audits); expect(await f.backups()).toEqual(backups);
     nativeCodingTemplateBase(preview.profile);
-    expect(preview.profile.parameters).toMatchObject({ docker: taskDocker, invocation: { provider: 'claude', cliVersion: '2.1.285 (Claude Code)' } });
+    expect(preview.profile.parameters).toMatchObject({ docker: taskDocker, invocation: { provider: 'codex', cliVersion: 'codex-cli 0.159.2' } });
     const invocation = preview.profile.parameters['invocation'] as Record<string, unknown>;
     for (const field of ['model', 'prompt', 'effort']) expect(invocation).not.toHaveProperty(field);
     for (const field of ['argv', 'nativeSubscription', 'executable']) expect(preview.profile.parameters['docker']).not.toHaveProperty(field);
@@ -83,7 +84,8 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     [{ ...request, kind: ' bad ' }, 'CODING_TEMPLATE_INPUT_INVALID'],
     [{ ...request, image: 'tag:latest' }, 'CODING_TEMPLATE_INPUT_INVALID'],
     [{ ...request, model: 'alias' }, 'CODING_TEMPLATE_INPUT_INVALID'],
-    [{ ...request, provider: 'codex' }, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED'],
+    [{ ...request, provider: 'cursor' }, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED'],
+    [{ ...request, provider: 'claude' }, 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE'], // owner 2026-11-08: no Claude pin still names the closed Docker path
     [{ ...request, image: `sha256:${'b'.repeat(64)}` }, 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED'],
     [{ ...request, kind: 'prepared' }, 'CODING_TEMPLATE_KIND_CONFLICT'],
   ])('refuses %j without writing', async (input, code) => {
@@ -162,8 +164,8 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     const f = await setup(); let output = '', error = '';
     const context = { root: f.root, env: f.options.env, configureCodingTemplate: (root: string, input: unknown, options: object) => configureNativeCodingTemplate(root, input, options, person),
       stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
-    const base = ['coding', 'template', '--provider', 'claude', '--kind', 'feature'];
-    for (const extra of [[], ['--preview', '--apply'], ['--apply', '--apply'], ['--preview', '--model', 'alias'], ['--preview', '--provider', 'claude']]) {
+    const base = ['coding', 'template', '--provider', 'codex', '--kind', 'feature'];
+    for (const extra of [[], ['--preview', '--apply'], ['--apply', '--apply'], ['--preview', '--model', 'alias'], ['--preview', '--provider', 'codex']]) {
       output = ''; expect(await main([...base, ...extra], context), error).toBe(2); expect(output).toBe('');
     }
     output = ''; expect(await main([...base, '--preview', '--json'], context), error).toBe(0);
@@ -185,24 +187,24 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     const context = { root: f.root, env: f.options.env, configureCodingTemplate: (root: string, input: unknown, options: object) => configureNativeCodingTemplate(root, input, options, person),
       stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
     for (const locale of ['en', 'tr']) {
-      output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--preview', '--lang', locale], context)).toBe(0);
+      output = ''; expect(await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--preview', '--lang', locale], context)).toBe(0);
       expect(output).toContain(locale === 'en' ? 'Coding template preview' : 'Kodlama şablonu önizlemesi');
     }
     // alpha.55.1: `--apply` writes the protected `admission.registry` — refused off a person's terminal (`--json`, a pipe), applied on one.
     const piped = await readFile(f.path, 'utf8');
-    output = ''; error = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--apply', '--json'], context)).not.toBe(0);
+    output = ''; error = ''; expect(await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--apply', '--json'], context)).not.toBe(0);
     expect(error).toContain('AUTHORITY_WITNESS_REQUIRED'); expect(await readFile(f.path, 'utf8')).toBe(piped);
     const terminal = { ...context, stdin: { isTTY: true }, stdout: { isTTY: true, columns: 120, write: (chunk: string) => { output += chunk; return true; } } };
-    output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--apply'], terminal), error).toBe(0);
+    output = ''; expect(await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--apply'], terminal), error).toBe(0);
     expect((JSON.parse(await readFile(f.path, 'utf8')) as { admission: { registry: { kinds: { kind: string }[] } } }).admission.registry.kinds.map(entry => entry.kind)).toContain('feature');
-    await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'catalog', scopeId: 's', action: 'register', catalog: await seedCatalog() }, f.options);
+    await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'catalog', scopeId: 's', action: 'register', catalog: await seedCatalog('codex-cli-subscription') }, f.options);
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'activate-channel', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }, f.options);
-    // Law 6 (owner Q-L6): activating the channel already activates its fresh priced models, so Sonnet needs no second activation.
+    // Law 6 (owner Q-L6): activating the channel already activates its fresh priced models, so the model needs no second activation.
     const channel = (await inspectModelCatalog(f.root, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, f.options)).channels.find(row => row.access === 'allowed');
-    expect(channel?.access === 'allowed' ? channel.models.find(row => row.modelId === 'claude-sonnet-5-5')?.activation?.state : null).toBe('active');
+    expect(channel?.access === 'allowed' ? channel.models.find(row => row.modelId === 'gpt-6.1-sol')?.activation?.state : null).toBe('active');
     const result = await createRun(f.root, { schemaVersion: 1, commandId: 'run', scopeId: 's', runId: 'typed-input', graph: { schemaVersion: 3, revision: 1,
       tasks: [{ id: 't', kind: 'feature', dependencies: [], acceptanceCriteria: ['exit'], workInput: { schemaVersion: 1, task: 'Edit note.txt', scope: { paths: ['note.txt'] }, acceptance: 'note.txt updated',
-        model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] } } }],
+        model: { channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', auxiliaryModelIds: [] } } }],
       criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } }, f.options);
     expect(result.admission.run.runId).toBe('typed-input'); expect(result.admission.run.tasks).toHaveLength(1);
   });
@@ -222,10 +224,10 @@ describe.skipIf(process.platform === 'win32')('coding template discovery selecti
     const context = { root: f.root, env: f.options.env, configureCodingTemplate: (root: string, input: unknown, options: object) => configureNativeCodingTemplate(root, input, options, person),
       stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
     for (const [locale, said] of [['en', 'Repository instructions: hidden from the worker'], ['tr', 'Repo talimatları: işçiden gizli']] as const) {
-      output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--discovery', 'disabled', '--preview', '--lang', locale], context), error).toBe(0);
+      output = ''; expect(await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--discovery', 'disabled', '--preview', '--lang', locale], context), error).toBe(0);
       expect(output).toContain(said);
     }
-    output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--preview', '--lang', 'en'], context), error).toBe(0);
+    output = ''; expect(await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--preview', '--lang', 'en'], context), error).toBe(0);
     expect(output).toContain('Repository instructions: read by the worker');
   });
 });

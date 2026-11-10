@@ -1,14 +1,14 @@
-import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeMcpTrustCard, expandMcpEntry, loadMcpRegistry, readMcpTrust, resolveMcpRegistry, runMcpCommand, type McpCommandContext, type McpCommandRequest,
+import { describeMcpTrustCard, expandMcpEntry, loadMcpRegistry, mcpSendAuthority, readMcpTrust, resolveMcpRegistry, runMcpCommand, type McpCommandContext, type McpCommandRequest,
   type McpTrustCard } from '#adapters/core/mcp-client/index.js';
 import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 import { agentShellHardFloor } from '#adapters/core/agent-workspace-floor/index.js';
-import { clearConfigCache, loadConfig } from '#platform/index.js';
+import { clearConfigCache, loadConfig, snapshotKnownSecrets } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
@@ -44,14 +44,14 @@ async function workspace(extraEnv: (project: string) => Record<string, string> =
   writeFileSync(tools, JSON.stringify([{ name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } }]));
   const entry = { command: process.execPath, args: [FIXTURE, '--mode', 'dual', '--tools', tools, '--log', log], realm: 'host' };
   const layout = (await loadConfig(project, { env })).productLayout;
-  const audits: string[] = [], asked: string[] = [];
-  const context: McpCommandContext = { projectRoot: project, layout, environment: env, secret: async () => undefined, sandboxes: [],
+  const audits: string[] = [], asked: string[] = [], secrets = new Map<string, string>();
+  const context: McpCommandContext = { projectRoot: project, layout, environment: env, secret: async name => secrets.get(name), sandboxes: [],
     principal: { issuer: 'test', subject: 'owner' }, describeNotice: notice => JSON.stringify(notice),
     ask: async card => { asked.push(`${card.phase}:${card.name}`); return true; },
     audit: async change => { audits.push(`${change.action}:${change.scope}:${change.name}`); } };
   const run = (request: McpCommandRequest) => runMcpCommand(request, context);
   const started = () => readFileSync(log, 'utf8').split('\n').filter(line => line.includes('"start"')).length;
-  return { base, project, home, env, layout, entry, run, audits, asked, started, legacy: join(project, '.deckent', 'integrations', 'mcp-trust.json') };
+  return { base, project, home, env, layout, entry, run, audits, asked, started, context, secrets, tools, legacy: join(project, '.deckent', 'integrations', 'mcp-trust.json') };
 }
 type Workspace = Awaited<ReturnType<typeof workspace>>;
 const status = async (w: Workspace, name = 'fx') => ((await w.run({ verb: 'get', name })) as { server: { status: string; definitionDigest: string; reason?: string } }).server;
@@ -116,14 +116,75 @@ describe.skipIf(process.platform !== 'linux')('SEC-2 F29: project MCP trust is n
     expect(existsSync(join(w.project, 'vendor'))).toBe(false);
   });
 
-  it.skipIf(process.platform === 'win32')('a hard-linked trust file is refused as unsafe', async () => {
+  it.skipIf(process.platform === 'win32')('a hard-linked, symlinked, foreign, unparsable, invalid or oversized trust file is refused (fail closed)', async () => {
     const base = mkdtempSync(join(tmpdir(), 'deckent-mcp-sec2-link-')); roots.push(base);
-    const store = join(base, 'store'), other = join(base, 'other.json');
-    mkdirSync(store, { mode: 0o700 });
+    const store = join(base, 'store'), other = join(base, 'other.json'), fresh = join(base, 'fresh'), linked = join(base, 'linked');
+    mkdirSync(store, { mode: 0o700 }); mkdirSync(fresh, { mode: 0o700 }); mkdirSync(linked, { mode: 0o700 });
     writeFileSync(other, JSON.stringify({ schemaVersion: 1, revision: 0, servers: [] }), { mode: 0o600 });
     linkSync(other, join(store, 'mcp-trust.json'));
     expect(await readMcpTrust(store)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
+    // KG12 F1: a symlink is never followed; without getuid (owner decision A23) no file is this user's.
+    symlinkSync(other, join(linked, 'mcp-trust.json'));
+    expect(await readMcpTrust(linked)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
+    rmSync(join(linked, 'mcp-trust.json')); writeFileSync(join(linked, 'mcp-trust.json'), readFileSync(other), { mode: 0o600 });
+    const getuid = Object.getOwnPropertyDescriptor(process, 'getuid')!;
+    Object.defineProperty(process, 'getuid', { value: undefined, configurable: true });
+    try { expect(await readMcpTrust(linked)).toEqual({ ok: false, reason: 'trust-store-unsafe' }); }
+    finally { Object.defineProperty(process, 'getuid', getuid); }
+    // p6 e5: unparsable JSON reads as unreadable, a wrong shape as invalid, a file over `trustMaxBytes` (8 MiB) is refused unread.
+    for (const [text, reason] of [['{', 'trust-store-unreadable'], ['{"schemaVersion":2}', 'trust-store-invalid'], [' '.repeat(8_388_609), 'trust-store-too-large']] as const) {
+      writeFileSync(join(fresh, 'mcp-trust.json'), text, { mode: 0o600 });
+      expect(await readMcpTrust(fresh)).toEqual({ ok: false, reason });
+    }
   });
+
+  // p6 e1/e2 (MCP-REVOKE, X8): `mcpSendAuthority` called directly. A same-inode, same-size, same-mtime hand edit is a new decision (ctime
+  // cannot be set back, so the test proves inode, size and mtime only); a `$DECK:` value is resolved at every send (A15).
+  it('the send authority decides from the registry and trust read at each send: its order, a completed change, a same-identity hand edit, a revoked secret', async () => {
+    const w = await workspace();
+    const managed = { servers: {} as Record<string, unknown>, allowed: null as string[] | null, denied: [] as string[] };
+    const send = mcpSendAuthority({ ...w.context, managed });
+    const unbound = { scope: 'local' as const, definitionDigest: 'a'.repeat(64) };
+    expect(await send({ server: 'fx', tool: 'echo', digest: 'a'.repeat(64), binding: unbound })).toBe('trust-revoked');
+    w.secrets.set('KEY', 'secret-value-123456');
+    await w.run({ verb: 'add', scope: 'local', name: 'fx', entry: w.entry });
+    await w.run({ verb: 'add', scope: 'local', name: 'fy', entry: { ...w.entry, env: { TOKEN: '$DECK:KEY' } } });
+    const read = async (name: string) => (await status(w, name)) as unknown as { definitionDigest: string; trust: { tools: { digest: string }[] } };
+    const fx = await read('fx'), fy = await read('fy'), pin = fx.trust.tools[0]!.digest, binding = { scope: 'local' as const, definitionDigest: fx.definitionDigest };
+    const call = (over: Partial<Parameters<typeof send>[0]> = {}) => send({ server: 'fx', tool: 'echo', digest: pin, binding, ...over });
+    expect([await call(), await call({ binding: null }), await call({ server: 'none' }), await call({ binding: { ...binding, scope: 'project' } }),
+      await call({ binding: { ...binding, definitionDigest: 'b'.repeat(64) } }), await call({ digest: 'c'.repeat(64) })])
+      .toEqual([null, 'trust-revoked', 'trust-revoked', 'definition-changed', 'definition-changed', 'pin-revoked']);
+    const paths = [join(w.project, '.deckent', 'mcp.json'), join(w.home, '.deckent', 'mcp.json')];
+    const bytes = paths.map(path => existsSync(path) ? readFileSync(path, 'utf8') : null);
+    managed.denied.push('fx'); expect.soft(await call()).toBe('trust-revoked');
+    managed.denied.length = 0; expect(await call()).toBe(null);
+    managed.allowed = []; expect.soft(await call()).toBe('trust-revoked');
+    managed.allowed = ['fx', 'fy']; expect(await call()).toBe(null);
+    managed.servers['fx'] = { ...w.entry, args: [...w.entry.args, '--company'] };
+    expect.soft(await call()).toBe('definition-changed');
+    delete managed.servers['fx']; expect(await call()).toBe(null);
+    expect(paths.map(path => existsSync(path) ? readFileSync(path, 'utf8') : null)).toEqual(bytes);
+    const file = join(await mcpProjectTrustDirectory(w.project, join(w.home, '.deckent'), false), 'mcp-trust.json'), text = readFileSync(file, 'utf8');
+    chmodSync(file, 0o644); expect(await call()).toBe('trust-unavailable'); chmodSync(file, 0o600);
+    const stamp = 1_800_000_000, edit = (next: string) => { writeFileSync(file, next); utimesSync(file, stamp, stamp); };
+    edit(text); const before = statSync(file); expect(await call()).toBe(null);
+    edit(text.replace(pin, `${pin[0] === 'f' ? 'e' : 'f'}${pin.slice(1)}`)); const after = statSync(file);
+    expect([after.ino, after.size, after.mtimeMs]).toEqual([before.ino, before.size, before.mtimeMs]);
+    expect(await call()).toBe('pin-revoked');
+    edit(text.replace('"decision": "trusted"', '"decision": "declined"')); expect(await call()).toBe('trust-revoked');
+    edit(text.replace(fx.definitionDigest, 'd'.repeat(64))); expect(await call()).toBe('definition-changed');
+    edit(text); expect(await call()).toBe(null);
+    const secretCall = () => send({ server: 'fy', tool: 'echo', digest: pin, binding: { scope: 'local', definitionDigest: fy.definitionDigest } });
+    expect(await secretCall()).toBe(null);
+    w.secrets.delete('KEY'); expect(await secretCall()).toBe('definition-changed');
+    // e2: a completed reset is seen by the next send; a re-approval that pins a changed tool leaves the old digest revoked.
+    await w.run({ verb: 'reset', name: 'fx' }); expect(await call()).toBe('trust-revoked');
+    writeFileSync(w.tools, JSON.stringify([{ name: 'echo', description: 'Echo, changed', inputSchema: { type: 'object', properties: {} } }]));
+    await w.run({ verb: 'approve', name: 'fx' });
+    const fresh = (await read('fx')).trust.tools[0]!.digest;
+    expect([await call(), await call({ digest: fresh })]).toEqual(['pin-revoked', null]);
+  }, 60_000);
 });
 
 describe('SEC-2 F30: a project file reads only allowlisted, non-secret environment variables', () => {
@@ -153,15 +214,17 @@ describe('SEC-2 F30: a project file reads only allowlisted, non-secret environme
     writeFileSync(join(project, '.deckent', 'config.json'), '{}\n');
     writeFileSync(join(project, '.deckent', 'mcp.json'), JSON.stringify({ mcpServers: {
       zone: { command: 'tool', args: ['--tz', '${TZ:-UTC}'] }, port: { command: 'tool', args: ['--port', '${PORT:-8080}'] } } }));
-    const digests = async (extra: Record<string, string>) => {
+    const digests = async (extra: Record<string, string>, knownSecrets = snapshotKnownSecrets([])) => {
       const env = { HOME: home, PATH: '/usr/bin', ...extra }, layout = (await loadConfig(project, { env })).productLayout;
       clearConfigCache();
-      return Object.fromEntries((await loadMcpRegistry({ projectRoot: project, layout, environment: env, secret })).servers.map(server => [server.name, server.definitionDigest]));
+      return Object.fromEntries((await loadMcpRegistry({ projectRoot: project, layout, environment: env, secret, knownSecrets })).servers.map(server => [server.name, server.definitionDigest]));
     };
     const unset = await digests({}), defined = await digests({ TZ: 'Europe/Istanbul', PORT: '9999' });
     expect(defined['zone']).not.toBe(unset['zone']);
     // PORT is not allowlisted: it never reaches the launch, so it never changes what was approved.
     expect(defined['port']).toBe(unset['port']);
+    // P21: a value equal to a known installation secret is hashed as unset, never into the digest `mcp list` shows.
+    expect((await digests({ TZ: 'Europe/Secret-Zone' }, snapshotKnownSecrets([{ name: 'ZONE', value: 'Europe/Secret-Zone' }])))['zone']).toBe(unset['zone']);
   });
 });
 

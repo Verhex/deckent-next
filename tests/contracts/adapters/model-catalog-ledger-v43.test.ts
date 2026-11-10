@@ -33,7 +33,7 @@ const channel = 'claude-cli-subscription';
 
 describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => {
   it('upgrades a v42 ledger losslessly: 0600 backup at v42, every existing table byte-equal, four empty catalog tables', async () => {
-    expect(CURRENT_LEDGER_VERSION).toBe(74); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(50);
+    expect(CURRENT_LEDGER_VERSION).toBe(75); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(50);
     const { root, path } = await ledger(); const backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
     const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V42_LEDGER_SQL);
     // An existing chat activation row and receipt must survive untouched.
@@ -71,13 +71,17 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
   });
   it('registers facts, activates hierarchically, replays exactly and refuses conflicts, unknown targets and stale revisions', async () => {
     const { path } = await ledger(); const catalog = await seedCatalog();
+    const historicalHaiku = catalog.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'claude-haiku-4-5-20251001');
+    expect(historicalHaiku.lifecycle).toMatchObject({ state: 'retired', retiredOn: '2026-10-15' });
+    // The shipped row is already retired; start before retirement to exercise a real fact revision.
+    historicalHaiku.lifecycle = { ...historicalHaiku.lifecycle, state: 'active', retiredOn: null };
     const store = await openSqliteModelCatalogStore(path, options, 'forbid');
     try {
       const register = { schemaVersion: 1, commandId: 'seed', scopeId: 's', action: 'register', catalog };
       const first = await store.apply(admission(register));
       expect(first.replayed).toBe(false);
       expect(first.receipt.changes.map(change => `${change.kind}:${change.modelId ?? '-'}:${change.revision}`)).toEqual(['channel:-:1',
-        'model:claude-fable-5-1:1', 'model:claude-haiku-4-5-20251001:1', 'model:claude-haiku-5-5:1', 'model:claude-opus-5-5:1', 'model:claude-sonnet-5-5:1']);
+        'model:claude-fable-5-1:1', 'model:claude-fable-5-2:1', 'model:claude-haiku-4-5-20251001:1', 'model:claude-haiku-5-5:1', 'model:claude-opus-5-5:1', 'model:claude-sonnet-5-5:1']);
       expect(await store.apply(admission(register))).toEqual({ replayed: true, receipt: first.receipt });
       await expect(store.apply(admission({ ...register, scopeId: 's', catalog: { ...catalog, revision: 'other' } }))).rejects.toMatchObject({ code: 'MODEL_CATALOG_COMMAND_CONFLICT' });
       // Unchanged facts are not rewritten; a lifecycle change bumps only that model.
@@ -99,7 +103,7 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     const reader = await openSqliteModelCatalogReader(path, options);
     try {
       expect((await reader.channel(channel))?.channel).toMatchObject({ kind: 'native-cli', cli: 'claude' });
-      expect((await reader.models(channel)).map(entry => [entry.modelId, entry.model.lifecycle.state])).toEqual([['claude-fable-5-1', 'active'],
+      expect((await reader.models(channel)).map(entry => [entry.modelId, entry.model.lifecycle.state])).toEqual([['claude-fable-5-1', 'active'], ['claude-fable-5-2', 'active'],
         ['claude-haiku-4-5-20251001', 'retired'], ['claude-haiku-5-5', 'active'], ['claude-opus-5-5', 'active'], ['claude-sonnet-5-5', 'active']]);
       expect(await reader.activation('s', channel, null)).toMatchObject({ state: 'active', revision: 1 });
       expect(await reader.activation('s', channel, 'claude-sonnet-5-5')).toMatchObject({ state: 'active', revision: 1 });

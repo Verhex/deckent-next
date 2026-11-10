@@ -15,10 +15,12 @@ export async function* streamTerminalAgentTurn(...args: Parameters<typeof import
   return yield* (await terminalTurn()).streamTerminalAgentTurn(...args);
 }
 export type { ConfigChoiceList, ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
+// alpha.64 B + C: the plan card's lines and a setting's closed choices for the chat turn's proposals (loaded on the first proposal call).
+export function loadProposalViews() { return Promise.all([import('#surfaces/core/run-planning/index.js'), import('#surfaces/core/config/index.js')]); }
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 export { openConfigWindow } from '#surfaces/core/config-window/index.js';
-export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+export { askCliCard, cliMode, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 // I-S3: `deckent init`'s setup reader (loads the setup surface lazily, as `init` does) and doctor's own measurement for the final check.
 export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
 /** The launch shell keeps input while its package loads the Workline groups, before the CLI host also loads the adapters. */
@@ -35,5 +37,6 @@ export function loadHubHttpSurface(): Promise<typeof import('#surfaces/core/hub-
 export function loadModelsSurface(): Promise<typeof import('#surfaces/core/cli-models/index.js')> { return import('#surfaces/core/cli-models/index.js'); }
 export type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 // BeUser report validation reaches the engine; opt in as for the other CLI families.
+/** @deprecated Tur 2 Q17: no Core importer; the surfaces barrel keeps this loader for one release. */
 export function loadBeuserSurface(): Promise<typeof import('#surfaces/core/cli-beuser/index.js')> { return import('#surfaces/core/cli-beuser/index.js'); }
 export type { BeuserCommandContext } from '#surfaces/core/cli-beuser/index.js';

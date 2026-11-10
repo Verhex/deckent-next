@@ -13,8 +13,7 @@ import { adoptConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegratio
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { confirmedDelivery, confirmedAdoption } from '../support/delivery-terminal.js';
 import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { openConfiguredWorkspaceBroker } from '../../../src/composition/core/workspaces/index.js';
+import { openConfiguredAttemptStore, openConfiguredWorkspaceBroker } from '../support/configured-open.js';
 import { checkConfiguredWorkTarget } from '../../../src/composition/core/workspace-patch/index.js';
 import { evaluatePolicy, getPolicyVocabulary, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, fingerprintGitSource } from '#adapters/index.js';

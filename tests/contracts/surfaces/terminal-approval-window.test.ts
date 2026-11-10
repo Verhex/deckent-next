@@ -1,3 +1,4 @@
+import { diffRows as splitDiffRows } from '#surfaces/core/terminal-approval/index.js';
 import { appendFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorklineApproval, TurnDelta } from '#surfaces/core/terminal/index.js';
@@ -38,6 +39,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const work = workSurfaceLabels(locale), w = work.approvalWindow;
     for (const [kind, fixture] of Object.entries(KINDS)) {
       it(`${locale} ${kind}: nine labelled fields, human risk and rule, digest only in the details`, () => {
+        expect(diffRows).toBe(splitDiffRows);
         const lines = approvalCardLines(fixture.approval, work, fixture.preview, kind === 'shell' ? 'rm -rf build && npm test' : null, { project: '/home/u/acme', mode: 'standart' }, NOW);
         const text = lines.join('\n');
         proof(`model ${locale} ${kind}`, text);
@@ -421,14 +423,15 @@ it('K23 worker card shows exact Run/Task/Attempt and argsDigest with witnessed-t
   const { workerToolCardSummary } = await import('#capabilities/index.js');
   const summary = workerToolCardSummary({ identity: { runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt', scopeId: 'scope', generation: 1, layoutRevision: 'l' },
     turnId: 'worker-turn', tool: 'write_file', resource: 'src/result.ts', argsDigest: 'f'.repeat(64) });
-  for (const locale of ['en', 'tr'] as const) {
-    const lines = approvalCardLines(base({ summary, tool: 'write_file', target: 'src/result.ts', risk: 'edit-self-source', requiredAssurance: 'turn-bound', preview: '+exact worker content\n-last hidden payload' }),
+  const worker = (await import('#capabilities/index.js')).readWorkerToolCard(summary)!;
+  for (const fields of [{ summary }, { summary: 'Human-readable worker call', worker }]) for (const locale of ['en', 'tr'] as const) {
+    const lines = approvalCardLines(base({ ...fields, tool: 'write_file', target: 'src/result.ts', risk: 'edit-self-source', requiredAssurance: 'turn-bound', preview: '+exact worker content\n-last hidden payload' }),
       workSurfaceLabels(locale), undefined, null, {}, NOW).join('\n');
     for (const value of ['worker-run', 'worker-task', 'worker-attempt', 'src/result.ts', 'f'.repeat(64), '+exact worker content', '-last hidden payload']) expect(lines).toContain(value);
     expect(lines).not.toContain(locale === 'tr' ? 'burada yalnız reddedebilirsiniz' : 'here you can only deny');
     expect(lines).toContain(locale === 'tr' ? 'kişi tanığıyla' : 'witnessed terminal');
     const { workerApprovalWaitLines } = await import('../../../src/surfaces/core/terminal-work/internal/job-windows.js');
-    const ledger = { scopeId: 'scope', listApprovalPage: async () => ({ items: [base({ summary, expiresAt: Date.now() + 60000, risk: 'edit-self-source' })], nextAfter: null }) };
+    const ledger = { scopeId: 'scope', listApprovalPage: async () => ({ items: [base({ ...fields, expiresAt: Date.now() + 60000, risk: 'edit-self-source' })], nextAfter: null }) };
     const waits = await workerApprovalWaitLines(ledger as never, 'worker-run', workSurfaceLabels(locale));
     expect(waits.map(line => plainText(line.spans)).join(' ')).toContain(locale === 'tr' ? 'Onayınız bekleniyor' : 'Waiting for your approval');
     expect(waits.map(line => plainText(line.spans)).join(' ')).toContain('worker-attempt');

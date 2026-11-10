@@ -1,12 +1,10 @@
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError } from './internal/command.js';
-export type { NativeCodingInvocation } from './internal/command.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NativeCodingInvocation } from './internal/command.js';
 export { assertNativeWorkerBinding, NativeWorkerBindingError } from './internal/binding.js';
-export { createNativeCodingTemplate, nativeWorkerEffortCapability, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, renderWorkScope } from './internal/template.js';
-export { nativeCliCommand, parseNativeCliRegistry, NativeCliRegistryError, nativeCliIds, nativeCliIdSchema, nativeCliCapabilitiesSchema } from '#adapters/core/native-cli-registry/index.js';
-export type { NativeCliCapabilities } from '#adapters/core/native-cli-registry/index.js';
-
+export { createNativeCodingTemplate, nativeWorkerEffortCapability, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit } from './internal/template.js';
+export { nativeCliCommand, parseNativeCliRegistry, NativeCliRegistryError, nativeCliIds, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 export { bindNativeWorkerEffort } from './internal/effort.js';
 export { NATIVE_PROMPT_LIMITS } from './internal/composition.js';
 export { detectNativeCliVersion } from './internal/discovery.js';
 export { nativeCodingEnvironmentProbes } from './internal/environment.js';
-export type { ContainerProbeRunner } from './internal/environment.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ContainerProbeRunner } from './internal/environment.js';

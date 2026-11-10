@@ -1,8 +1,8 @@
 import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
-import type { AgentToolSpec } from '#domain/index.js';
+import { AI_PROPOSAL_REGISTRY, type AgentToolSpec } from '#domain/index.js';
 import { projectModelIngressField } from '#engine/index.js';
-import { isMcpHttpEntry, mcpEndpointRefusal, mcpServerEntrySchema, MCP_DEFAULT_REALM, MCP_SERVER_NAME, type McpServerEntry } from './registry.js';
+import { isMcpHttpEntry, mcpEndpointRefusal, MCP_ENV_NAME, MCP_HEADER_NAME, mcpServerEntrySchema, MCP_DEFAULT_REALM, MCP_SERVER_NAME, type McpServerEntry } from './registry.js';
 
 /**
  * Model-proposed MCP servers (L1 item 5, owner 2026-10-07): the model may only PROPOSE a server; the proposal opens its own human card in every
@@ -14,9 +14,8 @@ import { isMcpHttpEntry, mcpEndpointRefusal, mcpServerEntrySchema, MCP_DEFAULT_R
  * chose. It may only name the settings the server needs; the server is added without them and a person binds them in `/mcp`, where the secret's
  * name and its destination are shown together.
  */
-export const PROPOSE_MCP_SERVER_TOOL = 'propose_mcp_server';
+export const PROPOSE_MCP_SERVER_TOOL = AI_PROPOSAL_REGISTRY.tools.mcp;
 const text = (max: number) => persistedString(z.string().min(1).max(max));
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u, HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/u;
 const proposalSchema = z.strictObject({
   name: text(32), transport: z.enum(['stdio', 'http']), reason: text(1_000),
   command: text(4_096).optional(), args: z.array(persistedString(z.string().max(4_096))).max(64).optional(), url: text(4_096).optional(),
@@ -43,10 +42,8 @@ export const PROPOSE_MCP_SERVER_TOOL_SPEC: AgentToolSpec = Object.freeze({ name:
     requiredSettings: { type: 'array', items: { type: 'string' }, description: 'Names only (env variables for stdio, headers for http) a person must bind.' },
     reason: { type: 'string', description: 'Why this server is needed, for the person who decides.' } } } });
 
-/** Any secret or environment reference: `$DECK:NAME`, `${VAR}`, `$VAR`. */
 const REFERENCE = /\$(?:DECK:|\{|[A-Za-z_])/u;
-export type McpProposalPlan = { readonly ok: true; readonly proposal: McpProposal; readonly entry: McpServerEntry } | { readonly ok: false; readonly reason: string };
-/** Checks one proposal (no secret or reference, shape, ingress of every string, name, the entry the registry would hold); nothing is written. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpProposalPlan = { readonly ok: true; readonly proposal: McpProposal; readonly entry: McpServerEntry } | { readonly ok: false; readonly reason: string };
 export function planMcpProposal(args: Record<string, unknown>): McpProposalPlan {
   // Values a person binds are refused by name, before anything else (the model is told where they belong).
   if ('env' in args || 'headers' in args) return { ok: false, reason: MCP_PROPOSAL_SECRETS_REFUSED };
@@ -58,7 +55,7 @@ export function planMcpProposal(args: Record<string, unknown>): McpProposalPlan 
   if ([proposal.command ?? '', proposal.url ?? '', ...(proposal.args ?? [])].some(value => REFERENCE.test(value))) return { ok: false, reason: MCP_PROPOSAL_SECRETS_REFUSED };
   for (const [field, value] of strings) if (projectModelIngressField(value).disposition !== 'unchanged') return { ok: false, reason: `ingress-refused:${field}` };
   if (!MCP_SERVER_NAME.test(proposal.name)) return { ok: false, reason: 'invalid-name' };
-  const nameRule = proposal.transport === 'http' ? HEADER_NAME : ENV_NAME;
+  const nameRule = proposal.transport === 'http' ? MCP_HEADER_NAME : MCP_ENV_NAME;
   if ((proposal.requiredSettings ?? []).some(name => !nameRule.test(name))) return { ok: false, reason: 'invalid-setting-name' };
   const raw = proposal.transport === 'http' ? { type: 'http', url: proposal.url }
     : { command: proposal.command, ...(proposal.args ? { args: proposal.args } : {}), realm: proposal.realm ?? MCP_DEFAULT_REALM };

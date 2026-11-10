@@ -1,7 +1,5 @@
-import { isAiPrincipal, mcpPrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
-  standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, AI_NON_DELEGABLE_CARD_CELLS, isAiPrincipal, mcpPrincipalRef, samePrincipalRef, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, fullAutoGrant, principalPermissionMode, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
-const sameActor = (a: { issuer: string; subject: string }, b: { issuer: string; subject: string }) => a.issuer === b.issuer && a.subject === b.subject;
 
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
@@ -52,7 +50,7 @@ const relaxableFor = (request: AgentToolCallRequest, askEdits: boolean): Relaxab
   ?? (SANDBOX_RELAXABLE.has(request.cell) && request.shell?.realm === 'sandbox' && request.shell.contained ? SANDBOX_RELAXATION : undefined);
 /** R9: the mode a background worker may use for this person now — full access never passes to a worker, its ceiling is full-auto under the
  * company's full-auto grant (PRE-9), else standart; `askEdits` and the entry id are kept. The plan card records it for a person's Run. */
-export function workerPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string) {
+function workerPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string) {
   const person = principalPermissionMode(policy, principal, scopeId);
   return Object.freeze({ ...person, mode: person.mode !== 'standart' && fullAutoGrant(policy, principal, scopeId).decision === 'allow' ? 'full-auto' as const : 'standart' as const });
 }
@@ -61,7 +59,7 @@ export const runWorkerMode = (policy: unknown, principal: VerifiedPrincipal, sco
   if (isAiPrincipal(principal)) return undefined;
   const { mode, askEdits } = workerPermissionMode(policy, principal, scopeId); return Object.freeze({ mode, askEdits });
 };
-export type WorkerPlanMode = { readonly mode: 'standart' | 'full-auto'; readonly askEdits: boolean };
+type WorkerPlanMode = { readonly mode: 'standart' | 'full-auto'; readonly askEdits: boolean };
 
 // Card presentation reads the same policy-owned mode; composition never evaluates bindings itself.
 export function agentCallPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string): PermissionMode {
@@ -91,16 +89,16 @@ export interface AgentToolCallRequest {
    * ceiling the mode is the lower of the two (askEdits if either), the current one recomputed now with full access capped at full-auto. */
   readonly origin?: { readonly kind: 'run'; readonly ceiling: WorkerPlanMode | null };
 }
-/** A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A person's standing approval that lowered a call (PERSISTENT-APPROVALS G6): this session's memory, or their own persisted grant. */
 export interface StandingApproval { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null }
-export interface PermissionModeRelaxation {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PermissionModeRelaxation {
   readonly mode: Exclude<PermissionMode, 'full-access'>;
   readonly cell: 'edit-non-floor' | 'shell-modify' | 'shell-read' | 'mcp-call';
   /** The lowered company `require-approval` rule ids (sorted, `+`-joined) and the person's mode entry id (null: the default standart). */
   readonly company: string;
   readonly person: string | null;
 }
-/** A call decided in a full-access turn (MODES-3): what the policy said before the floor raise, whether the floor raised it, the lowered
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A call decided in a full-access turn (MODES-3): what the policy said before the floor raise, whether the floor raised it, the lowered
  * company rule ids (null: none) and the grant rule that allows full access. Every such allowed call is audited before its effect. */
 export interface FullAccessDecision {
   readonly cell: Exclude<AgentToolCallCell, 'read' | 'mcp-floor' | 'edit-authority'>;
@@ -136,7 +134,8 @@ export interface AgentToolCallDecision {
  *    are not standing cells.
  * The turn's authorization and the effect gate call this same function; it throws on an invalid snapshot (callers fail closed).
  */
-export function decideAgentToolCall(policy: unknown, request: AgentToolCallRequest): AgentToolCallDecision {
+export function decideAgentToolCall(policyInput: unknown, request: AgentToolCallRequest): AgentToolCallDecision {
+  const policy = asPolicy(policyInput);
   const ask = (kind: string, id: string, action: string) => ({ principal: request.principal, scopeId: request.scopeId, action, resource: { kind, id } });
   const tool = agentToolPolicyResource(request.tool, request.mcpServer);
   const sides = [ask(tool.kind, tool.id, 'invoke'), ...(request.operation ? [ask(policyResources.operation.kind, request.operation.id, 'execute')] : [])];
@@ -147,7 +146,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
     return Object.freeze({ decision: 'deny' as const, revision, relaxation: null });
   const done = (decision: AgentToolCallDecision['decision'], relaxation: PermissionModeRelaxation | null = null, standing?: StandingApproval, fullAccess?: FullAccessDecision) =>
     Object.freeze({ decision, revision, relaxation, ...(standing ? { standing } : {}), ...(fullAccess ? { fullAccess: Object.freeze(fullAccess) } : {}) });
-  if (isAiPrincipal(request.principal) && ['edit-authority', 'edit-floor', 'mcp-floor'].includes(request.cell)) return done('deny');
+  if (isAiPrincipal(request.principal) && AI_NON_DELEGABLE_CARD_CELLS.some(cell => cell === request.cell)) return done('deny');
   // A deny is never lowered, in any mode (full access included).
   if (decided.some(entry => entry.decision.decision === 'deny')) return done('deny');
   const strict = decided.every(entry => entry.decision.decision === 'allow') ? 'allow' : 'require-approval';
@@ -157,7 +156,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   const access = grant?.decision === 'allow' && grant.ruleId !== undefined ? grant.ruleId : null;
   // PRE-9 (b): a stored full-auto counts only while its grant allows it on this very snapshot (like full access): revoked, the call is standart's.
   // R4a: an AI actor follows only the person whose MCP actor it is; without that person no mode relaxes anything (fail closed).
-  const owner = request.person && !isAiPrincipal(request.person) && sameActor(mcpPrincipalRef(request.person), request.principal) ? request.person : null;
+  const owner = request.person && !isAiPrincipal(request.person) && samePrincipalRef(mcpPrincipalRef(request.person), { issuer: request.principal.issuer, subject: request.principal.subject }) ? request.person : null;
   const modeActor = isAiPrincipal(request.principal) ? owner : request.principal;
   const plan = request.origin?.ceiling, now = access || !modeActor ? null : plan ? workerPermissionMode(policy, modeActor, request.scopeId) : effectivePermissionMode(policy, modeActor, request.scopeId);
   const person = now && plan ? { ...now, mode: plan.mode === 'full-auto' ? now.mode : 'standart' as const, askEdits: now.askEdits || plan.askEdits } : now;
@@ -171,7 +170,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
     if (key === undefined || (!standingCell(request.cell) && request.cell !== 'edit-self-source')) return null;
     const grant = evaluatePolicy(policy, ask(STANDING_GRANT_KIND, key, STANDING_GRANT_ACTION));
     const { principal, scopeId } = request;
-    const explicit = request.cell !== 'edit-self-source' && grant.decision === 'allow' ? policySchema.parse(policy).grants.find(rule => rule.effect === 'allow' && isStandingGrantId(rule.id)
+    const explicit = request.cell !== 'edit-self-source' && grant.decision === 'allow' ? policy.grants.find(rule => rule.effect === 'allow' && isStandingGrantId(rule.id)
       && rule.resource.kind === STANDING_GRANT_KIND && rule.resource.ids !== 'all' && rule.resource.ids.includes(key) && (rule.actions === 'all' || rule.actions.includes(STANDING_GRANT_ACTION))
       && (rule.scopes === 'all' || rule.scopes.includes(scopeId)) && rule.principals !== 'all' && rule.principals.some(item => item.issuer === principal.issuer && item.subject === principal.subject)) : undefined;
     if (explicit) return Object.freeze({ source: 'grant' as const, key, grantId: explicit.id });
@@ -221,7 +220,7 @@ export function standingWouldLower(policy: unknown, request: AgentToolCallReques
 }
 
 type AuditSummary = Extract<AuditEvent['subject'], { kind: 'full-access-call' }>['summary'];
-/** One call's audit identity and what it touched (the shared part of the permission-mode and full-access call events). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). One call's audit identity and what it touched (the shared part of the permission-mode and full-access call events). */
 export interface AgentCallAuditInput {
   readonly eventId: string; readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly atMs: number;
   readonly tool: { readonly name: string; readonly version: number };

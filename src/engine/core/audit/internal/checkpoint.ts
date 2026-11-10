@@ -3,14 +3,14 @@ import { encodeCommandProjection, auditCheckpointSchema, auditWitnessSchema, Aud
 import { sha256, type IntegrityAuthority } from '#platform/index.js';
 import { AUDIT_PAGE_MAX, AuditApplication } from './application.js';
 import type { AuditCheckpointStore } from './checkpoint-store.js';
-export interface AuditCheckpointContext { readonly installationId: string; readonly policyDigest: string; readonly producersDigest: string }
-export interface AuditVerificationLimits { readonly pageSize: number; readonly maxRecords: number }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AuditCheckpointContext { readonly installationId: string; readonly policyDigest: string; readonly producersDigest: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AuditVerificationLimits { readonly pageSize: number; readonly maxRecords: number }
 /** Who writes a checkpoint's wipe marker: the service's own verified principal and the policy revision in force. */
-/** Exactly what the person confirmed on the re-baseline card; the write re-checks all of it inside its own transaction. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Exactly what the person confirmed on the re-baseline card; the write re-checks all of it inside its own transaction. */
 export interface AuditRebaselineExpectation { readonly status: AuditVerification['status']; readonly head: AuditVerification['head']; readonly policyDigest: string; readonly producersDigest: string }
-export interface AuditCheckpointWriter { readonly principal: { readonly issuer: string; readonly subject: string }; readonly policyRevision: string }
-export const auditCheckpointDigest = (checkpoint: AuditCheckpoint): string => sha256(encodeCommandProjection('audit-checkpoint-digest:1', checkpoint));
-export const exportAuditCheckpoint = (checkpoint: AuditCheckpoint): AuditWitness => auditWitnessSchema.parse({ schemaVersion: 1,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AuditCheckpointWriter { readonly principal: { readonly issuer: string; readonly subject: string }; readonly policyRevision: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const auditCheckpointDigest = (checkpoint: AuditCheckpoint): string => sha256(encodeCommandProjection('audit-checkpoint-digest:1', checkpoint));
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const exportAuditCheckpoint = (checkpoint: AuditCheckpoint): AuditWitness => auditWitnessSchema.parse({ schemaVersion: 1,
   kind: 'deckent-audit-checkpoint', checkpoint, digest: auditCheckpointDigest(checkpoint) });
 export const auditPolicyDigest = (policy: unknown): string => sha256(encodeCommandProjection('audit-policy:1', policy));
 export const auditProducersDigest = (inventory: unknown): string => sha256(encodeCommandProjection('audit-producers:1', inventory));

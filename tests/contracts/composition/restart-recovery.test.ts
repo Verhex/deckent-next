@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { clearConfigCache, loadConfig, prepareProductDirectory } from '#platform/index.js';
 import { DockerCommandFailure, DockerSupervisor, FileArtifactStore, identifyDockerRequest, type DockerCommandRunner } from '#adapters/index.js';
 import { parseRetainedOutputEnvelope, type ReconciliationRecoveryPage } from '#engine/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { prepareConfiguredReconciliationRuntime } from '../../../src/composition/core/runtime/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks, inspectConfiguredRun, recoverConfiguredReconciliation } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';

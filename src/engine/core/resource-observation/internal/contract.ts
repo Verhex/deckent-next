@@ -1,14 +1,14 @@
-import { persistedString, persistedInteger, identitySchema, attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type WorkerIncarnation } from '#domain/index.js';
+import { counterSchema, persistedString, persistedInteger, identitySchema, attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type WorkerIncarnation } from '#domain/index.js';
 import { z } from 'zod';
 import { workerIncarnationSchema, type SandboxRequest, type ExecutionSupervisor } from '#engine/core/supervisor/index.js';
 import type { ResourceObservationSettings } from '#platform/index.js';
 const measured = z.number().finite().nonnegative();
 const incarnation = z.union([workerIncarnationSchema, z.strictObject({ kind: z.literal('process'), pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   startedAt: persistedString(z.string().min(1).max(128)) }).readonly()]);
-export const resourceGapSchema = z.enum(['starting', 'unsupported', 'denied', 'timeout', 'identity', 'invalid', 'overload', 'store-unavailable', 'queue-full', 'disabled', 'missing', 'counter-reset']);
-export type ResourceGap = z.infer<typeof resourceGapSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const resourceGapSchema = z.enum(['starting', 'unsupported', 'denied', 'timeout', 'identity', 'invalid', 'overload', 'store-unavailable', 'queue-full', 'disabled', 'missing', 'counter-reset']);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ResourceGap = z.infer<typeof resourceGapSchema>;
 export const resourceSampleSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
-  worker: incarnation.nullable(), observedAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  worker: incarnation.nullable(), observedAtMs: counterSchema,
   cpuSeconds: measured.nullable(), cpuCores: measured.nullable(), memoryBytes: measured.int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
   memoryLimitBytes: measured.int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), kernelPeakBytes: measured.int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
   gap: resourceGapSchema.nullable(), source: identitySchema,

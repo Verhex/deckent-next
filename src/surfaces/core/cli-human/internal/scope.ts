@@ -1,10 +1,10 @@
-import { ErrorRegistry, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { CliCardRequest } from './card.js';
 
 /** Where the scope of a command came from: typed `--scope`, the configured `terminal.scopeId` (reads only), or the person's TTY choice. */
 export type ScopeResolution = Readonly<{ scopeId: string; source: 'flag' | 'default' | 'picked' }>;
 /** The person's choice on a TTY card (the CLI card launcher); null = cancelled. */
-export type ScopePick = (request: CliCardRequest) => Promise<string | null>;
+type ScopePick = (request: CliCardRequest) => Promise<string | null>;
 
 /**
  * The scope rule (CLI review "Scope"): a read uses `--scope` or the configured default and says which; a change never takes a silent
@@ -22,7 +22,7 @@ export async function resolveCommandScope(input: Readonly<{ command: string; loc
   // J2d: the scope list says "no installation here" once (CLI_INSTALLATION_MISSING); a person on a terminal gets it as is, anyone else
   // keeps the unchanged CLI_SCOPE_REQUIRED (`--scope`), so `deckent init --yes` and agents see no change.
   const scopes = [...new Set(await input.listScopes().catch((error: unknown) => {
-    if (!person && (error as { code?: unknown } | null)?.code === 'CLI_INSTALLATION_MISSING') return [];
+    if (!person && isCodedError(error, 'CLI_INSTALLATION_MISSING')) return [];
     throw error;
   }))];
   // J2c: an installation with no scope this person may read: the same typed setup step as bare `deckent`.

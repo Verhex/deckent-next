@@ -9,10 +9,10 @@ import { buildHeadlessEnv, headlessLoginEnv } from './env.js';
 import { loginRecordPath, withLoginLock } from './login-lock.js';
 import { emptyRunDir, headlessAuth, privateDir } from './preflight.js';
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
-export type HeadlessLoginExit = 'completed' | 'cancelled' | 'failed';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HeadlessLoginExit = 'completed' | 'cancelled' | 'failed';
 export type HeadlessLoginResult = Readonly<{ schemaVersion: 1; configDir: string; owned: boolean; exit: HeadlessLoginExit; signedIn: boolean; authMethod: string | null; subscriptionType: string | null }>;
-export type HeadlessLoginInput = Readonly<{ family: string; stateDir: string; configDir: string; owned: boolean; executable?: string | undefined; sso: boolean; loginMethod?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; isolation: HeadlessIsolation; signal?: AbortSignal }>;
-export function headlessLoginArgs(family: string, method: string | undefined, sso: boolean): readonly string[] {
+type HeadlessLoginInput = Readonly<{ family: string; stateDir: string; configDir: string; owned: boolean; executable?: string | undefined; sso: boolean; loginMethod?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; isolation: HeadlessIsolation; signal?: AbortSignal }>;
+function headlessLoginArgs(family: string, method: string | undefined, sso: boolean): readonly string[] {
   const entry = nativeCliHeadless(family), selected = method === undefined ? undefined : nativeCliAgent(family)?.agent.loginMethods.find(row => row.method === method);
   if (!entry || method !== undefined && !selected) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   if (sso && !entry.headless.login.ssoFlag) refuse('HEADLESS_REQUEST_INVALID', { reason: 'sso' });

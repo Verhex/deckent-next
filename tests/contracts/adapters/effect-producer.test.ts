@@ -102,6 +102,33 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
   expect(applied).toBe(1);
 });
 
+it('claims nothing for an unobservable target or an oversized input; a session lapsing after the claim leaves it claimed and the same command resumes it', async () => {
+  const { store } = await ledger();
+  const clock = { sample: () => ({ wallMs: 1_000, monotonicMs: 1_000 }) }, principalRef = { id: 'person', issuer: 'test', subject: 'person' };
+  let calls = 0, lapseAt = 0, admitted = 0, applied = 0, observable = false;
+  const sessions = { verifySession: async () => ({ principal: { ...principalRef, assurance: 'token-verified', scopeIds: ['s'] }, session: { schemaVersion: 1, sessionId: 'session',
+    authorityRef: 'test', kind: 'token-verified', principalRef, scopeIds: ['s'], authenticatedAt: 1, expiresAt: 10_000 } }), isSessionActive: async () => ++calls !== lapseAt, revoke: async () => {} };
+  const allow = new OperationPolicyAuthorization({ load: async () => ({ schemaVersion: 1, revision: 'p', restrictions: [],
+    grants: [{ id: 'all', effect: 'allow', principals: 'all', scopes: ['s'], actions: 'all', resource: { kind: 'operation', ids: 'all' } }] }) });
+  const target = { kind: 'record', identity: () => 'fixture-target', observe: async () => { if (!observable) throw new Error('down'); return { version: '1' }; },
+    apply: async () => { applied++; return { version: '2' }; }, lookup: async () => ({ status: 'absent' as const }) };
+  const app = (entry = descriptor) => new EffectApplication({ resolve: async () => entry }, { resolve: () => target }, store, { admit: async () => { admitted++; } },
+    sessions, allow, clock, { producer: { kind: 'principal' } });
+  // S3-R6/R8: the input bound is checked before the gate is asked; an unobservable target stops before the claim.
+  await expect(app().execute({ ...command('big'), input: { value: 'x'.repeat(4096) } })).rejects.toMatchObject({ code: 'EFFECT_INVALID' });
+  expect(admitted).toBe(0);
+  await expect(app({ ...descriptor, precondition: 'record-version' }).execute({ ...command('down'), expectedVersion: '1' })).rejects.toMatchObject({ code: 'EFFECT_TARGET_UNAVAILABLE' });
+  for (const id of ['big', 'down']) expect(await store.loadEffect('s', id)).toBeNull();
+  // S3-R10: the session lapses at the re-check right before the send; the claim stays and holds its target.
+  observable = true; lapseAt = calls + 2;
+  await expect(app().execute(command('op-1'))).rejects.toMatchObject({ code: 'SESSION_INACTIVE' });
+  expect((await store.loadEffect('s', 'op-1'))!.state).toBe('claimed');
+  await expect(app().execute({ ...command('op-2'), target: command('op-1').target })).rejects.toMatchObject({ code: 'EFFECT_TARGET_BUSY' });
+  expect(applied).toBe(0);
+  expect(await app().execute(command('op-1'))).toMatchObject({ status: 'settled' });
+  expect(applied).toBe(1);
+});
+
 it('retains lifecycle custody for an unsettled business effect even when its scope has no current installation grant', async () => {
   const { observeUninstallWork } = await import('#adapters/core/installation-removal/index.js');
   const { store, path } = await ledger(), limits = { busyTimeoutMs: options.busyTimeoutMs, maxRecords: 10 };

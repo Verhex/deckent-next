@@ -1,5 +1,5 @@
 import { persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES, MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
-import { MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
+import { CodedError, MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 
@@ -17,7 +17,7 @@ const attemptRefSchema = z.strictObject({ runId: identitySchema, taskId: identit
 export const memoryExtractCommandSchema = z.strictObject({ ...scoped, source: attemptRefSchema, ruleId: identitySchema, ruleVersion: counterSchema.positive(), claimIndex: counterSchema,
   content: memoryContentSchema, audience: memoryAudienceSchema, support: z.strictObject({ producer: z.enum(['rule', 'worker-claim']), evaluationId: identitySchema,
     evaluationDigest: digestSchema, reportDigest: digestSchema.nullable() }).readonly() });
-export type MemoryExtractCommand = z.infer<typeof memoryExtractCommandSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryExtractCommand = z.infer<typeof memoryExtractCommandSchema>;
 /** One piece of evidence behind a system entry (append-only; `supportId` = the extraction command id, so a replay adds nothing). Never read for
  * model independence: S4B-3 re-derives the worker model from the sealed Run. */
 export interface MemorySupport { readonly schemaVersion: 1; readonly scopeId: string; readonly entryId: string; readonly supportId: string; readonly producer: 'rule' | 'worker-claim';
@@ -27,7 +27,7 @@ export interface MemorySupport { readonly schemaVersion: 1; readonly scopeId: st
 export interface MemoryExtractionReceipt { readonly schemaVersion: 1; readonly scopeId: string; readonly source: { readonly runId: string; readonly taskId: string; readonly attemptId: string };
   readonly atMs: number; readonly proposed: number; readonly shadow: number; readonly mode: 'live' | 'shadow';
   readonly refused: readonly { readonly ruleId: string; readonly claimIndex: number; readonly code: string }[]; readonly registryRevision: string }
-export type MemoryAlertKey = 'memory.alert.extractionBound' | 'memory.alert.screening';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryAlertKey = 'memory.alert.extractionBound' | 'memory.alert.screening';
 export type MemoryDistilOutcome = { readonly schemaVersion: 1; readonly status: 'extracted'; readonly proposed: number; readonly supported: number; readonly shadow: number;
   readonly refused: MemoryExtractionReceipt['refused']; readonly alerts: readonly { readonly key: MemoryAlertKey; readonly scopeId: string; readonly count: number }[] }
   | { readonly schemaVersion: 1; readonly status: 'replayed'; readonly receipt: MemoryExtractionReceipt }
@@ -60,7 +60,7 @@ export type MemoryInspectQuery = z.infer<typeof memoryInspectQuerySchema>;
 export type MemoryListQuery = z.infer<typeof memoryListQuerySchema>;
 export type MemorySearchQuery = z.infer<typeof memorySearchQuerySchema>;
 
-/** A read that could not be completed holds: the caller never receives an empty memory in place of a failed read (K-D, design note §3). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A read that could not be completed holds: the caller never receives an empty memory in place of a failed read (K-D, design note §3). */
 export type MemoryHoldCode = 'MEMORY_UNAVAILABLE' | 'MEMORY_CORRUPT' | 'MEMORY_PURGE_REPLAY_HELD';
 export interface MemoryHeld { readonly schemaVersion: 1; readonly status: 'held'; readonly code: MemoryHoldCode }
 export type MemoryInspection = { readonly schemaVersion: 1; readonly status: 'ok'; readonly entry: MemoryEntry; readonly history: readonly MemoryEntry[] }
@@ -218,9 +218,9 @@ export interface MemoryEvaluationPass { readonly schemaVersion: 1; readonly mode
   readonly records: readonly { readonly entryId: string; readonly recordId: string; readonly verdict: MemoryEvaluationRecord['verdict']; readonly verified: boolean; readonly contests: number }[];
   readonly skipped: readonly { readonly entryId: string; readonly reason: MemoryEvaluationSkip }[];
   readonly alerts: readonly { readonly key: MemoryEvaluationAlertKey; readonly scopeId: string }[] }
-export type MemoryJournalErrorCode = MemoryHoldCode | 'MEMORY_COMMAND_CONFLICT' | 'MEMORY_REVISION_CONFLICT' | 'MEMORY_NOT_FOUND' | 'MEMORY_OUTCOME_UNKNOWN'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type MemoryJournalErrorCode = MemoryHoldCode | 'MEMORY_COMMAND_CONFLICT' | 'MEMORY_REVISION_CONFLICT' | 'MEMORY_NOT_FOUND' | 'MEMORY_OUTCOME_UNKNOWN'
   | 'MEMORY_ENTRY_WITHHELD' | 'MEMORY_PURGED_CONTENT' | 'MEMORY_EXTRACTION_BOUND' | 'MEMORY_CANDIDATE_SECRET' | 'MEMORY_CANDIDATE_QUARANTINED' | 'MEMORY_DISTILLER_REQUIRED'
   | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PURGE_REPLAY_HELD' | 'MEMORY_CONTEST_RESOLVED' | 'MEMORY_PURGE_INVOCATION_REFUSED';
-export class MemoryJournalError extends Error {
-  constructor(readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
+export class MemoryJournalError extends CodedError {
+  constructor(override readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
 }

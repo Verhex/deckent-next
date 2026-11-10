@@ -1,6 +1,6 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
-import { SystemTrustedClock, inspectProductDirectory, ManagedFileError, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, inspectProductDirectory, ManagedFileError, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type ConfigLoadOptions } from '#platform/index.js';
 import { FileBrainQuotaWaitStore, indexMonitorInstall, listSurfaceRunIds, prepareMonitorInstall, stampMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
 import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, PoolControlPolicyAuthorization, assertPoolControlAllowed, MonitorSourceMemo, monitorScopeDiagnosticsAllowed, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type MonitorRecall } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
@@ -13,7 +13,7 @@ import { inspectConfiguredDismissedDeliveries } from '#composition/core/workspac
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
-const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED']); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (DENIED.has(queryFailure(error).code)) return false; throw error; });
+const denied = (code: string) => isAuthorizationRefusal(code, { include: PERSON_AUTHORIZATION_REFUSALS }); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (denied(queryFailure(error).code)) return false; throw error; });
 async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
       const output = await granted(() => auth.authorizeScopeReadOutput(scopeId, c.principal)), approval = await granted(async () => { authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); });
@@ -106,7 +106,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
       // One walk per scope: one context and reader for all its pages up to `maxEntries` (was one inventory call per page).
       const recalled = await recall(target.path); let page;
       try { page = (await inspectConfiguredWorkers(target.path, { schemaVersion: 1, scopeId, source: 'current', after: null, open: true }, options, { recall: recalled, entries: config.inspection.workers.maxEntries })).sources[0]!; }
-      catch (error) { const reason = queryFailure(error).code; if (DENIED.has(reason)) return { access: 'denied', reason, workers: [], workerStatus: 'denied', truncated: false }; throw error; }
+      catch (error) { const reason = queryFailure(error).code; if (denied(reason)) return { access: 'denied', reason, workers: [], workerStatus: 'denied', truncated: false }; throw error; }
       return { access: 'admitted', workers: page.workers, workerStatus: page.status, truncated: page.nextAfter !== null, approvals: await recalled(`approvals\0${scopeId}`, () => granted(async () => {
         const c = await scope(target.path, scopeId); authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); })) };
     } }).inspect(targets, selection);

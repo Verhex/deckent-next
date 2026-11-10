@@ -43,7 +43,7 @@ export const hubRosterSchema = z.strictObject({ get schemaVersion() { return z.l
   get entries() { return z.array(z.strictObject({ keyId: digest, publicKey: text, role: z.enum(['moderator', 'senior-moderator']), accountRef: id,
     notBefore: time, notAfter: positive })).max(HUB_LIMITS.searchPageMax); },
   get signature() { return z.strictObject({ keyId: digest, value: text }); } });
-export type HubRoster = z.infer<typeof hubRosterSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HubRoster = z.infer<typeof hubRosterSchema>;
 export const hubModerationCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, commandId: id,
   get action() { return z.enum(['approve', 'reject', 'request-changes', 'yank', 'revoke', 'hide', 'restore', 'suspend', 'ban', 'unban', 'recover-key']); },
   get targetKind() { return z.enum(['version', 'profile', 'account']); }, targetId: id, reason: id, get emergency() { return z.boolean(); },
@@ -81,4 +81,4 @@ export interface HubServiceDependencies {
   readonly identity: HubIdentityVerifier;
   readonly verifyDomain: (domain: string, expectedTxt: string, signal?: AbortSignal) => HubAwaitable<boolean>;
 }
-export interface HubServiceContext extends HubServerContext { readonly sessionId?: string }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface HubServiceContext extends HubServerContext { readonly sessionId?: string }

@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
+import { persistedString, persistedUuid } from '#platform/index.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns';
@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { attemptIdentitySchema, type AuditSubject } from '#domain/index.js';
+import { counterSchema, attemptIdentitySchema, type AuditSubject } from '#domain/index.js';
 import type { OAuthAccessTokenLease } from '#engine/index.js';
 import { SIWC_WORKER_RELAY as R } from '#adapters/core/provider-siwc/index.js';
 import { listenForContainerPeer, localPeerNativePath } from '#adapters/core/local-runtime-socket/index.js';
@@ -17,15 +17,15 @@ import { containerInitPeer } from './proc.js';
 import { siwcWorkerRequestBody, secretScrubber, type SiwcRelayRefusal } from './request.js';
 import { createAppServerTurn, type SiwcNativeApproval } from './client.js';
 
-const text = persistedString(z.string().min(1).max(256)), generation = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-/** Nonsecret binding of one relay capability (U9 rev 6 §11.3): app, person, installation/company/scope, connection, Attempt/fence, generations, model. */
+const text = persistedString(z.string().min(1).max(256)), generation = counterSchema;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Nonsecret binding of one relay capability (U9 rev 6 §11.3): app, person, installation/company/scope, connection, Attempt/fence, generations, model. */
 export const siwcWorkerBindingSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(), installationId: text, companyId: text,
   person: z.strictObject({ issuer: text, subject: text }).readonly(), attempt: attemptIdentitySchema, model: text,
   /** U6 pin of this Attempt: the worker image id and the Codex CLI version its build receipt recorded. */
   imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), codexVersion: text,
   generations: z.strictObject({ connection: generation, custody: generation, consent: generation }).readonly() }).readonly();
-export type SiwcWorkerBinding = z.infer<typeof siwcWorkerBindingSchema>;
-/** Container mount points of the relay channel and its pinned standalone programs (no credential path). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SiwcWorkerBinding = z.infer<typeof siwcWorkerBindingSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Container mount points of the relay channel and its pinned standalone programs (no credential path). */
 export const SIWC_WORKER_PATHS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs', hardening: '/run/deckent-hardening.node',
   /** The native Codex worker's core prompt file (its frozen `model_instructions_file` config names it). */
   instructions: '/tmp/deckent-prompt/core.txt' });
@@ -72,7 +72,7 @@ const httpsUpstream: SiwcUpstream = input => new Promise((resolve, reject) => {
 });
 
 /** One relay launch's input (U9-6/7). */
-export type SiwcWorkerRelayInput = {
+type SiwcWorkerRelayInput = {
   readonly directory: string; readonly binding: SiwcWorkerBinding; readonly prompt: string; readonly deadlineMs: number; readonly version: string;
   readonly lease: (connectionId: string, signal: AbortSignal) => Promise<OAuthAccessTokenLease>;
   /** Current Deckent decision for one native effect (fence/consent/policy re-read by the caller), asked before the effect. */

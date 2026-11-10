@@ -14,7 +14,7 @@ import { immediateSlashAction, liveWindowClosedText, liveWindowLines, liveWindow
 import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal/index.js';
 import { LiveWatchWindow } from '#surfaces/core/terminal-work/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { RenderGlyphsContext, plainText, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { plainText, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { WORKER_LINE_EN } from '../support/worker-line-labels.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';

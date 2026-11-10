@@ -1,6 +1,5 @@
 import { resolvedMcpCapabilityRules, ownedMcpCapabilityRules } from '#engine/core/policy/index.js';
-import { authorityDocuments, delegationWithin, encodeCommandProjection, evaluatePolicy, isMcpPrincipal, mcpCapabilityGroupSchema, mcpPrincipalRef, planPolicyChange, POLICY_CHANGE_MAX, policySchema,
-  RegistryError, sameMcpCapabilityRule, type McpCapabilityGroup, type McpCapabilityGroupInput, type McpCapabilityState, type McpCapabilityPreview, type McpCapabilityRequest, type McpCapabilityView, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
+import { authorityDocuments, delegationWithin, encodeCommandProjection, evaluatePolicy, isMcpPrincipal, mcpCapabilityGroupSchema, mcpPrincipalRef, planPolicyChange, POLICY_CHANGE_MAX, RegistryError, sameMcpCapabilityRule, type McpCapabilityGroup, type McpCapabilityGroupInput, type McpCapabilityState, type McpCapabilityPreview, type McpCapabilityRequest, type McpCapabilityView, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import catalog from './mcp-capabilities.json' with { type: 'json' };
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
@@ -33,7 +32,7 @@ export class McpCapabilities {
   private async snapshot(principal: VerifiedPrincipal, scopeId: string) {
     if (isMcpPrincipal(principal)) throw new Error('MCP_CAPABILITY_OWNER_REQUIRED');
     if (!principal.scopeIds.includes(scopeId)) throw new Error('MCP_CAPABILITY_SCOPE_UNKNOWN');
-    const policy = policySchema.parse(await this.deps.policy.load());
+    const policy = await this.deps.policy.load();
     if (policy.schemaVersion !== 2) throw new Error('MCP_CAPABILITY_UNSUPPORTED');
     return policy;
   }

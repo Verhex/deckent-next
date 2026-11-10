@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout } from '#platform/index.js';
 import { createFileSecretStore, encodeServiceFrame, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 

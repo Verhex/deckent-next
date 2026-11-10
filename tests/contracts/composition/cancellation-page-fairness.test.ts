@@ -10,7 +10,7 @@ import { DockerSupervisor, FileArtifactStore, identifyDockerRequest } from '#ada
 import { DispatchApplication, type ExecutionSupervisor, type SupervisorProfileSource } from '#engine/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { prepareConfiguredCancellationRuntime } from '../../../src/composition/core/runtime/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { requestRunCancellation } from '../../../src/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 

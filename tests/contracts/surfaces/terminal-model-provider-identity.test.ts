@@ -1,8 +1,8 @@
 import { createElement } from 'react';
 import { renderToString, Text } from 'ink';
 import { expect, it } from 'vitest';
-import { modelProviderSpans, plainText, SpanText, fitStatusRow, worklineStatusSegments } from '#surfaces/core/terminal-render/index.js';
-import { addSessionUsage, EMPTY_SESSION_USAGE, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { modelProviderSpans, plainText, fitStatusRow, worklineStatusSegments, SpanText } from '#surfaces/core/terminal-render-ink/index.js';
+import { addSessionUsage, EMPTY_SESSION_USAGE, resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { SystemSummaryLine, infoWindowLines, type InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 import { modelPanelTree } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';

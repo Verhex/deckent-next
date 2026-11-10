@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { inspectConfiguredDecisionDelegations, inspectConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { me, runtime } from '../support/mcp-capability-harness.js';
@@ -131,11 +131,17 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ ...template.bindings,
       bindings: [{ id: 'owner', principals: me, roles: ['owner'], scopes: 'all' }] }), { mode: 0o600 });
     const title = locale === 'tr' ? 'Yapay zekâya devir' : 'AI delegation', keys = locale === 'tr' ? 'y: onayla' : 'y: confirm', grantAction = locale === 'tr' ? 'Bu adımı devret' : 'Delegate this step';
+    // alpha.64 (owner S6): the AI proposals row, after the groups: off removes exactly the v20 rules (`--rollback`), on restores only them, both governed.
+    const ai = locale === 'tr' ? { row: 'Yapay zekâ önerileri', on: 'açık', off: 'kapalı', offCard: 'Kapat: şu kuralları', onCard: 'Aç: yalnız şu kuralları' }
+      : { row: 'AI proposals', on: 'on', off: 'off', offCard: 'Turn off: removes these rules', onCard: 'Turn on: adds only these rules' };
     const steps = [
       ['READY', [...'/policy', ENTER], 'start'], ['> scope', [ENTER], '+scopes'],
-      // Nine capability groups (S4 added `memory`, S7 `agents`) sit above the AI delegation entry; the opt-in `dogfood-worker` group is not
-      // listed unless held or named in policy.mcp.optInGroups (alpha.56 U5-S2, d3fca0899).
-      [w.groups, [...Array.from({ length: 9 }, () => DOWN), ENTER], '+groups'],
+      // Nine capability groups (S4 added `memory`, S7 `agents`) and the AI proposals row sit above the AI delegation entry; the opt-in `dogfood-worker`
+      // group is not listed unless held or named in policy.mcp.optInGroups (alpha.56 U5-S2, d3fca0899).
+      [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups'], [`${ai.row} · ${ai.on}`, [ENTER], '+ai row'], [w.action, [DOWN, ENTER], '+ai off action'],
+      [ai.offCard, [ENTER], '+ai off card'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after off'], [`${ai.row} · ${ai.off}`, [ENTER], '+ai row off'],
+      [w.action, [ENTER], '+ai on action'], [ai.onCard, [ENTER], '+ai on card'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after on'],
+      [`${ai.row} · ${ai.on}`, [DOWN, ENTER], '+ai row on'],
       [title, [ENTER], '+delegation list'], [grantAction, [ENTER], '+grant action'],
       [keys, [ENTER], '+default cancel'], [title, [ENTER], '+cancelled list'],
       [grantAction, [ENTER], '+grant again'], [keys, ['y'], '+grant card'],
@@ -153,8 +159,11 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     expect(view.steps[0]).toMatchObject({ step: { id: 'run-resume' }, managed: 'none', effective: 'denied' });
     const changes = f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row['record'])))
       .filter(row => row.event.subject.kind === 'authority-change');
-    expect(changes).toHaveLength(2);
+    expect(changes).toHaveLength(4); // the AI proposals off and on, then the delegation grant and revoke
     for (const row of changes) expect(row.event.subject.decider).toEqual(me[0]);
+    const held = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants.filter((rule: { id: string }) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id as never));
+    expect(held).toEqual(template.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id as never)));
+    for (const id of FIRST_RUN_CURRENT_UPGRADE_RULE_IDS) expect(text).toContain(id); // the off card named each rule it removes
     const directory = process.env['DECKENT_MCP_GRANT_FRAMES'];
     if (directory) { await mkdir(directory, { recursive: true }); await writeFile(join(directory, `delegation-${locale}.txt`), text); }
   }, 120_000);

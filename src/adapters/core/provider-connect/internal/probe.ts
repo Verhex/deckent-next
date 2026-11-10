@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { SIWC_INFERENCE } from '#adapters/core/provider-siwc/index.js';
 import { ProviderModelListError, readProviderPart, type ProviderDiscoveryCause } from './failure.js';
 import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js'; import { endpointMayCarryKey } from '#domain/index.js';
@@ -9,17 +10,17 @@ import { listKindProviderWorkspaces } from './workspaces.js';
  * and a server error; `unexpected` any other answer (a redirect is never followed: the key would travel to another host).
  */
 export const PROVIDER_PROBE_OUTCOMES = ['ok', 'credential-rejected', 'access-denied', 'spend-limit', 'rate-limit', 'limit-reached', 'unreachable', 'unexpected'] as const;
-export type ProviderProbeOutcome = typeof PROVIDER_PROBE_OUTCOMES[number];
-/** The secret lane's `ProviderRejectionKind` (one vocabulary for a refused turn and a refused check). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderProbeOutcome = typeof PROVIDER_PROBE_OUTCOMES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The secret lane's `ProviderRejectionKind` (one vocabulary for a refused turn and a refused check). */
 export type ProviderProbeRejection = ProviderRejectionKind;
-/** `key`: `verified` — the endpoint answered a request that needs the key; `none` — no key was sent; `unverified` — a local server answered,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `key`: `verified` — the endpoint answered a request that needs the key; `none` — no key was sent; `unverified` — a local server answered,
  * but it may not check keys at all. Nothing of the answer body is ever returned. */
 export type ProviderProbeResult = Readonly<{ outcome: ProviderProbeOutcome; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: ProviderDiscoveryCause }>;
-export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 export type ProviderProbeFetch = (url: string, init: { method: 'GET'; headers: Record<string, string>; redirect: 'manual'; signal: AbortSignal }) => Promise<Response>;
 export type ProviderProbeOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal; fetch?: ProviderProbeFetch }>;
-export class ProviderProbeError extends Error {
-  constructor(readonly code: 'PROVIDER_KIND_UNAVAILABLE' | 'PROVIDER_ENDPOINT_INVALID' | 'PROVIDER_KEY_REQUIRED' | 'PROVIDER_KEY_INSECURE', readonly reason?: string) { super(code); this.name = 'ProviderProbeError'; }
+export class ProviderProbeError extends CodedError {
+  constructor(override readonly code: 'PROVIDER_KIND_UNAVAILABLE' | 'PROVIDER_ENDPOINT_INVALID' | 'PROVIDER_KEY_REQUIRED' | 'PROVIDER_KEY_INSECURE', readonly reason?: string) { super(code); this.name = 'ProviderProbeError'; }
 }
 /** How much of a refusal's body is read to tell a spend limit from a rate limit; the text is matched, never kept or returned. */
 const BODY_PREFIX_BYTES = PROVIDER_CONNECT_LIMITS.bodyPrefixBytes;

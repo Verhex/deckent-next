@@ -1,7 +1,8 @@
 import { BeuserTransferError, assertUnsealedInstallation } from '#engine/core/beuser-realm/index.js';
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policySchema, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
+import { asPolicy, AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, principalGrants, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry, DeckentError, sha256 } from '#platform/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { backupCommandSchema, type BackupAuthority, type BackupAudit, type BackupAuthorization, type BackupStoragePort } from './contract.js';
 /** The single governed application for human and AI backup callers. Policy and audit never see the passphrase. */
 export class BackupApplication {
@@ -21,7 +22,7 @@ export class BackupApplication {
     });
     if (decision.effect !== 'allow') {
       await this.audit(event('refused', 'BACKUP_POLICY_DENIED'), this.authority.integrity);
-      throw ErrorRegistry.createError(decision.effect === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'BACKUP_POLICY_DENIED');
+      throw ErrorRegistry.createError(policyVerdictRefusal(decision.effect, { deny: 'BACKUP_POLICY_DENIED' }) ?? 'BACKUP_POLICY_DENIED');
     }
     await this.audit(event('intent', null), this.authority.integrity);
     let applied = false;
@@ -44,13 +45,13 @@ export class BackupApplication {
   }
 }
 
-/** A whole-installation backup needs an explicit all-scopes grant; scoped grants cannot export another company's state. */
+/** A whole-installation backup needs an all-scopes grant, explicit or role-bound (owner B3 (a), the M14 preflight rule); a scoped grant never exports another company's state. */
 export function policyBackupAuthorization(input: unknown): import('./contract.js').BackupAuthorization {
-  const document = policySchema.parse(input);
+  const document = asPolicy(input);
   return async (request, authority) => {
     const decision = evaluatePolicy(document, { principal: authority.principal, scopeId: request.scopeId, action: request.action,
       resource: { kind: 'backup', id: authority.installationId } });
-    const grant = document.grants.find(rule => rule.id === decision.ruleId);
+    const grant = principalGrants(document, authority.principal).find(rule => rule.id === decision.ruleId);
     return { policyRevision: decision.revision, effect: decision.decision === 'allow' && grant?.scopes !== 'all' ? 'deny' : decision.decision,
       ruleId: decision.ruleId ?? null };
   };

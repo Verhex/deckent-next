@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema, inspectTaskReadiness, type RunSnapshot } from '#domain/index.js';
-import { measureTaskOccupancy } from '#engine/core/scheduling/index.js';
+import { hasCapacityRoom, measureTaskOccupancy } from '#engine/core/scheduling/index.js';
 import { poolOccupancySchema, type PoolHoldRecord } from './pool-hold.js';
 const capacity = z.strictObject({ executionSlots: counterSchema, inFlightSlots: counterSchema }).readonly();
-export const poolWaitSchema = z.strictObject({ code: z.enum(['waiting-pool-slot', 'pool-held']), poolId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const poolWaitSchema = z.strictObject({ code: z.enum(['waiting-pool-slot', 'pool-held']), poolId: identitySchema,
   capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema, sinceMs: counterSchema.nullable() }).readonly();
-export const poolDriftSchema = z.strictObject({ code: z.literal('POOL_ADMISSION_CAPACITY_DRIFT'), poolId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const poolDriftSchema = z.strictObject({ code: z.literal('POOL_ADMISSION_CAPACITY_DRIFT'), poolId: identitySchema,
   source: z.enum(['admission', 'run']), requested: capacity, capacity }).readonly();
 export const runPoolObservationSchema = z.strictObject({ poolId: identitySchema, capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema,
   drift: z.array(poolDriftSchema).readonly(), waiting: z.array(z.strictObject({ taskId: identitySchema, reason: poolWaitSchema }).readonly()).readonly() }).readonly();
@@ -21,12 +21,11 @@ export const poolCapacityDrift = (poolId: string, requested: z.infer<typeof capa
 /** Current snapshot evidence, never a historical refused-at time. No writes and no extra control-path work. */
 export function derivePoolWait(poolId: string, current: z.infer<typeof capacity>, effective: z.infer<typeof capacity>, occupancy: z.infer<typeof poolOccupancySchema>,
   hold: { readonly state: 'held' | 'open'; readonly changedAtMs: number } | null): PoolWait | null {
-  const code = hold?.state === 'held' ? 'pool-held' : occupancy.execution >= effective.executionSlots || occupancy.inFlight >= effective.inFlightSlots ? 'waiting-pool-slot' : null;
+  const code = hold?.state === 'held' ? 'pool-held' : !hasCapacityRoom(effective, occupancy) ? 'waiting-pool-slot' : null;
   return code ? poolWaitSchema.parse({ code, poolId, capacity: current, effectiveCapacity: effective, occupancy, sinceMs: code === 'pool-held' ? hold!.changedAtMs : null }) : null;
 }
 export function hasRunReservationRoom(snapshot: RunSnapshot, limit: { readonly executionSlots: number; readonly inFlightSlots: number }): boolean {
-  const own = measureTaskOccupancy(snapshot.progress);
-  return own.execution < limit.executionSlots && own.inFlight < limit.inFlightSlots;
+  return hasCapacityRoom(limit, measureTaskOccupancy(snapshot.progress));
 }
 export function observeRunPool(e: RunPoolEvidence, now: number, admission?: z.infer<typeof capacity> & { readonly poolId: string }, ceiling = Infinity) {
   const { snapshot, pool } = e; if (!snapshot || !pool) return undefined;

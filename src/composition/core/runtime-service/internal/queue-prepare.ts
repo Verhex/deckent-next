@@ -1,4 +1,4 @@
-import { WorkspacePatchApplication, createWorkspaceQueuePreparation, stepWorkspaceQueueReattempt, stepWorkspaceRunDelivery, workspaceQueueShadow } from '#engine/index.js';
+import { verifiedPrincipal, WorkspacePatchApplication, createWorkspaceQueuePreparation, stepWorkspaceQueueReattempt, stepWorkspaceRunDelivery, workspaceQueueShadow } from '#engine/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, gitQueueCandidateSource, openSqliteInventoryReader, classifyDockerTaskEffects } from '#adapters/index.js';
 import type { TargetQueueRecord } from '#domain/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
@@ -7,7 +7,7 @@ import { getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.j
 import type { QueueContext } from './queue-context.js';
 import { autonomyShadowWriter } from './autonomy-shadow.js';
 export async function queuePreparation(root: string, c: QueueContext, options: ConfigLoadOptions) {
-  const store = await c.openAttempts(), verifier = { async verify() { return c.principal; } };
+  const store = await c.openAttempts(), verifier = verifiedPrincipal(c.principal);
   const patches = new WorkspacePatchApplication(store, c.artifacts, verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
   return createWorkspaceQueuePreparation({ ...c, registry: c.config.admission?.registry ?? null, bar: c.config.execution!.adoption.verification, maxBytes: c.config.artifacts.maxBytes }, store, patches, {
     delivery: new GitIntegrationDelivery(c.git), withAdmission: work => withConfiguredRunAdmission(root, c, options, work),

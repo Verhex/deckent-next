@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createConnection } from 'node:net';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { createGuardedRuntimeClient, guardRuntimeServiceStop } from '../../../src/composition/core/runtime-service/index.js';
 import { ServiceShutdownApplication } from '#engine/index.js';
 import { FileProjectIdentityStore } from '#adapters/index.js';

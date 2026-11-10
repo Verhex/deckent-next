@@ -1,3 +1,5 @@
+/** Test-only empty-schema down step; production rollback always restores the pre-upgrade backup. */
+export const DOWNGRADE_TO_V74_LEDGER_SQL = 'DROP INDEX IF EXISTS model_invocations_resource_claimed; DROP INDEX IF EXISTS runs_nonterminal; DROP INDEX IF EXISTS runs_pool; DROP INDEX IF EXISTS effect_intents_compensates; DROP INDEX IF EXISTS run_receipts_evaluation; DROP INDEX IF EXISTS approvals_pending; DROP INDEX IF EXISTS hub_client_receipts_revocations; DROP INDEX IF EXISTS hub_client_receipts_revocation_cursor; DROP INDEX IF EXISTS memory_entry_support_run; DROP INDEX IF EXISTS target_queue_run; DROP INDEX IF EXISTS target_queue_run_effect; DROP INDEX IF EXISTS target_queue_epoch; DROP INDEX IF EXISTS target_queue_retry_candidates; DROP INDEX IF EXISTS target_queue_reattempt; DROP INDEX IF EXISTS dispatches_run; DROP TABLE IF EXISTS ledger_extensions; ALTER TABLE model_invocations DROP COLUMN resource_key; PRAGMA user_version=74;';
 /**
  * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` retains the historical v50 target.
  * It removes v53 proposal tables, restores the v51 approval CHECK (run-create rows refuse downgrade),
@@ -32,7 +34,7 @@ export const PREVIOUS_LEDGER_VERSION = 50;
 /** v69 → v68 (S8-2 aggregator pass position): the additive table (with its triggers) is dropped; exact (it is rebuildable state). */
 /** v70 → v69 (S8-3 catalog suggestions): the additive tables (with their indexes and triggers) are dropped; exact for a ledger without suggestions (the
  * windows are rebuildable state); restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V73_LEDGER_SQL = 'DROP TABLE IF EXISTS run_capacity_resources; DROP TABLE IF EXISTS capacity_resources; PRAGMA user_version=73;';
+export const DOWNGRADE_TO_V73_LEDGER_SQL = DOWNGRADE_TO_V74_LEDGER_SQL + 'DROP TABLE IF EXISTS run_capacity_resources; DROP TABLE IF EXISTS capacity_resources; PRAGMA user_version=73;';
 export const DOWNGRADE_TO_V71_LEDGER_SQL = DOWNGRADE_TO_V73_LEDGER_SQL + 'DROP TABLE IF EXISTS provider_spend_period_history; PRAGMA user_version=71;';
 export const DOWNGRADE_TO_V70_LEDGER_SQL = DOWNGRADE_TO_V71_LEDGER_SQL + 'DROP TABLE IF EXISTS hub_revocation_entries; DROP TABLE IF EXISTS hub_client_receipts; DROP TABLE IF EXISTS hub_revocation_snapshots; DROP TABLE IF EXISTS hub_installs; DROP TABLE IF EXISTS hub_sources; PRAGMA user_version=70;';
 export const DOWNGRADE_TO_V69_LEDGER_SQL = DOWNGRADE_TO_V70_LEDGER_SQL + 'DROP TABLE IF EXISTS catalog_evolution_windows; DROP TABLE IF EXISTS catalog_suggestion_states; DROP TABLE IF EXISTS catalog_suggestions; PRAGMA user_version=69;';

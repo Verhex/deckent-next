@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { DeckentJsonSchemaValidator, validateStandardSchemaSync, type ConfigSectionSchema, toInputJsonSchema } from '#platform/index.js';
 import type { StandardSchemaV1 } from '#platform/index.js';
 
+const validator = new DeckentJsonSchemaValidator();
+// A shared projection can resolve references against different roots; short-lived navigation nodes share both identities.
+const projectedValidators = new WeakMap<object, WeakMap<object, ReturnType<DeckentJsonSchemaValidator['getValidator']>>>();
+
 export type ConfigSchemaNode = z.ZodType | ProjectedConfigNode;
 /** Foreign sections retain their validator; JSON Schema only supplies navigation and partial-overlay checks. */
 export class ProjectedConfigNode {
@@ -14,7 +18,11 @@ export class ProjectedConfigNode {
       const parsed = validateStandardSchemaSync(this.standard, value);
       return parsed.status === 'valid' ? { success: true, data: parsed.value } : { success: false, error: { issues: parsed.status === 'invalid' && parsed.issues.length ? parsed.issues : [{ message: 'SECTION_INVALID' }] } };
     }
-    const checked = new DeckentJsonSchemaValidator().getValidator(this.jsonSchema())(value);
+    let validators = projectedValidators.get(this.root);
+    if (!validators) { validators = new WeakMap(); projectedValidators.set(this.root, validators); }
+    let validate = validators.get(this.projection);
+    if (!validate) { validate = validator.getValidator(this.jsonSchema()); validators.set(this.projection, validate); }
+    const checked = validate(value);
     return checked.valid ? { success: true, data: checked.data } : { success: false, error: { issues: [{ message: 'SECTION_INVALID' }] } };
   }
   jsonSchema(): Record<string, unknown> {

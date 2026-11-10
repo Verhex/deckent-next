@@ -20,7 +20,7 @@ export interface WorklinePermissionModePort {
   set(mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: WorklineModeSession): Promise<PermissionModeChange>;
 }
 /** The terminal session a session-only full access belongs to (its conversation id; null before the first one). */
-export interface WorklineModeSession { readonly sessionId: string | null }
+interface WorklineModeSession { readonly sessionId: string | null }
 /** Templates with `{mode}` and `{previous}`; `inert` is appended when no company rule is mode-eligible here. */
 export interface WorklineModeLabels {
   readonly current: string;
@@ -141,7 +141,7 @@ export async function cyclePermissionMode(port: WorklinePermissionModePort, know
  * T3 L4 `/mode` panel: the chosen stop, set exactly as a Shift+Tab step to it would be (same service set, grant check and audit); the
  * view is read first so the set carries the current revision. A stop the cycle does not hold here is refused by the service, not here.
  */
-export async function selectPermissionModeStop(port: WorklinePermissionModePort, target: PermissionModeStop, labels: WorklineModeLabels = NEUTRAL,
+async function selectPermissionModeStop(port: WorklinePermissionModePort, target: PermissionModeStop, labels: WorklineModeLabels = NEUTRAL,
   fullAccess = false, session: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const base = await port.inspect();
   if (!base.supported) return { entries: [notice('error', line(base, labels, fullAccess))], view: base, fullAccess };

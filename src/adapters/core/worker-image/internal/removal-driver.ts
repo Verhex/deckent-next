@@ -24,7 +24,7 @@ export async function observeWorkerRemovalReferences(owner: WorkerReferenceOwner
   const after = await owner.inventory();
   return after && JSON.stringify(after) === JSON.stringify(registry) ? entries : null;
 }
-export interface NativeWorkerRemovalInput {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface NativeWorkerRemovalInput {
   readonly executable: string; readonly endpoint: string; readonly timeoutMs: number; readonly outputBytes: number;
   readonly receipt: unknown; readonly recipeDigest: string | null; readonly lineageDigest: string | null;
   readonly ownedTags: readonly string[]; readonly referenceOwner: WorkerReferenceOwner;
@@ -35,7 +35,7 @@ function pinnedEndpoint(endpoint: string) {
   return endpoint;
 }
 /** The one image removal argv: pinned daemon, exact immutable ID, --no-prune, never force or prune. */
-export function workerImageRemovalArgs(endpoint: string, imageId: string): readonly string[] {
+function workerImageRemovalArgs(endpoint: string, imageId: string): readonly string[] {
   if (!/^sha256:[a-f0-9]{64}$/u.test(imageId)) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
   return ['--host', pinnedEndpoint(endpoint), ...limits.removalCommand, imageId];
 }

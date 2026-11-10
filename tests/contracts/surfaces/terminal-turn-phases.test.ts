@@ -3,8 +3,7 @@ import { Writable } from 'node:stream';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SystemTrustedClock, type TrustedClock } from '#platform/index.js';
-import { AssistantLive, fitStatusRow, footerText, openAssistantStream, reasoningPreviewLines, renderAssistantStream, worklineStatusSegments,
-  type AssistantRenderLabels, type AssistantStreamStep, type FooterUnit } from '#surfaces/core/terminal-render/index.js';
+import { fitStatusRow, openAssistantStream, reasoningPreviewLines, renderAssistantStream, worklineStatusSegments, type AssistantStreamStep, type FooterUnit, AssistantLive, footerText, type AssistantRenderLabels } from '#surfaces/core/terminal-render-ink/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';

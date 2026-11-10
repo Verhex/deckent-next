@@ -24,8 +24,8 @@ export const mcpCapabilityGroupSchema = z.union([
 ]).readonly();
 export type McpCapabilityGroupInput = z.input<typeof mcpCapabilityGroupSchema>;
 export type McpCapabilityGroup = z.infer<typeof mcpCapabilityGroupSchema>;
-export type McpCapabilityAction = 'grant' | 'revoke' | 'narrow';
-export interface McpCapabilitySelection { readonly scopeId: string; readonly groupId: string; readonly action: McpCapabilityAction }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpCapabilityAction = 'grant' | 'revoke' | 'narrow';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface McpCapabilitySelection { readonly scopeId: string; readonly groupId: string; readonly action: McpCapabilityAction }
 export interface McpCapabilityRequest extends McpCapabilitySelection { readonly mode: 'preview' | 'apply'; readonly expect?: string }
 export interface McpCapabilityState { readonly group: McpCapabilityGroup; readonly managed: 'none' | 'partial' | 'granted' | 'conflict' | 'wider-earlier';
   readonly effective: 'denied' | 'partial' | 'allowed' }

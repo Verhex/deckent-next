@@ -2,6 +2,7 @@ import { personalCustodyEvidenceSchema, PersonalCustodyError, type PersonalCusto
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { AUDIT_EVENT_SCHEMA_VERSION, delegationOwner, type AuditEvent } from '#domain/index.js';
+import { policyVerdictRefusal } from '#engine/core/policy/index.js';
 import { isSecretName, isSecretValue, RENEWABLE_SECRET_PREFIX, assertSecretStorageProtection } from '#engine/core/secret-store/index.js';
 import { OAuthConnectionError, oauthConnectionOwnerSchema, oauthConnectionConnectSchema, oauthConnectionRecordSchema, oauthTokenSetSchema,
   type OAuthAccessTokenLease, type OAuthConnectionOwner, type OAuthConnectionPorts, type OAuthConnectionRecord, type OAuthConnectionView } from './contract.js';
@@ -309,8 +310,7 @@ export class OAuthConnectionApplication {
         backend: this.ports.store.descriptor.id, decision: { effect: decision.effect, ruleId: decision.ruleId } } };
     if (decision.effect === 'allow') { await this.ports.audit(event); return; }
     try { await this.ports.audit(event); } catch { /* Failed audit never grants a refused action. */ }
-    if (decision.effect === 'require-approval') throw new OAuthConnectionError('POLICY_APPROVAL_UNSUPPORTED');
-    throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
+    throw new OAuthConnectionError(policyVerdictRefusal(decision.effect, { deny: 'OAUTH_CONNECTION_DENIED' }) ?? 'OAUTH_CONNECTION_DENIED');
   }
   private tokens(value: unknown) {
     try { return oauthTokenSetSchema.parse(value); } catch { throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID'); }

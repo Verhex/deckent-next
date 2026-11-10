@@ -6,7 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import ts from 'typescript';
 import theme from '../../../assets/beuser/journeys/theme-light.json' with { type: 'json' };
-import { BeuserScreenRenderer, beuserTerminalFixture } from '#adapters/core/beuser-surface/index.js';
+import { beuserTerminalFixture } from '#adapters/core/beuser-surface/index.js';
+// The renderer is the lazily loaded xterm half (KG9 F2) with no index export; this file measures it directly.
+// eslint-disable-next-line no-restricted-imports
+import { BeuserScreenRenderer } from '#adapters/core/beuser-surface/internal/screen.js';
 
 const bytes = (text: string) => Buffer.from(text, 'utf8');
 const renderer = (columns = 20, rows = 4) => new BeuserScreenRenderer({ columns, rows, scrollback: 8 }, 20000);
@@ -14,10 +17,10 @@ const renderer = (columns = 20, rows = 4) => new BeuserScreenRenderer({ columns,
 it('the emitted screen code loads in real Node ESM with the exact CommonJS dependency artifacts', async () => {
   const require = createRequire(import.meta.url);
   const compile = async (name: string) => ts.transpileModule(await readFile(new URL(`../../../src/adapters/core/beuser-surface/internal/${name}.ts`, import.meta.url), 'utf8'),
-    { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
+      .replace("from '#platform/index.js'", `from ${JSON.stringify(pathToFileURL(require.resolve('#platform/index.js')).href)}`);
   const input = 'data:text/javascript;base64,' + Buffer.from(await compile('input')).toString('base64');
   const measurement = (await compile('measurement')).replace("from './input.js'", `from ${JSON.stringify(input)}`)
-    .replace("from '#platform/index.js'", `from ${JSON.stringify(pathToFileURL(require.resolve('#platform/index.js')).href)}`)
     .replace("from 'zod'", `from ${JSON.stringify(pathToFileURL(require.resolve('zod')).href)}`);
   const measurementUrl = 'data:text/javascript;base64,' + Buffer.from(measurement).toString('base64');
   const screen = (await compile('screen')).replace(/from '(@xterm\/[^']+)'/gu, (_match, spec: string) => `from ${JSON.stringify(pathToFileURL(require.resolve(spec)).href)}`)

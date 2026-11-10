@@ -31,7 +31,7 @@ export const configuredAgentSelection = (path: () => Promise<string>, sqlite: Pa
     const pins = new Map(captured.map(use => [use.taskId, use]));
     if (pins.size !== captured.length || captured.some(use => use.scopeId !== scopeId)) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT');
     if (registry === undefined || registry === null) {
-      if (pins.size) throw new AgentCatalogStoreError('AGENT_CATALOG_UNAVAILABLE');
+      if (pins.size) throw new AgentCatalogStoreError('AGENT_USE_CATALOG_UNAVAILABLE');
       return new Map();
     }
     return selectTaskAgentsFrom(async () => openSqliteAgentCatalogStore(await path(), sqlite, integrity, 'read'), graph, registry, scopeId, pins);

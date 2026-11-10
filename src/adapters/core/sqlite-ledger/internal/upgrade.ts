@@ -1,3 +1,4 @@
+import { CodedError, isAbsent } from '#platform/index.js';
 import { BEUSER_GENESIS_PATH, BeuserTransferError, assertUnsealedInstallation } from '#engine/index.js';
 import { chmodSync, constants, lstatSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -31,7 +32,7 @@ export function upgradeExistingLedger(path: string, options: SqliteLedgerOptions
     try { lstatSync(BEUSER_GENESIS_PATH); throw new BeuserTransferError(); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     backupPath = join(backupDirectory, `ledger-v${from}-${now.toISOString().replace(/[:.]/g, '-')}.db`);
-    try { lstatSync(backupPath); throw new Error('LEDGER_BACKUP_EXISTS'); } catch (error) { if ((error as Error).message === 'LEDGER_BACKUP_EXISTS') throw error; }
+    try { lstatSync(backupPath); throw new CodedError('LEDGER_BACKUP_EXISTS'); } catch (error) { if (!isAbsent(error)) throw error; }
     db.prepare('VACUUM INTO ?').run(backupPath);
     chmodSync(backupPath, constants.S_IRUSR | constants.S_IWUSR);
   } catch (error) { throw sqliteFailure(error); }

@@ -1,5 +1,5 @@
 import type { Environment } from '#platform/core/host/index.js';
-export type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
+type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
 export interface ColorOptions { noColor?: boolean; env?: Environment; isTTY?: boolean; argv?: readonly string[] }
 /**
  * What the terminal can draw (T2 T-READABLE): `--no-color`/`FORCE_COLOR=0`/`NO_COLOR`/`TERM=dumb`/non-TTY are none; `FORCE_COLOR=3|2` force
@@ -23,7 +23,7 @@ export function colorTier(options: ColorOptions = {}): ColorTier {
   if (!Number.isInteger(bg) || !(bg === 8 || (bg >= 0 && bg <= 6))) return 'ansi16';
   return capability;
 }
-export function shouldUseColor(options: ColorOptions = {}): boolean { return colorTier(options) !== 'none'; }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function shouldUseColor(options: ColorOptions = {}): boolean { return colorTier(options) !== 'none'; }
 export function stripAnsi(value: string): string {
   // eslint-disable-next-line no-control-regex
   return value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');

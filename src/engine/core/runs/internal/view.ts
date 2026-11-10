@@ -4,7 +4,7 @@ import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/hand
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
 import { taskQuotaHoldSchema, runPoolObservationSchema } from './pool-observation.js';
-import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema, taskAgentSealSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
+import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, safeParseRun, workerEffortSchema, workerTaskParameters, taskAgentSealSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
 import { RunStoreError } from './store.js';
 import { workerTreeExclusionSchema, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -42,7 +42,7 @@ export const runViewSchema = z.strictObject({
 export type RunView = z.infer<typeof runViewSchema>;
 export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = [],
   exclusions: readonly WorkerTreeExclusionRecord[] = []): RunView {
-  const parsed = runSnapshotSchema.safeParse(input);
+  const parsed = safeParseRun(input);
   if (!parsed.success) throw new RunStoreError('RUN_STORE_CORRUPT');
   const run = parsed.data; const progress = new Map(run.progress.map(task => [task.taskId, task]));
   return runViewSchema.parse({ schemaVersion: 3, runId: run.identity.runId, scopeId: run.identity.scopeId,
@@ -56,7 +56,7 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
         ...(progress.get(task.id)!.notAcceptedReason ? { reason: progress.get(task.id)!.notAcceptedReason } : {}) }), id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
       ...(() => {
-        const subscription = run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.parameters['nativeSubscription'];
+        const subscription = (workerTaskParameters(run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.parameters) as Record<string, unknown> | undefined)?.['nativeSubscription']; // a tokenless worker's task base
         const parsed = workerEffortSchema.safeParse(subscription && typeof subscription === 'object' && !Array.isArray(subscription) ? (subscription as Record<string, unknown>)['reasoningEffort'] : undefined);
         return parsed.success ? { reasoningEffort: parsed.data } : {};
       })(),

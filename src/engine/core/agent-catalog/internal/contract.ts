@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedString, persistedInteger, agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, identitySchema, signerPublicKeySchema, skillContentSchema, skillSignatureSchema, skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type ReadableSkillDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -155,8 +156,9 @@ export interface AgentCatalogDependencies {
   readonly now: () => number;
   readonly eventId: () => string;
 }
-export type AgentCatalogStoreErrorCode = 'AGENT_CATALOG_UNAVAILABLE' | 'AGENT_CATALOG_CORRUPT' | 'AGENT_CATALOG_COMMAND_CONFLICT' | 'AGENT_CATALOG_REVISION_CONFLICT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AgentCatalogStoreErrorCode = 'AGENT_CATALOG_UNAVAILABLE' | 'AGENT_CATALOG_CORRUPT' | 'AGENT_CATALOG_COMMAND_CONFLICT' | 'AGENT_CATALOG_REVISION_CONFLICT'
+  | 'AGENT_USE_PIN_MISMATCH' | 'AGENT_USE_TASK_UNAVAILABLE' | 'AGENT_USE_WORK_CLASS_REQUIRED' | 'AGENT_USE_CATALOG_UNAVAILABLE'
   | 'AGENT_CATALOG_NOT_FOUND' | 'AGENT_CATALOG_EXISTS' | 'AGENT_CATALOG_OUTCOME_UNKNOWN' | 'AGENT_CATALOG_LIMIT' | 'SIGNER_REVOCATION_LOG_BROKEN' | 'SIGNER_KEY_UNAVAILABLE';
-export class AgentCatalogStoreError extends Error {
-  constructor(readonly code: AgentCatalogStoreErrorCode) { super(code); this.name = 'AgentCatalogStoreError'; }
+export class AgentCatalogStoreError extends CodedError {
+  constructor(override readonly code: AgentCatalogStoreErrorCode) { super(code); this.name = 'AgentCatalogStoreError'; }
 }

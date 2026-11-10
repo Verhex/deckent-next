@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { integrationDeliveryIntentSchema, WorkspacePatchError, type IntegrationDeliveryCommand,
   type IntegrationDeliveryIntent, type IntegrationDeliveryRecord } from '#engine/index.js';
 import { readIntegration } from './integration.js';
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteDeliveryJournal {
   constructor(private readonly db: DatabaseSync) {}
   async loadDelivery(command: IntegrationDeliveryCommand): Promise<IntegrationDeliveryRecord | null> {
@@ -32,30 +33,27 @@ export class SqliteDeliveryJournal {
   }
   async claimDelivery(input: IntegrationDeliveryIntent) {
     const intent = integrationDeliveryIntentSchema.parse(input);
-    // All checks/mutations in the transaction are synchronous; no await while holding the writer.
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return ledgerTransaction(this.db, () => {
       this.bound(intent);
       const existing = this.db.prepare('SELECT intent,delivered FROM workspace_deliveries WHERE scope_id=? AND command_id=?').get(intent.command.identity.scopeId, intent.command.commandId);
       if (existing) {
         if (String(existing.intent) !== JSON.stringify(intent)) throw new WorkspacePatchError('PATCH_CONFLICT');
         if (existing.delivered !== 0 && existing.delivered !== 1) throw new WorkspacePatchError('PATCH_CORRUPT');
-        this.db.exec('COMMIT'); return { intent, delivered: existing.delivered === 1 };
+        return { intent, delivered: existing.delivered === 1 };
       }
       this.db.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,0)')
         .run(intent.command.identity.scopeId, intent.command.commandId, JSON.stringify(intent));
-      this.db.exec('COMMIT'); return { intent, delivered: false };
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+      return { intent, delivered: false };
+    });
   }
   async finishDelivery(input: IntegrationDeliveryIntent) {
     const intent = integrationDeliveryIntentSchema.parse(input);
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return ledgerTransaction(this.db, () => {
       this.bound(intent);
       const changed = this.db.prepare('UPDATE workspace_deliveries SET delivered=1 WHERE scope_id=? AND command_id=? AND intent=?')
         .run(intent.command.identity.scopeId, intent.command.commandId, JSON.stringify(intent));
       if (changed.changes !== 1) throw new WorkspacePatchError('PATCH_CONFLICT');
-      this.db.exec('COMMIT'); return { intent, delivered: true };
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+      return { intent, delivered: true };
+    });
   }
 }

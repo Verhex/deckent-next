@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { lstat } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { CURRENT_LEDGER_VERSION, openSqliteLedgerReadOnly, sqliteLedgerOptionsSchema, assertSqliteEngineSupported,
+import { ledgerTransaction, openLedgerDatabase, CURRENT_LEDGER_VERSION, openSqliteLedgerReadOnly, sqliteLedgerOptionsSchema,
   type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { executionPoolSchema, type ExecutionPool, type InstallationPoolStore } from '#engine/index.js';
@@ -23,10 +23,9 @@ export function installationPoolStore(path: string, options: SqliteLedgerOptions
     try { if (!(await lstat(path)).isFile()) return null; }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
     if (!apply) return openSqliteLedgerReadOnly(path, options);
-    assertSqliteEngineSupported(process.versions.sqlite);
-    const parsed = sqliteLedgerOptionsSchema.parse(options), { DatabaseSync } = await import('node:sqlite');
+    const parsed = sqliteLedgerOptionsSchema.parse(options);
     // SQLite's mode=rw omits CREATE even if the file disappears after the custody precheck.
-    return new DatabaseSync(`${pathToFileURL(path).href}?mode=rw`, { timeout: parsed.busyTimeoutMs, enableForeignKeyConstraints: true });
+    return openLedgerDatabase(`${pathToFileURL(path).href}?mode=rw`, { timeout: parsed.busyTimeoutMs, enableForeignKeyConstraints: true });
   };
   return {
     async inspect(pool) {
@@ -42,21 +41,17 @@ export function installationPoolStore(path: string, options: SqliteLedgerOptions
       let db;
       try { db = await open(true); } catch { return { status: 'unavailable', reason: 'ledger-unavailable' }; }
       if (!db) return { status: 'unavailable', reason: 'ledger-missing' };
-      let active = false, commitAttempted = false;
       try {
         const parsed = sqliteLedgerOptionsSchema.parse(options);
         db.exec(parsed.durability === 'extra' ? 'PRAGMA synchronous=EXTRA' : 'PRAGMA synchronous=FULL');
-        db.exec('BEGIN IMMEDIATE'); active = true;
-        const again = inspect(db, pool);
-        if (again.status !== 'preview') { db.exec('ROLLBACK'); active = false; return again; }
-        audit(new SqliteAuditStore(db));
-        new SqliteExecutionPools(db).create(pool);
-        commitAttempted = true; db.exec('COMMIT'); active = false;
-        return { status: 'created' };
-      } catch (error) {
-        if (active) { try { db.exec('ROLLBACK'); } catch { throw new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN'); } }
-        if (commitAttempted) throw new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN');
-        throw error;
+        const opened = db;
+        return ledgerTransaction(opened, (): Observation => {
+          const again = inspect(opened, pool);
+          if (again.status !== 'preview') return again;
+          audit(new SqliteAuditStore(opened));
+          new SqliteExecutionPools(opened).create(pool);
+          return { status: 'created' };
+        }, { unknown: () => new InstallationLedgerError('INSTALLATION_LEDGER_OUTCOME_UNKNOWN'), failure: error => error });
       } finally { db.close(); }
     },
   };

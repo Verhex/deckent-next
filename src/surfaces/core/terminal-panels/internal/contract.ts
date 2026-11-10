@@ -40,7 +40,7 @@ export interface ThemePanelPort {
   readonly title: string;
   inspect(): Promise<Readonly<{ current: string; source: string; notes: readonly string[];
     choices: readonly Readonly<{ id: string; label: string; detail: string }>[] }>>;
-  palette(setting: string): ReturnType<typeof import('#surfaces/core/terminal-kit/index.js').useWorklinePalette>;
+  palette(setting: string): ReturnType<typeof import('#surfaces/core/terminal-kit-ink/index.js').useWorklinePalette>;
   readonly words: Readonly<{ hints: string; current: string; preview: string; contrast: string; inherited: string; noColor: string; sessionOnly: string;
     samples: readonly Readonly<{ text: string; role: import('#surfaces/core/terminal-render/index.js').SpanRole }>[] }>;
   background(): string | null;
@@ -68,7 +68,7 @@ export type ConfigPanelField = Readonly<{
   locks: Readonly<Record<ConfigPanelLayer, Readonly<{ blocked: string | null; note: string | null }>>>;
 }>;
 export type ConfigPanelView = Readonly<{ title: string; fields: readonly ConfigPanelField[]; notes: readonly string[] }>;
-export type ConfigPanelWrite = Readonly<{ action: 'set' | 'unset'; keyPath: string; value?: unknown; layer: ConfigPanelLayer }>;
+type ConfigPanelWrite = Readonly<{ action: 'set' | 'unset'; keyPath: string; value?: unknown; layer: ConfigPanelLayer }>;
 export type ConfigPanelOutcome = Readonly<{ status: 'applied' | 'approval-pending'; lines: readonly string[]; approvalId: string | null }>;
 export interface ConfigPanelPort {
   readonly records?: import('#surfaces/core/config/index.js').ConfigRecordPort;
@@ -96,10 +96,10 @@ export interface ConfigPanelLabels {
   readonly entryTitle: string; readonly entryHint: string;
 }
 
-export type McpScopeId = 'local' | 'project' | 'user';
+type McpScopeId = 'local' | 'project' | 'user';
 export type McpPanelState = 'connected' | 'checking' | 'not-started' | 'pending-approval' | 'changed' | 'declined' | 'invalid-launch'
   | 'trust-store-unavailable' | 'secret-unresolved' | 'secret-refused' | 'secret-project-missing' | 'secret-undeclared' | 'secret-no-identity' | 'failed' | 'tools-changed' | 'timed-out' | 'unknown';
-export type McpPanelServer = Readonly<{ state: McpPanelState; name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
+type McpPanelServer = Readonly<{ state: McpPanelState; name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
   trusted: boolean; grantKey?: string }>; // KER-17: a main-vault key this project has not granted (the person-only first-use card answers it)
 export type McpPanelList = Readonly<{ servers: readonly McpPanelServer[]; problems: readonly string[] }>;
 /** One trust question of the wizard or a re-approval (the launch card, then the tools card): the window shows it, y says yes, n/Esc say no. */
@@ -147,7 +147,7 @@ export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label:
   /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
    * reference, and for a locked row the governed command that would fix it. */
   exact: string; command: string | null; stateToken?: string;
-  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider' | 'brain-global' | 'brain-project'; label: string }>[];
+  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider' | 'brain-global' | 'brain-project' | 'brain-off' | 'brain-on'; label: string }>[];
   /** R2c: the exact scoped profile's billing axis (absent: not declared, read as metered). */
   billing?: 'subscription' | 'local' | 'metered';
   /** The configured default (`terminal.chat.reference`). */
@@ -159,7 +159,7 @@ export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPa
   defaultBlocked: string | null; fixTitle?: string; fixApply?: string; fixKeep?: string }>;
 /** What the host binds for `/model`: the models and, when decided, the governed default write (the `/config` writer, approval-aware). */
 /** T4-B (owner 2026-10-08, Jev 77898686): the default was written but this project names its own model, which keeps winning here. */
-export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
+type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
   readonly provider?: ProviderPanelPort;
@@ -187,6 +187,8 @@ export interface ModelPanelSource {
   resolveShadow?(choice: ModelPanelChoice, action: 'remove' | 'align'): Promise<ConfigPanelOutcome>;
   /** R9b (owner D3): make this model the Brain's (`brain_planner.reference`) on the user or project layer through the same governed writer. */
   setBrain?(choice: ModelPanelChoice, layer: 'global' | 'project'): Promise<ConfigPanelOutcome>;
+  /** Owner 2026-11-06 ("can be Brain", default on): offer this model as Brain again, or switch it off (`brain_planner.excluded`, governed writer). */
+  setBrainOffer?(choice: ModelPanelChoice, offered: boolean): Promise<ConfigPanelOutcome>;
 }
 /** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). `fresh`: the
  * person chose a new context for the switch (the conversation keeps only their own instructions). */
@@ -211,7 +213,7 @@ export interface CachePanelLabels {
   readonly entry: string; readonly title: string; readonly confirm: string; readonly cancel: string; readonly hints: string;
 }
 /** CACHE-SLICE1: the model-switch question over a large context (`{tokens}` measured, `{model}` the chosen one). */
-export interface ModelSwitchLabels { readonly title: string; readonly fresh: string; readonly keep: string; readonly freshDone: string; readonly keepDone: string }
+interface ModelSwitchLabels { readonly title: string; readonly fresh: string; readonly keep: string; readonly freshDone: string; readonly keepDone: string }
 export interface ModelPanelLabels {
   readonly hints: string;
   /** Scope step: this session only; this session and the user default. */
@@ -316,7 +318,7 @@ export interface ProviderPanelLabels {
 export type BudgetPanelView = Readonly<{ action: 'create' | 'change' | null; current: string | null; note: string | null; frozen: boolean;
   settledUsd?: number;
   presets: readonly number[]; min: number; max: number; step: number; start: number }>;
-export type BudgetPanelOutcome = Readonly<{ ok: boolean; line: string }>;
+type BudgetPanelOutcome = Readonly<{ ok: boolean; line: string }>;
 export interface BudgetPanelPort {
   inspect(): Promise<BudgetPanelView>;
   apply(request: Readonly<{ action: 'create' | 'change'; usd: number; unfreeze: boolean }>): Promise<BudgetPanelOutcome>;
@@ -373,7 +375,7 @@ export interface PolicyPanelPreview {
   readonly scopeId: string; readonly groupId: string; readonly action: 'grant' | 'revoke' | 'narrow'; readonly digest: string;
   readonly lines: readonly PanelLine[]; readonly applicable: boolean;
 }
-export interface PolicyPanelLabels {
+interface PolicyPanelLabels {
   readonly delegations?: string; readonly delegationConfirm?: string; readonly delegateGrant?: string; readonly delegateRevoke?: string;
   readonly title: string; readonly scope: string; readonly groups: string; readonly preview: string;
   readonly completeBaseline?: string; readonly narrow?: string; readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;

@@ -2,9 +2,9 @@ import { nervousHoldNote, type AttemptIdentity, type DispatchLossDecision, type 
 import type { NervousExecutors } from './broker.js';
 import type { NervousProposal } from './detect.js';
 
-/** Which launch evidence the fenced dispatch retained: the incarnation (id + start), only the created container id (S6R-1), or neither. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Which launch evidence the fenced dispatch retained: the incarnation (id + start), only the created container id (S6R-1), or neither. */
 export type NervousRetained = 'incarnation' | 'container' | 'none';
-/** The reconciliation of the Attempt; no `disposition`: the fresh observation settled the dispatch as an ordinary exit, so nothing was fenced. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The reconciliation of the Attempt; no `disposition`: the fresh observation settled the dispatch as an ordinary exit, so nothing was fenced. */
 export type NervousRecoveryResult = Readonly<{ status: string; disposition?: DispatchLossDecision | undefined; retained?: NervousRetained | undefined }>;
 /** The existing applications behind the broker (composition wires them; nothing here reaches an adapter, opens an Attempt or calls a model). */
 export interface NervousRecoveryPorts {
@@ -15,7 +15,7 @@ export interface NervousRecoveryPorts {
   /** The s5b Nervous safety hold of one Run, idempotent by its command id (a person resumes it). */
   hold(command: Readonly<{ schemaVersion: 1; scopeId: string; runId: string; commandId: string; holdReason: string }>): Promise<unknown>;
 }
-/** The hold a case leaves for a person: a command id derived from the case (a replay holds once) and a stable code note (its EN/TR text is the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The hold a case leaves for a person: a command id derived from the case (a replay holds once) and a stable code note (its EN/TR text is the
  * shared hold renderer's, S6R-6). */
 export function nervousHoldCommand(proposal: NervousProposal, code: NervousHoldCode) {
   const runId = proposal.target.kind === 'attempt' ? proposal.target.identity.runId : proposal.target.kind === 'task' ? proposal.target.runId : null;

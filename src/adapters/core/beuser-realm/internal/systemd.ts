@@ -2,7 +2,7 @@ import type { BeuserContext } from '#engine/index.js';
 import type { BeuserRealmHandle } from '#engine/index.js';
 import { sha256 } from '#platform/index.js';
 import { BEUSER_REALM_RECIPE as recipe, checkHandle, type BeuserRealmCommand } from './realm.js';
-export interface BeuserSystemdCapability {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserSystemdCapability {
   readonly state: 'available' | 'unknown'; readonly evidenceRefs: readonly string[];
   readonly branches: readonly string[];
 }

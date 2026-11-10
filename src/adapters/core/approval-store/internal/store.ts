@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { approvalRecordSchema, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
+import { approvalRecordSchema, approvalRenewalRefusal, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
 import type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from '#engine/index.js';
-import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Uses the shared ledger; callers may supply the current reservation transaction's connection. */
 export class SqliteApprovalStore implements ApprovalStore {
@@ -10,9 +10,7 @@ export class SqliteApprovalStore implements ApprovalStore {
     try { return approvalRecordSchema.parse(JSON.parse(String(input))); } catch { throw new ApprovalError('APPROVAL_INTEGRITY'); }
   }
   private transaction<T>(fn: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const result = fn(); this.db.exec('COMMIT'); return result; }
-    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    return ledgerTransaction(this.db, fn, { failure: error => error });
   }
   private event(record: ApprovalRecord) {
     this.db.prepare('INSERT INTO approval_outbox(scope_id,approval_id,revision,snapshot) VALUES(?,?,?,?)')
@@ -52,7 +50,10 @@ export class SqliteApprovalStore implements ApprovalStore {
     if (record && (subject?.kind !== 'run-create' || subject.commandId !== commandId)) throw new ApprovalError('APPROVAL_INTEGRITY');
     return record;
   }
-  /** Row columns of a request: the subject kind and, for a task, its run and task. */
+  /** Proposals are recorded before requesting a card (v53); old cards carry no risk marker. */
+  hasRunProposal(scopeId: string, commandId: string, runId: string): boolean {
+    return this.db.prepare('SELECT 1 FROM run_proposals WHERE scope_id=? AND command_id=? AND run_id=?').get(scopeId, commandId, runId) !== undefined;
+  }
   private columns(record: ApprovalRecord) {
     const subject = approvalSubject(record.request);
     return subject.kind === 'task' ? ['task', subject.runId, subject.taskId] as const : [subject.kind, null, null] as const;
@@ -68,7 +69,7 @@ export class SqliteApprovalStore implements ApprovalStore {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new ApprovalError('APPROVAL_INVALID');
     // Status lives in the sealed snapshot; the caller verifies each record before acting on it.
     return this.db.prepare(`SELECT scope_id,approval_id FROM approvals WHERE subject_kind='agent-tool-call' AND current=1
-      AND json_extract(snapshot,'$.status')='pending' AND (? IS NULL OR (scope_id,approval_id)>(?,?)) ORDER BY scope_id,approval_id LIMIT ?`)
+      AND (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status') END)='pending' AND (? IS NULL OR (scope_id,approval_id)>(?,?)) ORDER BY scope_id,approval_id LIMIT ?`)
       .all(after?.scopeId ?? null, after?.scopeId ?? null, after?.approvalId ?? null, limit)
       .map(row => Object.freeze({ scopeId: String(row.scope_id), approvalId: String(row.approval_id) }));
   }
@@ -93,11 +94,7 @@ export class SqliteApprovalStore implements ApprovalStore {
   }
   renew(previous: ApprovalRecord, next: ApprovalRecord, receipt: ApprovalReceipt): ApprovalRecord {
     approvalRecordSchema.parse(next);
-    // A tool-call or operation approval is single use for its exact call/command: it is never renewed; the next one opens its own.
-    if (approvalSubject(previous.request).kind !== 'task' || approvalSubject(next.request).kind !== 'task') throw new ApprovalError('APPROVAL_INVALID');
-    if (next.status !== 'pending' || next.request.renewal?.previousApprovalId !== previous.request.approvalId
-      || next.request.scopeId !== previous.request.scopeId || next.request.actionDigest !== previous.request.actionDigest
-      || !(previous.status === 'expired' || (previous.status === 'decided' && previous.decision?.decision === 'deny'))) throw new ApprovalError('APPROVAL_CONFLICT');
+    const refused = approvalRenewalRefusal(previous, next); if (refused) throw new ApprovalError(refused);
     return this.transaction(() => {
       const replay = this.receipt(receipt.scopeId, receipt.commandId);
       if (replay) {

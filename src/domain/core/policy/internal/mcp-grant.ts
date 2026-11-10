@@ -1,6 +1,6 @@
 import { policyResources } from './vocabulary.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * MCP trust → permission (owner 2026-10-07: Jev 8e908338 K1, Jev 04f75210 authority kind, Jev 71eeb4ab effect): the trust approval of an MCP
  * server also writes the approver's OWN policy grant for that server — `mcp-server`/`invoke` on its registry name, which covers exactly its pinned
  * tools — in the server's scope (project/local: the scope id; user: every scope of this person). The effect is `require-approval` +
@@ -9,7 +9,7 @@ import { policyResources } from './vocabulary.js';
  * (server scope, server name, person, scope id), so a re-approval replaces exactly its own rule and never another server's or person's.
  */
 export const MCP_GRANT_PREFIX = 'mcp-';
-export const isMcpGrantId = (id: string) => id.startsWith(MCP_GRANT_PREFIX);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const isMcpGrantId = (id: string) => id.startsWith(MCP_GRANT_PREFIX);
 /** The rule id of one server's grant. */
 export const mcpGrantRuleIds = (digest: string) => Object.freeze([`${MCP_GRANT_PREFIX}${digest}-server`] as const);
 

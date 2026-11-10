@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, type RunLifecycleTiming } from '#domain/index.js';
 import { decideDispatchLaunch, validateLaunchRequest, DispatchError, type LaunchRequest, type LaunchDecision } from '#engine/index.js';
-import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { readRunBoundDispatch } from '#adapters/core/run-store/index.js';
 
 /** Caller owns BEGIN IMMEDIATE. The persisted decision is the launch linearization point,
  * not evidence that a process started. No expiry, retry or replay issues a second grant. */

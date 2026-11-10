@@ -10,19 +10,19 @@ import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
-import { DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { optionalField, DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { reportedTerminalBackground, type TerminalHostContext, type TerminalThemeRequest } from '#surfaces/core/terminal-host/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
-import { terminalDeliveryPort } from './deliver-port.js';
+import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
-import { mcpPanelPort } from './mcp-panel.js';
+import { mcpGrantKey, mcpPanelPort } from '#surfaces/core/mcp-presentation/index.js';
 import { secretGrantCardPort } from './secret-grant-card.js';
-import { modelPanelSource } from './model-panel.js';
+import { attachedScopeLabel, modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
 import { workspacePanelPort } from './workspace-panel.js';
@@ -100,13 +100,15 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
   return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
+const homeOf = (env: NodeJS.ProcessEnv): string | undefined => env['HOME'] ?? env['USERPROFILE'];
+
 /**
  * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
  * a list (TERM=dumb) there are none and the slash commands stay the text commands.
  */
 function panelProps(root: string, scopeId: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv, config: { cli: { invocationInputMaxBytes: number }; approvals: { sessionTtlMs: number } }) {
   if (pickerNeedsTextFallback(env, true)) return {};
-  const providerConnect = context.providerConnect;
+  const providerConnect = context.providerConnect, grantCard = context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, homeOf(env)) : undefined;
   // Stage 1: the scope budget window (create / change) in `/model` and `/provider`, when the host binds the spend read and the governed command.
   const budget = context.inspectProviderSpendAccount && context.manageProviderSpend ? { budget: budgetPanelPort(root, scopeId, { inspectProviderSpendAccount: context.inspectProviderSpendAccount,
     manageProviderSpend: context.manageProviderSpend }, options, locale, error => errorText(error, locale)) } : {};
@@ -123,15 +125,15 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
       theme: (control: TerminalHostContext['theme']) => themePanelPort(root, context, options, locale, {
         setting: (config as { terminal?: { theme?: TerminalThemeSetting } }).terminal?.theme ?? TERMINAL_THEME_SETTINGS[0],
         capability: colorCapability({ env, isTTY: true, argv: process.argv }), colorfgbg: env['COLORFGBG'], ...control }) } : {}),
-    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
+    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation, context.upgradePolicyTemplate) } : {}),
     ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
-    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}),
+    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, grantCard) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), grantCard) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
     // PRE-8 v2: the same first-use card as the chat turn when a model list, a model connection or a just-stored key needs a grant here.
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
-      context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined), ...budget, ...cache } } : {}) } } };
+      grantCard), ...budget, ...cache } } : {}) } } };
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
@@ -356,7 +358,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(openMode ? { open: openMode } : {}),
     inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
     set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: { readonly sessionId: string | null }) => context.setPermissionMode!(root,
-      { schemaVersion: 1, scopeId, mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
+      { schemaVersion: 1, scopeId, mode, expectedRevision, ...optionalField('askEdits', askEdits), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
   // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
   // it again on every turn and call). A closed explicit mode offers the host PRE-9 card; a stored mode without its grant starts standart.
   let fullAccess = false;
@@ -394,14 +396,14 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // BeUser DR3-02: the configured pool's hold, read with each plan, so the card says before y that an approved Run will wait.
   let poolHold: PlanningPoolHold | null = null;
   const readPoolHold = async () => { poolHold = await context.inspectPoolHold?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null) ?? null; };
-  const target = scopeId;
+  const target = await attachedScopeLabel(root, scopeId, options); // an attached project shows its folder; /status keeps the scope id
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
   const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly notify?: 'bell' | 'off'; readonly viewportRows?: number };
   const theme: TerminalThemeRequest = { setting: presentation.theme ?? TERMINAL_THEME_SETTINGS[0], capability: colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), colorfgbg: env['COLORFGBG'] };
   const palette = () => terminalPalette(theme.setting, theme.capability, theme.colorfgbg, reportedTerminalBackground());
   const ascii = prefersAsciiGlyphs(env);
-  const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
+  const home = homeOf(env), where = shortenHomePath(root, home);
   const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
@@ -418,7 +420,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
-    labels: { ...worklineLabels(locale, t('terminal.status.chat', { target: chatName }, locale)), ...(chat?.toolsVerifiedAtMs !== undefined ? { toolsUnverified: t('headless.agent.k13.unknown.earlier', { time: clockText(chat.toolsVerifiedAtMs) }, locale) } : {}),
+    labels: { ...worklineLabels(locale, t('terminal.status.chat', { target: chatName }, locale)), ...(chat?.toolsVerifiedAtMs !== undefined ? { toolsUnverified: t('headless.agent.unknown.earlier', { time: clockText(chat.toolsVerifiedAtMs) }, locale) } : {}),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     // Owner 2026-10-30: in a person's terminal (setup cards at hand) the status row says a missing model is set up with /setup.
@@ -436,16 +438,15 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale), localFallback: t('brain.localFallback', {}, locale), localNoTools: t('brain.localNoTools', {}, locale), offerHere: async (code: unknown) => await context.localRunOffer?.(root, scopeId, options, code).catch(() => false) ?? false, // K2/K3: the one host answer (profile defaults, held pool)
         chatReady: async () => !context.describeTerminalChatPlan || Boolean(await context.describeTerminalChatPlan(root, options).then(plan => plan.status === 'ready' && plan.reference, () => false)),
-        ...(context.workingTreeChanges ? { tree: async () => context.workingTreeChanges!(root, options) } : {}), dirty: { title: t('brain.dirty.title', {}, locale), go: t('brain.dirty.continue', {}, locale), cancel: t('brain.here.cancel', {}, locale), prompt: t('brain.here.prompt', {}, locale), cancelled: t('brain.here.cancelled', {}, locale), check: async () => { const families = (await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options))?.observation.families ?? {}; const work = families['work'] as { registry?: boolean; pool?: boolean } | undefined; if ((families['coding'] as { changes?: string } | undefined)?.changes !== 'present' || work?.registry !== true || work.pool !== true) return null; // NF-4: worded for the configured delivery mode
+        ...(context.workingTreeChanges ? { tree: async () => context.workingTreeChanges!(root, options) } : {}), dirty: { title: t('brain.dirty.title', {}, locale), check: async () => { const families = (await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options))?.observation.families ?? {}; const work = families['work'] as { registry?: boolean; pool?: boolean } | undefined; if ((families['coding'] as { changes?: string } | undefined)?.changes !== 'present' || work?.registry !== true || work.pool !== true) return null; // NF-4: worded for the configured delivery mode
           return deliveryMode((await loadConfig(root, options))['execution'] as Parameters<typeof deliveryMode>[0]) === 'working-tree' ? t('brain.dirty.bodyWorkingTree', {}, locale) : t('brain.dirty.body', {}, locale); } }, here: { title: t('brain.here.title', {}, locale), effect: t('brain.here.effect', {}, locale), run: t('brain.here.run', {}, locale), setup: t('brain.here.setupChoice', {}, locale), cancel: t('brain.here.cancel', {}, locale), noWorkers: t('brain.here.noWorkers', {}, locale), noModel: t('brain.here.noModel', {}, locale), prompt: t('brain.here.prompt', {}, locale), cancelled: t('brain.here.cancelled', {}, locale), changed: t('brain.here.changed', {}, locale), unchanged: t('brain.here.unchanged', {}, locale), unread: t('brain.here.unread', {}, locale),
         canSetup: async () => ((await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options).catch(() => null))?.observation.families?.['coding'] as { repository?: string } | undefined)?.repository === 'present' },
       billingSwitch: t('siwc.switch.notice', { model: '{model}' }, locale),
-      quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
+      quotaWait: (progress: Pick<Extract<BrainPlanProgress, { kind: 'quota-wait' }>, 'attempt' | 'maxAttempts' | 'untilMs'>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
       plan: async (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) => {
-        // R9b (owner D3): a chosen Brain model (`brain_planner.reference`) plans; the chat model is passed only when there is none.
         const result = await (pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal))
-          : (((await loadConfig(root, options))['brain_planner'] as { reference?: unknown } | undefined)?.reference ? Promise.resolve(undefined) : hereModel(reference)).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)));
+          : hereModel(reference).then(chatModel => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent }, options, signal, observe, chatModel)));
         await readPoolHold();
         return result;
       },
@@ -463,7 +464,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
         ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.reference ? { reference: turn.reference } : {}),
         ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal), locale) } : {}),
     ...(context.streamTerminalChat && context.secretGrantCard ? { secretGrant: secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, home) } : {}),
-    ...(ports.runMcp ? { mcpGrants: { given: (name: string) => t('mcp.grant.givenKey', { key: name }, locale), keys: async () => ((await ports.runMcp!(root, { verb: 'list', health: false }, options, async () => null)) as { servers?: { reason?: string }[] }).servers?.flatMap(server => server.reason?.startsWith('secret-refused:SECRET_GRANT_REQUIRED:') ? [{ name: server.reason.slice(37), project: root }] : []) ?? [] } } : {}), // KER-17 audit: offered after a turn
+    ...(ports.runMcp ? { mcpGrants: { given: (name: string) => t('mcp.grant.givenKey', { key: name }, locale), keys: async () => ((await ports.runMcp!(root, { verb: 'list', health: false }, options, async () => null)) as { servers?: Parameters<typeof mcpGrantKey>[0][] }).servers?.flatMap(server => { const name = mcpGrantKey(server); return name ? [{ name, project: root }] : []; }) ?? [] } } : {}), // KER-17 audit: offered after a turn
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

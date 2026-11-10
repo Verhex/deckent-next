@@ -1,9 +1,10 @@
+import { CodedError } from '#platform/index.js';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-export class InstallationProfileFileError extends Error {
-  constructor(readonly code: 'INSTALL_PROFILE_SOURCE_UNAVAILABLE' | 'INSTALL_PROFILE_SOURCE_UNSAFE'
+export class InstallationProfileFileError extends CodedError {
+  constructor(override readonly code: 'INSTALL_PROFILE_SOURCE_UNAVAILABLE' | 'INSTALL_PROFILE_SOURCE_UNSAFE'
     | 'INSTALL_PROFILE_SOURCE_TOO_LARGE' | 'INSTALL_PROFILE_SOURCE_CHANGED' | 'INSTALL_PROFILE_INVALID') {
     super(code); this.name = 'InstallationProfileFileError';
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assertPatchScope, classifyPatchScope, patchDigest, patchExclusions, PATCH_SCOPE_ERROR_PATHS, WorkspaceIntegrationApplication,
+import { assertPatchScope, classifyPatchScope, isPatchExcluded, patchPathSchema, patchDigest, patchExclusions, PATCH_SCOPE_ERROR_PATHS, WorkspaceIntegrationApplication,
   WorkspacePatchApplication, WorkspacePatchError, type PatchScopeMode, type WorkspacePatch } from '#engine/index.js';
 import { createGlobMatcher, WORK_TARGET_SETTINGS } from '#platform/index.js';
 import { INSTRUCTION_SURFACE_PATHS } from '#domain/index.js';
@@ -21,8 +21,21 @@ describe('patch scope classification (one deny grammar, exact full-path match)',
     // v1 is released (pushed, run live): it stays exactly as it was, so `scope` needs v2 and v1 with a scope is refused.
     expect([settings(undefined, 1), settings({ mode: 'warn' }, 1), settings({ mode: 'enforce' }, 1)]).toEqual([true, false, false]);
   });
-  it('uses the platform matcher the workspace deny language uses (moved, not copied)', () => {
+  it('uses the shared deny grammar and keeps old patch exclusions while DENY tightens credential classes', () => {
     expect(adapterMatcher).toBe(createGlobMatcher);
+    for (const path of ['.git/config', '.deckent/docs/a.md', '.brain/a', '.codex/auth.json', '.claude/a', '.cursor/a', '.ssh/a', '.aws/a',
+      '.azure/a', '.kube/a', '.npmrc', '.netrc', 'auth.json', '.credentials.json', 'credentials.json', '.envoy', 'nested/.env.local']) {
+      expect(isPatchExcluded(path), path).toBe(true);
+      expect(patchPathSchema.safeParse(path).success, path).toBe(false);
+    }
+    for (const path of ['src/a.ts', 'certs/server.pem.txt', '.dockerignore', '.config/gh-other/config']) expect(isPatchExcluded(path), path).toBe(false);
+    for (const path of ['.gnupg', '.gnupg/private-keys-v1.d/key', '.docker', '.docker/config.json', '.config/gh', '.config/gh/hosts.yml', '.git-credentials', '.pypirc',
+      'server.pem', 'deploy.key', 'secrets.json', 'trust.jks']) {
+      for (const rel of [path, `nested/${path}`]) {
+        expect.soft(isPatchExcluded(rel), rel).toBe(true);
+        expect.soft(patchPathSchema.safeParse(rel).success, rel).toBe(false);
+      }
+    }
   });
   it('suggests unique literal parents only for uncovered paths, without changing classification or mutable inputs', () => {
     const declared = ['src', 'src/notes', 'src', 'docs/readme.md', 'dir[1]'];

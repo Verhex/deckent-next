@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { auditEventSchema, resolvePolicyBindings, sessionPattern, standingCell, standingPattern } from '#domain/index.js';
+import { AI_NON_DELEGABLE_CARD_CELLS, HARD_FLOOR_CARD_CELLS, auditEventSchema, resolvePolicyBindings, sessionPattern, standingCell, standingPattern } from '#domain/index.js';
 import { agentCallPermissionMode, decideAgentToolCall, agentToolApprovalFacts, standingCallKey, standingApprovalAuditEvent } from '#engine/index.js';
 
 const me = { issuer: 'host', subject: '1000' };
@@ -76,6 +76,11 @@ describe('SELF-SOURCE-FLOOR session and policy boundary', () => {
       fullAccess: { cell: 'edit', policy: 'allow', raised: false, company: null, grant: 'fa' } });
     for (const fullAccess of [false, true]) expect(decideAgentToolCall(allowed, { ...request, cell: 'edit-authority', fullAccess, standing: { key: KEY, session: true } }))
       .toEqual({ decision: 'require-approval', revision: 'p+b', relaxation: null });
+    // S1-e4 (KG3 F2): each AI non-delegable cell is a deny for an AI principal, full access included; a hard-floor cell outside the set is not.
+    const ai = { ...principal, assurance: 'workload-verified' as const };
+    expect(HARD_FLOOR_CARD_CELLS).toEqual(expect.arrayContaining([...AI_NON_DELEGABLE_CARD_CELLS, 'shell-destructive']));
+    for (const cell of AI_NON_DELEGABLE_CARD_CELLS) for (const fullAccess of [false, true]) expect(decideAgentToolCall(allowed, { ...request, principal: ai, cell, fullAccess }).decision, cell).toBe('deny');
+    expect(decideAgentToolCall(allowed, { ...request, principal: ai, cell: 'shell-destructive' }).decision).toBe('require-approval');
   });
 
   it('carries the self-source cell through the existing sealed session audit and requires a turn-bound card', () => {

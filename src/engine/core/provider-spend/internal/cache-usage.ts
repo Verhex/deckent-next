@@ -1,6 +1,6 @@
 import type { ProviderSpendReservation } from './account.js';
 
-/** Raw cache classes of one settled call plus the same-request net cache benefit (CACHE-SLICE1 `/usage`). `netBenefitUsdE10`: USD x 1e10, the
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Raw cache classes of one settled call plus the same-request net cache benefit (CACHE-SLICE1 `/usage`). `netBenefitUsdE10`: USD x 1e10, the
  * read savings minus the write premium against the uncached input rate of the same request and tier; null when it does not fit a safe integer. */
 export type SettledProviderCacheUsage = Readonly<{ readTokens: number; writeTokens: number; promptTokens: number; write5mTokens: number; write1hTokens: number;
   netBenefitUsdE10: number | null }>;

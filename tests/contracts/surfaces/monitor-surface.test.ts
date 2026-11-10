@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render, renderToString } from 'ink';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../../src/surfaces/core/monitor/internal/view.js', async original => {
+  const actual = await original<Record<string, unknown> & { buildMonitorView: (...args: unknown[]) => unknown }>();
+  return { ...actual, buildMonitorView: vi.fn(actual.buildMonitorView) };
+});
 import { main } from '../../../src/surfaces/index.js';
 import { summarizeWorkerEvents, type WorkerEvent } from '#domain/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
@@ -257,6 +261,7 @@ describe('fullscreen monitor', () => {
     } finally { view.instance.unmount(); }
   });
   it('refreshes in place every interval, single-flight; r refreshes now; p pauses; a failure keeps the last snapshot with a warning', async () => {
+    const builds = vi.mocked(surface.buildMonitorView); builds.mockClear();
     let calls = 0, fail = false, release: (() => void) | null = null;
     const view = mount({ intervalMs: 40, load: async () => {
       calls++;
@@ -268,12 +273,12 @@ describe('fullscreen monitor', () => {
       await until(() => calls >= 3, 'automatic refreshes');
       // The third read hangs: neither the timer nor `r` may start a fourth read meanwhile.
       await view.press('r'); await view.press('r'); await settle(120);
-      expect(calls).toBe(3);
+      expect(calls).toBe(3); expect(builds).toHaveBeenCalledTimes(2);
       release!(); await until(() => view.stdout.frame.includes('2026-10-02 09:30:03Z'), 'third snapshot');
       await view.press('p');
       expect(view.stdout.frame).toContain('Paused: press p to resume');
       const paused = calls; await settle(150);
-      expect(calls).toBe(paused);
+      expect(calls).toBe(paused); expect(builds).toHaveBeenCalledTimes(paused);
       fail = true; await view.press('r');
       await until(() => view.stdout.frame.includes('refresh failed'), 'failure warning');
       expect(view.stdout.frame).toContain(t('error.INVENTORY_UNAVAILABLE', {}, 'en'));
@@ -281,7 +286,7 @@ describe('fullscreen monitor', () => {
       expect(view.stdout.frame).toContain('Stuck or waiting');
       fail = false; await view.press('p');
       await until(() => !view.stdout.frame.includes('refresh failed'), 'recovered');
-    } finally { view.instance.unmount(); }
+    } finally { view.instance.unmount(); builds.mockClear(); }
   });
   it('never overflows a narrow terminal and keeps a stable height', async () => {
     for (const columns of [60, 79]) {

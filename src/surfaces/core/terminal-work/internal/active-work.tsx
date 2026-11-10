@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, formatDuration, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { SpanText, cells, projectHumanPickerText, span, truncateEnd, useHumanTextSecrets, useRenderGlyphs, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
+import { cells, projectHumanPickerText, span, truncateEnd, type Span, type SpanRole, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
 import { runStatusKey } from '#surfaces/core/cli-human/index.js';
 import { displayId, parkReasonText, runStateText, runTitle, type JobWindowLabels } from './job-windows.js';
@@ -24,7 +24,7 @@ export interface ActiveWorkLabels {
 }
 /** The one `/do` this session is running (one line at a time). `expiresAtMs`: its run-create approval's expiry; `untilText`: a quota wait's end. */
 export type ActiveDo = Readonly<{ title: string; phase: 'planning' | 'waiting' | 'quota-wait'; sinceMs: number; expiresAtMs?: number | undefined; untilText?: string | undefined }>;
-export type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
+type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
 /** A delivery waiting for the person in this session (TESLIM-PENCERESI); `sinceMs`: when this session first saw it. */
 export type ActiveDelivery = Readonly<{ key: string; title: string; sinceMs: number }>;
 /** `detail`: a Run's short id and its model (or task kind), between the title and the state (owner 2026-10-17). */

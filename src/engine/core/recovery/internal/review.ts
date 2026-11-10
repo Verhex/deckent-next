@@ -12,7 +12,7 @@ export type RecoveryReviewItem = Readonly<{ caseId: string; decisionEventId: str
 /** What the person saw happen and what they would have done; the reveal returns the model's choice only after it is sealed. */
 export type RecoveryVerdictOutcome = Readonly<{ status: 'recorded' | 'current'; caseId: string; detection: 'lost' | 'not-lost'; choice: Decision['action'] | null;
   model: Readonly<{ action: Decision['action']; causeClass: Decision['causeClass'] }>; agreed: boolean | null }>;
-/** The review's reads (sealed records, Runs), its one write (the verdict seal, a person's), the person checks and the trusted clock. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The review's reads (sealed records, Runs), its one write (the verdict seal, a person's), the person checks and the trusted clock. */
 export interface RecoveryReviewPorts extends RecoveryRolloutPorts {
   load(scopeId: string, eventId: string): AuditRecord | null | Promise<AuditRecord | null>;
   record(event: unknown): unknown;

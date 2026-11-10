@@ -2,7 +2,7 @@ import { EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent
 import { AuditApplication, recordAuditSummary, PolicyAuthorizationError, agentCallAuditEvent, approvedWriteEntryAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, PolicyTurnRecord, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
-import { t, resolveLocale, getConfigKnownSecrets, redactForRecord, sha256, type TrustedClock } from '#platform/index.js';
+import { optionalField, t, resolveLocale, getConfigKnownSecrets, redactForRecord, sha256, type TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -16,10 +16,10 @@ export const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell
   'narrow-mutating': 'shell-narrow-mutating', destructive: 'shell-destructive', 'always-ask': 'shell-always-ask', 'other-modify': 'shell-other-modify',
   // Lead 2026-10-21 (PRE-8): the product's authority commands from an agent shell are the configuration-authority cell: a person's card in every mode.
   authority: 'edit-authority' };
-export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' }); // Silent without any mode (owner q5): counted, not recorded.
+const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' }); // Silent without any mode (owner q5): counted, not recorded.
 /** Audit event identity of a mode relaxation (or, tag `full-access-call`, a full-access call): one per call position of a turn (the effect
  * gate may be asked several times). */
-export const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string, tag = 'permission-mode') =>
+const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string, tag = 'permission-mode') =>
   sha256(`${tag}:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 
 type Shell = AgentToolCallRequest['shell']; type CallRef = { readonly round: number; readonly index: number; readonly callId: string }; type Stored = { readonly cell: AgentToolCallCell; readonly shell: Shell; readonly decision: AgentToolCallDecision } | { readonly planError: string };
@@ -62,7 +62,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     const standing = standingOf(tool, cell, args);
     // An MCP tool is authorized on its server (`mcp-server`); a tool the turn does not know cannot name one and fails on the `agent-tool` side.
     const server = mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined;
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, ...(server === undefined ? {} : { mcpServer: server }),
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, ...optionalField('mcpServer', server),
       standing: probeSession && standing ? { ...standing, session: true } : standing,
       ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}), ...(input.person ? { person: input.person } : {}), ...(input.origin ? { origin: input.origin } : {}) }); }
     catch { return null; }
@@ -168,6 +168,13 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     /** B1 card facts: the permission cell this call was planned as (null: not planned, e.g. a plan error). */ cell(tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null { const kept = stored.get(keyOf(tool, args)); return kept && 'cell' in kept ? kept.cell : null; },
     /** NATIVE-BAGLAM: one representative cell's decision on the given snapshot, described in the session context; never kept, audited or applied. */ probe: async (snapshot: unknown, tool: AgentToolSpec, cell: AgentToolCallCell, shellInput?: Shell) => (await decide(tool, cell, snapshot, undefined, shellInput))?.decision ?? null,
     /** S5 D1: the policy denied a call after its owner approval (the turn's revalidation): an effect-stage refusal. */ refusedAfterApproval(tool: AgentToolSpec, args: Record<string, unknown>, call: CallRef, revision: string) { const kept = stored.get(keyOf(tool, args)); turnRecord.note(tool, call, kept && 'cell' in kept ? kept.cell : null, { decision: 'deny', revision }, 'effect', keyOf(tool, args)); },
+    /** alpha.64 B + C: a proposal tool is decided by the AI actor's v20 rules (`aiProposalToolDecision`), not by the cells above; the turn's record still
+     * names it: a refusal now, a plain allow once it runs (`ranAllowed`). */
+    proposal(tool: AgentToolSpec, args: Record<string, unknown> | undefined, call: CallRef | undefined, decided: { readonly decision: 'allow' | 'deny'; readonly revision: string }) {
+      if (!args) return; const key = keyOf(tool, args);
+      if (decided.decision === 'deny') { stored.delete(key); turnRecord.note(tool, call, null, decided, 'policy', key); }
+      else stored.set(key, { cell: 'read', shell: undefined, decision: { ...decided, relaxation: null } });
+    },
     /** S5 D1: a read the turn runs on its own path after a plain allow here. */ ranAllowed(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string) { const key = keyOf(tool, args), kept = stored.get(key); if (kept && 'cell' in kept && kept.decision.decision === 'allow' && !kept.decision.relaxation && !kept.decision.standing && !kept.decision.fullAccess) turnRecord.allowed({ tool, call: { ...execution, callId }, cell: kept.cell, argsDigest: key, revision: kept.decision.revision }); },
     /** S5 D1: seals the turn's `policy-turn` record once per content (false: the audit refused it). Evidence after the fact: it never changes a decision or fails the turn. */ flush: async () => {
       const recorded = await turnRecord.flush(clock.sample().wallMs, event => withAudit(audit => audit.record(event)));

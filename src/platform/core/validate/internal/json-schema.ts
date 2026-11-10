@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/core/errors/index.js';
 /**
  * Deckent's JSON Schema validator for MCP tool schemas (MCP-SCHEMA-VALIDATOR, owner 2026-09-29: problematic dependencies are not accepted).
  *
@@ -15,14 +16,14 @@ import { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern,
 
 export type JsonSchemaRefusalReason = 'unsupported-dialect' | 'unsupported-keyword' | 'remote-ref' | 'unsupported-pattern' | 'invalid-schema' | 'limit';
 /** A schema this validator will not compile (fail closed); `at` is the JSON Pointer of the schema location. */
-export class JsonSchemaRefusal extends Error {
-  readonly code = 'JSON_SCHEMA_REFUSED';
+export class JsonSchemaRefusal extends CodedError {
+  override readonly code = 'JSON_SCHEMA_REFUSED';
   constructor(readonly reason: JsonSchemaRefusalReason, readonly at: string, detail: string) {
-    super(`${reason} at #${at}: ${detail}`);
+    super('JSON_SCHEMA_REFUSED', { message: `${reason} at #${at}: ${detail}` });
     this.name = 'JsonSchemaRefusal';
   }
 }
-export interface JsonSchemaLimits {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface JsonSchemaLimits {
   /** Schema object nesting (JSON Pointer depth) and compile recursion including `$ref` hops. */
   readonly schemaDepth: number;
   readonly schemaNodes: number;
@@ -43,15 +44,15 @@ export const JSON_SCHEMA_LIMITS: JsonSchemaLimits = Object.freeze({
   schemaDepth: 64, schemaNodes: 10_000, schemaKeywords: 50_000, patternSource: 4_096, patternStates: 2_000, patternRepeat: 1_000,
   schemaPatternStates: 20_000, instanceDepth: 128, evaluationDepth: 512, validationSteps: 5_000_000,
 });
-/** Keywords that never change a validation result and are accepted in both dialects (policy: extend per provider, not by editing code paths).
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Keywords that never change a validation result and are accepted in both dialects (policy: extend per provider, not by editing code paths).
  * Also accepted: `x-`-prefixed extensions. `discriminator` (OpenAPI, emitted by pydantic) and `nullable` are hints; ignoring them never
  * loosens a result. `$defs` / `definitions` are containers: their members compile only when a `$ref` reaches them. */
 export const JSON_SCHEMA_ANNOTATIONS: readonly string[] = Object.freeze(['$schema', '$id', '$comment', 'title', 'description', 'default',
   'examples', 'deprecated', 'readOnly', 'writeOnly', 'format', 'contentMediaType', 'contentEncoding', 'contentSchema', 'discriminator',
   'nullable', '$defs', 'definitions']);
-export type JsonSchemaResult<T> = { valid: true; data: T; errorMessage: undefined } | { valid: false; data: undefined; errorMessage: string };
-export type JsonSchemaCheck<T> = (input: unknown) => JsonSchemaResult<T>;
-export interface JsonSchemaValidatorOptions {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type JsonSchemaResult<T> = { valid: true; data: T; errorMessage: undefined } | { valid: false; data: undefined; errorMessage: string };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type JsonSchemaCheck<T> = (input: unknown) => JsonSchemaResult<T>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface JsonSchemaValidatorOptions {
   readonly limits?: Partial<JsonSchemaLimits>;
   /** Format checkers by name (asserted only for strings); an unregistered format is an annotation (2020-12 default). */
   readonly formats?: Readonly<Record<string, (value: string) => boolean>>;
@@ -83,7 +84,7 @@ interface Evaluated { readonly props: Set<string>; readonly items: Set<number>; 
 interface Ctx { readonly budget: StepBudget; readonly path: (string | number)[]; depth: number; message: string }
 type Validate = (instance: Json, ctx: Ctx, ev: Evaluated | null) => boolean;
 
-class ValidationLimit extends Error {}
+class ValidationLimit extends CodedError { constructor(message = '', options?: ErrorOptions) { super('VALIDATION_LIMIT', { message, ...options }); } }
 const isObject = (value: Json): value is JsonObject => typeof value === 'object' && value !== null && !Array.isArray(value);
 const newEv = (): Evaluated => ({ props: new Set(), items: new Set(), all: false });
 const merge = (from: Evaluated, into: Evaluated) => {

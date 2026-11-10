@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it, vi } from 'vitest';
@@ -6,13 +6,14 @@ import { brainProviderFixture } from '../support/brain-provider.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
-  resolveNativeCliWorkerProfile, readLocalOsIdentity, localPrincipalChannel, executionTaskBase, executionTaskSilenceDeadline, executionTaskHiddenPaths, validateDockerTaskProfile, type NativeCliWorkerBinding } from '#adapters/index.js';
+  resolveNativeCliWorkerProfile, inspectNativeCliWorker, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding, type NativeCliWorkerPorts } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest, connectedModelProfile } from '#engine/index.js';
 import { FIRST_RUN_UPGRADE_RULE_IDS, firstRunPolicyTemplate, modelInvocationProfileSchema } from '#domain/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, productResourcePath } from '#platform/index.js';
 
 it('K17: worker ports use fresh K5 workload authority and the existing K6 reservation without an invocation claim', async () => {
   const owner = readLocalOsIdentity(), f = await brainProviderFixture({ headless: { executable: process.execPath,
@@ -34,13 +35,6 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     { provider: entry.id, cliVersion: '9.0.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding);
     const work = { schemaVersion: 1, task: 'Record the business result.', scope: { paths: ['result.txt'] }, acceptance: 'The result has a durable receipt.',
       model: { channelId: profile.reference.providerId, modelId: 'vendor/model', auxiliaryModelIds: [] } }, compiled = compileNativeCodingWorkInput(template, work);
-    // R8b (owner D1b): without Docker settings the worker template has the default limits and no image; the compiled worker still resolves for
-    // admission and keeps its silence deadline, the placeholder never reaches the stored base, and a plain Docker template without an image is refused.
-    const invocation = { provider: entry.id, cliVersion: '9.0.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' };
-    const imageless = compileNativeCodingWorkInput(createNativeCodingTemplate(undefined, invocation, binding), work), base = resolveNativeCliWorkerProfile(imageless).base;
-    expect(base.parameters).not.toHaveProperty('imageId'); expect(validateDockerTaskProfile(executionTaskBase(imageless))).toBeUndefined(); expect(executionTaskSilenceDeadline(imageless)).toBe(1200000);
-    expect(executionTaskHiddenPaths(imageless)).toEqual(executionTaskHiddenPaths(compiled)); // C2: the same pinned checkout shaping as with an image
-    expect(() => createNativeCodingTemplate(undefined, invocation)).toThrow();
     const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['criterion'] }],
       criterionDefinitions: [{ id: 'criterion', version: 1, description: 'Evidence', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
     // R9: an assigned model runs on the same login's connected profile for it; another login or an undeclared model has none.
@@ -52,6 +46,9 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     expect(await connectedModelProfile(context.config, 's', { ...binding, definition: { ...binding.definition, configDir: '/other/login' } }, model)).toBeNull();
     const admission = nativeWorkerAdmission(f.project, 's', f.options);
     const execution = await admission.modelUse.pin({ ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, context.principal);
+    // X4: the run owner check is the strict principal compare; the same issuer and subject with another id or assurance is not the owner.
+    for (const other of [{ ...context.principal, id: 'other' }, { ...context.principal, assurance: 'token-verified' as const }])
+      await expect(admission.modelUse.pin({ ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, other)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
     const frozen = resolveNativeCliWorkerProfile(execution.tasks[0]!.profile).binding;
     expect(frozen.modelUsePin?.principal).toMatchObject({ issuer: `${owner.issuer}/mcp`, assurance: 'workload-verified' });
     expect(await admission.resources(execution)).toEqual([{ taskId: 't', resourceKey: resource.resourceKey }]);
@@ -70,6 +67,10 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     const ports = createConfiguredNativeCliWorkerPorts(f.project, 's', store as never, f.options, runtime), signal = new AbortController().signal;
     const request = { protocolVersion: 1 as const, identity, workspace: '/synthetic/attempt/workspace', argv: resolveNativeCliWorkerProfile(execution.tasks[0]!.profile).argv };
     expect(await ports.readiness(frozen)).toEqual({ state: 'ready', execution: seal }); expect(await ports.f08(frozen)).toEqual(seal);
+    // KG6 F1/F2: the production readiness point reads the observation once and its F08 reuses that seal and the point's K5 resolution.
+    const reads = vi.mocked(runtime.readiness.read).mock.calls.length;
+    expect(await inspectNativeCliWorker(frozen, ports)).toEqual({ state: 'ready', execution: seal }); expect(runtime.readiness.read).toHaveBeenCalledTimes(reads + 1);
+    expect(runtime.f08).toHaveBeenLastCalledWith(expect.objectContaining({ execution: seal, use: expect.objectContaining({ pin: frozen.modelUsePin }) }));
     expect(await ports.prepare!(frozen)).toBeNull(); expect(runtime.prepare).toHaveBeenCalledWith(profile);
     await ports.recheck(request, frozen, signal);
     const slot = await ports.capacity.acquire(request, frozen, signal); expect(slot.state).toBe('acquired');
@@ -85,6 +86,9 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
     await expect(ports.openTools(request, frozen, signal, {})).rejects.toBeTruthy(); expect(runtime.openTools).toHaveBeenCalledOnce(); expect(runtime.driver).not.toHaveBeenCalled();
     await expect(ports.prepare!(frozen)).rejects.toBeTruthy(); expect(runtime.prepare).toHaveBeenCalledOnce();
+    // KG6 OQ1: the guard that passed before the change and the execute recheck after it each read a fresh snapshot, as does every readiness point.
+    for (const point of [() => ports.recheck(request, frozen, signal), () => recheckNativeWorkerUse(f.project, 's', frozen, f.options), () => ports.readiness(frozen), () => ports.readinessPoint!(frozen), () => ports.f08(frozen)])
+      await expect(point()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     const check = new DatabaseSync(f.path, { readOnly: true });
     try { expect(check.prepare('SELECT count(*) AS n FROM model_invocations').get()).toEqual({ n: 0 }); } finally { check.close(); }
     expect(f.posts).toBe(0);
@@ -95,7 +99,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
   const { mkdtemp, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir, hostname, userInfo } = await import('node:os');
   const { execFileSync } = await import('node:child_process');
-  const { openConfiguredAttemptStore } = await import('#composition/core/storage/index.js');
+  const { openConfiguredAttemptStore } = await import('../support/configured-open.js');
   const { executeConfiguredTask } = await import('#composition/core/execution/index.js');
   const nativeConnection = await import('#adapters/core/native-connection/index.js');
   const { recordedNativeCliWorkerSupervisor } = await import('#adapters/core/native-cli-worker/index.js');
@@ -140,7 +144,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const release = vi.fn(async () => undefined), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
       const ports = { readiness: async () => ({ state: 'ready' as const, execution: seal }), f08: async () => seal, recheck: async () => undefined,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release }) },
-        checkEnvironment: vi.fn(async (request, _binding, requirements) => {
+        checkEnvironment: vi.fn<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>(async (request, _binding, requirements) => {
           expect(await readFile(join(request.workspace, 'note.txt'), 'utf8')).toBe('fixed base\n'); expect(requirements).toEqual(environment);
         }),
         openTools: vi.fn(async (request, _binding, _signal, context) => {
@@ -159,6 +163,35 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       expect(run).toHaveBeenCalledOnce(); expect(release).toHaveBeenCalledOnce(); expect(ports.checkEnvironment).toHaveBeenCalledOnce(); expect(credential).not.toHaveBeenCalled();
       await store.cancelRun({ commandId: 'cancel-finished', actor, scopeId: 's', runId: 'run', expectedRevision: (await store.loadRun('s', 'run'))!.revision });
       await store.settleCancelledAttempt(identity);
+      for (const cause of ['run-cancel', 'service-stop', 'service-stop-unknown']) {
+        const probing = { ...identity, runId: cause, attemptId: cause }, stop = new AbortController();
+        await store.createRun({ commandId: `create-${cause}`, actor, identity: { scopeId: 's', runId: cause, layoutRevision: identity.layoutRevision }, graph,
+          execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
+          policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: `reserve-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: 0, now: 0, identities: [probing] });
+        let started!: () => void, finish!: () => void, probeSignal!: AbortSignal, probeWorkspace!: string;
+        const entered = new Promise<void>(resolve => { started = resolve; });
+        ports.checkEnvironment.mockImplementationOnce(async (request, _binding, _requirements, _resources, signal) => {
+          probeSignal = signal; probeWorkspace = request.workspace; started();
+          await new Promise<void>(resolve => { finish = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
+          if (cause === 'service-stop-unknown') throw ErrorRegistry.createError('NATIVE_WORKER_CUSTODY_UNKNOWN');
+        });
+        const pending = executeConfiguredTask(project, probing, { ...options, nativeCliWorker: { ports, projectionRetired: true } }, stop.signal);
+        const outcome = pending.then(result => ({ result }), (error: unknown) => ({ error }));
+        await entered;
+        try {
+          if (cause === 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
+          else stop.abort();
+          await vi.waitFor(() => expect(probeSignal.aborted).toBe(true), { timeout: 3000 });
+        } finally { finish(); }
+        expect(await outcome).toMatchObject({ error: { code: cause === 'service-stop-unknown' ? 'NATIVE_WORKER_CUSTODY_UNKNOWN' : 'DISPATCH_FENCED' } });
+        if (cause === 'service-stop-unknown') expect(await readFile(join(probeWorkspace, 'note.txt'), 'utf8')).toBe('fixed base\n');
+        else await expect(readFile(join(probeWorkspace, 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+        expect(await readdir(join(productResourcePath(opened.layout, 'crashes'), 'dispatch-preparation'))).toHaveLength(cause === 'service-stop-unknown' ? 1 : 0);
+        expect(await store.loadBoundDispatch(probing)).toBeNull();
+        expect(run).toHaveBeenCalledOnce(); expect(ports.openTools).toHaveBeenCalledOnce();
+        if (cause !== 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
+      }
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,

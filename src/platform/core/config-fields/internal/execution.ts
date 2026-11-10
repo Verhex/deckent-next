@@ -1,4 +1,4 @@
-import { persistedString, persistedEmail, persistedInteger } from '#platform/core/validate/index.js';
+import { persistedCounter, persistedString, persistedEmail, persistedInteger } from '#platform/core/validate/index.js';
 import { z } from 'zod';
 import quotaDefaults from './quota-policy.json' with { type: 'json' };
 import stallDefaults from './stall-policy.json' with { type: 'json' };
@@ -17,8 +17,12 @@ export const DOCKER_EXECUTION_SETTINGS = z.strictObject({
   get controlTimeoutMs() { return persistedInteger().positive().max(2_147_483_647).prefault(docker.controlTimeoutMs); }, get outputBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(docker.outputBytes); },
 });
 /** outputBytes bounds one Git listing/blob read; the default fits repositories with tens of thousands of tracked paths. */
+export const GIT_COPY_BYTES = executionDefaults.git.copyBytes;
 export const GIT_EXECUTION_SETTINGS = z.strictObject({ get gitExecutable() { return persistedString(z.string().min(1)); },
   get timeoutMs() { return persistedInteger().positive().max(2_147_483_647).prefault(executionDefaults.git.timeoutMs); }, get outputBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(4_194_304); },
+  /** A6-6: the objects one copy into a Deckent-owned private repository (a Run's base: HEAD's whole history) may stream; unset, `GIT_COPY_BYTES`.
+   * Optional, so an unset value leaves every workspace fingerprint as it was. */
+  get copyBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(); },
   get deliveryIdentity() { return z.strictObject({ authorName: persistedString(z.string().trim().min(1).max(256)).refine(value => ![...value].some(char => char === '<' || char === '>' || char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)).describe('config.field.execution.git.deliveryIdentity.authorName'), authorEmail: persistedString(persistedEmail().max(256)).describe('config.field.execution.git.deliveryIdentity.authorEmail') }).optional(); }, });
 /** Branches an operator allows `integration-adopt` to move. Empty (default) refuses every adoption; a listed branch must
  * exist and must not be checked out in any worktree when adopted. Business policy data, not a grant: policy still applies. */
@@ -26,7 +30,7 @@ export const GIT_EXECUTION_SETTINGS = z.strictObject({ get gitExecutable() { ret
 const configIdentity = persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 /** B06-2c: what counts as verification of an adopted commit. `kind` is the task kind whose Run verifies; `required` refuses adoption
  * without one; `criteria` is the bar each such Run's acceptance must meet (per evaluator: never accepting more than these parameters). */
-export const ADOPTION_VERIFICATION_REQUIREMENT = z.strictObject({ kind: configIdentity, get required() { return z.boolean(); },
+const ADOPTION_VERIFICATION_REQUIREMENT = z.strictObject({ kind: configIdentity, get required() { return z.boolean(); },
   get criteria() { return z.array(z.strictObject({ evaluator: z.strictObject({ id: configIdentity, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }),
     parameters: z.record(z.string(), z.unknown().optional()) })).min(1).max(16); } });
 export const ADOPTION_TARGET_SETTINGS = z.strictObject({ get targets() { return z.array(z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/)).max(64).prefault([]).describe('config.field.execution.adoption.targets'); },
@@ -85,12 +89,12 @@ export const ARTIFACT_STORAGE_LIMITS = z.strictObject({ get maxBytes() { return 
 export const RUN_PARKING_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); },
   get timeoutMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(86_400_000); } });
 
-export const QUOTA_RECOVERY_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); }, get maxResumes() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(quotaDefaults.maxResumes).describe('config.field.runRuntime.quotaRecovery.maxResumes'); },
+export const QUOTA_RECOVERY_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); }, get maxResumes() { return persistedCounter().prefault(quotaDefaults.maxResumes).describe('config.field.runRuntime.quotaRecovery.maxResumes'); },
   get maxWaitMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(quotaDefaults.maxWaitMs).describe('config.field.runRuntime.quotaRecovery.maxWaitMs'); },
   /** S9: how often a person may choose to keep waiting after the ask; the ask itself never ends the Run. */
-  get maxRewaits() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(quotaDefaults.maxRewaits).describe('config.field.runRuntime.quotaRecovery.maxRewaits'); } });
+  get maxRewaits() { return persistedCounter().prefault(quotaDefaults.maxRewaits).describe('config.field.runRuntime.quotaRecovery.maxRewaits'); } });
 /** R3 (owner D4a): installation silence policy for watchable workers (frozen per task at admission; a work class may override warn/stop),
  * at most `maxRetries` automatic re-runs of a stalled Attempt after `backoffMs`. Warn must come before stop. */
 export const STALL_RECOVERY_SETTINGS = z.strictObject({ get schemaVersion() { return z.literal(1); }, get warnAfterMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.warnAfterMs).describe('config.field.runRuntime.stallRecovery.warnAfterMs'); },
-  get stopAfterMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.stopAfterMs).describe('config.field.runRuntime.stallRecovery.stopAfterMs'); }, get maxRetries() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.maxRetries).describe('config.field.runRuntime.stallRecovery.maxRetries'); },
-  get backoffMs() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.backoffMs).describe('config.field.runRuntime.stallRecovery.backoffMs'); } }).refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });
+  get stopAfterMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(stallDefaults.stopAfterMs).describe('config.field.runRuntime.stallRecovery.stopAfterMs'); }, get maxRetries() { return persistedCounter().prefault(stallDefaults.maxRetries).describe('config.field.runRuntime.stallRecovery.maxRetries'); },
+  get backoffMs() { return persistedCounter().prefault(stallDefaults.backoffMs).describe('config.field.runRuntime.stallRecovery.backoffMs'); } }).refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });

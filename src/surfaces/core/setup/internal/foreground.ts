@@ -2,7 +2,7 @@ import { emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupStage } from '#engine/index.js';
 import { askCliCard, lendHeldInput, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import { runKernelCommand, type KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
-import type { SetupApplyResult, SetupCommandContext } from './contract.js';
+import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import registry from './modes.json' with { type: 'json' };
 
 /** Stages whose owner takes the person's terminal itself (a card, a picker, a second window or sudo's own password prompt): the setup
@@ -51,6 +51,7 @@ export async function runForegroundStage(context: Omit<SetupCommandContext, 'ins
   try {
     if (op === 'doctor.inspect') { await runKernelCommand(['doctor'], human as unknown as KernelCommandContext); return result('applied'); }
     if (!scopeId) return result('refused', 'CLI_SCOPE_REQUIRED');
+    if (op === 'installation.policy-template') return await (context.applySetupStage ?? notWiredApply)(root, stage, { env, scopeId, foreground: true, language: locale });
     if (op === 'execution-environment.install' && context.installExecutionEnvironment) {
       // sudo asks on the terminal itself: the held input goes back to the line discipline for the whole install (its card included).
       const giveBack = lendHeldInput(process.stdin, { plain: true });

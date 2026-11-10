@@ -11,7 +11,7 @@ export const hubRevocationCursorSchema = z.strictObject({ schemaVersion: z.liter
   page: hubTimeSchema.positive(), issuedAtMs: hubTimeSchema, nextRefreshBy: hubTimeSchema, signature: hubFeedSignatureSchema
 }).refine(row => row.afterSequence <= row.throughSequence && row.position < row.throughPosition && row.nextRefreshBy > row.issuedAtMs).readonly();
 export type HubRevocationCursor = z.infer<typeof hubRevocationCursorSchema>;
-export const hubRevocationCatchupSchema = z.strictObject({ schemaVersion: z.literal(1), afterSequence: hubTimeSchema, throughSequence: hubTimeSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const hubRevocationCatchupSchema = z.strictObject({ schemaVersion: z.literal(1), afterSequence: hubTimeSchema, throughSequence: hubTimeSchema,
   position: hubTimeSchema, throughPosition: hubTimeSchema, page: hubTimeSchema, complete: z.boolean(), next: hubRevocationCursorSchema.nullable()
 }).refine(row => row.afterSequence <= row.throughSequence && row.position <= row.throughPosition && row.complete === (row.next === null)
   && (!row.next || row.next.afterSequence === row.afterSequence && row.next.throughSequence === row.throughSequence

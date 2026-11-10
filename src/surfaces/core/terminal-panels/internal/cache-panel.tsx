@@ -10,7 +10,7 @@ const CONFIRM = 'confirm';
 export function cacheEntry(view: CachePanelView | null, words: CachePanelLabels): Readonly<{ label: string; detail: string }> | null {
   return view ? { label: words.entry, detail: view.detail } : null;
 }
-export function cacheConfirmTree(words: CachePanelLabels): PickerTree {
+function cacheConfirmTree(words: CachePanelLabels): PickerTree {
   return { title: words.title, items: [{ id: CONFIRM, label: words.confirm }, { id: 'cancel', label: words.cancel }] };
 }
 

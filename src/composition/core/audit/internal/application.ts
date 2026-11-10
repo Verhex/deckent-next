@@ -1,10 +1,10 @@
 import { hostname, userInfo } from 'node:os';
-import { AuditError, auditListQuerySchema, auditRebaselineCommandSchema, auditVerifyQuerySchema, type AuditListView, type AuditVerification } from '#domain/index.js';
+import { type Policy, AuditError, auditListQuerySchema, auditRebaselineCommandSchema, auditVerifyQuerySchema, type AuditListView, type AuditVerification } from '#domain/index.js';
 import { AuditApplication, AuditCheckpointCycleError, AuditCheckpointApplication, approvalAssuranceProducerInventory, auditScopeRecorded, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openReadOnlyAuditStore, openSqliteAuditStore, openLocalIntegrityAuthority, LOCAL_AUTHENTICATOR_INVENTORY } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 const unavailable = (scopeId: string, reason: AuditVerification['reason'] = 'unavailable'): AuditVerification => Object.freeze({ schemaVersion: 1, scopeId, status: 'unknown', reason, head: null, checkpoint: null });
@@ -44,7 +44,7 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
     const scopes = store.scopeIds(config.audit.maxScopes);
     if (scopes.length > config.audit.maxScopes) throw new AuditCheckpointCycleError('limit');
     if (!scopes.length) return []; // no event and no checkpoint anywhere: nothing to anchor, and no key is required yet
-    const document = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load();
+    const document = await contextPolicySource({ layout: config.productLayout, config }).load();
     const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
     const app = new AuditCheckpointApplication(store, integrity, config.audit), context = { installationId,
       policyDigest: auditPolicyDigest(document), producersDigest: producersDigest(config) };
@@ -55,7 +55,7 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
   finally { store?.close(); }
 }
 /** What the re-baseline card shows and the write is bound to: the verified state plus the policy and producer digests it was computed over. */
-export type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
+type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
 /** The explicit operator re-baseline: approval-decide authority on `audit-rebaseline` (on the AI floor), a witnessed human terminal and one y/N bound to the shown state. The policy is read again after the answer; the engine re-checks state, head and digests inside the write, and a change in between asks again (bounded), never writes over what the person did not see. */
 export async function rebaselineConfiguredAudit(root: string, input: unknown, options: ConfigLoadOptions,
   confirm: (current: AuditRebaselineView) => Promise<boolean>, attempts = 3): Promise<AuditVerification | null> {
@@ -64,14 +64,14 @@ export async function rebaselineConfiguredAudit(root: string, input: unknown, op
     authorizeApproval(context.document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
     if (localPrincipalChannel() === 'mcp' || localPrincipalPeer() || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('AUDIT_REBASELINE_INTERACTIVE_REQUIRED');
     if (!context.installationId) throw new AuditError('AUDIT_UNAVAILABLE');
-    const installationId = context.installationId, policy = createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes);
+    const installationId = context.installationId, policy = contextPolicySource(context);
     const scoped = async () => { const document = await policy.load(); return { document, value: { installationId, policyDigest: auditPolicyDigest(document), producersDigest: producersDigest(context.config) } }; };
     const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile), store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
     try {
       const app = new AuditCheckpointApplication(store, integrity, context.config.audit);
       for (let left = attempts; ; ) {
         // Authority is decided again on every policy this flow reads (REVIEW2561 R2): each card's, the write's, and inside the write.
-        const shown = await scoped(), current = app.verify(command.scopeId, shown.value), authorize = (document: unknown) => authorizeApproval(document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
+        const shown = await scoped(), current = app.verify(command.scopeId, shown.value), authorize = (document: Policy) => authorizeApproval(document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
         authorize(shown.document);
         if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(current.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
         if (!await confirm({ ...current, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest })) return null;

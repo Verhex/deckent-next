@@ -1,10 +1,10 @@
 export { NervousApplication } from './internal/application.js';
-export type { NervousContext, NervousOutcome, NervousPorts } from './internal/application.js';
+export type { NervousContext, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousOutcome, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousPorts } from './internal/application.js';
 export { NERVOUS_RULES_SEED, NervousError, loadNervousRules, promoteNervousRule } from './internal/rules.js';
 export type { NervousRule, NervousRules } from './internal/rules.js';
 export { nervousAttemptSignalSchema, nervousProposalSchema, nervousCaseId } from './internal/detect.js';
-export type { NervousAttemptSignal, NervousEvidence, NervousFeedKind, NervousProposal, NervousTarget } from './internal/detect.js';
+export type { NervousAttemptSignal, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousEvidence, NervousFeedKind, NervousProposal, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousTarget } from './internal/detect.js';
 export { nervousDisposition, nervousRulePromoted, nervousStandingApproval, nervousStandingApprovalSchema } from './internal/broker.js';
-export { NERVOUS_EXECUTABLE_ACTIONS, nervousExecutors, nervousHoldCommand } from './internal/executors.js';
-export type { NervousRecoveryPorts, NervousRecoveryResult, NervousRetained } from './internal/executors.js';
-export type { NervousDisposition, NervousExecutors, NervousStandingApproval } from './internal/broker.js';
+export { NERVOUS_EXECUTABLE_ACTIONS, nervousExecutors, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nervousHoldCommand } from './internal/executors.js';
+export type { NervousRecoveryPorts, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousRecoveryResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousRetained } from './internal/executors.js';
+export type { NervousDisposition, NervousExecutors, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NervousStandingApproval } from './internal/broker.js';

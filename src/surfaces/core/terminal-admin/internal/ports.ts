@@ -10,7 +10,7 @@ import { scopeLines, scopeView } from './scope.js';
 import { statusLines, statusView } from './status.js';
 import { usageLines, usageView } from './usage.js';
 
-export interface TerminalAdminInput {
+interface TerminalAdminInput {
   readonly root: string;
   readonly scopeId: string;
   readonly installationId: string;

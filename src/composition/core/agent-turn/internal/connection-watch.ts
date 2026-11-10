@@ -1,5 +1,5 @@
 /** How often a turn asks the transport whether its client is still there (a turn waiting on an owner writes nothing that could fail). */
-export const CONNECTION_WATCH_MS = 250;
+const CONNECTION_WATCH_MS = 250;
 
 /**
  * A client that closes while the service has nothing to write (an approval card waiting for the owner) is not seen by the stream's

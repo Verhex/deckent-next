@@ -7,7 +7,7 @@ import { readRunHold, runHoldOverlay } from './hold.js';
 import { projectRunAttempt } from './reduce.js';
 import registry from './environment-requirements.json' with { type: 'json' };
 const limits = registry.limits;
-/** PRE-7: a task environment requirement as versioned registry data in one generic form: `kind` names a probe kind an adapter registers
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). PRE-7: a task environment requirement as versioned registry data in one generic form: `kind` names a probe kind an adapter registers
  * (coding kinds in the native-coding adapter, business-process kinds in their own adapters), `target` what it probes and `expect` an optional
  * expectation. The declaration never carries a command: probe commands come only from the adapter's probe-kind registry. */
 export const environmentRequirementSchema = z.strictObject({ id: identitySchema, kind: identitySchema,

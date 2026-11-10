@@ -10,6 +10,7 @@
     "unsure": "classification needs the owning slice's review"
   },
   "sites": {
+    "src/engine/core/agent-turn/internal/proposals.ts": { "sites": 1, "class": "pure", "note": "alpha.64: offers the proposal tools while the AI actor's v20 Run/setting rule holds; never gates an effect (Run create and config write decide again, sealed)" },
     "src/domain/core/identity-profile/internal/diff.ts": { "sites": 2, "class": "pure", "note": "draft before/after diff preview, no writer" },
     "src/domain/core/policy/internal/administration.ts": { "sites": 1, "class": "pure", "note": "admin capability probe; POLICY_LAST_ADMIN refusal sealed as authority-refusal (best-effort)" },
     "src/domain/core/policy/internal/decision-step.ts": { "sites": 1, "class": "pure", "note": "explicit decision grant probe for approval/runs callers" },
@@ -30,7 +31,7 @@
     "src/engine/core/identity-profile/internal/application.ts": { "sites": 1, "class": "read-gate", "note": "scope/inspect draft preview" },
     "src/engine/core/identity-profile/internal/distribution.ts": { "sites": 2, "class": "unsealed", "note": "pre-checks before administration.submit" },
     "src/engine/core/installation/internal/application.ts": { "sites": 2, "class": "unsure", "note": "checks an authored profile's policy (profile validation or gate)" },
-    "src/engine/core/installation/internal/uninstall-application.ts": { "sites": 2, "class": "unsealed", "note": "uninstall/purge needs an all-scopes installation grant; a refusal is a typed error with no sealed record, while each removal command still passes the effect policy and the sealed approval broker" },
+    "src/engine/core/uninstall/internal/uninstall-application.ts": { "sites": 2, "class": "unsealed", "note": "alpha.64 SPLIT: uninstall/purge needs an all-scopes installation grant; a refusal is a typed error with no sealed record, while each removal command still passes the effect policy and the sealed approval broker" },
     "src/engine/core/memory/internal/authorization.ts": { "sites": 2, "class": "unsealed", "note": "memory propose/verify/retire gate (S4); an allowed transition is sealed as memory-journal, a refusal is not yet; inspect is a read-gate; the S4B-1 read filter (source read-output and work-target use) only withholds entries from an answer (read-gate, no effect)" },
     "src/engine/core/nervous/internal/broker.ts": { "sites": 2, "class": "sealed", "kind": "recovery-detection", "note": "S6R-3 owner standing grant (recovery-action/apply): no grant seals the case proposal-only, a grant seals execute with standingRef; alpha.56 rule promotion (nervous-rule/promote) is sealed as the rule status of the same record" },
     "src/engine/core/recovery/internal/policy-card.ts": { "sites": 1, "class": "pure", "note": "alpha.56: card display of the effective grant; the change goes through administerOwnPolicyChange (policy.administer)" },
@@ -50,9 +51,7 @@
     "src/engine/core/project-instructions/internal/worker-trust.ts": { "sites": 1, "class": "sealed", "kind": "authority-decision" },
     "src/engine/core/runs/internal/authority.ts": { "sites": 2, "class": "partial", "kind": "authority-decision", "note": "run/create sealed; proposal require-approval deferred to task admission" },
     "src/engine/core/runs/internal/decision-approval.ts": { "sites": 1, "class": "unsealed", "note": "only allow sealed (run-lifecycle)" },
-    "src/engine/core/secret-store/internal/administration.ts": { "sites": 1, "class": "sealed", "kind": "secret-change" },
-    "src/engine/core/secret-store/internal/grant-administration.ts": { "sites": 3, "class": "sealed", "kind": "authority-decision", "note": "secret list --all is a read-gate" },
-    "src/engine/core/secret-store/internal/switch.ts": { "sites": 1, "class": "sealed", "kind": "secret-store-switch" },
+    "src/engine/core/secret-store/internal/administration.ts": { "sites": 1, "class": "sealed", "kind": "secret-change", "note": "Shared evaluateSecretCell: change decisions seal secret-change; grant administration seals authority-decision (list --all is a read-gate); store switching seals secret-store-switch. Callers remain in grant-administration.ts and switch.ts." },
     "src/engine/core/setup/internal/install.ts": { "sites": 1, "class": "sealed", "kind": "execution-environment-install" }
   }
 }

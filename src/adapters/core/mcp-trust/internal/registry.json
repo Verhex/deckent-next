@@ -10,6 +10,8 @@
     "TZ",
     "TMPDIR"
   ],
+  "toolsMax": 512,
+  "toolsMaxNote": "The most tools one trust record pins and one server may list (the client pool imports it). The record's 256 servers stay a store bound, apart from the pool's mcp.maxServers.",
   "trustMaxBytes": 8388608,
   "trustMaxBytesNote": "The largest trust record read (256 servers x 512 pins fit well below it); a larger file is refused unread."
 }

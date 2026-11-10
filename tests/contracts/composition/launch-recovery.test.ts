@@ -11,7 +11,7 @@ import { expect, it } from 'vitest';
 import { DockerSupervisor, identifyDockerRequest, openSqliteAttemptStore, validateDockerSupervisorProfile, type SqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { reconcileAttempt } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';
 import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';

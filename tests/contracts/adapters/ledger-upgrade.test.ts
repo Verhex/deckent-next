@@ -2,13 +2,21 @@ import { mkdtemp, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, DOWNGRADE_TO_V35_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 
+const statRefusal = vi.hoisted(() => ({ path: null as string | null, error: undefined as unknown }));
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, lstatSync: (...args: Parameters<typeof actual.lstatSync>) => {
+    if (String(args[0]) === statRefusal.path) throw statRefusal.error;
+    return actual.lstatSync(...args);
+  } };
+});
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { statRefusal.path = null; statRefusal.error = undefined; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const options = { busyTimeoutMs: 1_000, journalMode: 'wal' as const, durability: 'full' as const };
 const version = (path: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare('PRAGMA user_version').get()?.user_version; } finally { db.close(); } };
 
@@ -27,6 +35,14 @@ it('backs up an older ledger with its version in the name, then migrates it to t
   expect(await upgradeExistingProductLedger(join(root, 'absent.db'), options, backups, new Date())).toBeNull();
   expect(await readdir(backups)).toHaveLength(1);
   await expect(stat(join(root, 'absent.db'))).rejects.toMatchObject({ code: 'ENOENT' });
+  const refused = join(root, 'refused.db'); openSqliteLedger(refused, options).close();
+  const old = new DatabaseSync(refused); old.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); old.close();
+  const date = new Date('2026-09-27T00:00:00.000Z');
+  const foreign = Object.assign(new Error('LEDGER_BACKUP_EXISTS'), { code: 'EACCES' });
+  statRefusal.path = join(backups, `ledger-v${PREVIOUS_LEDGER_VERSION}-2026-09-27T00-00-00-000Z.db`); statRefusal.error = foreign;
+  await expect(upgradeExistingProductLedger(refused, options, backups, date)).rejects.toBe(foreign);
+  expect(version(refused)).toBe(PREVIOUS_LEDGER_VERSION);
+  expect(await readdir(backups)).toHaveLength(1);
 });
 
 it('keeps every allocation row across the v36 rebuild and then admits an allocation without a lifetime total', async () => {

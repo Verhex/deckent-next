@@ -146,6 +146,11 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     const worker = (await import('#capabilities/index.js')).readWorkerToolCard(card.request.summary);
     expect(worker).toMatchObject({ identity: { runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt' }, tool: 'write_file', resource: 'src/allowed.ts' });
     expect(worker?.argsDigest).toMatch(/^[a-f0-9]{64}$/u);
+    const { approvalRecordSchema } = await import('#domain/index.js');
+    const stored = approvalRecordSchema.parse(JSON.parse(JSON.stringify(await f.client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: card.request.approvalId }))));
+    expect(stored).toEqual(card);
+    expect(stored.request).toMatchObject({ origin: { kind: 'worker-tool-call', identity: worker!.identity,
+      turnId: worker!.turnId, resourceDigest: worker!.resourceDigest, argsDigest: worker!.argsDigest } });
     expect(card.request).toMatchObject({ preview: { schemaVersion: 1, argsDigest: worker?.argsDigest, text: expect.stringContaining('+approved-output'), cut: null } });
     const command = { schemaVersion: 1, scopeId: 'scope', approvalId: card.request.approvalId, expectedRevision: card.revision, reason: 'Reviewed exact worker call', decision: 'allow' };
     await expect(f.client.decideApproval({ ...command, commandId: 'unattended-worker' })).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
@@ -165,10 +170,29 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     expect(allowed.response).toMatchObject({ ok: true, result: { decision: { assurance: 'turn-bound', deciderClass: 'human-tty' } } });
     expect((await write).outcome.status).toBe('ok'); expect(await readFile(join(f.attempt, 'src/allowed.ts'), 'utf8')).toBe('approved-output');
     await expect(readFile(join(f.project, 'src/allowed.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const displayRecord = { ...stored, request: { ...stored.request, subject: { ...approvalSubject(stored.request), resource: 'synthetic-private-display-target' } } };
+    const { createWorklineLedgerPorts } = await import('../support/cli-ledger-ports.js');
+    const ledger = createWorklineLedgerPorts({ root: f.project, scopeId: 'scope', options: {},
+      inspectWorkers: (async () => ({})) as never, inspectRun: (async () => ({ run: null })) as never,
+      listApprovals: async () => [displayRecord], decideApproval: async () => displayRecord })!;
+    const shown = (await ledger.listApprovalPage!(null)).items[0]!;
+    expect(shown.worker).toMatchObject({ identity: worker!.identity, argsDigest: worker!.argsDigest, resource: worker!.resource });
+    expect(shown.worker!.resource).not.toContain('synthetic-private-display-target');
     const deniedWrite = f.propose('denied-output', 'src/denied.ts'), deniedCard = await f.pending();
     expect((await terminalRequest(f, 'decideApproval', { ...command, approvalId: deniedCard.request.approvalId, commandId: 'human-deny-worker', decision: 'deny' })).response.ok).toBe(true);
     expect((await deniedWrite).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
     await expect(readFile(join(f.attempt, 'src/denied.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    // KG4 F1 (X3): the worker settles like the chat. Policy denies the call after the owner allowed it: the policy's refusal, in the turn's audit record.
+    const revoked = f.propose('revoked-output', 'src/revoked.ts'), revokedCard = await f.pending();
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'revoked', grants: [{ id: 'no-write', effect: 'deny', principals: 'all', scopes: ['scope'], actions: ['invoke'],
+      resource: { kind: 'agent-tool', ids: ['write_file'] } }, ...policy.grants] }), { mode: 0o600 }); clearConfigCache();
+    expect((await terminalRequest(f, 'decideApproval', { ...command, approvalId: revokedCard.request.approvalId, commandId: 'human-allow-revoked' })).response.ok).toBe(true);
+    expect((await revoked).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-policy') });
+    await expect(readFile(join(f.attempt, 'src/revoked.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await adapters.withMcpPrincipal(() => f.port.cancel());
+    expect(f.policyTurns().flatMap(turn => turn.refused.calls)).toContainEqual(expect.objectContaining({ decision: 'deny', stage: 'effect', revision: expect.stringContaining(policy.revision),
+      call: expect.objectContaining({ callId: 'revoked-output' }) }));
   } finally { await adapters.withMcpPrincipal(() => f.port.cancel()); }
 }, 30_000);
 
@@ -191,28 +215,35 @@ it('K23 the bridge deadline before the card TTL still expires durably and overri
 }, 30_000);
 
 it('K23 worker mint refuses AI, expiry, foreign subject and forged capability while keeping peer/principal binding single-use', async () => {
-  const { nativeWorkerApprovalExpired, mintAttendedWorkerDecision, workerToolCardSummary } = await import('#capabilities/index.js');
-  const { createTurnDecisionCapabilities } = await import('#engine/index.js');
+  const { mintAttendedWorkerDecision, workerToolCardSummary } = await import('#capabilities/index.js');
+  const { agentToolApprovalLeft, createTurnDecisionCapabilities } = await import('#engine/index.js');
   const { principal } = await import('../support/agent-turn-modes.js');
-  expect(nativeWorkerApprovalExpired(100, { wallMs: 50, monotonicMs: 5 }, { wallMs: 40, monotonicMs: 55 })).toBe(true);
+  expect(agentToolApprovalLeft(100, { wallMs: 50, monotonicMs: 5 }, { wallMs: 40, monotonicMs: 55 })).toBeLessThanOrEqual(0);
   const ring = createTurnDecisionCapabilities(), identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 'scope', layoutRevision: 'l', generation: 1 };
   const subject = { kind: 'agent-tool-call' as const, turnId: 'worker-turn', round: 0, index: 0, tool: 'write_file', toolVersion: 1, resource: 'src/x.ts', argsDigest: 'a'.repeat(64) };
   const record = { request: { schemaVersion: 3, scopeId: 'scope', approvalId: 'card', subject, expiresAt: 100,
     preview: { schemaVersion: 1, argsDigest: subject.argsDigest, text: '+reviewed-content', cut: null },
     summary: workerToolCardSummary({ identity, turnId: subject.turnId, tool: subject.tool, resource: subject.resource, argsDigest: subject.argsDigest }) }, status: 'pending', revision: 0, decision: null } as unknown as import('#domain/index.js').ApprovalRecord;
-  expect(mintAttendedWorkerDecision(record, { ...principal, issuer: principal.issuer + '/mcp' }, 10, true, ring, 50)).toBeNull();
-  expect(mintAttendedWorkerDecision(record, principal, 10, false, ring, 50)).toBeNull();
-  expect(mintAttendedWorkerDecision(record, principal, 10, true, ring, 100)).toBeNull();
-  expect(mintAttendedWorkerDecision({ ...record, request: { ...record.request, subject: { ...subject, resource: 'elsewhere' } } } as never, principal, 10, true, ring, 50)).toBeNull();
-  for (const preview of [undefined, { schemaVersion: 1, argsDigest: 'b'.repeat(64), text: 'foreign-call', cut: null },
-    { schemaVersion: 1, argsDigest: subject.argsDigest, text: 'cut', cut: { shown: 1, total: 2, bytes: 3, totalBytes: 10, digest: 'c'.repeat(64), kept: '/synthetic/full' } }])
-    expect(mintAttendedWorkerDecision({ ...record, request: { ...record.request, preview } } as never, principal, 10, true, ring, 50)).toBeNull();
-  const capability = mintAttendedWorkerDecision(record, principal, 10, true, ring, 50)!;
-  const evidence = { scopeId: 'scope', approvalId: 'card', decider: principal, peerPid: 10, capability, nowMs: 50 };
-  expect(ring.attests({ ...evidence, peerPid: 11 })).toBe(false);
-  expect(ring.attests({ ...evidence, decider: { ...principal, subject: 'other' } })).toBe(false);
-  expect(ring.attests({ ...evidence, capability: 'A'.repeat(43) })).toBe(false);
-  expect(ring.attests(evidence)).toBe(true); ring.settle(evidence); expect(ring.attests(evidence)).toBe(false);
+  const legacy = record;
+  const origin = { kind: 'worker-tool-call', identity, turnId: subject.turnId, resourceDigest: (await import('#platform/index.js')).sha256(subject.resource), argsDigest: subject.argsDigest };
+  const typed = { ...record, request: { ...record.request, origin, summary: 'Human-readable worker call' } } as unknown as import('#domain/index.js').ApprovalRecord;
+  for (const record of [legacy, typed]) {
+    expect(mintAttendedWorkerDecision(record, { ...principal, issuer: principal.issuer + '/mcp' }, 10, true, ring, 50)).toBeNull();
+    expect(mintAttendedWorkerDecision(record, principal, 10, false, ring, 50)).toBeNull();
+    expect(mintAttendedWorkerDecision(record, principal, 10, true, ring, 100)).toBeNull();
+    expect(mintAttendedWorkerDecision({ ...record, request: { ...record.request, subject: { ...subject, resource: 'elsewhere' } } } as never, principal, 10, true, ring, 50)).toBeNull();
+    for (const preview of [undefined, { schemaVersion: 1, argsDigest: 'b'.repeat(64), text: 'foreign-call', cut: null },
+      { schemaVersion: 1, argsDigest: subject.argsDigest, text: 'cut', cut: { shown: 1, total: 2, bytes: 3, totalBytes: 10, digest: 'c'.repeat(64), kept: '/synthetic/full' } }])
+      expect(mintAttendedWorkerDecision({ ...record, request: { ...record.request, preview } } as never, principal, 10, true, ring, 50)).toBeNull();
+    const capability = mintAttendedWorkerDecision(record, principal, 10, true, ring, 50)!;
+    const evidence = { scopeId: 'scope', approvalId: 'card', decider: principal, peerPid: 10, capability, nowMs: 50 };
+    expect(ring.attests({ ...evidence, peerPid: 11 })).toBe(false);
+    expect(ring.attests({ ...evidence, decider: { ...principal, subject: 'other' } })).toBe(false);
+    expect(ring.attests({ ...evidence, capability: 'A'.repeat(43) })).toBe(false);
+    expect(ring.attests(evidence)).toBe(true); ring.settle(evidence); expect(ring.attests(evidence)).toBe(false);
+    if (record === typed) for (const change of [{ turnId: 'foreign' }, { resourceDigest: 'b'.repeat(64) }, { argsDigest: 'b'.repeat(64) }, { identity: { ...identity, scopeId: 'other' } }])
+      expect(mintAttendedWorkerDecision({ ...typed, request: { ...typed.request, origin: { ...origin, ...change } } } as never, principal, 10, true, ring, 50)).toBeNull();
+  }
 });
 
 it('K24 oversized worker diff is redacted, retained owner-only, and cannot mint or allow a cut card', async () => {

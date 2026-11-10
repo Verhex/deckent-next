@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { applyModelCatalog, createRun, proposeRun } from '../../../src/index.js';
 import { defineConfiguredAgent, defineConfiguredSkill, inspectConfiguredAgent, prepareConfiguredAgentUse, configuredAgentSelection, taskAgentUseSchema } from '#composition/core/agent-catalog/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
+import { seedCatalog } from '../support/model-catalog.js';
+const SEED_CHANNEL = 'codex-cli-subscription'; // owner 2026-11-08: no Claude Docker worker; this admission path runs on a Codex Docker template
 
 // S8-1b on the product path: a person defines an agent on their terminal card, then the real admission (configured registry, ledger catalog,
 // policy, integrity key) selects it for a work-input task of its WorkClass, puts its persona and pinned skill into the worker prompt and freezes the
@@ -21,9 +22,9 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-const claude = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
+const codex = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const registry = { schemaVersion: 1, revision: 's8-1b', profiles: [{ id: 'coding', version: 1, adapter: { id: 'native-coding-template', version: 1 },
-  parameters: { schemaVersion: 1, docker, invocation: claude } }], kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }],
+  parameters: { schemaVersion: 1, docker, invocation: codex } }], kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } }],
   evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] };
 const graph = { schemaVersion: 4, revision: 1, tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], workClass: 'small',
   workInput: { schemaVersion: 2, task: 'Append the line "done" to note.txt.', scope: { paths: ['note.txt'] }, acceptance: 'note.txt ends with "done".' } }],
@@ -46,8 +47,8 @@ async function seeded() {
   ] }), { mode: 0o600 });
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog() });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }); await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', expectedRevision: 0 });
+  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
+  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }); await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6-luna', expectedRevision: 0 });
   const task = (runId: string) => { const db = new DatabaseSync(path, { readOnly: true });
     try { return (JSON.parse(String(db.prepare('SELECT snapshot FROM runs WHERE run_id = ?').get(runId)!['snapshot'])) as { execution: { tasks: Record<string, unknown>[] } }).execution.tasks[0]!; } finally { db.close(); } };
   return { project, options, task };
@@ -65,7 +66,7 @@ it('the configured admission selects the person\'s candidate agent, fills its pe
   expect(task.agent).toMatchObject({ agentId: 'small-fixer', revision: 1, workClass: 'small', standing: 'candidate', skills: [{ skillId: 'tdd', revision: 1, digest: skill.contentDigest }] });
   expect(task.profile.parameters.nativeSubscription.promptDelivery.segments.filter(row => row.kind === 'persona' || row.kind === 'skill').map(row => `${row.kind}:${row.id}`))
     .toEqual(['persona:small-fixer', 'skill:tdd']);
-  expect(task.assignment.modelId).toBe('claude-sonnet-5-5');
+  expect(task.assignment.modelId).toBe('gpt-6-luna');
   // The proposal path records the same selection; a candidate never runs card-less.
   const proposal = { schemaVersion: 1 as const, commandId: 'p', proposalId: 'p', scopeId: 's', runId: 'proposed', proposer: (({ id, issuer, subject }) => ({ id, issuer, subject }))(readLocalOsIdentity()),
     source: { kind: 'human' as const }, budgetCeiling: { currency: 'USD', limitMinorUnits: 0 }, requiredPermissions: [], graph };
@@ -94,8 +95,8 @@ it('K8: use-for-work previews exact catalog pins, then the admission port rechec
   const select = configuredAgentSelection(c.path, c.config.storage.sqlite, integrity, [pin]);
   expect((await select(graph, registry, 's')).get('t')!.seal).toMatchObject({ agentId: 'z-invoice', revision: 1, standing: 'candidate', skills: content.skills });
   await expect(select(graph, registry, 'foreign')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
-  await expect(select({ ...graph, tasks: [] }, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
-  await expect(select(graph, undefined, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
+  await expect(select({ ...graph, tasks: [] }, registry, 's')).rejects.toMatchObject({ code: 'AGENT_USE_TASK_UNAVAILABLE' });
+  await expect(select(graph, undefined, 's')).rejects.toMatchObject({ code: 'AGENT_USE_CATALOG_UNAVAILABLE' });
   await expect(configuredAgentSelection(c.path, c.config.storage.sqlite, integrity, [pin, pin])(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
   await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'alternative', scopeId: 's', agentId: 'a-alternative', expectedRevision: null,
     content: { ...content, name: 'Alternative' } }, f.options, witness);
@@ -108,9 +109,9 @@ it('K8: use-for-work previews exact catalog pins, then the admission port rechec
   await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'denied-run', grants: policy.grants.filter((row: { id: string }) => row.id !== 'run') }));
   await expect(createRun(f.project, { schemaVersion: 1, commandId: 'no-authority', scopeId: 's', runId: 'denied', graph }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'a2', scopeId: 's', agentId: 'z-invoice', expectedRevision: 1, content: { ...content, persona: 'New revision' } }, f.options, witness);
-  await expect(select(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(select(graph, registry, 's')).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
   await expect(prepareConfiguredAgentUse(f.project, request, f.options)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
   await writeFile(policyPath, JSON.stringify(policy));
   await withConfiguredRunAdmission(f.project, c, f.options, app => expect(app.create({ schemaVersion: 1, commandId: 'stale-pin', scopeId: 's', runId: 'stale', graph }))
-    .rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' }), undefined, [pin]);
+    .rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' }), undefined, [pin]);
 });

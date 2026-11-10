@@ -4,7 +4,7 @@ import { sha256 } from '#platform/index.js';
 import { skillContentV2Digest, verifyHubPackageFiles } from '#engine/core/hub/index.js';
 import { HubClientError, type HubClientStore } from './contract.js';
 import { decodeHubBundle } from './bundle.js';
-export interface SelectedSkillFile { readonly path: string; readonly bytes: Uint8Array; readonly digest: string; readonly entry: boolean }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SelectedSkillFile { readonly path: string; readonly bytes: Uint8Array; readonly digest: string; readonly entry: boolean }
 /** Only the admitted task's frozen pins, never current selection or an eager catalog scan. No network and no standing change. */
 export async function selectedHubSkillFiles(store: Pick<HubClientStore, 'loadSkill' | 'skillBundle'>, artifacts: Pick<ArtifactStore, 'read'>,
   scopeId: string, input: TaskAgentSeal | undefined): Promise<readonly SelectedSkillFile[]> {

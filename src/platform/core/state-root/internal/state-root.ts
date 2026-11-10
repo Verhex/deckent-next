@@ -1,3 +1,4 @@
+import { processExists } from './process-exists.js';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import module from 'node:module';
@@ -5,7 +6,7 @@ import { posix, win32 } from 'node:path';
 import { PRODUCT_LAYOUT_REGISTRY as registry, hasGlobWildcard } from '#platform/core/common/index.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
-export type GlobalStateRoot = { readonly ok: true; readonly root: string; readonly home: string | null; readonly override: string | undefined }
+type GlobalStateRoot = { readonly ok: true; readonly root: string; readonly home: string | null; readonly override: string | undefined }
   | { readonly ok: false; readonly code: 'UNSUPPORTED_PLATFORM' | 'HOME_NOT_RESOLVED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_PATH_UNEXPRESSIBLE' };
 const value = (env: Env, name: string) => env[name] === '' ? undefined : env[name];
 const hasControl = (text: string) => [...text].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
@@ -93,7 +94,7 @@ function recordWriter(cache: string, uid: number, join: (...parts: string[]) => 
   for (const name of readdirSync(directory)) {
     const pid = Number(/^(\d+)-/u.exec(name)?.[1] ?? 0), leaf = join(directory, name);
     if (!Number.isSafeInteger(pid) || pid < 1 || pid === process.pid) continue;
-    try { process.kill(pid, 0); continue; } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue; }
+    if (processExists(pid)) continue;
     try { const entry = lstatSync(leaf); if (entry.isFile() && entry.nlink === 1 && entry.uid === uid) unlinkSync(leaf); } catch { /* pruned by another start */ }
   }
   const startedAtMs = Math.floor(performance.timeOrigin), name = `${process.pid}-${startedAtMs}-${randomBytes(8).toString('hex')}`;

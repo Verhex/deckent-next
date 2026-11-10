@@ -5,7 +5,7 @@ import { assertBeuserAccess, type BeuserContext } from '#engine/core/beuser-cont
 import { assertBeuserRequestIdentity } from './admission.js';
 import type { DispatchApplication } from '#engine/core/dispatch/index.js';
 
-export interface BeuserSupervisorCustody {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserSupervisorCustody {
   /** Trusted Run reservation/dispatch lookup, not a process-local PID table or public ingress. */
   context(request: SandboxRequest): Promise<BeuserContext>;
   request(context: BeuserContext): Promise<SandboxRequest>;
@@ -72,7 +72,7 @@ export class BeuserExecutionSupervisor implements ExecutionSupervisor, Superviso
     return this.delegate.removeCreatedContainer?.(request, containerId) ?? 'not-created';
   }
 }
-export type BeuserDispatchPort = Pick<DispatchApplication, 'execute' | 'cancel' | 'reconcile' | 'recoverOutput' | 'release'>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BeuserDispatchPort = Pick<DispatchApplication, 'execute' | 'cancel' | 'reconcile' | 'recoverOutput' | 'release'>;
 /** All durable replay/launch decisions stay inside the existing dispatch application. */
 export class BeuserDispatch {
   constructor(private readonly dispatch: BeuserDispatchPort, private readonly refusal: (context: BeuserContext) => Promise<void>, private readonly request: (context: BeuserContext) => Promise<SandboxRequest>) {}

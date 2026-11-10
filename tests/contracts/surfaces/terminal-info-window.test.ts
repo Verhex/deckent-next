@@ -2,8 +2,8 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { RenderGlyphsContext, plainText, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
+import { plainText, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
 import { InfoWindow, SystemSummaryLine, WindowStackProvider, INFO_GLYPHS_ASCII, infoModelText, infoWindowLines, shortenIdentity, systemSummaryText,
   type InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 

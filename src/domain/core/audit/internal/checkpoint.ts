@@ -16,7 +16,7 @@ export const auditListQuerySchema = z.strictObject({ schemaVersion: z.literal(1)
   limit: counterSchema.positive().optional() }).readonly();
 export type AuditListQuery = z.input<typeof auditListQuerySchema>;
 export type AuditListView = Readonly<{ schemaVersion: 1; scopeId: string; records: readonly Readonly<{ sequence: number; event: AuditEvent }>[]; next: number | null }>;
-export const auditVerificationSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const auditVerificationSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
   status: z.enum(['match', 'truncated', 'possible-wipe', 'policy-changed', 'producers-changed', 'chain-broken', 'unknown']),
   reason: z.enum(['verified', 'no-checkpoint-yet', 'unavailable', 'limit', 'foreign-witness', 'key-unavailable', 'integrity', 'head-missing', 'checkpoints-missing', 'policy', 'producers']),
   head: z.strictObject({ sequence: counterSchema, digest }).nullable(), checkpoint: auditWitnessSchema.nullable() }).readonly();

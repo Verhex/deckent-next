@@ -2,9 +2,9 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
 import { attachmentLifecycle, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
-import { policySchema, type InstallationIdentityChoice } from '#domain/index.js';
+import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredInstallationProjectContext } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
@@ -16,8 +16,8 @@ export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeI
   return loadScopeContext(projectRoot, scopeId, options, () => verified, access);
 };
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess) {
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout;
-  let document; try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
+  let document; try { document = (await contextPolicySource({ layout, config, ownerUid }).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
   const identity = readIdentity();
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
@@ -26,7 +26,7 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
   const project = await accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
-  return Object.freeze({ config, layout, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
+  return Object.freeze({ config, layout, ownerUid, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
 }
 /** Key creation and ledger access are independent: producers may require an existing key; observers open read-only without creating one. */
@@ -61,7 +61,7 @@ export async function loadConfiguredInstallationIdentity(projectRoot: string, op
   return readBootstrapIdentity(async () => (await configuredInstallationProjectContext(config, options)).identity);
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
-export type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
+type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
   readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean };
 export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<InstallationBindingInspection | null> {
   let config;

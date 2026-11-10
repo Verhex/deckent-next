@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-/** Identity of the compiled tree written by the build (`dist/build-identity.json`); null when running from source or when the file is
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Identity of the compiled tree written by the build (`dist/build-identity.json`); null when running from source or when the file is
  * absent or malformed. Lets an operator see exactly which source tree and commit a running binary came from. */
 export interface BuildIdentity { readonly sourceTreeSha256: string; readonly sourceCommit: string | null; readonly sourceDirty: boolean | null;
   readonly sourceCommonDir?: string }

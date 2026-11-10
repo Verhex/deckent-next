@@ -2,7 +2,7 @@
   "custodyInspectionMs": 5000,
   "readinessInspectionMs": 5000,
   "subscriptionLabelKeys": {
-    "tui.provider.kind.claudeCliSubscription": "headless.agent.k13.tui.provider.kind.claudeCliSubscription",
-    "tui.provider.kind.codexCli": "headless.agent.k13.tui.provider.kind.codexCli"
+    "tui.provider.kind.claudeCliSubscription": "headless.agent.tui.provider.kind.claudeCliSubscription",
+    "tui.provider.kind.codexCli": "headless.agent.tui.provider.kind.codexCli"
   }
 }

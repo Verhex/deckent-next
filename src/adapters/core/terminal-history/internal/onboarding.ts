@@ -1,4 +1,5 @@
-import { persistedString, persistedInteger, ManagedFileError } from '#platform/index.js';
+import { counterSchema } from '#domain/index.js';
+import { persistedString, ManagedFileError } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open, mkdir, rename, rmdir, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -6,10 +7,10 @@ import { z } from 'zod';
 import limits from './onboarding-limits.json' with { type: 'json' };
 const privateMode = constants.S_IRUSR | constants.S_IWUSR, modeMask = constants.S_IRWXU | constants.S_IRWXG | constants.S_IRWXO;
 const entry = z.strictObject({ principal: persistedString(z.string().min(1).max(4096)), folder: persistedString(z.string().max(4096)), stageId: persistedString(z.string().min(1).max(160)),
-  deferredAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), planDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
+  deferredAt: counterSchema, planDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
 const document = z.strictObject({ schemaVersion: z.literal(2), entries: z.array(entry).max(limits.maxEntries) });
 const MAX_DEFERRAL_BYTES = limits.maxFileBytes;
-export type OnboardingDeferral = z.infer<typeof entry>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type OnboardingDeferral = z.infer<typeof entry>;
 /** Presentation only. Legacy v1 folder-less entries belong to the root folder, never every folder. */
 export function openOnboardingDeferrals(path: string) {
   if (process.platform === 'win32' || !constants.O_NOFOLLOW || !constants.O_NONBLOCK) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');

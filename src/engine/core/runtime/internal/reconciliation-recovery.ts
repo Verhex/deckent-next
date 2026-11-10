@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Buffer } from 'node:buffer';
 import { attemptIdentitySchema, identitySchema } from '#domain/index.js';
+import { CodedError, isAuthorizationRefusal } from '#platform/index.js';
 import { dispatchTerminalSchema, type DispatchInventoryPage } from '#engine/core/dispatch/index.js';
 
 const inputSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable() }).readonly();
@@ -10,21 +11,19 @@ const entrySchema = z.strictObject({
 });
 const pageSchema = z.strictObject({ entries: z.array(entrySchema), nextAfter: identitySchema.nullable() });
 export type ReconciliationRecoveryCommand = z.infer<typeof inputSchema>;
-export interface ReconciliationRecoveryInventory { inspect(command: ReconciliationRecoveryCommand & { limit: number }): Promise<DispatchInventoryPage> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ReconciliationRecoveryInventory { inspect(command: ReconciliationRecoveryCommand & { limit: number }): Promise<DispatchInventoryPage> }
 export interface ReconciliationRecoveryExecutor {
   reconcile(identity: z.infer<typeof attemptIdentitySchema>): Promise<Readonly<{ status: 'terminal' | 'unresolved' | 'prevented'; outputRecorded: boolean }>>;
   recoverOutput(identity: z.infer<typeof attemptIdentitySchema>): Promise<Readonly<{ completeness: 'complete' | 'partial' | 'unavailable' }>>;
 }
-export interface ReconciliationRecoveryOptions { readonly maxPageSize: number; readonly maxConcurrentReconciliations: number }
-export class ReconciliationRecoveryError extends Error { constructor(readonly code: 'RECONCILIATION_RECOVERY_INVALID') { super(code); this.name = 'ReconciliationRecoveryError'; } }
-export type ReconciliationRecoveryOutcome = Readonly<{ identity: z.infer<typeof attemptIdentitySchema>; status: 'terminal' | 'unresolved' | 'prevented' | 'output-recovered' | 'skipped' | 'failed'; completeness?: 'complete' | 'partial' | 'unavailable'; reason?: 'denied' | 'unavailable' }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ReconciliationRecoveryOptions { readonly maxPageSize: number; readonly maxConcurrentReconciliations: number }
+export class ReconciliationRecoveryError extends CodedError { constructor(override readonly code: 'RECONCILIATION_RECOVERY_INVALID') { super(code); this.name = 'ReconciliationRecoveryError'; } }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ReconciliationRecoveryOutcome = Readonly<{ identity: z.infer<typeof attemptIdentitySchema>; status: 'terminal' | 'unresolved' | 'prevented' | 'output-recovered' | 'skipped' | 'failed'; completeness?: 'complete' | 'partial' | 'unavailable'; reason?: 'denied' | 'unavailable' }>;
 export type ReconciliationRecoveryPage = Readonly<{ nextAfter: string | null; outcomes: readonly ReconciliationRecoveryOutcome[] }>;
 
 function failureReason(error: unknown): 'denied' | 'unavailable' {
   const code = z.looseObject({ code: z.string() }).safeParse(error);
-  return code.success && ['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED', 'POLICY_DENIED',
-    'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(code.data.code)
-    ? 'denied' : 'unavailable';
+  return code.success && isAuthorizationRefusal(code.data.code, { include: ['authentication', 'policy-denied', 'approval-unsupported', 'scope-unknown'] }) ? 'denied' : 'unavailable';
 }
 function follows(value: string, previous: string) {
   return Buffer.compare(Buffer.from(value, 'utf8'), Buffer.from(previous, 'utf8')) > 0;

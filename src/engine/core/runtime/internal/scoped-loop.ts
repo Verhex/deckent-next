@@ -1,11 +1,11 @@
-export interface ScopedRuntimeLoopOptions { readonly scopeIds: readonly string[]; readonly pollIntervalMs: number; readonly failureBackoffMs: number }
+interface ScopedRuntimeLoopOptions { readonly scopeIds: readonly string[]; readonly pollIntervalMs: number; readonly failureBackoffMs: number }
 export interface ScopedRuntimeLoopClock { now(): number }
 export type ScopedRuntimeLoopWait = (milliseconds: number, signal: AbortSignal) => Promise<void>;
-export interface ScopedRuntimeLoopObserver<Command, Result> {
+interface ScopedRuntimeLoopObserver<Command, Result> {
   onPage(command: Command, result: Result): void | Promise<void>;
   onError(command: Command, error: unknown): void | Promise<void>;
 }
-export interface ScopedRuntimeLoopContract<Command, Result> {
+interface ScopedRuntimeLoopContract<Command, Result> {
   command(scopeId: string, cursor: string | null): Command;
   nextCursor(result: Result): string | null;
   unavailable(result: Result): boolean;

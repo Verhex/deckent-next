@@ -3,7 +3,7 @@ import { createElement, useState } from 'react';
 import { Box, render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PermissionModeKeys } from '#surfaces/core/terminal/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Window, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';

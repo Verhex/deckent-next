@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 import { createConfiguredRuntimeClient } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';

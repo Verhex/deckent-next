@@ -1,18 +1,16 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { userInfo } from 'node:os';
 import { SystemTrustedClock, getConfigKnownSecrets, isSensitiveConfigKey, redactForRecord, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
-import { LocalOsSessionAuthority, createLocalPeerSession, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
-  resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
+import { LocalOsSessionAuthority, createLocalPeerSession, openLocalIntegrityAuthority, openSqliteApprovalStore, readOperationsConfig, resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
 import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, operationInputDescriber, runtimeOperationQuerySchema, type EffectOutcome } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredPeerScopeContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredPeerScopeContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Query ('read') or command ('write') admission of the scope; stated by every entry below (Astra 2126 R1). */
 type ScopeAccess = Parameters<typeof loadConfiguredScopeContext>[3];
 /** Optional wait for a pending operation approval (SDK/terminal): the core never blocks; the wait polls the stored request and, on
  * `allow`, resubmits the same command once. A timed-out or cancelled wait returns the pending outcome and closes nothing. */
-export interface OperationSubmitOptions { readonly awaitApproval?: { readonly timeoutMs: number; readonly pollMs?: number; readonly signal?: AbortSignal } }
+interface OperationSubmitOptions { readonly awaitApproval?: { readonly timeoutMs: number; readonly pollMs?: number; readonly signal?: AbortSignal } }
 type Wait = (scopeId: string, approvalId: string, wait: NonNullable<OperationSubmitOptions['awaitApproval']>) => Promise<'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled'>;
 /** The one producer of catalog operations for every surface (SDK/CLI locally, the runtime service for its socket peers — MCP and runtime
  * clients, C12 G4). The principal is the local OS identity, or the kernel-verified socket peer supplied only by the trusted transport
@@ -31,12 +29,12 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     const clock = new SystemTrustedClock();
     const sessions = peer ? await createLocalPeerSession(peer, principal.scopeIds, config.approvals.sessionTtlMs, clock)
       : await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
-    const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+    const source = contextPolicySource({ layout, config });
     const policy = new OperationPolicyAuthorization(source);
     // A producer of approvals, like Run reservation and the agent turn: the integrity key is created on first use (decisions only read it).
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
     const ledger = await path();
-    const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+    const store = await openConfiguredLedger({ config, path: async () => ledger }, { migration: 'forbid' });
     const journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     try {
       const broker = new OperationApprovalBroker(journal.store, integrity, source, clock,

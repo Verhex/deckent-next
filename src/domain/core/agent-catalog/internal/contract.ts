@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S7 agent/skill catalog core (owner ORG; AJAN-ORG 2026-10-16 S1, S2, S4, S6; A4; ASS1). Agent and skill definitions are versioned ledger rows of
  * exactly one scope. An agent carries requirements only (persona, WorkClass bindings, skills pinned by digest, an optional manager in the org tree);
  * the system assignment picks the model (S2, ASS1). The tier opens empty and grants nothing (A4). Every field is plain JSON (storage-neutral).
@@ -54,15 +54,15 @@ export type AgentContent = z.infer<typeof agentContentSchema>;
 export type AgentDefinition = z.infer<typeof agentDefinitionSchema>;
 export type SkillContent = z.infer<typeof skillContentSchema>;
 export type SkillSignature = z.infer<typeof skillSignatureSchema>;
-export type SkillSource = z.infer<typeof skillSourceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SkillSource = z.infer<typeof skillSourceSchema>;
 export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 /** What a signature check answered; anything but `valid` refuses the import (no verifier wired is `unavailable`). */
 export type SkillSignatureVerdict = 'valid' | 'invalid' | 'unknown-key' | 'unavailable';
-export type AgentCatalogErrorCode = 'AGENT_DEFINITION_INVALID' | 'SKILL_DEFINITION_INVALID' | 'AGENT_ORG_CYCLE' | 'AGENT_ORG_DEPTH' | 'AGENT_PARENT_NOT_FOUND'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AgentCatalogErrorCode = 'AGENT_DEFINITION_INVALID' | 'SKILL_DEFINITION_INVALID' | 'AGENT_ORG_CYCLE' | 'AGENT_ORG_DEPTH' | 'AGENT_PARENT_NOT_FOUND'
   | 'AGENT_SKILL_NOT_PINNED' | 'AGENT_WORK_CLASS_UNKNOWN' | 'SKILL_IMPORT_UNPINNED' | 'SKILL_IMPORT_PIN_MISMATCH' | 'SKILL_IMPORT_UNSIGNED' | 'SKILL_IMPORT_SIGNATURE_UNVERIFIED'
   | 'AGENT_STANDING_REFUSED' | 'AGENT_STANDING_CONFLICT' | 'AGENT_PROMPT_TOO_LARGE'
   | 'CATALOG_SIGNER_UNKNOWN' | 'CATALOG_SIGNER_REVOKED' | 'CATALOG_SIGNER_MISMATCH' | 'CATALOG_SIGNATURE_INVALID' | 'CATALOG_SIGNATURE_REQUIRED' | 'SKILL_SIGNER_REFUSED' | 'SKILL_SIGNER_INVALID'
   | 'CATALOG_SUGGESTION_STALE' | 'CATALOG_SUGGESTION_SHADOW';
-export class AgentCatalogError extends Error {
-  constructor(readonly code: AgentCatalogErrorCode) { super(code); this.name = 'AgentCatalogError'; }
+export class AgentCatalogError extends CodedError {
+  constructor(override readonly code: AgentCatalogErrorCode) { super(code); this.name = 'AgentCatalogError'; }
 }

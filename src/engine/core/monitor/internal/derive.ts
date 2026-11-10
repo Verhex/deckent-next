@@ -1,6 +1,6 @@
 import { workerBillingAxis } from '#engine/core/provider-spend/index.js';
 import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.js';
-import { summarizeWorkCosts } from '#domain/index.js';
+import { RUN_OPEN_PHASES, summarizeWorkCosts } from '#domain/index.js';
 import { projectAttemptWorkCost, recommendRunWorkCosts } from '#engine/core/resource-observation/index.js';
 import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, dependencyTaskId, excludeConflicting, isConflictEdge, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
@@ -17,7 +17,7 @@ export interface MonitorRunEvidence {
   /** BeUser M-33: set-aside `scope\0run\0task` keys; such a task owes no delivery in the outlook. */
   readonly dismissed?: ReadonlySet<string>;
 }
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * The one blocker precedence (MONITOR-DATA): repair/human conditions outrank progress; equal codes keep graph order. `unknown` (no
  * evidence) sits above the progressing codes so missing evidence is never shown as healthy progress.
  */
@@ -30,7 +30,6 @@ const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.free
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
 /** PRE-7: the parked blocker's detail for an environment park: this prefix + the unmet requirement id (the view names it in words). */
 export const MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:' as const;
-const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
 const blocker = (code: MonitorBlockerCode, taskId: string | null, sinceMs: number | null = null, detail: string | null = null): MonitorBlocker =>
   Object.freeze({ code, taskId, sinceMs, detail });
 const readiness = (run: MonitorLedgerRun, now: number) => new Map(inspectTaskReadiness(run.snapshot.graph,
@@ -39,9 +38,9 @@ const attemptOf = (run: MonitorLedgerRun, taskId: string) => {
   const binding = run.snapshot.bindings.find(value => value.identity.taskId === taskId);
   return binding ? run.attempts.find(value => value.attemptId === binding.identity.attemptId) ?? null : null;
 };
-/** Last heartbeat time proven by the sidecar: the sampling time minus its measured age; null without an age. */
 /** The proven end of an attempt: its sealed worker log, else the host-observed exit; never the launch grant. */
 const endOf = (attempt: MonitorLedgerAttempt | null | undefined) => attempt?.sealedAtMs ?? attempt?.observedEndAtMs ?? null;
+/** Last heartbeat time proven by the sidecar: the sampling time minus its measured age; null without an age. */
 const heartbeatAt = (worker: WorkerObservation | undefined, observedAt: number) => {
   const age = worker?.files?.heartbeat.ageMs; return typeof age === 'number' ? observedAt - age : null;
 };
@@ -107,7 +106,7 @@ export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
   if (snapshot.state.kind === 'terminal') return null;
   if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-ask' ? 'quota-ask' : snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.reason === 'environment-not-ready' ? MONITOR_ENVIRONMENT_DETAIL + snapshot.state.failureCode : snapshot.state.reason === 'operator-hold' && snapshot.state.holdSource === 'nervous' && snapshot.state.note ? snapshot.state.note : snapshot.state.failureCode ?? (snapshot.state.reason === 'dependency-failed' && snapshot.progress.some(task => task.notAcceptedReason === 'worker-stalled') ? 'TASK_STALL_RETRY_EXHAUSTED' : snapshot.state.reason)), ...(snapshot.state.reason === 'quota-ask' ? {} : { deadlineMs: snapshot.state.deadline }) };
-  if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
+  if (!snapshot.progress.some(task => RUN_OPEN_PHASES.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];
   const conflicting = new Set(excludeConflicting(snapshot.graph, snapshot.progress, snapshot.graph.tasks.map(task => task.id).filter(id => ready.get(id)?.disposition === 'ready')));

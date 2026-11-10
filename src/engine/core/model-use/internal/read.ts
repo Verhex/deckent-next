@@ -1,3 +1,4 @@
+import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -10,8 +11,8 @@ import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js
 import type { ModelUseReadPorts, ModelUseContext } from './ports.js';
 import { pinModelUse, recheckModelUse, type ModelUsePin } from './recheck.js';
 
-export const modelUseProfiles = (config: Readonly<Record<string, unknown>>) =>
-  ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+/** @deprecated Use configuredInvocationProfiles for validated configuration. */
+export const modelUseProfiles = (config: Readonly<Record<string, unknown>>) => configuredInvocationProfiles(config).map(value => modelInvocationProfileSchema.parse(value));
 /** Current binding, active set and source policy, never a historical connect receipt. */
 export async function assertModelUseSource(ports: ModelUseReadPorts, context: ModelUseContext, profile: ModelInvocationProfile, actor: VerifiedPrincipal = context.principal, requireActive = true) {
   if (profile.schemaVersion === 3) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
@@ -32,17 +33,23 @@ export function resolveModelUse(ports: ModelUseReadPorts, root: string, profile:
 export function resolveModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, check: { action: 'inspect' }): Promise<NonNullable<Awaited<ReturnType<typeof inspectModelUse>>>['use']>;
 export function resolveModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal): Promise<NonNullable<Awaited<ReturnType<typeof inspectModelUse>>>['use']>;
 export async function resolveModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, check?: { action: 'pin' | 'inspect' } | { action: 'recheck'; pin: ModelUsePin }) {
-  const resolved = await inspectModelUse(ports, root, profile, actor, check?.action !== 'inspect');
-  if (!check || check.action === 'inspect') return resolved?.use ?? null;
-  const pin = resolved && (profile.schemaVersion === 3 || modelInvocationBillingAxis(profile) === 'subscription') ? pinModelUse(profile, actor, resolved) : null;
-  if (check.action === 'recheck') return recheckModelUse(pin, check.pin);
-  return pin;
+  if (check?.action === 'pin') return pinCurrentModelUse(ports, root, profile, actor);
+  if (check?.action === 'recheck') return recheckCurrentModelUse(ports, root, profile, actor, check.pin);
+  return (await inspectModelUse(ports, root, profile, actor, check?.action !== 'inspect'))?.use ?? null;
+}
+/** K5 pin of one fresh snapshot; `target` is the caller's own fresh context for (root, profile.scopeId), so one chain loads it once. */
+export async function pinCurrentModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, target?: ModelUseContext): Promise<ModelUsePin | null> {
+  const resolved = await inspectModelUse(ports, root, profile, actor, true, target);
+  return resolved && (profile.schemaVersion === 3 || modelInvocationBillingAxis(profile) === 'subscription') ? pinModelUse(profile, actor, resolved) : null;
+}
+export async function recheckCurrentModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, pin: ModelUsePin, target?: ModelUseContext) {
+  recheckModelUse(await pinCurrentModelUse(ports, root, profile, actor, target), pin);
 }
 /** Internal snapshot shared by resolution and admission pins: authorize exactly the context being pinned. */
-export async function inspectModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive = true) {
+export async function inspectModelUse(ports: ModelUseReadPorts, root: string, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive = true, loaded?: ModelUseContext) {
   const subscription = modelInvocationBillingAxis(profile) === 'subscription';
-  if (profile.schemaVersion !== 3 && !subscription && !(await ports.config(root)).installation.sharedRegistrationId) return null;
-  const target = await ports.context(root, profile.scopeId);
+  if (profile.schemaVersion !== 3 && !subscription && !(loaded?.config ?? await ports.config(root)).installation.sharedRegistrationId) return null;
+  const target = loaded ?? await ports.context(root, profile.scopeId);
   if (!target.config.installation.sharedRegistrationId) {
     if (profile.schemaVersion === 3) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     if (subscription) await assertFreshModelUse(ports, target, profile, actor, requireActive);
@@ -62,13 +69,13 @@ export async function inspectModelUse(ports: ModelUseReadPorts, root: string, pr
   if (!registry || registry.unregistered || !context.source || !entry || entry.state !== 'active' || lease?.state !== 'active' || lease.leaseId !== profile.useLeaseId
     || !retained || retained.targetDigest !== modelInvocationProfileDigest(profile) || !actor.scopeIds.includes(profile.scopeId)
     || !sameAttachmentPerson(context.source.owner, subscriptionActor(actor).owner)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
-  const fresh = modelUseProfiles(target.config).find(item => item.id === profile.id && item.scopeId === profile.scopeId);
+  const fresh = configuredInvocationProfiles(target.config).find(item => item.id === profile.id && item.scopeId === profile.scopeId);
   if (!fresh || modelInvocationProfileDigest(fresh) !== retained.targetDigest) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   await new ModelInvocationPolicyAuthorization({ load: async () => target.document }).authorize('invoke', profile, actor);
   const source = await ports.context(context.source.projectRoot, context.source.scopeId);
   if (source.installationId !== target.installationId || source.projectId !== context.source.projectId || source.config.company.id !== target.config.company.id)
     return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
-  const sourceProfile = modelUseProfiles(source.config).find(item => item.scopeId === context.source!.scopeId && isDeepStrictEqual(item.reference, profile.reference));
+  const sourceProfile = configuredInvocationProfiles(source.config).find(item => item.scopeId === context.source!.scopeId && isDeepStrictEqual(item.reference, profile.reference));
   if (!sourceProfile || modelInvocationProfileDigest(sourceProfile) !== retained.sourceDigest || sourceProfile.bindingDigest !== retained.bindingDigest)
     return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   await assertModelUseSource(ports, source, sourceProfile, { ...actor, scopeIds: [sourceProfile.scopeId] });
@@ -96,7 +103,7 @@ function assertModelUsePerson(context: ModelUseContext, profile: ModelInvocation
 }
 
 async function assertFreshModelUse(ports: ModelUseReadPorts, target: ModelUseContext, profile: ModelInvocationProfile, actor: VerifiedPrincipal, requireActive: boolean) {
-  const fresh = modelUseProfiles(target.config).find(item => item.id === profile.id && item.scopeId === profile.scopeId);
+  const fresh = configuredInvocationProfiles(target.config).find(item => item.id === profile.id && item.scopeId === profile.scopeId);
   if (!fresh || modelInvocationProfileDigest(fresh) !== modelInvocationProfileDigest(profile)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   await assertModelUseSource(ports, target, fresh, actor, requireActive);
 }

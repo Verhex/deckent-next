@@ -18,7 +18,7 @@ function readBounded(path: string): string | null {
 }
 let hostKernel: { readonly text: string | null } | undefined;
 /** The running host's kernel identity, read at most once per process and bounded; failure reads as unknown (null). */
-export const hostKernelIdentity: KernelIdentityReader = () => {
+const hostKernelIdentity: KernelIdentityReader = () => {
   hostKernel ??= { text: KERNEL_FILES.map(readBounded).find(text => !!text?.trim()) ?? null };
   return hostKernel.text;
 };

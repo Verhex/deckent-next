@@ -1,10 +1,10 @@
-import { ErrorRegistry, MESSAGE_REGISTRY, redactForRecord, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, messageText, redactForRecord, t, type Locale } from '#platform/index.js';
 import { queueTerminal } from '#domain/index.js';
 import type { DeliverySummary, TargetQueueView } from '#engine/index.js';
 import { summaryListCells, type AutonomyShadowView } from '#surfaces/core/delivery-summary/index.js';
 import { displayId } from '#surfaces/core/cli-human/index.js';
 /** Catalog lookup for the typed view's enum and adapter-owned keys (the same words as the terminal queue window). */
-const word = (key: string, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[key] ?? key;
+const word = (key: string, locale: Locale) => messageText(key, locale) ?? key;
 const cell = (value: string) => redactForRecord(value).replace(/[\p{Cc}\p{Cf}]/gu, ' ');
 const width = (value: string) => [...value].length;
 /**

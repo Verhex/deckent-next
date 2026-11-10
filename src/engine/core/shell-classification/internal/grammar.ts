@@ -1,3 +1,4 @@
+import { FIND_ACTIONS, GIT_READ_SUBCOMMANDS, GIT_BRANCH_FLAGS } from './tables.js';
 import type { ShellReasonCode, ShellWord } from './scanner.js';
 import type { ProgramSpec, ShellReadRisk, ValueKind } from './programs.js';
 
@@ -14,7 +15,7 @@ export const stageFail = (reasonCode: ShellReasonCode, detail?: string): StageVe
  * Option grammars of the allowlisted programs, `find` and `git` (legacy @a8b67e2a1, kept as is). Argv semantics: any word whose
  * resolved text starts with `-` is an option, whatever its quoting; the word `--` ends options.
  */
-export interface WalkResult {
+interface WalkResult {
   readonly verdict: StageVerdict | null;
   readonly positionals: ShellWord[];
   readonly scriptSeen: boolean;
@@ -136,7 +137,6 @@ export async function checkPositionals(spec: ProgramSpec, walk: WalkResult, cont
 const FIND_VALUE_PRIMARIES = new Set(['-name', '-iname', '-path', '-ipath', '-wholename', '-iwholename', '-regex', '-iregex', '-lname', '-ilname', '-type', '-xtype', '-maxdepth', '-mindepth', '-mtime', '-mmin', '-atime', '-amin', '-ctime', '-cmin', '-size', '-perm', '-user', '-group', '-uid', '-gid', '-links', '-inum', '-regextype', '-printf', '-used', '-fstype', '-context', '-D']);
 const FIND_PATH_PRIMARIES = new Set(['-newer', '-anewer', '-cnewer', '-samefile']);
 const FIND_SWITCH_PRIMARIES = new Set(['-print', '-print0', '-ls', '-prune', '-quit', '-empty', '-readable', '-writable', '-executable', '-nouser', '-nogroup', '-false', '-true', '-not', '!', '-a', '-and', '-o', '-or', '-depth', '-d', '-follow', '-L', '-H', '-P', '-xdev', '-mount', '-noleaf', '-ignore_readdir_race', '-noignore_readdir_race', '-daystart', '(', ')', '-files0-from']);
-const FIND_DENIED = new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete', '-fprint', '-fprint0', '-fprintf', '-fls', '-files0-from']);
 
 export async function checkFind(args: readonly ShellWord[], paths: ShellPathContext): Promise<StageVerdict> {
   let i = 0;
@@ -149,7 +149,7 @@ export async function checkFind(args: readonly ShellWord[], paths: ShellPathCont
   }
   for (; i < args.length; i++) {
     const token = (args[i]!).text;
-    if (FIND_DENIED.has(token)) return stageFail('MUTATING_FLAG', token);
+    if (Object.hasOwn(FIND_ACTIONS, token)) return stageFail('MUTATING_FLAG', token);
     if (FIND_SWITCH_PRIMARIES.has(token) || /^-O\d$/u.test(token)) continue;
     if (token.startsWith('-newer') && token.length > 6) {
       const value = args[++i];
@@ -175,10 +175,7 @@ export async function checkFind(args: readonly ShellWord[], paths: ShellPathCont
   return { ok: true, risk: 'low' };
 }
 
-// ─── git ────────────────────────────────────────────────────────────────────
-
 const GIT_GLOBAL_SWITCHES = new Set(['--no-pager', '-P', '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs', '--no-optional-locks', '--no-replace-objects', '--version']);
-const GIT_READ_SUBCOMMANDS = new Set(['status', 'log', 'shortlog', 'show', 'diff', 'diff-tree', 'diff-index', 'diff-files', 'blame', 'annotate', 'describe', 'name-rev', 'merge-base', 'cat-file', 'ls-tree', 'ls-files', 'rev-parse', 'rev-list', 'grep', 'count-objects', 'check-ignore', 'check-attr', 'var', 'version', 'whatchanged', 'cherry', 'range-diff', 'for-each-ref', 'show-ref', 'show-branch', 'reflog', 'stash', 'remote', 'tag', 'branch', 'config', 'worktree', 'submodule', 'symbolic-ref', 'rev-parse', 'log', 'fsck', 'verify-commit', 'verify-tag', 'get-tar-commit-id', 'diff-tree', 'help']);
 /** Per-subcommand flags that disqualify read-only (write an output file, run
  *  an external program/pager/editor, or mutate refs). `*` applies to every
  *  read subcommand; branch/tag/config carry their own full grammars below. */
@@ -188,8 +185,6 @@ const GIT_DENIED_BY_SUBCOMMAND: Readonly<Record<string, readonly string[]>> = {
   'symbolic-ref': ['-d', '--delete', '-m'],
   'cat-file': ['--batch-command'],
 };
-const GIT_BRANCH_READ_FLAGS = new Set(['--list', '-l', '-a', '-r', '-v', '-vv', '--all', '--remotes', '--verbose', '--show-current', '--color', '--no-color', '--column', '--no-column', '--ignore-case', '--no-abbrev', '--abbrev']);
-const GIT_BRANCH_VALUE_FLAGS = new Set(['--contains', '--no-contains', '--merged', '--no-merged', '--points-at', '--format', '--sort']);
 const GIT_TAG_READ_FLAGS = new Set(['--list', '-l', '-n', '--column', '--no-column', '--ignore-case', '-i', '--color']);
 const GIT_TAG_VALUE_FLAGS = new Set(['--contains', '--no-contains', '--merged', '--no-merged', '--points-at', '--format', '--sort']);
 const GIT_CONFIG_READ_FLAGS = new Set(['--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l', '--show-origin', '--show-scope', '-z', '--null', '--name-only', '--type', '--bool', '--int', '--path', '--global', '--system', '--local', '--worktree', '--includes', '--no-includes', '--default', '--fixed-value', 'get', 'list']);
@@ -216,9 +211,9 @@ async function gitSubcommandVerdict(sub: string, args: readonly ShellWord[], pat
     case 'branch': {
       for (let i = 0; i < texts.length; i++) {
         const t = texts[i]!;
-        if (GIT_BRANCH_READ_FLAGS.has(t)) continue;
-        if (GIT_BRANCH_VALUE_FLAGS.has(t)) { i++; continue; }
-        if ([...GIT_BRANCH_VALUE_FLAGS].some((f) => t.startsWith(`${f}=`))) continue;
+        if (Object.hasOwn(GIT_BRANCH_FLAGS, t) && !GIT_BRANCH_FLAGS[t]?.value) continue;
+        if (GIT_BRANCH_FLAGS[t]?.value) { i++; continue; }
+        if (Object.entries(GIT_BRANCH_FLAGS).some(([f, rule]) => rule.value && t.startsWith(`${f}=`))) continue;
         if (t.startsWith('-')) return stageFail('GIT_SUBCOMMAND_NOT_READ_ONLY', `branch ${t}`);
         if (!texts.includes('--list') && !texts.includes('-l')) return stageFail('GIT_SUBCOMMAND_NOT_READ_ONLY', `branch ${t}`);
       }
@@ -284,6 +279,6 @@ export async function checkGit(args: readonly ShellWord[], paths: ShellPathConte
   }
   const sub = args[i]?.text ?? '';
   if (sub === '') return stageFail('GIT_SUBCOMMAND_NOT_READ_ONLY', '');
-  if (!GIT_READ_SUBCOMMANDS.has(sub)) return stageFail('GIT_SUBCOMMAND_NOT_READ_ONLY', sub);
+  if (!Object.hasOwn(GIT_READ_SUBCOMMANDS, sub)) return stageFail('GIT_SUBCOMMAND_NOT_READ_ONLY', sub);
   return gitSubcommandVerdict(sub, args.slice(i + 1), paths);
 }

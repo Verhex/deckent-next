@@ -3,16 +3,20 @@ import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteModelActivationStore, type ShellSandboxFactory } from '#adapters/index.js';
+import { loadProposalViews } from '#surfaces/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
-import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveGlobalConfigReadPath, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
+import { openConfiguredAttemptStore } from './configured-open.js';
 
 /**
  * Real runtime service (in process) for the permission-mode matrix (T-L4 slice 4a): a local OpenAI-chat fixture answers each round
@@ -49,7 +53,8 @@ const baseGrants = [
 
 export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null;
   /** SHELL-AUTONOMY: the `terminal.shell` section (realm) and the sandbox providers (code-only port) when a test pins them. */
-  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string }) {
+  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string; /** alpha.64 B: the service's plan port `propose_work` runs. */ planWork?: PlanServiceRun;
+  /** alpha.64 B: the fixture model is also the Brain (a `brain` role row); every non-streamed request (a planning call) is answered with this content. */ brain?: string }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-modes-')); roots.push(root);
   const project = join(root, 'project'), data = input.dataRoot ? join(project, input.dataRoot) : join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
@@ -65,7 +70,13 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body: Buffer[] = []; req.on('data', (part: Buffer) => body.push(part));
     req.on('end', () => {
-      state.sent.push(JSON.parse(Buffer.concat(body).toString('utf8')) as (typeof state.sent)[number]);
+      const sent = JSON.parse(Buffer.concat(body).toString('utf8')) as (typeof state.sent)[number] & { stream?: boolean };
+      state.sent.push(sent);
+      if (input.brain !== undefined && sent.stream !== true) { // a planning call is one JSON answer, never a turn round
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'chatcmpl-brain', object: 'chat.completion', created: 1, model: 'native-chat', choices: [{ index: 0, finish_reason: 'stop',
+          message: { role: 'assistant', content: input.brain } }], usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 } })); return;
+      }
       // Odd requests are the call round of a turn, even ones its closing round.
       const call = state.requests++ % 2 === 0 ? state.script.shift() : undefined;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -87,6 +98,8 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
     terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 }, ...(input.shell ? { shell: input.shell } : {}) },
+    // alpha.64 B: with a plan port, a proposal admission (pool `p`, the `business` WorkClass) so `propose_work` reaches real run admission.
+    ...(input.planWork ? { admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2, ordering: 'input-order', registry: { ...fixtureDockerRegistry(['purchase']), workClasses: businessWorkClasses() } } } : {}),
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
@@ -107,8 +120,14 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   };
   await writeAuthority(input.grants, input.mode);
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  if (input.brain !== undefined) { const global = await resolveGlobalConfigReadPath(env); await mkdir(dirname(global), { recursive: true });
+    await writeFile(global, JSON.stringify({ model_roles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture-roles', roles: [],
+      models: [{ channelId: reference.providerId, modelId: model.nativeId, version: 1, tier: 'frontier', roles: ['brain'] }], exceptions: [] }] } })); }
   await ensureConfiguredTerminalIdentity(project, 'scope', { env });
-  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, input.sandboxes ? { shellSandboxes: input.sandboxes } : {});
+  if (input.planWork) { const { store } = await openConfiguredAttemptStore(project, { env }); try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 } }); } finally { store.close(); } }
+  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, { ...(input.sandboxes ? { shellSandboxes: input.sandboxes } : {}), ...(input.planWork ? { planWork: input.planWork } : {}),
+    // The CLI host lends the proposal card and choice views (composition never imports surfaces); the fixture lends the same ones.
+    proposalViews: () => loadProposalViews().then(([planning, config]) => ({ cardLines: planning.brainProposalCardLines, schemaChoices: config.configSchemaChoices })) });
   services.push(service);
   // LIVENESS-EINTR: what a failed status assertion needs to tell the turn's abort sources apart (service shutdown vs. a turn-level abort
   // with the service still running), without any runtime field: the service's own settlement and the last turn's decision responses.

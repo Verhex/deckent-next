@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { access, constants, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
+import { FIXED_TOOL_PATH } from '#platform/index.js';
 
 /**
  * Why a server did not start inside its sandbox view (MCP-SANDBOX-PATHS, 2026-09-29): a path the server needs exists on this machine but the
@@ -10,13 +11,13 @@ import { basename, isAbsolute, resolve } from 'node:path';
  */
 export type McpSandboxDiagnosis = { readonly kind: 'path-hidden'; readonly role: 'command' | 'argument'; readonly index: number; readonly path: string;
   readonly target?: string } | { readonly kind: 'package-runner' | 'container-daemon'; readonly runner: string };
-export type McpStartDiagnosis = { readonly kind: 'sandbox'; readonly diagnosis: McpSandboxDiagnosis } | { readonly kind: 'not-found' };
+type McpStartDiagnosis = { readonly kind: 'sandbox'; readonly diagnosis: McpSandboxDiagnosis } | { readonly kind: 'not-found' };
 
 /** Commands that fetch the server at start (npm/pnpm/bun/uv/pipx runners) and container clients: a hint only, named by the command's own name. */
 const PACKAGE_RUNNERS: ReadonlySet<string> = new Set(['npx', 'pnpx', 'bunx', 'uvx', 'pipx']);
 const CONTAINER_CLIENTS: ReadonlySet<string> = new Set(['docker', 'podman', 'nerdctl']);
 /** Bounds of the probe: absolute-path arguments looked at, its deadline and output. */
-export const MCP_DIAGNOSE_PATHS_MAX = 16;
+const MCP_DIAGNOSE_PATHS_MAX = 16;
 const PROBE_TIMEOUT_MS = 5_000;
 /** Prints (NUL-separated) every argument that does not exist in the view; runs only our own `/bin/sh` and `test`, never server code. */
 const PROBE_SCRIPT = 'for p do [ -e "$p" ] || printf "%s\\0" "$p"; done';
@@ -36,7 +37,7 @@ async function resolveCommand(command: string, pathVariable: string | undefined,
 function hiddenInView(launcher: { readonly file: string; readonly prefix: readonly string[] }, paths: readonly string[], cwd: string): Promise<ReadonlySet<string> | null> {
   return new Promise(done => {
     execFile(launcher.file, [...launcher.prefix, '--', '/bin/sh', '-c', PROBE_SCRIPT, 'sh', ...paths],
-      { cwd, env: { PATH: '/usr/bin:/bin' }, timeout: PROBE_TIMEOUT_MS, maxBuffer: 65_536, encoding: 'utf8' },
+      { cwd, env: { PATH: FIXED_TOOL_PATH }, timeout: PROBE_TIMEOUT_MS, maxBuffer: 65_536, encoding: 'utf8' },
       (error, stdout) => done(error ? null : new Set(stdout.split('\0').filter(Boolean))));
   });
 }

@@ -3,7 +3,7 @@ import { startWorkerImageAcquisition } from './acquire.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
+import { CodedError, loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
 import { workerImageBudget, registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
@@ -11,7 +11,6 @@ import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependen
 export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
   imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>;
 export interface ToolchainRefreshObserver { onToolchainRefresh?(event: ToolchainRefreshEvent): void | Promise<void> }
-const holdError = (code: string) => Object.assign(new Error(code), { code });
 const failureCode = (error: unknown) => (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : 'UNKNOWN').slice(0, 128);
 /** The durable refresh marker (null when none was ever written or it is unreadable). Admission, doctor and monitor read it; only the refresh writes it. */
 export async function readToolchainRefreshState(projectRoot: string, options: ConfigLoadOptions = {}): Promise<ToolchainRefreshState | null> {
@@ -32,7 +31,7 @@ export async function isToolchainRefreshInProgress(projectRoot: string, options:
   return refreshInProgress(await readToolchainRefreshState(projectRoot, options), Date.now());
 }
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
-export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
 export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies {
   /** Test seam: runs after the registry was read and the revision derived, immediately before the compare-and-set write. */
   readonly beforeRegistryWrite?: (attempt: number) => void | Promise<void>;
@@ -70,7 +69,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   let result: Awaited<ReturnType<typeof updateConfiguredToolchains>> | null = null; let applied = 0; let configWrite: unknown = null; let code: string | null = null;
   try {
     // Before any build: a registry a global layer contributes to is never revised automatically (see `registryLayerHold`); no image is built for it.
-    if (registryLayerHold(await snapshotConfiguredConfig(projectRoot, options, 'project')) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw holdError('TOOLCHAIN_REGISTRY_LAYER_HOLD');
+    if (registryLayerHold(await snapshotConfiguredConfig(projectRoot, options, 'project')) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw new CodedError('TOOLCHAIN_REGISTRY_LAYER_HOLD');
     // The `updating` marker (what admission and the surfaces read) exists only once a build is certain, never during the currency check itself.
     result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, { ...dependencies, refreshExisting: true, onBuild: async (plan, expiresAt) => {
       base.startedAt = now(); base.expiresAt = expiresAt ?? new Date(Date.parse(base.startedAt) + workerImageBudget(policy.buildTimeoutMs, plan.staleProviders.length)).toISOString();
@@ -78,20 +77,20 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
       await emit('started', { imageVersion: plan.next?.imageVersion ?? null }); await dependencies.onBuild?.(plan);
     } });
     if (result.decision === 'built' && result.proposal) {
-      if (dependencies.signal?.aborted) throw Object.assign(new Error('REFRESH_STOPPED'), { code: 'REFRESH_STOPPED' });
+      if (dependencies.signal?.aborted) throw new CodedError('REFRESH_STOPPED');
       // Compare-and-set on one consistent read: the project document and its digest come from the same bytes, the revision is derived from that
       // document alone (never from the merged view), and the write carries the digest as `expect` while a guard under the write lock refuses it
       // if a global layer now contributes a registry. A concurrent change is a typed hold: re-read and re-derive (bounded), never overwrite.
       const scopeIdOf = (effective: { service: { identity: { scopeId: string } | null } }) => effective.service.identity?.scopeId ?? (effective as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
-      const layerGuard = (snapshot: { global: Record<string, unknown> }) => { if (registryLayerHold({ global: snapshot.global, project: {} }) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw holdError('TOOLCHAIN_REGISTRY_LAYER_HOLD'); };
+      const layerGuard = (snapshot: { global: Record<string, unknown> }) => { if (registryLayerHold({ global: snapshot.global, project: {} }) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw new CodedError('TOOLCHAIN_REGISTRY_LAYER_HOLD'); };
       for (let attempt = 1; ; attempt++) {
         const read = await snapshotConfiguredConfig(projectRoot, options, 'project');
         const hold = registryLayerHold(read);
-        if (hold) throw holdError(hold);
+        if (hold) throw new CodedError(hold);
         const revision = reviseRegistryForProposal((read.document as { admission: { registry: unknown } }).admission.registry, result.proposal);
         if (!revision) break;
         const scopeId = scopeIdOf(await loadConfig(projectRoot, { ...options, force: true })); // the service's own scope, else the terminal scope `config set` uses
-        if (!scopeId) throw holdError('TERMINAL_SCOPE_REQUIRED');
+        if (!scopeId) throw new CodedError('TERMINAL_SCOPE_REQUIRED');
         const principal = await resolveConfiguredConfigPrincipal(projectRoot, scopeId, options);
         await dependencies.beforeRegistryWrite?.(attempt);
         try {
@@ -113,7 +112,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   const event = await emit(phase, { imageVersion, imageId, appliedProfiles: applied, code: code ?? unverified });
   return Object.freeze({ outcome: phase, event });
 }
-export interface ToolchainRefreshHandle { readonly done: Promise<void> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ToolchainRefreshHandle { readonly done: Promise<void> }
 /**
  * The service's refresh schedule: one start refresh and, when `intervalMs` is positive, one per interval. Never awaited by readiness,
  * single-flight (a trigger that arrives while a refresh runs joins it), and the interval timer is cancelled by `signal`. Failures reach the

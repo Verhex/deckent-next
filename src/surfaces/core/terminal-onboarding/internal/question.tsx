@@ -3,13 +3,13 @@ import { Box, Text, render, useInput, usePaste, useWindowSize } from 'ink';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cardCopyLabels, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import presentation from './presentation.json' with { type: 'json' };
-import { fillTemplate, humanRecordText, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, humanRecordText, truncateEnd, wrapCells, useSpinnerGlyph } from '#surfaces/core/terminal-render-ink/index.js';
 import { cardCopyText, isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];
   step: number; total: number; initial?: string | null; text?: boolean }>;
 export type QuestionAnswer = Readonly<{ id: string; text?: string }>;
-export type CardWork = 'applying' | 'preparing';
+type CardWork = 'applying' | 'preparing';
 /** The welcome alone yields to typing; every onboarding card guards selection keys for `cardInputGuardMs` after it has drawn (owner 2026-11-02). */
 type WelcomeInput = Readonly<{ typed(): void }>;
 type CardGuard = Readonly<{ guardMs: number; openedAt(): number }>;
@@ -17,7 +17,7 @@ type CardGuard = Readonly<{ guardMs: number; openedAt(): number }>;
 const COPIED_MS = 4_000;
 /** `finish` takes the one answer and says whether its apply now runs behind this card: the card then shows that it is applying and every key is
  * visibly not used (BeUser walk19R: never a silent drop, and never kept for the next card, which is another question). */
-export function OnboardingQuestionView({ question, locale, finish, copy = null, known, work = 'applying', welcome, guard }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => boolean;
+function OnboardingQuestionView({ question, locale, finish, copy = null, known, work = 'applying', welcome, guard }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => boolean;
   readonly welcome?: WelcomeInput | undefined; readonly guard?: CardGuard | undefined;
   /** The process's known secrets: the Ctrl+Y copy passes the same record projection as every card's copy (`humanRecordText`). */ readonly known?: CliCardIo['known'];
   /** What the card says while that work runs: a write (`applying`) or a preview or check that writes nothing (`preparing`). */ readonly work?: CardWork;

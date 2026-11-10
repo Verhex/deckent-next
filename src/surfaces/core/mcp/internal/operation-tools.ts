@@ -2,7 +2,7 @@ import { effectCommandSchema, type EffectCommand, type OperationDescriptor } fro
 import { runtimeOperationQuerySchema, type RuntimeOperationQuery, type RuntimeServiceDelivery } from '#engine/index.js';
 import { t, type Locale } from '#platform/index.js';
 
-export type OperationToolHints = Readonly<{ readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld: boolean }>;
+type OperationToolHints = Readonly<{ readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld: boolean }>;
 /** Hints of one catalog operation tool over the operations it can reach: read-only when every one only reads, destructive when any may
  * change or irreversibly act on its target, open-world when any exists (targets are external systems). Idempotent regardless of the
  * catalog: a recorded command resumes its durable record and a settled/refused one replays without a second effect
@@ -18,7 +18,7 @@ function hints(reachable: readonly OperationDescriptor[]): OperationToolHints {
  * descriptor (engine/core/effect/internal/application.ts `run`; domain `assertCompensation`), so a settled effect whose operation has
  * left the catalog still reaches its compensation. Any reachable operation may be such a pinned compensation; nothing outside the
  * reachable catalog is. Hints are advisory and grant nothing. */
-export function operationToolHints(catalog: readonly OperationDescriptor[]) {
+function operationToolHints(catalog: readonly OperationDescriptor[]) {
   return Object.freeze({ execute: hints(catalog), compensate: hints(catalog),
     inspect: Object.freeze({ readOnly: true, destructive: false, idempotent: true, openWorld: false }) });
 }

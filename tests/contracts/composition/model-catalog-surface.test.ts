@@ -6,7 +6,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, inspectModelCatalog } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main } from '../../../src/surfaces/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -76,7 +76,7 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     const receipt = JSON.parse(first.stdout);
     expect(receipt).toMatchObject({ replayed: false, receipt: { command: { action: 'register', commandId: 'seed-1' }, authorizations: [{ level: 'installation' }] } });
     expect(receipt.receipt.changes.map((change: { kind: string; modelId: string | null }) => `${change.kind}:${change.modelId}`)).toEqual([`channel:null`,
-      'model:claude-fable-5-1', 'model:claude-haiku-4-5-20251001', 'model:claude-haiku-5-5', 'model:claude-opus-5-5', 'model:claude-sonnet-5-5']);
+      'model:claude-fable-5-1', 'model:claude-fable-5-2', 'model:claude-haiku-4-5-20251001', 'model:claude-haiku-5-5', 'model:claude-opus-5-5', 'model:claude-sonnet-5-5']);
     const facts = f.tables();
     const replay = JSON.parse((await f.cli('register', '--scope', 's', '--command-id', 'seed-1', '--seed', 'claude-cli-subscription', '--json')).stdout);
     expect(replay).toEqual({ ...receipt, replayed: true });
@@ -137,7 +137,7 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     // A model turned on before its retirement is still turned off: activate it while current, record its retirement, then deactivate.
     const register = async (commandId: string, retiredOn: string | null) => { const catalog = await seedCatalog(); catalog.revision = commandId;
       Object.assign(catalog.providers[0].models.find((model: { nativeId: string }) => model.nativeId === 'claude-haiku-4-5-20251001').lifecycle,
-        retiredOn ? { retiredOn, retireNotBefore: retiredOn } : { retiredOn: null, retireNotBefore: '2099-01-01' });
+        retiredOn ? { state: 'retired', retiredOn, retireNotBefore: retiredOn } : { state: 'active', retiredOn: null, retireNotBefore: '2099-01-01' });
       await applyModelCatalog(admin.project, { schemaVersion: 1, commandId, scopeId: 's', action: 'register', catalog }, admin.options); };
     await register('current', null);
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r2', '--expected-revision', '0')).code).toBe(0);

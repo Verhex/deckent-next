@@ -11,7 +11,7 @@ import * as catalog from '#composition/core/provider-catalog/index.js';
 import { createRuntimeChatTurnHost, runPeerConfiguredChatTurn } from '#composition/core/agent-turn/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { executeRuntimeApproval } from '#composition/core/runtime-service/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { workSurfaceLabels } from '#surfaces/core/cli/index.js';
 import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteAgentCatalogStore, bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeWorkerEffortCapability,
   NATIVE_PROMPT_LIMITS } from '#adapters/index.js';
-import { AgentCatalogApplication, assertRunExecution, composeModelRolePolicy, personaDigest, projectRunView, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, selectTaskAgents, skillContentDigest,
+import { AgentCatalogApplication, assertRunExecution, composeModelRolePolicy, personaDigest, projectRunView, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, selectTaskAgents, selectTaskAgentsFrom, skillContentDigest,
   skillSetDigest, type AgentCatalogDependencies, type ModelCatalogReader } from '#engine/index.js';
 import { createRun, parseProviderCatalogDocument, readWorkerModelPin, type ExecutionProfileDefinition, type ModelCatalogModelRecord } from '#domain/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
@@ -96,7 +96,7 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     const execution = await f.admit(), task = execution.tasks[0]!;
     expect(task.agent).toEqual({ schemaVersion: 1, agentId: 'auditor', revision: 1, workClass: 'feature', personaDigest: personaDigest(a.content.persona), skillSetDigest: a.skillSetDigest,
       skills: [{ skillId: 'tdd', revision: 1, digest: skillContentDigest({ name: 'tdd', text: 'Önce başarısız testi yaz.' }) }], standing: 'candidate', standingRevision: 1,
-      selection: { eligible: 1, position: 0, reason: 'first-candidate' } });
+      selection: { eligible: 1, position: 0, reason: 'first-candidate' }, name: 'auditor' });
     expect(a.skillSetDigest).toBe(skillSetDigest(task.agent!.skills));
     expect(prompt(task.profile)).toMatchObject({ persona: [{ id: 'auditor', version: 1 }], skills: [{ id: 'tdd', version: 1 }] });
     expect(prompt(task.profile).text).toContain(a.content.persona); expect(prompt(task.profile).text).toContain('Önce başarısız testi yaz.');
@@ -113,7 +113,14 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     expect(chosen).toMatchObject({ agentId: 'b-second', standing: 'active', standingRevision: 2, selection: { eligible: 2, position: 1, reason: 'active-agent' } });
     const execution = await f.admit(), card = renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: graph() },
       { graph: graph(), execution } as never, { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, 'tr');
-    expect(card).toContain('ajan: b-second (sürüm 1, terfili)');
+    expect(card).toContain('ajan: b-second (sürüm 1, terfili)'); expect(card).not.toContain('ajan kimliği');
+    // a64 (owner walk): a named agent is shown by its name on the card's head, its id under details; a seal frozen without a name keeps the id.
+    const named = (name?: string) => renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: graph() },
+      { graph: graph(), execution: { ...execution, tasks: execution.tasks.map(task => ({ ...task, agent: { ...task.agent!, name } })) } } as never,
+      { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, 'en');
+    const shown = named('Note writer');
+    expect(shown).toContain('agent: Note writer (id b-second, revision 1, promoted)');
+    expect(named(undefined)).toContain('agent: b-second (revision 1, promoted)');
   });
   it('F2-11 (owner walk 2026-11-08): a Brain answer naming `small` binds the agent defined for `small` with its pinned skill revision, on the card and in the seal; the walk\'s `feature` answer binds none', async () => {
     const f = await fixture(), k = await f.skill('satir-ekle', 'Dosyanın sonuna tek satır ekle.'); await f.agent('not-yazici', [k], ['small']);
@@ -192,15 +199,24 @@ it('K8: an explicit task pin selects that candidate, never another agent; revise
   // Skill revision is not an implicit repin: the agent still uses exactly revision 1.
   await f.app.defineSkill({ schemaVersion: 1, scopeId: 's', commandId: 'skill-revise', skillId: 'invoice', expectedRevision: 1, content: { name: 'invoice', text: 'new skill text' } });
   expect((await f.select('s', graph(), pins)).get('t')!.parts.skills[0]!.text).toBe(skill.content.text);
-  await expect(f.select('s', graph(), new Map([['missing-task', pin]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
-  await expect(f.select('other', graph(), pins)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
-  await expect(f.select('s', graph(), new Map([['t', { ...pin, personaDigest: 'e'.repeat(64) }]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
-  await expect(f.select('s', graph(), new Map([['t', { ...pin, skills: [] }]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(f.select('s', graph(), new Map([['missing-task', pin]]))).rejects.toMatchObject({ code: 'AGENT_USE_TASK_UNAVAILABLE' });
+  const unclassified = { ...graph(), tasks: [{ ...graph().tasks[0]!, kind: 'unclassified' }] };
+  await expect(f.select('s', unclassified, pins)).rejects.toMatchObject({ code: 'AGENT_USE_WORK_CLASS_REQUIRED' });
+  const noInput = { ...graph(), tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'] }] };
+  await expect(selectTaskAgents(noInput, undefined, 's', { eligibleAgents: async () => [], loadSkill: async () => null }, pins)).rejects.toMatchObject({ code: 'AGENT_USE_TASK_UNAVAILABLE' });
+  await expect(selectTaskAgentsFrom(undefined, graph(), undefined, 's', pins)).rejects.toMatchObject({ code: 'AGENT_USE_CATALOG_UNAVAILABLE' });
+  let opened = false;
+  await expect(selectTaskAgentsFrom(async () => { opened = true; throw new Error('unexpected-open'); }, { ...graph(), tasks: [] }, undefined, 's', pins))
+    .rejects.toMatchObject({ code: 'AGENT_USE_TASK_UNAVAILABLE' });
+  expect(opened).toBe(false);
+  await expect(f.select('other', graph(), pins)).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
+  await expect(f.select('s', graph(), new Map([['t', { ...pin, personaDigest: 'e'.repeat(64) }]]))).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
+  await expect(f.select('s', graph(), new Map([['t', { ...pin, skills: [] }]]))).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
   await f.app.defineAgent({ schemaVersion: 1, scopeId: 's', commandId: 'revise', agentId: chosen.agentId, expectedRevision: 1, content: { ...chosen.content, persona: 'Revised persona' } });
-  await expect(f.select('s', graph(), pins)).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(f.select('s', graph(), pins)).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
   const current = (await f.select('s', graph(), new Map([['t', { ...pin, revision: 2, personaDigest: personaDigest('Revised persona') }]]))).get('t')!.seal;
   writeStanding(f.path, integrity, moved((await f.standings('z-chosen', 2))[0]!, 'retired'));
-  await expect(f.select('s', graph(), new Map([['t', current]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+  await expect(f.select('s', graph(), new Map([['t', current]]))).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
 });
 
 it('K8: upstream agent/skill revocation rejects an explicit choice without falling through to a different candidate', async () => {
@@ -210,7 +226,7 @@ it('K8: upstream agent/skill revocation rejects an explicit choice without falli
   try {
     for (const revokedKind of ['agent', 'skill']) {
       const source = { eligibleAgents: store.eligibleAgents.bind(store), loadSkill: store.loadSkill.bind(store), upstream: async (_scope: string, kind: string) => kind === revokedKind ? 'revoked' as const : 'clear' as const };
-      await expect(selectTaskAgents(graph(), undefined, 's', source, new Map([['t', pin]]))).rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
+      await expect(selectTaskAgents(graph(), undefined, 's', source, new Map([['t', pin]]))).rejects.toMatchObject({ code: 'AGENT_USE_PIN_MISMATCH' });
     }
   } finally { store.close(); }
 });

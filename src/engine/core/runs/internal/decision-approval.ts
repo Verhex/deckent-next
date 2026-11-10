@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { approvalDecisionClass, approvalRequestSchema, encodeCommandProjection, evaluatePolicy, explicitDecisionGrant, isAiPrincipal, readRunHold,
-  ApprovalError, policySchema, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS, sha256, t, type IntegrityAuthority, type Locale } from '#platform/index.js';
+  ApprovalError, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
+import { sha256, t, type IntegrityAuthority, type Locale } from '#platform/index.js';
 import { RunLifecycleError, type RunDecisionAuthorization, type RunDecisionEvidence, type RunLifecycleCommand, type RunLifecycleWrite } from './lifecycle.js';
-import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
-import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval, minimumApprovalAssurance, type ApprovalStore } from '#engine/core/approval/index.js';
+import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
+import { admitDecided, expireDue, sealApproval, verifyApproval, minimumApprovalAssurance, type ApprovalStore } from '#engine/core/approval/index.js';
 /** Decision routing reuses the existing task subject, command-bound digest, sealed store and approval decision owner. */
 export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
   constructor(private readonly store: ApprovalStore, private readonly integrity: IntegrityAuthority, private readonly policy: PolicySource,
@@ -14,7 +14,7 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
   }
   async authorize(command: RunLifecycleCommand, principal: VerifiedPrincipal, run: RunSnapshot, replay?: RunLifecycleWrite): Promise<RunDecisionEvidence> {
     const ai = isAiPrincipal(principal), witness = !ai && await this.interactive(principal);
-    const policy = policySchema.parse(await this.policy.load());
+    const policy = await this.policy.load();
     const taskStep = 'taskId' in command, kind = taskStep ? 'task-decision' : 'run-decision', id = taskStep ? command.taskId : command.runId;
     const sameReplayActor = replay?.actor.issuer === principal.issuer && replay.actor.subject === principal.subject && replay.actor.id === principal.id;
     // S5b (Auditor owner decision 6): hold is the ordinary control; every resume is a decision. A replay of a resume recorded as an
@@ -27,7 +27,7 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     const control = evaluatePolicy(policy, { principal, scopeId: command.scopeId,
       action: taskStep ? 'evaluate' : command.action === 'hold' || command.action === 'close' ? 'cancel' : 'reserve',
       resource: { kind: taskStep ? 'attempt' : 'run', id: targetId } });
-    if (control.decision !== 'allow') throw new PolicyAuthorizationError(control.decision === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'POLICY_DENIED');
+    const refusal = policyVerdictRefusal(control.decision, { deny: 'POLICY_DENIED' }); if (refusal) throw new PolicyAuthorizationError(refusal);
     const ruleId = ordinary ? control.ruleId : explicitDecisionGrant(policy, principal, command.scopeId, kind, id, command.action);
     const evidence = (deciderClass: RunDecisionEvidence['deciderClass'], rule?: string, approvalId?: string): RunDecisionEvidence => ({ schemaVersion: 1,
       deciderClass, step: ordinary ? 'operator-control' : 'human-step', policyRevision: policy.revision, ...(rule ? { ruleId: rule } : {}), ...(approvalId ? { approvalId } : {}) });
@@ -58,16 +58,11 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     if (record.request.actionDigest !== digest) throw new ApprovalError('APPROVAL_CONFLICT');
     const consumed = sameReplayActor && replay?.decision?.approvalId === record.request.approvalId;
     if (!consumed && record.request.policyRevision !== policy.revision) throw new ApprovalError('APPROVAL_STALE');
-    if (record.status === 'pending' && now >= record.request.expiresAt) record = expireApproval(this.store, this.integrity, record);
+    record = expireDue(this.store, this.integrity, record, now);
     if (record.status === 'pending') throw new RunLifecycleError('TASK_DECISION_APPROVAL_REQUIRED', record.request.approvalId);
-    if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const decision = record.decision!;
-    if (decision.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
-    if (decision.requestDigest !== approvalRequestDigest(record.request)) throw new ApprovalError('APPROVAL_INTEGRITY');
-    const decider = approvalDecisionClass(decision);
-    if (decider !== 'human-tty' && decider !== 'ai-policy') throw new ApprovalError('APPROVAL_DENIED');
-    if (!consumed && (decision.decidedAt > now + MAX_WALL_SKEW_MS || now > decision.decidedAt + this.admitWithinMs)) throw new ApprovalError('APPROVAL_EXPIRED');
+    const decider = record.decision ? approvalDecisionClass(record.decision) : 'unknown', counted = decider === 'human-tty' || decider === 'ai-policy' ? decider : null;
+    admitDecided(record, consumed ? null : { now, window: this.admitWithinMs }, counted !== null);
     // The decision's class names who decided the card, even when the requester resubmits it.
-    return consumed ? replay!.decision! : evidence(decider, undefined, record.request.approvalId);
+    return consumed ? replay!.decision! : evidence(counted!, undefined, record.request.approvalId);
   }
 }

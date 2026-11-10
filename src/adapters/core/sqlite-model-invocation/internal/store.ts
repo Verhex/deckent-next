@@ -1,4 +1,4 @@
-import { assertInvocationResourceCapacity } from './resource-capacity.js';
+import { assertInvocationResourceCapacity, invocationResourceKey } from './resource-capacity.js';
 import { recordInvocationPlanUsage } from './plan-usage.js';
 import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
@@ -15,7 +15,7 @@ import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendErro
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, type ProviderSpendMeasurement, verifyModelActivationRecord,
   planModelAllocationSlotRelease, type ModelAllocationSlotRelease, type ModelAllocationSlotReleaseStore, type ModelAllocationStartCustody } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationCommandRow, invocationRow, loadInvocationRecord, loadInvocationCommandRecord, visitAllocationInvocations } from './read.js';
 
 type Row = Readonly<Record<string, unknown>>;
@@ -27,22 +27,11 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
 
   private fail(error: unknown): never {
     if (error instanceof ModelInvocationStoreError || error instanceof ProviderSpendError) throw error;
-    sqliteFailure(error);
-    throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    const mapped = sqliteFailure(error); // owner B1-9: a real ledger busy stays busy, also when an inner transaction already mapped it
+    throw mapped && typeof mapped === 'object' && 'code' in mapped && mapped.code === 'ATTEMPT_STORE_BUSY' ? mapped : new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
   private transaction<T>(work: () => T): T {
-    let active = false; let commitAttempted = false;
-    try {
-      this.db.exec('BEGIN IMMEDIATE'); active = true;
-      const result = work(); commitAttempted = true; this.db.exec('COMMIT'); active = false; return result;
-    } catch (error) {
-      if (active) {
-        try { this.db.exec('ROLLBACK'); active = false; }
-        catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
-      }
-      if (commitAttempted) throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN');
-      return this.fail(error);
-    }
+    return ledgerTransaction(this.db, work, { unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => this.fail(error) });
   }
   async loadReceipt(scopeInput: string, commandInput: string): Promise<ModelInvocationRecord | null> {
     try { return loadInvocationCommandRecord(this.db, scopeInput, commandInput); }
@@ -92,8 +81,8 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
         writeModelAllocation(this.db, checkpoint, after);
         const receipt = createModelInvocationClaimReceipt(admission);
         const record = encoded(receipt);
-        this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record) VALUES(?,?,?,?,?,?)')
-          .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record);
+        this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record,resource_key) VALUES(?,?,?,?,?,?,?)')
+          .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record, invocationResourceKey(this.db, profile));
         const control = parseModelInvocationControlRecord({ schemaVersion: 1, claim: receipt.claim, reference: receipt.request.reference,
           send: { state: 'pending' }, cancellation: null });
         this.db.prepare(`INSERT INTO model_invocation_controls(scope_id,invocation_id,send_state,record) VALUES(?,?,?,?)`)
@@ -139,8 +128,8 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     writeModelAllocation(this.db, checkpoint, parseModelAllocation({ ...allocation, inFlight: allocation.inFlight - 1 }));
     if (next.content) this.db.prepare(`INSERT INTO model_invocation_contents(scope_id,invocation_id,record) VALUES(?,?,?)`)
       .run(current.receipt.claim.scopeId, current.receipt.claim.invocationId, encoded(next.content));
-    const updated = this.db.prepare(`UPDATE model_invocations SET state=?,record=? WHERE scope_id=? AND invocation_id=? AND state='claimed'`)
-      .run(outcome.state, encoded(next.receipt), current.receipt.claim.scopeId, current.receipt.claim.invocationId);
+    const updated = this.db.prepare(`UPDATE model_invocations SET state=?,record=?,resource_key=? WHERE scope_id=? AND invocation_id=? AND state='claimed'`)
+      .run(outcome.state, encoded(next.receipt), invocationResourceKey(this.db, next.receipt.profile), current.receipt.claim.scopeId, current.receipt.claim.invocationId);
     if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
   async loadControl(scopeId: string, invocationId: string) {

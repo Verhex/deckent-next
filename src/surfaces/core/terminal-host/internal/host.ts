@@ -1,8 +1,8 @@
 import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
 import { setImmediate as yieldToInput } from 'node:timers/promises';
-import { terminalPalette, WorklinePaletteProvider, type ColorTier, type TerminalThemeSetting, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
-import { RenderGlyphsContext, resolveRenderGlyphs, TerminalHandoverContext } from '#surfaces/core/terminal-render/index.js';
+import { terminalPalette, type ColorTier, type TerminalThemeSetting, type WorklineInkPalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
+import { resolveRenderGlyphs, RenderGlyphsContext, TerminalHandoverContext } from '#surfaces/core/terminal-render-ink/index.js';
 import type { TerminalHandover } from './handoff.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,

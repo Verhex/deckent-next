@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { z } from 'zod';
 import { containerEvidenceSchema } from './container.js';
 import type { CollectedOutputFile } from './output-files.js';
@@ -53,8 +54,8 @@ export interface ExecutionSupervisor {
    * an already absent container; an adapter that cannot tell returns nothing. */
   release(request: SandboxRequest): Promise<'removed' | 'absent' | void>;
 }
-export class SupervisorError extends Error {
-  constructor(readonly code: 'SUPERVISOR_REQUEST_INVALID' | 'SUPERVISOR_WORKSPACE_INVALID' | 'SUPERVISOR_IDENTITY_CONFLICT'
+export class SupervisorError extends CodedError {
+  constructor(override readonly code: 'SUPERVISOR_REQUEST_INVALID' | 'SUPERVISOR_WORKSPACE_INVALID' | 'SUPERVISOR_IDENTITY_CONFLICT'
     | 'SUPERVISOR_PROFILE_INVALID' | 'SUPERVISOR_PROFILE_ORIGIN_MISMATCH'
     | 'SUPERVISOR_OPTIONS_INVALID' | 'SUPERVISOR_ISOLATION_MISMATCH' | 'SUPERVISOR_CANCELLED' | 'SUPERVISOR_CONTROL_FAILED' | 'SUPERVISOR_NOT_TERMINAL' | 'SUPERVISOR_RELEASE_UNCONFIRMED') {
     super(code); this.name = 'SupervisorError';

@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { executeConfiguredOperation } from '../../../src/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main as cli } from '#surfaces/core/cli/index.js';
 import { operationsConfigSchema, registerOperationAdapterModule, registerProviderConfig, HOST_SHELL_RUN_OPERATION, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
+import { composeCore } from '#composition/core/root/index.js';
 import { AdapterRegistry, EffectTargetError, type EffectTarget, type EffectApplyRequest, type AdapterModuleRegistration } from '#engine/index.js';
 import { CORE_API_VERSION, unifyOperationCatalog, type AdapterModuleManifest, type EffectTargetRef } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -43,9 +44,9 @@ const module: AdapterModuleRegistration = { manifest, factories: { 'test.memory-
   create: (options: unknown) => { const t = new MemoryRecordTarget(optionsSchema.parse(options).kind); targets.set(t.kind, t); return t; } } } };
 const target = { adapter: 'test.memory-record', options: { kind: 'memo' } };
 const issues = (value: unknown) => { const r = operationsConfigSchema.safeParse(value); return r.success ? [] : r.error.issues.map(i => i.message); };
-// One process-wide registry per test file: the module registers before configuration registration seals it.
+// One process-wide registry per test file: the module registers before composing Core seals it.
 registerOperationAdapterModule(module);
-registerProviderConfig();
+composeCore();
 
 async function project(operations: unknown, open = true) {
   const root = await mkdtemp(join(tmpdir(), 'dn-catalog-')); cleanup.push(() => rm(root, { recursive: true, force: true }));

@@ -5,12 +5,13 @@ import { custodyPrincipal, custodyProfile } from '../support/custody.js';
 const fixture = vi.hoisted(() => ({ run: null as unknown, attempt: null as unknown,
   authorize: vi.fn(), close: vi.fn(), integrity: vi.fn(), observe: vi.fn(), loadRun: vi.fn(), loadAttempt: vi.fn() }));
 const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
-vi.mock('#composition/core/scoped-request/index.js', () => ({
+vi.mock('#composition/core/scoped-request/index.js', async importOriginal => ({
+  ...await importOriginal<typeof import('#composition/core/scoped-request/index.js')>(),
   async loadConfiguredScopeContext() { return { config: { inspection: { policyMaxBytes: 65536 },
     storage: { sqlite: {} }, runRuntime: { parking: { timeoutMs: 1000 } }, artifacts: { maxBytes: 65536 }, approvals: { keyFile: 'key' } },
     layout: {}, document: { revision: 'policy' }, principal: custodyPrincipal, path: async () => 'fixture-ledger' }; },
 }));
-vi.mock('#composition/core/policy/index.js', () => ({ createLayoutPolicySource: () => ({}) }));
+vi.mock('#composition/core/policy/index.js', () => ({ contextPolicySource: () => ({}) }));
 vi.mock('#platform/index.js', async importOriginal => ({ ...await importOriginal<typeof import('#platform/index.js')>(),
   inspectProductDirectory: async () => 'fixture-artifacts' }));
 vi.mock('#engine/index.js', async importOriginal => ({ ...await importOriginal<typeof import('#engine/index.js')>(),

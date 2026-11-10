@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { WORKER_IMAGE_ESTIMATED_GB, attestLocalInteractiveTerminal, codingSetupFamily, detectCodingFacts, detectExecutionFacts, dockerInstallOffer, executionSetupFamily, localPrincipalChannel,
   nativeProviderSpec, observeWorkerImage, workerImagePresence, workerImageSetupPorts, type ExecutionFacts } from '#adapters/index.js';
 import { affectedToolchainProfiles, WorkerImageSetupApplication, assertAuthorityWitness, type AuthorityWitness, type SetupStage, SETUP_PERMISSIONS_FAMILY, setupProfileRefSchema, hasWorkerKind } from '#engine/index.js';
-import { ErrorRegistry, sha256, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, sha256, loadConfig, prepareProductDirectory, productResourcePath, resolveLocale, type Locale, type ConfigLoadOptions } from '#platform/index.js';
 import { cliCardGate, doctorVerdict, loadSetupSurface, type CliCardIo, type KernelCommandContext } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallationWithSecretDefault, installConfiguredExecutionPool, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
@@ -15,7 +15,7 @@ import { executionRegistrySchema } from '#domain/index.js';
 import { installExecutionEnvironment } from './install.js';
 import { observeSetupPermissions, applySetupPermissions } from './permissions.js';
 
-type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }>; signal?: AbortSignal }>; // signal (alpha.60 B): terminal closed → probes killed, no further step, no write
+type Options = ConfigLoadOptions & Readonly<{ person?: boolean; foreground?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }>; signal?: AbortSignal }>; // signal (alpha.60 B): terminal closed → probes killed, no further step, no write
 const reachableDocker = (facts: ExecutionFacts) => facts.runtimes.find(row => row.support === 'supported' && row.daemon === 'reachable')?.path ?? null;
 const toolchainsHome = (config: Awaited<ReturnType<typeof loadConfig>>) => join(productResourcePath(config.productLayout, 'workspaces'), 'toolchains');
 /** Second-provider profile add: the CLI host supplies the registry owner, so setup never reaches the coding template composition itself. */
@@ -31,9 +31,9 @@ const failure = (error: unknown) => { const code = (error as { code?: unknown } 
  * human doctor) run in the surface after the window closed, so here they are refused (TERMINAL_TTY_REQUIRED) and never half-run; the
  * surface reaches I-D2's foreground install through `installExecutionEnvironment`.
  */
-export function configuredSetup(host: object, witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
+export function configuredSetup(host: object, witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }, confirmDirectory?: (path: string, locale: Locale) => Promise<boolean>) {
   // The doctor verdict (its grouped rows, read-only); in an observation a measurement that cannot run is "not run", never a guess.
-  const verdict = (env: NodeJS.ProcessEnv, root: string) => doctorVerdict(root, { ...host, env } as KernelCommandContext, { env });
+  const verdict = (env: NodeJS.ProcessEnv, root: string) => doctorVerdict(root, { ...host, env, inspectCodingRepository } as KernelCommandContext, { env });
   const observeSetup = async (root: string, options: Options) => {
     const env = options.env ?? process.env, config = await loadConfig(root, { env, heal: false }).catch(() => null);
     const credential = (id: string) => { try { return nativeProviderSpec(id as Parameters<typeof nativeProviderSpec>[0]); } catch { return null; } };
@@ -49,7 +49,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     // R8b/R3a: a chosen subscription connection (answer `{ connection }`), or an `execution` without Docker, runs the worker without an image or runtime.
     const connections = config ? connectedWorkerClis(config, config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId) : [];
     const chosen = connections.find(row => row.id === (options.answers?.['work:kind'] as { connection?: unknown } | undefined)?.connection);
-    const connected = chosen || config?.execution && !config.execution.docker ? config?.execution ? 'configured' as const : 'pending' as const : undefined;
+    const connected = (chosen || (config?.execution && !config.execution.docker)) ? (config?.execution ? 'configured' as const : 'pending' as const) : undefined;
     const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
     const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
       connected && stage.id === 'execution:runtime' ? { state: 'skipped' as const, reason: { code: 'setup.execution.workerConnection', params: {} } }
@@ -85,7 +85,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
         // The owner's own preview first (the same deterministic plan the apply journals), then the journaled first-run install.
         await previewPolicyTemplateInstallation(root, scopeId, options);
         // U1 S1: the store default's outcome rides on the stage result (the installation stands even when the default was refused).
-        const installed = await applyPolicyTemplateInstallationWithSecretDefault(root, scopeId, options), secretStore = 'secretStore' in installed ? installed.secretStore : undefined;
+        const installed = await applyPolicyTemplateInstallationWithSecretDefault(root, scopeId, options, options.foreground && confirmDirectory ? path => confirmDirectory(path, resolveLocale(options.language, options.env)) : undefined), secretStore = 'secretStore' in installed ? installed.secretStore : undefined;
         return installed.status === 'installed' || installed.status === 'replayed' ? { ...result('applied'), ...(secretStore ? { secretStore } : {}) } : result('refused', installed.status);
       }
       if (op === 'setup.permissions') {
@@ -132,5 +132,9 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
   };
   const openOnboarding = (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) =>
     configuredOnboarding(host, { observeSetup, applySetupStage }, root, scopeId, folder, options);
-  return { openOnboarding, observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment, prepareWorkerImage, inspectWorkerImage: workerImagePresence };
+  const inspectCodingRepository = async (root: string, options: ConfigLoadOptions) => {
+    const decision = codingSetupFamily().stages[0]!.evaluate({ facts: await detectCodingFacts({ root, env: options.env ?? process.env }), scopeId: null, answer: undefined, states: new Map() });
+    return { state: decision.state, reason: { ...decision.reason, params: decision.reason.params ?? {} } };
+  };
+  return { openOnboarding, observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment, inspectCodingRepository, prepareWorkerImage, inspectWorkerImage: workerImagePresence };
 }

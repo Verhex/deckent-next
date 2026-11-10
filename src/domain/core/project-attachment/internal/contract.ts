@@ -3,8 +3,8 @@ import { persistedString, persistedUuid, identitySchema, installationIdSchema, p
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 
 const text = persistedString(z.string().min(1).max(4096));
-export const attachmentPersonSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
-/** Location evidence detects copying; it grants no execution authority. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const attachmentPersonSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Location evidence detects copying; it grants no execution authority. */
 export const attachmentLocationSchema = z.strictObject({ canonicalRoot: text, device: z.string().regex(/^\d+$/), inode: z.string().regex(/^[1-9]\d*$/) }).readonly();
 export const installationSourceSchema = z.strictObject({ projectRoot: text, layoutRoot: text, bootstrapConfigPath: text,
   layoutRevision: z.string().regex(/^[a-f0-9]{64}$/), installationId: installationIdSchema, projectId: projectIdSchema,
@@ -12,12 +12,12 @@ export const installationSourceSchema = z.strictObject({ projectRoot: text, layo
 export const projectAttachmentSchema = z.strictObject({ schemaVersion: z.literal(1), registrationId: persistedUuid(),
   projectId: projectIdSchema, companyId: identitySchema, scopeId: identitySchema, actor: attachmentPersonSchema,
   location: attachmentLocationSchema, commandId: persistedUuid() }).readonly();
-export const modelUseLeaseSchema = z.strictObject({ schemaVersion: z.literal(1), leaseId: persistedUuid(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelUseLeaseSchema = z.strictObject({ schemaVersion: z.literal(1), leaseId: persistedUuid(),
   state: z.enum(['pending', 'active', 'revoked']), profiles: z.array(z.strictObject({ reference: modelReferenceSchema,
     sourceDigest: z.string().regex(/^[a-f0-9]{64}$/), targetDigest: z.string().regex(/^[a-f0-9]{64}$/),
     bindingDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly()).readonly() }).readonly();
 export type ModelUseLease = z.infer<typeof modelUseLeaseSchema>;
-export const attachmentInventoryEntrySchema = z.strictObject({ attachment: projectAttachmentSchema, modelLease: modelUseLeaseSchema.optional(),
+const attachmentInventoryEntrySchema = z.strictObject({ attachment: projectAttachmentSchema, modelLease: modelUseLeaseSchema.optional(),
   preparationDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), restoreDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), planDigest: z.string().regex(/^[a-f0-9]{64}$/), state: z.enum(['pending', 'active', 'revoked']) }).readonly();
 export const installationRegistrationSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), registrationId: persistedUuid(), unregistered: z.boolean().optional(),
   source: installationSourceSchema, entries: z.array(attachmentInventoryEntrySchema).readonly() }).superRefine((value, ctx) => {
@@ -57,4 +57,4 @@ export const attachmentPreparationSchema = z.strictObject({ digest: hex,
 export type AttachmentPreparation = z.infer<typeof attachmentPreparationSchema>;
 export const projectAttachmentOfferSchema = z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('none') }),
   z.strictObject({ kind: z.literal('ready'), scopeId: scope, path: text, writeRoot: text, planDigest: hex, preparation: attachmentPreparationSchema })]).readonly();
-export type ProjectAttachmentOffer = z.infer<typeof projectAttachmentOfferSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProjectAttachmentOffer = z.infer<typeof projectAttachmentOfferSchema>;

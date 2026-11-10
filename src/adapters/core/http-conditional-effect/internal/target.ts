@@ -16,7 +16,7 @@ export const httpConditionalEffectOptionsSchema = z.strictObject({
     context.addIssue({ code: 'custom', message: 'EFFECT_TARGET_URL_INVALID' });
   }
 }).readonly();
-export type HttpConditionalEffectOptions = z.infer<typeof httpConditionalEffectOptionsSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HttpConditionalEffectOptions = z.infer<typeof httpConditionalEffectOptionsSchema>;
 type Response = { readonly status: number; readonly headers: IncomingHttpHeaders; readonly body: Buffer };
 
 /** Generic conditional-write record service (documented REST shape, not a vendor adapter):

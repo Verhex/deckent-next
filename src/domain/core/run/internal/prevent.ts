@@ -1,16 +1,7 @@
-import { sameAttemptIdentity, attemptSnapshotSchema } from '#domain/core/attempt/index.js';
-import { reconcileRunLifecycle, type RunLifecycleTiming } from './lifecycle.js';
-import { checkedRun, RunError } from './contract.js';
+import type { RunLifecycleTiming } from './lifecycle.js';
+import { cancelRunAttempt, type CancelledAttemptDispatch } from './settle.js';
 
-/** Application proof that launch permission was denied before execution. This is not a
- * supervisor observation or a fabricated exit. Existing uncertain effects must remain open. */
-export function preventRunAttempt(input: unknown, expectedRevision: number, attemptInput: unknown, timing: RunLifecycleTiming) {
-  const run = checkedRun(input, expectedRevision); const attempt = attemptSnapshotSchema.parse(attemptInput); const identity = attempt.identity;
-  const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, identity));
-  const task = run.progress.find(value => value.taskId === identity.taskId);
-  if (!attempt.cancelRequested || attempt.lastObservation !== null || !binding || binding.observedRevision !== null || !task || task.unresolvedEffects
-    || !['active', 'cancelled'].includes(task.phase)) throw new RunError('RUN_ATTEMPT_CONFLICT');
-  if (task.phase === 'cancelled') return run;
-  return reconcileRunLifecycle({ ...run, revision: run.revision + 1,
-    progress: run.progress.map(value => value === task ? { ...value, phase: 'cancelled' } : value) }, timing.now, timing.timeoutMs);
-}
+/** Application proof that launch permission was denied before execution (no claim, or the launch decision itself). This is not a
+ * supervisor observation or a fabricated exit. Existing uncertain effects must remain open; a granted launch is never prevented. */
+export const preventRunAttempt = (input: unknown, expectedRevision: number, attemptInput: unknown, dispatch: CancelledAttemptDispatch, timing: RunLifecycleTiming) =>
+  cancelRunAttempt(input, expectedRevision, attemptInput, dispatch, 'prevent', timing);

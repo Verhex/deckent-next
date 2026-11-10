@@ -1,23 +1,23 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { CodedError, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, catalogChannelSchema, catalogModelSchema, exactModelIdSchema,
   parseProviderCatalogDocument, reportedNameConflict, connectTermsMisplaced, type ProviderCatalogDocument } from '#domain/core/provider-catalog/index.js';
 import { modelActivationActorSchema, modelActivationAuthorizationSchema } from './contract.js';
 
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Ledger model catalog (WORKER-CURRENCY-1, ledger v43, Jev 55471f68). Catalog facts are installation-wide rows keyed by
  * (channel id, exact model id); activation is per scope and hierarchical — a channel row (model id null) and a model row. Only an
  * active model of an active channel in the request scope is selectable. Writes go through one command with a receipt; authority is
  * the existing `model-activation` policy resource (register and activate need `activate`, deactivate needs `deactivate`).
  */
 export const MODEL_CATALOG_SCHEMA_VERSION = 1;
-export const MODEL_CATALOG_TARGET_PREFIX = 'deckent.model-catalog-target.v1\n';
-export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REVISION_CONFLICT' | 'MODEL_CATALOG_NOT_FOUND'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_CATALOG_TARGET_PREFIX = 'deckent.model-catalog-target.v1\n';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REVISION_CONFLICT' | 'MODEL_CATALOG_NOT_FOUND'
   | 'MODEL_CATALOG_NOT_ACTIVE' | 'MODEL_CATALOG_COMMAND_CONFLICT' | 'MODEL_CATALOG_CORRUPT' | 'MODEL_CATALOG_UNAVAILABLE'
-  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT' | 'MODEL_CATALOG_MODEL_RETIRED';
-export class ModelCatalogError extends Error {
-  constructor(readonly code: ModelCatalogErrorCode, readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
+  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT' | 'MODEL_CATALOG_MODEL_RETIRED' | 'MODEL_CATALOG_READ_ONLY';
+export class ModelCatalogError extends CodedError {
+  constructor(override readonly code: ModelCatalogErrorCode, override readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
 }
 const catalogDocumentSchema = z.unknown().optional().transform((input, context): ProviderCatalogDocument => {
   try { return parseProviderCatalogDocument(input); }
@@ -27,7 +27,7 @@ const catalogDocumentSchema = z.unknown().optional().transform((input, context):
   }
 });
 const base = { schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), commandId: clientCommandIdSchema, scopeId: identitySchema };
-export const modelCatalogTargetSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema.nullable() }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelCatalogTargetSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema.nullable() }).readonly();
 /** Read query (WORKER-CURRENCY-2): the catalog as one scope sees it, optionally one channel. */
 export const modelCatalogQuerySchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
   channelId: identitySchema.optional() }).readonly();
@@ -37,18 +37,18 @@ export const modelCatalogCommandSchema = z.discriminatedUnion('action', [
   z.strictObject({ ...base, action: z.enum(['activate', 'deactivate']), channelId: identitySchema, modelId: exactModelIdSchema.nullable(),
     expectedRevision: counterSchema }),
 ]).readonly();
-export const modelCatalogChannelRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelCatalogChannelRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
   revision: counterSchema.positive(), providerVersion: counterSchema.positive(), channel: catalogChannelSchema, catalogRevision: identitySchema,
 }).readonly();
-export const modelCatalogModelRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelCatalogModelRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
   modelId: exactModelIdSchema, revision: counterSchema.positive(), providerVersion: counterSchema.positive(), model: catalogModelSchema,
   catalogRevision: identitySchema }).refine(record => record.model.nativeId === record.modelId).readonly();
-export const modelCatalogActivationRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelCatalogActivationRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
   channelId: identitySchema, modelId: exactModelIdSchema.nullable(), revision: counterSchema.positive(), state: z.enum(['active', 'inactive']),
 }).readonly();
 const changeSchema = z.strictObject({ kind: z.enum(['channel', 'model', 'activation']), channelId: identitySchema,
   modelId: exactModelIdSchema.nullable(), revision: counterSchema.positive() }).readonly();
-export const modelCatalogReceiptSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelCatalogReceiptSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION),
   command: modelCatalogCommandSchema, actor: modelActivationActorSchema,
   authorizations: z.array(z.strictObject({ target: modelCatalogTargetSchema, action: z.enum(['activate', 'deactivate']),
     level: z.enum(['installation', 'scope']), authorization: modelActivationAuthorizationSchema }).readonly()).min(1).readonly(),

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { nativeAgentInitReason } from './guards.js';
@@ -12,9 +13,9 @@ type Entry = { id: string; command: Command; headless: NonNullable<Command['head
 type Call = Parameters<ToolSessionPort['propose']>[0];
 type ToolResult = Awaited<ReturnType<ToolSessionPort['propose']>>;
 type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string }>;
-export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
-export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
   finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[] }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
@@ -22,7 +23,7 @@ const objectJson = (value: string) => { try { return record(JSON.parse(value)); 
 const fact = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,48}$/u.test(value) ? value : '?';
 const facts = (parts: readonly string[]) => parts.join(' ').slice(0, 64);
 /** Only fixed diagnostic keys leave this adapter; CLI output and token-bearing I/O errors never become error messages. */
-export class ClaudeAgentError extends Error {
+export class ClaudeAgentError extends CodedError {
   constructor(readonly reason: NativeAgentReadinessReason, readonly field: string) { super(reason); this.name = 'ClaudeAgentError'; }
 }
 function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field); }
@@ -36,7 +37,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
-  const notices = new Set<string>(), stopEvents = new Set(entry.agent.transport.kind === 'claude-mcp' ? entry.agent.transport.guards.stopEvents : []);
+  const notices = new Set<string>(), stopEvents = new Set(entry.agent.transport.guards.stopEvents);
   const notice = (value: Record<string, unknown>): 'stop' | undefined => {
     // Case-folded so a spelling variant cannot pass a stop event; a non-identifier name ('?') stops too.
     const type = fact(value.type).toLowerCase(), name = `${type}${value.subtype === undefined ? '' : `/${fact(value.subtype).toLowerCase()}`}`;
@@ -44,6 +45,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
   };
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
+  let usage: Readonly<Record<string, number>> | null = null;
   const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string): 'stop' => {
     failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }) }; controller.abort(); return 'stop';
   };
@@ -79,7 +81,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
         || value.plugin_errors !== undefined && (!Array.isArray(value.plugin_errors) || value.plugin_errors.length !== 0)) return fail('init-binding');
       init = true; return;
     }
-    // Only A0's inert UI invalidation may precede init. Unknown notices, retries and permission denials stop the run.
+    // A0's inert invalidation may precede init; other system events follow the registry stop rules.
     if (value.type === 'system' && value.subtype === 'ui_invalidate') return;
     if (!init) return value.type === 'system' ? notice(value) : fail('before-init');
     // CLI 2.1.318 thinking progress: two token estimates, no content.
@@ -125,7 +127,8 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (typeof value.is_error !== 'boolean' || typeof value.subtype !== 'string') return fail('result');
     result = value;
     if (value.is_error || value.subtype !== 'success') return;
-    if (typeof value.result !== 'string' || !reportedCounters(value.usage, ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'])) return fail('usage');
+    usage = reportedCounters(value.usage, ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens']);
+    if (typeof value.result !== 'string' || !usage) return fail('usage');
     const models = record(value.modelUsage);
     if (!models || Object.keys(models).length !== 1 || !Object.hasOwn(models, model)) return fail('model-usage');
     if ([...calls.values()].some(call => !call.streamed || !call.settled)) return fail('correlation-incomplete');
@@ -172,7 +175,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       controller.abort();
       if (exit.reason !== 'exit' || exit.exitCode !== 0 || exit.stdoutTruncated || exit.stderrTruncated || !result) return final = { kind: 'failed', subtype: 'incomplete' };
       if (result.is_error || result.subtype !== 'success') return final = { kind: 'failed', subtype: result.subtype === 'error_during_execution' ? 'error_during_execution' : 'provider-error' };
-      return final = { kind: 'completed', text: result.result as string, usage: reportedCounters(result.usage, ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'])!,
+      return final = { kind: 'completed', text: result.result as string, usage: usage!,
         stopReason: typeof result.stop_reason === 'string' ? result.stop_reason : null };
     },
   });

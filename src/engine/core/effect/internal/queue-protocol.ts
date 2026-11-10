@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger, attemptIdentitySchema, clientCommandIdSchema, identitySchema, effectTargetRefSchema, targetDisplaySchema, queueReasonSchema, queueDeliveryIntentSchema } from '#domain/index.js';
+import { counterSchema, persistedString, persistedInteger, attemptIdentitySchema, clientCommandIdSchema, identitySchema, effectTargetRefSchema, targetDisplaySchema, queueReasonSchema, queueDeliveryIntentSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { targetQueueViewSchema } from './queue-view.js';
 /** `deliveryIntent` (D2b) is the human's explicit opt-in on this one Run and target; there is no wire field for a re-attempt or delegation. */
@@ -15,8 +15,8 @@ const queueForwardExecuteSchema = queueQuerySchema.unwrap().extend({ publishDige
 export const queueExecuteSchema = z.union([queueForwardExecuteSchema,
   queueQuerySchema.unwrap().extend({ rollbackDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()]);
 export const queueRollbackSchema = queueQuerySchema.unwrap().extend({ sourceCommandId: identitySchema }).strict().readonly();
-export type QueueRollback = z.infer<typeof queueRollbackSchema>;
-export type QueueEnqueue = z.infer<typeof queueEnqueueSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type QueueRollback = z.infer<typeof queueRollbackSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type QueueEnqueue = z.infer<typeof queueEnqueueSchema>;
 export type QueueQuery = z.infer<typeof queueQuerySchema>;
 export type QueueList = z.infer<typeof queueListSchema>;
 export type QueueChallenge = z.infer<typeof queueChallengeSchema>;
@@ -28,7 +28,7 @@ export const queuePageSchema = z.strictObject({ schemaVersion: z.literal(1), rec
 export const queueConsentSchema = z.strictObject({ schemaVersion: z.literal(1), digest, capability: persistedString(z.string().min(1).max(4096)), operation: z.enum(['publish', 'adopt', 'rollback']),
   expiresAt: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), target: effectTargetRefSchema, display: targetDisplaySchema,
   items: z.array(z.strictObject({ commandId: identitySchema, from: persistedString(z.string().min(1)), to: persistedString(z.string().min(1)), candidateDigest: digest, verificationReceipt: digest, changes: z.array(z.string()) })).min(1) }).readonly();
-export const queueExecutionSchema = z.strictObject({ settledPrefix: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), items: z.array(z.strictObject({ commandId: identitySchema,
+export const queueExecutionSchema = z.strictObject({ settledPrefix: counterSchema, items: z.array(z.strictObject({ commandId: identitySchema,
   published: z.boolean(), state: z.enum(['settled', 'refused', 'unknown']), reason: queueReasonSchema.optional() })) }).readonly();
 export type QueueConsent = z.infer<typeof queueConsentSchema>;
 /** The SDK/MCP shape: inspect and list only (DESIGN §6). */

@@ -2,11 +2,10 @@
 # Builds a static, non-setuid bubblewrap inside the pinned Alpine image (driver: scripts/build-bwrap.mjs; lock: bwrap.lock.json).
 # Input (read-only): /in/bubblewrap-<version>.tar.xz (sha256 already verified by the driver against bwrap.lock.json).
 # Output: /out/<arch>/{bwrap,build-info.txt,sysroot-packages.txt}, /out/licenses/bubblewrap-COPYING, /out/host-packages.txt (the
-# resolved package sets, compared by the driver with the lock).
-# Every package comes from Alpine's signed repositories at the
-# exact version the lock names (a removed version fails the build; the lock is then updated deliberately, never silently).
+# resolved package sets; sysroot closures are compared by the driver with the lock).
+# Host tools resolve from Alpine's signed repositories; sysroot packages retain exact versions from the lock.
 set -eu
-# The driver passes direct pins and the complete resolved closures as pkg=version constraints. Empty closures are allowed only
+# The driver passes sysroot pins and complete sysroot closures as pkg=version constraints. Empty closures are allowed only
 # for the driver's initial --record; normal check mode validates all closures before running this recipe.
 version=${BWRAP_VERSION:?} epoch=${SOURCE_DATE_EPOCH:?} host_pkgs=${HOST_PACKAGES:?} sysroot_pkgs=${SYSROOT_PACKAGES:?}
 arches=${ARCHES:-x86_64 aarch64}
@@ -14,9 +13,7 @@ export SOURCE_DATE_EPOCH="$epoch" TZ=UTC LC_ALL=C
 
 # shellcheck disable=SC2086
 mkdir -p /out/apk/host
-apk add --cache-dir /out/apk/host --cache-packages --cache-predownload -q $host_pkgs ${HOST_RESOLVED_PACKAGES:-} || {
-  echo 'BWRAP_PIN_REFRESH_REQUIRED: Alpine pins unavailable; run platform verification deps-watch (CONTRIBUTING.md).' >&2; exit 1;
-}
+apk add --cache-dir /out/apk/host --cache-packages --cache-predownload -q $host_pkgs
 LLVM=/usr/lib/llvm22/bin
 mkdir -p /build && cd /build
 tar -xJf "/in/bubblewrap-$version.tar.xz"

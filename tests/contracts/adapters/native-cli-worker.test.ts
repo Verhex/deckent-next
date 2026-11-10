@@ -1,14 +1,16 @@
 import { expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
+import { ErrorRegistry } from '#platform/index.js';
+import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
 import { finalReportTextInstruction, nativeProjectionDispatch, reportLanguageInstruction } from '#adapters/core/native-connection/index.js';
 import { createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker,
   validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence, recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, createNativeWorkerEvents,
-  createNativeCliWorkerDriver, type NativeCliWorkerTransport,
+  createNativeCliWorkerDriver, executionTask, executionTaskSilenceDeadline, executionTaskHiddenPaths, type NativeCliWorkerTransport,
   type NativeCliWorkerFenceReader, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type NativeCliWorkerDriver } from '#adapters/core/native-cli-worker/index.js';
 import type { NativeAgentExecution, ToolSessionPort } from '#capabilities/index.js';
 import { sandboxObservationSchema, type SandboxRequest } from '#engine/index.js';
@@ -39,7 +41,7 @@ it('K27: native defaults use the enforcing native bound, preserve declarations a
     const declared = { schemaVersion: 1, requirements: [{ id: 'operator', kind: 'executable', target: 'operator-node' }] };
     expect(resolveNativeCliWorkerProfile(compileNativeCodingWorkInput(createNativeCodingTemplate({ ...docker, environment: declared }, call, native), workInput)).environment).toEqual(declared);
   }
-  const template = createNativeCodingTemplate(docker, invocation);
+  const template = createNativeCodingTemplate(docker, { ...invocation, provider: 'codex' });
   expect((template.parameters['docker'] as { environment: unknown }).environment).toEqual({ schemaVersion: 1,
     requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'node-heap', kind: 'node-heap', target: 'node', expect: '201326592' }] });
 });
@@ -67,8 +69,13 @@ async function prepared(f = fixture(), language?: string) {
   return { ...f, supervisor: result.supervisor };
 }
 
+/** A v1 Claude Docker template as written before alpha.64 (owner 2026-11-08: creating one is refused now; Run admission refuses it). */
+const legacyTemplate = () => { const codex = createNativeCodingTemplate(docker, { ...invocation, provider: 'codex' }), parameters = codex.parameters as { invocation: object };
+  return { ...codex, parameters: { ...parameters, invocation: { ...parameters.invocation, provider: invocation.provider } } }; };
 it('K12: v2 template freezes a separate tokenless backend; legacy v1 remains unchanged and no silent migration occurs', () => {
-  const legacy = compileNativeCodingWorkInput(createNativeCodingTemplate(docker, invocation), workInput);
+  const legacy = compileNativeCodingWorkInput(legacyTemplate(), workInput);
+  expect(() => createNativeCodingTemplate(docker, invocation)).toThrow(expect.objectContaining({ code: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' })); // no new v1 Claude template
+  for (const locale of ['en', 'tr'] as const) expect(ErrorRegistry.createError('NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE', { locale }).message).toContain('deckent coding template --connection');
   expect(legacy.adapter).toEqual({ id: 'docker', version: 2 });
   const template = createNativeCodingTemplate(docker, invocation, binding), worker = profile();
   expect(template.adapter).toEqual({ id: 'native-coding-template', version: 2 });
@@ -80,6 +87,14 @@ it('K12: v2 template freezes a separate tokenless backend; legacy v1 remains unc
   expect(() => compileNativeCodingWorkInput({ ...template, adapter: { ...template.adapter, version: 1 } }, workInput)).toThrow('NATIVE_CODING_TEMPLATE_INVALID');
   expect(() => createNativeCliWorkerProfile(legacy, { ...binding, protocolFamily: 'unavailable' })).toThrow('NATIVE_CLI_WORKER_PROFILE_INVALID');
   expect(() => createNativeCliWorkerProfile({ ...legacy, adapter: { ...legacy.adapter, version: 1 } }, binding)).toThrow();
+  // R8b (owner D1b): without Docker settings the worker template has the default limits and no image; the compiled worker resolves for admission
+  // and keeps its silence deadline, its base is stored without an image (KG7 F3: no placeholder), the Docker task validator still refuses that
+  // base, and a plain Docker template without an image is refused.
+  const imageless = compileNativeCodingWorkInput(createNativeCodingTemplate(undefined, invocation, binding), workInput), base = resolveNativeCliWorkerProfile(imageless).base;
+  expect(base.parameters).not.toHaveProperty('imageId'); expect(executionTask(imageless).options).not.toHaveProperty('imageId'); expect(executionTaskSilenceDeadline(imageless)).toBe(1200000);
+  expect(() => validateDockerTaskProfile(base)).toThrow('DOCKER_TASK_PROFILE_INVALID');
+  expect(executionTaskHiddenPaths(imageless)).toEqual(executionTaskHiddenPaths(worker)); // C2: the same pinned checkout shaping as with an image
+  expect(() => createNativeCodingTemplate(undefined, invocation)).toThrow();
 });
 it('K12: new backend refuses native discovery and unprovable helper models instead of dropping capabilities', () => {
   const repository = createNativeCodingTemplate(docker, { ...invocation, discovery: { schemaVersion: 1, mode: 'repository' } }, binding);
@@ -169,11 +184,27 @@ it('K12: each tool admission rechecks the fence and lease; a later denial is nev
     f.fence.mockResolvedValue(false);
     await expect(input.tools.propose({ ...call, id: 'second-call' }, { kind: 'claude-tool-use', toolUseId: 'second-tool', deckentCallId: 'second-call' }, new AbortController().signal))
       .rejects.toThrow('SUPERVISOR_CANCELLED');
+    expect(f.tools.revoke).toHaveBeenCalledOnce();
+    f.fence.mockResolvedValue(true);
+    await expect(input.tools.propose({ ...call, id: 'after-revocation' }, { kind: 'claude-tool-use', toolUseId: 'late-tool', deckentCallId: 'after-revocation' }, new AbortController().signal))
+      .rejects.toThrow('SUPERVISOR_CANCELLED');
     return { termination: 'confirmed', status: 'completed', text: 'one scoped call' };
   } }));
-  const p = await prepared(f); await p.supervisor.execute(request);
+  const p = await prepared(f);
+  expect(await p.supervisor.execute(request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, interrupted: true });
   expect(f.tools.propose).toHaveBeenCalledTimes(1); expect(f.tools.propose).toHaveBeenCalledWith(call, expect.anything(), expect.any(AbortSignal));
   expect(f.ports.recheck).toHaveBeenCalledTimes(4); await p.supervisor.release(request);
+  const withdrawn = fixture();
+  withdrawn.ports.driver = vi.fn(async input => ({ tools: input.tools, close: async () => {}, async run() {
+    withdrawn.ports.recheck = async () => { throw new Error('lease-revoked'); };
+    await expect(input.tools.propose(call, { kind: 'claude-tool-use', toolUseId: 'original-tool', deckentCallId: call.id }, new AbortController().signal))
+      .rejects.toThrow('lease-revoked');
+    expect(withdrawn.tools.revoke).toHaveBeenCalledOnce();
+    return { termination: 'confirmed', status: 'completed', text: 'must not succeed after revocation' };
+  } }));
+  const denied = await prepared(withdrawn);
+  expect(await denied.supervisor.execute(request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, interrupted: true });
+  expect(withdrawn.tools.propose).not.toHaveBeenCalled(); await denied.supervisor.release(request);
 });
 it('K12: cancellation aborts the same driver, closes the facade/session and keeps the first stop cause', async () => {
   const f = fixture(); let entered!: () => void;
@@ -298,15 +329,13 @@ async function transportFixture(family: string) {
     preflight: vi.fn(async () => ({ execution: seal, preflight: { executable: seal.executable, version: seal.cliVersion, flagSetDigest: seal.flagSetDigest,
       runDir: stateDir, env: {}, isolation: { launcher: '/synthetic/bwrap', version: 'synthetic' } } })),
     claudeDriver: vi.fn(options => ({ ...options.port, signal: new AbortController().signal, line() {}, finish: () => ({ kind: 'completed', text: 'answer' }) })),
-    claudeRun: vi.fn(async (_entry, _session, input) => {
-      const promptFile = join(input.runDir, 'system'), configFile = join(input.runDir, 'mcp.json');
-      await writeFile(promptFile, input.system, { flag: 'wx', mode: 0o600 }); await writeFile(configFile, input.turnToken, { flag: 'wx', mode: 0o600 });
-      return { args: [cli.command.modelFlag, input.model], promptFile, configFile, dispose: async () => undefined };
-    }), runIsolated: isolated };
+    runIsolated: isolated };
   const bridge = { turnToken: 'synthetic-turn-token', tokenEnvName: cli.bridge.tokenEnvName,
     url: `http://${cli.bridge.sentinelHost}${cli.bridge.path}` } as Parameters<NativeCliWorkerDriver['run']>[0];
   return { stateDir, input, transport, bridge, isolated };
 }
+const launchBounds = (outputBytes: number, family: string) => { const limits = nativeCliAgent(family)!.headless.limits;
+  return { outputBytes: 2 * outputBytes + limits.responseFramingBytes, stderrBytes: limits.stderrMaxBytes, maxLineBytes: limits.maxLineBytes, interruptGraceMs: limits.killGraceMs }; };
 it('K17: Claude worker transport preserves task limits and private files through the shared isolated seam', async () => {
   const f = await transportFixture('claude-code-stream-json');
   try {
@@ -317,6 +346,9 @@ it('K17: Claude worker transport preserves task limits and private files through
     expect(spawn.args).toEqual(expect.arrayContaining(['--max-turns', '3', f.input.model]));
     expect(spawn.args).not.toContain(f.bridge.turnToken); expect(spawn).not.toHaveProperty('workspace'); expect(spawn).not.toHaveProperty('inputs');
     expect(spawn.mcpConfigFile).toContain('worker-run-'); expect(bounds.timeoutMs).toBe(f.input.deadlineMs);
+    // [floor] The turn token reaches Claude through the private MCP config only; the bounds are the chat formula (KG7 F1).
+    expect(spawn.env).not.toHaveProperty(f.bridge.tokenEnvName); expect(await readFile(spawn.mcpConfigFile!, 'utf8')).toContain(f.bridge.turnToken);
+    expect(bounds).toMatchObject(launchBounds(f.input.outputBytes, 'claude-code-stream-json'));
     expect(Buffer.from(bounds.stdinBase64!, 'base64').toString()).toBe(f.input.user); expect(events.some(row => row.kind === 'session.ended')).toBe(true);
     await driver.close(); expect(await readdir(f.stateDir)).toEqual([]);
     await expect(driver.run(f.bridge, new AbortController().signal)).rejects.toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
@@ -327,9 +359,10 @@ it('K17: Codex worker uses the real K3 stream guard, token env and no invented t
   try {
     const driver = createNativeCliWorkerDriver(f.input, f.transport, new AbortController().signal);
     expect(await driver.run(f.bridge, new AbortController().signal)).toMatchObject({ termination: 'confirmed', status: 'completed', text: 'answer' });
-    const [, spawn] = f.isolated.mock.calls[0]!;
+    const [, spawn, bounds] = f.isolated.mock.calls[0]!;
     expect(spawn.env[f.bridge.tokenEnvName]).toBe(f.bridge.turnToken); expect(spawn.args.join(' ')).not.toContain(f.bridge.turnToken);
-    expect(f.transport.claudeDriver).not.toHaveBeenCalled(); expect(f.transport.claudeRun).not.toHaveBeenCalled();
+    expect(spawn.args).not.toContain('--max-turns'); expect(spawn).not.toHaveProperty('mcpConfigFile'); expect(bounds).toMatchObject(launchBounds(f.input.outputBytes, 'codex-jsonl'));
+    expect(f.transport.claudeDriver).not.toHaveBeenCalled(); expect(spawn.promptFile).toContain('worker-run-');
     await driver.close(); expect(await readdir(f.stateDir)).toEqual([]);
     expect(() => createNativeCliWorkerDriver({ ...f.input, maxTurns: 3 }, f.transport, new AbortController().signal)).toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
@@ -385,9 +418,11 @@ it('K22: guard rejection is a terminal negative; corrupted, linked and writable 
     expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_PLUGIN_UNEXPECTED' }); expect(f.run).toHaveBeenCalledOnce();
     const record = await readFileText(path);
     await chmod(path, 0o666); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await chmod(path, 0o600);
-    await link(path, join(state, 'hardlink')); await expect(file.read()).rejects.toThrow(); await unlink(join(state, 'hardlink'));
+    await link(path, join(state, 'hardlink')); await expect(file.read()).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await unlink(join(state, 'hardlink'));
     await unlink(path); await symlink(join(state, 'absent'), path); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await unlink(path);
-    await writeFile(path, 'x'.repeat(8193), { mode: 0o600 }); await expect(file.read()).rejects.toThrow();
+    await writeFile(path, 'x'.repeat(8193), { mode: 0o600 }); await expect(file.read()).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
+    // Owner B2-11: an unsafe evidence directory refuses the claim with the typed F08 reason, not a bare error.
+    await chmod(state, 0o755); await expect(file.claim()).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' }); await chmod(state, 0o700);
     await writeFile(path, '{', { mode: 0o600 }); await expect(readNativeWorkerEvidence(file, target)).rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
     await writeFile(path, record, { mode: 0o600 }); expect(await file.read()).toMatchObject({ verdict: { state: 'refused' } });
   } finally { await rm(root, { recursive: true, force: true }); }

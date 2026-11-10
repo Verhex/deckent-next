@@ -1,11 +1,12 @@
+import { isCodedError } from '#platform/index.js';
 import { relocateConfiguredProjectAttachment } from '#composition/core/attachment-lifecycle/index.js';
 import { applyConfiguredProviderSpendTemplate } from '#composition/core/provider-spend/index.js';
-import { configuredModelProfiles, inspectModelUsePreparation } from '#composition/core/model-use/index.js';
-import { modelInvocationBillingAxis, ProjectAttachmentApplication } from '#engine/index.js';
+import { inspectModelUsePreparation } from '#composition/core/model-use/index.js';
+import { configuredInvocationProfiles, modelInvocationBillingAxis, ProjectAttachmentApplication } from '#engine/index.js';
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { localProjectAttachmentPorts, readAttachmentBootstrapConfig, withSideEffectFreeSqliteReads } from '#adapters/index.js';
+import { localProjectAttachmentPorts, prepareAttachmentDirectory, readAttachmentBootstrapConfig, withSideEffectFreeSqliteReads } from '#adapters/index.js';
 import { projectAttachmentCommandSchema } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { applyPolicyTemplateInstallation } from './policy-template.js';
@@ -18,12 +19,19 @@ export async function configuredProjectAttachment(root: string, options: ConfigL
     source: (root, scope, actor) => inspectConfiguredInstallationSource(root, scope, actor, options),
     install: (attachment, identity) => applyPolicyTemplateInstallation(root, attachment.scopeId, options, { attachment, identity }) });
 }
-export async function executeConfiguredProjectAttachment(root: string, input: unknown, options: ConfigLoadOptions = {}) {
-  const command = projectAttachmentCommandSchema.parse(input), app = await configuredProjectAttachment(root, options);
+/** Optional interaction belongs only to the trusted local CLI; SDK/MCP callers have no repair answer port. */
+export async function prepareConfiguredAttachmentDirectory(root: string, options: ConfigLoadOptions, confirm?: (path: string) => Promise<boolean>) {
+  const config = await loadComposedConfig(root, { ...options, globalOnly: true, heal: false, force: true }), store = configuredAttachmentStore(config, options);
+  return prepareAttachmentDirectory(root, localProjectAttachmentPorts(config, options, store).authorize, confirm);
+}
+export async function executeConfiguredProjectAttachment(root: string, input: unknown, options: ConfigLoadOptions = {}, confirm?: (path: string) => Promise<boolean>) {
+  const command = projectAttachmentCommandSchema.parse(input);
+  if (confirm && ['preview', 'offer', 'apply', 'register-preview', 'register'].includes(command.action)) await prepareConfiguredAttachmentDirectory(root, options, confirm);
+  const app = await configuredProjectAttachment(root, options);
   const complete = async (result: Awaited<ReturnType<typeof app.apply>>) => {
       const modelLease = await grantConfiguredModelUse(root, result.attachment.scopeId, options, result.preparation?.digest);
       const config = await loadComposedConfig(root, options), registration = await configuredAttachmentStore(config, options).registration();
-      const metered = configuredModelProfiles(config).some(profile => profile.scopeId === result.attachment.scopeId && modelInvocationBillingAxis(profile) === 'metered');
+      const metered = configuredInvocationProfiles(config).some(profile => profile.scopeId === result.attachment.scopeId && modelInvocationBillingAxis(profile) === 'metered');
       const budget = metered && registration ? await applyConfiguredProviderSpendTemplate(root, result.attachment.scopeId,
         { root: registration.source.projectRoot, scopeId: registration.source.scopeId }, options) : { status: 'not-metered' };
       return { ...result, modelLease, budget }; };
@@ -49,5 +57,5 @@ export async function registerFreshInstallation(root: string, scopeId: string, o
     const app = await configuredProjectAttachment(root, options), preview = await app.registrationPreview(root, scopeId);
     await app.register(root, scopeId, preview.planDigest);
     return { status: 'registered' as const };
-  } catch (error) { if ((error as { code?: unknown }).code === 'AUTHORITY_WITNESS_REQUIRED') return { status: 'witness-required' as const }; throw error; }
+  } catch (error) { if (isCodedError(error, 'AUTHORITY_WITNESS_REQUIRED')) return { status: 'witness-required' as const }; throw error; }
 }

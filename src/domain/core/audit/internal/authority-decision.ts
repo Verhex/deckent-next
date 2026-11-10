@@ -9,7 +9,7 @@ export const authorityDecisionSubjectSchema = z.strictObject({ kind: z.literal('
   verdict: z.strictObject({ decision: z.enum(['allow', 'deny', 'require-approval']), revision: identitySchema,
     reason: z.enum(['GRANTED', 'NO_GRANT', 'DENIED', 'SCOPE', 'APPROVAL_REQUIRED', 'AI_NON_DELEGABLE']), ruleId: identitySchema.optional() }),
 }).readonly();
-export const authorityDecisionReferenceSchema = z.strictObject({ eventId: identitySchema, sequence: counterSchema.positive() }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const authorityDecisionReferenceSchema = z.strictObject({ eventId: identitySchema, sequence: counterSchema.positive() }).readonly();
 /** The effect pins both the immutable decision and the exact approval receipt it consumed, if required. */
 export const authorityAdmissionSchema = z.strictObject({ decision: authorityDecisionReferenceSchema,
   approval: z.strictObject({ approvalId: identitySchema, actionDigest: digest, requestDigest: digest, commandId: identitySchema }).readonly().optional(),

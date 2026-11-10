@@ -45,9 +45,11 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
     inputHistory: { load: async () => [], append: entry => { history.push(entry.text); } }, doPlan: { ...words,
       async plan(intent, id) { plans.push({ intent, id }); return decision ? { ...pending, run: decision === 'allow' ? run : null,
         proposal: { ...pending.proposal, status: decision === 'allow' ? 'accepted' : 'rejected', approval: null } } : pending; },
-      lines: result => brainProposalLines(result, 'en'), cardLines: result => brainProposalCardLines(result, 'en') } }); mounted.push(view);
+      lines: result => brainProposalLines(result, 'en'), cardLines: result => brainProposalCardLines(result, 'en'), dirty: { check: async () => 'STARTS FROM LAST COMMIT', title: 'UNCOMMITTED' } } }); mounted.push(view);
   await settle(40); view.stdin.write('/do Prepare purchase api_key=sk-fixture\r');
   await until(() => view.stdout.frame.includes('Durable business evidence'), 'actual approval preview');
+  // Lead 2026-11-09: uncommitted changes are one line on the Run card itself (planned at once, no card before it).
+  expect(view.stdout.frame).toContain('UNCOMMITTED. STARTS FROM LAST COMMIT');
   expect(decisions).toEqual([]); expect(plans).toHaveLength(1); expect(plans[0]!.intent).toBe('Prepare purchase api_key=[REDACTED]');
   expect(history).toEqual(['/do Prepare purchase api_key=[REDACTED]']);
   // R9f: the card's preview adds only what its summary does not say (criteria here); budget, scope and the plan header stay out.
@@ -142,6 +144,14 @@ it('A62: host permission is rechecked before local execution; a model-less norma
   expect(opened).toEqual([]); expect(view.stdout.text).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(asked).toHaveLength(1);
   await until(() => /> ?Hello model/u.test(view.stdout.frame), 'draft retained');
 });
+it('H3-R: a turn refused because the service is absent starts it once and sends the line again; a second refusal is shown, not retried', async () => {
+  let starts = 0; const asked: string[] = [];
+  const view = mountWorkline({ ...windowLabels, startService: async () => { starts++; return 'SERVICE STARTED'; },
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); throw new DeckentError('LOCAL_RUNTIME_UNAVAILABLE', 'SERVICE ABSENT'); } }); mounted.push(view);
+  await settle(40); view.stdin.write('Hello there\r'); await until(() => view.stdout.text.includes('SERVICE STARTED'), 'service started');
+  await until(() => asked.length === 2, 'line sent again'); await until(() => view.stdout.text.includes('SERVICE ABSENT'), 'second refusal shown');
+  expect(starts).toBe(1); expect(asked).toEqual(['Hello there', 'Hello there']);
+});
 // alpha.60 B, owner 2026-10-31 rule (b): setup is prepared after the frame; its waiting card opens by itself only while the person has typed nothing.
 // Typed-ahead keys never answer it: one line names the waiting steps and the keys stay the draft.
 // Astra 2858 B-R2: the condition holds across the input hand-over — a key that arrives after the opening resolved (the hand-over gap), input
@@ -174,15 +184,36 @@ it('BeUser M-07: a plan rejected because no worker can run it shows its refusal 
   expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?');
 });
 
-it('BeUser M-32: with uncommitted changes and workers set up, /do asks first (Continue / Cancel, Esc = Cancel); Deckent commits nothing', async () => {
-  const plans: string[] = [];
-  const dirty = { check: async () => 'STARTS FROM LAST COMMIT', title: 'UNCOMMITTED', go: 'CONTINUE-ROW', cancel: 'CANCEL-ROW', prompt: 'choose', cancelled: 'NOT STARTED' };
-  const view = mountWorkline({ ...windowLabels, doPlan: { ...words, dirty, lines: () => ['PLANNED'], plan: async intent => { plans.push(intent); throw new DeckentError('MODEL_NOT_ACTIVATED', 'x'); } } }); mounted.push(view);
-  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('UNCOMMITTED'), 'card');
-  expect(view.stdout.frame).toContain('STARTS FROM LAST COMMIT'); view.stdin.write('\u001b'); await until(() => view.stdout.text.includes('NOT STARTED'), 'cancelled');
-  expect(plans).toEqual([]);
-  view.stdin.write('/do Second\r'); await until(() => view.stdout.frame.includes('CONTINUE-ROW'), 'card again'); await settle(40); view.stdin.write('\r');
-  await until(() => plans.length === 1, 'planned'); expect(plans).toEqual(['Second']);
+it('BeUser M-32 + alpha.64 B (v31): a chat turn\'s propose_work shows /do\'s quota wait, its one Run card carries /do\'s uncommitted-changes line, and its admitted Run goes to /tasks', async () => {
+  // Lead 2026-11-09: the uncommitted-changes text is one line on the one Run card (no card of its own), for /do (the y/n test above) and the chat AI alike.
+  const dirty = { check: async () => 'STARTS FROM LAST COMMIT', title: 'UNCOMMITTED' }, plans: string[] = [], decided: string[] = [];
+  let waited!: () => void, answered!: () => void; const wait = new Promise<void>(resolve => { waited = resolve; }), answer = new Promise<void>(resolve => { answered = resolve; });
+  const streamTurn = async function* () {
+    yield { kind: 'tool' as const, phase: 'started' as const, callId: 'w1', name: 'propose_work', target: null, status: null, ms: null };
+    yield { kind: 'work' as const, callId: 'w1', phase: 'planning' as const, attempt: 1 };
+    yield { kind: 'work' as const, callId: 'w1', phase: 'quota-wait' as const, untilMs: Date.now() + 60_000, attempt: 2, maxAttempts: 3 };
+    await wait;
+    yield { kind: 'work' as const, callId: 'w1', phase: 'planning' as const, attempt: 2 };
+    yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'w1', approvalId: 'run-card', revision: 0, summary: 'Plan · tasks: 1', preview: 'Proposed by the AI in this conversation; you decide.',
+      expiresAt: Date.now() + 600_000, tool: 'propose_work', target: null };
+    await answer;
+    yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'w1', approvalId: 'run-card', outcome: 'allow' as const };
+    yield { kind: 'work' as const, callId: 'w1', phase: 'admitted' as const, runId: 'r' };
+    yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'w1', name: 'propose_work', target: null, status: 'ok' as const, ms: 5 };
+    yield { kind: 'done' as const, finish: 'stop' as const };
+  };
+  const ledger = { scopeId: 's', workerHeartbeatMs: 60_000, listRunIds: async () => ['r'], inspectRun: async () => run, listWorkers: async () => ({ schemaVersion: 1, scopeId: 's', observedAt: Date.now(), sources: [] }),
+    listApprovalPage: async () => ({ items: [], nextAfter: null }),
+    decideApproval: async (target: { approvalId: string }, decision: string) => { decided.push(`${target.approvalId}:${decision}`); answered(); return { ...target, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided', decision, expiresAt: 0 }; } };
+  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work: workSurfaceLabels('en') }, ledger: ledger as never, pollMs: 60_000, streamTurn: streamTurn as never,
+    doPlan: { ...words, dirty, quotaWait: progress => ({ body: `WAITING ${progress.attempt}/${progress.maxAttempts}`, hint: 'Esc cancel', untilText: 'soon' }), lines: () => ['PLANNED'],
+      plan: async intent => { plans.push(intent); throw new DeckentError('MODEL_NOT_ACTIVATED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('add a third line\r');
+  await until(() => view.stdout.frame.includes('WAITING 2/3'), 'the /do quota wait window'); waited();
+  await until(() => view.stdout.frame.includes('UNCOMMITTED. STARTS FROM LAST COMMIT'), 'the line on the one Run card');
+  expect(view.stdout.frame).toContain('Proposed by the AI'); expect(view.stdout.frame).not.toContain('WAITING 2/3');
+  await settle(40); view.stdin.write('y'); await until(() => decided.length === 1, 'decided'); expect(decided).toEqual(['run-card:allow']);
+  await until(() => view.stdout.frame.includes('Watching'), 'the admitted Run handed to /tasks'); expect(plans).toEqual([]); // the chat path never runs /do's own plan
 });
 
 it('RC-C1: a company/pool stop during the model preflight cancels before the local turn', async () => {

@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { isAbsolute } from 'node:path';
 import { identitySchema } from '#domain/index.js';
 import { DockerCommandFailure, runNodeDockerCommand, type DockerCommandOutput, type DockerCommandRunner } from './command.js';
@@ -6,22 +7,22 @@ import { dockerEndpointSchema } from './profile.js';
 const imageDigest = /^sha256:[a-f0-9]{64}$/;
 const boundedPositive = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 0x7fffffff;
 
-export type DockerImageProbeErrorCode = 'DOCKER_IMAGE_PROBE_INVALID' | 'DOCKER_IMAGE_PROBE_UNAVAILABLE' | 'DOCKER_IMAGE_PROBE_CHANGED';
+type DockerImageProbeErrorCode = 'DOCKER_IMAGE_PROBE_INVALID' | 'DOCKER_IMAGE_PROBE_UNAVAILABLE' | 'DOCKER_IMAGE_PROBE_CHANGED';
 /** E1: the bounded kind of the failed step behind UNAVAILABLE — its own deadline, a non-zero exit, a caller's stop, or an answer that could
  * not be read as the exact expected value. Absent when the failure is unclassified (never a guess); Docker's own text never leaves. */
-export type DockerImageProbeCause = 'deadline' | 'exit' | 'signal' | 'parse';
-export class DockerImageProbeError extends Error {
-  constructor(readonly code: DockerImageProbeErrorCode, readonly probeCause?: DockerImageProbeCause) { super(code); this.name = 'DockerImageProbeError'; }
+type DockerImageProbeCause = 'deadline' | 'exit' | 'signal' | 'parse';
+export class DockerImageProbeError extends CodedError {
+  constructor(override readonly code: DockerImageProbeErrorCode, readonly probeCause?: DockerImageProbeCause) { super(code); this.name = 'DockerImageProbeError'; }
 }
 const commandCause = (error: unknown): DockerImageProbeCause | undefined =>
   error instanceof DockerCommandFailure ? error.stop ?? (typeof error.code === 'number' ? 'exit' : undefined) : undefined;
-export interface DockerImageAvailabilityProbeInput {
+interface DockerImageAvailabilityProbeInput {
   readonly executable: string;
   readonly timeoutMs: number;
   readonly outputBytes: number;
   readonly imageId: string;
 }
-export interface DockerImageAvailability {
+interface DockerImageAvailability {
   readonly endpoint: string;
   readonly daemonId: string;
   readonly imageId: string;
@@ -60,8 +61,8 @@ export async function probeDockerImageAvailability(input: unknown,
   return Object.freeze({ endpoint, daemonId: before, imageId: input.imageId, status: 'locally-available' });
 }
 /** `partial`: the time limit cut the inspects short; an id the daemon does not have is left out without it. */
-export type DockerImageSet = Readonly<{ imageIds: readonly string[]; partial: boolean }>;
-export interface DockerImageSetProbeInput extends Omit<DockerImageAvailabilityProbeInput, 'imageId'> {
+type DockerImageSet = Readonly<{ imageIds: readonly string[]; partial: boolean }>;
+interface DockerImageSetProbeInput extends Omit<DockerImageAvailabilityProbeInput, 'imageId'> {
   readonly imageIds: readonly string[]; readonly chunkSize: number; readonly processes: number;
   /** The least time kept for the daemon-id check after the inspects, also when the first read was near-instant (CONFIG-PARTIAL-CLI finding). */
   readonly minAfterCheckMs?: number;

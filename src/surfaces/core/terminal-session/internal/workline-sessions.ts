@@ -50,7 +50,7 @@ const BAR_CELLS = 20;
  * `/context` as a window (SW-1): the window fill with a bar and a chip, where the runtime summarizes by itself, what fills it (a size
  * estimate of the client-visible history, as a table), the summaries so far and the suggestion — the same facts as the text view.
  */
-export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | null; history: readonly AgentChatMessage[]; compaction: ContextCompaction | null }>,
+function contextInfoModel(input: Readonly<{ measured: ContextMeasure | null; history: readonly AgentChatMessage[]; compaction: ContextCompaction | null }>,
   labels: ContextInfoLabels, view: ContextViewLabels | undefined, ascii = false): InfoWindowModel {
   const { measured, compaction } = input, parts = contextBreakdown(input.history);
   const count = input.history.filter(message => message.role !== 'system').length;

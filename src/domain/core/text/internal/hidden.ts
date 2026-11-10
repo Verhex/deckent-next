@@ -3,9 +3,9 @@
  * Callers assemble complete text before classification and keep raw custody/digests separately.
  */
 export type HiddenTextContext = 'exact' | 'prose';
-export type HiddenTextCategory = 'bidi-control' | 'default-ignorable';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HiddenTextCategory = 'bidi-control' | 'default-ignorable';
 type SourceSpan = { readonly source: string; readonly start: number; readonly end: number };
-export type HiddenTextToken =
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HiddenTextToken =
   | (SourceSpan & { readonly kind: 'text' })
   | (SourceSpan & { readonly kind: 'marker'; readonly codePoint: number; readonly category: HiddenTextCategory });
 export type HiddenTextClassification = { readonly tokens: readonly HiddenTextToken[]; readonly hiddenCount: number };

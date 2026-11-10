@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { t, type Locale } from '#platform/index.js';
 import type { BeuserLimits, BeuserReport } from '#engine/index.js';
 import { Window, QuestionWindow } from '#surfaces/core/terminal-window/index.js';
-import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
+import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { panelWindowLines, PickerWindow, type ConfigPanelOutcome, type PanelLabels, type PanelNotice, type PanelLine } from '#surfaces/core/terminal-panels/index.js';
 
 type Model = { readonly channelId: string; readonly modelId: string };
@@ -13,11 +13,11 @@ export interface BeuserMonitorView {
   readonly report: BeuserReport | null;
 }
 export type BeuserLimitKey = 'maxWallMs' | 'maxReruns' | 'maxSteps' | 'maxCost';
-export interface BeuserLimitConfig {
+interface BeuserLimitConfig {
   readonly root: string; readonly expect: string | null; readonly values: Readonly<Record<BeuserLimitKey, number>>;
   readonly currency: string; readonly source: 'code' | 'config'; readonly revision: string; readonly presets: readonly { readonly key: BeuserLimitKey; readonly value: number }[];
 }
-export interface BeuserPanelSource {
+interface BeuserPanelSource {
   inspect(): Promise<BeuserMonitorView | null>;
   limitConfig?(): Promise<BeuserLimitConfig | null>;
   writeLimit?(key: BeuserLimitKey, value: number, expect: string | null): Promise<ConfigPanelOutcome>;
@@ -46,7 +46,7 @@ type Actions = { readonly labels: PanelLabels; readonly push: (notices: readonly
   readonly openApproval: (approvalId: string) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void };
 type Selection = { readonly key: BeuserLimitKey; readonly value: number };
 /** Snapshot projection; Esc closes only this window. Limit changes leave it for presets, preview and an armed person card. */
-export function BeuserPanel({ source, locale, labels, push, openApproval, onError, onClose }: Actions & { readonly source: BeuserPanelSource; readonly locale: Locale }) {
+function BeuserPanel({ source, locale, labels, push, openApproval, onError, onClose }: Actions & { readonly source: BeuserPanelSource; readonly locale: Locale }) {
   const known = useHumanTextSecrets(), exits = useRef({ onError, onClose }); exits.current = { onError, onClose };
   const [lines, setLines] = useState<PanelLine[]>([{ label: '', text: labels.loading }]);
   const [settings, setSettings] = useState<BeuserLimitConfig | null>(null), busy = useRef(false);

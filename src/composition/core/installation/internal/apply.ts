@@ -1,12 +1,12 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
+import { persistedString, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, isCodedError, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { attestLocalInteractiveTerminal, ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, localPrincipalChannel, withInstallationJournal } from '#adapters/index.js';
-import { immutableJsonObjectSchema } from '#domain/index.js';
+import { counterSchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { assertAuthorityWitness, InstallationPublicationApplication, InstallationPublicationError, suppliedPolicyWithinTemplate, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
@@ -14,7 +14,7 @@ import { installationPublicationPorts } from './publication.js';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 const choicesSchema = z.strictObject({ allowShutdown: z.boolean(), dockerExecutable: persistedString(z.string().min(1)).refine(isAbsolute),
   proposalDigest: z.string().regex(/^[a-f0-9]{64}$/), acceptCustom: z.literal(true) }).readonly();
-export type InstallationApplyChoices = z.infer<typeof choicesSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InstallationApplyChoices = z.infer<typeof choicesSchema>;
 function choices(input: unknown): InstallationApplyChoices {
   const safe = immutableJsonObjectSchema.safeParse(input), parsed = safe.success ? choicesSchema.safeParse(safe.data) : null;
   if (!parsed?.success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
@@ -25,7 +25,7 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
   // Structural read only: the engine cross-validates recovery against preparation and current identity before publication.
   const schema = z.looseObject({ material: z.looseObject({ authoredProfile: immutableJsonObjectSchema,
     configuration: immutableJsonObjectSchema, allowShutdown: z.boolean() }),
-    consent: z.looseObject({ id: persistedString(z.string().min(1)), atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
+    consent: z.looseObject({ id: persistedString(z.string().min(1)), atMs: counterSchema }) });
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }
@@ -35,7 +35,7 @@ export async function assertConfiguredInstallationIdentity(projectRoot: string, 
   try {
     if (publicationGuarded && (await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
     await loadConfiguredInstallationIdentity(projectRoot, { ...options, pendingBootstrap: 'config-settled' });
-  } catch (error) { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; }
+  } catch (error) { if (!publicationGuarded || !isCodedError(error, 'CONFIG_VALIDATION')) throw error; }
 }
 /** Settled binding settings, or defaults while config publication is pending. */
 export async function configuredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}) {

@@ -11,7 +11,7 @@ export const modelInvocationCancellationCommandSchema = z.strictObject({ schemaV
   scopeId: identitySchema, targetCommandId: identitySchema, reference: modelReferenceSchema,
   expectedRequestDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly();
 export const modelInvocationCancellationCommandInputSchema = envelope.pipe(modelInvocationCancellationCommandSchema);
-export const modelInvocationCancellationReceiptSchema = z.strictObject({ schemaVersion: z.literal(1),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationCancellationReceiptSchema = z.strictObject({ schemaVersion: z.literal(1),
   command: modelInvocationCancellationCommandSchema, claim: modelInvocationClaimSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, requestedAtMs: counterSchema,
   disposition: z.enum(['prevented', 'requested', 'already-terminal']),
@@ -21,14 +21,14 @@ export const modelInvocationCancellationReceiptSchema = z.strictObject({ schemaV
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_CANCELLATION_TARGET_INVALID' });
   }
 }).readonly();
-/** Permission is an ambiguity boundary, never proof that the remote provider accepted or stopped work. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Permission is an ambiguity boundary, never proof that the remote provider accepted or stopped work. */
 export const modelInvocationSendStateSchema = z.discriminatedUnion('state', [
   z.strictObject({ state: z.literal('pending') }),
   z.strictObject({ state: z.literal('permitted'), ownerId: identitySchema, permittedAtMs: counterSchema }),
   z.strictObject({ state: z.literal('prevented') }),
   z.strictObject({ state: z.literal('unobserved') }),
 ]).readonly();
-export const modelInvocationControlRecordSchema = z.strictObject({ schemaVersion: z.literal(1), claim: modelInvocationClaimSchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelInvocationControlRecordSchema = z.strictObject({ schemaVersion: z.literal(1), claim: modelInvocationClaimSchema,
   reference: modelReferenceSchema, send: modelInvocationSendStateSchema, cancellation: modelInvocationCancellationReceiptSchema.nullable(),
 }).superRefine((record, context) => {
   const cancellation = record.cancellation;

@@ -1,4 +1,4 @@
-export type InferenceMetricsEndpoint = Readonly<
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type InferenceMetricsEndpoint = Readonly<
   { ok: true; url: string } | { ok: false; code: 'INFERENCE_METRICS_HOST_DENIED' | 'INFERENCE_METRICS_URL_INVALID' }
 >;
 

@@ -60,7 +60,8 @@ export class HubClientApplication {
       || this.deps.catalog.now() >= state.feed.nextRefreshBy || this.deps.catalog.now() - state.feed.issuedAtMs >= HUB_LIMITS.feedMaxAgeMs;
     let failure: unknown;
     if (due && this.deps.fetchRevocations) {
-      const bounded = AbortSignal.any([signal, AbortSignal.timeout(HUB_LIMITS.fetchTimeoutMs)]);
+      const lifetime = new AbortController();
+      const bounded = AbortSignal.any([signal, AbortSignal.timeout(HUB_LIMITS.fetchTimeoutMs), lifetime.signal]);
       try {
         let current = state.feed;
         while (true) {
@@ -78,6 +79,7 @@ export class HubClientApplication {
         }
       }
       catch (error) { failure = error; }
+      finally { lifetime.abort(); }
       signal.throwIfAborted();
     }
     const result = await this.write('refresh', command, credential, async (store, principal) => {

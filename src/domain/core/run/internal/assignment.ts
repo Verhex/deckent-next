@@ -7,7 +7,7 @@ import limits from './work-class-limits.json' with { type: 'json' };
 const reasonSchema = z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/);
 export const assignmentPolicyReferenceSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly();
 export const assignmentEffortSourceSchema = z.enum(['candidate', 'catalog', 'cli-default']);
-export const workerAssignmentSkipSchema = z.strictObject({ index: counterSchema, channelId: identitySchema, modelId: exactModelIdSchema, reason: reasonSchema }).readonly();
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const workerAssignmentSkipSchema = z.strictObject({ index: counterSchema, channelId: identitySchema, modelId: exactModelIdSchema, reason: reasonSchema }).readonly();
 /**
  * ATAMA-1 seal (owner ASS1, A1, A5): how the system chose a task's worker when the work input left the model open. Frozen with the Run next to
  * the compiled profile, whose pin stays the execution truth; this record is the audit of the choice: the WorkClass and its policy revision, the

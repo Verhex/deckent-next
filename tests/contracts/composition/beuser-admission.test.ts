@@ -12,7 +12,7 @@ import { BeuserRealmApplication } from '#engine/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { admitConfiguredBeuserWalk, readConfiguredBeuserReport, inspectConfiguredBeuserMonitor, validateBeuserSupervisorProfile } from '#composition/core/beuser/index.js';
 import { reserveConfiguredRunTasks, inspectConfiguredPoolCapacity } from '#composition/core/runs/index.js';
-import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { measureInstalledPackage, beuserPrivateRecord } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, beuserEvaluatorFor, createBeuserReport } from '#engine/index.js';
 import { sha256, clearConfigCache, prepareProductDirectory, withConfigWriteLock } from '#platform/index.js';

@@ -20,4 +20,4 @@ export { releaseConfiguredQuota } from './internal/pool-hold.js';
 export { inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from './internal/worker-instructions.js';
 export { createRecordedCancellationDelivery } from './internal/cancellation-runtime.js';
 
-export { nativeWorkerAdmission, resolveNativeWorkerUse, recheckNativeWorkerUse, assertNativeWorkerReservation } from './internal/native-worker.js';
+export { nativeWorkerAdmission, resolveNativeWorkerUse, recheckNativeWorkerUse, assertNativeWorkerReservation, type NativeWorkerUse } from './internal/native-worker.js';

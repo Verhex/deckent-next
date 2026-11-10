@@ -4,14 +4,12 @@ import { ConfigApplication, ConfigApplicationError, ConfigChangeApprovalBroker, 
 import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
 import { attestLocalInteractiveTerminal, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
   resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
-import { resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { isCodedError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { configuredMemoryRolloutPrecondition } from '#composition/core/memory-rollout/index.js';
 export async function resolveConfiguredConfigPrincipal(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<VerifiedPrincipal> {
   return (await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write')).principal;
 }
-/** `guard` runs on the snapshot taken under the layer's write lock, immediately before the change is planned: it may refuse the write (throw) when
- * something outside the written layer changed what the write was derived from. */
 /** Layer documents and the layer digest from one read per file (the value and its digest always come from the same bytes). */
 export function snapshotConfiguredConfig(projectRoot: string, options: ConfigLoadOptions = {}, layer: 'project' | 'global' = 'project') {
   composeCore(); return createConfigFileDocuments(projectRoot, options).snapshot(layer);
@@ -27,6 +25,8 @@ export function configPersonWitness(witness: AuthorityWitness = { attest: () => 
 export function assertConfiguredConfigWitness(action: 'set' | 'unset', keyPath: string, witness?: AuthorityWitness): Promise<void> {
   return assertConfigPersonWitness(action, keyPath, configPersonWitness(witness));
 }
+/** `guard` runs on the snapshot taken under the layer's write lock, immediately before the change is planned: it may refuse the write (throw) when
+ * something outside the written layer changed what the write was derived from. */
 export function createConfiguredConfigApplication(projectRoot: string, options: ConfigLoadOptions = {}, guard?: (snapshot: ConfigSnapshot) => void,
   witness?: AuthorityWitness) {
   composeCore();
@@ -35,6 +35,7 @@ export function createConfiguredConfigApplication(projectRoot: string, options: 
   const load = (scopeId: string) => loadConfiguredScopeContext(projectRoot, scopeId, { ...options, force: true, heal: false }, 'write');
   // S4B-7: the protected memory live switches are written only when their measured rollout criteria hold (every write path builds this app).
   return new ConfigApplication(guarded, { ...createConfigFileAuthority(load), approvals: configuredConfigApprovals(load, options),
+    async audit(event) { await withScopeAudit(await load(event.scopeId), audit => { audit.record(event); }); },
     precondition: configuredMemoryRolloutPrecondition(projectRoot, options), witness: configPersonWitness(witness) });
 }
 
@@ -61,10 +62,10 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
       const context = await load(inputs[0]!.scopeId);
       return inputs.map(input => {
         try { const decided = evaluateConfigWrite(context.document, context.principal, input); return { decision: decided.decision, ruleId: decided.ruleId }; }
-        catch (error) { if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: error instanceof ConfigApplicationError && typeof error.params?.['ruleId'] === 'string' ? error.params['ruleId'] : null }; throw error; }
+        catch (error) { if (isCodedError(error, 'POLICY_DENIED')) return { decision: 'deny' as const, ruleId: error instanceof ConfigApplicationError && typeof error.params?.['ruleId'] === 'string' ? error.params['ruleId'] : null }; throw error; }
       });
     },
-    async admit(input, subject, authorization) {
+    async admit(input, subject, authorization, personDecision) {
       const context = await load(input.scopeId), { config, layout, principal } = context;
       // A producer of approvals (like Run reservation and the agent turn): the integrity key is created on first use.
       const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
@@ -73,7 +74,7 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
         const locale = resolveLocale(undefined, options.env ?? process.env, config.language);
         return new ConfigChangeApprovalBroker(journal.store, integrity, new SystemTrustedClock(), { requestTtlMs: config.approvals.requestTtlMs, admitWithinMs: config.approvals.requestTtlMs })
           .admit({ scopeId: input.scopeId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, subject, policy: context.document,
-            policyRevision: authorization.revision, summary: configChangeSummary(subject, locale) });
+            policyRevision: authorization.revision, summary: configChangeSummary(subject, locale), ...(personDecision ? { personDecision } : {}) });
       } finally { journal.close(); }
     },
   };

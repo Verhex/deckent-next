@@ -5,10 +5,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { targetQueueViewSchema, type QueueConsent, type EffectConfirmationView, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, deliveredTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
-  type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
+import { deliveryLines, shellWord } from '#surfaces/core/terminal-delivery/index.js';
+import { awaitingDeliveryTargets, deliveredTargets, consentMatches, patchDiffs, terminalDeliveryPort, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview,
+  type TerminalDeliveryPort, type VerificationCandidate } from '#surfaces/core/delivery-port/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { patchDiffs, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
@@ -153,6 +153,16 @@ describe('delivery window — pure rules', () => {
     const changes = [{ path: 'a', before: 'x', after: 'y' }];
     expect(consentMatches({ ...consent, changes }, { ...view, changes })).toBe(true);
     expect(consentMatches({ ...consent, changes }, { ...view, changes: [{ path: 'a', before: 'x', after: 'z' }] })).toBe(false);
+    // B2-9: an old consent without digests needs a fresh yes for a card that carries them.
+    expect(consentMatches(consent, { ...view, changes })).toBe(false);
+    expect(consentMatches({ ...consent, changes }, view)).toBe(false);
+    expect(consentMatches(consent, { ...view, changes: [] })).toBe(false);
+    expect(consentMatches({ ...consent, changes: [] }, { ...view, changes: [] })).toBe(true);
+    const ordered = [{ path: 'a', before: null, after: 'y' }, { path: 'b', before: 'x', after: null }];
+    expect(consentMatches({ ...consent, changes: ordered }, { ...view, changes: ordered.map(({ path, before, after }) => ({ after, path, before })) })).toBe(true);
+    for (const asked of [ordered.toReversed(), ordered.slice(1), [{ ...ordered[0]!, path: 'other' }, ordered[1]!],
+      [{ ...ordered[0]!, before: 'x' }, ordered[1]!], [ordered[0]!, { ...ordered[1]!, after: 'y' }]])
+      expect(consentMatches({ ...consent, changes: ordered }, { ...view, changes: asked })).toBe(false);
   });
 });
 
@@ -705,12 +715,21 @@ describe('bounded per-file diffs (cli-terminal port)', () => {
     writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
       logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: [] } } }));
     const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 3 };
+    let unreadable = false, sourceVersion = 2;
     const handlers = { inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),
-      previewWorkspacePatch: async () => ({ patch: { changes: [change('a.txt', 'x\n', 'y\n')] } }),
+      previewWorkspacePatch: async () => { if (unreadable) throw ErrorRegistry.createError('PATCH_CORRUPT');
+        return { patch: { source: { schemaVersion: 1, adapter: { id: 'git', version: sourceVersion } }, changes: [change('a.txt', 'x\n', 'y\n')] } }; },
       checkWorkspaceIntegration: async () => ({ observation: { source: 'SRC', head: BASE }, proposal: 'PROP', scope: { status: 'in-scope' } }),
       prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: render, interactiveDelivery: () => ({}) };
-    const preview = await terminalDeliveryPort(root, handlers as never, { env: homeEnv(join(root, 'home')) })!.preview({ scopeId: 's', runId: 'r', taskId: 'task', key: 'k', title: 't' });
+    const subject = terminalDeliveryPort(root, handlers as never, { env: homeEnv(join(root, 'home')) })!;
+    const target = { scopeId: 's', runId: 'r', taskId: 'task', key: 'k', title: 't' }, preview = await subject.preview(target);
     expect(preview).toMatchObject({ identity, base: BASE, proposal: 'PROP', files: [{ path: 'a.txt', added: 1, removed: 1 }], diffs: [{ path: 'a.txt', lines: ['@@ -1 +1 @@', '-x', '+y'] }] });
+    expect(preview.changes).toEqual([{ path: 'a.txt', before: 'd', after: 'd' }]);
+    expect((await subject.previewDelivered!(target)).workingTree).toBe(true);
+    sourceVersion = 1;
+    expect(await subject.previewDelivered!(target)).not.toHaveProperty('workingTree');
+    unreadable = true;
+    await expect(subject.previewDelivered!(target)).rejects.toMatchObject({ code: 'PATCH_CORRUPT' });
   });
 });
 

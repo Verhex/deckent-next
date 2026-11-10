@@ -1,20 +1,17 @@
-import { persistedString, persistedInteger } from '#platform/index.js';
-import { createHash } from 'node:crypto';
+import { sha256, persistedString, persistedInteger, redactBounded } from '#platform/index.js';
 import { z } from 'zod';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
-import { redactText } from '#adapters/core/native-connection/index.js';
 import { fetchableUrlError, fetchHttps, type HttpFetchResult, type HttpFetchTransport } from './request.js';
 
-const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 export const NETWORK_FETCH_TARGET_KIND = 'network-fetch';
 /** Core operation of an agent fetch (FETCH S7, owner 2026-09-28): the `network` namespace is Core's. A request leaves the machine, so it is a
  * write-class external effect; policy decides it, it has no precondition and no compensation. The input is the URL and the byte limit. */
 export const NETWORK_FETCH_OPERATION = Object.freeze({ schemaVersion: 1 as const, operation: Object.freeze({ id: 'network.fetch', version: 1 }),
   targetKind: NETWORK_FETCH_TARGET_KIND, effectClass: 'write' as const, approval: 'policy' as const, precondition: 'none' as const,
   compensation: null, inputMaxBytes: 4_096 });
-export const FETCH_URL_MAX_CHARS = 2_048;
-/** Head of a fetched text shown to the model (the read tools' result bound); the whole body is in the scratch area. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const FETCH_URL_MAX_CHARS = 2_048;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Head of a fetched text shown to the model (the read tools' result bound); the whole body is in the scratch area. */
 export const FETCH_HEAD_BYTES = 16_384;
 
 export const FETCH_URL_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: 'fetch_url', version: 1, toolClass: 'deckent' as const,
@@ -24,7 +21,7 @@ export const FETCH_URL_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: 'fetch_u
   inputSchema: { type: 'object' as const, required: ['url'], properties: { url: { type: 'string', description: 'The https:// URL' },
     maxBytes: { type: 'integer', description: 'Keep at most this many body bytes (the installation limit applies)' } } } });
 
-/** `terminal.fetch` as the adapter uses it (configuration data). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `terminal.fetch` as the adapter uses it (configuration data). */
 export interface FetchSettings {
   readonly egress: 'none' | 'allowlist' | 'approval'; readonly allowedHosts: readonly string[]; readonly maxBytes: number;
   readonly timeoutMs: number; readonly maxRedirects: number;
@@ -71,7 +68,7 @@ const mediaType = (contentType: string | null) => (contentType ?? '').split(';',
 const extensionOf = (contentType: string | null) => EXTENSIONS[mediaType(contentType)] ?? (mediaType(contentType).startsWith('text/') ? 'txt' : 'bin');
 const isText = (contentType: string | null) => { const type = mediaType(contentType); return type.startsWith('text/') || /(?:json|xml|javascript|yaml)$/u.test(type); };
 
-/** Stores a fetched body in the scratch area (the scratch store owns the quota and the file). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Stores a fetched body in the scratch area (the scratch store owns the quota and the file). */
 export type FetchDeposit = (rel: string, data: Uint8Array, signal?: AbortSignal) => Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
 export interface FetchRun { readonly result: HttpFetchResult; readonly stored: Awaited<ReturnType<FetchDeposit>> | null }
 
@@ -127,7 +124,7 @@ export function describeFetchResult(run: FetchRun): AgentToolOutcome {
   lines.push(stored?.ok ? `[deckent] saved: ${stored.path} (scratch_read path: ${stored.rel})` : `[deckent] not saved: error=${stored?.error ?? 'scratch-unavailable'}`);
   if (!isText(result.contentType)) lines.push('[deckent] binary content is not shown');
   else {
-    lines.push(redactText(head(result.body, FETCH_HEAD_BYTES), [], Number.MAX_SAFE_INTEGER));
+    lines.push(redactBounded(head(result.body, FETCH_HEAD_BYTES)));
     if (result.body.length > FETCH_HEAD_BYTES) lines.push(`[deckent] showing the first ${FETCH_HEAD_BYTES} of ${result.body.length} bytes`);
   }
   const ok = stored?.ok === true && result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;

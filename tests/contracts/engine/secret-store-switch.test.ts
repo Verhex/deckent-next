@@ -36,7 +36,7 @@ function harness(selected: string | null, stores: Record<string, ReturnType<type
     custody: { async exclusive<T>(work: () => Promise<T>) { log.push('enter'); try { return await work(); } finally { log.push('leave'); } },
       selected: async () => selection ?? ENV },
   };
-  return { application: new SecretStoreSwitch(ports), log, audits, selection: () => selection };
+  return { application: new SecretStoreSwitch(ports), log, audits, selection: () => selection, race: () => { digest = 'digest-raced'; } };
 }
 const request = (to: string, confirmDowngrade = false) => ({ principal: me, scopeId: 'installation', to, confirmDowngrade });
 const code = (promise: Promise<unknown>) => promise.then(() => null, (error: { code?: string }) => error.code);
@@ -140,6 +140,13 @@ describe('ordinary secret store switch compatibility', () => {
     expect(await code(h.application.switch(request(SEALED)))).toBe('SECRET_STORE_SWITCH_UNVERIFIED');
     expect(h.selection()).toBe(FILE); expect(file.data.get('A_KEY')).toBe('synthetic-a');
     expect(h.log).not.toContain(`publish ${SEALED}`);
+    // p4 e3 (R8): a selection changed between its read and the publish refuses the switch and deletes nothing from the source.
+    const source = memoryStore(FILE, { A_KEY: 'synthetic-a', B_KEY: 'synthetic-b' }), target = memoryStore(SEALED);
+    const raced = harness(FILE, { [FILE]: source, [SEALED]: target }), set = target.store.set;
+    target.store.set = async (name, value) => { raced.race(); return set(name, value); };
+    await expect(raced.application.switch(request(SEALED))).rejects.toThrow('raced');
+    expect(raced.selection()).toBe(FILE); expect(Object.fromEntries(source.data)).toEqual({ A_KEY: 'synthetic-a', B_KEY: 'synthetic-b' });
+    expect(raced.log.filter(entry => entry.startsWith('delete') || entry.startsWith('publish'))).toEqual([]);
   });
 
   it('a crash after publication leaves secrets reachable (cleaned false); the same switch again removes identical leftovers only, decided and audited', async () => {

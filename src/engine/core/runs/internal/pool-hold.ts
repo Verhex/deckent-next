@@ -31,7 +31,7 @@ export const poolHoldReceiptSchema = z.strictObject({ schemaVersion: z.literal(1
 export type PoolHoldCommand = z.infer<typeof poolHoldCommandSchema>;
 export type PoolHoldQuery = z.infer<typeof poolHoldQuerySchema>;
 export type PoolHoldRecord = z.infer<typeof poolHoldRecordSchema>;
-export type PoolOccupancy = z.infer<typeof poolOccupancySchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type PoolOccupancy = z.infer<typeof poolOccupancySchema>;
 export type PoolHoldReceipt = z.infer<typeof poolHoldReceiptSchema>;
 /** The resolved command the store writes (pool chosen, reason null when absent) and who/when; also the replay fingerprint. */
 export interface PoolHoldWrite {
@@ -57,7 +57,7 @@ export function decidePoolHold(current: PoolHoldRecord | null, write: PoolHoldWr
     poolId: write.command.poolId, action: write.command.action, changed: previous !== next, state: next, hold: record });
   return Object.freeze({ transition: Object.freeze({ previous, next }), record, receipt });
 }
-/** Typed status: `drained` = held and no reserved, running, uncertain or evaluating task left on the pool (Jev 2e7be700 drain check). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Typed status: `drained` = held and no reserved, running, uncertain or evaluating task left on the pool (Jev 2e7be700 drain check). */
 export function poolHoldView(poolId: string, hold: PoolHoldRecord | null, occupancy: PoolOccupancy) {
   const state = hold?.state ?? 'open';
   return Object.freeze({ schemaVersion: 1 as const, poolId, state, hold, occupancy,

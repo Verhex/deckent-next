@@ -115,8 +115,8 @@ it('MCP cannot decide either allow or deny; the proposal remains pending and no 
     scopeId: 's', approvalId: pending.proposal.approval!.approvalId, expectedRevision: 0, decision, reason: 'MCP attempt' })).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
   expect((await f.app().propose(proposal)).proposal.status).toBe('pending'); noRun(f);
 });
-it('a verified MCP proposer produces the same durable plan for the authorized human inspection', async () => {
-  const f = await fixture(false), ref = mcpPrincipalRef(principal);
+it('a verified MCP proposer needs the person card even with standing admission and broad allow', async () => {
+  const f = await fixture(true), ref = mcpPrincipalRef(principal);
   f.state.principal = { ...principal, ...ref, id: 'mcp-proposer' };
   const policy = await f.source.load();
   // MCP needs named grants; principals: all does not cover its separate actor.
@@ -132,6 +132,11 @@ it('a verified MCP proposer produces the same durable plan for the authorized hu
   expect(approval!.request.summary).toContain('Checked by policy at the start: permission to run each task (tasks: 1)'); expect(approval!.request.summary).not.toContain('task / execute / task');
   expect(approval!.request.summary).toContain('$2.00');
   expect(approval!.request.summary).toContain('only at admission');
+  expect(pending.proposal.binding!.admission!.standingAdmission).toBe(true);
+  await f.decide('deny');
+  expect((await f.app().propose(input)).proposal).toMatchObject({ status: 'rejected', reason: 'APPROVAL_DENIED' }); noRun(f);
+  const direct = await f.runs().create({ schemaVersion: 1, commandId: 'direct-ai', scopeId: 's', runId: 'direct-ai', graph: proposal.graph });
+  expect(direct.run.runId).toBe('direct-ai'); expect(direct.run.authority!.approval).toBeUndefined();
 });
 it('policy deny seals a denial and never persists an executable proposal or Run', async () => {
   const f = await fixture(true, 'deny'); await expect(f.app().propose(proposal)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); noRun(f);
@@ -262,6 +267,9 @@ it('budget gates subtract reserved and settled money, accept equality using exac
   const refused = (() => { try { validateRunProposal({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 201 } }, f.state.registry, cp, 100); } catch (error) { return error as DeckentError; } throw new Error('NOT_REFUSED'); })();
   expect(refused.localize('en').message).toContain('$2.00'); expect(refused.localize('en').message).toContain('$2.01');
   expect(refused.localize('tr').message).toContain('2,00'); expect(refused.localize('tr').message).toContain('kalan');
+  const overrun = createProviderSpendCheckpoint({ ...account, settledMinorUnits: 1000, settledExactMinorUnits: '1000', frozen: true }, 3, 0);
+  expect(() => validateRunProposal(proposal, f.state.registry, overrun, 100)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_BUDGET_EXCEEDED',
+    params: { remaining: 0, ceiling: 200, currency: 'USD' } }));
 });
 // recheck_ceiling (owner 2026-10-18, Jev b7d6c0cf): the person approved the declared ceiling, never the moving balance. Registry, budget identity,
 // budget revision and currency stay exact; a parallel charge that still leaves the ceiling covered admits, one that does not is refused.

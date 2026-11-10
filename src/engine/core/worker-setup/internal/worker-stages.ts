@@ -17,7 +17,7 @@ export const workerFactsSchema = z.strictObject({ configured: imageId.nullable()
 type WorkerFacts = z.infer<typeof workerFactsSchema>;
 /** The part of the execution family's facts these stages read (the family validates the whole shape with its own schema). */
 type Facts = Readonly<{ runtimes: readonly Readonly<{ id: string; support: string; daemon: string; path: string | null }>[]; worker?: WorkerFacts }>;
-export const RUNTIME_STAGE_ID = 'execution:runtime', WORKER_STAGE_ID = 'execution:worker', SETTINGS_STAGE_ID = 'execution:worker-settings';
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const RUNTIME_STAGE_ID = 'execution:runtime', WORKER_STAGE_ID = 'execution:worker', SETTINGS_STAGE_ID = 'execution:worker-settings';
 
 const reason = (code: string, params: Record<string, string | number> = {}) => ({ code: `setup.execution.${code}`, params });
 const blocked = (code: string, params: Record<string, string | number> = {}): SetupDecision => ({ state: 'blocked', reason: reason(code, params) });

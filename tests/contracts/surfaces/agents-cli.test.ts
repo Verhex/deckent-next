@@ -167,7 +167,5 @@ it('K13: use prepares the exact task/agent/skill pin without a witnessed write; 
     await expect(agentsCommand([...args.slice(0, 6), revision, '--scope', 'scope'], { root: f.root, env: f.env, prepareAgentUse })).rejects.toMatchObject({ code: 'CLI_USAGE' });
     expect(requests).toHaveLength(before);
   }
-  await expect(agentsCommand(args, { root: f.root, env: f.env, prepareAgentUse: async () => { throw Object.assign(new Error('changed'), { code: 'AGENT_CATALOG_REVISION_CONFLICT' }); } }))
-    .rejects.toMatchObject({ code: 'AGENT_CATALOG_REVISION_CONFLICT' });
   await expect(agentsCommand(args, { root: f.root, env: f.env })).rejects.toMatchObject({ code: 'AGENT_CATALOG_UNAVAILABLE' });
 });

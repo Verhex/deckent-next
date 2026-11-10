@@ -1,17 +1,16 @@
-import { createRequire } from 'node:module';
+import { openLedgerDatabase, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { refuse } from './files.js';
 /** S1 O6: a set's ledger is opened immutable, so reading it (also a WAL-header snapshot of an alpha.18 set) never leaves -wal/-shm beside it. */
 export function openSetLedger(path: string): import('node:sqlite').DatabaseSync {
   const url = pathToFileURL(path); url.searchParams.set('immutable', '1');
-  return new (createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')).DatabaseSync(url, { readOnly: true }); // lazy (sqlite-ledger-lazy)
+  return openLedgerDatabase(url, { readOnly: true });
 }
 /** Stable table content fingerprint of the immutable online snapshot; identifiers are quoted, all integers read as bigint. */
 export function ledgerFingerprint(path: string): string {
   const db = openSetLedger(path);
-  try {
-    db.exec('BEGIN');
+  try { return ledgerTransaction(db, () => {
     const integrity = db.prepare('PRAGMA integrity_check').all().map(row => row['integrity_check']);
     if (integrity.length !== 1 || integrity[0] !== 'ok') return refuse('BACKUP_LEDGER_INVALID');
     const tables: Record<string, { rows: number; sha256: string }> = {};
@@ -26,5 +25,5 @@ export function ledgerFingerprint(path: string): string {
       tables[name] = { rows, sha256: hash.digest('hex') };
     }
     return JSON.stringify({ schemaVersion: 1, integrity: 'ok', userVersion: db.prepare('PRAGMA user_version').get()?.['user_version'], tables });
-  } catch { return refuse('BACKUP_LEDGER_INVALID'); } finally { db.close(); }
+  }, { mode: 'read' }); } catch { return refuse('BACKUP_LEDGER_INVALID'); } finally { db.close(); }
 }

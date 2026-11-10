@@ -8,20 +8,20 @@ import settings from './model-role-admission.json' with { type: 'json' };
  * M2 typed role admission (owner 2026-10-23: a new model works through a data update, with no release and no model literal; it is fail-closed
  * until a person assigns its role). `inspect` is the one read view (CLI `models roles`, MCP `inspect_model_roles`, doctor): every registered
  * catalog model the scope sees, each with its tier/role row or `pending`. `assign` writes ONE row into the one installation overlay this
- * command owns (revision `<prefix><n>`, prefix in `model-role-admission.json`), through the governed config write of the global layer: the layer digest the
+ * command owns (`origin: 'person-assignment'`), through the governed config write of the global layer: the layer digest the
  * card showed is the compare-and-set, the merge (`mergeModelRoleRegistries`) validates the whole section before anything is submitted, and the
  * config application audits it as a sealed `config-change`. Overlays it does not own are never edited.
  */
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const modelRoleQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, channelId: identitySchema.optional(), modelId: exactModelIdSchema.optional() }).readonly();
 export type ModelRoleQuery = z.infer<typeof modelRoleQuerySchema>;
-export const modelRoleAssignCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, channelId: identitySchema,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const modelRoleAssignCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, channelId: identitySchema,
   modelId: exactModelIdSchema, tier: z.enum(MODEL_TIERS), roles: z.array(identitySchema).max(limits.rolesPerModel).refine(roles => new Set(roles).size === roles.length).readonly(),
   /** The global layer digest the card showed (null: no global configuration file yet). */
   expect: digestSchema.nullable() }).readonly();
 export type ModelRoleAssignCommand = z.infer<typeof modelRoleAssignCommandSchema>;
 
-/** What the catalog row says of a model: its name, canonical maker and price evidence (never a tier or role). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the catalog row says of a model: its name, canonical maker and price evidence (never a tier or role). */
 export type ModelRoleCatalogFacts = Readonly<{ channelId: string; modelId: string; displayName: string | null; maker: string | null;
   pricing: Readonly<{ kind: string; asOf: string | null; inputPerMTok: string | null; outputPerMTok: string | null }> | null }>;
 export type ModelRoleEntry = Readonly<{ channelId: string; modelId: string; catalog: ModelRoleCatalogFacts | null;
@@ -30,11 +30,11 @@ export type ModelRoleEntry = Readonly<{ channelId: string; modelId: string; cata
   exceptions: readonly string[] }>;
 export type ModelRoleInspection = Readonly<{ schemaVersion: 1; scopeId: string; revision: string; digest: string | null;
   roles: readonly ModelRolePolicy['roles'][number][]; models: readonly ModelRoleEntry[]; pending: number }>;
-export type ModelRoleRow = ModelRoleRegistry['models'][number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModelRoleRow = ModelRoleRegistry['models'][number];
 export type ModelRoleAssignResult = Readonly<{ status: 'applied'; row: ModelRoleRow; revision: string; approvalId: string | null }>
   | Readonly<{ status: 'approval-pending'; row: ModelRoleRow; approvalId: string; expiresAt: number; summary: string; commandId: string }>
   | Readonly<{ status: 'unchanged'; row: ModelRoleRow }>;
-export type ModelRoleWriteOutcome = Readonly<{ status: 'applied'; approvalId: string | null }>
+type ModelRoleWriteOutcome = Readonly<{ status: 'applied'; approvalId: string | null }>
   | Readonly<{ status: 'approval-pending'; commandId: string; approval: Readonly<{ approvalId: string; expiresAt: number; summary: string }> }>;
 export interface ModelRoleAdmissionPorts {
   /** The global layer's authored `model_roles` section and that layer's digest, from one read. */
@@ -66,16 +66,16 @@ export function modelRoleCoverage(policy: ModelRolePolicy, catalog: readonly Mod
   }));
 }
 
-/** The owned overlay's write counter (`<prefix><n>`), or null for an overlay this command does not own. */
+/** The write counter still reads prefixed revisions; ownership only falls back to it for legacy records. */
 const counter = (overlay: Readonly<{ revision: string }>) => {
   const rest = overlay.revision.startsWith(settings.ownedOverlayRevisionPrefix) ? overlay.revision.slice(settings.ownedOverlayRevisionPrefix.length) : '';
   return /^[1-9]\d*$/.test(rest) && Number.isSafeInteger(Number(rest)) ? Number(rest) : null;
 };
 /** Whether an overlay is the one a person's own role assignment (`models roles assign`, `/roles`) writes; the Brain gate never treats it as binding policy. */
-export const isOwnedRoleOverlay = (overlay: Readonly<{ revision: string }>) => counter(overlay) !== null;
+export const isOwnedRoleOverlay = (overlay: Pick<ModelRoleRegistry, 'revision' | 'origin'>) =>
+  overlay.origin === undefined ? counter(overlay) !== null : overlay.origin === 'person-assignment';
 const fail = (code: ModelRoleErrorCode): never => { throw new ModelRoleError(code); };
 const sameRoles = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
-/** The Core seed with these overlays; a refusal is the merge's own typed code. */
 const merged = (overlays: readonly unknown[]): ModelRolePolicy => mergeModelRoleRegistries(CORE_MODEL_ROLES, overlays);
 /**
  * One row for one exact (channel, model) in the owned overlay — created last when absent. The row's compare-and-set names the version of the
@@ -87,7 +87,7 @@ export function planModelRoleAssignment(section: unknown, request: Readonly<Role
   try { config = section === undefined ? { schemaVersion: 1, overlays: [] } : modelRoleConfigSchema.parse(section); }
   catch { return fail('MODEL_ROLE_COMMAND_INVALID'); }
   const overlays: ModelRoleRegistry[] = [...config.overlays], key = roleModelKey(request);
-  const index = overlays.map(overlay => counter(overlay) !== null).lastIndexOf(true), mine = index < 0 ? null : overlays[index]!;
+  const index = overlays.map(isOwnedRoleOverlay).lastIndexOf(true), mine = index < 0 ? null : overlays[index]!;
   const effective = merged(overlays).models.find(row => roleModelKey(row) === key);
   const previous = merged(index < 0 ? overlays : overlays.slice(0, index)).models.find(row => roleModelKey(row) === key);
   const existing = mine?.models.find(row => roleModelKey(row) === key);
@@ -96,8 +96,8 @@ export function planModelRoleAssignment(section: unknown, request: Readonly<Role
     ...(effective?.measured ? { measured: effective.measured } : {}), ...(previous ? { override: Object.freeze({ previousVersion: previous.version }) } : {}) });
   if (effective && effective.tier === request.tier && sameRoles(effective.roles, request.roles)) return { changed: false as const, row: effective, section: config };
   const body = { roles: mine?.roles ?? [], models: [...(mine?.models ?? []).filter(entry => roleModelKey(entry) !== key), row], exceptions: mine?.exceptions ?? [] };
-  const revision = `${settings.ownedOverlayRevisionPrefix}${(mine ? counter(mine)! : 0) + 1}`;
-  const overlay = { schemaVersion: 1 as const, revision, ...body };
+  const revision = `${settings.ownedOverlayRevisionPrefix}${(mine ? counter(mine) ?? 0 : 0) + 1}`;
+  const overlay = { schemaVersion: 1 as const, revision, origin: 'person-assignment' as const, ...body };
   if (index < 0) overlays.push(overlay); else overlays[index] = overlay;
   if (overlays.length > limits.overlays) fail('MODEL_ROLE_REGISTRY_LIMIT');
   const next = { schemaVersion: 1 as const, overlays };
@@ -121,7 +121,6 @@ export class ModelRoleAdmissionApplication {
   }
   async assign(input: unknown): Promise<ModelRoleAssignResult> {
     const command = parse(modelRoleAssignCommandSchema, input), current = await this.ports.section();
-    // The card's compare-and-set, checked before the catalog read; the config write checks it again under the layer lock.
     if (current.digest !== command.expect) fail('MODEL_ROLE_STALE');
     const key = roleModelKey(command);
     if (!catalogRoleFacts(await this.ports.catalog(command.scopeId)).some(row => roleModelKey(row) === key)) fail('MODEL_ROLE_CATALOG_UNKNOWN');

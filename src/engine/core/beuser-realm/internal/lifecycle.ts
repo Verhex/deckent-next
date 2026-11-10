@@ -1,4 +1,4 @@
-import { assertBeuserAccess, pinBeuserLimits, BeuserContractError, type BeuserContext, type BeuserRealmObservation, type BeuserFilesystemProof, type RealmPort } from '#engine/core/beuser-contract/index.js';
+import { assertBeuserAccess, assertBeuserLimits, BeuserContractError, type BeuserContext, type BeuserRealmObservation, type BeuserFilesystemProof, type RealmPort } from '#engine/core/beuser-contract/index.js';
 import type { BeuserBinding } from '#domain/index.js';
 import { beuserBindingDigest } from './seal.js';
 
@@ -37,7 +37,7 @@ export interface BeuserRealmCustody {
 export class BeuserRealmApplication implements RealmPort {
   constructor(private readonly runtime: BeuserRealmRuntime, private readonly custody: BeuserRealmCustody) {}
   private check(context: BeuserContext, cleanup = false) {
-    pinBeuserLimits(context.limits);
+    assertBeuserLimits(context.limits);
     const checked = cleanup ? { ...context, signal: new AbortController().signal } : context;
     assertBeuserAccess(checked, context.binding, context.principal, { kind: 'beuser-sandbox', id: context.binding.realmId }, cleanup ? 'destroy' : 'create');
   }

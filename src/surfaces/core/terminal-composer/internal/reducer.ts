@@ -47,8 +47,8 @@ export interface ComposerState extends Draft {
 export const EMPTY_COMPOSER: ComposerState = Object.freeze({ text: '', cursor: 0, pastes: [], killed: '', history: [], browsing: null,
   search: null, selected: 0, dismissed: null, mentions: null, mentionDismissed: null, shortcuts: false, armedAt: null, stash: null, undo: [], typing: false });
 
-export type ComposerMove = 'left' | 'right' | 'wordLeft' | 'wordRight' | 'home' | 'end' | 'up' | 'down';
-export type ComposerDelete = 'back' | 'forward' | 'wordBack' | 'spaceWordBack' | 'wordForward' | 'toStart' | 'toEnd';
+type ComposerMove = 'left' | 'right' | 'wordLeft' | 'wordRight' | 'home' | 'end' | 'up' | 'down';
+type ComposerDelete = 'back' | 'forward' | 'wordBack' | 'spaceWordBack' | 'wordForward' | 'toStart' | 'toEnd';
 
 export type ComposerKey =
   | { readonly type: 'text' | 'paste'; readonly text: string }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema, type AttemptIdentity } from '#domain/index.js';
 import { authenticate, AuthenticationError, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import { isAuthorizationRefusal } from '#platform/index.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 import type { DispatchApplication, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { RunAuthorization } from './application.js';
@@ -13,11 +14,11 @@ import { cancellationRecoveryPageSchema, type CancellationRecoveryQueryStore } f
 export const cancellationRecoveryCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
   afterAttemptId: identitySchema.nullable() });
 export type CancellationRecoveryCommand = z.infer<typeof cancellationRecoveryCommandSchema>;
-export const cancellationRecoveryFailureReasonSchema = z.enum(['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED',
+const cancellationRecoveryFailureReasonSchema = z.enum(['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED',
   'POLICY_DENIED', 'POLICY_UNAVAILABLE', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN',
   'CANCELLATION_DELIVERY_CONFLICT', 'CANCELLATION_DELIVERY_CORRUPT', 'UNKNOWN']);
-export type CancellationRecoveryFailureReason = z.infer<typeof cancellationRecoveryFailureReasonSchema>;
-export type CancellationRecoveryOutcome = Readonly<{ identity: AttemptIdentity; outcome: RunCancellationOutcome; reason?: CancellationRecoveryFailureReason }>;
+type CancellationRecoveryFailureReason = z.infer<typeof cancellationRecoveryFailureReasonSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CancellationRecoveryOutcome = Readonly<{ identity: AttemptIdentity; outcome: RunCancellationOutcome; reason?: CancellationRecoveryFailureReason }>;
 
 // C12 Q8 / H34 S1: an authorization or delivery failure always yields a typed per-attempt reason, never a thrown
 // parse error — an unrecognized code (a future authority adds one this schema does not yet know) degrades to
@@ -74,7 +75,7 @@ export class CancellationRecoveryApplication {
         } catch (error) {
           outcome = { attemptId: identity.attemptId, taskId: identity.taskId,
             status: error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
-              && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable' };
+              && isAuthorizationRefusal(error.code, { include: ['policy-denied', 'approval-unsupported', 'scope-unknown'] })) ? 'denied' : 'unavailable' };
           outcomes[index] = Object.freeze({ identity, outcome, reason: failureReason(error) });
           continue;
         }

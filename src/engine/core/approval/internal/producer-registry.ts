@@ -7,13 +7,13 @@ import type { TurnDecisionCapabilities } from './assurance.js';
 
 const manifestSchema = z.strictObject({ schemaVersion: z.literal(1), id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   level: approvalAssuranceSchema, rank: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
-export type ApprovalAssuranceProducerManifest = z.infer<typeof manifestSchema>;
-/** Trusted distribution code, never client input. Implementations attest service-held, scope/approval/principal-bound evidence. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ApprovalAssuranceProducerManifest = z.infer<typeof manifestSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Trusted distribution code, never client input. Implementations attest service-held, scope/approval/principal-bound evidence. */
 export interface ApprovalAssuranceAttester {
   attests(evidence: ApprovalAssuranceEvidence): boolean;
   settle?(evidence: ApprovalAssuranceEvidence): void;
 }
-export interface ApprovalAssuranceProducerRegistration {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ApprovalAssuranceProducerRegistration {
   readonly manifest: ApprovalAssuranceProducerManifest;
   create(): ApprovalAssuranceAttester;
 }

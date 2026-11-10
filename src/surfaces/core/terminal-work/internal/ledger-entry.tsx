@@ -1,10 +1,8 @@
 import { Box, Text } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { type LedgerBuffer, type LedgerRow, type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { AssistantUnitRow, HumanTextRow, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render/index.js';
+import { projectHumanPickerText, AssistantUnitRow, HumanTextRow, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render-ink/index.js';
 import { SYSTEM_SUMMARY_ENTRY_ID, SystemSummaryLine } from '#surfaces/core/terminal-window/index.js';
-import { readApprovalDecisionNotice } from './approval-decision-notice.js';
-import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
 export interface LedgerEntryLabels {
   /** The system summary line's label (`terminal.info.systemLabel`). */
   readonly system?: string | undefined;
@@ -73,8 +71,6 @@ function LedgerEntryBody({ entry, labels, groupView }: { readonly entry: WorkLed
     return <SystemSummaryLine text={projectHumanPickerText(entry.text, known).label} identity={entry.identity} label={labels.system ?? 'Deckent'} tone={entry.level} />;
   }
   if (entry.kind === 'notice') {
-    const decision = readApprovalDecisionNotice(entry);
-    if (decision) return <ApprovalDecisionNoticeRow raw={decision} labels={labels.render} error={entry.level === 'error'} />;
     const levelWords = labels.workerLine?.card?.notice?.[entry.level];
     return <HumanTextRow text={levelWords ? fillTemplate(levelWords, { text: entry.text }) : entry.text} style={entry.level === 'error' ? ink.error : entry.level === 'warning' ? ink.warning : ink.muted}
       hiddenLabel={labels.render.hiddenCount} />;

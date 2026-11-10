@@ -3,13 +3,14 @@ import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { DEFAULT_DELEGATED_CLASSES, type ModelConnectCommand } from '#domain/index.js';
-import { ModelConnectError, assertAuthorityWitness, modelUseProfiles, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessConsent, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
+import { ModelConnectError, assertAuthorityWitness, configuredInvocationProfiles, prepareSubscriptionConsent, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
   bindCapacityResource, headlessCapacityBinding, openSqliteLedger,
-  prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, shellSandboxCapabilities, type HeadlessLoginResult,
+  prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, type HeadlessLoginResult,
   type ProviderConnectKind } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
-import { ErrorRegistry, automationMarker, globalStateRoot, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
+import { configuredBubblewrap } from '#composition/core/model-invocation/index.js';
+import { ErrorRegistry, automationMarker, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
   resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 
 type Env = NodeJS.ProcessEnv;
@@ -21,10 +22,9 @@ async function ownedLoginDir(family: string, env: Env): Promise<string> {
   const resource = await prepareProductDirectory(loginsLayout(env), 'headlessLogins').catch(() => { throw ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'state-dir' } }); });
   return headlessOwnedLoginDir(family, resource);
 }
-const isolation = (env: Env) => async () => (await shellSandboxCapabilities(globalStateRoot(env))).bubblewrap;
 /** PV 2a: why a CLI subscription cannot run on this host before anything is chosen (the same typed refusal connect and login give), or null. */
 export async function headlessIsolationRefusal(options: ConfigLoadOptions = {}): Promise<Error | null> {
-  const capability = process.platform === 'linux' ? await isolation(options.env ?? process.env)().catch(() => null) : null;
+  const capability = process.platform === 'linux' ? await configuredBubblewrap(options)().catch(() => null) : null;
   return capability?.status === 'available' && capability.launcher ? null
     : ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: capability?.status === 'restricted' ? 'user-namespace' : 'launcher' } });
 }
@@ -49,7 +49,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
     const stateDir = join(stateRoot(env), 'headless', createHash('sha256').update(JSON.stringify([kind.id, command.scopeId, nativeId])).digest('hex').slice(0, 16));
     const owned = await ownedLoginDir(protocol.family, env);
     return { protocol, owned, base: await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir,
-      ownedConfigDir: owned, env, now: Date.now, isolation: isolation(env) }) };
+      ownedConfigDir: owned, env, now: Date.now, isolation: configuredBubblewrap(options) }) };
     })(); prepared.set(nativeId, next); return next;
   };
   return {
@@ -61,7 +61,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       const seed = await readProviderConnectSeed(kind.connect!.seed!);
       const references = seed.providers.flatMap(provider => provider.models.filter(model => model.nativeId === value.nativeId)
         .map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version })));
-      const profiles = modelUseProfiles(context.config);
+      const profiles = configuredInvocationProfiles(context.config);
       const existing = [value.existing, ...profiles.filter(profile => profile.scopeId === command.scopeId
         && references.some(reference => isDeepStrictEqual(reference, profile.reference))).map(profile => profile.adapter.definition)];
       if (existing.some(definition => {
@@ -73,7 +73,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       if (!existing.some(Boolean) || existing.some(definition => definition && definition['sourceBinding'] === undefined))
         await assertAuthorityWitness('models.connect', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
           headlessPersonWitness(env, context.config.cli.agentEnvironment));
-      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never,
+      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = prepareSubscriptionConsent(value.existing as never,
         command.delegate ?? (existing.some(Boolean) ? undefined : DEFAULT_DELEGATED_CLASSES), principal, Date.now()); // a first connect takes the owner default
       const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = headlessConnectionAdapter(definition, protocol);
       const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
@@ -108,5 +108,5 @@ export async function loginConfiguredHeadless(command: HeadlessLoginCommand, opt
   if (!await confirm({ configDir, owned: configDir === owned })) return null;
   // Deckent's own state for this sign-in sits beside the connections' (the same per-login-dir lock), never in the login dir.
   const stateDir = join(stateRoot(env), 'headless', `login-${createHash('sha256').update(configDir).digest('hex').slice(0, 16)}`);
-  return runHeadlessLogin({ family, stateDir, configDir, owned: configDir === owned, executable: command.executable, sso: command.sso === true, loginMethod: command.loginMethod, env, now: Date.now, isolation: isolation(env) });
+  return runHeadlessLogin({ family, stateDir, configDir, owned: configDir === owned, executable: command.executable, sso: command.sso === true, loginMethod: command.loginMethod, env, now: Date.now, isolation: configuredBubblewrap(options) });
 }

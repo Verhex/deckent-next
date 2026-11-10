@@ -16,7 +16,7 @@ export type SetupApplyResult = Readonly<{ stage: string; operation: string; stat
 export type SetupSecretStoreDetail = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string }>;
 /** `scopeId`: the folder stage's answer, else the configured scope. `foreground`: the person's terminal is free (no window holds it), so an
  * owner that takes the terminal itself (a card, a picker, sudo's own prompt) may run; without it such a stage is refused, never half-run. */
-export type SetupApplyOptions = ConfigLoadOptions & Readonly<{ scopeId?: string; foreground?: boolean }>;
+export type SetupApplyOptions = ConfigLoadOptions & Readonly<{ scopeId?: string; foreground?: boolean; language?: string }>;
 /** One stage's operation through its existing owner, after that owner's own preview (I-S3). */
 export type SetupApplyHandler = (root: string, stage: SetupStage, options: SetupApplyOptions) => Promise<SetupApplyResult>;
 /** `person`: a person on a real terminal answers this plan (the window); only then may a family offer a host install (I-D2). */
@@ -27,7 +27,7 @@ export type SetupObserveHandler = (root: string, options: SetupObserveOptions) =
   firstJob?: FirstJobFacts }>>;
 
 /** The shell realm doctor reports (structural: only the fields setup reads). */
-export type SetupShellRealmView = Readonly<{ selected: string | null; rejected: readonly Readonly<{ restricted: boolean }>[];
+type SetupShellRealmView = Readonly<{ selected: string | null; rejected: readonly Readonly<{ restricted: boolean }>[];
   selfTest?: Readonly<{ status: 'ok' | 'failed' | 'not-run' }> }>;
 
 /**

@@ -23,7 +23,7 @@ export function isPublicNativeAddress(address: string) {
   return routable && !Object.values(networkInterfaces()).flat().some(row => row?.address === address);
 }
 /** What one CONNECT tunnel shares with the gateway that owns it: the destination allowlist, its lifetime, its sockets and its traffic budget. */
-export interface NativeTunnelContext {
+interface NativeTunnelContext {
   readonly destinations: readonly string[];
   readonly closed: () => boolean;
   readonly sockets: Set<Socket>;

@@ -1,13 +1,13 @@
 import { BeuserContractError, BEUSER_WALK_RULES, assertBeuserAccess, pinBeuserLimits, type BeuserLimits, type BeuserContext, type BeuserScreen, type BeuserSurfaceCommand, type BeuserWalkerHistory, type BeuserCorrection } from '#engine/core/beuser-contract/index.js';
 import type { BeuserWalkerSummary } from '#domain/index.js';
-import { sha256 } from '#platform/index.js';
+import { CodedError, sha256 } from '#platform/index.js';
 
 // Node's signed timer representation is a platform invariant, never a configurable walk policy.
 const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;
 /** The one loop-equivalence of screens (walk18): numbers masked, so a cycle that only bumps a revision or counter returns to the same screen. */
 export const beuserSettledScreen = (screen: BeuserScreen): string => sha256(screen.text.replace(/\p{Nd}+/gu, '#'));
 
-export class BeuserWalkStopped extends Error {
+export class BeuserWalkStopped extends CodedError {
   constructor(readonly reason: 'bound' | 'loop' | 'observing' | 'patience' | 'drift' | 'leak' | 'unknown' | 'cancelled' | 'deadline') { super(reason); }
 }
 /** A timeout stops waiting even if a broken adapter ignores cancellation. Its effect then remains uncertain. */

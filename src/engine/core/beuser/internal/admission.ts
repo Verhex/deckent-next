@@ -1,14 +1,14 @@
 import { persistedInteger, identitySchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection, acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { z } from 'zod';
-import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, sealBeuserContext, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { runAdmissionSchema, runReservationCommandSchema, type RunAdmissionApplication, type RunReservationApplication } from '#engine/core/runs/index.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const cellSchema = z.strictObject({ taskId: identitySchema, branchId: identitySchema, journeyDigest: digest, repeat: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), summary: z.unknown().optional() });
 const campaignSchema = z.strictObject({ run: runAdmissionSchema, candidate: acceptanceSubjectSchema, candidateDigest: digest, cells: z.array(cellSchema).min(1), limits: z.unknown().optional(), rubric: beuserSealedRubricSchema });
-export type BeuserCampaign = ReturnType<typeof pinBeuserCampaign>;
-export interface BeuserExecutionProfile { readonly taskKind: string; readonly evaluator: { readonly id: string; readonly version: number } }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type BeuserCampaign = ReturnType<typeof pinBeuserCampaign>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BeuserExecutionProfile { readonly taskKind: string; readonly evaluator: { readonly id: string; readonly version: number } }
 export function pinBeuserCampaign(input: unknown, profile: BeuserExecutionProfile) {
   const parsed = campaignSchema.parse(input), limits = pinBeuserLimits(parsed.limits);
   const cells = parsed.cells.map(cell => Object.freeze({ ...cell, summary: pinBeuserWalkerSummary(cell.summary) }));
@@ -20,7 +20,7 @@ export function pinBeuserCampaign(input: unknown, profile: BeuserExecutionProfil
         && criterion.evaluator.id === profile.evaluator.id && criterion.evaluator.version === profile.evaluator.version))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
   return Object.freeze({ ...parsed, cells: Object.freeze(cells), limits, inputDigest: sha256(encodeCommandProjection('beuser-campaign:1', { ...parsed, cells, limits })) });
 }
-/** Pure profile validation only. Composition seals this pin through the generic Run authority, never before its authorization. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Pure profile validation only. Composition seals this pin through the generic Run authority, never before its authorization. */
 export async function admitBeuserCampaign(campaign: BeuserCampaign, runs: Pick<RunAdmissionApplication, 'create'>, credential: unknown,
   validateProfile: (campaign: BeuserCampaign) => Promise<{ readonly inputDigest: string }>): ReturnType<RunAdmissionApplication['create']> {
   if ((await validateProfile(campaign)).inputDigest !== campaign.inputDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
@@ -35,14 +35,14 @@ export function admitBeuserAttempt(campaign: BeuserCampaign, input: { binding: u
     || binding.candidateDigest !== campaign.candidateDigest || binding.rubricDigest !== campaign.rubric.digest
     || binding.personaDigest !== sha256(encodeCommandProjection('beuser-persona:1', cell.summary))
     || !isBeuserEvaluatorPrincipal(principal) || principal.assurance !== 'workload-verified') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-  const context = Object.freeze({ binding, principal, signal: input.signal, limits: campaign.limits });
+  const context = Object.freeze(sealBeuserContext({ binding, principal, signal: input.signal, limits: campaign.limits }));
   assertBeuserAccess(context, binding, principal, { kind: 'run', id: binding.identity.runId }, 'inspect');
   return context;
 }
 export function assertBeuserRequestIdentity(context: BeuserContext, identity: BeuserBinding['identity']): void {
   if (!sameAttemptIdentity(context.binding.identity, identity)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
 }
-/** Generic reservation atomically creates real Attempts; never create a second Attempt or write the Run directly. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Generic reservation atomically creates real Attempts; never create a second Attempt or write the Run directly. */
 export async function reserveBeuserAttempts(campaign: BeuserCampaign, commandInput: unknown, reservations: Pick<RunReservationApplication, 'reserve'>, credential: unknown) {
   const command = runReservationCommandSchema.parse(commandInput);
   if (command.scopeId !== campaign.run.scopeId || command.runId !== campaign.run.runId) throw new BeuserContractError('BEUSER_INPUT_INVALID');

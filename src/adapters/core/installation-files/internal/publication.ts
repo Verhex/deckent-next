@@ -1,18 +1,19 @@
+import { CodedError } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { link, lstat, mkdir, open, unlink } from 'node:fs/promises';
 import { basename, dirname, parse, relative, resolve, sep } from 'node:path';
 
-export type InstallationFileErrorCode = 'INSTALLATION_FILE_CONFLICT' | 'INSTALLATION_FILE_UNSAFE'
+type InstallationFileErrorCode = 'INSTALLATION_FILE_CONFLICT' | 'INSTALLATION_FILE_UNSAFE'
   | 'INSTALLATION_FILE_INVALID' | 'INSTALLATION_FILE_UNAVAILABLE' | 'INSTALLATION_FILE_OUTCOME_UNKNOWN'
   | 'INSTALLATION_FILE_UNSUPPORTED';
-export class InstallationFileError extends Error {
-  constructor(readonly code: InstallationFileErrorCode, readonly params: Readonly<Record<string, string>> = {}) { super(code); this.name = 'InstallationFileError'; }
+export class InstallationFileError extends CodedError {
+  constructor(override readonly code: InstallationFileErrorCode, override readonly params: Readonly<Record<string, string>> = {}) { super(code); this.name = 'InstallationFileError'; }
 }
-export interface InstallationFileRequest { readonly root: string; readonly path: string; readonly maxBytes: number }
-export interface InstallationFilePublishRequest extends InstallationFileRequest { readonly transactionId: string }
-export interface InstallationFileInspection { readonly digest: string | null }
-export interface InstallationFilePublication { readonly digest: string; readonly status: 'published' | 'replayed' }
+interface InstallationFileRequest { readonly root: string; readonly path: string; readonly maxBytes: number }
+interface InstallationFilePublishRequest extends InstallationFileRequest { readonly transactionId: string }
+interface InstallationFileInspection { readonly digest: string | null }
+interface InstallationFilePublication { readonly digest: string; readonly status: 'published' | 'replayed' }
 
 const digest = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 function fail(code: InstallationFileErrorCode): never { throw new InstallationFileError(code); }

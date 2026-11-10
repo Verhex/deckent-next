@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ErrorRegistry } from '#platform/index.js';
+import { isCodedError, ErrorRegistry } from '#platform/index.js';
 import { queueRequeueCause, queueServiceActor, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type TargetBinding, type TargetQueueRecord,
   type TargetQueueRequest, type VerifiedPrincipal } from '#domain/index.js';
 import type { TargetQueueApplication } from '#engine/core/effect/index.js';
@@ -15,8 +15,8 @@ export function assertRunDeliveryIntent(run: RunSnapshot | null, request: Pick<T
     || intent.target.kind !== request.target.target.kind || intent.target.id !== request.target.target.id || !same(intent.grantedBy, delegation.grantedBy)
     || delegation.intentRef.proposalId !== run.proposal!.proposalId || delegation.intentRef.digest !== run.proposal!.digest) throw ErrorRegistry.createError('DELIVERY_INTENT_NOT_ADMITTED');
 }
-export type RunDeliveryStep = Readonly<{ taskId: string; state: 'enqueued' | 'requeued' | 'exhausted' | 'refused'; commandId?: string; reason?: string }>;
-export interface RunDeliveryPorts {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunDeliveryStep = Readonly<{ taskId: string; state: 'enqueued' | 'requeued' | 'exhausted' | 'refused'; commandId?: string; reason?: string }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface RunDeliveryPorts {
   readonly requeueMax: number; readonly policyRevision: string; readonly ttlMs: number; now(): number;
   forRun(scopeId: string, runId: string): readonly TargetQueueRecord[];
   binding(target: { kind: string; id: string }): Promise<TargetBinding>;
@@ -51,13 +51,13 @@ export async function stepRunDelivery(ports: RunDeliveryPorts, run: RunSnapshot)
     } catch (error) {
       // A typed refusal (intent, policy, target, bound) is shown and retried on a later scan; anything else is the service's failure.
       const code = (error as { code?: unknown }).code;
-      if (typeof code !== 'string' || !/^[A-Z][A-Z0-9_]{2,63}$/.test(code)) throw error;
+      if (typeof code !== 'string' || !isCodedError(error, code) || !/^[A-Z][A-Z0-9_]{2,63}$/.test(code)) throw error;
       steps.push({ taskId: task.taskId, state: code === 'QUEUE_REQUEUE_EXHAUSTED' ? 'exhausted' : 'refused', reason: code });
     }
   }
   return Object.freeze(steps);
 }
-export interface WorkspaceRunDeliveryContext {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspaceRunDeliveryContext {
   readonly principal: VerifiedPrincipal; readonly document: { readonly revision: string };
   readonly config: { readonly targetQueue: { readonly requeueMax: number; readonly ttlMs: number; readonly capacity: number } };
   readonly queue: { forRun(scopeId: string, runId: string, limit: number): readonly TargetQueueRecord[] };

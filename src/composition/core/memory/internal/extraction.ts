@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { executionRegistrySchema, type AttemptIdentity, type MemoryExtractionSource, type VerifiedPrincipal } from '#domain/index.js';
-import { MemoryJournalApplication, MemoryPolicyAuthorization, PolicyAuthorizationError, memoryDistillerFor, memoryReportClaimsOf, memoryWorkClassView, type MemoryReportClaims } from '#engine/index.js';
+import { verifiedPrincipal, MemoryJournalApplication, MemoryPolicyAuthorization, PolicyAuthorizationError, memoryDistillerFor, memoryReportClaimsOf, memoryWorkClassView, type MemoryReportClaims } from '#engine/index.js';
 import { FileArtifactStore, memoryKeyedDigest, openLocalIntegrityAuthority, openSqliteInventoryReader, openSqliteMemoryJournalStore, type SqliteInventoryReader, readMemoryExtractionPage, selectWorkTarget } from '#adapters/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
@@ -19,7 +19,7 @@ export function prepareConfiguredMemoryExtraction(projectRoot: string, options: 
   return Object.freeze({ async run(scopeId: string) { try {
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), path = await c.path(), integrity = await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, true);
     const policy = new MemoryPolicyAuthorization({ async load() { return c.document; } }), distiller = memoryDistillerFor(c.principal, scopeId);
-    const app = new MemoryJournalApplication({ verifier: { verify: async () => distiller }, authorize: (...args) => policy.authorize(...args), keyedDigest: memoryKeyedDigest(integrity),
+    const app = new MemoryJournalApplication({ verifier: verifiedPrincipal(distiller), authorize: (...args) => policy.authorize(...args), keyedDigest: memoryKeyedDigest(integrity),
       openStore: async access => openSqliteMemoryJournalStore(path, c.config.storage.sqlite, integrity, access), automation: c.config.memoryAutomation.overlay, now: Date.now, eventId: randomUUID,
       // S4B-4: a purge the ledger lacks holds the distiller too (the service start replays first; this keeps the engine rule for every writer).
       purgeJournal: memoryPurgeJournalOf(c.layout, async () => integrity) });

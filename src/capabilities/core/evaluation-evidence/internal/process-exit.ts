@@ -8,7 +8,7 @@ export const processExitParametersSchema = z.strictObject({
   acceptedExitCodes: z.array(persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER)).min(1).refine(values => new Set(values).size === values.length, 'PROCESS_EXIT_CODES_DUPLICATE'),
 }).readonly();
 const parametersSchema = processExitParametersSchema;
-export type ProcessExitParameters = z.infer<typeof parametersSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProcessExitParameters = z.infer<typeof parametersSchema>;
 
 /** Installation checks implementation availability without inventing a task criterion. */
 export function validateInstalledProcessExitEvaluator(evaluator: EvaluatorDefinition): undefined {
@@ -48,7 +48,7 @@ export const processExitTerminalEvaluator = Object.freeze({
     return evaluateProcessExit(criterion.parameters, { exitCode: terminal.exitCode, ...(terminal.signal === undefined ? {} : { signal: terminal.signal }) });
   },
 });
-/** "Not weaker" for process-exit: a criterion accepting only exit codes the required bar accepts never passes a process the bar fails. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). "Not weaker" for process-exit: a criterion accepting only exit codes the required bar accepts never passes a process the bar fails. */
 export function processExitWithin(required: unknown, actual: unknown): boolean {
   const bar = parametersSchema.safeParse(required), criterion = parametersSchema.safeParse(actual);
   return bar.success && criterion.success && criterion.data.acceptedExitCodes.every(code => bar.data.acceptedExitCodes.includes(code));

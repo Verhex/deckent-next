@@ -11,7 +11,7 @@ import { auditCheckpointFixture } from '../support/audit-checkpoint.js';
 import { verifyAudit, type AuditVerifyQuery } from '../../../src/index.js';
 import { checkpointConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { clearConfigCache, productResourcePath, t } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { homeEnv } from '../support/host-platform.js';
@@ -87,6 +87,11 @@ it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share rea
     expect((await client.callTool({ name: 'verify_audit', arguments: query })).structuredContent).toEqual(drift);
     json = ''; await runKernelCommand(['doctor', '--json'], { root: f.root, env: f.options.env, verifyAudit: inspect, stdout: { write: value => { json += value; } } });
     expect(JSON.parse(json)).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'policy-changed' } });
+    for (const locale of ['en', 'tr'] as const) {
+      let human = ''; await runKernelCommand(['doctor', '--lang', locale], { root: f.root, env: f.options.env, verifyAudit: inspect, stdout: { write: value => { human += value; } } });
+      expect(human.split('\n')[0]).toContain(locale === 'en' ? 'Status: needs attention' : 'Durum: ilgi bekliyor');
+      expect(human).toContain(locale === 'en' ? 'policy changed' : 'policy değişmiş');
+    }
     expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('policy-changed');
     expect((await inspect(f.root, query)).checkpoint).toEqual(sdk.checkpoint);
     await writeFile(f.policyPath, JSON.stringify({ ...f.document, grants: [f.document.grants[1]] }));
@@ -140,6 +145,11 @@ it('a throwing verifier, an unverified scope and an unavailable result are never
     expect(await main(['audit', 'verify', '--scope', 's', '--json'], { root, env, verifyAudit, stdout: quiet, stderr: quiet }), name).not.toBe(0);
     let json = ''; await runKernelCommand(['doctor', '--json'], { root, env, verifyAudit, stdout: { write: value => { json += value; } }, stderr: quiet });
     expect(JSON.parse(json), name).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: name === 'unverified' ? 'no-checkpoint-yet' : 'unavailable' } });
+    for (const locale of ['en', 'tr'] as const) {
+      let human = ''; await runKernelCommand(['doctor', '--lang', locale], { root, env, verifyAudit, stdout: { write: value => { human += value; } }, stderr: quiet });
+      expect(human.split('\n')[0], `${name}/${locale}`).toContain(locale === 'en' ? 'Status: needs attention' : 'Durum: ilgi bekliyor');
+      expect(human, `${name}/${locale}`).toContain(t(name === 'unverified' ? 'doctor.check.audit.noCheckpoint' : 'cli.audit.reason.unavailable', {}, locale));
+    }
   }
 });
 

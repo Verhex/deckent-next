@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HUB_LIMITS, canonicalHubJson, requireBoundedHubJson } from '#domain/index.js';
+import { HUB_LIMITS, canonicalHubJson, hubExtensionId, requireBoundedHubJson } from '#domain/index.js';
 import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { type HubOperationPorts } from '#engine/index.js';
 import { createGovernedHubFetch, type HubFetchDependencies } from './client.js';
@@ -7,7 +7,7 @@ import { HubNetworkError } from './listener.js';
 
 /** H7 bridge to H3/H5 over H4. Extension identity is registry input; connecting still requires the exact durable first-use person decision. */
 export function governedHubOperations(deps: HubFetchDependencies, extensionId: string): NonNullable<HubOperationPorts['remote']> {
-  if (!/^[a-z0-9.-]+\/[a-z0-9-]+$/.test(extensionId) || extensionId === 'io.modelcontextprotocol/skills') throw new HubNetworkError('HUB_NETWORK_INVALID');
+  if (!hubExtensionId(extensionId)) throw new HubNetworkError('HUB_NETWORK_INVALID');
   return async (request, source, signal) => {
     signal.throwIfAborted();
     const boundedResponse = (value: unknown): unknown => {

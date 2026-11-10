@@ -4,17 +4,17 @@ import registry from './report-limits.json' with { type: 'json' };
 
 /** Mutable report/delivery policy: one versioned registry, also injected into the standalone worker bootstrap. */
 export const workerReportLimits = Object.freeze(registry.limits);
-export type WorkerReportLimits = typeof workerReportLimits;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerReportLimits = typeof workerReportLimits;
 const limits = workerReportLimits;
 /** A stopped worker requests a new attempt with human input; this never accepts work. */
 export const workerNeedsInputSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('needs-input'),
   question: persistedString(z.string().trim().min(1).max(limits.handoffOpenQuestionChars)) }).readonly();
-export const workerHandoffNoteSchema = z.strictObject({ toTask: persistedString(z.string().min(1).max(limits.handoffTaskIdChars)).optional(),
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const workerHandoffNoteSchema = z.strictObject({ toTask: persistedString(z.string().min(1).max(limits.handoffTaskIdChars)).optional(),
   summary: persistedString(z.string().max(limits.handoffSummaryChars)),
   artifacts: z.array(z.strictObject({ name: persistedString(z.string().min(1).max(limits.handoffArtifactNameChars)), digest: z.string().regex(/^[a-f0-9]{64}$/) })).max(limits.handoffArtifacts),
   openQuestions: z.array(persistedString(z.string().max(limits.handoffOpenQuestionChars))).max(limits.handoffOpenQuestions),
 });
-export type WorkerHandoffNote = z.infer<typeof workerHandoffNoteSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerHandoffNote = z.infer<typeof workerHandoffNoteSchema>;
 
 /** R5 (owner D5a): a check claim may carry a `checkId` and a `role`. An `acceptance` check that did not pass fails the task; an
  * `exploratory` or untyped check never does. A passed check stays a claim and never grants acceptance by itself. */
@@ -23,12 +23,12 @@ const workerReportCheckSchema = z.strictObject({ command: persistedString(z.stri
 /** S4B-2 (§4.4): one durable-lesson claim of the worker. Claims only, never verified here; a `lesson` names its cause and its correction, an
  * incomplete one is refused (never coerced). Bounds come from the report registry. */
 const lessonText = (max: number) => persistedString(z.string().trim().min(1).max(max));
-export const workerReportLessonSchema = z.discriminatedUnion('kind', [
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const workerReportLessonSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('fact'), title: lessonText(limits.lessonTitleChars), body: lessonText(limits.lessonBodyChars) }),
   z.strictObject({ kind: z.literal('lesson'), title: lessonText(limits.lessonTitleChars), body: lessonText(limits.lessonBodyChars),
     cause: lessonText(limits.lessonFieldChars), correction: lessonText(limits.lessonFieldChars) }),
 ]);
-export type WorkerReportLesson = z.infer<typeof workerReportLessonSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerReportLesson = z.infer<typeof workerReportLessonSchema>;
 /** Claims only: this report never grants task acceptance or execution authority. The enclosing dispatch artifact seals its bytes. */
 export const workerFinalReportSchema = z.strictObject({ schemaVersion: z.literal(1), summary: persistedString(z.string().max(limits.summaryChars)),
   changedFiles: z.array(persistedString(z.string().max(limits.changedFileChars))).max(limits.changedFiles),
@@ -75,7 +75,7 @@ export function readWorkerFinalReport(stdout: string): WorkerFinalReportResult {
 export const workerReportEvidenceSchema = z.strictObject({ status: z.enum(['reported', 'missing', 'invalid', 'oversized', 'unsupported']),
   acceptanceChecks: z.enum(['not-passed', 'not-run']).optional(), /** S4B-2: a malformed optional `lessons` claim was dropped; acceptance is unaffected. */ lessons: z.literal('invalid').optional(),
 }).refine(value => value.status === 'reported' || (value.acceptanceChecks === undefined && value.lessons === undefined)).readonly();
-export type WorkerReportEvidence = z.infer<typeof workerReportEvidenceSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerReportEvidence = z.infer<typeof workerReportEvidenceSchema>;
 export function workerReportEvidence(result: WorkerFinalReportResult): WorkerReportEvidence {
   if (result.status !== 'reported') return { status: result.reason };
   const last = new Map<string, string>(), untyped: string[] = [];

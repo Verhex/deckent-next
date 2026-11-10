@@ -3,8 +3,7 @@ import { attemptIdentitySchema, identitySchema, sameAttemptIdentity } from '#dom
 import type { ArtifactStore } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
-import { integrationManifestSchema, type IntegrationRecord, type IntegrationManifest } from './integration.js';
-import { WorkspacePatchError } from './contract.js';
+import { integrationManifestSchema, type IntegrationRecord, type IntegrationManifest, WorkspacePatchError } from '#engine/core/workspace-patch-contract/index.js';
 export const integrationQuerySchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   commandId: identitySchema }).readonly();
 export type IntegrationQuery = z.infer<typeof integrationQuerySchema>;

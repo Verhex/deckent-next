@@ -1,14 +1,14 @@
-import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { CodedError, persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { operationDescriptorSchema } from '#domain/core/effect/index.js';
 import { operationKey } from './catalog.js';
 /** Version of the Core port contract a target adapter module binds to (`EffectTarget`, `OperationCatalog`). Bumps only when
  * those ports change incompatibly; a manifest whose range excludes it is refused before anything is registered. */
 export const CORE_API_VERSION = 1;
-/** Tier is descriptive distribution data (which edition ships the module); it never grants authority or namespace ownership. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Tier is descriptive distribution data (which edition ships the module); it never grants authority or namespace ownership. */
 export const moduleTierSchema = z.enum(['core', 'base', 'enterprise', 'custom', 'user']);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-/** Room for signed Enterprise manifests (owner Q7). Present in v1 so the shape need not change; verification arrives with A04-3,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Room for signed Enterprise manifests (owner Q7). Present in v1 so the shape need not change; verification arrives with A04-3,
  * and until then a non-null signature is refused rather than accepted unverified. */
 export const manifestSignatureSchema = z.strictObject({ algorithm: z.literal('ed25519'), keyId: identitySchema, digest, value: persistedString(z.string().min(1).max(4096)) }).readonly();
 /** Manifest v1: pure data describing one adapter module. Every level, including the `provides` collections, is frozen on parse so
@@ -28,10 +28,10 @@ export const adapterModuleManifestSchema = z.strictObject({
   signature: manifestSignatureSchema.nullable(),
 }).readonly();
 export type AdapterModuleManifest = z.infer<typeof adapterModuleManifestSchema>;
-export type ModuleTier = z.infer<typeof moduleTierSchema>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ModuleTier = z.infer<typeof moduleTierSchema>;
 
-export class RegistryError extends Error {
-  constructor(readonly code: 'REGISTRY_MANIFEST_INVALID' | 'REGISTRY_SIGNATURE_UNSUPPORTED' | 'REGISTRY_CORE_API_UNSUPPORTED'
+export class RegistryError extends CodedError {
+  constructor(override readonly code: 'REGISTRY_MANIFEST_INVALID' | 'REGISTRY_SIGNATURE_UNSUPPORTED' | 'REGISTRY_CORE_API_UNSUPPORTED'
     | 'REGISTRY_NAMESPACE_RESERVED' | 'REGISTRY_MODULE_DUPLICATE' | 'REGISTRY_NAMESPACE_SHADOWED' | 'REGISTRY_ID_OUTSIDE_NAMESPACE'
     | 'REGISTRY_ADAPTER_DUPLICATE' | 'REGISTRY_ADAPTER_UNKNOWN' | 'REGISTRY_OPERATION_REDEFINED' | 'REGISTRY_FACTORY_MISMATCH' | 'REGISTRY_SEALED'
     | 'REGISTRY_OPTIONS_INVALID' | 'REGISTRY_OPTIONS_ASYNC', options?: ErrorOptions) {

@@ -11,11 +11,7 @@ const observed = { dataBlockers: [], managedScopes: [], work: { running: [], par
   service: { running: false, unit: null, unitDisable: 'none' as const, command: null } };
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
-it('removes only the owner-named members of a cache, keeping same-user strays and their parent while refusing symlinks, protected overlap and drift', async () => {
-  if (process.platform === 'win32') {
-    expect(() => new InstallationCacheRemovalTarget('fixture', [], [], { maxEntries: 10, maxDepth: 3 }, async work => work())).toThrow(expect.objectContaining({ code: 'EFFECT_TARGET_REJECTED' }));
-    console.info('verify-not-run: cache removal POSIX ownership unavailable'); return;
-  }
+it.skipIf(process.platform === 'win32')('removes only the owner-named members of a cache, keeping same-user strays and their parent while refusing symlinks, protected overlap and drift [verify-not-run: platform custody unavailable]', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-cache-')); roots.push(root);
   const cache = join(root, 'cache'), area = join(cache, 'a'.repeat(32)), audit = join(root, 'audit'); await mkdir(area, { mode: 0o700, recursive: true });
   await writeFile(audit, 'retained', { mode: 0o600 }); await writeFile(join(area, 'entry'), 'disposable', { mode: 0o600 });
@@ -60,8 +56,7 @@ it('removes only the owner-named members of a cache, keeping same-user strays an
   await remove(witnessed(1000)); for (const gone of [version, writers, moved, join(compile, 'removing')]) await expect(lstat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
-it('removes cache members only through their pinned parent: a link planted after the scan touches nothing outside', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: pinned removal is Linux-only'); return; }
+it.skipIf(process.platform !== 'linux')('removes cache members only through their pinned parent: a link planted after the scan touches nothing outside [verify-not-run: platform custody unavailable]', async () => {
   const platform = await import('#platform/index.js'), root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-pinned-cache-')); roots.push(root);
   const cache = join(root, 'cache'), area = join(cache, 'b'.repeat(32)), outside = join(root, 'outside'), entry = join(area, 'entry');
   for (const dir of [area, outside]) await mkdir(dir, { mode: 0o700, recursive: true });
@@ -76,8 +71,7 @@ it('removes cache members only through their pinned parent: a link planted after
   try { await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); } finally { spy.mockRestore(); }
   expect(await readFile(join(outside, 'entry'), 'utf8')).toBe('OUTSIDE'); expect(await readFile(join(`${area}-moved`, 'entry'), 'utf8')).toBe('disposable');
 });
-it('never accepts a foreign target id or a symlink ancestor into the recorded disposable set', async () => {
-  if (process.platform === 'win32') { console.info('verify-not-run: POSIX no-follow ownership check'); return; }
+it.skipIf(process.platform === 'win32')('never accepts a foreign target id or a symlink ancestor into the recorded disposable set [verify-not-run: platform custody unavailable]', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-foreign-')); roots.push(root);
   const foreign = join(root, 'foreign'), owned = join(root, 'owned');
   await mkdir(foreign, { mode: 0o700 }); await mkdir(owned, { mode: 0o700 });
@@ -91,8 +85,7 @@ it('never accepts a foreign target id or a symlink ancestor into the recorded di
   expect(await readFile(join(foreign, 'customer-record'), 'utf8')).toBe('KEEP');
 });
 
-it('keeps an authenticated recovery hold on unknown, rejects a different installation/person and releases only after settlement', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: private recovery and directory fsync require Linux'); return; }
+it.skipIf(process.platform !== 'linux')('keeps an authenticated recovery hold on unknown, rejects a different installation/person and releases only after settlement [verify-not-run: platform custody unavailable]', async () => {
   const { UninstallRecovery } = await import('#adapters/core/installation-removal/index.js');
   const { createUninstallPlan } = await import('#engine/core/installation/index.js');
   const { createHmacIntegrity, uninstallHoldPath } = await import('#platform/index.js');
@@ -116,13 +109,18 @@ it('keeps an authenticated recovery hold on unknown, rejects a different install
 });
 
 it('refuses unsupported native managers with typed manual guidance rather than translating them into Linux deletions', async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+  try {
+    expect(() => new InstallationCacheRemovalTarget('fixture', [], [], { maxEntries: 10, maxDepth: 3 }, async work => work()))
+      .toThrow(expect.objectContaining({ code: 'EFFECT_TARGET_REJECTED' }));
+  } finally { Object.defineProperty(process, 'platform', platform); }
   const { assertNativeUninstallSupport } = await import('#adapters/core/installation-removal/index.js');
   for (const platform of ['darwin', 'win32']) expect(() => assertNativeUninstallSupport(platform)).toThrow(expect.objectContaining({ code: 'UNINSTALL_NATIVE_UNSUPPORTED' }));
   expect(() => assertNativeUninstallSupport('linux')).not.toThrow();
 });
 
-it('deletes only exact members bound to the verified backup: a failed backup, a changed byte, a replacement link or a new member after verification is never deleted', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: private native purge target'); return; }
+it.skipIf(process.platform !== 'linux')('deletes only exact members bound to the verified backup: a failed backup, a changed byte, a replacement link or a new member after verification is never deleted [verify-not-run: platform custody unavailable]', async () => {
   const { InstallationDataRemovalTarget } = await import('#adapters/core/installation-removal/index.js');
   const { createHash } = await import('node:crypto');
   const root = await mkdtemp(join(tmpdir(), 'deckent-data-final-tail-')); roots.push(root);
@@ -156,8 +154,7 @@ it('deletes only exact members bound to the verified backup: a failed backup, a 
   expect(await target.lookup(ref, 'key')).toEqual({ status: 'applied', version: null });
 });
 
-it('keeps immutable tombstones across reinstall and never substitutes an old completed purge for a newly held partial one', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: private native completion custody'); return; }
+it.skipIf(process.platform !== 'linux')('keeps immutable tombstones across reinstall and never substitutes an old completed purge for a newly held partial one [verify-not-run: platform custody unavailable]', async () => {
   const { uninstallRecoveryDirectory, readUninstallTombstone, writeUninstallTombstone } = await import('#adapters/core/installation-removal/index.js');
   const { createUninstallPlan } = await import('#engine/core/installation/index.js');
   const { uninstallHoldPath } = await import('#platform/index.js');
@@ -187,8 +184,7 @@ it('keeps immutable tombstones across reinstall and never substitutes an old com
   expect(await readFile(join(directory, `${first.planDigest}.tombstone.json`))).toEqual(saved);
 });
 
-it('reads Git tracking hardened: a hostile repository config runs nothing, tracked paths are kept, unreadable tracking keeps every project path', async () => {
-  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: hardened Git probe needs Linux and /usr/bin/git'); return; }
+it.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/git'))('reads Git tracking hardened: a hostile repository config runs nothing, tracked paths are kept, unreadable tracking keeps every project path [verify-not-run: platform custody unavailable]', async () => {
   const { projectTracking } = await import('#adapters/core/installation-removal/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-vcs-')); roots.push(root);
   const project = join(root, 'project'), data = join(project, '.deckent'), marker = join(root, 'marker'), bounds = { timeoutMs: 10_000, outputBytes: 65_536 };
@@ -207,9 +203,8 @@ it('reads Git tracking hardened: a hostile repository config runs nothing, track
   }
 });
 
-it('archives members into the encrypted companion bound to D0, never deletes one changed after archiving, and restores only files that are missing', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: uninstall archive custody is Linux-only'); return; }
-  const { createBackupSet } = await import('#adapters/core/backup-store/index.js');
+it.skipIf(process.platform !== 'linux')('archives members into the encrypted companion bound to D0, never deletes one changed after archiving, and restores only files that are missing [verify-not-run: platform custody unavailable]', async () => {
+  const { createBackupSet, verifyBackupSet } = await import('#adapters/core/backup-store/index.js');
   const { createUninstallArchive, restoreUninstallArchive, InstallationDataRemovalTarget } = await import('#adapters/core/installation-removal/index.js');
   const { resolveProductLayout, productResourcePath } = await import('#platform/index.js');
   const { DatabaseSync } = await import('node:sqlite');
@@ -225,7 +220,11 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   const limits = { maxFiles: 100, maxDepth: 10, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 22 }, phrase = 'fixture-private-backup-passphrase';
   const set = join(base, 'recovery/set'); await mkdir(dirname(set), { mode: 0o700 }); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
   const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
-  const { members: bound } = await createUninstallArchive(set, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
+  const verified = await verifyBackupSet(set, phrase, limits);
+  const ids = { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) };
+  // B2-14: a cut line that is gone refuses with a registered code before anything is written.
+  await expect(createUninstallArchive(verified, [project], [{ ...members[0]!, line: 'ABSENT' }], ids, phrase, limits)).rejects.toMatchObject({ code: 'UNINSTALL_ARCHIVE_CHANGED' });
+  const { members: bound } = await createUninstallArchive(verified, [project], members, ids, phrase, limits); verified.close();
   expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
   // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
   const target = new InstallationDataRemovalTarget('fixture', members, []), ref = { kind: target.kind, id: 'conversation-data' };
@@ -237,4 +236,6 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   await rm(script);
   await expect(restoreUninstallArchive(set, [project], phrase, limits)).rejects.toMatchObject({ code: 'UNINSTALL_RESTORE_KEPT', params: { paths: history } });
   expect((await lstat(script)).mode & 0o777).toBe(0o755); expect(await readFile(history, 'utf8')).toBe('NEWER');
+  // B2-14: an archived path outside the restore roots stays the backup owner's coverage refusal, not an archive code.
+  await expect(restoreUninstallArchive(set, [join(base, 'elsewhere')], phrase, limits)).rejects.toMatchObject({ code: 'BACKUP_COVERAGE_INCOMPLETE' });
 });

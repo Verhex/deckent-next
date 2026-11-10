@@ -6,6 +6,7 @@ import { spendPeriodLines } from './spend-period.js';
 import { modelsInteractive } from './io.js';
 import { parseProviderSpendManagementCommand, type ProviderSpendManagementCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult, ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
+import { providerSpendRemaining } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUnchangedLine, scopeBudgetUsd } from './budget.js';
@@ -140,7 +141,7 @@ async function spendingSummary(args: Parsed, context: ModelCommandContext, local
     const money = (minor: number) => `${formatDecimal(minor / 10 ** digits, locale, digits)} ${currency}`, used = Number(value.period?.usedExactMinorUnits ?? account.settledExactMinorUnits);
     return [...spendPeriodLines(value, locale), t('climodels.spending.limit', { amount: money(account.budget.limitMinorUnits) }, locale), t('climodels.spending.used', { amount: money(used) }, locale),
       t('climodels.spending.held', { amount: money(account.reservedMinorUnits) }, locale),
-      t('climodels.spending.left', { amount: money(value.period?.remainingMinorUnits ?? Math.max(0, account.budget.limitMinorUnits - used - account.reservedMinorUnits)) }, locale),
+      t('climodels.spending.left', { amount: money(value.period?.remainingMinorUnits ?? providerSpendRemaining(value.checkpoint, used)!.remainingMinorUnits) }, locale),
       ...(account.frozen ? [t('climodels.spending.frozen', {}, locale)] : [])].join('\n');
   } });
 }

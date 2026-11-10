@@ -36,7 +36,7 @@ export function renderConfigOverrides(view: ConfigInspection, locale: Locale, st
 const columns = (locale: Locale) => t('clisetup.config.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
 
 /** Leaf rows of a displayed configuration (already redacted) under `prefix`: `key · value`, arrays and objects flattened to their leaves. */
-export function configLeafRows(value: unknown, prefix: string): [string, string][] {
+function configLeafRows(value: unknown, prefix: string): [string, string][] {
   if (Array.isArray(value)) return value.length ? value.flatMap((item, index) => configLeafRows(item, `${prefix}.${index}`)) : [[prefix, '[]']];
   if (value && typeof value === 'object') {
     const entries = Object.entries(value);

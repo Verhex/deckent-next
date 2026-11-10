@@ -140,6 +140,7 @@
   "cli.policy.summary.count": "{total} içinde {on} açık",
   "cli.policy.summary.delegations": "AI'a devredilen adımlar: {state} (deckent policy delegations)",
   "cli.policy.summary.mcp": "MCP izin grupları: {state} (deckent policy mcp)",
+  "cli.policy.summary.rollback": "Benimsemeyi geri alma: attempt / rollback-integration; deliver-working-tree kuralından ayrı yönetilir.",
   "cli.policy.summary.unreadable": "(okunamadı: {code})",
   "cli.policy.summary.revision": "Politika revizyonu: {revision}",
   "cli.policy.scopes.header": "Okuyabildiğiniz {count} kapsam:",

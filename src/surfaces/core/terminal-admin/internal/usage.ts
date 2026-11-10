@@ -1,4 +1,5 @@
 import { loadConfig, t } from '#platform/index.js';
+import { providerSpendRemaining } from '#engine/index.js';
 import { type InfoSection, type InfoView } from '#surfaces/core/terminal-window/index.js';
 import { parseProviderSpendAccountQuery } from '#domain/index.js';
 import { SCOPE_BUDGET_CHOICES, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
@@ -119,7 +120,7 @@ async function accountSection(call: TerminalAdminCall, budget: Budget | null): P
       { key: t('terminal.info.usage.key.limit', {}, locale), value: minor(account.budget.limitMinorUnits) },
       { key: t('terminal.info.usage.key.reserved', {}, locale), value: minor(account.reservedMinorUnits) },
       { key: t('terminal.info.usage.key.settled', {}, locale), value: minor(result.period?.usedExactMinorUnits ?? account.settledExactMinorUnits) },
-      { key: t('terminal.info.usage.key.remaining', {}, locale), value: minor(result.period?.remainingMinorUnits ?? Math.max(0, account.budget.limitMinorUnits - account.settledMinorUnits - account.reservedMinorUnits)) },
+      { key: t('terminal.info.usage.key.remaining', {}, locale), value: minor(result.period?.remainingMinorUnits ?? providerSpendRemaining(result.checkpoint, account.settledMinorUnits)!.remainingMinorUnits) },
       { key: t('terminal.info.usage.key.frozen', {}, locale), value: account.frozen ? t('models.spending.frozenYes', {}, locale) : t('models.spending.frozenNo', {}, locale) },
       { key: t('terminal.info.usage.key.reservations', {}, locale), value: count(result.checkpoint.reservationCount, locale) },
       { key: t('terminal.info.usage.key.checkpoint', {}, locale), value: String(result.checkpoint.revision) }], notes: [...spendPeriodLines(result, locale), t('terminal.admin.usage.notBilling', {}, locale)] };

@@ -18,7 +18,7 @@ it('keeps coding-tree and isolated BeUser launches behind their own admitted gat
   // recover output or release a recorded dispatch. Only the bounded BeUser controller receives an execute-capable dispatch port.
   const builders = sites(/new DispatchApplication\(/u);
   expect(builders).toEqual([BEUSER, 'src/composition/core/execution/internal/task.ts', 'src/composition/core/runs/internal/cancellation-runtime.ts',
-    'src/composition/core/runs/internal/reconcile.ts', 'src/composition/core/runs/internal/recover-output.ts', 'src/engine/core/workspace-patch/internal/custody.ts']);
+    'src/composition/core/runs/internal/reconcile.ts', 'src/composition/core/runs/internal/recover-output.ts', 'src/engine/core/workspace-adoption/internal/custody.ts']);
   const beuser = files.find(file => file.path === BEUSER)!.text;
   const admitted = beuser.indexOf("await policy.authorizeIdentity('execute', request.identity, c.principal)"), selected = beuser.indexOf('selectReservedTaskProfile(await store.loadRun(');
   expect(admitted).toBeGreaterThan(-1); expect(selected).toBeGreaterThan(admitted);
@@ -53,7 +53,8 @@ it('scans after the tree is final and before any connection, supervisor or claim
   const text = files.find(file => file.path === TASK)!.text, at = (needle: string) => { const index = text.indexOf(needle); expect(index, needle).toBeGreaterThan(-1); return index; };
   // R2 (D3a 2026-10-18): the gate runs through scan admission; its scan port is the adapter scan of exactly those views.
   const gate = at('await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv)');
-  expect(at('await nativePorts.prepare?.(native.binding)')).toBeLessThan(at('await inspectNativeCliWorker(native.binding, nativePorts)'));
+  expect(at('await nativePorts.prepare?.(native!.binding)')).toBeLessThan(at('await inspectNativeCliWorker(native!.binding, nativePorts)'));
+  expect(at('if (refusal) return refusal')).toBeLessThan(at('await inspectNativeCliWorker(native!.binding, nativePorts)'));
   expect(text.indexOf('enforceAdmittedWorkerTreeGate(')).toBe(text.lastIndexOf('enforceAdmittedWorkerTreeGate(')); expect(at('scan: async views => scanWorkerTree(views,')).toBeGreaterThan(gate);
   // The one decision stays `enforceWorkerTreeGate`, called only by the admitted gate (no second, unadmitted gate path in src).
   expect(sites(/\benforceWorkerTreeGate\(/u)).toEqual(['src/engine/core/workspaces/internal/scan-admission.ts', 'src/engine/core/workspaces/internal/secret-gate.ts']);

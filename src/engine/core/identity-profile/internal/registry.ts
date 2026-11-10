@@ -1,7 +1,7 @@
 import { coreIdentityProfileData, encodeIdentityProfile, IdentityProfileError, identityProfileDefinitionSchema, identityProfilePackageSchema,
   identityProfileRefSchema, type IdentityProfileDefinition, type IdentityProfileRef } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
-export interface IdentityProfileEntry { readonly definition: IdentityProfileDefinition; readonly digest: string; readonly namespace: string;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface IdentityProfileEntry { readonly definition: IdentityProfileDefinition; readonly digest: string; readonly namespace: string;
   readonly source: string; readonly labels: Readonly<{ en: string; tr: string }> | null }
 /** Immutable registry snapshot. Extensions add data under their own namespace, never replace Core or an existing version. */
 export class IdentityProfileRegistry {

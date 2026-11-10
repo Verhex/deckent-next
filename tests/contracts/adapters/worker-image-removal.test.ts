@@ -135,6 +135,10 @@ it('answers references from builder-custody leases only with participation, a pr
     // Removal's custody is the same kernel lock: a new user's lease waits and is refused, never written beside a removal.
     await withWorkerBuilder(custody('remover'), async () => {
       await expect(lease('late', 'adopted-label-matched', [imageId], 100)).rejects.toMatchObject({ code: 'WORKER_IMAGE_BUILDING' });
+      const stop = new AbortController(), reason = new Error('builder cancelled'); let entered = false;
+      stop.abort(reason);
+      await expect(withWorkerBuilder({ ...custody('cancelled'), signal: stop.signal }, async () => { entered = true; })).rejects.toBe(reason);
+      expect(entered).toBe(false);
     });
     expect(await readdir(join(daemon, 'leases', createHash('sha256').update(imageId).digest('hex')))).toHaveLength(2);
   } finally { server.close(); await rm(root, { recursive: true, force: true }); }

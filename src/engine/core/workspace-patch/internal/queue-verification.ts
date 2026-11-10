@@ -2,8 +2,8 @@ import { ErrorRegistry } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { encodeCriterionDefinition, executionRegistrySchema, taskGraphSchema, sameAttemptIdentity, CandidateBindingError,
   type CandidateBinding, type TargetQueueRecord, type RunSnapshot, type CriterionDefinition } from '#domain/index.js';
-import { executionProfileFingerprint, adoptionCriteriaMeet, type AdoptionVerificationRequirement, type CriterionWithin } from './verification.js';
-import { WorkspaceAdoptionError } from './adoption-error.js';
+import { executionProfileFingerprint, adoptionCriteriaMeet, type AdoptionVerificationRequirement, type CriterionWithin } from '#engine/core/workspace-adoption/index.js';
+import { WorkspaceAdoptionError } from '#engine/core/workspace-patch-contract/index.js';
 /** Preserve the original Task's evaluator definitions and pinned implementations, adding the current installation bar conjunctively. */
 export function queueVerificationGraph(record: TargetQueueRecord, original: RunSnapshot, registryInput: unknown, bar: AdoptionVerificationRequirement | null) {
   const task = original.graph.tasks.find(task => task.id === record.request.identity.taskId);

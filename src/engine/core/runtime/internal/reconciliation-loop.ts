@@ -1,3 +1,4 @@
+import { CodedError } from '#platform/index.js';
 import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
 import type { ReconciliationRecoveryCommand, ReconciliationRecoveryPage } from './reconciliation-recovery.js';
@@ -5,14 +6,14 @@ import { ScopedRuntimeLoop, type ScopedRuntimeLoopClock, type ScopedRuntimeLoopW
 
 const optionsSchema = z.strictObject({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   failureBackoffMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
-export type ReconciliationRuntimeLoopOptions = Readonly<z.infer<typeof optionsSchema>>;
-export type ReconciliationRecoveryDrain = (command: ReconciliationRecoveryCommand) => Promise<ReconciliationRecoveryPage>;
-export interface ReconciliationRuntimeLoopObserver {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ReconciliationRuntimeLoopOptions = Readonly<z.infer<typeof optionsSchema>>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ReconciliationRecoveryDrain = (command: ReconciliationRecoveryCommand) => Promise<ReconciliationRecoveryPage>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ReconciliationRuntimeLoopObserver {
   onPage(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
   onError(command: ReconciliationRecoveryCommand, error: unknown): void | Promise<void>;
 }
-export class ReconciliationRuntimeLoopError extends Error {
-  constructor(readonly code: 'RECONCILIATION_RUNTIME_LOOP_OPTIONS' | 'RECONCILIATION_RUNTIME_LOOP_RUNNING') {
+export class ReconciliationRuntimeLoopError extends CodedError {
+  constructor(override readonly code: 'RECONCILIATION_RUNTIME_LOOP_OPTIONS' | 'RECONCILIATION_RUNTIME_LOOP_RUNNING') {
     super(code); this.name = 'ReconciliationRuntimeLoopError';
   }
 }

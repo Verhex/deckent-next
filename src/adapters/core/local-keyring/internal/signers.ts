@@ -1,10 +1,10 @@
-import { persistedString, persistedInteger, catalogActionBytes, encodeCommandProjection, identitySchema, SIGNATURE_LABELS } from '#domain/index.js';
+import { counterSchema, persistedString, catalogActionBytes, encodeCommandProjection, identitySchema, SIGNATURE_LABELS } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { open, rename, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { AgentCatalogStoreError, type SignerKeyCustody, type SignerRevocation, type SignerRevocationLog } from '#engine/index.js';
-import { ED25519_PKCS8_BYTES, ed25519KeyId, ed25519Signer, generateEd25519Pair, inspectProductDirectory, prepareProductDirectory, signatureMessage, withConfigWriteLock,
+import { isCodedError, ED25519_PKCS8_BYTES, ed25519KeyId, ed25519Signer, generateEd25519Pair, inspectProductDirectory, prepareProductDirectory, signatureMessage, withConfigWriteLock,
   type IntegrityAuthority, type ProductLayout } from '#platform/index.js';
 import { withPrivateKeyFile } from './keyring.js';
 import limits from './signer-limits.json' with { type: 'json' };
@@ -42,7 +42,7 @@ export function localSignerKeyCustody(layout: ProductLayout): SignerKeyCustody {
 }
 
 const entrySchema = z.strictObject({ scopeId: identitySchema, keyId: z.string().regex(/^[a-f0-9]{64}$/), by: z.strictObject({ issuer: identitySchema, subject: identitySchema }),
-  atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), commandId: identitySchema });
+  atMs: counterSchema, commandId: identitySchema });
 const lineSchema = z.strictObject({ entry: z.unknown().optional(), prev: z.string().regex(/^[a-f0-9]{64}$/), keyId: persistedString(z.string().min(1)), mac: z.string().regex(/^[a-f0-9]{64}$/) });
 const GENESIS = '0'.repeat(64), SEAL = 'signer-revocations:1';
 /**
@@ -56,7 +56,7 @@ export class FileSignerRevocationLog implements SignerRevocationLog {
   private async path(create: boolean) {
     try { return join(create ? await prepareProductDirectory(this.layout, 'signers') : await inspectProductDirectory(this.layout, 'signers'), limits.revocationLogFile); }
     // No store yet, or a platform without POSIX key custody (no key can exist there either): no revocation recorded.
-    catch (error) { if (!create && ['MANAGED_FILE_MISSING', 'MANAGED_FILE_UNSUPPORTED'].includes((error as { code?: string }).code ?? '')) return null; throw unavailable(); }
+    catch (error) { if (!create && ['MANAGED_FILE_MISSING', 'MANAGED_FILE_UNSUPPORTED'].some(code => isCodedError(error, code))) return null; throw unavailable(); }
   }
   private async read(path: string, lenient = false): Promise<{ entries: SignerRevocation[]; last: string; valid: number }> {
     let handle: FileHandle;

@@ -1,6 +1,6 @@
 import { emit, getConfigFieldDefault, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { askCliCard, cliTableStyle, orderPendingFirst, renderCliTable, type CliCardOption, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
-import { mcpServerStateWord, mcpTrustQuestion } from '#surfaces/core/cli-terminal/index.js';
+import { mcpServerStateWord, mcpTrustQuestion } from '#surfaces/core/mcp-presentation/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 /** One server as `mcp list` returns it (adapter summary + health); only the fields a person reads. */

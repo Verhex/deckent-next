@@ -4,10 +4,10 @@ import { render } from 'ink';
 import { t } from '#platform/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
-import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { policyPanelPort } from '#surfaces/core/cli-terminal/index.js';
-import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+import { changeConfiguredDecisionDelegation, configuredPolicyTemplateUpgrade, inspectConfiguredDecisionDelegations, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 
 const [locale, root, tier] = process.argv.slice(2);
 composeCore();
@@ -36,7 +36,8 @@ const view = createElement(WorklinePaletteProvider, {
     context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' },
     labels, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 20,
     errorText: error => `ERR:${error?.code ?? 'error'}`, completeTurn: async () => 'unused', pollMs: 60_000, approvalPollMs: 60_000,
-    panels: { labels: terminalPanelLabels(locale), ports: { policy: policyPanelPort(root, { listMcpCapabilityScopes: listConfiguredMcpCapabilityScopes, inspectMcpCapabilities: inspectConfiguredMcpCapabilities, changeMcpCapabilities: changeConfiguredMcpCapabilities }, options, locale, { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation }) } },
+    panels: { labels: terminalPanelLabels(locale), ports: { policy: policyPanelPort(root, { listMcpCapabilityScopes: listConfiguredMcpCapabilityScopes, inspectMcpCapabilities: inspectConfiguredMcpCapabilities, changeMcpCapabilities: changeConfiguredMcpCapabilities }, options, locale, { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation }, undefined,
+      (root, scopeId, input, options) => configuredPolicyTemplateUpgrade(root, scopeId, options, input)) } },
   })),
 });
 const instance = render(view, { exitOnCtrlC: false, patchConsole: false, interactive: true });

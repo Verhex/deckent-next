@@ -1,17 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-import type { SecretCustody, SecretStore } from './port.js';
-import type { SecretChangeAudit, SecretChangeDecision } from './administration.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, FILE_SECRET_STORE_ID, type SecretCustody, type SecretStore } from './port.js';
+import { decideSecretCell, recordSecretDecision, type SecretChangeAudit, type SecretChangeDecision } from './administration.js';
 import { assertSecretRelocation } from './protection.js';
 
 /** The policy resource id of a store switch: one installation store, so one fixed id; a rule for every secret name (`all`) covers it. */
 export const SECRET_STORE_SWITCH_RESOURCE_ID = 'secret-store';
-/** The environment backend's id (the selection an absent `secrets` section means). */
-const ENVIRONMENT_STORE = 'core.secret-store.env@1';
 /** Core stores by custody strength: a move to a lower rank is a downgrade; a store outside this list (Enterprise/custom) always asks. */
-const CORE_STORE_RANK: Readonly<Record<string, number>> = Object.freeze({ 'core.secret-store.env@1': 1, 'core.secret-store.file@1': 2,
-  'core.secret-store.encrypted-file@1': 3 });
+const CORE_STORE_RANK: Readonly<Record<string, number>> = Object.freeze({ [ENV_SECRET_STORE_ID]: 1, [FILE_SECRET_STORE_ID]: 2, [ENCRYPTED_FILE_SECRET_STORE_ID]: 3 });
 
 /** The installation's store selection (`secrets.store` of the installation config): `store` null = no selection (the environment backend). */
 export interface SecretStoreSelectionPort {
@@ -31,7 +28,7 @@ export interface SecretStoreSwitchPorts {
   /** Names resolving from env but absent in this target; reads config and target metadata inside custody, never values. */
   readonly environmentReferences: (target: SecretStore) => Promise<readonly string[]>;
 }
-export interface SecretStoreSwitchRequest {
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface SecretStoreSwitchRequest {
   readonly principal: { readonly issuer: string; readonly subject: string };
   readonly scopeId: string;
   readonly to: string;
@@ -39,7 +36,7 @@ export interface SecretStoreSwitchRequest {
   readonly confirmDowngrade: boolean;
   readonly confirmEnvMissing?: boolean;
 }
-/** `switched`: entries moved and the selection published; `current`: the target was already selected (leftover identical copies cleaned). */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `switched`: entries moved and the selection published; `current`: the target was already selected (leftover identical copies cleaned). */
 export interface SecretStoreSwitchResult {
   readonly schemaVersion: 1; readonly scopeId: string; readonly status: 'switched' | 'current';
   readonly from: string; readonly to: string; readonly entries: number; readonly downgrade: boolean;
@@ -50,14 +47,8 @@ export interface SecretStoreSwitchResult {
 
 /** `secret`/`switch` for the verified principal in the request's scope (the caller passes the socket peer; anyone else is refused). */
 export function policySecretStoreSwitchAuthorization(policy: unknown, principal: VerifiedPrincipal) {
-  return async (request: SecretStoreSwitchRequest): Promise<SecretChangeDecision> => {
-    if (request.principal.issuer !== principal.issuer || request.principal.subject !== principal.subject) {
-      throw ErrorRegistry.createError('SECRET_STORE_SWITCH_DENIED', { params: { to: request.to } });
-    }
-    const decision = evaluatePolicy(policy, { principal, scopeId: request.scopeId, action: 'switch',
-      resource: { kind: policyResources.secret.kind, id: SECRET_STORE_SWITCH_RESOURCE_ID } });
-    return Object.freeze({ policyRevision: decision.revision, effect: decision.decision, ruleId: decision.ruleId ?? null });
-  };
+  return async (request: SecretStoreSwitchRequest): Promise<SecretChangeDecision> => decideSecretCell(policy, principal, request.principal, request.scopeId,
+    'switch', SECRET_STORE_SWITCH_RESOURCE_ID, () => ErrorRegistry.createError('SECRET_STORE_SWITCH_DENIED', { params: { to: request.to } }));
 }
 
 /** Whether a move from one store to another lowers custody (both ranked by Core and the target ranks at least as high: not a downgrade). */
@@ -88,10 +79,10 @@ export class SecretStoreSwitch {
   }
 
   private async move(request: SecretStoreSwitchRequest): Promise<SecretStoreSwitchResult> {
-    const selection = await this.ports.selection.read(), from = selection.store ?? ENVIRONMENT_STORE;
+    const selection = await this.ports.selection.read(), from = selection.store ?? ENV_SECRET_STORE_ID;
     if (from === request.to) return this.finish(request, from);
     const source = this.ports.open(from), target = this.ports.open(request.to);
-    if (from === ENVIRONMENT_STORE) {
+    if (from === ENV_SECRET_STORE_ID) {
       const missing = await this.ports.environmentReferences(target);
       if (missing.length && !request.confirmEnvMissing) throw ErrorRegistry.createError('SECRET_STORE_ENV_UNCONFIRMED', {
         params: { to: request.to, names: missing.join(', ') } });
@@ -163,9 +154,6 @@ export class SecretStoreSwitch {
     const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: request.scopeId,
       principal: { issuer: request.principal.issuer, subject: request.principal.subject }, policyRevision: decision.policyRevision, atMs: this.ports.now(),
       subject: { kind: 'secret-store-switch', from, to: request.to, entries, downgrade, decision: { effect: decision.effect, ruleId: decision.ruleId } } };
-    if (decision.effect === 'allow') { await this.ports.audit(event); return; }
-    try { await this.ports.audit(event); } catch { /* an unrecordable refusal is still a refusal */ }
-    if (decision.effect === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
-    throw ErrorRegistry.createError('SECRET_STORE_SWITCH_DENIED', { params: { to: request.to } });
+    await recordSecretDecision(decision, event, this.ports.audit, 'SECRET_STORE_SWITCH_DENIED', { to: request.to });
   }
 }

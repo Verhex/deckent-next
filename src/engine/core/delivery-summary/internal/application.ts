@@ -1,6 +1,6 @@
-import { persistedString, persistedInteger, attemptIdentitySchema, identitySchema, readWorkerFinalReport, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, type WorkerFinalReportResult } from '#domain/index.js';
+import { counterSchema, persistedString, attemptIdentitySchema, identitySchema, readWorkerFinalReport, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, type WorkerFinalReportResult } from '#domain/index.js';
 import { z } from 'zod';
-import type { KnownSecretSnapshot } from '#platform/index.js';
+import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type KnownSecretSnapshot } from '#platform/index.js';
 import { parseRetainedOutputEnvelope, type DispatchIdentityAuthorization, type RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import { describeAttemptWorkerModels, WorkerObservationError, type WorkerEventArtifacts, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { RunStoreError, type RunAuthorization, type RunStore } from '#engine/core/runs/index.js';
@@ -10,11 +10,11 @@ import { projectDeliverySummary } from './projector.js';
 /** What the caller already knows about the card: operation, the target as its adapter registered it, and the system verification Run if any. */
 export const deliverySummaryRequestSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, operation: deliverySummaryOperationSchema,
   target: z.strictObject({ id: persistedString(z.string().min(1).max(4096)), protected: z.boolean().nullable() }).nullable(),
-  verificationRunId: identitySchema.nullable(), topPaths: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
+  verificationRunId: identitySchema.nullable(), topPaths: counterSchema.optional(),
   /** A queue ticket's command id: the host derives its verification Run id (surfaces never load the queue naming code). */
   ticketCommandId: identitySchema.optional() }).readonly();
 export type DeliverySummaryRequest = z.infer<typeof deliverySummaryRequestSchema>;
-/** The target adapter's change filler; null = no change evidence. A policy refusal it throws becomes `withheld`. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The target adapter's change filler; null = no change evidence. A person-facing authorization refusal it throws becomes `withheld`. */
 export type DeliveryChangeSource = (identity: AttemptIdentity, principal: VerifiedPrincipal) => Promise<DeliveryChangeFacts | null>;
 export interface DeliverySummaryPorts {
   readonly store: Pick<RunStore, 'loadRun'> & Pick<RunBoundDispatchStore, 'loadBoundDispatch'> & Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
@@ -22,8 +22,7 @@ export interface DeliverySummaryPorts {
   readonly runs: RunAuthorization; readonly attempts: DispatchIdentityAuthorization;
   readonly change?: DeliveryChangeSource; readonly known?: KnownSecretSnapshot;
 }
-const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error
-  && ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'APPROVAL_DENIED'].includes(String(error.code));
+const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS });
 async function readable(check: () => Promise<void>): Promise<boolean> {
   try { await check(); return true; } catch (error) { if (denied(error)) return false; throw error; }
 }
@@ -80,7 +79,7 @@ export class DeliverySummaryApplication {
   }
 }
 
-/** What the queue service already holds for its own ticket: the operation, its target, its verification Run and the adapter's change facts. */
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). What the queue service already holds for its own ticket: the operation, its target, its verification Run and the adapter's change facts. */
 export type SystemDeliverySummaryRequest = Readonly<{ identity: AttemptIdentity; operation: DeliverySummaryRequest['operation'];
   target: Readonly<{ id: string; protected: boolean | null }> | null; verificationRunId: string | null; change: DeliveryChangeFacts | null }>;
 /**

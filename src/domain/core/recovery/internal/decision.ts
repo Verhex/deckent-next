@@ -5,9 +5,9 @@ import { RECOVERY_CAUSE_CLASSES, recoveryNoteCodeSchema } from './case.js';
 
 /** S6R-DESIGN §6: the only actions a recovery decision may choose (versioned code, never registry data); the gate decides which are offered. */
 export const RECOVERY_DECISION_ACTIONS = Object.freeze(['continue-new-attempt', 'escalate-human'] as const);
-export type RecoveryDecisionAction = typeof RECOVERY_DECISION_ACTIONS[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryDecisionAction = typeof RECOVERY_DECISION_ACTIONS[number];
 const positive = counterSchema.positive();
-/**
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S6R-5 (S6R-DESIGN §6, §8; owner Q-R1/Q-R2): the recovery-decision registry, versioned Core data (`assets/recovery/decision.json`), every bound
  * provisional until measured (K-F S8). `template` names the current prompt among the versioned `templates` (`id@version` is sealed with each call);
  * `noteCodes` the codes a decision may pass on with their worker-facing text; `answer` the strict answer bounds; `call` the completion cap of the one
@@ -39,9 +39,9 @@ export function recoveryDecisionTemplate(registry: RecoveryDecisionRegistry) {
 /** The worker-facing text of a note code (null: not a code of this registry). */
 export const recoveryNoteText = (registry: RecoveryDecisionRegistry, code: string) => registry.noteCodes.find(row => row.code === code)?.text ?? null;
 
-export const RECOVERY_DECISION_FAILURES = Object.freeze(['answer-too-large', 'answer-invalid', 'echo-mismatch', 'action-not-offered', 'note-invalid'] as const);
-export type RecoveryDecisionFailure = typeof RECOVERY_DECISION_FAILURES[number];
-export type RecoveryDecisionAnswer = Readonly<{ ok: true; action: RecoveryDecisionAction; causeClass: typeof RECOVERY_CAUSE_CLASSES[number]; note: string | null; rationale: string }>
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const RECOVERY_DECISION_FAILURES = Object.freeze(['answer-too-large', 'answer-invalid', 'echo-mismatch', 'action-not-offered', 'note-invalid'] as const);
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryDecisionFailure = typeof RECOVERY_DECISION_FAILURES[number];
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RecoveryDecisionAnswer = Readonly<{ ok: true; action: RecoveryDecisionAction; causeClass: typeof RECOVERY_CAUSE_CLASSES[number]; note: string | null; rationale: string }>
   | Readonly<{ ok: false; failure: RecoveryDecisionFailure }>;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 /** The answer contract the template names (`answerSchema` in the request is its plain description). */

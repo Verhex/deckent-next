@@ -2,6 +2,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
+import { hasLiveWork } from '#domain/index.js';
 import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderTaskAgentLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { runStateWord, runTitle, shownId } from './run-human.js';
@@ -13,7 +14,7 @@ const localTime = (ms: number, locale: Locale) => new Intl.DateTimeFormat(locale
 type TaskView = RunView['tasks'][number];
 type InspectData = Pick<Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>, 'run' | 'models'>;
 
-export function phaseText(phase: TaskView['phase'], locale: Locale): string {
+function phaseText(phase: TaskView['phase'], locale: Locale): string {
   const phases: Readonly<Record<TaskView['phase'], () => string>> = {
     skipped: () => t('cli.run.inspect.states.skipped', {}, locale), 'awaiting-decision': () => t('cli.run.inspect.states.awaitingDecision', {}, locale),
     pending: () => t('cli.run.inspect.states.pending', {}, locale), active: () => t('cli.run.inspect.states.active', {}, locale),
@@ -24,7 +25,7 @@ export function phaseText(phase: TaskView['phase'], locale: Locale): string {
 }
 
 /** What an accepted task's acceptance rests on (law 1), one line per distinct evaluator of its criteria; a person's accept says so instead. */
-export function acceptanceEvidenceLines(run: RunView, task: TaskView, locale: Locale): string[] {
+function acceptanceEvidenceLines(run: RunView, task: TaskView, locale: Locale): string[] {
   if (task.phase !== 'accepted') return [];
   if (task.acceptedEvidence === 'model-unverified') return [t('cli.task.decision.acceptedUnverified', {}, locale)];
   const evaluators = [...new Map(run.criteria.filter(criterion => task.acceptanceCriteria.includes(criterion.id))
@@ -86,7 +87,7 @@ function holdLines(run: RunView, locale: Locale): string[] {
 }
 function cancelledBeforeLaunch(run: RunView): boolean {
   const waiting = new Set((run.quotaWaits ?? []).map(wait => wait.taskId));
-  return run.tasks.some(task => task.phase === 'cancelled') && run.tasks.every(task => !task.unresolvedEffects && !['active', 'evaluating', 'reconciling'].includes(task.phase)
+  return run.tasks.some(task => task.phase === 'cancelled') && run.tasks.every(task => !hasLiveWork(task)
     && (task.phase !== 'cancelled' || (task.cancellation?.reason === 'prevented-before-launch' && !waiting.has(task.id))));
 }
 export function renderRunInspect(data: InspectData, locale: Locale, verbose: boolean, notice: readonly string[] = []): string {

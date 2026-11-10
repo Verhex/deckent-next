@@ -1,17 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
-import { AuditApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryCatalogFacts, memoryCatalogKey, memoryRolloutGated, type MemoryHeld,
+import { verifiedPrincipal, AuditApplication, MemoryJournalApplication, MemoryPolicyAuthorization, memoryCatalogFacts, memoryCatalogKey, memoryRolloutGated, type MemoryHeld,
   type MemoryRolloutModes, type MemoryRolloutStatus } from '#engine/index.js';
 import { FileMemoryPurgeJournal, memoryKeyedDigest, openLocalIntegrityAuthority, openMemoryEvaluationSourceReader, openReadOnlyAuditStore, openSqliteMemoryJournalStore,
   openSqliteModelCatalogReader } from '#adapters/index.js';
 import { ErrorRegistry, SystemTrustedClock, getConfigKnownSecrets, productResourcePath, type ConfigLoadOptions, type DeckentConfig } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
-/** The three `memoryAutomation` switch modes of one effective configuration. */
-export const memoryRolloutModesOf = (config: Pick<DeckentConfig, 'memoryAutomation'>): MemoryRolloutModes => ({ extraction: config.memoryAutomation.extraction.mode,
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const memoryRolloutModesOf = (config: Pick<DeckentConfig, 'memoryAutomation'>): MemoryRolloutModes => ({ extraction: config.memoryAutomation.extraction.mode,
   verification: config.memoryAutomation.verification.mode, context: config.memoryAutomation.context.mode });
 
 /**
@@ -24,7 +22,7 @@ export async function inspectConfiguredMemoryRollout(projectRoot: string, scopeI
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, { ...options, heal: false }, 'read'), { config, layout } = c, sqlite = config.storage.sqlite;
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, false).catch(() => null);
     if (!integrity) return { schemaVersion: 1, status: 'held', code: 'MEMORY_UNAVAILABLE' };
-    const path = await c.path(), policy = new MemoryPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
+    const path = await c.path(), policy = new MemoryPolicyAuthorization(contextPolicySource({ layout, config }));
     const view = await policy.readFilter(c.principal, scopeId);
     // The sealed-Run re-derivation (independence) opens its own readers; when they cannot open, only that measure is unreadable.
     const sources = await (async () => {
@@ -34,7 +32,7 @@ export async function inspectConfiguredMemoryRollout(projectRoot: string, scopeI
       return openMemoryEvaluationSourceReader(path, sqlite, (channelId, modelId) => facts.get(memoryCatalogKey(channelId, modelId))?.maker ?? null, runId => view({ kind: 'run', id: runId }, 'inspect'));
     })().catch(() => null);
     try {
-      const clock = new SystemTrustedClock(), journal = new MemoryJournalApplication({ verifier: { verify: async () => c.principal }, authorize: (...args) => policy.authorize(...args),
+      const clock = new SystemTrustedClock(), journal = new MemoryJournalApplication({ verifier: verifiedPrincipal(c.principal), authorize: (...args) => policy.authorize(...args),
         readFilter: (...args) => policy.readFilter(...args), openStore: async access => openSqliteMemoryJournalStore(path, sqlite, integrity, access), keyedDigest: memoryKeyedDigest(integrity),
         purgeJournal: new FileMemoryPurgeJournal(async () => productResourcePath(layout, 'memoryPurges'), async () => integrity), ...(sources ? { evaluationSources: sources } : {}),
         automation: config.memoryAutomation.overlay, knownSecrets: getConfigKnownSecrets(config), now: () => clock.sample().wallMs, eventId: randomUUID });

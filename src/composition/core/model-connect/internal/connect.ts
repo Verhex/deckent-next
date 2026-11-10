@@ -1,8 +1,9 @@
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
 import { SIWC_INFERENCE } from '#adapters/index.js';
-import type { ModelInvocationProfile, ModelConnectResult } from '#domain/index.js';
+import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { assertAuthorityWitness, OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
+import { configuredInvocationProfiles, assertAuthorityWitness, OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
 import { localPrincipalChannel, localPrincipalPeer, PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -12,7 +13,6 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
 import { activateConfiguredWorkerModel, carryConfiguredModelActivation, admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { listConfiguredConnectionWorkspaces, listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
-import { connectionFacts } from './facts.js';
 import { headlessConnectPorts, headlessPersonWitness } from './headless.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -41,10 +41,9 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: parsed.data.workspaceId } };
     }
-    const facts = parsed.success && kindOf(parsed.data.connection)?.connect?.personOnly && kindOf(parsed.data.connection)?.connect?.chatPath === null
-      ? connectionFacts(projectRoot, String(scopeId), options) : null;
-    const inspectCatalog = (channelId: string) => facts ? facts.catalog(channelId)
-      : inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options);
+    // A person-only CLI connection needs authorized catalog/activation facts before a legacy profile can be repaired, never invocation permission.
+    const facts = parsed.success && kindOf(parsed.data.connection)?.connect?.personOnly && kindOf(parsed.data.connection)?.connect?.chatPath === null ? { modelUse: false } as const : {};
+    const inspectCatalog = (channelId: string) => inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options, facts);
     const siwc = parsed.success && kindOf(parsed.data.connection)?.connect?.adapter === SIWC_INFERENCE.adapter.id ? configuredSiwcConnect(projectRoot, parsed.data, options, host.siwcPresentation) : null;
     const pulled = new Map<string, readonly string[]>();
     const app = new ModelConnectApplication({
@@ -62,7 +61,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async preflight(scopeId, principal, target) {
         const kind = parsed.success ? kindOf(parsed.data.connection) : null;
         const channelId = target?.reference.providerId ?? kind?.connect?.seed ?? (kind ? providerDiscoveryChannel(kind, parsed.success ? parsed.data.endpoint : null) : 'unknown');
-        const source = { load: async () => (await scope()).document };
+        const source = contextPolicySource(await scope(), async () => (await scope()).document);
         await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: null }, principal, 'scope');
         if (target) {
           await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: target.nativeId }, principal, 'scope');
@@ -96,7 +95,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async write(change) {
         const input = { ...change, expect: change.layer === 'global' ? globalDigest : observed!.digest, principal: await principal(), scopeId: String(scopeId) };
         const kind = parsed.success ? kindOf(parsed.data.connection) : null;
-        const profiles = (observed?.[change.layer]['provider_invocation_profiles'] as { profiles?: ModelInvocationProfile[] } | undefined)?.profiles ?? [];
+        const profiles = configuredInvocationProfiles(observed?.[change.layer] ?? {});
         const selected = parsed.success && 'nativeId' in parsed.data.model ? parsed.data.model.nativeId : null;
         const profile = profiles.find(profile => profile.scopeId === scopeId && (parsed.success && 'reference' in parsed.data.model
           ? isDeepStrictEqual(profile.reference, parsed.data.model.reference)
@@ -130,8 +129,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       },
       async register(catalog, commandId) { await applyConfiguredModelCatalog(projectRoot, { schemaVersion: 1, commandId, scopeId, action: 'register', catalog }, options); },
       binding: reference => inspectModelBinding(projectRoot, reference, options),
-      async activation(reference) { return (await (facts ? facts.activation(reference)
-        : inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options))).activation; },
+      async activation(reference) { return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options, facts)).activation; },
       async activate(value) {
         await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
           expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options); },
@@ -171,7 +169,7 @@ export async function planConfiguredProfileCache(projectRoot: string, scopeId: s
   const snapshot = await snapshotConfiguredConfig(projectRoot, options);
   return planProfileCache({ global: snapshot.global as Record<string, unknown>, project: snapshot.project as Record<string, unknown> }, scopeId, providerProfileCacheOffer);
 }
-export type ProfileProtocolPlan = Omit<ProfileChangePlan<ProviderProfileProtocolDetail>, 'writes'> & Readonly<{ writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
+type ProfileProtocolPlan = Omit<ProfileChangePlan<ProviderProfileProtocolDetail>, 'writes'> & Readonly<{ writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
 export async function planConfiguredProfileProtocol(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileProtocolPlan> {
   const snapshots = await Promise.allSettled(['global', 'project'].map(layer => snapshotConfiguredConfig(projectRoot, options, layer as 'global' | 'project')));
   for (const snapshot of snapshots) if (snapshot.status === 'rejected') throw snapshot.reason;

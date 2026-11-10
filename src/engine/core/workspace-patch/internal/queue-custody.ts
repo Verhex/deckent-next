@@ -1,11 +1,9 @@
 import { sameAttemptIdentity, CandidateBindingError, TargetQueueError, type TargetQueueRecord, type RunSnapshot } from '#domain/index.js';
 import type { TargetQueueStore } from '#engine/core/effect/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
-import { workspacePatchSchema } from './contract.js';
-import { integrationManifestSchema } from './integration.js';
+import { workspacePatchSchema, integrationManifestSchema, type IntegrationCommitMetadata } from '#engine/core/workspace-patch-contract/index.js';
 import type { IntegrationReader } from './inspection.js';
 import { queueCommandIds } from './queue-git.js';
-import type { IntegrationCommitMetadata } from './commit-metadata.js';
 /** Reuses immutable integration and patch receipts; a queue JSON path is never workspace authority. */
 export async function readQueueCandidate(record: TargetQueueRecord, reader: IntegrationReader, artifacts: ArtifactStore, maxBytes: number) {
   const candidate = record.candidate, ids = queueCommandIds(record), identity = record.request.identity;

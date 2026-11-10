@@ -25,7 +25,7 @@ const LISTED = 20;
 
 /** `/scratch` lists the area (newest first), `/scratch path` names it, `/scratch clear` empties it; anything else is the usage line and
  * calls nothing. Port failures propagate to the caller (typed errors render there). */
-export async function runScratchCommand(args: string, sessionId: string, port: WorklineScratchPort,
+async function runScratchCommand(args: string, sessionId: string, port: WorklineScratchPort,
   labels: WorklineScratchLabels = NEUTRAL): Promise<readonly WorkLedgerEntry[]> {
   const verb = args.trim().toLowerCase();
   if (verb === 'clear') {

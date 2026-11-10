@@ -1,7 +1,7 @@
 import type { MessageKey } from '#platform/index.js';
 
 export const HELP_GROUPS = ['start', 'observe', 'work', 'models', 'approvals', 'setup', 'developer'] as const;
-export type HelpGroup = typeof HELP_GROUPS[number];
+type HelpGroup = typeof HELP_GROUPS[number];
 /**
  * How a command relates to the dispatcher's installation identity preflight (ID-1C relocation stop). Absent: the dispatcher reads the
  * installation identity before the command runs. `owned`: the command loads, heals or recovers the installation and checks its identity
@@ -15,7 +15,7 @@ export type CliInstallationContract = 'owned' | 'independent';
  * Otherwise the dispatcher lists the actions and names the missing argument (`requires`, else `<action>`) and exits 2. A default never
  * mutates state: only an action that reads may be named here.
  */
-export type CliBareBehaviour = 'handler' | { readonly read?: string; readonly requires?: readonly string[] };
+type CliBareBehaviour = 'handler' | { readonly read?: string; readonly requires?: readonly string[] };
 export interface CliCommandSpec { readonly name: string; readonly group: HelpGroup; readonly summary: MessageKey; readonly detail: MessageKey;
   readonly installation?: CliInstallationContract; readonly children?: readonly CliCommandSpec[];
   /** Family synopsis for the main help, CLI syntax only: flags verbatim, `<placeholder>` words localized through `cli.help.placeholder.*`. */
@@ -162,7 +162,7 @@ export const CLI_CATALOG = [
   // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
   { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
     action('inspect', 'observe', 'agents.help.action.inspect', 'agents.help.detail', { requires: ['<id>'] }),
-    action('use', 'observe', 'headless.agent.k13.agents.action', 'headless.agent.k13.agents.help', { requires: ['<id>', '--task <id>', '--revision <number>'] }),
+    action('use', 'observe', 'headless.agent.agents.action', 'headless.agent.agents.help', { requires: ['<id>', '--task <id>', '--revision <number>'] }),
     action('skills', 'observe', 'agents.help.action.skills', 'agents.help.detail'),
     action('skill', 'observe', 'agents.help.action.skill', 'agents.help.detail', { requires: ['<id>'] }),
     action('define', 'observe', 'agents.help.action.define', 'agents.help.detail', { requires: ['--input <file>'] }),
@@ -206,6 +206,7 @@ export const CLI_CATALOG = [
       action('register', 'models', 'cli.help.action.register', 'cli.help.modelsCatalog', { requires: ['--command-id <id>', '--seed <name> | --file <path>'] }),
       action('activate', 'models', 'cli.help.action.models.catalog.activate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
       action('deactivate', 'models', 'cli.help.action.models.catalog.deactivate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
+      action('brain', 'models', 'cli.help.action.models.catalog.brain', 'cli.help.modelsCatalogBrain', { requires: ['--channel <id>', '--model <exact_id>', '--on | --off'] }),
     ] },
     // M2 typed role admission: which exact catalog model serves which role; `set` is a person's card (never AI, pipe or --json).
     { name: 'roles', group: 'models', summary: 'cli.help.action.models.roles', detail: 'climodels.roles.help', children: [
@@ -232,6 +233,7 @@ export const CLI_CATALOG = [
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', args: '[--scope <id>]', bare: { read: 'status' }, children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', { installation: 'independent' }),
     action('status', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
+    action('show', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
     action('delegations', 'observe', 'policy.delegate.title', 'cli.help.policy'),
     action('delegate', 'approvals', 'policy.delegate.grant', 'cli.help.policy', { requires: ['--step <id>'] }),
     action('undelegate', 'approvals', 'policy.delegate.revoke', 'cli.help.policy', { requires: ['--step <id>'] }),
@@ -288,9 +290,9 @@ export const CLI_CATALOG = [
     action('shutdown', 'developer', 'cli.help.action.shutdown', 'cli.help.runtime'),
     action('restart', 'developer', 'cli.help.action.restart', 'cli.help.runtime'),
   ] },
-  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'k29.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
-    action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help', { requires: ['--input <file|->'] }),
-    action('template', 'developer', 'cli.help.action.codingTemplate', 'k29.coding.template.help'),
+  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
+    action('prepare', 'developer', 'cli.help.action.prepare', 'coding.prepare.help', { requires: ['--input <file|->'] }),
+    action('template', 'developer', 'cli.help.action.codingTemplate', 'coding.template.help'),
     { name: 'instructions', group: 'developer', summary: 'cli.help.action.coding.instructions', detail: 'cli.coding.instructions.help', children: [
       action('status', 'developer', 'cli.help.action.coding.instructions.status', 'cli.coding.instructions.help'),
       action('trust', 'developer', 'cli.help.action.coding.instructions.trust', 'cli.coding.instructions.help'),

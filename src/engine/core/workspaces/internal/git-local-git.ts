@@ -1,3 +1,4 @@
+import { FIXED_TOOL_PATH } from '#platform/index.js';
 /** Git argument/environment construction shared by every invocation this package runs directly against a
  * repository it does not itself allocate (the caller's real source root, a configured work target, or a Deckent reference namespace
  * inside it): bounded read or ref-write access, never a network transport, a repository hook, an fsmonitor
@@ -35,17 +36,25 @@
  * the variable is compiled into the 2.43.0 binary and measured effective here. The `--no-lazy-fetch` CLI flag
  * itself is Git 2.45+ ("unknown option" on 2.43.0) and is not used; only the underlying env var is. */
 export const GIT_LOCAL_ENV: Readonly<Record<string, string>> = Object.freeze({
-  PATH: '/usr/bin:/bin',
+  PATH: FIXED_TOOL_PATH,
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_TERMINAL_PROMPT: '0',
   GIT_ALLOW_PROTOCOL: '',
   GIT_NO_LAZY_FETCH: '1',
   GIT_OPTIONAL_LOCKS: '0',
+  // KG1 P1.2: `--no-replace-objects` leaves `info/grafts` in force (measured 2026-11-09, git 2.43.0: a graft file rewrote `log`'s history).
+  GIT_GRAFT_FILE: '/dev/null',
 });
 
-/** Full, ordered argument list for a bounded local Git invocation against `root`: no replaced objects, no
- * repository hooks, no fsmonitor helper, no protocol transport, then the caller's own subcommand and args. */
+/** The empty graft file still prints Git's grafts deprecation hint on every commit read (309 stderr bytes, against the caller's output bound), so it is off. */
 export function localGitArgs(root: string, args: readonly string[]): string[] {
-  return ['--no-replace-objects', '-C', root, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', ...args];
+  return ['--no-replace-objects', '-C', root, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', '-c', 'advice.graftFileDeprecated=false', ...args];
+}
+
+/** The paths of a `check-attr -z` answer (`path NUL attribute NUL value NUL` rows) whose attribute is set, with its first set value. */
+export function checkAttrSet(output: string): Map<string, string> {
+  const fields = output.split('\0'), set = new Map<string, string>();
+  for (let at = 0; at + 2 < fields.length; at += 3) if (fields[at + 2] !== 'unspecified' && fields[at + 2] !== 'unset' && !set.has(fields[at]!)) set.set(fields[at]!, fields[at + 2]!);
+  return set;
 }

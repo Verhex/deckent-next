@@ -50,13 +50,15 @@ it('a new catalog model is pending until a person assigns it; the write is one g
   const f = await fixture();
   const before = await inspectConfiguredModelRoles(f.project, { schemaVersion: 1, scopeId: 'scope', channelId: SEED_CHANNEL }, f.options);
   expect(before.models.find(row => row.modelId === NEW.modelId)).toMatchObject({ state: 'pending', tier: null, catalog: { maker: 'anthropic', displayName: 'Claude Next 1' } });
-  expect(before).toMatchObject({ revision: CORE_MODEL_ROLES.revision, pending: 1, digest: null });
+  // FABLE52: 5.1 stays selectable but its shipped roles move to 5.2, so it is pending alongside the synthetic new model.
+  expect(before).toMatchObject({ revision: CORE_MODEL_ROLES.revision, pending: 2, digest: null });
+  expect(before.models.filter(row => row.state === 'pending').map(row => row.modelId).sort()).toEqual(['claude-fable-5-1', NEW.modelId].sort());
   const active = { today: '2026-10-23', active: new Set([roleModelKey(NEW)]) };
   expect(decideRoleModel(composeModelRolePolicy(undefined), 'brain', NEW, active)).toEqual({ state: 'refused', reason: 'model-unknown' });
   const audits = auditRows(f.ledger).length;
   expect(await assignConfiguredModelRole(f.project, assign(before.digest), f.options, person)).toMatchObject({ status: 'applied', row: { ...NEW, version: 1, tier: 'frontier' } });
   const written = JSON.parse(await readFile(f.globalFile, 'utf8'));
-  expect(written.model_roles.overlays).toEqual([{ schemaVersion: 1, revision: 'installation-roles:1', roles: [], exceptions: [],
+  expect(written.model_roles.overlays).toEqual([{ schemaVersion: 1, revision: 'installation-roles:1', origin: 'person-assignment', roles: [], exceptions: [],
     models: [{ ...NEW, version: 1, tier: 'frontier', roles: ['brain', 'worker'] }] }]);
   const recorded = auditRows(f.ledger).slice(audits);
   expect(recorded).toHaveLength(1); expect(recorded[0]).toContain('config-change'); expect(recorded[0]).toContain('model_roles'); expect(recorded[0]).toContain('"layer":"global"');

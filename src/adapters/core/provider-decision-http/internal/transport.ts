@@ -6,9 +6,9 @@ import { decisionAdviceFromWire } from './advice.js';
 import { DecisionHttpError, decisionHttpAdapter, decisionHttpProtocolData, decisionHttpWireObjectSchema, parseDecisionHttpDefinition,
   parseDecisionHttpLimits, parseDecisionHttpRequest, rethrowDecisionHttpTransport, type DecisionHttpDefinition, type DecisionHttpLimits } from './contract.js';
 
-export type PreparedDecisionHttpRequest = Readonly<{ definition: DecisionHttpDefinition; limits: DecisionHttpLimits;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type PreparedDecisionHttpRequest = Readonly<{ definition: DecisionHttpDefinition; limits: DecisionHttpLimits;
   request: ReturnType<typeof parseDecisionHttpRequest>; model: string; body: string }>;
-export interface DecisionHttpNativeOptions { readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined> }
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface DecisionHttpNativeOptions { readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined> }
 
 /** Case serialization and validation are pure; credentials resolve only inside the shared send. */
 export function prepareDecisionHttpRequest(definitionInput: unknown, limitsInput: unknown, requestInput: unknown, model: string): PreparedDecisionHttpRequest {

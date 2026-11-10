@@ -7,7 +7,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { mcpPrincipalRef } from '#domain/index.js';
 
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };

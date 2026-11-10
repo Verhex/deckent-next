@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
 import { loadConfigLanguage } from '#platform/index.js';
+import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
 import { createSetupController, setupInitCommand, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 
@@ -37,6 +38,26 @@ async function fixture() {
 const digest = async (path: string) => createHash('sha256').update(await readFile(path)).digest('hex');
 
 describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --yes through the real owners (real binary)', () => {
+  it('SETUPUX: a Git project without a host CLI still offers worker setup, and its rights card previews the doctor families', async () => {
+    const f = await fixture();
+    expect((await f.run(['init', '--yes', '--scope', 'erp-demo'])).code).toBe(0);
+    expect(await configuredSetup({}).inspectCodingRepository(f.root, { env: f.env })).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.notRepository' } });
+    await execute('git', ['init'], { cwd: f.root });
+    await symlink((await execute('which', ['git'])).stdout.trim(), join(f.empty, 'git'));
+    const families: string[][] = [];
+    const host = { openOwnerBaselineInstallation: async (_root: string, _scope: string, input: { families: string[] }) => {
+      families.push(input.families); return { status: 'preview', expect: 'd'.repeat(64), added: [{}] }; } };
+    const port = await configuredSetup(host).openOnboarding(f.root, 'erp-demo', '', { env: { ...f.env, PATH: f.empty } });
+    const view = await port.observe({});
+    expect(await configuredSetup({}).inspectCodingRepository(f.root, { env: { ...f.env, PATH: f.empty } }))
+      .toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.noCommitsInfo' } });
+    expect(view.folderFacts.kind).toBe('coding');
+    expect(view.hosts.every(row => row.cli !== 'found')).toBe(true);
+    expect(view.plan.stages.find(row => row.id === 'coding:first-commit')).toMatchObject({ state: 'ready' });
+    expect(view.plan.stages.find(row => row.id === 'work:kind')).toMatchObject({ state: 'needs-answer' });
+    expect(families).toEqual([OWNER_BASELINE_DEFAULT_FAMILIES]);
+  }, 120_000);
+
   it('--yes --scope in a pipe: fresh policy and language through their owners; a second run applies nothing', async () => {
     await access(cli);
     const f = await fixture();

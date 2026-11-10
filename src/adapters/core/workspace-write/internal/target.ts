@@ -1,4 +1,4 @@
-import { persistedString, persistedInteger } from '#platform/index.js';
+import { optionalField, persistedString, persistedInteger } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
@@ -9,7 +9,7 @@ import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#
 import type { WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { ABSENT_FILE_VERSION, EMPTY_DIRECTORY_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, deleteWorkspaceFile, fileContentVersion, readWritableDirectory,
   readWritableFile, removeWorkspaceDirectory, resolveWritable,
-  temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritePhase } from './files.js';
+  temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritablePath, type WritePhase } from './files.js';
 import { unifiedDiff } from './diff.js';
 import { isWriteApprovalFloored } from './floor.js';
 
@@ -88,8 +88,7 @@ export class WorkspaceFileTarget implements EffectTarget {
     if (!target.ok || target.rel !== ref.id) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     return target;
   }
-  private async version(ref: EffectTargetRef) {
-    const target = await this.writable(ref);
+  private async version(target: Extract<WritablePath, { ok: true }>) {
     // SHELL-OVERLAY: a write-set target also records directories (empty or not); the edit tools' target keeps refusing them.
     if (this.options.writeSet) {
       const directory = await readWritableDirectory(this.scope, target).catch(() => { throw new EffectTargetError('EFFECT_TARGET_REJECTED'); });
@@ -113,8 +112,7 @@ export class WorkspaceFileTarget implements EffectTarget {
     const directory = await open(this.journalDirectory, constants.O_RDONLY | constants.O_DIRECTORY);
     try { await directory.sync(); } finally { await directory.close(); }
   }
-  async observe(ref: EffectTargetRef) { return { version: await this.version(ref) }; }
-  /** The change one request asks for: new bytes (and, for a write set, their mode) or a removal; null when the input is not accepted here. */
+  async observe(ref: EffectTargetRef) { return { version: await this.version(await this.writable(ref)) }; }
   private async change(request: EffectApplyRequest): Promise<{ readonly bytes: Buffer | null; readonly mode?: number; readonly directory?: true } | null> {
     const edit = inputSchema.safeParse(request.input);
     if (edit.success) return { bytes: Buffer.from(edit.data.content, 'utf8') };
@@ -132,7 +130,7 @@ export class WorkspaceFileTarget implements EffectTarget {
     if (bytes && bytes.length > this.maxBytes) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     const target = await this.writable(request.target);
     // A stale precondition is refused before anything is journaled, so it leaves no trace a later lookup could misread.
-    if (await this.version(request.target) !== request.expectedVersion) throw new EffectTargetError('EFFECT_TARGET_PRECONDITION');
+    if (await this.version(target) !== request.expectedVersion) throw new EffectTargetError('EFFECT_TARGET_PRECONDITION');
     await mkdir(this.journalDirectory, { recursive: true, mode: 0o700 });
     const earlier = await this.readJournal(request.idempotencyKey);
     // Only a resend after `absent` reaches here with a journal; anything else about this key is not a fresh attempt.
@@ -155,7 +153,7 @@ export class WorkspaceFileTarget implements EffectTarget {
         return { version: ABSENT_FILE_VERSION };
       }
       return { version: await writeWorkspaceFile(this.scope, target, request.expectedVersion, bytes,
-        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...(createMode !== undefined ? { createMode } : {}),
+        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...optionalField('createMode', createMode),
           ...(maxFileBytes ? { maxFileBytes } : {}), ...(change.mode !== undefined ? { mode: change.mode } : {}) }) };
     } catch (error) {
       if (error instanceof WorkspaceWriteError) {

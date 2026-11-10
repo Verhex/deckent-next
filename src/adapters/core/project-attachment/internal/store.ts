@@ -1,25 +1,59 @@
+import { constants } from 'node:fs';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { lstat, realpath } from 'node:fs/promises';
+import { lstat, realpath, open } from 'node:fs/promises';
 import { dirname, resolve, parse, join, relative, sep } from 'node:path';
 import { installationRegistrationSchema, projectAttachmentSchema, type InstallationRegistration, type ProjectAttachment, type AttachmentLocation } from '#domain/index.js';
 import { attachmentFailure } from '#engine/index.js';
 import { readInstallationFile } from '#adapters/core/installation-files/index.js';
-import { inspectProductFile, prepareProductFile, prepareProductCompanionPath, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout,
+import { ErrorRegistry, inspectProductFile, prepareProductFile, prepareProductCompanionPath, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout,
   serializeJsonDocument, withConfigWriteLock, writeJsonAtomic, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 const heldRegistries = new AsyncLocalStorage<ReadonlySet<string>>();
 /** No-follow ancestry, local owner and location evidence; reads create neither locks nor directories. */
-export async function captureAttachmentLocation(root: string): Promise<AttachmentLocation> {
+async function inspectAttachmentDirectory(root: string) {
   if (process.platform === 'win32' || !process.getuid) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
   const canonicalRoot = await realpath(root);
-  if (canonicalRoot !== resolve(root) || canonicalRoot === parse(canonicalRoot).root) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+  if (canonicalRoot !== resolve(root)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { params: { reason: 'location', path: resolve(root) } });
+  if (canonicalRoot === parse(canonicalRoot).root) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
   let cursor = parse(canonicalRoot).root;
   for (const segment of relative(cursor, canonicalRoot).split(sep).filter(Boolean)) {
     cursor = join(cursor, segment); const info = await lstat(cursor);
-    if (!info.isDirectory() || info.isSymbolicLink()) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+    if (!info.isDirectory() || info.isSymbolicLink()) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { params: { reason: 'location', path: canonicalRoot } });
   }
-  const info = await lstat(canonicalRoot, { bigint: true });
-  if (info.uid !== BigInt(process.getuid()) || (info.mode & 0o022n) !== 0n || info.ino === 0n) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  return { canonicalRoot, info: await lstat(canonicalRoot, { bigint: true }) };
+}
+export async function captureAttachmentLocation(root: string): Promise<AttachmentLocation> {
+  const { canonicalRoot, info } = await inspectAttachmentDirectory(root);
+  if (info.uid !== BigInt(process.getuid!()) || (info.mode & 0o022n) !== 0n || info.ino === 0n) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { params: {
+    reason: info.uid === BigInt(process.getuid!()) && info.ino !== 0n && (info.mode & 0o022n) !== 0n ? 'location-write' : 'location', path: canonicalRoot } });
+  const current = await lstat(canonicalRoot, { bigint: true });
+  if (current.dev !== info.dev || current.ino !== info.ino || current.uid !== info.uid || current.gid !== info.gid || current.mode !== info.mode) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   return { canonicalRoot, device: String(info.dev), inode: String(info.ino) };
+}
+/** A person's explicit answer changes only the pinned directory; a replaced path or lost witness refuses before chmod. */
+export async function prepareAttachmentDirectory(root: string, authorize: () => Promise<void>, confirm?: (path: string) => Promise<boolean>): Promise<AttachmentLocation> {
+  try { return await captureAttachmentLocation(root); }
+  catch (error) {
+    if (!confirm || !(error instanceof Error) || !('params' in error) || (error.params as { reason?: string }).reason !== 'location-write') throw error;
+    try { await authorize(); } catch { throw error; }
+    const { canonicalRoot, info } = await inspectAttachmentDirectory(root);
+    if (info.uid !== BigInt(process.getuid!()) || info.ino === 0n || (info.mode & 0o022n) === 0n) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+    const same = (next: typeof info) => next.dev === info.dev && next.ino === info.ino && next.uid === info.uid && next.gid === info.gid && next.mode === info.mode;
+    const handle = await open(canonicalRoot, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try {
+      if (!same(await handle.stat({ bigint: true }))) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+      if (!await confirm(canonicalRoot)) throw error;
+      await authorize();
+      const current = await inspectAttachmentDirectory(root);
+      if (current.canonicalRoot !== canonicalRoot || !same(current.info) || !same(await handle.stat({ bigint: true }))) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+      const mode = Number(info.mode & 0o7777n) & ~0o022;
+      await handle.chmod(mode);
+      if ((await handle.stat({ bigint: true })).mode !== (info.mode & ~0o022n)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+      await authorize();
+      const location = await captureAttachmentLocation(root);
+      if (location.device !== String(info.dev) || location.inode !== String(info.ino)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+      return location;
+    } finally { await handle.close(); }
+  }
 }
 export class FileProjectAttachmentStore {
   constructor(readonly layout: ProductLayout, readonly options: ConfigLoadOptions, readonly maxBytes: number, readonly timeoutMs: number) {}

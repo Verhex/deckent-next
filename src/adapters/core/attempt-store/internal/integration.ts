@@ -2,7 +2,8 @@ import { sameAttemptIdentity } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { integrationIntentSchema, WorkspacePatchError, type IntegrationQuery, type IntegrationIntent, type IntegrationRecord } from '#engine/index.js';
-import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { readRunBoundDispatch } from '#adapters/core/run-store/index.js';
+import { ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteIntegrationJournal {
   constructor(private readonly db: DatabaseSync) {}
   private read(intent: IntegrationIntent): IntegrationRecord | null {
@@ -22,8 +23,7 @@ export class SqliteIntegrationJournal {
   }
   async claimIntegration(input: IntegrationIntent) {
     const intent = integrationIntentSchema.parse(input);
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return ledgerTransaction(this.db, () => {
       this.bound(intent);
       if (intent.command.replacesCommandId) {
         if (intent.command.replacesCommandId === intent.command.commandId) throw new WorkspacePatchError('PATCH_CONFLICT');
@@ -31,23 +31,21 @@ export class SqliteIntegrationJournal {
         if (!old || JSON.stringify(old.intent.patch) !== JSON.stringify(intent.patch)) throw new WorkspacePatchError('PATCH_CONFLICT');
       }
       const existing = this.read(intent);
-      if (existing) { this.db.exec('COMMIT'); return { acquired: false, record: existing }; }
+      if (existing) return { acquired: false, record: existing };
       this.db.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,NULL)')
         .run(intent.command.identity.scopeId, intent.command.commandId, JSON.stringify(intent));
-      this.db.exec('COMMIT'); return { acquired: true, record: { intent, manifest: null } };
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+      return { acquired: true, record: { intent, manifest: null } };
+    });
   }
   async finishIntegration(input: IntegrationIntent, receipt: ArtifactReceipt) {
     const intent = integrationIntentSchema.parse(input); const manifest = artifactReceiptSchema.parse(receipt);
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    ledgerTransaction(this.db, () => {
       this.bound(intent); const existing = this.read(intent);
       if (!existing || manifest.scopeId !== intent.command.identity.scopeId || (existing.manifest && JSON.stringify(existing.manifest) !== JSON.stringify(manifest)))
         throw new WorkspacePatchError('PATCH_CONFLICT');
       this.db.prepare('UPDATE workspace_integrations SET manifest=? WHERE scope_id=? AND command_id=?')
         .run(JSON.stringify(manifest), intent.command.identity.scopeId, intent.command.commandId);
-      this.db.exec('COMMIT');
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    });
   }
 }
 

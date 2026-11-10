@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { classifyCancelledAttempt, preventRunAttempt, settleCancelledRunAttempt } from '#domain/index.js';
 import { projectRunView } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -55,6 +56,11 @@ it('settles a launched worker killed after cancellation when its terminal exit i
   const cancelled = await f.cancel('r1', 1);
   expect(cancelled.snapshot.progress[0]!.phase).toBe('active');
   expect(await f.store.settleCancelledAttempt(identityOf('r1'))).toEqual({ status: 'not-settleable', phase: 'active' });
+  // S2-D3: the adapter and both domain transitions read one classifier; a granted launch is never prevented, whatever a caller claims.
+  const run = (await f.store.loadRun('s', 'r1'))!, attempt = (await f.store.load('s', 'attempt-r1'))!, timing = { now: 0, timeoutMs: 1 };
+  expect(['none', 'pending', 'denied', 'granted', 'exited'].map(dispatch => classifyCancelledAttempt(run, attempt, dispatch as never))).toEqual(['prevent', 'not-settleable', 'prevent', 'not-settleable', 'not-settleable']);
+  expect(() => settleCancelledRunAttempt(run, run.revision, attempt, 'exited', timing)).toThrow('RUN_ATTEMPT_CONFLICT');
+  expect(() => preventRunAttempt(run, run.revision, attempt, 'granted', timing)).toThrow('RUN_ATTEMPT_CONFLICT');
   await f.store.finishDispatch(claim, { handle: 'worker-1', exitCode: 137, interrupted: false });
   expect(await f.phase('r1')).toBe('cancelled');
   expect(projectRunView((await f.store.loadRun('s', 'r1'))!).tasks[0]).toMatchObject({ cancellation: { reason: 'exited-under-cancellation' } });
