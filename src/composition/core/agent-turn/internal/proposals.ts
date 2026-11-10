@@ -10,14 +10,13 @@ type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' |
 type Plan = (command: BrainPlanCommand, signal: AbortSignal, observe: BrainPlanObserver) => Promise<RunPlanningResult>;
 /** The card and choice presentation the CLI host lends the service (composition never imports surfaces; the SDK entry stays surface-free). */
 export interface AgentProposalViews { readonly cardLines: (result: RunPlanningResult, locale: Locale) => readonly string[]; readonly schemaChoices: (schema: unknown) => readonly unknown[] }
-const CARD_ROUNDS = 3; // L1c, as /do: a plan whose basis changed while its card was open comes back with a fresh card, at most this often.
 const said = { deny: 'the person declined; nothing was changed', expired: 'the card expired unanswered; nothing was changed', cancelled: 'the turn ended before the person answered; nothing was changed' } as const;
 const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.code ?? 'failed');
 
 /**
  * alpha.64 B + C (owner S4/S5/S6 2026-11-09): the chat turn's `propose_work`, `propose_setting` and `list_setting_choices`. Every decision and
- * application call of these tools runs as the AI actor (`withMcpPrincipal`), in the API loop too, whose turn principal is the person: the v20
- * `require-approval` rules then open the very card `/do` (Run create) or `/config` (config-change) opens, in every mode; the card goes to the
+ * application call of these tools runs as the AI actor (`withMcpPrincipal`), in the API loop too, whose turn principal is the person. The
+ * proposal application requires the very card `/do` (Run create) or `/config` (config-change) opens, regardless of grants or mode; it goes to the
  * person on this turn's stream (the turn mints the decision capability for the person, never for the AI), and only the AI's same command
  * submitted again after the person's yes has an effect. A no, an expired card or an ended turn changes nothing; the model reads which.
  */
@@ -55,14 +54,14 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     const plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress));
     progress({ kind: 'planning', attempt: 1 });
     let result = await plan();
-    for (let round = 0; round < CARD_ROUNDS && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; round++) {
+    for (let round = 0; round < AI_PROPOSAL_REGISTRY.maxCardRounds && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; round++) {
       const settled = await card(callId, result.proposal.approval.approvalId, [origin, ...views.cardLines(result, input.locale)].join('\n'));
       if (settled !== 'allow') return tag(name, said[settled]);
       result = await plan();
     }
     if (result.run) {
       input.emit({ kind: 'work', callId, phase: 'admitted', runId: result.run.runId });
-      return { status: 'ok', text: `[deckent] ${name}: the person approved; Run ${result.run.runId} was admitted and is listed in /tasks.` };
+      return { status: 'ok', text: `[deckent] ${name}: Run ${result.run.runId} was admitted and is listed in /tasks.` };
     }
     const reason = isRunIntentResult(result) ? 'work-parked' : result.proposal.reason ?? result.proposal.status;
     return tag(name, `error=${reason}; no Run was admitted (the person can start the work with /do)`);
@@ -72,14 +71,14 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     if (!listed.choices.some(value => isDeepStrictEqual(value, choice))) return tag(name, `error=choice-not-listed; choose one of ${JSON.stringify(listed.choices)}; nothing was proposed`);
     const app = createConfiguredConfigApplication(projectRoot, options), principal = await withMcpPrincipal(() => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options));
     const write = { keyPath, value: choice, layer, principal, scopeId, commandId: `propose-setting-${sha256(`propose-setting:1\0${scopeId}\0${input.turnId}\0${callId}`).slice(0, 40)}` };
-    let outcome = await withMcpPrincipal(() => app.submit('set', write));
+    let outcome = await withMcpPrincipal(() => app.propose(write));
     if (outcome.status === 'approval-pending') {
       const settled = await card(callId, outcome.approval.approvalId, origin);
       if (settled !== 'allow') return tag(name, said[settled]);
       const expect = outcome.expect;
-      outcome = await withMcpPrincipal(() => app.submit('set', { ...write, ...(expect === null ? {} : { expect }) }));
+      outcome = await withMcpPrincipal(() => app.propose({ ...write, ...(expect === null ? {} : { expect }) }));
     }
-    return outcome.status === 'applied' ? { status: 'ok', text: `[deckent] ${name}: the person approved; ${keyPath} is now ${JSON.stringify(choice)} on the ${outcome.result.layer} layer.` }
+    return outcome.status === 'applied' ? { status: 'ok', text: `[deckent] ${name}: ${keyPath} is now ${JSON.stringify(choice)} on the ${outcome.result.layer} layer.` }
       : tag(name, 'error=approval-pending; nothing was changed');
   }
   return {

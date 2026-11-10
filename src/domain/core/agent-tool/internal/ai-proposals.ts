@@ -1,9 +1,10 @@
+import limits from './proposal-limits.json' with { type: 'json' };
 /**
  * alpha.64 B + C (owner S4/S5/S6, 2026-11-09): the chat AI's proposal tools and the only settings it may propose, as versioned registry data
  * (Kanun 6: one source for the template's v20 rules, the tools and their refusals). The AI proposes; a person's card decides in every mode.
  * A lane may only narrow `settingKeys`; widening it is the owner's decision. Model and Brain choices stay in /model, every other key in its window.
  */
-export const AI_PROPOSAL_REGISTRY = Object.freeze({ version: 1,
+export const AI_PROPOSAL_REGISTRY = Object.freeze({ version: 1, maxCardRounds: limits.maxCardRounds,
   tools: Object.freeze({ work: 'propose_work', setting: 'propose_setting', choices: 'list_setting_choices' } as const),
   settingKeys: Object.freeze(['language', 'output_mode', 'terminal.responseStyle'] as const),
   layers: Object.freeze(['project', 'global'] as const) });

@@ -3,7 +3,7 @@
   "scope": "Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.",
   "sources": {
     "src/domain/core/agent-tool/index.ts": "5fca1d65a69303f1a78c15d7e5e7479659364a69b93669ec57ca70c7a009cd68",
-    "src/domain/core/agent-tool/internal/ai-proposals.ts": "554f73aac59a4087e8ce1aa854a2dfe0cff00d490a0f6b0960368ea5eb01fbb8",
+    "src/domain/core/agent-tool/internal/ai-proposals.ts": "f14ff6a786c06243b4f7fb5b415e0a245505f7ae6a515c6791667867003f4ee4",
     "src/domain/core/agent-tool/internal/contract.ts": "db8926a0ed593318c401c79645cc54374b3d23e3f3ad1953db9e0d32d7b27616",
     "src/domain/core/agent-tool/internal/text.ts": "9ee5a731b6745d74c261e71c0f805494ca206474a632513f237e792e308192d2",
     "src/domain/core/agent-turn/index.ts": "a1855b1e86d68766c3d98e99dfd2bfff76172da0d2d40249ea8fe937373d05db",
@@ -14,7 +14,7 @@
     "src/domain/core/agent-turn/internal/workspace-files.ts": "246d8587821d717da9ecd3db34845c252bfceae0e44acb1beeaee0bce9c22c21",
     "src/domain/core/approval/index.ts": "ad286f0861e2c3264a01924a4f9ce4771a0b2d3cd9a858c3aa120bab102ca823",
     "src/domain/core/approval/internal/ai-cells.ts": "1d21009bc1f56d29e758fa8ea77eaff142e0361cf6c649634cfa15b11bd4f98b",
-    "src/domain/core/approval/internal/contract.ts": "56d64fac27dec5f357019dbfd05d396bc0e5b5054ce0e274e313bc742347d842",
+    "src/domain/core/approval/internal/contract.ts": "a023fbb93c94475e453f9bfbf4cce01aba929ce1ae92d37aa409c4d69ecd348f",
     "src/domain/core/attempt/index.ts": "2ef16bfdc5d5645c3c84b87832bdf81f4139ee06bfece6a309f62eb49f807fd5",
     "src/domain/core/attempt/internal/contract.ts": "b0439ca3825487d7ffeb418ff56bd1c51a7aa8c61eefbd7a4c66d141b5567cf8",
     "src/domain/core/attempt/internal/dispatch-loss.ts": "d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f",

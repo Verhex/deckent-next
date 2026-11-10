@@ -1,10 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planMcpProposal } from '#adapters/index.js';
 import { describeMcpProposal, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule } from '../support/agent-turn-modes.js';
-import { aiSettingResourceIds, firstRunProposalRules, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
+import { aiSettingResourceIds, firstRunProposalRules, proposalCoverageGrants, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteApprovalStore, withMcpPrincipal } from '#adapters/index.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { planServiceRun } from '#composition/core/run-planner/index.js';
@@ -164,6 +164,42 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
         .toEqual([['planning', 1, undefined, undefined], ['quota-wait', 2, 3, 2_000], ['planning', 2, undefined, undefined]]);
     }
     expect(config(every)['output_mode']).toBeUndefined(); expect(runsOf(every)).toEqual([]);
+  }, 180_000);
+
+  it('PROPFIX: upgraded broad AI grants, direct or by role, never replace the person card in any mode', async () => {
+    for (const byRole of [false, true]) for (const mode of [null, 'full-auto', { mode: 'full-access' }] as const) {
+      const f = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, PERSON_CONFIG, FULL_ACCESS], mode, planWork: realPlan });
+      const policyPath = join(f.data, 'policy.json'), bindingsPath = join(f.data, 'bindings.json');
+      const policy = JSON.parse(readFileSync(policyPath, 'utf8')), bindings = JSON.parse(readFileSync(bindingsPath, 'utf8'));
+      const broad = ['config', 'run'].map(kind => ({ id: `old-ai-${kind}`, effect: 'allow', actions: [kind === 'config' ? 'write' : 'create'], resource: { kind, ids: 'all' } }));
+      if (byRole) {
+        policy.roles.push({ id: 'old-ai', permissions: broad });
+        bindings.bindings.push({ id: 'old-ai', principals: [AI], roles: ['old-ai'], scopes: 'all' });
+      } else policy.grants.push(...broad.map(grant => ({ ...grant, principals: [AI], scopes: 'all' })));
+      // The alpha.63.3 customization survives the same add-only v20 coverage calculation as the installation upgrade.
+      const upgrade = firstRunProposalRules(proposalCoverageGrants(policy, bindings, me[0]!), me[0]!, ['scope']);
+      expect(upgrade.skipped).toHaveLength(2);
+      policy.grants.push(...upgrade.wanted);
+      writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 }); writeFileSync(bindingsPath, JSON.stringify(bindings), { mode: 0o600 });
+      const turn = typeof mode === 'object' && mode !== null ? { fullAccess: true } : {};
+      const before = readFileSync(join(f.project, '.deckent', 'config.json'), 'utf8');
+      const setting = await f.call('propose_setting', { keyPath: 'language', choice: 'tr' }, 'deny', turn);
+      expect(setting, f.evidence(setting)).toMatchObject({ card: true, status: 'error' });
+      expect(setting.text).toContain('the person declined'); expect(setting.text).not.toContain('the person approved');
+      expect(readFileSync(join(f.project, '.deckent', 'config.json'), 'utf8')).toBe(before);
+      expect(f.audit().filter(row => row.event.subject['kind'] === 'config-change')).toEqual([]);
+      const work = await f.call('propose_work', { request: 'update the tests' }, 'deny', turn);
+      expect(work, f.evidence(work)).toMatchObject({ card: true, status: 'error' });
+      expect(work.text).toContain('the person declined'); expect(work.text).not.toContain('the person approved'); expect(runsOf(f)).toEqual([]);
+      const applied = await f.call('propose_setting', { keyPath: 'language', choice: 'tr' }, 'allow', turn);
+      expect(applied, f.evidence(applied)).toMatchObject({ card: true, status: 'ok' }); expect(config(f)['language']).toBe('tr');
+      expect(f.audit().filter(row => row.event.subject['kind'] === 'config-change').map(row => row.event.subject['approvalId'])).toEqual([expect.any(String)]);
+      const admitted = await f.call('propose_work', { request: 'update the tests' }, 'allow', turn);
+      expect(admitted, f.evidence(admitted)).toMatchObject({ card: true, status: 'ok' });
+      expect(runsOf(f)).toMatchObject([{ authority: { approval: { approvalId: expect.any(String) } } }]);
+      expect(admitted.text).toContain('was admitted');
+      await closeModeRuntimes();
+    }
   }, 180_000);
 
   it('a secret or a reference is refused before any window, also in a full-access turn; without a policy grant the model cannot propose at all', async () => {

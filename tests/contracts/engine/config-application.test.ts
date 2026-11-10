@@ -10,7 +10,7 @@ import { digestText } from '../../../src/platform/core/utils/index.js';
 
 const principal = { id: 'test', issuer: 'local-os', subject: 'test', assurance: 'os-user', scopeIds: ['test'] } as const;
 const command = { keyPath: 'max_workers', value: 2, principal, scopeId: 'test', commandId: 'config-test' };
-function fixture() {
+function fixture(approvals?: ConfigApprovalPort) {
   const document = {}, effective = createDefaultConfig();
   const snapshot = { document, global: {}, project: {}, effective, digest: null, layer: 'project' as const, env: {} };
   const events: unknown[] = [];
@@ -18,7 +18,7 @@ function fixture() {
   const app = new ConfigApplication({
     async snapshot() { reads++; return snapshot; },
     async publish(input, planner) { const plan = await planner(snapshot); published = plan.document; return { keyPath: input.keyPath, layer: 'project', beforeDigest: null, afterDigest: digestText(JSON.stringify(plan.document)), backupPath: null, overridden: false }; },
-  }, { async authorize() { return 'test-policy'; }, async audit(event) { events.push(event); } });
+  }, { ...(approvals ? { approvals } : {}), async authorize() { return 'test-policy'; }, async audit(event) { events.push(event); } });
   return { app, events, reads: () => reads, published: () => published };
 }
 describe('registry config application', () => {
@@ -32,6 +32,34 @@ describe('registry config application', () => {
   it('set produces one validated document and one value-free audit event', async () => {
     const f = fixture(); await f.app.set(command); expect(f.published()).toMatchObject({ max_workers: 2 }); expect(f.events).toHaveLength(1);
     expect(JSON.stringify(f.events)).not.toContain('"value"'); validateConfig({ ...createDefaultConfig(), ...f.published() as object });
+  });
+  it('PROPFIX: a proposal needs an exact approval under allow, again under the write lock; ordinary writes keep allow', async () => {
+    let allow = false, deny = false, withdraw = false, admissions = 0;
+    const f = fixture({ evaluate: async () => {
+      if (deny) throw new ConfigApplicationError('POLICY_DENIED');
+      return { decision: 'allow', revision: 'test-policy', ruleId: 'old-ai-allow' };
+    }, admit: async () => {
+      admissions++;
+      return allow && !(withdraw && admissions === 2) ? { approved: { approvalId: 'person-card', actionDigest: 'exact-change' } }
+        : { pending: { approvalId: 'person-card', revision: 0, expiresAt: 1000, summary: 'Person decides' } };
+    } });
+    await expect(f.app.propose(command)).resolves.toMatchObject({ status: 'approval-pending' });
+    expect(f.published()).toBeUndefined(); expect(f.events).toEqual([]);
+    deny = true;
+    await expect(f.app.propose(command)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(f.published()).toBeUndefined(); expect(f.events).toEqual([]);
+    deny = false; allow = true; withdraw = true; admissions = 0;
+    await expect(f.app.propose(command)).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_REQUIRED' });
+    expect(f.published()).toBeUndefined(); expect(f.events).toEqual([]);
+    withdraw = false;
+    await expect(f.app.propose(command)).resolves.toMatchObject({ status: 'applied', approvalId: 'person-card' });
+    expect(f.events).toMatchObject([{ subject: { approvalId: 'person-card' } }]);
+    const ordinary = fixture({ evaluate: async () => ({ decision: 'allow', revision: 'test-policy', ruleId: 'old-ai-allow' }),
+      admit: async () => { throw Error('ordinary allow must not ask'); } });
+    await expect(ordinary.app.submit('set', command)).resolves.toMatchObject({ status: 'applied', approvalId: null });
+    const unsupported = fixture();
+    await expect(unsupported.app.propose(command)).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_REQUIRED' });
+    expect(unsupported.published()).toBeUndefined(); expect(unsupported.events).toEqual([]);
   });
   it('denies unauthorized writes before audit and publication', async () => {
     const f = fixture(); const app = new ConfigApplication({ snapshot: async () => { throw Error('should not read'); }, publish: async () => { throw Error('should not publish'); } }, { authorize: async () => { throw new ConfigApplicationError('POLICY_DENIED'); }, audit: async () => { throw Error('should not audit'); } });
