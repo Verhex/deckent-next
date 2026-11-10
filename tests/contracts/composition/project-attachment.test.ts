@@ -187,6 +187,20 @@ it.skipIf(process.platform === 'win32')('ATTACH F3: real initCommand/createCliHo
     expect(surface.askCliCard).not.toHaveBeenCalled(); expect(output).toContain('PROJECT_ATTACHMENT_DENIED');
     expect((await fs.lstat(project)).mode & 0o777).toBe(0o775);
     expect(await readdir(project)).toEqual([]); expect(await readdir(global)).toEqual([]);
+    for (const language of ['en', 'tr']) {
+      output = '';
+      expect(await cliMain(['init', 'policy', '--scope', 's', '--apply', '--lang', language])).toBe(78);
+      const request = vi.mocked(surface.askCliCard).mock.calls.at(-1)![0];
+      expect(request.initial).toBe('no');
+      expect(request.body).toEqual([project, language === 'en'
+        ? 'Only this folder: remove write permission for the group and others. Nothing inside the folder changes.'
+        : 'Yalnız bu klasör: grubun ve diğer hesapların yazma izni kaldırılır. Klasörün içindekiler değişmez.',
+      language === 'en' ? 'Folder permission: 0775 → 0755' : 'Klasör izni: 0775 → 0755']);
+      expect(output).toContain('chmod go-w .'); expect(output).toContain('deckent init');
+      expect(output).toContain(language === 'en' ? "This is the person's decision." : 'Bu karar kişiye aittir.');
+      expect((await fs.lstat(project)).mode & 0o777).toBe(0o775);
+      expect(await readdir(project)).toEqual([]); expect(await readdir(global)).toEqual([]);
+    }
   } finally { writes.forEach(write => write.mockRestore()); streams.forEach((stream, index) => { const descriptor = descriptors[index]; if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor); else Reflect.deleteProperty(stream, 'isTTY'); }); }
 });
 it.skipIf(process.platform !== 'linux')('ATTACH owner repair pins the folder and witness across the answer; never follows replacements or recurses', async () => {

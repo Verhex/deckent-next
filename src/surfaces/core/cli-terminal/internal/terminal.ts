@@ -132,8 +132,8 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
     ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), grantCard) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
     // PRE-8 v2: the same first-use card as the chat turn when a model list, a model connection or a just-stored key needs a grant here.
-    ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
-      grantCard), ...budget, ...cache } } : {}) } } };
+    ...(providerConnect ? { provider: Object.assign(providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
+      grantCard), budget, cache) } : {}) } } };
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */

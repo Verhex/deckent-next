@@ -335,6 +335,8 @@
   "setup.instructions.legacy": "Legacy DECKENT.md is used only because AGENTS.md and CLAUDE.md are absent. Move your instructions to AGENTS.md; Deckent never generates DECKENT.md.",
   "setup.instructions.legacyNext": "Move the instructions to AGENTS.md, then run deckent doctor again.",
   "setup.attachment.narrowPermission": "Others can write to this folder; narrow the permission?",
+  "setup.attachment.narrowPermissionScope": "Only this folder: remove write permission for the group and others. Nothing inside the folder changes.",
+  "setup.attachment.narrowPermissionMode": "Folder permission: {before} → {after}",
   "setup.attach.title": "Connect this folder to the selected installation?",
   "setup.attach.body": "Folder: {path}\nScope / project: {scope}\nThis prepares an isolated project context. Model access is configured separately.",
   "setup.attach.saved": "Project connection record saved.",

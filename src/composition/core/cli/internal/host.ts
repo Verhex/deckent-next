@@ -1,4 +1,5 @@
 import { nativeCliAgent } from '#adapters/index.js';
+import { lstat } from 'node:fs/promises';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { inspectConfiguredBrainModels, inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
@@ -62,7 +63,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
   const { root, locale, signal } = base, runtime = createConfiguredRuntimeClient(root);
   const narrowDirectory = async (path: string, json = false, language: Locale = locale) => {
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
-    return await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path], initial: 'no', options: [
+    // Display only: the attachment adapter pins and rechecks the directory before changing its mode.
+    const mode = await lstat(path).then(info => info.mode & 0o7777, () => null);
+    return await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path, t('setup.attachment.narrowPermissionScope', {}, language),
+      ...(mode === null ? [] : [t('setup.attachment.narrowPermissionMode', { before: mode.toString(8).padStart(4, '0'), after: (mode & ~0o022).toString(8).padStart(4, '0') }, language)])], initial: 'no', options: [
       { id: 'yes', label: t('setup.window.yes', {}, language), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, language), role: 'no' },
     ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) }) === 'yes';
   };
