@@ -531,7 +531,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   an `authority-change` audit record and an archived revision under the installer's upgrade key, once. A rule whose whole cell one
   allow of the AI actor already covers (the same or a wider action, scope and resource selection, a role binding of the actor included;
   for example the MCP `work` group's run rule) is not added, so ordinary operations keep that allow. Proposals still require
-  your card regardless of existing grants or standing admission. The record names each such rule and the rule that holds it.
+  your card regardless of existing grants or standing admission. Only a witnessed person can allow or deny a proposal card,
+  including pending AI Run proposals from alpha.63.3. If policy also requires approval of the `propose_mcp_server` tool call,
+  you can answer that card in your own chat turn; allowing it opens the separate MCP proposal card. The record names each such rule and the rule that holds it.
   An allow on part of the cell (one pool, for example) covers nothing, so the rule is added. `/policy` shows the four
   rules as one row, **AI proposals** (on, off, partly on, or covered by an existing grant, which it names): off removes them on your card
   (`deckent policy upgrade --template current --rollback`), on adds back only them (`--apply --only ai-proposals`); after you turn them

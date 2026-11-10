@@ -50,6 +50,10 @@ export class SqliteApprovalStore implements ApprovalStore {
     if (record && (subject?.kind !== 'run-create' || subject.commandId !== commandId)) throw new ApprovalError('APPROVAL_INTEGRITY');
     return record;
   }
+  /** Proposals are recorded before requesting a card (v53); old cards carry no risk marker. */
+  hasRunProposal(scopeId: string, commandId: string, runId: string): boolean {
+    return this.db.prepare('SELECT 1 FROM run_proposals WHERE scope_id=? AND command_id=? AND run_id=?').get(scopeId, commandId, runId) !== undefined;
+  }
   private columns(record: ApprovalRecord) {
     const subject = approvalSubject(record.request);
     return subject.kind === 'task' ? ['task', subject.runId, subject.taskId] as const : [subject.kind, null, null] as const;

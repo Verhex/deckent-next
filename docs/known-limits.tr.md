@@ -525,7 +525,9 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   yükseltme anahtarıyla arşivlenmiş bir revizyon yazar, bir kez. Hücresinin tamamını AI aktörünün tek bir izni zaten kapsayan kural
   (aynı ya da daha geniş eylem, kapsam ve kaynak seçimi; aktörün rol bağlaması da sayılır; örneğin MCP `work` grubunun Run kuralı)
   eklenmez; normal işlemler o izni korur. Öneriler mevcut izin ya da standing kabulünden bağımsız olarak yine kartınızı gerektirir;
-  kayıt her böyle kuralı ve onu tutan kuralı adlandırır. Hücrenin bir kısmını açan izin (örneğin tek
+  alpha.63.3'ten kalan bekleyen AI Run önerileri dahil öneri kartına yalnız tanıklı kişi onay veya ret verebilir. Politika
+  `propose_mcp_server` araç çağrısını da onaya bağlıyorsa kendi sohbet turunuzdaki o kartı yanıtlayabilirsiniz; onayınız ayrı
+  MCP öneri kartını açar. Kayıt her böyle kuralı ve onu tutan kuralı adlandırır. Hücrenin bir kısmını açan izin (örneğin tek
   bir havuz) hiçbir şeyi kapsamaz, kural eklenir. `/policy` dört kuralı tek satırda gösterir, **Yapay zekâ önerileri** (açık, kapalı, kısmen
   açık ya da adını verdiği mevcut bir izinle karşılanıyor): kapatmak onları kendi kartınızla kaldırır (`deckent policy upgrade --template
   current --rollback`), açmak yalnız onları geri ekler (`--apply --only ai-proposals`); kapattıktan sonra başlangıç onları bir daha

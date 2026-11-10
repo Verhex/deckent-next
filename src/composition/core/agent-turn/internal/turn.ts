@@ -1,4 +1,4 @@
-import { textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
+import { aiProposalRequester, textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
@@ -378,7 +378,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
           const policy = await context.policy.load();
           const callSubject = approvals.subject({ round, index }, tool, target, argsDigest), resource = callSubject.resource, started = clock.sample(), now = started.wallMs;
-          const { id, issuer, subject } = context.principal, facts = agentToolApprovalFacts(policy, command.scopeId, decisions.cell(tool, args));
+          const { id, issuer, subject } = tool.name === PROPOSE_MCP_SERVER_TOOL_SPEC.name || agentProposals?.owns(tool.name) ? aiProposalRequester(context.principal) : context.principal, facts = agentToolApprovalFacts(policy, command.scopeId, decisions.cell(tool, args));
           const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject }, subject: callSubject, facts,
             policyRevision: policy.revision,
             summary: agentToolApprovalSummary({ tool: tool.name, resource, argsDigest, cell: decisions.cell(tool, args), selfSourceReason: decisions.cell(tool, args) === 'edit-self-source' ? t('terminal.approval.selfSource',
