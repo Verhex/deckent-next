@@ -189,7 +189,9 @@ flowchart LR
    it is not a folder or a sandbox. Use a folder you own that other accounts cannot write to. On systems such as Ubuntu
    that create group-writable folders, Deckent asks once on a real terminal whether to narrow that folder's permission.
    Yes removes group/other write access from that folder only; no leaves it unchanged and shows `chmod go-w .` guidance.
-   For `terminal attach --preview`, this explicit permission step happens before the read-only preview; after yes, use its digest with `--apply --expect <digest>`.
+   For `terminal attach --preview`, this explicit permission step happens before the read-only preview; after yes, copy and run the complete apply command printed at the end.
+   It includes `--scope <id> --apply --expect <digest> --command-id <uuid>`; keep the same command id when retrying.
+   Attaching a project requires that explicit command id; apply does not generate one.
    Machine output (`--json`), non-TTY and AI callers are refused without a question or permission change.
    Choose a scope such as `my-project`, preview the policy and install it:
 

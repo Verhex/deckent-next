@@ -190,7 +190,9 @@ flowchart LR
    bir klasör ya da sandbox değildir. Size ait, başka hesapların yazamadığı bir klasör kullanın. Ubuntu gibi grup yazma
    izniyle klasör oluşturan sistemlerde Deckent, gerçek terminalde o klasörün iznini daraltmayı bir kez sorar.
    Evet yalnız o klasörün grup/diğer yazma iznini kaldırır; hayır klasörü değiştirmez ve `chmod go-w .` rehberini gösterir.
-   `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra üretilen özeti `--apply --expect <özet>` ile kullanın.
+   `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra sonda gösterilen tam uygulama komutunu kopyalayıp çalıştırın.
+   Komut `--scope <id> --apply --expect <özet> --command-id <uuid>` içerir; yeniden denerken aynı komut kimliğini koruyun.
+   Proje bağlama bu açık komut kimliğini gerektirir; uygulama kendisi kimlik üretmez.
    Makine çıktısı (`--json`), TTY dışı ve AI çağrıları soru veya izin değişikliği olmadan reddedilir.
    `my-project` gibi bir kapsam seçin, policy'yi önizleyin ve kurun:
 

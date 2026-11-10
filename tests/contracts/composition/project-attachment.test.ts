@@ -5,6 +5,8 @@ import * as localPrincipal from '#adapters/core/local-principal/index.js';
 import * as childProcess from 'node:child_process';
 import { main as cliMain } from '#composition/core/cli/index.js';
 import * as surface from '#surfaces/index.js';
+import * as cliHuman from '#surfaces/core/cli-human/index.js';
+import { main as surfaceCli } from '#surfaces/core/cli/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 import { carryConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
@@ -299,6 +301,30 @@ it.skipIf(process.platform !== 'linux')('ATTACH review P2 carries location guida
   vi.mocked(fs.lstat).mockImplementation(async (...args) => args[0] === root
     ? stat(link, args[1]) : stat(...args));
   try { await assertGuidance(real); } finally { vi.mocked(fs.lstat).mockReset(); }
+});
+
+it.skipIf(process.platform !== 'linux')('ATTACHDOC: the copied preview command attaches durably and replays with its generated command id', async () => {
+  const f = await fixture(), target = await f.make(f.b), preview = await target.app.preview('target');
+  let output = '', errors = '';
+  const attachCliContext = { root: f.b, env: f.options.env, stdin: { isTTY: true } as NodeJS.ReadStream,
+    stdout: { isTTY: true, write: (text: string) => { output += text; } }, stderr: { write: (text: string) => { errors += text; } },
+    projectAttachment: async (_root: string, command: import('#domain/index.js').ProjectAttachmentCommand) => {
+      if (command.action === 'preview') return target.app.preview(command.scopeId);
+      if (command.action === 'apply') return target.app.apply(command.scopeId, command.expect, command.commandId);
+      throw new Error('unexpected fixture action');
+    } };
+  expect(await surfaceCli(['terminal', 'attach', '--scope', 'target', '--preview'], attachCliContext), errors).toBe(0);
+  const args = output.trimEnd().split('\n').at(-1)!.split(' ').slice(1), commandId = args.at(-1)!;
+  const confirm = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue('yes');
+  try {
+    output = '';
+    expect(await surfaceCli(args, attachCliContext), errors).toBe(0);
+    expect(confirm).toHaveBeenCalledOnce();
+  } finally { confirm.mockRestore(); }
+  const persisted = await target.store.attachment();
+  expect(persisted).toMatchObject({ scopeId: 'target', commandId });
+  expect(await target.app.apply('target', preview.planDigest, commandId)).toMatchObject({ attachment: persisted });
+  expect(await target.store.attachment()).toEqual(persisted);
 });
 
 describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {

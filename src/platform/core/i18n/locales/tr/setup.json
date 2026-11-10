@@ -341,7 +341,7 @@
   "setup.attach.body": "Klasör: {path}\nScope / proje: {scope}\nBu işlem ayrı bir proje bağlamı hazırlar. Model erişimi ayrıca yapılandırılır.",
   "setup.attach.saved": "Proje bağlantı kaydı saklandı.",
   "setup.attach.preview": "Proje bağlantısı önizlemesi (hiçbir şey yazılmadı).",
-  "setup.attach.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <digest>] [--command-id <id>] [--json]\nMevcut kurulumu kendi klasöründe --register ile açıkça seçin. Uygulama, terminalde kişi tanığı ve değişmemiş önizleme özeti gerektirir. --revoke <project-id> --apply proje bağlantısını geri alır.",
+  "setup.attach.help": "terminal attach --scope <id> --preview [--register] [--json]\nterminal attach --scope <id> --apply --expect <özet> --command-id <uuid>\nterminal attach --register --scope <id> --apply [--expect <özet>]\nMevcut kurulumu kendi klasöründe --register ile açıkça seçin. Uygulama, terminalde kişi tanığı ve değişmemiş önizleme özeti gerektirir. --revoke <project-id> --apply proje bağlantısını geri alır.",
   "setup.session.title": "Bu klasörde oturum aç?",
   "setup.session.body": "Klasör: {path}\nScope: {scope}\nBağlantı: {connections}\nMaliyet türü: {costs}\nYazılacak alan: {writeRoot}\nAyrı proje politikası, ledger ve oturum oluşturulur; bağlantı kullanım izni geri alınabilir. Token kopyalanmaz.",
   "setup.session.noConnection": "Henüz yapılandırılmadı",
@@ -354,8 +354,9 @@
   "setup.attachment.relocate": "Taşınmış proje veya kaynağı kimliğini koruyarak uzlaştır",
   "setup.attachment.restore": "Proje bağını geri aç ve yeni model kullanım izni ver",
   "setup.attachment.body": "İşlem: {action}\nKlasör: {path}\nScope / proje: {scope}\nİşlem güncel politikayı ve gereken yerde tam önizlemeyi kullanır.",
-  "setup.attachment.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <özet>] [--command-id <uuid>] [--json]\nDoğrulanmış kaynağı kendi klasöründe kaydedin, sonra yeni projeyi önizleyip bağlayın. --lease-revoke <projeKimliği> --apply yalnız model kullanımını geri alır. --detach <projeKimliği> --apply veri silmeden bağı ve kullanımı geri alır. Kaynakta --unregister --apply bağlı projelerin ayrılmasını gerektirir. --relocate --scope <id> --apply gerçek taşımayı uzlaştırır. Şifreli yedekten dönüşten sonra eski kapsam için önizleme alın; --restore <projeKimliği> --expect <özet> --apply yeni kullanım izni verir. Her uygulama gerçek terminalde kişi ister.",
+  "setup.attachment.help": "terminal attach --scope <id> --preview [--register] [--json]\nterminal attach --scope <id> --apply --expect <özet> --command-id <uuid>\nterminal attach --register --scope <id> --apply [--expect <özet>]\nDoğrulanmış kaynağı kendi klasöründe kaydedin, sonra yeni projeyi önizleyip bağlayın. --lease-revoke <projeKimliği> --apply yalnız model kullanımını geri alır. --detach <projeKimliği> --apply veri silmeden bağı ve kullanımı geri alır. Kaynakta --unregister --apply bağlı projelerin ayrılmasını gerektirir. --relocate --scope <id> --apply gerçek taşımayı uzlaştırır. Şifreli yedekten dönüşten sonra eski kapsam için önizleme alın; --restore <projeKimliği> --expect <özet> --apply yeni kullanım izni verir. Her uygulama gerçek terminalde kişi ister.",
   "setup.session.registerHint": "Başka klasörde kuruluysa kurulu klasörünüzde `deckent terminal attach --register --apply` çalıştırın, kaynağı onaylayıp buraya dönün.",
+  "setup.attachment.next": "Uygulamak için bu komutu çalıştırın. Yeniden denerken aynı komutu kullanın:\n{command}",
   "setup.state.checked": "kontrol çalıştı",
   "setup.reason.checkPending": "Son kontrol çalıştı; {count} madde sizi bekliyor. Sonuçlar ve sonraki adımlar için deckent doctor çalıştırın."
 }
