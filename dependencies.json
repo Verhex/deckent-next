@@ -114,10 +114,11 @@
         "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.",
         "MCP-SCHEMA-VALIDATOR (owner 2026-09-29): the SDK's embedded @cfworker/json-schema@4.1.1 (last release 2025-01-31; cfworker#335/#337 fail-closed, #150 $dynamicRef fail-open; ReDoS through pattern) is no longer used or shipped; build-dist refuses cfWorkerProvider/@cfworker/json-schema like ajv. It remains in the installed dev/test tree (embedded[] mirrors the installed sourcemaps).",
         "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint.",
+        "2026-11-11 review (lead): no release after 2.4.0 (2026-10-23); the ten upstream advisories (newest 2026-10-15) are all fixed at or before 2.3.0; deps-watch reports only the embedded fast-uri findings as mitigated; upstream typescript-sdk#2036 (fast-uri bump) is still open.",
         "2026-10-31 review (proof/ALPHA60/PAKET-2/DEPREVIEW/REPORT.md): 2.4.0 (2026-10-23) carries no security fix; seven SDK advisories 2026-09-30..10-15 were fixed at or before 2.3.0. Behaviour changes: a tool whose x-mcp-header parameter is a number is no longer listed (spec 2026-07-28), an outputSchema .meta({id}) is no longer wrapped in {result}, an invalid URI scheme in $id/$ref no longer compiles. Its nested zod copies are pinned to 4.6.7 by package.json overrides (GHSA-mrhx-c7xc-m3w5, <4.6.6)."
       ],
-      "lastReview": "2026-10-31",
-      "nextReview": "2026-11-14"
+      "lastReview": "2026-11-11",
+      "nextReview": "2026-11-25"
     },
     "@modelcontextprotocol/server": {
       "kind": "runtime",
@@ -195,8 +196,8 @@
         "Three nested zod copies under the SDK packages (client and server 4.6.5, core 4.6.7 since SDK 2.3.1) until our zod 4 migration dedupes them.",
         "2026-10-31 review (proof/ALPHA60/PAKET-2/DEPREVIEW/REPORT.md): 2.4.0 (2026-10-23) carries no security fix; seven SDK advisories 2026-09-30..10-15 were fixed at or before 2.3.0. Behaviour changes: a tool whose x-mcp-header parameter is a number is no longer listed (spec 2026-07-28), an outputSchema .meta({id}) is no longer wrapped in {result}, an invalid URI scheme in $id/$ref no longer compiles. Its nested zod copies are pinned to 4.6.7 by package.json overrides (GHSA-mrhx-c7xc-m3w5, <4.6.6)."
       ],
-      "lastReview": "2026-10-31",
-      "nextReview": "2026-11-14"
+      "lastReview": "2026-11-11",
+      "nextReview": "2026-11-25"
     },
     "ink": {
       "kind": "runtime",
@@ -858,7 +859,7 @@
         "GHSA-xhq7-xmqj-769h"
       ],
       "severity": "MEDIUM",
-      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036). 2026-10-15: SDK 2.3.1 still embeds fast-uri 3.1.0 (tarball grep); GHSA-hrr3-gc8f-f4qj (MEDIUM, host case normalization of scheme-relative references) is the same host-confusion class and is covered by the same not-shipped + own-validator mitigation. 2026-10-22: no SDK release since 2.3.1 (2026-10-05); owner extended the acceptance 30 days on the same not-shipped + own-validator conditions. 2026-10-31: SDK 2.4.0 embeds fast-uri 3.1.8 (the nine 3.1.0 advisories are fixed); four new advisories of 2026-10-23 (2 MEDIUM, 2 LOW; fix 3.1.9) are the same URI/host-confusion class under the same not-shipped + own-validator mitigation; expiry kept at the owner window.",
+      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036). 2026-10-15: SDK 2.3.1 still embeds fast-uri 3.1.0 (tarball grep); GHSA-hrr3-gc8f-f4qj (MEDIUM, host case normalization of scheme-relative references) is the same host-confusion class and is covered by the same not-shipped + own-validator mitigation. 2026-10-22: no SDK release since 2.3.1 (2026-10-05); owner extended the acceptance 30 days on the same not-shipped + own-validator conditions. 2026-10-31: SDK 2.4.0 embeds fast-uri 3.1.8 (the nine 3.1.0 advisories are fixed); four new advisories of 2026-10-23 (2 MEDIUM, 2 LOW; fix 3.1.9) are the same URI/host-confusion class under the same not-shipped + own-validator mitigation; expiry kept at the owner window. 2026-11-11: no SDK release since 2.4.0; owner extended the acceptance to 2026-12-21 on the same not-shipped + own-validator conditions.",
       "evidence": [
         "proof/FASTURI-OUT-2026-09-29/review.md (tarball grep, SBOM, pack-smoke Node 24.21/26.10, guard mutation)",
         "tests/contracts/surfaces/mcp-json-schema-validator.test.ts",
@@ -869,9 +870,9 @@
         "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/astra-2180-adaptation.md (Astra 2180 R2: $dynamicRef refused before send; red on 0a69a70, green on the merge)",
         "merged 5330cb7e (lane/mcp-schema-validator f00b6f77) + tests/contracts/platform/json-schema-validator.test.ts"
       ],
-      "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29; carriers moved to SDK 2.3.1 and GHSA-hrr3 added after owner chose the 2.3.1 upgrade, 2026-10-15; owner extended 30 days on 2026-10-22: SDK still 2.3.1, last release 2026-10-05); carriers moved to SDK 2.4.0 with the owner-decided 2.4.0 upgrade (lead, 2026-10-31; owner window unchanged)",
-      "decided": "2026-10-22",
-      "expires": "2026-11-21"
+      "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29; carriers moved to SDK 2.3.1 and GHSA-hrr3 added after owner chose the 2.3.1 upgrade, 2026-10-15; owner extended 30 days on 2026-10-22: SDK still 2.3.1, last release 2026-10-05); carriers moved to SDK 2.4.0 with the owner-decided 2.4.0 upgrade (lead, 2026-10-31; owner window unchanged); owner extended 30 days to 2026-12-21 on 2026-11-11 on the same conditions (SDK still 2.4.0, released 2026-10-23) and decided that an entry proven not shipped stays valid without a monthly renewal once the rule lands in beta.1",
+      "decided": "2026-11-11",
+      "expires": "2026-12-21"
     }
   ]
 }
