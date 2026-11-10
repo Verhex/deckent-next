@@ -16,7 +16,7 @@ export class SqliteTargetQueue implements TargetQueueStore {
     return row ? decodeTargetQueueRow(row) : null;
   }
   forVerification(scopeId: string, runId: string): TargetQueueRecord | null {
-    const rows = this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND json_extract(record,'$.effectCommandIds[3]')=? LIMIT 2").all(scopeId, runId);
+    const rows = this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.effectCommandIds[3]') END)=? LIMIT 2").all(scopeId, runId);
     if (rows.length > 1) throw new TargetQueueError('QUEUE_CORRUPT');
     return rows[0] ? decodeTargetQueueRow(rows[0]) : null;
   }
@@ -24,7 +24,7 @@ export class SqliteTargetQueue implements TargetQueueStore {
     return this.db.prepare(`SELECT * FROM target_queue WHERE ${open} AND (target_key>? OR (target_key=? AND ordinal>?)) ORDER BY target_key,ordinal LIMIT ?`)
       .all(after?.key ?? '', after?.key ?? '', after?.ordinal ?? 0, limit).map(decodeTargetQueueRow);
   }
-  epoch(key: string): number { return Number(this.db.prepare("SELECT coalesce(max(json_extract(record,'$.epoch')),0) AS n FROM target_queue WHERE target_key=?").get(key)?.n); }
+  epoch(key: string): number { return Number(this.db.prepare("SELECT coalesce(max((CASE WHEN json_valid(record) THEN json_extract(record,'$.epoch') END)),0) AS n FROM target_queue WHERE target_key=?").get(key)?.n); }
   head(key: string): TargetQueueRecord | null {
     const row = this.db.prepare(`SELECT * FROM target_queue WHERE target_key=? AND ${open} ORDER BY ordinal LIMIT 1`).get(key);
     return row ? decodeTargetQueueRow(row) : null;
@@ -35,14 +35,14 @@ export class SqliteTargetQueue implements TargetQueueStore {
       .all(scopeId, after ?? '', limit).map(row => decodeTargetQueueRow(row));
   }
   forRun(scopeId: string, runId: string, limit: number): readonly TargetQueueRecord[] {
-    return this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND json_extract(record,'$.request.identity.runId')=? ORDER BY command_id LIMIT ?")
+    return this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.identity.runId') END)=? ORDER BY command_id LIMIT ?")
       .all(scopeId, runId, limit).map(decodeTargetQueueRow);
   }
   /** D1a work list: base-advanced tickets under delivery intent submitted after `since`, whose re-attempt ticket does not exist yet. */
   reattemptable(since: number, limit: number): readonly TargetQueueRecord[] {
-    return this.db.prepare(`SELECT * FROM target_queue t WHERE state='settled' AND json_extract(record,'$.outcome')='conflict-needs-reattempt' AND json_extract(record,'$.reason')='PATCH_BASE_ADVANCED'
-      AND json_extract(record,'$.request.deliveryIntent') IS NOT NULL AND json_extract(record,'$.request.submittedAt')>? AND NOT EXISTS (SELECT 1 FROM target_queue s
-      WHERE s.scope_id=t.scope_id AND json_extract(s.record,'$.request.reattempt.sourceCommandId')=t.command_id) ORDER BY target_key,ordinal LIMIT ?`).all(since, limit).map(decodeTargetQueueRow);
+    return this.db.prepare(`SELECT * FROM target_queue t WHERE state='settled' AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.outcome') END)='conflict-needs-reattempt' AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.reason') END)='PATCH_BASE_ADVANCED'
+      AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.deliveryIntent') END) IS NOT NULL AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.request.submittedAt') END)>? AND NOT EXISTS (SELECT 1 FROM target_queue s
+      WHERE s.scope_id=t.scope_id AND (CASE WHEN json_valid(s.record) THEN json_extract(s.record,'$.request.reattempt.sourceCommandId') END)=t.command_id) ORDER BY target_key,ordinal LIMIT ?`).all(since, limit).map(decodeTargetQueueRow);
   }
   /** D2b work list: Runs whose approved proposal carries a delivery intent, newest first, with the granting human (a pass per lease). */
   intentRuns(limit: number) {

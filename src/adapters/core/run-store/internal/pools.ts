@@ -56,7 +56,7 @@ export class SqliteExecutionPools {
   /** Run progress is the sole occupancy truth, summed over every scope's Runs of the pool. */
   occupancy(poolId: string): { execution: number; inFlight: number } {
     let execution = 0; let inFlight = 0;
-    const rows = this.db.prepare("SELECT scope_id,run_id,revision,snapshot,json_extract(policy,'$.poolId') AS assigned_pool FROM runs WHERE json_extract(policy,'$.poolId')=? OR json_extract(policy,'$.poolId') IS NULL").all(poolId);
+    const rows = this.db.prepare("SELECT scope_id,run_id,revision,snapshot,(CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END) AS assigned_pool FROM runs WHERE (CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END)=? OR (CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END) IS NULL").all(poolId);
     for (const row of rows) {
       const run = decodeLedgerRunSnapshot(row.snapshot, String(row.scope_id), String(row.run_id));
       if (run.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');

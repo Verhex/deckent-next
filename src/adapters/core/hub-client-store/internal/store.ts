@@ -63,14 +63,14 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
     return Promise.all(rows.map(async row => (await this.install(scopeId, hubId, String(row.package_id), String(row.version)))!));
   }
   async refreshResult(scopeId: string, hubId: string) {
-    const row = this.db.prepare("SELECT record FROM hub_client_receipts WHERE scope_id=? AND json_extract(record,'$.value.result.kind')='revocations' AND json_extract(record,'$.value.result.hubId')=? ORDER BY rowid DESC LIMIT 1").get(scopeId, hubId);
+    const row = this.db.prepare("SELECT record FROM hub_client_receipts WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.result.kind') END)='revocations' AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.result.hubId') END)=? ORDER BY rowid DESC LIMIT 1").get(scopeId, hubId);
     if (!row) return null;
     const receipt = this.open(row.record) as HubReceipt;
     if (receipt.scopeId !== scopeId) throw corrupt();
     return hubRefreshResultSchema.parse(receipt.result);
   }
   async revocationCards(scopeId: string, after: number, limit: number) {
-    return this.db.prepare("SELECT rowid,record FROM hub_client_receipts WHERE scope_id=? AND rowid>? AND json_extract(record,'$.value.result.kind')='revocations' ORDER BY rowid LIMIT ?").all(scopeId, after, limit).map(row => {
+    return this.db.prepare("SELECT rowid,record FROM hub_client_receipts WHERE scope_id=? AND rowid>? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.result.kind') END)='revocations' ORDER BY rowid LIMIT ?").all(scopeId, after, limit).map(row => {
       const receipt = this.open(row.record) as HubReceipt;
       if (receipt.scopeId !== scopeId) throw corrupt();
       return { after: Number(row.rowid), result: hubRefreshResultSchema.parse(receipt.result) };

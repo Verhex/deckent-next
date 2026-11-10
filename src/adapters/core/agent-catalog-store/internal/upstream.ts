@@ -16,7 +16,7 @@ export function catalogHubUpstream(db: DatabaseSync, open: (value: unknown) => u
     const install = hubInstallSchema.parse(open(row.record));
     if (install.scopeId !== scopeId || install.hubId !== row.hub_id || install.packageId !== row.package_id || install.version !== row.version) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
     if (!install.items.some(item => item.kind === kind && item.id === id && item.revision === revision)) continue;
-    const refresh = db.prepare("SELECT record FROM hub_client_receipts WHERE scope_id=? AND json_extract(record,'$.value.result.kind')='revocations' AND json_extract(record,'$.value.result.hubId')=? ORDER BY rowid DESC LIMIT 1").get(scopeId, install.hubId);
+    const refresh = db.prepare("SELECT record FROM hub_client_receipts WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.result.kind') END)='revocations' AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.result.hubId') END)=? ORDER BY rowid DESC LIMIT 1").get(scopeId, install.hubId);
     const previous = refresh ? hubRefreshResultSchema.parse((open(refresh.record) as { result: unknown }).result) : null;
     if (previous && previous.hubId !== install.hubId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
     const keyIds = install.signerKeyIds ?? verifiedKeyIds ?? previous?.packages.find(row => row.packageId === install.packageId && row.version === install.version)?.signerKeyIds;
