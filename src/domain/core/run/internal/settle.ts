@@ -21,7 +21,11 @@ export function classifyCancelledAttempt(run: RunSnapshot, attempt: AttemptSnaps
 }
 /** The transition both verdicts apply: the attempt's task becomes `cancelled`; repeated settlement is idempotent. */
 export function cancelRunAttempt(input: unknown, expectedRevision: number, attemptInput: unknown, dispatch: CancelledAttemptDispatch, verdict: 'prevent' | 'settle', timing: RunLifecycleTiming) {
-  const run = checkedRun(input, expectedRevision), attempt = attemptSnapshotSchema.parse(attemptInput), found = classifyCancelledAttempt(run, attempt, dispatch);
+  const run = checkedRun(input, expectedRevision), attempt = attemptSnapshotSchema.parse(attemptInput);
+  if (verdict === 'prevent' && (!attempt.cancelRequested || attempt.lastObservation !== null
+    || run.bindings.some(binding => sameAttemptIdentity(binding.identity, attempt.identity) && binding.observedRevision !== null)
+    || run.progress.some(task => task.taskId === attempt.identity.taskId && task.unresolvedEffects))) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  const found = classifyCancelledAttempt(run, attempt, dispatch);
   if (found === 'already-cancelled') return run;
   if (found !== verdict) throw new RunError('RUN_ATTEMPT_CONFLICT');
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1,

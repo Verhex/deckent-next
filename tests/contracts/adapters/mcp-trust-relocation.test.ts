@@ -141,7 +141,9 @@ describe.skipIf(process.platform !== 'linux')('SEC-2 F29: project MCP trust is n
   // p6 e1/e2 (MCP-REVOKE, X8): `mcpSendAuthority` called directly. A same-inode, same-size, same-mtime hand edit is a new decision (ctime
   // cannot be set back, so the test proves inode, size and mtime only); a `$DECK:` value is resolved at every send (A15).
   it('the send authority decides from the registry and trust read at each send: its order, a completed change, a same-identity hand edit, a revoked secret', async () => {
-    const w = await workspace(), send = mcpSendAuthority(w.context);
+    const w = await workspace();
+    const managed = { servers: {} as Record<string, unknown>, allowed: null as string[] | null, denied: [] as string[] };
+    const send = mcpSendAuthority({ ...w.context, managed });
     const unbound = { scope: 'local' as const, definitionDigest: 'a'.repeat(64) };
     expect(await send({ server: 'fx', tool: 'echo', digest: 'a'.repeat(64), binding: unbound })).toBe('trust-revoked');
     w.secrets.set('KEY', 'secret-value-123456');
@@ -153,6 +155,16 @@ describe.skipIf(process.platform !== 'linux')('SEC-2 F29: project MCP trust is n
     expect([await call(), await call({ binding: null }), await call({ server: 'none' }), await call({ binding: { ...binding, scope: 'project' } }),
       await call({ binding: { ...binding, definitionDigest: 'b'.repeat(64) } }), await call({ digest: 'c'.repeat(64) })])
       .toEqual([null, 'trust-revoked', 'trust-revoked', 'definition-changed', 'definition-changed', 'pin-revoked']);
+    const paths = [join(w.project, '.deckent', 'mcp.json'), join(w.home, '.deckent', 'mcp.json')];
+    const bytes = paths.map(path => existsSync(path) ? readFileSync(path, 'utf8') : null);
+    managed.denied.push('fx'); expect.soft(await call()).toBe('trust-revoked');
+    managed.denied.length = 0; expect(await call()).toBe(null);
+    managed.allowed = []; expect.soft(await call()).toBe('trust-revoked');
+    managed.allowed = ['fx', 'fy']; expect(await call()).toBe(null);
+    managed.servers['fx'] = { ...w.entry, args: [...w.entry.args, '--company'] };
+    expect.soft(await call()).toBe('definition-changed');
+    delete managed.servers['fx']; expect(await call()).toBe(null);
+    expect(paths.map(path => existsSync(path) ? readFileSync(path, 'utf8') : null)).toEqual(bytes);
     const file = join(await mcpProjectTrustDirectory(w.project, join(w.home, '.deckent'), false), 'mcp-trust.json'), text = readFileSync(file, 'utf8');
     chmodSync(file, 0o644); expect(await call()).toBe('trust-unavailable'); chmodSync(file, 0o600);
     const stamp = 1_800_000_000, edit = (next: string) => { writeFileSync(file, next); utimesSync(file, stamp, stamp); };
