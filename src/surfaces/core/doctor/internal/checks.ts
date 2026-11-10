@@ -42,7 +42,7 @@ export interface DoctorCheckFacts {
   readonly modelConnections?: readonly Readonly<{ profile: string; tools: 'available' | 'none' | 'unknown'; stale: boolean }>[] | null;
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
-    cliUpdated?: Readonly<{ from: string; to: string }> | null;
+    cliUpdated?: Readonly<{ cli: string; from: string; to: string }> | null;
     owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
     /** f5: the realm gateway's cumulative refusals (host names most refused first, `other` without a valid name); null: none recorded. */
     egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
@@ -127,7 +127,7 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   const audit = r.auditIntegrity;
   if (audit) rows.push(audit.status === 'match' ? row('security', 'security.audit', 'ok', t('doctor.check.audit.ok', {}, l))
     // A fresh scope cannot prove integrity yet, but has no checkpoint failure that blocks installation.
-    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? { ...row('security', 'security.audit', 'untested', t('doctor.check.audit.noCheckpoint', {}, l)), needsAttention: true }
+    : audit.status === 'unknown' && audit.reason === 'no-checkpoint-yet' ? { ...row('security', 'security.audit', 'untested', t('doctor.check.audit.noCheckpoint', {}, l), t('doctor.check.audit.firstCheckpoint.next', { verify: scoped('deckent audit verify', f) }, l)), needsAttention: true }
     : row('security', 'security.audit', 'error', t('doctor.check.audit.problem', { status: renderAuditStatus(audit.status, l), reason: renderAuditReason(audit.reason, l) }, l), scoped('deckent audit verify', f), fix('security.audit')));
   const directory = r.recoveryFiles?.installationDirectory;
   if (directory) rows.push((parseInt(directory.mode, 8) & 0o077)
@@ -150,7 +150,7 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
     else if (custody?.status === 'refused' && !(open && custody.folder === 'root')) rows.push(row('security', 'security.siwcCustody', 'warning',
       ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: Object.fromEntries(Object.entries({ reason: custody.reason, path: custody.path, mode: custody.mode, folder: custody.folder })
         .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }).localize?.(l).message ?? custody.reason ?? '',
-      custody.folder === 'root' && custody.path ? `chmod 700 ${custody.path}` : undefined));
+      custody.folder === 'root' && custody.path ? `chmod 700 ${custody.path}` : t('doctor.check.custody.next', {}, l)));
   }
   // PRE-8 v2: one row per key a profile uses that this project cannot read now, with the exact next command (names only).
   for (const use of f.secretUse ?? []) {
@@ -171,7 +171,7 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
-  if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText));
+  if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
     : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
@@ -213,7 +213,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   for (const connection of f.modelConnections ?? []) if (connection.stale || connection.tools !== 'available') rows.push(row('work', 'work.modelConnection', 'warning',
     `${terminalSafeText(connection.profile)} · ${connection.stale ? ErrorRegistry.get('MODEL_INVOCATION_PROFILE_CONFLICT', l)?.message : connection.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, l) : t('terminal.admin.model.toolsUnknown', {}, l)}`, scoped('deckent models connect', f)));
   for (const login of f.headlessLogins ?? []) {
-    if (login.cliUpdated) rows.push(row('work', 'work.cliUpdated', 'ok', setupReasonText('doctor.headless.updated', { from: terminalSafeText(login.cliUpdated.from), to: terminalSafeText(login.cliUpdated.to) }, l)));
+    if (login.cliUpdated) rows.push(row('work', 'work.cliUpdated', 'ok', setupReasonText('doctor.headless.updated', { cli: terminalSafeText(login.cliUpdated.cli), from: terminalSafeText(login.cliUpdated.from), to: terminalSafeText(login.cliUpdated.to) }, l)));
     const dir = terminalSafeText(login.configDir), consent = login.consent.length ? login.consent.join(', ') : t('doctor.headless.none', {}, l);
     // S3-5: the realm the last passing check ran in, or that the realm itself closed the channel.
     const isolated = !login.isolation ? '' : login.isolation === 'unavailable' ? t('doctor.headless.isolationUnavailable', {}, l)
@@ -327,9 +327,17 @@ export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Local
     const rows = checks.filter(check => check.group === group);
     if (!rows.length) continue;
     lines.push('', groupWord(group, locale));
+    const rendered = new Map<string, { line: string; next: string; count: number }>();
     for (const check of rows) {
-      lines.push(`  ${marks[check.state].padEnd(width)}  ${check.text}`);
-      if (check.next) lines.push(`  ${' '.repeat(width)}  ${t('doctor.next', { step: check.next }, locale)}`);
+      const line = `  ${marks[check.state].padEnd(width)}  ${check.text}`;
+      const next = check.next ? `  ${' '.repeat(width)}  ${t('doctor.next', { step: check.next }, locale)}` : '';
+      const key = JSON.stringify([line, next]), previous = rendered.get(key);
+      if (previous) previous.count++;
+      else rendered.set(key, { line, next, count: 1 });
+    }
+    for (const { line, next, count } of rendered.values()) {
+      lines.push(count > 1 ? t('doctor.repeated', { text: line, count }, locale) : line);
+      if (next) lines.push(next);
     }
   }
   return lines.join('\n');

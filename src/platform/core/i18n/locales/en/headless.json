@@ -58,7 +58,7 @@
   "headless.connect.loginOwned": "CLI login used: {dir} (the Brain's own; the CLI reads it itself, Deckent never opens it).",
   "doctor.headless.owned": "; the Brain's own login directory",
   "doctor.headless.notOwned": "; not the Brain's own login directory (it keeps working): sign the Brain's own in, then connect again",
-  "doctor.headless.updated": "; CLI updated {from} → {to} (checked again before use)",
+  "doctor.headless.updated": "CLI {cli} updated {from} → {to} (checked again before use)",
   "tui.provider.login.ownSubscriptionNote": "Your own subscription through the CLI's own sign-in; Deckent never reads, copies or shares it.",
   "tui.model.textChatSubscription": "Subscription text chat; no API budget. Native tools are disabled.",
   "headless.chat.quota": "Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.",

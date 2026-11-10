@@ -1,6 +1,6 @@
 import { compareToolchainVersions, prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import {  headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
@@ -84,7 +84,7 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
       subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, owned: ownedRoot !== null && dirname(definition.configDir) === ownedRoot,
       consent: definition.delegatedUse?.classes ?? [], isolation,
       // S7: the CLI behind the connected path changed version since an earlier passing check (`doctor.headless.updated`).
-      cliUpdated: record?.state === 'open' && text(record.updatedFrom) && text(record.version) ? { from: text(record.updatedFrom)!, to: text(record.version)! } : null,
+      cliUpdated: record?.state === 'open' && text(record.updatedFrom) && text(record.version) ? { cli: basename(definition.executable), from: text(record.updatedFrom)!, to: text(record.version)! } : null,
       egress: await readEgress(definition.stateDir) });
   }));
 }

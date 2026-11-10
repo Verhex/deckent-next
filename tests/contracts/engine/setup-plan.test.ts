@@ -199,8 +199,8 @@ it('U3-1a: phase filters keep all prerequisite states, settle install warnings, 
   expect(fresh.stages.map(stage => stage.id)).not.toContain('execution:runtime');
   expect(fresh.stages.map(stage => stage.id)).not.toContain('core:model');
   const done = observe({ language: { configured: 'en', requested: null, system: null }, folder: { ...base.folder, installation: 'present', configuredScope: 's' },
-    policy: { state: 'current' }, profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } }, check: { state: 'warnings' } });
-  expect(byId(planSetup(done, undefined, registry, { phase: 'install' })).get('core:final-check')).toMatchObject({ state: 'done', reason: { code: 'setup.reason.checkWarnings' } });
+    policy: { state: 'current' }, profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } }, check: { state: 'warnings', pending: 2 } });
+  expect(byId(planSetup(done, undefined, registry, { phase: 'install' })).get('core:final-check')).toMatchObject({ state: 'done', reason: { code: 'setup.reason.checkPending', params: { count: 2 } } });
   const onboarding = planSetup(done, undefined, registry, { phase: 'onboarding' });
   expect(onboarding.stages.every(stage => stage.phase === 'onboarding')).toBe(true);
   expect(byId(onboarding).get('core:model')!.state).toBe('needs-answer');

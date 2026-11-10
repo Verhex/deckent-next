@@ -94,8 +94,8 @@
   "setup.reason.modelMissing": "No model is connected yet.",
   "setup.reason.modelChosen": "The model {model} will be connected.",
   "setup.reason.checkReady": "Ready for the final check.",
-  "setup.reason.checkPassed": "The final check passed.",
-  "setup.reason.checkWarnings": "The final check found warnings; deckent doctor lists each one with its next step.",
+  "setup.reason.checkPassed": "The final check ran; no items need attention.",
+  "setup.reason.checkWarnings": "The final check ran; some items need attention. Run deckent doctor for each next step.",
   "setup.reason.checkErrors": "The final check found errors.",
   "error.SETUP_STAGE_INVALID": "A setup stage registration or its decision is invalid.",
   "error.SETUP_STAGE_SHADOW": "A setup stage registration cannot replace Core or another family.",
@@ -353,5 +353,7 @@
   "setup.attachment.restore": "Restore the project attachment and grant a new model-use lease",
   "setup.attachment.body": "Action: {action}\nFolder: {path}\nScope / project: {scope}\nThe operation uses current policy and the exact preview where required.",
   "setup.attachment.help": "terminal attach --scope <id> --preview|--apply [--register] [--expect <digest>] [--command-id <uuid>] [--json]\nRegister a verified source in its folder, then preview and attach a new project. --lease-revoke <projectId> --apply withdraws only model use. --detach <projectId> --apply withdraws both attachment and use without deleting data. --unregister --apply on the source requires detached dependencies. --relocate --scope <id> --apply reconciles a real move. After encrypted restore, preview the retained scope and use --restore <projectId> --expect <digest> --apply to grant new use. Every apply needs a person at a terminal.",
-  "setup.session.registerHint": "Already installed elsewhere? In your installed folder, run `deckent terminal attach --register --apply`, confirm the source, then return here."
+  "setup.session.registerHint": "Already installed elsewhere? In your installed folder, run `deckent terminal attach --register --apply`, confirm the source, then return here.",
+  "setup.state.checked": "check ran",
+  "setup.reason.checkPending": "The final check ran; {count} item(s) wait for you. Run deckent doctor for the results and next steps."
 }
