@@ -1,4 +1,4 @@
-import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, standingAgentsChanged, AuditError,
+import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, isAiPrincipal, standingAgentsChanged, AuditError,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
@@ -51,11 +51,9 @@ export class RunCreationAuthority {
       this.recordUnapplied(command, principal, evaluation);
       throw ErrorRegistry.createError('APPROVAL_STALE');
     }
-    // A proposal may only lower the registry gate when every exact class declares low risk and standing admission.
-    // It never lowers policy require-approval or deny.
     if (command.proposal && !command.proposal.admission) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
-    // D2b: a delivery intent always shows the human a card (never standing/allow); S8-1b (N29): so does an agent that is not the recorded `active` one.
-    if (command.proposal && (!command.proposal.admission!.standingAdmission || command.proposal.delivery || standingAgentsChanged(command.proposal.admission!.agents, create.execution.tasks)) && evaluation.verdict.decision === 'allow') {
+    // Owner S4/S6: AI proposals always need the person card; D2b and S8-1b (N29) retain the delivery and changed-agent gates.
+    if (command.proposal && (isAiPrincipal(principal) || !command.proposal.admission!.standingAdmission || command.proposal.delivery || standingAgentsChanged(command.proposal.admission!.agents, create.execution.tasks)) && evaluation.verdict.decision === 'allow') {
       evaluation = { ...evaluation, verdict: { decision: 'require-approval', revision: evaluation.verdict.revision, reason: 'APPROVAL_REQUIRED' } };
     }
     // R9 (owner 2026-11-05): the worker ceiling belongs to a plan the person approves on its card (shown there, sealed in its basis); a Run admitted without a card keeps the current mode alone.

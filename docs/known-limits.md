@@ -528,8 +528,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   owns the policy files and a rule names that person in the configured service scope (or a first-run read rule does): the start writes
   an `authority-change` audit record and an archived revision under the installer's upgrade key, once. A rule whose whole cell one
   allow of the AI actor already covers (the same or a wider action, scope and resource selection, a role binding of the actor included;
-  for example the MCP `work` group's run rule) is not added, so that allow never becomes a card; the record names each such rule and the
-  rule that holds it. An allow on part of the cell (one pool, for example) covers nothing, so the rule is added. `/policy` shows the four
+  for example the MCP `work` group's run rule) is not added, so ordinary operations keep that allow. Proposals still require
+  your card regardless of existing grants or standing admission. The record names each such rule and the rule that holds it.
+  An allow on part of the cell (one pool, for example) covers nothing, so the rule is added. `/policy` shows the four
   rules as one row, **AI proposals** (on, off, partly on, or covered by an existing grant, which it names): off removes them on your card
   (`deckent policy upgrade --template current --rollback`), on adds back only them (`--apply --only ai-proposals`); after you turn them
   off the start never adds them again. A chat-started plan shows `/do`'s quota-wait window, its Run card carries `/do`'s uncommitted-changes

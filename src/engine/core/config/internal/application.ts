@@ -84,6 +84,8 @@ export class ConfigApplication {
    * refresh's derived writes (no person-chosen key or value); a composition writer of a person's choice asks the same witness itself.
    */
   async submit(action: 'set' | 'unset', input: ConfigWriteInput): Promise<ConfigChangeOutcome> { return this.submitChanges(action, [input]); }
+  /** A proposal always needs the person's exact config-change decision, even under an existing allow (owner S5/S6). */
+  async propose(input: ConfigWriteInput): Promise<ConfigChangeOutcome> { return this.submitChanges('set', [input], true); }
   /** Trusted connect composition only: a capability-only declaration and its exact scoped profile share one governed publish. */
   async submitCatalogCapabilities(input: ConfigWriteInput, target: Parameters<typeof capabilityProfileChange>[2]): Promise<ConfigChangeOutcome> {
     this.admitInput(input);
@@ -92,16 +94,17 @@ export class ConfigApplication {
     if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
     return this.submitChanges('set', [{ ...input, expect: snapshot.digest }, ...capabilityProfileChange(snapshot, input, target)]);
   }
-  private async submitChanges(action: 'set' | 'unset', inputs: readonly ConfigWriteInput[]): Promise<ConfigChangeOutcome> {
+  private async submitChanges(action: 'set' | 'unset', inputs: readonly ConfigWriteInput[], proposal = false): Promise<ConfigChangeOutcome> {
     const input = inputs[0]!;
     const unset = action === 'unset', approvals = this.authority.approvals;
     for (const item of inputs) { this.admitInput(item); await assertConfigPersonWitness(action, item.keyPath, this.authority.witness); }
     if (!approvals) {
+      if (proposal) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
       for (const item of inputs) await this.authority.authorize(item);
       return { status: 'applied', result: await this.write(inputs, unset, null, []), approvalId: null };
     }
     const decisions = await Promise.all(inputs.map(item => approvals.evaluate(item)));
-    if (decisions.every(row => row.decision === 'allow')) return { status: 'applied', result: await this.write(inputs, unset, approvals, []), approvalId: null };
+    if (!proposal && decisions.every(row => row.decision === 'allow')) return { status: 'applied', result: await this.write(inputs, unset, approvals, []), approvalId: null };
     const preview = await this.documents.snapshot(input.layer ?? 'project');
     for (const item of inputs) if (item.expect !== undefined && item.expect !== preview.digest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
     const document = inputs.reduce((doc, item) => planConfigChange(doc, item.keyPath, item.value, unset), preview.document);
@@ -109,13 +112,13 @@ export class ConfigApplication {
     const subjects: (ConfigChangeSubject | null)[] = []; let approvalId: string | null = null;
     for (const item of inputs) {
       const authorization = await approvals.evaluate(item);
-      if (authorization.decision === 'allow') { subjects.push(null); continue; }
+      if (!proposal && authorization.decision === 'allow') { subjects.push(null); continue; }
       const subject = configChangeSubject(preview, item, unset, authorization.ruleId ?? 'policy');
       const admission = await approvals.admit(item, subject, authorization);
       if ('pending' in admission) return { status: 'approval-pending', commandId: item.commandId, expect: preview.digest, keyPath: item.keyPath, layer: preview.layer, approval: admission.pending };
       subjects.push(subject); approvalId = admission.approved.approvalId;
     }
-    return { status: 'applied', result: await this.write(inputs, unset, approvals, subjects), approvalId };
+    return { status: 'applied', result: await this.write(inputs, unset, approvals, subjects, proposal), approvalId };
   }
   /** Layer validation, the person-only subscription profiles and the precondition port, in that order, over one planned document. */
   private async check(input: ConfigWriteInput, snapshot: ConfigSnapshot, document: Record<string, unknown>) {
@@ -142,7 +145,7 @@ export class ConfigApplication {
    * previewed digest, and the current policy must still permit the write — an `allow`, or a `require-approval` whose stored allow of this exact
    * change is still within its admission window. Without an approval port the allow-only authorization decides, as before.
    */
-  private write(inputs: readonly ConfigWriteInput[], unset: boolean, approvals: ConfigApprovalPort | null, subjects: readonly (ConfigChangeSubject | null)[]) {
+  private write(inputs: readonly ConfigWriteInput[], unset: boolean, approvals: ConfigApprovalPort | null, subjects: readonly (ConfigChangeSubject | null)[], proposal = false) {
     const input = inputs[0]!;
     return this.documents.publish(input, async snapshot => {
       if (subjects.some(subject => subject && snapshot.digest !== subject.expectDigest)) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
@@ -156,7 +159,7 @@ export class ConfigApplication {
         if (!approvals) revision = await this.authority.authorize(input);
         else {
           const current = await approvals.evaluate(input);
-          if (current.decision === 'require-approval') {
+          if (proposal || current.decision === 'require-approval') {
             if (!approved) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
             const admission = await approvals.admit(input, approved, current);
             if (!('approved' in admission)) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
