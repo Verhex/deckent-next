@@ -33,6 +33,18 @@ it('makes repeated prevention idempotent for the same cancelled attempt', () => 
   const first = preventRunAttempt(run, 1, attempt, 'none', { now: 100, timeoutMs: 1000 });
   const second = preventRunAttempt(first, 2, attempt, 'none', { now: 100, timeoutMs: 1000 });
   expect(second).toEqual(first);
+  const started = applyAttemptObservation(attempt, {
+    protocolVersion: 1, identity: attemptIdentity, sequence: 1, eventId: 'started', result: { kind: 'started' },
+  }, 1);
+  for (const [replay, evidence] of [
+    [first, createAttempt(attemptIdentity)],
+    [first, started],
+    [{ ...first, bindings: first.bindings.map(binding => ({ ...binding, observedRevision: started.revision, observedKind: 'started' })) }, attempt],
+    [{ ...first, state: { kind: 'running' }, progress: first.progress.map(task => ({ ...task, unresolvedEffects: true })) }, attempt],
+  ] as const) {
+    const snapshot = runSnapshotSchema.parse(replay);
+    expect.soft(() => preventRunAttempt(snapshot, 2, evidence, 'none', { now: 100, timeoutMs: 1000 })).toThrow('RUN_ATTEMPT_CONFLICT');
+  }
 });
 
 it('rejects foreign identity, missing cancellation, observed attempts, and unresolved effects', () => {

@@ -14,7 +14,7 @@ import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.
 import { expandMcpEntry, isMcpHttpEntry, mcpScopedDigest, mcpEntryDisplay, mcpLaunchValues, mcpEndpointRefusal, mcpEntryRedacted, MCP_DEFAULT_REALM, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME,
   MCP_VARIABLE_NAME, parseMcpRegistryFile, readMcpRegistryFile, readMcpRegistryText, resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistryProblem, type McpScope, type McpSecretRefusal,
   type McpServerEntry } from './registry.js';
-import { findMcpTrust, MCP_PROJECT_VARIABLES, MCP_STATE_LOCK_MS, MCP_TRUST_FILE, mcpProjectTrustDirectory, parseMcpTrust, readMcpTrust, readMcpTrustText, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
+import { findMcpTrust, MCP_STATE_LOCK_MS, MCP_TRUST_FILE, mcpProjectTrustDirectory, parseMcpTrust, readMcpTrust, readMcpTrustText, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 import type { AgentToolApprovalFacts } from '#engine/index.js';
 import noticeLimits from './notice-limits.json' with { type: 'json' };
@@ -106,10 +106,10 @@ const sendRefusalOf = (status: McpServerStatus): McpSendRefusal | null => status
  * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right before a call is handed to the SDK — after its approval wait — both registry files and the bound scope's trust record are read again
  * (user trust in the global root, project and local trust in that root's project directory) and the call is admitted only while the server is still trusted as exactly the scope and definition the turn offered it under, its entry still expands and the tool's pin is still that digest. The check runs under the
  * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before the check is always seen; a later change can race the actual send (the lock is released before the SDK sends; a revocation never recalls a call already sent). Fails closed.
- * X8: no read is skipped; only their parse is reused while the bytes read under the lock (and the allowlisted values a digest binds) are the same, so any hand edit is a new decision. A15: only the called server is expanded, its `$DECK:` values resolved at every send, never kept.
+ * X8: no read is skipped; only their parse is reused while the bytes read under the lock are the same. Selection re-applies company policy and environment/known-secret checks at every send. A15: only the called server is expanded, its `$DECK:` values resolved at every send, never kept.
  */
 export function mcpSendAuthority(registry: McpRegistryContext) {
-  let memo: { readonly key: string; readonly servers: ReturnType<typeof resolveFiles>['servers']; readonly trust: ReturnType<typeof parseMcpTrust> } | null = null;
+  let memo: { readonly key: string; readonly project: ReturnType<typeof parseMcpRegistryFile>; readonly personal: ReturnType<typeof parseMcpRegistryFile>; readonly trust: ReturnType<typeof parseMcpTrust> } | null = null;
   return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null }): Promise<McpSendRefusal | null> => {
     const { binding } = call;
     if (!binding) return 'trust-revoked';
@@ -120,9 +120,9 @@ export function mcpSendAuthority(registry: McpRegistryContext) {
     const check = async (): Promise<McpSendRefusal | null> => {
       const projectKey = await realpath(registry.projectRoot).catch(() => registry.projectRoot), paths = mcpRegistryPaths(projectKey, mcpGlobalRoot(registry.environment));
       const read = await Promise.all([readMcpRegistryText(paths.project, 'project'), readMcpRegistryText(paths.personal, 'personal'), storeTextOf(mcpTrustDirectory(binding.scope, registry))] as const);
-      const key = createHash('sha256').update(JSON.stringify([projectKey, read, [...MCP_PROJECT_VARIABLES].map(name => registry.environment[name] ?? null)])).digest('hex');
-      if (memo?.key !== key) memo = { key, trust: parseMcpTrust(read[2]), servers: resolveFiles(registry, paths, parseMcpRegistryFile(read[0], 'project'), parseMcpRegistryFile(read[1], 'personal', projectKey)).servers };
-      const server = memo.servers.find(entry => entry.name === call.server);
+      const key = createHash('sha256').update(JSON.stringify([projectKey, read])).digest('hex');
+      if (memo?.key !== key) memo = { key, trust: parseMcpTrust(read[2]), project: parseMcpRegistryFile(read[0], 'project'), personal: parseMcpRegistryFile(read[1], 'personal', projectKey) };
+      const server = resolveFiles(registry, paths, memo.project, memo.personal).servers.find(entry => entry.name === call.server);
       if (!server) return 'trust-revoked';
       const trust = (server.scope === 'user') === (binding.scope === 'user') ? memo.trust : await storeOf(mcpTrustDirectory(server.scope, registry));
       if (!trust.ok) return 'trust-unavailable';
