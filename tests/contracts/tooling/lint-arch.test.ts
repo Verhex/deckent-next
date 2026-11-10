@@ -200,15 +200,15 @@ describe('lint-arch tier contract', () => {
 
   it('enforces the shared file cap for native and application sources without an extra EOF line', async () => {
     const root = await fixture({
-      'native/supervisor/main.go': '// line\n'.repeat(1500),
-      'native/authority/main.c': '// line\n'.repeat(1500),
-      'apps/desktop/view.js': '// line\n'.repeat(1500),
+      'native/supervisor/main.go': '// line\n'.repeat(1600),
+      'native/authority/main.c': '// line\n'.repeat(1600),
+      'apps/desktop/view.js': '// line\n'.repeat(1600),
     });
     expect((await lint(root)).code).toBe(0);
     for (const file of ['native/supervisor/main.go', 'native/authority/main.c', 'apps/desktop/view.js']) {
-      await writeFile(join(root, file), '// line\n'.repeat(1501));
+      await writeFile(join(root, file), '// line\n'.repeat(1601));
       expect((await lint(root)).out).toContain(`[file-size] ${file}`);
-      await writeFile(join(root, file), '// line\n'.repeat(1500));
+      await writeFile(join(root, file), '// line\n'.repeat(1600));
     }
   });
 
@@ -330,11 +330,11 @@ describe('lint-arch unit contract', () => {
     expect(result.out).not.toContain('domain decision function schema');
   });
 
-  it('enforces canonical vocabulary and the aggregate 2,000-line unit budget', async () => {
+  it('enforces canonical vocabulary and the aggregate 2,200-line unit budget', async () => {
     const root = await fixture({
       'src/platform/core/large/index.ts': 'export {};\n',
-      'src/platform/core/large/internal/a.ts': '// line\n'.repeat(1001),
-      'src/platform/core/large/internal/b.ts': '// line\n'.repeat(1001),
+      'src/platform/core/large/internal/a.ts': '// line\n'.repeat(1101),
+      'src/platform/core/large/internal/b.ts': '// line\n'.repeat(1101),
       'tests/legacy.test.ts': `test('legacy', () => {}); // ${['Sp', 'rint'].join('')}\n`,
     });
     const result = await lint(root);
