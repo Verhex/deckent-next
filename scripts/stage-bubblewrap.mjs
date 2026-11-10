@@ -2,6 +2,23 @@ import { cpSync, existsSync, readdirSync, statSync, readFileSync } from 'node:fs
 import { createHash } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
+import { requireDocker } from './docker-preflight.mjs';
+
+function bundleInput(ROOT, buildOutput) {
+  const lock = JSON.parse(readFileSync(join(ROOT, 'packaging', 'bwrap', 'bwrap.lock.json'), 'utf8'));
+  const target = join(ROOT, 'src', BUNDLED_DIR), packs = join(ROOT, '.pack', 'bwrap');
+  if (!bundleProblems(target, lock).length) return { lock, target };
+  const candidates = buildOutput ? [resolve(buildOutput)]
+    : existsSync(packs) ? readdirSync(packs).map(name => join(packs, name)).filter(dir => existsSync(join(dir, 'out'))).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs) : [];
+  const source = candidates.find(dir => lock.shipArches.every(arch => { const file = join(dir, 'out', arch, 'bwrap'); return existsSync(file) && createHash('sha256').update(readFileSync(file)).digest('hex') === lock.outputs[arch].sha256; }));
+  return { lock, target, source };
+}
+
+export function preflightBubblewrap({ root, platform = process.platform, buildOutput = process.env.DECKENT_BWRAP_BUILD, checkDocker = requireDocker }) {
+  if (platform !== 'linux') return;
+  const { lock, target, source } = bundleInput(root, buildOutput);
+  if (bundleProblems(target, lock).length && !existsSync(target) && !source) checkDocker('BUBBLEWRAP_BUILD_REQUIRED');
+}
 
 /**
  * BWRAP-SELECT (lead 2026-09-29): the bundled bubblewrap is part of the normal build, so src-mode tests and dist run the same locked build
@@ -10,16 +27,10 @@ import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
  * staged tree fails the build; no verifiable output triggers the locked CI source recipe (Docker), whose failure stops the build. build-dist still gates releases on its own `--bwrap` input.
  */
 export function stageBubblewrap({ root: ROOT, run, platform = process.platform, buildOutput = process.env.DECKENT_BWRAP_BUILD }) {
-  const SRC = join(ROOT, 'src'), DIST = join(ROOT, 'dist');
-  const lock = JSON.parse(readFileSync(join(ROOT, 'packaging', 'bwrap', 'bwrap.lock.json'), 'utf8'));
-  const target = join(SRC, BUNDLED_DIR);
-  const verifies = dir => lock.shipArches.every(arch => { const file = join(dir, 'out', arch, 'bwrap'); return existsSync(file) && createHash('sha256').update(readFileSync(file)).digest('hex') === lock.outputs[arch].sha256; });
+  const DIST = join(ROOT, 'dist');
+  const { lock, target, source } = bundleInput(ROOT, buildOutput);
   let state = 'present';
   if (bundleProblems(target, lock).length) {
-    const packs = join(ROOT, '.pack', 'bwrap');
-    const candidates = buildOutput ? [resolve(buildOutput)]
-      : existsSync(packs) ? readdirSync(packs).map(name => join(packs, name)).filter(dir => existsSync(join(dir, 'out'))).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs) : [];
-    const source = candidates.find(verifies);
     if (source) { stageBundle(source, target, lock); state = `staged from ${relative(ROOT, source) || source}`; }
     else if (existsSync(target)) throw new Error(`${relative(ROOT, target)} is not the locked bubblewrap build (${bundleProblems(target, lock).join('; ')}) and no build-bwrap output verifies against the lock: `
       + 'run `node scripts/build-bwrap.mjs` (Docker) or set DECKENT_BWRAP_BUILD=<build-bwrap output>');

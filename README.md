@@ -162,7 +162,8 @@ Read `npm audit` for the affected packages and report them to the maintainers. K
 do not run `npm audit fix --force`, which can install incompatible dependency versions.
 
 The build ends with `bubblewrap=present` or `bubblewrap=staged from …`. If it stops with `BUBBLEWRAP_BUILD_REQUIRED`,
-Docker was not reachable: start it, run both `build-bwrap` commands again with a new `--out` directory (for example
+Docker was not reachable: rootless → `systemctl --user start docker` (`systemctl --user enable docker` for future sessions); system Docker → `sudo systemctl start docker`; Docker Desktop on WSL → start Desktop and enable Settings > Resources > WSL Integration.
+Both scripts check Docker before long work; the error gives the detected setup's command (or all three when unknown). Run both `build-bwrap` commands again with a new `--out` directory (for example
 `.pack/bwrap/second-build`), then `npm run build`. On Ubuntu 24.04 and later the kernel may block the user
 namespaces bubblewrap needs; Deckent then says so and falls back to Landlock. The
 [operator reference](.deckent/docs/architecture/operator-reference.md#source-build-and-sandbox-posture) explains both

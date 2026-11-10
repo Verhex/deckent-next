@@ -1,0 +1,8 @@
+{
+  "docker.unavailable": "Docker'a ulaşılamıyor. Seçili Docker uç noktasını ve erişim izninizi kontrol edin.",
+  "docker.rootless": "Rootless Docker: `systemctl --user start docker` çalıştırın; sonraki kullanıcı oturumları için `systemctl --user enable docker` ile etkinleştirin (giriş yapmadan açılış için lingering de gerekir; bkz. https://docs.docker.com/engine/security/rootless/tips/).",
+  "docker.rootful": "Sistem Docker'ı: `sudo systemctl start docker` çalıştırın.",
+  "docker.desktop": "Docker Desktop: Windows'ta Docker Desktop'ı başlatın ve Settings > Resources > WSL Integration altında bu dağıtımı etkinleştirin.",
+  "docker.unknown": "Docker türü bilinmiyor; kurulumunuza uyan yolu seçin:",
+  "docker.retry": "Sonra derlemeyi yeniden deneyin. build-bwrap için `node scripts/build-bwrap.mjs --out <fresh-directory>`, ardından `DECKENT_BWRAP_BUILD=<fresh-directory> npm run build` çalıştırın. Başarısız çıktıları tanı için saklayın."
+}

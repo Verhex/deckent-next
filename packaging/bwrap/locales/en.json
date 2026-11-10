@@ -1,0 +1,8 @@
+{
+  "docker.unavailable": "Docker is not reachable. Check the selected Docker endpoint and your access to it.",
+  "docker.rootless": "Rootless Docker: run `systemctl --user start docker`; enable it for future user sessions with `systemctl --user enable docker` (boot without login also requires lingering; see https://docs.docker.com/engine/security/rootless/tips/).",
+  "docker.rootful": "System Docker: run `sudo systemctl start docker`.",
+  "docker.desktop": "Docker Desktop: start Docker Desktop on Windows and enable Settings > Resources > WSL Integration for this distribution.",
+  "docker.unknown": "Docker type is unknown; choose the matching setup:",
+  "docker.retry": "Then retry the build. For build-bwrap, use `node scripts/build-bwrap.mjs --out <fresh-directory>`, then `DECKENT_BWRAP_BUILD=<fresh-directory> npm run build`. Keep any failed output for diagnosis."
+}
