@@ -15,9 +15,9 @@ export function readRunEvaluationPrincipal(db: DatabaseSync, identity: AttemptId
 export function bindOperationEvidenceUse(db: DatabaseSync, run: RunSnapshot, evaluation: TaskEvaluation): TaskEvaluation {
   const { scopeId, runId } = evaluation.identity;
   return bindUsedOperationEvidence(run, evaluation, commandId => !!db.prepare(`SELECT 1 FROM run_receipts r, json_each(r.command,'$.evaluation.criteria') c
-      WHERE r.scope_id=? AND json_extract(r.command,'$.action')='apply-task-evaluation' AND json_extract(r.command,'$.evaluation.identity.runId')!=?
+      WHERE r.scope_id=? AND (CASE WHEN json_valid(r.command) THEN json_extract(r.command,'$.action') END)='apply-task-evaluation' AND (CASE WHEN json_valid(r.command) THEN json_extract(r.command,'$.evaluation.identity.runId') END)!=?
       AND COALESCE(json_extract(c.value,'$.effectEvidence.commandId'),CASE WHEN EXISTS(SELECT 1 FROM json_each(c.value,'$.evidenceTypes') t WHERE t.value='operation-settlement') THEN json_extract(c.value,'$.evidenceReferences[0].id') END)=? AND json_extract(c.value,'$.verdict')='pass'
-      AND EXISTS (SELECT 1 FROM run_receipts a, json_each(a.snapshot,'$.progress') p, json_each(a.snapshot,'$.bindings') b WHERE a.scope_id=r.scope_id AND json_extract(a.snapshot,'$.identity.runId')=json_extract(r.command,'$.evaluation.identity.runId')
+      AND EXISTS (SELECT 1 FROM run_receipts a, json_each(a.snapshot,'$.progress') p, json_each(a.snapshot,'$.bindings') b WHERE a.scope_id=r.scope_id AND json_extract(a.snapshot,'$.identity.runId')=(CASE WHEN json_valid(r.command) THEN json_extract(r.command,'$.evaluation.identity.runId') END)
         AND json_extract(p.value,'$.taskId')=json_extract(r.command,'$.evaluation.identity.taskId') AND json_extract(p.value,'$.phase')='accepted'
         AND json_extract(b.value,'$.identity.attemptId')=json_extract(r.command,'$.evaluation.identity.attemptId')) LIMIT 1`).get(scopeId, runId, commandId));
 }

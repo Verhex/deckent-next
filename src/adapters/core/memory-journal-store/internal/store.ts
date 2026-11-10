@@ -240,8 +240,8 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
   /** Support rows are read in order and each is re-verified (the json_extract filter is only an index, never the evidence). */
   async sourceEntryIds(scopeId: string, source: { readonly runId: string; readonly attemptId: string | null }, limit: number) {
     return this.read(() => {
-      const ids: string[] = [], rows = this.db.prepare(`SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND json_extract(record,'$.value.source.runId')=?
-        ${source.attemptId === null ? '' : `AND json_extract(record,'$.value.source.attemptId')=?`} ORDER BY rowid`).iterate(scopeId, source.runId, ...(source.attemptId === null ? [] : [source.attemptId]));
+      const ids: string[] = [], rows = this.db.prepare(`SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.source.runId') END)=?
+        ${source.attemptId === null ? '' : `AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.value.source.attemptId') END)=?`} ORDER BY rowid`).iterate(scopeId, source.runId, ...(source.attemptId === null ? [] : [source.attemptId]));
       for (const row of rows) {
         const support = this.supportRow(row, scopeId);
         if (support.source.runId !== source.runId || (source.attemptId !== null && support.source.attemptId !== source.attemptId)) throw corrupt();

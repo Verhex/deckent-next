@@ -65,7 +65,7 @@ export class SqliteApprovalStore implements ApprovalStore {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new ApprovalError('APPROVAL_INVALID');
     // Status lives in the sealed snapshot; the caller verifies each record before acting on it.
     return this.db.prepare(`SELECT scope_id,approval_id FROM approvals WHERE subject_kind='agent-tool-call' AND current=1
-      AND json_extract(snapshot,'$.status')='pending' AND (? IS NULL OR (scope_id,approval_id)>(?,?)) ORDER BY scope_id,approval_id LIMIT ?`)
+      AND (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status') END)='pending' AND (? IS NULL OR (scope_id,approval_id)>(?,?)) ORDER BY scope_id,approval_id LIMIT ?`)
       .all(after?.scopeId ?? null, after?.scopeId ?? null, after?.approvalId ?? null, limit)
       .map(row => Object.freeze({ scopeId: String(row.scope_id), approvalId: String(row.approval_id) }));
   }

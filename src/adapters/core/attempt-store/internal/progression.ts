@@ -35,7 +35,7 @@ export class SqliteRunProgression {
         JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id
         WHERE i.actor_id=? AND i.issuer=? AND i.subject=?
           AND (? IS NULL OR (i.scope_id,i.run_id)>(?,?)) AND (? IS NULL OR EXISTS (SELECT 1 FROM scope_registry s WHERE s.scope_id=i.scope_id AND s.company_id=?))
-          AND json_extract(r.snapshot,'$.state.kind')!='terminal'
+          AND (CASE WHEN json_valid(r.snapshot) THEN json_extract(r.snapshot,'$.state.kind') END)!='terminal'
           AND ((json_extract(r.snapshot,'$.state.kind')='parked' AND json_extract(r.snapshot,'$.state.deadline')<=?)
             OR EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p
               WHERE json_extract(p.value,'$.phase')='awaiting-decision' AND json_extract(p.value,'$.decision.deadline')<=?))
@@ -48,7 +48,7 @@ export class SqliteRunProgression {
   /** Scopes of this actor's unfinished Runs not registered to `companyId` (one row per scope, bounded), for one typed note. */
   async listForeignProgressionScopes(input: { readonly actor: ProgressionQuery['actor']; readonly companyId: string; readonly limit: number }) {
     const { actor, companyId, limit } = progressionQuerySchema.required({ companyId: true }).parse({ ...input, after: null });
-    try { return Object.freeze(this.db.prepare(`SELECT DISTINCT i.scope_id AS scope_id, s.company_id AS company_id FROM run_execution_intents i JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id LEFT JOIN scope_registry s ON s.scope_id=i.scope_id WHERE i.actor_id=? AND i.issuer=? AND i.subject=? AND json_extract(r.snapshot,'$.state.kind')!='terminal' AND (s.company_id IS NULL OR s.company_id!=?) ORDER BY i.scope_id LIMIT ?`).all(actor.id, actor.issuer, actor.subject, companyId, limit)
+    try { return Object.freeze(this.db.prepare(`SELECT DISTINCT i.scope_id AS scope_id, s.company_id AS company_id FROM run_execution_intents i JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id LEFT JOIN scope_registry s ON s.scope_id=i.scope_id WHERE i.actor_id=? AND i.issuer=? AND i.subject=? AND (CASE WHEN json_valid(r.snapshot) THEN json_extract(r.snapshot,'$.state.kind') END)!='terminal' AND (s.company_id IS NULL OR s.company_id!=?) ORDER BY i.scope_id LIMIT ?`).all(actor.id, actor.issuer, actor.subject, companyId, limit)
       .map(row => Object.freeze({ scopeId: progressionCursorSchema.shape.scopeId.parse(row.scope_id), reason: row.company_id === null ? 'unregistered' as const : 'foreign' as const }))); }
     catch (error) { throw sqliteFailure(error); }
   }

@@ -3,9 +3,9 @@ import { sameAttemptIdentity, taskEvaluationSchema, type AttemptIdentity } from 
 import { AttemptStoreError } from '#engine/index.js';
 /** Evaluation evidence stays in existing Run receipts. Query pins the complete accepted Attempt, never artifact existence. */
 export function readTaskHandoffEvaluation(db: DatabaseSync, identity: AttemptIdentity) {
-  const row = db.prepare(`SELECT command FROM run_receipts WHERE scope_id=? AND json_extract(command,'$.action')='apply-task-evaluation'
-    AND json_extract(command,'$.evaluation.identity.runId')=? AND json_extract(command,'$.evaluation.identity.attemptId')=?
-    ORDER BY json_extract(snapshot,'$.revision') DESC LIMIT 1`).get(identity.scopeId, identity.runId, identity.attemptId);
+  const row = db.prepare(`SELECT command FROM run_receipts WHERE scope_id=? AND (CASE WHEN json_valid(command) THEN json_extract(command,'$.action') END)='apply-task-evaluation'
+    AND (CASE WHEN json_valid(command) THEN json_extract(command,'$.evaluation.identity.runId') END)=? AND (CASE WHEN json_valid(command) THEN json_extract(command,'$.evaluation.identity.attemptId') END)=?
+    ORDER BY (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.revision') END) DESC LIMIT 1`).get(identity.scopeId, identity.runId, identity.attemptId);
   if (!row) return null;
   try {
     const evaluation = taskEvaluationSchema.parse(JSON.parse(String(row.command)).evaluation);

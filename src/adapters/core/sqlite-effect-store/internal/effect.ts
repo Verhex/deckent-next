@@ -24,7 +24,7 @@ export class SqliteEffectJournal {
     // A damaged indexed record with a missing JSON relation must never count as absent compensation.
     const damaged = this.db.prepare("SELECT command_id FROM effect_intents WHERE scope_id=? AND target_kind=? AND target_id=? AND sequence>? AND (json_valid(record)=0 OR json_extract(record,'$.intent.command.commandId') IS NOT command_id OR json_extract(record,'$.sequence') IS NOT sequence) LIMIT 1").get(scopeId, target.kind, target.id, original.sequence);
     if (damaged) throw new EffectError('EFFECT_CORRUPT');
-    const row = this.db.prepare("SELECT command_id FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.command.compensates')=? AND state!='refused' ORDER BY CASE state WHEN 'settled' THEN 0 ELSE 1 END,sequence DESC LIMIT 1").get(scopeId, commandId);
+    const row = this.db.prepare("SELECT command_id FROM effect_intents WHERE scope_id=? AND (CASE WHEN json_valid(record) THEN json_extract(record,'$.intent.command.compensates') END)=? AND state!='refused' ORDER BY CASE state WHEN 'settled' THEN 0 ELSE 1 END,sequence DESC LIMIT 1").get(scopeId, commandId);
     return row ? this.read(scopeId, String(row.command_id)) : null;
   }
   async loadEffectCompensation(scopeId: string, commandId: string) { return this.readCompensation(scopeId, commandId); }
