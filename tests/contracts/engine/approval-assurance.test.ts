@@ -8,7 +8,7 @@ import { createHmacIntegrity } from '../../../src/platform/core/integrity/index.
 import { openSqliteApprovalStore } from '../../../src/adapters/core/approval-store/index.js';
 import { LocalOsSessionAuthority } from '../../../src/adapters/core/local-principal/index.js';
 import { ApprovalApplication, HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, createTurnDecisionCapabilities, requestAgentToolApproval, requestTaskApproval,
-  requiredApprovalAssurance, sealApproval, verifyApproval, OperationApprovalBroker } from '../../../src/engine/core/approval/index.js';
+  minimumApprovalAssurance, requiredApprovalAssurance, sealApproval, verifyApproval, OperationApprovalBroker } from '../../../src/engine/core/approval/index.js';
 import { SQLITE_STORAGE_OPTIONS } from '../../../src/platform/core/config-fields/index.js';
 
 // B1 APPROVAL-ASSURANCE (owner 2026-10-01 attested_assurance): every decision carries a service-derived assurance the client cannot claim;
@@ -132,6 +132,8 @@ describe('B1 attested assurance on the one approval decision path', () => {
   });
 
   it.skipIf(linux)('[requires Linux live OS session /proc identity] policy approvalAssurance only tightens: a looser rule never lowers a hard-floor card, a stricter one raises an ordinary card, an unknown level is unsatisfiable', async () => {
+    const runPolicy = policyWith([{ id: 'run-risk', scopes: ['scope'], subject: 'run-create', effectClasses: ['read'], minimum: 'turn-bound' }]);
+    expect(minimumApprovalAssurance(runPolicy, 'scope', 'run-create', { source: 'effect-class', effectClass: 'write', authority: true })).toBe('turn-bound');
     const loose = policyWith([{ id: 'loose', scopes: ['scope'], subject: 'agent-tool-call', cells: ['edit-floor'], minimum: 'peer-session' }]);
     const f = await fixture(loose);
     try {

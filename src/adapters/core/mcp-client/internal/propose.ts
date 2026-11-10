@@ -1,6 +1,6 @@
 import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
-import type { AgentToolSpec } from '#domain/index.js';
+import { AI_PROPOSAL_REGISTRY, type AgentToolSpec } from '#domain/index.js';
 import { projectModelIngressField } from '#engine/index.js';
 import { isMcpHttpEntry, mcpEndpointRefusal, MCP_ENV_NAME, MCP_HEADER_NAME, mcpServerEntrySchema, MCP_DEFAULT_REALM, MCP_SERVER_NAME, type McpServerEntry } from './registry.js';
 
@@ -14,7 +14,7 @@ import { isMcpHttpEntry, mcpEndpointRefusal, MCP_ENV_NAME, MCP_HEADER_NAME, mcpS
  * chose. It may only name the settings the server needs; the server is added without them and a person binds them in `/mcp`, where the secret's
  * name and its destination are shown together.
  */
-export const PROPOSE_MCP_SERVER_TOOL = 'propose_mcp_server';
+export const PROPOSE_MCP_SERVER_TOOL = AI_PROPOSAL_REGISTRY.tools.mcp;
 const text = (max: number) => persistedString(z.string().min(1).max(max));
 const proposalSchema = z.strictObject({
   name: text(32), transport: z.enum(['stdio', 'http']), reason: text(1_000),

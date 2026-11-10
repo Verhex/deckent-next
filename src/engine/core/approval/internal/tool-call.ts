@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, isEffectOpen, samePrincipalRef, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
+import { approvalRequestSchema, approvalSubject, requiresPersonProposalDecision, encodeCommandProjection, isEffectOpen, samePrincipalRef, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
   type EffectCommand, type EffectIntentApproval, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
-import { admitDecided, agentToolApprovalLeft, approvalActorRef, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { admitDecided, agentToolApprovalLeft, approvalActorRef, expireApproval, sealApproval, verifyApproval, witnessedPersonDecision } from './integrity.js';
 import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
@@ -70,6 +70,7 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
     const loaded = store.load(scopeId, approvalId);
     const current = loaded ? verifyApproval(loaded, integrity) : null;
     if (!current) return 'expired';
+    if (current.status === 'decided' && requiresPersonProposalDecision(current.request) && !witnessedPersonDecision(current)) throw new ApprovalError('APPROVAL_DENIED');
     // A terminal decision is durable history, not permission to consume an allow after expiry or cancellation.
     if (signal.aborted) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'cancelled'; }
     // The producer passes its creation sample so preview/persistence time also spends the original TTL.

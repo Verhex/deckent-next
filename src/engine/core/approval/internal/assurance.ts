@@ -14,7 +14,6 @@ const PEER = { level: APPROVAL_ASSURANCE.peerSession, rank: 0 } as const;
 /** The turn-bound producer of a service: one per runtime service (its memory), minted by agent turns, read by every decision. */
 export const createTurnDecisionCapabilities = () => new DecisionCapabilityRing(APPROVAL_ASSURANCE.turnBound, 1);
 export type TurnDecisionCapabilities = ReturnType<typeof createTurnDecisionCapabilities>;
-/** The decision path's registry: the peer-session baseline plus the given producers (Core's turn ring; Enterprise's own). */
 export const approvalAssuranceRegistry = (producers: readonly ApprovalAssuranceProducer[] = []) => new ApprovalAssuranceRegistry(PEER, producers);
 /** Core's levels, for ranking a minimum where no service registry is at hand (a producer filling a card's facts). */
 export const coreApprovalAssuranceInventory = () => CORE_LEVELS.inventory();
@@ -34,6 +33,7 @@ function matches(rule: { readonly subject: string; readonly scopes: 'all' | read
 /** The minimum assurance for one subject in one scope: Core's minimum raised by every matching policy rule (ranked by `registry`). */
 export function minimumApprovalAssurance(policyInput: unknown, scopeId: string, subject: ApprovalSubject['kind'], risk: Risk,
   registry: ApprovalAssuranceRegistry = CORE_LEVELS): string {
+  if (subject === 'run-create') risk = null; // A proposal's person marker must retain the existing unknown-risk policy minimum.
   let minimum: string = coreMinimum(subject, risk);
   const parsed = policyInput === null || policyInput === undefined ? null : safePolicy(policyInput);
   const rules = parsed?.success && parsed.data.schemaVersion === 2 ? parsed.data.approvalAssurance ?? [] : [];

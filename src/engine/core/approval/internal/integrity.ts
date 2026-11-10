@@ -1,4 +1,4 @@
-import { asPolicy, approvalRecordSchema, ApprovalError, encodeCommandProjection, type ApprovalRecord, type ApprovalRequest,
+import { asPolicy, approvalDecisionClass, approvalDecisionAssurance, requiresPersonProposalDecision, isWorkloadPrincipalRef, samePrincipalRef, approvalRecordSchema, ApprovalError, encodeCommandProjection, type ApprovalRecord, type ApprovalRequest,
   type RunSnapshot, type ApprovalActor } from '#domain/index.js';
 import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
@@ -27,9 +27,11 @@ export function verifyApproval(input: unknown, authority: IntegrityAuthority): A
 export function expireApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord): ApprovalRecord {
   return store.transition(record, sealApproval({ request: record.request, revision: record.revision + 1, status: 'expired', decision: null }, integrity));
 }
-/** A pending record past its request expiry ends expired (lazy expiry); any other record is returned unchanged. */
 export const expireDue = (store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord, now: number) =>
   record.status === 'pending' && now >= record.request.expiresAt ? expireApproval(store, integrity, record) : record;
+/** The existing sealed person class, never inferred from the declared channel or a legacy decision. */
+export const witnessedPersonDecision = (record: ApprovalRecord): boolean => record.decision !== null && approvalDecisionClass(record.decision) === 'human-tty'
+  && approvalDecisionAssurance(record.decision) !== 'ai-policy' && !isWorkloadPrincipalRef(record.decision.actor) && !samePrincipalRef(record.decision.actor, record.request.requester);
 /**
  * KG4 F2 (S1-D1): why a stored record does not admit its command, or null: not decided, not an allow, a decision on another request, a decider
  * the caller does not accept; then the time. A decision dated beyond the clock skew is a conflict everywhere (owner B2-2; another process may
@@ -41,6 +43,7 @@ export function decidedRefusal(record: ApprovalRecord, at: { readonly now: numbe
   const decision = record.decision!;
   if (decision.decision !== 'allow') return 'APPROVAL_DENIED' as const;
   if (decision.requestDigest !== approvalRequestDigest(record.request)) return 'APPROVAL_INTEGRITY' as const;
+  if (requiresPersonProposalDecision(record.request) && !witnessedPersonDecision(record)) return 'APPROVAL_DENIED' as const;
   if (!accepted) return 'APPROVAL_DENIED' as const;
   if (at && decision.decidedAt > at.now + MAX_WALL_SKEW_MS) return 'APPROVAL_CONFLICT' as const;
   return at && at.now > decision.decidedAt + at.window ? 'APPROVAL_EXPIRED' as const : null;
@@ -48,7 +51,6 @@ export function decidedRefusal(record: ApprovalRecord, at: { readonly now: numbe
 /** The one expiry rule of a tool-call request (I40-c): ms left until `expiresAt` on the wall clock and of the producer's monotonic TTL from `started`. */
 export const agentToolApprovalLeft = (expiresAt: number, started: ClockSample, now: ClockSample) =>
   Math.min(expiresAt - now.wallMs, expiresAt - started.wallMs - (now.monotonicMs - started.monotonicMs));
-/** `decidedRefusal` as the typed refusal of a broker; returns the admitted decision. */
 export function admitDecided(record: ApprovalRecord, at: { readonly now: number; readonly window: number } | null, accepted = true) {
   const refusal = decidedRefusal(record, at, accepted); if (refusal) throw new ApprovalError(refusal);
   return record.decision!;

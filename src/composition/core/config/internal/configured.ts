@@ -65,7 +65,7 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
         catch (error) { if (isCodedError(error, 'POLICY_DENIED')) return { decision: 'deny' as const, ruleId: error instanceof ConfigApplicationError && typeof error.params?.['ruleId'] === 'string' ? error.params['ruleId'] : null }; throw error; }
       });
     },
-    async admit(input, subject, authorization) {
+    async admit(input, subject, authorization, personDecision) {
       const context = await load(input.scopeId), { config, layout, principal } = context;
       // A producer of approvals (like Run reservation and the agent turn): the integrity key is created on first use.
       const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
@@ -74,7 +74,7 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
         const locale = resolveLocale(undefined, options.env ?? process.env, config.language);
         return new ConfigChangeApprovalBroker(journal.store, integrity, new SystemTrustedClock(), { requestTtlMs: config.approvals.requestTtlMs, admitWithinMs: config.approvals.requestTtlMs })
           .admit({ scopeId: input.scopeId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, subject, policy: context.document,
-            policyRevision: authorization.revision, summary: configChangeSummary(subject, locale) });
+            policyRevision: authorization.revision, summary: configChangeSummary(subject, locale), ...(personDecision ? { personDecision } : {}) });
       } finally { journal.close(); }
     },
   };

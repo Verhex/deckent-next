@@ -1,4 +1,4 @@
-import { asPolicy, AI_PROPOSAL_REGISTRY, aiSettingResourceIds, evaluatePolicy, isAiSettingKey, type AgentToolSpec, type AiSettingKey, type VerifiedPrincipal } from '#domain/index.js';
+import { asPolicy, AI_PROPOSAL_REGISTRY, aiSettingResourceIds, evaluatePolicy, isAiPrincipal, isAiSettingKey, mcpPrincipalRef, type AgentToolSpec, type AiSettingKey, type VerifiedPrincipal } from '#domain/index.js';
 import { projectModelIngressField } from './model-ingress-project.js';
 
 /**
@@ -7,6 +7,10 @@ import { projectModelIngressField } from './model-ingress-project.js';
  * `modeEligible`), and only the person's yes has an effect. Arguments are checked here, before any configuration or policy read.
  */
 const tools = AI_PROPOSAL_REGISTRY.tools;
+export function aiProposalRequester(person: VerifiedPrincipal) {
+  if (isAiPrincipal(person)) return { id: person.id, issuer: person.issuer, subject: person.subject };
+  const ref = mcpPrincipalRef(person); return { id: `${person.id}${ref.issuer.slice(person.issuer.length)}`, ...ref };
+}
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const PROPOSE_WORK_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.work, version: 1, toolClass: 'read' as const,
   description: 'Propose background work for a request that needs changes (files, tests, several steps). Deckent plans it and shows the person the '
     + 'same plan card as /do; nothing runs without their approval. Do not use it for questions or explanations; ask first when the request is unclear.',

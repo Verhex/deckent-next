@@ -60,7 +60,7 @@ export interface ConfigApprovalPort {
   evaluate(input: ConfigWriteInput): Promise<ConfigAuthorization>;
   /** T3 L4: the same decision for many writes of one scope under one policy read (display only: `deny` is returned, not thrown). */
   evaluateMany?(inputs: readonly ConfigWriteInput[]): Promise<readonly ConfigPermissionDecision[]>;
-  admit(input: ConfigWriteInput, subject: ConfigChangeSubject, authorization: ConfigAuthorization): Promise<ConfigApprovalAdmission>;
+  admit(input: ConfigWriteInput, subject: ConfigChangeSubject, authorization: ConfigAuthorization, personDecision?: boolean): Promise<ConfigApprovalAdmission>;
 }
 /** What `submit` did: applied (with the approval it consumed, if one was needed) or nothing written and an approval pending. */
 export type ConfigChangeOutcome =

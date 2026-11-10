@@ -12,6 +12,8 @@ import { proposeConfiguredRun } from '#composition/core/runs/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
+import { terminalRequest } from '../support/approval-terminal.js';
+import { aiProposalRequester } from '#engine/index.js';
 
 // L1 MCP-CORE item 5 (owner 2026-10-07): the model may only PROPOSE an MCP server. The proposal opens its own approval window in every mode —
 // standart, full-auto and a full-access turn alike — and nothing is written without the person's yes; a yes adds the server to the project's
@@ -78,6 +80,51 @@ describe('a proposal is checked before anything is shown (pure)', () => {
     expect(describeMcpProposal(proposal as never, 'model chat', 'en')).not.toContain('Warning:');
   });
 });
+
+it.skipIf(process.platform !== 'linux')('PROPFIX2: an AI with inspect and decide cannot answer its setting or work proposal through the runtime SDK', async () => {
+  const f = await modeRuntime({ grants: [PROPOSE, AI_SCOPE, ...AI_OBSERVE, ...V20, PERSON_CONFIG,
+    { id: 'ai-decide', effect: 'allow', actions: ['decide'], scopes: ['scope'], principals: [AI], resource: { kind: 'approval', ids: 'all' } }], mode: null, planWork: realPlan });
+  const { principal: ai } = await withMcpPrincipal(() => loadConfiguredScopeContext(f.project, 'scope', { env: f.env }, 'read'));
+  expect(aiProposalRequester(ai)).toEqual({ id: ai.id, issuer: ai.issuer, subject: ai.subject });
+  for (const [tool, args] of [['propose_setting', { keyPath: 'language', choice: 'tr' }], ['propose_work', { request: 'update the tests' }], ['propose_mcp_server', proposal]] as const) {
+    const before = readFileSync(join(f.project, '.deckent/config.json'), 'utf8'), beforeMcp = registered(f), beforeRuns = runsOf(f);
+    f.script(tool, args);
+    const checks: Promise<void>[] = []; let failure: unknown;
+    await f.client.chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: `self-${tool}`, messages: [{ role: 'user', content: 'go' }] }, event => {
+      if (event.kind !== 'approval.requested') return;
+      checks.push((async () => {
+        const query = { schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId };
+        const command = { ...query, commandId: `self-${tool}`, expectedRevision: event.revision, decision: 'allow', reason: 'AI self approval' };
+        try {
+          expect(await withMcpPrincipal(() => f.client.inspectApproval(query))).toMatchObject({ status: 'pending' });
+          expect((await f.client.inspectApproval(query))!.request.requester).toEqual({ id: ai.id, issuer: ai.issuer, subject: ai.subject });
+          for (const decision of ['allow', 'deny']) {
+            const result = await withMcpPrincipal(() => f.client.decideApproval({ ...command, decision })).then(() => 'accepted', (error: { code: string }) => error.code);
+            expect(result, `${tool}:${decision}:${(await f.client.inspectApproval(query))?.status}`).toBe('AI_AUTHORITY_NON_DELEGABLE');
+          }
+          expect(await withMcpPrincipal(() => f.client.inspectApproval(query))).toMatchObject({ status: 'pending' });
+          expect(readFileSync(join(f.project, '.deckent/config.json'), 'utf8')).toBe(before); expect(registered(f)).toBe(beforeMcp); expect(runsOf(f)).toEqual(beforeRuns);
+        } finally {
+          if ((await f.client.inspectApproval(query))?.status === 'pending') {
+            const person = { ...command, commandId: `person-${tool}`, decision: 'deny', reason: 'Person declined' };
+            const denied = await terminalRequest(f, 'decideApproval', person);
+            expect(denied.response).toMatchObject({ ok: true, result: { decision: { deciderClass: 'human-tty', decision: 'deny' } } });
+            expect((await terminalRequest(f, 'decideApproval', person)).response).toEqual(denied.response);
+          }
+        }
+      })().catch(error => { failure = error; }));
+    });
+    await Promise.all(checks); if (failure) throw failure; expect(checks).toHaveLength(1);
+    expect(readFileSync(join(f.project, '.deckent/config.json'), 'utf8')).toBe(before); expect(registered(f)).toBe(beforeMcp); expect(runsOf(f)).toEqual(beforeRuns);
+    const accepted = await f.call(tool, args, 'allow');
+    expect(accepted, f.evidence(accepted)).toMatchObject({ status: 'ok', card: true });
+    if (tool === 'propose_setting') {
+      expect(config(f)['language']).toBe('tr');
+      expect(f.audit().filter(row => row.event.subject['kind'] === 'config-change')).toHaveLength(1);
+    } else if (tool === 'propose_work') expect(runsOf(f)).toHaveLength(1);
+    else expect(registered(f)).toContain(proposal.name);
+  }
+}, 60_000);
 
 describe.skipIf(process.platform !== 'linux')('the proposal window in every mode (real runtime service)', () => {
   it('standart: the window opens; a no writes nothing; a yes adds the server untrusted', async () => {
