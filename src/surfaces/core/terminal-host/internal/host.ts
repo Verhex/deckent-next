@@ -5,6 +5,7 @@ import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { terminalPalette, type ColorTier, type TerminalThemeSetting, type WorklineInkPalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { resolveRenderGlyphs, RenderGlyphsContext, TerminalHandoverContext } from '#surfaces/core/terminal-render-ink/index.js';
 import type { TerminalHandover } from './handoff.js';
+import { ResizeFrame } from './resize-frame.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,
   type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
@@ -119,7 +120,8 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
     ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) };
   const tree = (view: TerminalHostOptions['view'], colors: WorklineInkPalette) => createElement(WorklinePaletteProvider, { palette: colors,
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-      createElement(TerminalHandoverContext.Provider, { value: handover ?? null }, view(context))) });
+      createElement(TerminalHandoverContext.Provider, { value: handover ?? null },
+        fullscreen ? createElement(ResizeFrame, { stdout: out }, view(context)) : view(context))) });
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(tree(view, palette),
