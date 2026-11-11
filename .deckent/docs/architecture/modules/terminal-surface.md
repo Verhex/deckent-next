@@ -221,7 +221,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   reports out of the input before Ink parses it (wheel → `WheelContext` → three lines a notch; left press/drag/release → `PointerContext`;
   every other report dropped), so no mouse event reaches the composer or a card. Selection (TERM-POLISH, owner 2026-10-20; Claude Code
   fullscreen "click and drag … copies automatically on mouse release", code.claude.com/docs/en/fullscreen read 2026-10-20): click and drag
-  over the conversation highlights it in reverse video (`selection.ts`, content-anchored by block key/line/cell, so streaming or the wheel
+  over the conversation highlights it with the shared selection style (brand foreground/background pair in dark/light truecolor/256,
+  reverse video otherwise; `selection.ts`, content-anchored by block key/line/cell, so streaming or the wheel
   never moves it); the release copies exactly the displayed (secret-projected) text, SGR and trailing padding removed, as one OSC 52 write
   (`osc52Copy`) from `runTerminalWorkline`, and the hint row shows `terminal.viewport.copied` for 4 s (fixed height). A plain click or any
   key but the scroll keys clears it; a press outside the drawn lines starts nothing; a drag past the view clamps (no autoscroll, no
@@ -446,8 +447,10 @@ the terminal's own foreground; the answer heading is `● deckent` (`assistantLa
 calm mark `⏵⏵⏵` (ASCII `>>>`) and a factual line (`tui.panel.mode.fullAccessLine`); the launch notice is warning level. Security behaviour
 is unchanged. Opening (inline layout; the full window shows the banner as its first block instead): on a TTY the
 workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
-mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
+lowercase `d` mark with an ASCII form, version, project and path, model, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
 with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.
+The full banner uses the 16-cell, 10-row Unicode mark at 100 columns and 30 rows or larger; otherwise it uses the 8-cell, 5-row mark.
+ASCII stays at 8 cells and 5 rows. The launch shell and conversation share the same size rule on resize, with the facts bottom-aligned beside the mark.
 The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08); Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) contained
 ED 3 at the time; the Workline output adapter now removes ED 3 from Ink's overflow clear (see above). Proof:
 `/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
@@ -468,6 +471,18 @@ sequence until its final byte, even after 250 ms, within the same size bound; ov
 Inside a broken OSC/DCS, ESC starts a fresh sequence (including a keyboard CSI or another OSC), while `ESC \` still terminates the old
 string; recovery also works after either bound. Ctrl+C (0x03 or kitty `CSI 99;5u`) always passes once and ends a probe. On a reported background a role below its minimum keeps only
 its attributes. Consumers move to `terminalPalette`/the theme request in L3. Proof is kept with the lead's package record (alpha.60 package 2, lane TH-A).
+
+**Brand palette (B11-PALETTE, owner 2026-11-11 #72).** Only `dark` and `light` use the approved brand roles, selected by per-theme
+primitive overrides in `terminal.map.json`: accent `#6CCFAE` / `#0A4A4F` (assistant label, window title, section header, mode indicator),
+info blue `#A9BFD6` / `#2E4A68` (info, links, code, model), success `#9BE3A6` / `#136F57`, warning `#F2B24A` / `#8A5300`,
+error `#F0806E` / `#A8281C`, muted `#A8A89C` / `#566065` (including provider, user rail and window border).
+For light 256-colour output, accent keeps index 23, success uses 22 and info/link/code/model use 24, preserving distinct green/teal/blue hues.
+The reference grounds include `#191B1A` / `#F4F5F2`; the terminal still owns its normal foreground and background. Selection pairs background `#153B39` / `#DCE9E7`
+with explicit theme text `#E7E3D9` / `#0B1215` and bold in truecolor/256, so pinning a theme against the terminal's ground stays readable;
+ANSI16 retains reverse video. Pickers, monitor rows and in-app text selection consume the same pair; nested semantic colours yield
+to the selected foreground. Link underline, focus and the
+user/key/system labels and system rail stay unchanged. Daltonized, high-contrast and ANSI theme values stay frozen for this release;
+applying the brand to those themes needs a separate colour-vision check and owner review.
 
 **Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
 details heading. `/status`: one sentence (running or not read, version, model) then the host report and the service descriptor

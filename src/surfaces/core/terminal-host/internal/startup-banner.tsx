@@ -13,8 +13,10 @@ export interface WorklineStartup {
   /** Clear the visible screen first (the caller already excluded TERM=dumb and the setting; this side still requires a TTY). */
   readonly clear: boolean;
   readonly banner: typeof STARTUP_BANNERS[number];
-  /** The Deckent mark, one string per row (3–5 rows). */
+  /** The small deckent mark, one string per row (5 rows). */
   readonly logo: readonly string[];
+  /** The large Unicode mark (10 rows), or the same small ASCII mark on limited terminals. */
+  readonly logoLarge: readonly string[];
   /** Beside the mark: the title row, then the static facts (project and model) and the hint. Current mode lives in the status strip. */
   readonly lines: readonly string[];
   /** The one-line form: narrow terminals and `banner: compact`. */
@@ -38,14 +40,17 @@ export function clearVisibleScreen(rows: number): string {
 }
 /** Below this width the mark and its facts do not fit side by side: the one-line form is shown. */
 export const STARTUP_BANNER_MIN_COLUMNS = 60;
-export function StartupBanner({ startup, columns }: { readonly startup: WorklineStartup; readonly columns: number }) {
+export const STARTUP_BANNER_LARGE_MIN_COLUMNS = 100;
+export const STARTUP_BANNER_LARGE_MIN_ROWS = 30;
+export function StartupBanner({ startup, columns, rows }: { readonly startup: WorklineStartup; readonly columns: number; readonly rows: number }) {
   const palette = useWorklinePalette();
   if (startup.banner === 'compact' || columns < STARTUP_BANNER_MIN_COLUMNS) return <Text {...palette.accent} wrap="truncate-end">{startup.compact}</Text>;
+  const logo = startup.banner === 'full' && columns >= STARTUP_BANNER_LARGE_MIN_COLUMNS && rows >= STARTUP_BANNER_LARGE_MIN_ROWS ? startup.logoLarge : startup.logo;
   const [title, ...facts] = startup.lines;
   const hint = facts.at(-1), details = facts.slice(0, -1);
   return (
     <Box flexDirection="row" alignItems="flex-end">
-      <Box flexDirection="column" marginRight={2} flexShrink={0}>{startup.logo.map((row, index) => <Text key={index} {...palette.accent}>{row}</Text>)}</Box>
+      <Box flexDirection="column" marginRight={2} flexShrink={0}>{logo.map((row, index) => <Text key={index} {...palette.accent}>{row}</Text>)}</Box>
       <Box flexDirection="column">
         {title ? <Text {...palette.strong} wrap="truncate-end">{title}</Text> : null}
         {details.map((line, index) => <Text key={index} wrap="truncate-end">{line}</Text>)}
@@ -58,7 +63,7 @@ export function StartupBanner({ startup, columns }: { readonly startup: Workline
 export function startupFrame(startup: WorklineStartup, palette: WorklineInkPalette, columns: number, rows: number): string {
   const clear = startup.clear ? clearVisibleScreen(rows) : '';
   if (startup.banner === 'off') return clear;
-  const banner = renderToString(createElement(WorklinePaletteProvider, { palette, children: createElement(StartupBanner, { startup, columns }) }), { columns });
+  const banner = renderToString(createElement(WorklinePaletteProvider, { palette, children: createElement(StartupBanner, { startup, columns, rows }) }), { columns });
   return `${clear}${banner}\n`;
 }
 /** Writes the opening frame on an interactive terminal only: a pipe or redirect never receives a clear sequence or the banner. */

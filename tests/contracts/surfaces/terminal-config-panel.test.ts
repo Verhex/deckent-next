@@ -104,7 +104,7 @@ describe('/config window port', () => {
     const runtime = { setting: 'auto' as const, capability: 'truecolor' as const, background: () => '#f0ece5', apply: (value: string) => { appliedThemes.push(value); } };
     const theme = themePanelPort(root, context([], themeSeen), options, 'tr', runtime);
     expect((await theme.inspect()).choices).toHaveLength(9);
-    expect(theme.palette('light').link.color).toBe('#0B6A9E');
+    expect(theme.palette('light').link.color).toBe('#2E4A68');
     expect(() => theme.palette('not-a-theme')).toThrow(); expect(themeSeen).toEqual([]);
     theme.apply('light'); await theme.write('light');
     expect(appliedThemes).toEqual(['light']);

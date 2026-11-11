@@ -78,7 +78,7 @@ describe('settings windows in the workline', () => {
     await settle(60); view.stdin.write(ENTER);
     await until(() => frameOf(view).includes('THEME-WINDOW') && frameOf(view).includes('LINK-PREVIEW'), 'theme from config');
     await settle(60); view.stdin.write(DOWN);
-    await until(() => frameOf(view).includes('5.00:1'), 'light link contrast against owner background');
+    await until(() => frameOf(view).includes('7.77:1'), 'light link contrast against owner background');
     expect(themes).toEqual([]); expect(writes).toEqual([]);
     view.stdin.write(ESC); await until(() => !frameOf(view).includes('THEME-WINDOW'), 'theme discarded');
     expect(themes).toEqual([]); expect(writes).toEqual([]);

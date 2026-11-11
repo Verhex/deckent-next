@@ -43,7 +43,7 @@ function ShellView({ options, kept, exit }: { readonly options: TerminalShellOpt
   const status = [labels.status, ...(queued ? [labels.queued.replace('{count}', String(queued))] : [])].join(' · ');
   return <FullscreenWorkline
     viewport={<Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={1} overflow="hidden" justifyContent="flex-end">
-      {options.startup.banner === 'off' ? null : <StartupBanner startup={options.startup} columns={size.columns || 80} />}<Text {...palette.accent}>{labels.banner}</Text><Text> </Text></Box>}
+      {options.startup.banner === 'off' ? null : <StartupBanner startup={options.startup} columns={size.columns || 80} rows={size.rows || 24} />}<Text {...palette.accent}>{labels.banner}</Text><Text> </Text></Box>}
     above={null}
     bar={<Composer prompt={labels.prompt} labels={labels.composer} busy={false} maxRows={Math.max(1, Math.floor((size.rows || 24) / 3))}
       onSubmit={submit} onCancel={() => undefined} onExit={exit} onDraft={entry => { kept.draft = entry.text || entry.pastes.length ? entry : null; }} onArm={armedAt => { kept.armedAt = armedAt; }} />}

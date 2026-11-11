@@ -8,7 +8,8 @@ import { terminalScreen } from '../../fixtures/terminal-screen.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { Box, measureElement, Text, type DOMElement } from 'ink';
-import { openTerminalHost } from '#surfaces/core/terminal-host/index.js';
+import { openTerminalHost, openTerminalShell } from '#surfaces/core/terminal-host/index.js';
+import { displayWidth } from '#surfaces/core/terminal-composer/index.js';
 import { useTerminalHandover } from '#surfaces/core/terminal-render-ink/index.js';
 import { runTerminalWorkline } from '#surfaces/core/terminal/index.js';
 import { worklineLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -21,6 +22,27 @@ const facts = { version: '1.0.0-alpha.9', project: 'deckent-next', path: '~/deck
 const startup = (locale: 'en' | 'tr', options: Partial<WorklineStartup> = {}, ascii = false): WorklineStartup =>
   ({ clear: true, banner: 'full', ...terminalStartupLabels(locale, facts, ascii), ...options });
 const plain = resolveWorklinePalette('none');
+// Owner-approved mark-art.json, pasted here as an independent art oracle (B11-MARK).
+const smallMark = [
+  '      ⣿⣿',
+  '⢀⣴⣾⠿⠿⣿⣿⣿',
+  '⣾⡟⢀⡀  ⣿⣿',
+  '⢿⣧⣿⠁  ⣿⣿',
+  '⠈⠻⢿⣶⣶⣿⣿⣿',
+];
+const largeMark = [
+  '            ⣿⣿⣿⡇',
+  '            ⣿⣿⣿⡇',
+  '    ⣀⣤⣴⣶⣶⣤⣄⡀⣿⣿⣿⡇',
+  ' ⢀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇',
+  '⢀⣾⣿⣿⡿⠋⠁  ⠈⠙⢿⣿⣿⣿⡇',
+  '⢸⣿⣿⡿  ⣀⡀   ⠘⣿⣿⣿⡇',
+  '⢸⣿⣿⣧ ⣼⣿⠁   ⣰⣿⣿⣿⡇',
+  '⠘⣿⣿⣿⣦⡹⣿⣷⣤⣤⣾⣿⣿⣿⣿⡇',
+  ' ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇',
+  '   ⠉⠻⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇',
+];
+const asciiMark = ['      ##', '.o######', '##..  ##', '###.  ##', '.o######'];
 
 it('keeps one startup mark and help region through width and height changes on the production terminal host', async () => {
   class Tty extends Writable {
@@ -53,6 +75,13 @@ it('keeps one startup mark and help region through width and height changes on t
       screen.resize(columns, rows); Object.assign(stdout, { columns, rows }); stdout.emit('resize');
     };
     const sizes = [[60, 30], [110, 30], [110, 40], [110, 30]] as const;
+    const markSizes = [[60, 30, false], [100, 30, true], [99, 30, false], [100, 29, false], [100, 30, true], [110, 40, true], [110, 30, true]] as const;
+    const checkMark = (text: string, large: boolean) => {
+      const expected = large ? largeMark : smallMark, width = large ? 16 : 8;
+      const markColumns = text.split('\n').map(line => line.slice(0, width).trimEnd()).join('\n');
+      expect(markColumns.split(expected.join('\n')).length - 1, `${banner}\n${text}`).toBe(banner === 'full' ? 1 : 0);
+      if (banner === 'off') expect(text).not.toMatch(/[\u2800-\u28ff]/u);
+    };
     const checkResizes = async (tokens: readonly string[]) => {
       for (const [columns, rows] of sizes) {
         resize(columns, rows); await settle(160);
@@ -60,7 +89,17 @@ it('keeps one startup mark and help region through width and height changes on t
         for (const token of tokens) expect(text.split(token).length - 1, `${banner} ${columns}x${rows}\n${text}`).toBe(1);
       }
     };
-    const running = runTerminalWorkline({ labels, startup: startup('en', { banner }), palette: plain,
+    const shell = await openTerminalShell({ palette: plain, startup: startup('en', { banner }),
+      stdin: stdin as unknown as NodeJS.ReadStream, stdout: stdout as unknown as NodeJS.WriteStream, signal: controller.signal,
+      labels: { composer: labels.composer, prompt: labels.prompt, banner: labels.banner, hint: labels.hint,
+        status: 'preparing', queued: '{count}', dropped: '{count}' } });
+    try {
+      await settle(120); checkMark(await replay(), true);
+      for (const [columns, rows, large] of markSizes) {
+        resize(columns, rows); await settle(160); checkMark(await replay(), large);
+      }
+    } catch (error) { await shell.host.close(); screen.dispose(); throw error; }
+    const running = runTerminalWorkline({ labels, shell, startup: startup('en', { banner }), palette: plain,
       stdin: stdin as unknown as NodeJS.ReadStream, stdout: stdout as unknown as NodeJS.WriteStream, signal: controller.signal,
       context: { installationId: 'i', projectId: 'p', scopeId: 's' }, target: 'scope', systemPrompt: 'system', historyMessages: 40,
       completeTurn: async () => 'unused', errorText: String, decisionArmMs: 0,
@@ -82,14 +121,14 @@ it('keeps one startup mark and help region through width and height changes on t
     try {
       await until(() => stdout.text.includes('Enter send'), 'startup help'); await settle(120);
       stdin.write('DRAFT-SURVIVES'); await until(() => stdout.text.includes('DRAFT-SURVIVES'), 'draft'); await settle(120);
-      const snapshots = [{ size: '110x30', text: await replay() }];
-      for (const [columns, rows] of sizes) {
+      const snapshots = [{ size: '110x30', large: true, text: await replay() }];
+      for (const [columns, rows, large] of markSizes) {
         resize(columns, rows); await settle(160);
-        snapshots.push({ size: `${columns}x${rows}`, text: await replay() });
+        snapshots.push({ size: `${columns}x${rows}`, large, text: await replay() });
       }
-      for (const { size, text } of snapshots) {
+      for (const { size, large, text } of snapshots) {
         const at = `${banner} ${size}\n${text}`;
-        for (const row of startup('en').logo) expect.soft(text.split(row.trim()).length - 1, at).toBe(banner === 'full' ? 1 : 0);
+        checkMark(text, large);
         expect.soft(text.split('/help · Shift+Tab mode · ? shortcuts').length - 1, at).toBe(banner === 'full' ? 1 : 0);
         expect.soft(text.split('deckent workline.').length - 1, at).toBe(1);
         expect.soft(text.split('Ctrl+C twice when idle quits.').length - 1, at).toBe(1);
@@ -209,18 +248,18 @@ describe('opening frame (T2 T-STARTUP)', () => {
     const frame = startupFrame(startup('en'), plain, 100, 10).replace(/\n/gu, '\r\n');
     const screen = terminalScreen(before + frame, 100, 10);
     expect(screen).toContain('old line 1');
-    expect(screen.slice(screen.indexOf('⣀⣠⣀⡀'))).toContain('deckent 1.0.0-alpha.9');
-    expect(screen.indexOf('old line 2')).toBeLessThan(screen.indexOf('⣀⣠⣀⡀'));
+    expect(screen.slice(screen.indexOf('      ⣿⣿'))).toContain('deckent 1.0.0-alpha.9');
+    expect(screen.indexOf('old line 2')).toBeLessThan(screen.indexOf('      ⣿⣿'));
   });
 
   it('prints the mark beside version, project, model and the hint without stale mode — EN, TR, NO_COLOR and ASCII', () => {
-    const en = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 100, 30));
+    const en = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 99, 30));
     expect(en.split('\n').slice(0, 5).map(line => line.trimEnd())).toEqual([
-      '          ⣀⣠⣀⡀',
-      '         ⢸⣟⡉⢻⣿⡄  deckent 1.0.0-alpha.9',
-      '        ⢀⣠⣽⣶⣟⡿⠁  Project deckent-next · ~/deckent-next',
-      '⣀⣀⣀⣠⣤⣴⣶⣟⣿⡷⠟⠉⠁    Model: local-openai/chat@1',
-      '⣿⣿⣿⣽⡿⠾⠛⠋⠁        /help · Shift+Tab mode · ? shortcuts',
+      '      ⣿⣿',
+      '⢀⣴⣾⠿⠿⣿⣿⣿  deckent 1.0.0-alpha.9',
+      '⣾⡟⢀⡀  ⣿⣿  Project deckent-next · ~/deckent-next',
+      '⢿⣧⣿⠁  ⣿⣿  Model: local-openai/chat@1',
+      '⠈⠻⢿⣶⣶⣿⣿⣿  /help · Shift+Tab mode · ? shortcuts',
     ]);
     const tr = stripVTControlCharacters(startupFrame(startup('tr', { clear: false }), plain, 100, 30));
     expect(tr).toContain('Proje deckent-next · ~/deckent-next');
@@ -230,16 +269,28 @@ describe('opening frame (T2 T-STARTUP)', () => {
     // NO_COLOR: the `none` palette leaves no escape at all in the banner.
     expect(startupFrame(startup('tr', { clear: false }), plain, 100, 30)).not.toContain('\u001b');
     const ascii = stripVTControlCharacters(startupFrame(startup('en', { clear: false }, true), plain, 100, 30));
-    expect(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 9).trimEnd())).toEqual(['      .-.', "   .o-'o|", " .o'  `-'", "-'"]);
-    expect(/[^ -~]/u.test(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 9)).join(''))).toBe(false);
-    for (const columns of [80, 120]) for (const locale of ['en', 'tr'] as const) for (const ascii of [false, true]) {
-      const labels = startup(locale, { clear: false }, ascii), rendered = stripVTControlCharacters(startupFrame(labels, plain, columns, 30));
+    expect(ascii.split('\n').slice(0, 5).map(line => line.slice(0, 8).trimEnd())).toEqual(asciiMark);
+    for (const locale of ['en', 'tr'] as const) {
+      const unicode = startup(locale), ascii = startup(locale, {}, true);
+      expect(unicode.logo).toEqual(smallMark); expect(unicode.logoLarge).toEqual(largeMark);
+      expect(ascii.logo).toEqual(asciiMark); expect(ascii.logoLarge).toEqual(asciiMark);
+      for (const [art, count, width] of [[unicode.logo, 5, 8], [unicode.logoLarge, 10, 16], [ascii.logo, 5, 8]] as const) {
+        expect(art).toHaveLength(count);
+        for (const row of art) { expect(displayWidth(row)).toBe(width); expect(row).toBe(row.trimEnd()); }
+      }
+      expect(unicode.logo.join('') + unicode.logoLarge.join('')).toMatch(/^[ \u2801-\u28ff]+$/u);
+      expect(ascii.logo.join('')).toMatch(/^[ -~]+$/u);
+    }
+    for (const [columns, height, large] of [[60, 30, false], [100, 30, true], [99, 30, false], [100, 29, false], [120, 40, true]] as const)
+      for (const locale of ['en', 'tr'] as const) for (const ascii of [false, true]) {
+      const labels = startup(locale, { clear: false }, ascii), rendered = stripVTControlCharacters(startupFrame(labels, plain, columns, height));
       const rows = rendered.trimEnd().split('\n');
-      expect(rows).toHaveLength(ascii ? 4 : 5);
-      expect(rows[ascii ? 0 : 1]).toContain('deckent 1.0.0-alpha.9');
+      const expected = ascii ? asciiMark : large ? largeMark : smallMark;
+      expect(rows).toHaveLength(expected.length);
+      expect(rows[expected.length - 4]).toContain('deckent 1.0.0-alpha.9');
+      expect(rows.map(row => row.slice(0, ascii || !large ? 8 : 16).trimEnd())).toEqual(expected);
       for (const row of rows) expect(row.length).toBeLessThanOrEqual(columns);
       for (const line of labels.lines) expect(rendered).toContain(line);
-      expect(labels.logo.join('')).toMatch(ascii ? /^[ -~]+$/u : /^[ \u2801-\u28ff]+$/u);
     }
   });
 

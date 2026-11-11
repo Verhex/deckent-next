@@ -821,9 +821,9 @@ export function WorklineApp(props: WorklineProps) {
     <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} {...(groupView ? { groupView } : {})} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>; };
   // The conversation opens with the opening frame (until `/clear`) and the workline's own how-to line (how to cancel and quit), once, at its top.
   const startup = props.startup, bannerLine = labels.banner, bannerOf = useMemo(() => fullscreenMode ? (columns: number) => {
-    const frame = bannerShown && startup && startup.banner !== 'off' ? startupFrame({ ...startup, clear: false }, palette, columns, 0) : '';
+    const frame = bannerShown && startup && startup.banner !== 'off' ? startupFrame({ ...startup, clear: false }, palette, columns, size.rows || 24) : '';
     return `${frame}${renderToString(<Text {...palette.accent}>{bannerLine}</Text>, { columns })}\n`;
-  } : null, [fullscreenMode, bannerShown, startup, palette, bannerLine]);
+  } : null, [fullscreenMode, bannerShown, startup, palette, bannerLine, size.rows]);
   const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette, variantOf);
   const transcriptExit = props.transcriptExit;
   useLayoutEffect(() => { if (transcriptExit && fullscreenMode) transcriptExit.current = transcript.text; }, [transcriptExit, fullscreenMode, transcript]);

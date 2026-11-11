@@ -221,7 +221,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const shown = body.slice(0, bodyHeight).map(line => clipLine(line, width, ellipsis));
   while (shown.length < bodyHeight) shown.push([span('')]);
 
-  const colored = Object.keys(palette.accent).length > 0;
+  const colored = Object.keys(palette.accent).length > 0 || palette.selection.backgroundColor !== undefined;
   const tabParts = tabs.map((name, index) => `${index + 1} ${name === 'config' ? t('config.surface.monitorTab', {}, locale) : tabLabel(name, locale)}`);
   const full = tabParts.join('  ').length + 2 <= width;
   const tabLine: MonitorLine = tabs.flatMap((_, index) => {
@@ -236,8 +236,8 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   return (
     <Box flexDirection="column" width={width}>
       {lines.map((entry, index) => (
-        <Text key={index} wrap="truncate-end" {...(entry.selected ? { inverse: true } : {})}>
-          {lineText(entry.line) ? entry.line.map((part, at) => <Text key={at} {...(part.role ? palette[part.role] : {})}>{part.text}</Text>) : ' '}
+        <Text key={index} wrap="truncate-end" {...(entry.selected ? palette.selection : {})}>
+          {lineText(entry.line) ? entry.line.map((part, at) => <Text key={at} {...(part.role && !(entry.selected && palette.selection.backgroundColor) ? palette[part.role] : {})}>{part.text}</Text>) : ' '}
         </Text>
       ))}
     </Box>

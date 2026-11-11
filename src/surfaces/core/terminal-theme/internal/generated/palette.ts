@@ -6,7 +6,7 @@ export type PaletteRole = 'model' | 'provider' | 'success' | 'error' | 'warning'
 
 export type PaletteClass = 'primary' | 'supplemental' | 'decorative';
 
-/** WCAG 2.2: `text` needs 4.5:1 (1.4.3), `border` 3:1 (1.4.11) against each reference background; `none` uses the terminal's foreground. */
+/** WCAG 2.2: `text` needs 4.5:1 (1.4.3), `border` 3:1 (1.4.11) against each reference background; `none` uses the terminal's foreground (selection backgrounds are measured with foreground text). */
 export type PaletteContrast = 'text' | 'border' | 'none';
 
 export type PaletteTheme = 'dark' | 'light' | 'dark-daltonized' | 'light-daltonized' | 'dark-ansi' | 'light-ansi' | 'dark-high-contrast' | 'light-high-contrast' | 'neutral-ansi';
@@ -18,76 +18,80 @@ export interface PaletteEntry {
   readonly attrs: readonly string[];
   readonly class: PaletteClass;
   readonly contrast: PaletteContrast;
+  /** Hex/256 is a selection background; ANSI16 keeps its foreground and reverse-video attributes. */
+  readonly background?: boolean;
+  /** The selection's paired text colour at rich tiers, independent of the terminal's foreground. */
+  readonly foreground?: Readonly<{ hex: string; ansi256: number }>;
 }
 
 export const PALETTE_THEMES: readonly PaletteTheme[] = ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi', 'dark-high-contrast', 'light-high-contrast', 'neutral-ansi'];
 
 export const THEME_PALETTES: Readonly<Record<PaletteTheme, Readonly<Record<PaletteRole, PaletteEntry>>>> = {
   'dark': {
-    model: { hex: '#87AFFF', ansi256: 111, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
-    provider: { hex: '#D7AFFF', ansi256: 183, ansi16: '95', attrs: [], class: 'primary', contrast: 'text' },
-    success: { hex: '#43E39A', ansi256: 78, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
-    error: { hex: '#FF6B5E', ansi256: 203, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
-    warning: { hex: '#E8B34C', ansi256: 179, ansi16: '33', attrs: [], class: 'supplemental', contrast: 'text' },
-    info: { hex: '#38D3FF', ansi256: 81, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
-    muted: { hex: '#7FA3B2', ansi256: 109, ansi16: '', attrs: [], class: 'primary', contrast: 'text' },
-    accent: { hex: '#38D3FF', ansi256: 81, ansi16: '36', attrs: [], class: 'decorative', contrast: 'text' },
+    model: { hex: '#A9BFD6', ansi256: 146, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
+    provider: { hex: '#A8A89C', ansi256: 248, ansi16: '', attrs: [], class: 'primary', contrast: 'text' },
+    success: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
+    error: { hex: '#F0806E', ansi256: 209, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
+    warning: { hex: '#F2B24A', ansi256: 215, ansi16: '33', attrs: [], class: 'supplemental', contrast: 'text' },
+    info: { hex: '#A9BFD6', ansi256: 146, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
+    muted: { hex: '#A8A89C', ansi256: 248, ansi16: '', attrs: [], class: 'primary', contrast: 'text' },
+    accent: { hex: '#6CCFAE', ansi256: 79, ansi16: '36', attrs: [], class: 'decorative', contrast: 'text' },
     focus: { hex: null, ansi256: null, ansi16: '', attrs: ['7'], class: 'primary', contrast: 'none' },
-    link: { hex: '#38D3FF', ansi256: 81, ansi16: '94', attrs: ['4'], class: 'primary', contrast: 'text' },
-    code: { hex: '#7BE8FF', ansi256: 117, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
-    userBar: { hex: '#7FA3B2', ansi256: 109, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
+    link: { hex: '#A9BFD6', ansi256: 146, ansi16: '94', attrs: ['4'], class: 'primary', contrast: 'text' },
+    code: { hex: '#A9BFD6', ansi256: 146, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
+    userBar: { hex: '#A8A89C', ansi256: 248, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
     userLabel: { hex: null, ansi256: null, ansi16: '', attrs: ['1'], class: 'primary', contrast: 'none' },
-    assistantLabel: { hex: '#38D3FF', ansi256: 81, ansi16: '94', attrs: ['1'], class: 'primary', contrast: 'text' },
-    workerCard: { hex: '#43E39A', ansi256: 78, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'border' },
-    windowBorder: { hex: '#7FA3B2', ansi256: 109, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
-    windowTitle: { hex: '#38D3FF', ansi256: 81, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
-    selection: { hex: '#7BE8FF', ansi256: 117, ansi16: '96', attrs: ['1', '7'], class: 'primary', contrast: 'text' },
-    diffAdded: { hex: '#43E39A', ansi256: 78, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
-    diffRemoved: { hex: '#FF6B5E', ansi256: 203, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
-    modeIndicator: { hex: '#7BE8FF', ansi256: 117, ansi16: '96', attrs: [], class: 'supplemental', contrast: 'text' },
-    sectionHeader: { hex: '#38D3FF', ansi256: 81, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
+    assistantLabel: { hex: '#6CCFAE', ansi256: 79, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
+    workerCard: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'border' },
+    windowBorder: { hex: '#A8A89C', ansi256: 248, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
+    windowTitle: { hex: '#6CCFAE', ansi256: 79, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
+    selection: { hex: '#153B39', ansi256: 236, ansi16: '96', attrs: ['1', '7'], class: 'primary', contrast: 'none', background: true, foreground: { hex: '#E7E3D9', ansi256: 254 } },
+    diffAdded: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
+    diffRemoved: { hex: '#F0806E', ansi256: 209, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
+    modeIndicator: { hex: '#6CCFAE', ansi256: 79, ansi16: '96', attrs: [], class: 'supplemental', contrast: 'text' },
+    sectionHeader: { hex: '#6CCFAE', ansi256: 79, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
     keyLabel: { hex: null, ansi256: null, ansi16: '', attrs: ['1'], class: 'primary', contrast: 'none' },
-    mutedId: { hex: '#7FA3B2', ansi256: 109, ansi16: '90', attrs: [], class: 'supplemental', contrast: 'text' },
-    chipOk: { hex: '#43E39A', ansi256: 78, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    chipWarn: { hex: '#E8B34C', ansi256: 179, ansi16: '33', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    chipFail: { hex: '#FF6B5E', ansi256: 203, ansi16: '31', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    mutedId: { hex: '#A8A89C', ansi256: 248, ansi16: '90', attrs: [], class: 'supplemental', contrast: 'text' },
+    chipOk: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    chipWarn: { hex: '#F2B24A', ansi256: 215, ansi16: '33', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    chipFail: { hex: '#F0806E', ansi256: 209, ansi16: '31', attrs: ['1'], class: 'supplemental', contrast: 'text' },
     systemLabel: { hex: null, ansi256: null, ansi16: '35', attrs: ['1'], class: 'primary', contrast: 'none' },
     systemRail: { hex: null, ansi256: null, ansi16: '35', attrs: [], class: 'decorative', contrast: 'none' },
-    stateConnected: { hex: '#43E39A', ansi256: 78, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    stateDisconnected: { hex: '#F0883E', ansi256: 209, ansi16: '33', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    stateConnected: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    stateDisconnected: { hex: '#F2B24A', ansi256: 215, ansi16: '33', attrs: ['1'], class: 'supplemental', contrast: 'text' },
   },
   'light': {
-    model: { hex: '#005FAF', ansi256: 25, ansi16: '34', attrs: [], class: 'primary', contrast: 'text' },
-    provider: { hex: '#8700AF', ansi256: 91, ansi16: '35', attrs: [], class: 'primary', contrast: 'text' },
-    success: { hex: '#16774A', ansi256: 22, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
-    error: { hex: '#B3261E', ansi256: 124, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
-    warning: { hex: '#8A5A00', ansi256: 94, ansi16: '', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    info: { hex: '#0B6A9E', ansi256: 25, ansi16: '34', attrs: [], class: 'primary', contrast: 'text' },
-    muted: { hex: '#4E6874', ansi256: 60, ansi16: '', attrs: [], class: 'primary', contrast: 'text' },
-    accent: { hex: '#0B6A9E', ansi256: 25, ansi16: '36', attrs: [], class: 'decorative', contrast: 'text' },
+    model: { hex: '#2E4A68', ansi256: 24, ansi16: '34', attrs: [], class: 'primary', contrast: 'text' },
+    provider: { hex: '#566065', ansi256: 59, ansi16: '', attrs: [], class: 'primary', contrast: 'text' },
+    success: { hex: '#136F57', ansi256: 22, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
+    error: { hex: '#A8281C', ansi256: 124, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
+    warning: { hex: '#8A5300', ansi256: 94, ansi16: '', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    info: { hex: '#2E4A68', ansi256: 24, ansi16: '34', attrs: [], class: 'primary', contrast: 'text' },
+    muted: { hex: '#566065', ansi256: 59, ansi16: '', attrs: [], class: 'primary', contrast: 'text' },
+    accent: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: [], class: 'decorative', contrast: 'text' },
     focus: { hex: null, ansi256: null, ansi16: '', attrs: ['7'], class: 'primary', contrast: 'none' },
-    link: { hex: '#0B6A9E', ansi256: 25, ansi16: '34', attrs: ['4'], class: 'primary', contrast: 'text' },
-    code: { hex: '#075985', ansi256: 24, ansi16: '34', attrs: [], class: 'primary', contrast: 'text' },
-    userBar: { hex: '#4E6874', ansi256: 60, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
+    link: { hex: '#2E4A68', ansi256: 24, ansi16: '34', attrs: ['4'], class: 'primary', contrast: 'text' },
+    code: { hex: '#2E4A68', ansi256: 24, ansi16: '34', attrs: [], class: 'primary', contrast: 'text' },
+    userBar: { hex: '#566065', ansi256: 59, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
     userLabel: { hex: null, ansi256: null, ansi16: '', attrs: ['1'], class: 'primary', contrast: 'none' },
-    assistantLabel: { hex: '#0B6A9E', ansi256: 25, ansi16: '34', attrs: ['1'], class: 'primary', contrast: 'text' },
-    workerCard: { hex: '#16774A', ansi256: 22, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'border' },
-    windowBorder: { hex: '#4E6874', ansi256: 60, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
-    windowTitle: { hex: '#0B6A9E', ansi256: 25, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
-    selection: { hex: '#075985', ansi256: 24, ansi16: '36', attrs: ['1', '7'], class: 'primary', contrast: 'text' },
-    diffAdded: { hex: '#16774A', ansi256: 22, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
-    diffRemoved: { hex: '#B3261E', ansi256: 124, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
-    modeIndicator: { hex: '#075985', ansi256: 24, ansi16: '36', attrs: [], class: 'supplemental', contrast: 'text' },
-    sectionHeader: { hex: '#0B6A9E', ansi256: 25, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
+    assistantLabel: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
+    workerCard: { hex: '#136F57', ansi256: 22, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'border' },
+    windowBorder: { hex: '#566065', ansi256: 59, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
+    windowTitle: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
+    selection: { hex: '#DCE9E7', ansi256: 254, ansi16: '36', attrs: ['1', '7'], class: 'primary', contrast: 'none', background: true, foreground: { hex: '#0B1215', ansi256: 233 } },
+    diffAdded: { hex: '#136F57', ansi256: 22, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
+    diffRemoved: { hex: '#A8281C', ansi256: 124, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
+    modeIndicator: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: [], class: 'supplemental', contrast: 'text' },
+    sectionHeader: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
     keyLabel: { hex: null, ansi256: null, ansi16: '', attrs: ['1'], class: 'primary', contrast: 'none' },
-    mutedId: { hex: '#4E6874', ansi256: 60, ansi16: '30', attrs: [], class: 'supplemental', contrast: 'text' },
-    chipOk: { hex: '#16774A', ansi256: 22, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    chipWarn: { hex: '#8A5A00', ansi256: 94, ansi16: '', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    chipFail: { hex: '#B3261E', ansi256: 124, ansi16: '31', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    mutedId: { hex: '#566065', ansi256: 59, ansi16: '30', attrs: [], class: 'supplemental', contrast: 'text' },
+    chipOk: { hex: '#136F57', ansi256: 22, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    chipWarn: { hex: '#8A5300', ansi256: 94, ansi16: '', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    chipFail: { hex: '#A8281C', ansi256: 124, ansi16: '31', attrs: ['1'], class: 'supplemental', contrast: 'text' },
     systemLabel: { hex: null, ansi256: null, ansi16: '35', attrs: ['1'], class: 'primary', contrast: 'none' },
     systemRail: { hex: null, ansi256: null, ansi16: '35', attrs: [], class: 'decorative', contrast: 'none' },
-    stateConnected: { hex: '#16774A', ansi256: 22, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
-    stateDisconnected: { hex: '#A64B00', ansi256: 94, ansi16: '', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    stateConnected: { hex: '#136F57', ansi256: 22, ansi16: '32', attrs: ['1'], class: 'supplemental', contrast: 'text' },
+    stateDisconnected: { hex: '#8A5300', ansi256: 94, ansi16: '', attrs: ['1'], class: 'supplemental', contrast: 'text' },
   },
   'dark-daltonized': {
     model: { hex: '#87AFFF', ansi256: 111, ansi16: '94', attrs: [], class: 'primary', contrast: 'text' },
@@ -337,8 +341,8 @@ export const THEME_TEXT_MINIMUM: Readonly<Record<PaletteTheme, number>> = {
 
 /** Reference backgrounds each theme's contrast is measured against (Deckent never sets the terminal background); none for `ansiOnly` themes. */
 export const THEME_BACKGROUNDS: Readonly<Record<PaletteTheme, readonly string[]>> = {
-  'dark': ['#000000', '#0C0C0C', '#1E1E1E', '#282C34'],
-  'light': ['#FFFFFF', '#FAFAFA', '#F5F5F5', '#F6F2EA', '#F0ECE5'],
+  'dark': ['#000000', '#0C0C0C', '#1E1E1E', '#282C34', '#191B1A'],
+  'light': ['#FFFFFF', '#FAFAFA', '#F5F5F5', '#F6F2EA', '#F0ECE5', '#F4F5F2'],
   'dark-daltonized': ['#000000', '#0C0C0C', '#1E1E1E', '#282C34'],
   'light-daltonized': ['#FFFFFF', '#FAFAFA', '#F5F5F5', '#F6F2EA', '#F0ECE5'],
   'dark-ansi': [],
@@ -348,5 +352,5 @@ export const THEME_BACKGROUNDS: Readonly<Record<PaletteTheme, readonly string[]>
   'neutral-ansi': [],
 };
 
-/** The dark theme: the palette before themes existed. */
+/** Default dark semantic palette. */
 export const PALETTE: Readonly<Record<PaletteRole, PaletteEntry>> = THEME_PALETTES.dark;
