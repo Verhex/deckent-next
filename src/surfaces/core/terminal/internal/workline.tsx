@@ -1,3 +1,5 @@
+import { TimingWindowFrame } from '#surfaces/core/terminal-kit-ink/index.js';
+import { runWithTiming, currentTiming, type TimingTrace } from '#platform/index.js';
 import { useOnboardingHandoff, type OnboardingFocus, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
@@ -198,7 +200,7 @@ export interface WorklineProps {
   /** alpha.60 C: what the launch shell kept while the host loaded — the draft as typed and the lines sent meanwhile, sent in order after mount
    *  through the opening's send gate. */
   readonly initialDraft?: ComposerHistoryEntry | null; readonly armedAt?: number | null; // a first idle Ctrl+C in the shell: the next one quits
-  readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>[];
+  readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry; timing?: TimingTrace }>[];
   /** ADAYLAR 16b (QW): whether the configured model takes tools (`describeTerminalChat` `tools`); `none` is said once as a system line. */
   readonly modelTools?: 'available' | 'none' | 'unknown' | 'unverified';
 }
@@ -719,7 +721,9 @@ export function WorklineApp(props: WorklineProps) {
   }, [labels.windows, performLine]);
   performRef.current = perform;
 
+  const executionTiming = useRef<TimingTrace | undefined>(undefined);
   execute.current = async execution => {
+    executionTiming.current = currentTiming();
     const action = taskActions.current.get(execution.input.inputId);
     taskActions.current.delete(execution.input.inputId);
     if (action && ledger && labels.work) {
@@ -729,7 +733,7 @@ export function WorklineApp(props: WorklineProps) {
       return;
     }
     // B: a line sent before the opening is ready waits behind one notice (Ctrl+C sends nothing); a failed start says its typed error and gives the line back as the draft.
-    if (await gate(execution.input.text, execution.signal, () => { if (props.opening) push([notice('info', props.opening.wait)]); }).catch((error: unknown) => { push([notice('error', errorText(error))]); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: execution.input.text, pastes: [] } })); return false; })) await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
+    if (await gate(execution.input.text, execution.signal, () => { if (props.opening) push([notice('info', props.opening.wait)]); }).catch((error: unknown) => { currentTiming()?.fail(); push([notice('error', errorText(error))]); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: execution.input.text, pastes: [] } })); return false; })) { currentTiming()?.phase('gate-passed'); currentTiming()?.phase('dispatch'); await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId)); }
   };
   const inputSequence = useRef(0), typedArgumentInputs = useRef(new Set<string>());
   taskActionRef.current = action => {
@@ -754,7 +758,7 @@ export function WorklineApp(props: WorklineProps) {
   };
   submitRef.current = submit;
   const handedOver = useRef(false); // alpha.60 C: the shell's sent lines go once, in order, through the same submit and send gate
-  useEffect(() => { if (handedOver.current) return; handedOver.current = true; for (const line of props.queuedInputs ?? []) submit(line.text, line.mentions, line.entry); }, []);
+  useEffect(() => { if (handedOver.current) return; handedOver.current = true; for (const line of props.queuedInputs ?? []) runWithTiming(line.timing, () => submit(line.text, line.mentions, line.entry)); }, []);
   const withdraw = () => { const taken = handoffs.withdraw(); if (taken) typedArgumentInputs.current.delete(taken.inputId); return taken?.entry ?? null; };
   const cancel = () => {
     const current = panel.controller.snapshot(), active = current.active;
@@ -832,6 +836,7 @@ export function WorklineApp(props: WorklineProps) {
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
     waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
   const windowsNode = <>
+    {othersOpen ? <TimingWindowFrame trace={executionTiming.current} /> : null}
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
     {instructions.window}
     {fullscreenMode ? null : liveNode}

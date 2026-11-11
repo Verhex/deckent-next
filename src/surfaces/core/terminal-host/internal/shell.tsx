@@ -1,3 +1,4 @@
+import { currentTiming, type TimingTrace } from '#platform/index.js';
 import { createElement, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
@@ -12,7 +13,7 @@ interface TerminalShellLabels { readonly composer: ComposerLabels; readonly prom
   readonly status: string; readonly queued: string; readonly dropped: string }
 interface TerminalShellOptions extends Omit<TerminalHostOptions, 'view' | 'inlineStartup' | 'fullscreen'> {
   readonly startup: WorklineStartup; readonly labels: TerminalShellLabels }
-type ShellLine = Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>;
+type ShellLine = Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry; timing?: TimingTrace }>;
 /** What the shell hands to the view that takes its host: the draft as typed and the lines sent meanwhile, in order. */
 export interface TerminalShell { readonly host: TerminalHostHandle; take(): Readonly<{ draft: ComposerHistoryEntry | null; queued: readonly ShellLine[]; armedAt: number | null }> }
 
@@ -25,6 +26,7 @@ export interface TerminalShell { readonly host: TerminalHostHandle; take(): Read
 export async function openTerminalShell(options: TerminalShellOptions): Promise<TerminalShell> {
   const kept: { draft: ComposerHistoryEntry | null; queued: ShellLine[]; armedAt: number | null } = { draft: null, queued: [], armedAt: null };
   const host = await openTerminalHost({ ...options, fullscreen: true, view: () => createElement(ShellView, { options, kept, exit: () => { void host.close(); } }) });
+  void host.wait().then(() => { for (const line of kept.queued) line.timing?.finish(true); }, () => undefined);
   await host.flushed();
   return { host, take: () => ({ draft: kept.draft, queued: [...kept.queued], armedAt: kept.armedAt }) };
 }
@@ -33,8 +35,10 @@ function ShellView({ options, kept, exit }: { readonly options: TerminalShellOpt
   const palette = useWorklinePalette(), size = useWindowSize(), rows = fullscreenFrameRows(size.rows || 24), { labels } = options;
   const [queued, setQueued] = useState(0), [dropped, setDropped] = useState(false);
   const submit = (text: string, mentions: readonly string[], entry: ComposerHistoryEntry) => {
-    if (kept.queued.length >= SHELL_LIMITS.queuedLines) { setDropped(true); return; }
-    kept.queued.push({ text, mentions, entry }); kept.draft = null; setQueued(kept.queued.length);
+    const timing = currentTiming();
+    if (kept.queued.length >= SHELL_LIMITS.queuedLines) { timing?.finish(true); setDropped(true); return; }
+    timing?.phase('queued');
+    kept.queued.push({ text, mentions, entry, ...(timing ? { timing } : {}) }); kept.draft = null; setQueued(kept.queued.length);
   };
   const status = [labels.status, ...(queued ? [labels.queued.replace('{count}', String(queued))] : [])].join(' · ');
   return <FullscreenWorkline

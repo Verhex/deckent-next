@@ -1,5 +1,6 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
-import { encodeModelBindingDefinition, modelInvocationProfileSchema, resolveModelBindingDefinition, type ModelReference, type ModelBindingDefinition } from '#domain/index.js';
+import { encodeModelBindingDefinition as encodeModelBindingDefinitionRaw, modelInvocationProfileSchema, resolveModelBindingDefinition as resolveModelBindingDefinitionRaw, type ModelReference, type ModelBindingDefinition } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { ConfigApplicationError, type ConfigSnapshot, type ConfigWriteInput } from './contract.js';
@@ -49,3 +50,7 @@ export function capabilityProfileChange(snapshot: ConfigSnapshot, input: ConfigW
   return changed ? [{ ...input, keyPath: 'provider_invocation_profiles', value: { ...section, profiles }, expect: snapshot.digest,
     commandId: `${input.commandId}.rebind` }] : [];
 }
+
+const resolveModelBindingDefinition = (input: unknown, reference: unknown) => resolveModelBindingDefinitionRaw(input, reference, catalogParseObserver);
+
+const encodeModelBindingDefinition = (input: unknown) => encodeModelBindingDefinitionRaw(input, catalogParseObserver);

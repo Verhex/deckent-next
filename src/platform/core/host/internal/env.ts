@@ -3,7 +3,7 @@ import AUTOMATION from './automation.json' with { type: 'json' };
 export type Environment = Readonly<Record<string, string | undefined>>;
 /** Documented call-time inputs; NO_COLOR is deliberately presence-based. */
 export const ENVIRONMENT_KEYS = Object.freeze([
-  'DECKENT_CONFIG_RELOAD',
+  'DECKENT_CONFIG_RELOAD', 'DECKENT_TIMING_TRACE',
   'DECKENT_LANGUAGE', 'DECKENT_LANG',
   PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey, PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey, 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH',
   'HOME', 'WSL_DISTRO_NAME', 'WSL_INTEROP', 'APPDATA', 'LOCALAPPDATA', 'XDG_CONFIG_HOME',

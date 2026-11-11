@@ -1,5 +1,6 @@
+import { timedAsync, catalogParseObserver } from '#platform/index.js';
 import { createHash } from 'node:crypto';
-import { parseModelReference, parseProviderCatalog, resolveParsedModelBindingDefinition, encodeParsedModelBindingDefinition, type ProviderCatalog,
+import { parseModelReference, parseProviderCatalog as parseProviderCatalogRaw, resolveParsedModelBindingDefinition, encodeParsedModelBindingDefinition, type ProviderCatalog,
   type ModelReference, type ModelBindingDefinition } from '#domain/index.js';
 import type { ProviderCatalogSource } from './application.js';
 
@@ -17,7 +18,8 @@ export type ModelBindingInspection = Readonly<{
 /** A content binding identifies an exact declaration. It grants no activation or invocation authority. */
 export class ModelBindingApplication {
   constructor(private readonly source: ProviderCatalogSource, private readonly parsed?: ProviderCatalog | null) {}
-  async inspect(input: unknown): Promise<ModelBindingInspection> {
+  inspect(input: unknown): Promise<ModelBindingInspection> { return timedAsync('binding-inspect', () => this.inspectTimed(input))(); }
+  private async inspectTimed(input: unknown): Promise<ModelBindingInspection> {
     const reference = parseModelReference(input);
     const base = { schemaVersion: 1 as const, reference, availability: 'not-observed' as const };
     const authored = this.parsed ?? await this.source.read();
@@ -32,3 +34,5 @@ export class ModelBindingApplication {
       binding: Object.freeze({ encodingVersion: 1, algorithm: 'sha256', digest }) });
   }
 }
+
+const parseProviderCatalog = (input: unknown) => parseProviderCatalogRaw(input, catalogParseObserver);

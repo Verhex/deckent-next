@@ -1,3 +1,4 @@
+import { useTimingFrame } from '#surfaces/core/terminal-kit-ink/index.js';
 import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
@@ -46,11 +47,13 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const words = labels.model;
   const provider = port.provider as ProviderWindowPort | undefined, locale = provider?.locale ?? 'en';
   const inspection = useRef(0), inspectionAbort = useRef<AbortController | null>(null);
-  const inspect = (progress?: (view: ModelPanelView) => void) => { if (progress) setView(null); const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort;
-    return port.inspect(value => { if (mounted.current && generation === inspection.current) progress?.(value); }, abort.signal).then(view => subscriptionModelView(view, provider, locale)); };
+  const inspect = (progress?: (view: ModelPanelView) => void | Promise<void>) => { if (progress) setView(null); const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort;
+    return port.inspect(value => { if (mounted.current && generation === inspection.current) return progress?.(value); }, abort.signal).then(view => subscriptionModelView(view, provider, locale)); };
   const [workspaces, setWorkspaces] = useState<Awaited<ReturnType<NonNullable<ModelPanelPort['workspace']>['inspect']>>>([]);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [view, setView] = useState<ModelPanelView | null>(null);
+  const [checked, setChecked] = useState(false);
+  const timing = useTimingFrame(checked, view !== null);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [shadow, setShadow] = useState<Readonly<{ choice: ModelPanelChoice; projectModel: string; first: readonly string[] }> | null>(null);
   // Stage 1: the scope budget row (create / change) and its window; a budget read failure only hides the row.
@@ -67,11 +70,11 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   useEffect(() => {
     mounted.current = true;
     let live = true;
-    inspect(value => { if (live) setView(value); }).then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
-    port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
-    port.cache?.inspect().then(value => { if (live) setCache(value); }, () => undefined);
-    port.workspace?.inspect().then(value => { if (live) setWorkspaces(value); }, () => undefined);
-    port.protocol?.inspect().then(value => { if (live) setProtocol(value); }, () => undefined);
+    timing.run(() => inspect(value => { if (live) { setView(value); return timing.frame(); } })).then(value => { if (live) { setView(value); setChecked(true); } }, error => { if (live) { timing.fail(); exits.current.onError(error); exits.current.onClose(); } });
+    timing.run(() => port.budget?.inspect()).then(value => { if (live) setBudget(value ?? null); }, () => undefined);
+    timing.run(() => port.cache?.inspect()).then(value => { if (live) setCache(value ?? null); }, () => undefined);
+    timing.run(() => port.workspace?.inspect()).then(value => { if (live) setWorkspaces(value ?? []); }, () => undefined);
+    timing.run(() => port.protocol?.inspect()).then(value => { if (live) setProtocol(value ?? null); }, () => undefined);
     return () => { live = false; mounted.current = false; inspectionAbort.current?.abort(); };
   }, [port]);
   const loading = useLoadingText(labels, !view || preparing);

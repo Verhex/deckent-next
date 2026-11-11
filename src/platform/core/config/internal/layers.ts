@@ -1,3 +1,4 @@
+import { beginTimingRead } from '#platform/core/state-root/index.js';
 import { assertNoUninstallHold } from './uninstall-hold.js';
 import { bindConfigKnownSecrets } from './redaction-context.js';
 import { lstat } from 'node:fs/promises';
@@ -111,6 +112,8 @@ export async function loadConfigTerminalLaunch(projectRoot = process.cwd(), opti
     dataRoot: resolveProductLayout({ projectRoot: resolve(projectRoot), ...(root ? { root } : {}), platform: (options.platform ?? process.platform) === 'win32' ? 'win32' : 'posix' }).root };
 }
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
+  const endTiming = beginTimingRead('config'); let cacheOutcome: 'hit' | 'miss' | 'forced' = options.force || envValue(options.env ?? process.env, 'DECKENT_CONFIG_RELOAD') === '1' ? 'forced' : 'miss';
+  try {
   const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };
   const platform = options.platform ?? process.platform;
   const admission = options.pendingBootstrap === 'config-settled' && options.heal === false ? 'config-settled' : 'none', hold = options.restoreHold ?? 'refuse';
@@ -126,6 +129,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const key = digestText(JSON.stringify([root, platform, [...new Set([...ENVIRONMENT_KEYS, ...CONFIG_ENVIRONMENT_KEYS])].map(name => [name, env[name]]), stamps, bootstrap?.generation ?? null, configRegistryGeneration(), options.globalOnly ?? false, options.heal ?? true]));
   const cached = options.force || envValue(env, 'DECKENT_CONFIG_RELOAD') === '1' ? undefined : cache.get(key);
   if (cached) {
+    cacheOutcome = 'hit';
     for (const section of configSections().values()) section.options.validateEffective?.(cached.value, env);
     cached.warnings.forEach(w => options.onWarning?.(w));
     if (bootstrap) await assertInstallationBootstrap(root, bootstrap, admission, hold);
@@ -186,4 +190,5 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     cache.set(key, { value, warnings: structuredClone(warnings) });
   }
   return value;
+  } finally { endTiming?.(cacheOutcome); }
 }

@@ -215,7 +215,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       const checkingRows: ProviderPanelKind[] = connect.kinds.filter(kind => kind.headlessLogin || (kind.presentation !== 'hidden' && kind.presentation !== 'beta')).map(kind => ({
         id: kind.id, label: kindLabel(kind, kind.id, locale), detail: checking, blocked: checking, keyName: kind.secretName, keyStored: false,
         endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: [], models: [], modelBlocked: checking }));
-      progress?.({ title, kinds: [...checkingRows], notes: [] });
+      await progress?.({ title, kinds: [...checkingRows], notes: [] });
       const opening = await host.openModelInspection?.(root, scopeId, options, signal), reads = { ...host, ...opening?.host };
       try {
         const displayReadiness = subscriptionReadinessPort(root, scopeId, reads, options);

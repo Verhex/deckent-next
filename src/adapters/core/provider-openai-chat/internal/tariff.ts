@@ -1,10 +1,11 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { OPENAI_RESERVATION_POLICY } from './reservation-policy.js';
 import { verifiedOpenAiCompatibleTariff } from './pricing-catalog.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { openAiChatPromptUpperBound } from './invocation.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest,
   ProviderSpendError, measuredTariffExactMinorUnits, ceilProviderSpendExactMinorUnits, providerSpendExactFromNumericSource, providerSpendExactWithSafetyMargin, compareProviderSpendExactMinorUnits, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { isOpenAiChatHttpAdapter, OpenAiChatHttpError, parseOpenAiChatHttpDefinition,
@@ -62,3 +63,5 @@ export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenA
     cachedInput: providerSpendExactFromNumericSource(`${tariff.cachedInputMinorUnitsPerMillionTokens ?? tariff.inputMinorUnitsPerMillionTokens}e-2`, 1),
     output: providerSpendExactFromNumericSource(`${tariff.outputMinorUnitsPerMillionTokens}e-2`, 1) };
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

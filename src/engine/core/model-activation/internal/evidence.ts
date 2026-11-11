@@ -1,6 +1,7 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition, parseModelBindingDefinition, PROVIDER_CATALOG_WIRE_LIMITS } from '#domain/index.js';
+import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition as encodeModelBindingDefinitionRaw, parseModelBindingDefinition as parseModelBindingDefinitionRaw, PROVIDER_CATALOG_WIRE_LIMITS } from '#domain/index.js';
 import { encodeModelActivationTarget, ModelActivationError, modelActivationActorSchema, modelActivationAuthorizationSchema,
   modelActivationCommandSchema, parseModelActivationCommand, parseModelActivationRecord, parseModelActivationReceipt,
   type ModelActivationActor, type ModelActivationCommand, type ModelActivationRecord, type ModelActivationReceipt } from '#domain/index.js';
@@ -52,3 +53,7 @@ export function sameModelActivationRequest(receipt: ModelActivationReceipt, comm
   return JSON.stringify(checked.command) === JSON.stringify(parseModelActivationCommand(command))
     && JSON.stringify(checked.actor) === JSON.stringify(modelActivationActorSchema.parse(actor));
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);
+
+const encodeModelBindingDefinition = (input: unknown) => encodeModelBindingDefinitionRaw(input, catalogParseObserver);

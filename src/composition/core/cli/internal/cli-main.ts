@@ -1,3 +1,4 @@
+import { currentTiming, flushTiming } from '#platform/index.js';
 import './production-mode.js'; // First: NODE_ENV is settled before any module below loads React.
 import { main as runCli, resolveCliLocale, prepareTerminalSurface } from '#surfaces/index.js';
 import { envValue, loadConfigLanguage, loadConfigAgentEnvironment, resolveProjectRoot, DeckentError, formatHumanError, exitCodeFor, type Locale, type ProjectRootResolution } from '#platform/index.js';
@@ -53,5 +54,5 @@ export function startCli(): void { // The bootstrap (entry.ts, P5a) runs this pr
   if (!(process.argv[2] === 'runtime' && process.argv[3] === 'serve')) for (const stream of [process.stdout, process.stderr]) {
     stream.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') throw error; process.exit(CLOSED_PIPE_EXIT); });
   }
-  void main().then(code => { if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });
+  void main().then(async code => { if (code !== 0) currentTiming()?.fail(); currentTiming()?.phase('exit', code === 0 ? 'ok' : 'error'); currentTiming()?.finish(); await flushTiming(); if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });
 }

@@ -1,3 +1,4 @@
+import { currentTiming } from '#platform/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
 import { isCodedError, PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -75,6 +76,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   // renders in the same language as its heading.
   let locale = context.locale ?? resolveLocale(undefined, context.env), shell: import('#surfaces/core/terminal-host/index.js').TerminalShell | null = null;
   try {
+    currentTiming()?.phase('dispatch');
     const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams, async (locale, query) => (await import('#surfaces/core/terminal-labels/index.js')).terminalCommandHelp(locale, query));
     if (help) {
       locale = help.locale; context.onLocale?.(locale);

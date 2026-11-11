@@ -107,7 +107,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
             detail: checking, blocked: checking, exact: `${provider.id}@${provider.version}/${model.id}@${model.version}`, command: null, configured: false };
         }));
         const publish = () => progress?.({ title, choices: pending, notes, defaultBlocked: defaultBlocked(), subscriptionChecked: true });
-        publish();
+        await publish(); // Let the names/checking frame flush before row inspection starts.
         const subscription = { subscriptionReadiness: subscriptionReadinessPort(root, scopeId, reads, options) };
         const reading = await reads.inspectInvocableModels?.(root, scopeId, options);
         if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));

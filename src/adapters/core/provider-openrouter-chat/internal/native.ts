@@ -1,6 +1,7 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote,
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, parseProviderSpendQuote,
   type ModelBindingDefinition, type ModelInvocationProfile, type ModelInvocationNativeResponse, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationNativeResponseUpperBound, modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest,
   providerSpendQuoteDigest, parseProviderSpendReportedMeasurement, modelInvocationResponseContentDescriptor,
@@ -147,3 +148,5 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
     return quote;
   } });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

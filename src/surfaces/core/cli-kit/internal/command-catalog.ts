@@ -280,7 +280,7 @@ export const CLI_CATALOG = [
   { name: 'toolchains', group: 'setup', summary: 'cli.help.summary.toolchains', detail: 'cli.help.toolchains', args: '[update [--apply]]', bare: 'handler', children: [
     action('update', 'setup', 'cli.help.action.update', 'cli.help.toolchains'),
   ] },
-  { name: 'doctor', group: 'setup', summary: 'cli.help.summary.doctor', detail: 'cli.help.doctor', args: '[--verbose] [--toolchains] [--json]' },
+  { name: 'doctor', group: 'setup', summary: 'cli.help.summary.doctor', detail: 'cli.help.doctor', args: '[--verbose] [--toolchains] [--json]', bare: 'handler', children: [action('timing', 'observe', 'doctor.timing.summary', 'doctor.timing.help', { installation: 'independent' })] },
   { name: 'inventory', group: 'developer', summary: 'cli.help.summary.inventory', detail: 'cli.help.inventory', args: '[--scope <id>] [--after <id>] [--limit <n>]',
     bare: 'handler' },
   { name: 'paths', group: 'developer', summary: 'cli.help.summary.paths', detail: 'cli.help.paths', args: '[--global]' },

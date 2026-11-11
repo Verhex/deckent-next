@@ -616,6 +616,33 @@ Author RED/GREEN and compiled CLI/PTY evidence are external in `proof/ALPHA63/k9
 
 Kalıcı işçi kartı, sohbetle aynı sınırlı ve bilinen sırları redakte edilmiş komut/diff önizlemesini ve kesim bilgisini exact çağrının argsDigest değeriyle mühürlü taşır; büyük önizlemenin tam kopyası yalnız bekleme boyunca kişiye özel saklanır ve kesik veya eski önizlemesiz kart allow üretemez. Ön kontrol sırasındaki iptal, model süreci başlamadan iptal sonucuna bağlanır; gerçek ön kontrol hataları ve mevcut iptal süresi değişmez. Yazar kanıtı dış `proof/ALPHA63/k24/` alanındadır; monte sürüm kabulü ve bağımsız inceleme ayrıdır.
 
+## Local command timing
+
+`DECKENT_TIMING_TRACE=1` opts CLI and terminal processes into local, bounded JSONL timing. The early CLI bootstrap records process entry before
+loading the command graph. A random, non-authorizing correlation follows a slash submission through its FIFO and opening gate (the `started` milestone separates queue residence from gate wait); the renderer's
+`waitUntilRenderFlush` marks first and populated frames for model/provider/status/doctor. For model/provider, first means names with
+EN `Checking…` / TR `Kontrol ediliyor…`; populated means the opening's row checks have all completed. The initial progress callback can
+await that first flush before row checks start; the preliminary loading frame is excluded. Information windows currently have no separate loading
+frame, so their first frame is also populated. Picker dwell is excluded. Flush means output bytes, not physical emulator paint.
+
+The registered `timingTrace` resource is under the global installation state root (`state/timing/commands.jsonl`): a private directory, 0600 regular
+single-link files, pinned no-follow custody, nonblocking exclusive writer lock, two generations of at most 1 MiB each and at most 256 pending
+records. Limits and the switch name live in the timing registry. Unsupported custody or logging failure drops observations without changing
+command authority or behavior; the next retained record carries the process's cumulative dropped count. The pinned file port currently supports
+Linux; other platforms run commands without timing persistence. No tracing files are created while the switch is off.
+
+Records contain only schema/build identity, generated trace identity, registered command/phase/read-operation enums, monotonic elapsed times,
+counts, cache outcomes and result categories. No input text, arguments, paths, business identities, model/provider identifiers, environment,
+credentials, URLs, raw errors or child output enter the serializer. Nested read durations overlap and are not an additive latency total. Reads started before screen completion can append
+`read-completed` count snapshots afterward; they never extend the screen-latency sample. Pure
+catalog parsers accept an optional observation callback; clocks, correlation and persistence remain outside domain. Background work keeps its own
+async context rather than inheriting the latest command.
+
+`deckent doctor timing [--json] [--lang en|tr]` reads both generations without installation initialization, service requests or file creation. It
+reports CLI and slash samples separately, median, nearest-rank p95 and the largest p95 interval between screen milestones per command. Slash samples end at populated
+flush (first flush where there is no populated view); CLI samples end at first output. Incomplete samples are excluded; records may be lost at rotation or forced
+termination; the summary reports the largest observed per-process dropped count, not a global exact loss total. Source runs label builds unbuilt;
+packaged runs include the build tree digest. Local instrumentation and tests do not establish performance improvement or live acceptance.
 
 **beta.1 model/provider opening reads (B1-PERF-MODEL).** The CLI host gives each window inspection a disposable,
 read-only `model-inspection` snapshot: one effective config and parsed declared catalog per root, one scope/policy

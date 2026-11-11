@@ -1,3 +1,4 @@
+import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
@@ -12,10 +13,10 @@ import { resolveConfiguredScopeMembership } from './registry.js';
 // any identity access (PLATFORM-TEMIZLIK). A socket peer is still verified first, so an unauthenticated caller learns nothing about policy.
 type ScopeReadInputs = Readonly<{ config: ResolvedConfig; document: Awaited<ReturnType<ReturnType<typeof contextPolicySource>['load']>>;
   inspectSource: NonNullable<Parameters<typeof configuredInstallationProjectContext>[4]> }>;
-export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess, inspected?: ScopeReadInputs) => loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access, inspected);
+export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess, inspected?: ScopeReadInputs) => timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access, inspected);
 export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => {
   const verified = verifyLocalPeerIdentity(peer);
-  return loadScopeContext(projectRoot, scopeId, options, () => verified, access);
+  return timedScopeContext(projectRoot, scopeId, options, () => verified, access);
 };
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess, inspected?: ScopeReadInputs) {
   const reading = access === 'read' ? inspected : undefined;
@@ -96,3 +97,5 @@ export async function ensureConfiguredTerminalIdentity(root: string, scopeId: st
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   return Object.freeze({ installationId, projectId });
 }
+
+const timedScopeContext = timedAsync('scope-context', loadScopeContext);

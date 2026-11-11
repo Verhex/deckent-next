@@ -1,3 +1,4 @@
+import { timingEnabled, installTimingFlush } from '#platform/index.js';
 import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
 import { setImmediate as yieldToInput } from 'node:timers/promises';
@@ -127,6 +128,7 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
     { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true, kittyKeyboard: { mode: 'auto' as const } } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
       ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
       stdout: options.clearScreen === false ? out : mainScreenOutput(out) });
+  const releaseTiming = timingEnabled ? installTimingFlush(async () => { await yieldToInput(); await instance.waitUntilRenderFlush(); }) : undefined;
   const stop = () => instance.unmount();
   if (signal?.aborted) stop(); else signal?.addEventListener('abort', stop, { once: true }); // aborted during the probe: nothing stays open
   if (mouse) { reportingOn(); process.once('exit', reportingOff); }
@@ -139,7 +141,7 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   process.removeAllListeners('warning'); process.on('warning', hold);
   let open = true;
   const done = (async () => { try { await instance.waitUntilExit(); }
-  finally { open = false;
+  finally { open = false; releaseTiming?.();
     process.off('warning', hold); for (const listener of warningListeners) process.on('warning', listener);
     for (const warning of held) process.emitWarning(warning);
     signal?.removeEventListener('abort', stop);

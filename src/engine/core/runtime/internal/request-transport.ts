@@ -1,3 +1,4 @@
+import { beginTimingRead } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import type { AgentTurnStreamEvent, ModelInvocationDeltaSink, ModelInvocationDelta } from '#domain/index.js';
 import { prepareRuntimeClientRequest, acceptRuntimeClientResponse } from './client.js';
@@ -11,12 +12,13 @@ export function createRuntimeRequestTransport<Context extends { service: { respo
 }) {
   return async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
     onDelta?: ModelInvocationDeltaSink, version: RuntimeServiceLifecycleVersion = RUNTIME_SERVICE_SCHEMA_VERSION, onEvent?: (event: AgentTurnStreamEvent) => void): Promise<unknown> => {
+    const endTiming = beginTimingRead('runtime-request', operation);
     try {
       const context = await ports.prepare(), requestId = randomUUID();
       const request = prepareRuntimeClientRequest(version, requestId, operation, input, { ...context.service, maxResultBytes: delivery?.maxResultBytes, channel: ports.channel() });
       const response = onEvent ? await ports.turn(context, request, events => { for (const event of events) onEvent(event); }, signal)
         : onDelta ? await ports.stream(context, request, deltas => { for (const delta of deltas) onDelta(delta); }, signal) : await ports.request(context, request, signal);
       return acceptRuntimeClientResponse(response);
-    } catch (error) { throw ports.failure(error); }
+    } catch (error) { throw ports.failure(error); } finally { endTiming?.(); }
   };
 }

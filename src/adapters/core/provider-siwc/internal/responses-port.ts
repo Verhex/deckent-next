@@ -1,6 +1,7 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { persistedString, persistedUuid } from '#platform/index.js';
 import { z } from 'zod';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, delegatedUseConsentSchema, modelReferenceSchema, openAiChatDialectSchema,
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, delegatedUseConsentSchema, modelReferenceSchema, openAiChatDialectSchema,
   type HeadlessRejectionBody, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort,
   type OAuthAccessTokenLease } from '#engine/index.js';
@@ -72,3 +73,5 @@ export function createSiwcResponsesPort(options: { readonly now: () => number;
     },
   });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

@@ -1,3 +1,4 @@
+import { beginTimingRead } from '#platform/index.js';
 import { CodedError, persistedString, persistedInteger } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
@@ -66,17 +67,23 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
     } finally { await handle.close(); }
   }
   async load(): Promise<Policy> {
+    const endTiming = beginTimingRead('file-policy'); let outcome: 'read' | 'reparsed' = 'read';
+    try {
     const key = this.identity(), known = snapshots.get(key), read = await this.readGuarded(this.options.path, 'policy');
     if (known?.digest === read.digest) return remember(key, known);
-    const file = known?.digest.startsWith(`${read.digest}+`) ? null : policyFileSchema.safeParse(read.value);
+    const unchangedPolicy = known?.digest.startsWith(`${read.digest}+`);
+    if (!unchangedPolicy) outcome = 'reparsed';
+    const file = unchangedPolicy ? null : policyFileSchema.safeParse(read.value);
     if (file?.success === false) throw new PolicyFileError('POLICY_FILE_INVALID');
-    if (file?.data.schemaVersion === 1) return remember(key, { digest: read.digest, policy: file.data });
+    if (file?.data.schemaVersion === 1) { outcome = 'reparsed'; return remember(key, { digest: read.digest, policy: file.data }); }
     const raw = await this.readBindings(), digest = `${read.digest}+${raw.digest}`;
     if (known?.digest === digest) return remember(key, known);
+    outcome = 'reparsed';
     const bindings = bindingsFileSchema.safeParse(raw.value);
     if (!bindings.success) throw new PolicyFileError('POLICY_FILE_INVALID', 'bindings');
     // An unknown role refuses the whole snapshot (PolicyError POLICY_ROLE_UNKNOWN); the policy is never evaluated without its bindings.
     return remember(key, { digest, policy: resolvePolicyBindings(file?.data ?? read.value, bindings.data) });
+    } finally { endTiming?.(outcome); }
   }
   private async readBindings() {
     const path = this.options.bindingsPath;

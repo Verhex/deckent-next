@@ -1,8 +1,9 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { anthropicUsageSchema } from './assemble.js';
 import reservationDefaults from './reservation-defaults.json' with { type: 'json' };
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest, ProviderSpendError, measuredTariffExactMinorUnits, ceilProviderSpendExactMinorUnits, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { openAiChatUsageSchema, OpenAiChatHttpError, parseOpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, ANTHROPIC_MESSAGES_METER_ID, ANTHROPIC_MESSAGES_PRICING_ID,
@@ -110,3 +111,5 @@ export function anthropicSettledCharge(tariff: AnthropicPublishedTariff, input: 
   return { exactMinorUnits, roundedMinorUnits: ceilProviderSpendExactMinorUnits(exactMinorUnits),
     tier: selected.aboveTokens, dimensions, cacheSplit: fields.cache_creation ? 'reported' as const : write > 0 ? 'dearest' as const : 'none' as const };
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

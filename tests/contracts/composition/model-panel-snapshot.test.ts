@@ -54,7 +54,7 @@ it.skipIf(process.platform === 'win32')('30 models: one opening reads inputs onc
   const counts = () => ({ config: loads.mock.calls.length, scope: contexts.mock.calls.length, catalog: parses.mock.calls.length, policy: policies.mock.calls.length });
   const reset = () => { loads.mockClear(); contexts.mockClear(); parses.mockClear(); policies.mockClear(); };
   const source = modelPanelSource(f.project, 'scope', host, options, 'en'), frames: ModelPanelView[] = [];
-  const result = await source.inspect(view => frames.push(structuredClone(view)));
+  const result = await source.inspect(view => { frames.push(structuredClone(view)); });
   expect(frames[0]!.choices).toHaveLength(30);
   expect(frames[0]!.choices.every(row => row.label.startsWith('native-') && row.blocked === 'Checking…' && !row.fixes?.length)).toBe(true);
   expect(result.choices.map(row => row.blocked)).toEqual(Array(30).fill(null));
@@ -66,7 +66,7 @@ it.skipIf(process.platform === 'win32')('30 models: one opening reads inputs onc
   expect(counts()).toEqual({ config: 1, scope: 1, catalog: 3, policy: 1 }); // Authored + effective config validation, then one display parse.
   reset();
   const providerFrames: boolean[] = [];
-  await providerPanelPort(f.project, 'scope', host, options, 'en', () => 'fixture-error').inspect(view => providerFrames.push(view.kinds.every(row => row.blocked === 'Checking…')));
+  await providerPanelPort(f.project, 'scope', host, options, 'en', () => 'fixture-error').inspect(view => { providerFrames.push(view.kinds.every(row => row.blocked === 'Checking…')); });
   expect(providerFrames[0]).toBe(true);
   expect(counts()).toEqual({ config: 1, scope: 1, catalog: 1, policy: 1 });
   // Fresh opening after a policy change: per-model decisions must remain distinct, without N config/scope loads.
