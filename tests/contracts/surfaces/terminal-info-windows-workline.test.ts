@@ -158,7 +158,8 @@ describe('information windows on the real workline (SW-1)', () => {
     const root = await project();
     const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'ready', host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
       company: { companyId: 'default' }, principal: { id: 'host:1000' }, secretStore: { backend: 'core.secret-store.encrypted-file@1', status: 'ready', code: null },
-      serviceConfig: 'stale', imageRefresh: { status: 'failed', reason: 'network', imageVersion: null }, installationBinding: { capability: 'supported', strength: 'machine', source: 'platform' },
+      serviceConfig: 'stale', imageRefresh: { status: 'failed', reason: 'network', imageVersion: null }, installationBinding: { capability: 'supported', strength: 'machine', source: 'platform',
+        filesystemIdentity: { status: 'available', kind: 'linux.ext4.statfs-fsid.v1' } },
       poolReadiness: { status: 'ready', drift: null }, shellRealm: null };
     const ports = admin(root, {}, { doctorReport: async sink => { sink.write(`${JSON.stringify({ message: 'a config warning' })}\n${JSON.stringify(report)}\n`); } });
     const view = await open({ info: ports.info });
@@ -167,6 +168,7 @@ describe('information windows on the real workline (SW-1)', () => {
     const frame = view.stdout.frame;
     expect(frame).toContain('[✓ 3 ok] [! 1 check] [✗ 1 failed]'); expect(frame).toContain('▸ Secret store [✓ ok]'); expect(frame).toContain('▸ Runtime service [! check]');
     expect(frame).toContain('Memory'); expect(frame).toContain('16000 MB');
+    expect(frame).toContain('Filesystem identity: available (linux.ext4.statfs-fsid.v1)');
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Health: 3 ok · 1 to check · 1 failed`), 'doctor summary');
     const text = (await admin(root, {}).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;

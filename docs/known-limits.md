@@ -770,6 +770,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Installation moved
 
+beta.2 is the reader release (R): the existing device-number rule and F1 interruption remain unchanged. It can read the machine-strength binding v3 prepared for beta.2.1 (R+1), comparing the persistent filesystem identity only where its producer is proven (Linux ext4). beta.2 never writes v3. After rolling back from R+1, a matching v3 record is read without rewriting it; `init identity --keep/--new` refuses it with `INSTALLATION_IDENTITY_NEWER_BINDING`. Use the newer version or restore the older identity record from backup. Doctor reports filesystem identity availability; it does not enable the new writer.
+
 On WSL, restarting can attach distro disks in a different order. The installation binding records the disk device
 number, so this can stop commands with `INSTALLATION_IDENTITY_RELOCATED` even when the project has not moved.
 In an unattached project that is not the registered source, `deckent init identity --keep` updates the binding.

@@ -2,7 +2,7 @@ import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
-import { attachmentLifecycle, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { attachmentLifecycle, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -67,18 +67,21 @@ export async function loadConfiguredInstallationIdentity(projectRoot: string, op
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
 type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
-  readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean };
+  readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean;
+  readonly filesystemIdentity: Readonly<{ status: 'available'; kind: string } | { status: 'unavailable'; reason: string }> };
 export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<InstallationBindingInspection | null> {
   let config;
   try { config = await loadComposedConfig(projectRoot, { ...options, heal: false }); } catch { return null; }
   const required = config.installation.requireMachineBinding;
+  const observed = await inspectFilesystemIdentity(config.productLayout.root);
+  const filesystemIdentity = observed.status === 'available' ? { status: 'available' as const, kind: observed.identity.kind } : observed;
   try {
     // The capability is machine-level: probe against the project directory, which exists before `.deckent` is initialized.
     const binding = await localInstallationBindingSource({ ...config.productLayout, root: config.projectRoot }, config.installation).capture();
-    return 'status' in binding ? { capability: 'unsupported', strength: null, source: null, required }
-      : { capability: 'supported', strength: binding.strength, source: binding.source, required };
+    return 'status' in binding ? { capability: 'unsupported', strength: null, source: null, required, filesystemIdentity }
+      : { capability: 'supported', strength: binding.strength, source: binding.source, required, filesystemIdentity };
   } catch (error) {
-    if (error instanceof InstallationIdentityError && error.code === 'INSTALLATION_IDENTITY_SOURCE_INVALID') return { capability: 'source-invalid', strength: null, source: 'configured', required };
+    if (error instanceof InstallationIdentityError && error.code === 'INSTALLATION_IDENTITY_SOURCE_INVALID') return { capability: 'source-invalid', strength: null, source: 'configured', required, filesystemIdentity };
     return null;
   }
 }

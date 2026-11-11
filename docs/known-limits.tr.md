@@ -765,6 +765,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Kurulumun konumu değiştiğinde
 
+beta.2 okuyucu sürümüdür (R): mevcut aygıt numarası kuralı ve F1 kesintisi değişmez. beta.2.1 (R+1) için hazırlanan, makine gücündeki v3 bağı okuyabilir; kalıcı dosya sistemi kimliği yalnız üreticisi kanıtlanan yerde (Linux ext4) karşılaştırılır. beta.2 hiçbir v3 bağı yazmaz. R+1'den geri dönüşte eşleşen v3 yeniden yazılmadan okunur; `init identity --keep/--new`, `INSTALLATION_IDENTITY_NEWER_BINDING` ile durur. Yeni sürümü kullanın veya eski kimlik kaydını yedekten geri yükleyin. Doctor dosya sistemi kimliğinin kullanılabilirliğini gösterir; yeni yazarı açmaz.
+
 WSL yeniden başlatıldığında dağıtım diskleri farklı sırada bağlanabilir. Kurulum bağı disk aygıt numarasını
 kaydettiği için proje taşınmamış olsa bile komutlar `INSTALLATION_IDENTITY_RELOCATED` hatasıyla durabilir.
 Bir kaynağa bağlı olmayan ve kayıtlı kaynak olmayan projede `deckent init identity --keep` bağı günceller.

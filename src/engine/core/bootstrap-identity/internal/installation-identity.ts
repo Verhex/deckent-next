@@ -27,7 +27,8 @@ export interface InstallationBindingSource { capture(): Promise<InstallationBind
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `MASKED` (B5): the record is hidden by a Deckent shell sandbox (the command runs inside one), not lost. */
 export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE' | 'INSTALLATION_IDENTITY_MASKED'
   | 'INSTALLATION_IDENTITY_LOCKED' | 'INSTALLATION_IDENTITY_UNSUPPORTED' | 'INSTALLATION_IDENTITY_RELOCATED'
-  | 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' | 'INSTALLATION_IDENTITY_SOURCE_INVALID' | 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED';
+  | 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' | 'INSTALLATION_IDENTITY_SOURCE_INVALID' | 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED'
+  | 'INSTALLATION_IDENTITY_NEWER_BINDING';
 export class InstallationIdentityError extends CodedError {
   constructor(override readonly code: InstallationIdentityErrorCode) { super(code); this.name = 'InstallationIdentityError'; }
 }
@@ -41,6 +42,10 @@ export class InstallationIdentityError extends CodedError {
  */
 export type InstallationBindingAssessment = 'match' | 'strengthen' | 'relocated';
 export function assessInstallationBinding(recorded: InstallationBinding, captured: InstallationBindingCapture): InstallationBindingAssessment {
+  if (recorded.schemaVersion === 3) return captured.strength === 'machine' && recorded.machineDigest === captured.machineDigest
+    && recorded.canonicalRoot === captured.canonicalRoot && recorded.inode === captured.inode
+    && recorded.filesystemIdentity.kind === captured.filesystemIdentity?.kind && recorded.filesystemIdentity.value === captured.filesystemIdentity.value
+    ? 'match' : 'relocated';
   if (recorded.canonicalRoot !== captured.canonicalRoot || recorded.device !== captured.device || recorded.inode !== captured.inode) return 'relocated';
   if (recorded.schemaVersion === 2 && recorded.strength === 'weak') return captured.strength === 'machine' ? 'strengthen' : 'match';
   if (captured.strength !== 'machine') return 'relocated';

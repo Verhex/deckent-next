@@ -15,7 +15,7 @@ type IdentityRecord = ReturnType<typeof installationIdentityRecordSchema.parse>;
 /** `bind`: an unbound v1 record on a host that can bind only weakly; the write path records the weak binding (reads never do). */
 type Outcome = 'unsupported' | 'match' | 'bind' | 'strengthen' | 'relocated';
 function assess(record: IdentityRecord, captured: InstallationBindingCapability): Outcome {
-  if ('status' in captured) return 'unsupported';
+  if ('status' in captured) return record.schemaVersion !== 1 && record.binding.schemaVersion === 3 ? 'relocated' : 'unsupported';
   // A v1 record on a machine-capable host keeps the explicit-consent rule: it may be a copy from a host without machine identity.
   if (record.schemaVersion === 1) return captured.strength === 'weak' ? 'bind' : 'relocated';
   return assessInstallationBinding(record.binding, captured);
@@ -24,6 +24,9 @@ const bound = (installationId: string, binding: InstallationBindingCapture, last
   realmSeal ? installationIdentityRecordSchema.parse({ schemaVersion: 3, installationId, binding: retainedInstallationBinding(binding), lastResolution, realmSeal })
     : boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding: retainedInstallationBinding(binding), lastResolution });
 const identity = (record: IdentityRecord) => installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.installationId, ...('realmSeal' in record && record.realmSeal ? { realmSeal: record.realmSeal } : {}) });
+const refuseNewerBindingWrite = (record: IdentityRecord | null) => {
+  if (record && record.schemaVersion !== 1 && record.binding.schemaVersion === 3) throw new InstallationIdentityError('INSTALLATION_IDENTITY_NEWER_BINDING');
+};
 
 /** One local metadata transition owner. Binding evidence detects relocation; it grants no authority. */
 export class FileInstallationIdentityStore implements InstallationIdentityStore {
@@ -125,14 +128,18 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       const again = assess(current, fresh);
       if (again === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
       if ((again !== 'bind' && again !== 'strengthen') || 'status' in fresh) return current;
+      refuseNewerBindingWrite(current);
       return bound(current.installationId, fresh, current.schemaVersion !== 1 ? current.lastResolution : null, 'realmSeal' in current ? current.realmSeal : undefined);
     }));
   }
   async resolveRelocation(choice: InstallationIdentityChoice, principal: { readonly issuer: string; readonly subject: string }) {
     if (!installationIdentityChoiceSchema.safeParse(choice).success) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
     const source = this.source();
+    // Refuse before creating a lock companion; repeat under the lock against a concurrent newer writer.
+    refuseNewerBindingWrite(await this.file(() => source.capture()).load());
     const record = await this.file(() => source.capture()).update(async current => {
       await this.checkSeal(current);
+      refuseNewerBindingWrite(current);
       if ('realmSeal' in current && current.realmSeal) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
       const captured = await source.capture();
       if ('status' in captured) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');

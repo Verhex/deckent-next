@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
-import { installationIdentitySchema, installationIdentityRecordSchema } from '#domain/index.js';
-import { resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
+import { installationIdentitySchema, installationIdentityRecordSchema, installationBindingCaptureSchema } from '#domain/index.js';
+import { resolveProductLayout, withConfigWriteLock, ErrorRegistry } from '#platform/index.js';
 import { installationBindingNotRunReason, machineBindingNotRunReason } from '../support/binding-capability.js';
 // Location evidence (root, device, inode) is bound on every posix host; only machine-digest assertions need a machine identity.
 const bindingNotRun = await installationBindingNotRunReason(), machineNotRun = await machineBindingNotRunReason();
@@ -207,3 +207,36 @@ it.skipIf(process.platform !== 'linux' || machineNotRun !== null)('[requires mac
   const record = JSON.parse(bytes); record.binding.machineDigest = 'b'.repeat(64); await writeFile(f.path, JSON.stringify(record));
   await expect(original.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
 });
+
+it.skipIf(process.platform === 'win32')('reads R+1 v3 without writes; refuses relocation and every rebinding choice without dropping its identity', async () => {
+    expect(ErrorRegistry.createError('INSTALLATION_IDENTITY_NEWER_BINDING', { locale: 'en' }).message).toBe("This installation's identity record was written by a newer deckent. Use that version or restore the older record from backup.");
+    expect(ErrorRegistry.createError('INSTALLATION_IDENTITY_NEWER_BINDING', { locale: 'tr' }).message).toBe('Bu kurulumun kimlik kaydı daha yeni bir deckent sürümüyle yazıldı. O sürümü kullanın veya eski kaydı yedekten geri yükleyin.');
+    const f = await fixture(), filesystemIdentity = { kind: 'linux.ext4.statfs-fsid.v1', value: '033b6aacc3f1ba86' };
+    let captured = installationBindingCaptureSchema.parse({ schemaVersion: 2, strength: 'machine', source: 'platform', machineDigest: 'a'.repeat(64),
+      canonicalRoot: f.layout.root, device: '2049', inode: '131', filesystemIdentity });
+    const store = new FileInstallationIdentityStore(f.layout, undefined, { capture: async () => captured }), first = await store.loadOrCreate();
+    const record = JSON.parse(await readFile(f.path, 'utf8'));
+    record.binding = { ...captured, schemaVersion: 3, device: '9999' };
+    await writeFile(f.path, JSON.stringify(record));
+    const before = await readFile(f.path, 'utf8');
+    await withConfigWriteLock(f.directory, async () => {
+      expect(await store.read()).toMatchObject({ status: 'available', value: first });
+      expect(await store.read()).not.toHaveProperty('pendingWrite');
+      await expect(store.admitWrite()).resolves.toBeUndefined();
+      expect(await store.loadOrCreate()).toEqual(first);
+      for (const choice of ['keep', 'new'] as const) {
+        await expect(store.resolveRelocation(choice, { issuer: 'host', subject: '1000' })).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_NEWER_BINDING' });
+      }
+    });
+    expect(await readFile(f.path, 'utf8')).toBe(before);
+    captured = installationBindingCaptureSchema.parse({ ...captured, filesystemIdentity: undefined });
+    for (const read of [() => store.read(), () => store.admitWrite(), () => store.loadOrCreate()]) {
+      await expect(read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    }
+    for (const choice of ['keep', 'new'] as const) {
+      await expect(store.resolveRelocation(choice, { issuer: 'host', subject: '1000' })).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_NEWER_BINDING' });
+    }
+    const unsupported = new FileInstallationIdentityStore(f.layout, undefined, { capture: async () => ({ status: 'unsupported' }) });
+    await expect(unsupported.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    expect(await readFile(f.path, 'utf8')).toBe(before);
+  });

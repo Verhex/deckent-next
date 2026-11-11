@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "mountinfoMaxBytes": 1048576,
+  "filesystemTypes": {
+    "ext4": { "statfsType": 61267, "kind": "linux.ext4.statfs-fsid.v1" }
+  },
+  "source": "https://github.com/torvalds/linux/blob/v6.18/fs/ext4/super.c",
+  "observedOn": "2026-11-12"
+}

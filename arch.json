@@ -1252,7 +1252,8 @@
         "src/engine/core/worker-observation",
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/terminal-ledger",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/doctor"
       ],
       "plan": "SURFACES",
       "ink": false
