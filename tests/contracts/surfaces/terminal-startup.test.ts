@@ -171,10 +171,17 @@ it('keeps one startup mark and help region through width and height changes on t
       await until(() => entered, 'terminal handed over');
       await replay();
       if (pending) stdout.releaseFlush?.();
-      const start = stdout.text.length;
+      const start = stdout.text.length, heldInput = stdin.listenerCount('data');
+      // Astra 3069 R3: a second, refused handover must not hand input or reporting back while the first one still owns the terminal.
+      let second = false;
+      expect(await handover('SECOND-SURFACE', async () => { second = true; })).toBeNull();
+      expect.soft(second, 'the overlapping handover is refused').toBe(false);
+      expect.soft(stdin.listenerCount('data'), 'input stays with the first handover').toBe(heldInput);
       resize(60, 30); resize(110, 40); await settle(160);
-      expect.soft(stdout.text.slice(start), `no repaint bytes while handed over (pending=${pending})`).toBe('');
+      expect.soft(stdout.text.slice(start), `no repaint or reporting bytes while handed over (pending=${pending})`).toBe('');
       const returned = stdout.text.length; finish(); await handed; await settle(160);
+      expect.soft(stdout.text.slice(returned).split('\u001b[?1000h'), 'mouse reporting returns once, with the last holder').toHaveLength(2);
+      expect.soft(stdin.listenerCount('data'), 'input returns after the first handover ends').toBeGreaterThan(heldInput);
       expect.soft(stdout.text.slice(returned).split(CLEAR_VISIBLE_SCREEN), `one repaint after return (pending=${pending})`).toHaveLength(2);
       expect.soft((await replay()).split('OWNED-FRAME'), stdout.text.slice(returned)).toHaveLength(2);
       // Ink re-enters once on resume; ResizeFrame must never add another alternate-screen entry.

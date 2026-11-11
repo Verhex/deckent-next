@@ -112,10 +112,12 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const reportingOn = () => { try { out.write(modes(MOUSE_REPORTING_ON, FOCUS_REPORTING_ON, PALETTE_NOTICES_ON)); } catch { /* the terminal is gone */ } };
   // T4: Ink's own suspension hands back raw mode, bracketed paste and the alternate screen; mouse and focus reports are the host's to switch off and on.
   const resizeOwnership = createResizeOwnership();
+  let holds = 0;
   const handover: TerminalHandover | undefined = mouse || fullscreen ? {
     // Reporting modes are switched only where the mouse layer switched them on (as before); the resize gate applies to every full window.
-    release: () => { resizeOwnership.release(); if (mouse) { reportingOff(); mouse.hold(true); } },
-    reclaim: () => { if (mouse) { mouse.hold(false); reportingOn(); } resizeOwnership.reclaim(); },
+    // Holds are counted: a second, refused handover (Ink allows one suspension) must not return input or reporting under the first one.
+    release: () => { resizeOwnership.release(); if (holds++ === 0 && mouse) { reportingOff(); mouse.hold(true); } },
+    reclaim: () => { if (--holds === 0 && mouse) { mouse.hold(false); reportingOn(); } resizeOwnership.reclaim(); },
   } : undefined;
   let view = options.view;
   const repaint = () => { if (request) palette = drawn(); if (open) instance.rerender(tree(view, palette)); };
