@@ -446,8 +446,10 @@ the terminal's own foreground; the answer heading is `● deckent` (`assistantLa
 calm mark `⏵⏵⏵` (ASCII `>>>`) and a factual line (`tui.panel.mode.fullAccessLine`); the launch notice is warning level. Security behaviour
 is unchanged. Opening (inline layout; the full window shows the banner as its first block instead): on a TTY the
 workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
-mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
+lowercase `d` mark with an ASCII form, version, project and path, model, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
 with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.
+The full banner uses the 16-cell, 10-row Unicode mark at 100 columns and 30 rows or larger; otherwise it uses the 8-cell, 5-row mark.
+ASCII stays at 8 cells and 5 rows. The launch shell and conversation share the same size rule on resize, with the facts bottom-aligned beside the mark.
 The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08); Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) contained
 ED 3 at the time; the Workline output adapter now removes ED 3 from Ink's overflow clear (see above). Proof:
 `/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
