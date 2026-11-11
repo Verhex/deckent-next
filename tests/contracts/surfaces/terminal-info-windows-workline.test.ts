@@ -50,6 +50,27 @@ async function expectFrozenRemaining(root: string) {
 }
 
 describe('information windows on the real workline (SW-1)', () => {
+  it('help opens during startup but its selected command waits under its own name, including cancellation', async () => {
+    const root = await project();
+    let ready!: () => void, reads = 0;
+    const info = admin(root, running).info, status = info.ports.status!;
+    const view = await open({ opening: { ready: new Promise<void>(resolve => { ready = resolve; }), wait: 'OPENING-WAIT' },
+      info: { ...info, ports: { ...info.ports, status: async input => { reads++; return status(input); } } } });
+    const selectStatus = async () => {
+      await type(view, '/help\r'); await until(() => view.stdout.frame.includes('>   /status'), 'help before readiness');
+      await type(view, '\r');
+    };
+    await selectStatus(); await settle(60);
+    expect(view.stdout.frame).toContain('OPENING-WAIT'); expect(reads).toBe(0);
+    view.stdin.write('\u0003'); await until(() => view.stdout.frame.includes('READY'), 'cancel selected command');
+    expect(reads).toBe(0);
+    await selectStatus(); await settle(60); expect(reads).toBe(0);
+    ready(); await until(() => view.stdout.frame.includes('▸ Runtime service'), 'selected command after readiness');
+    expect(reads).toBe(1);
+    await type(view, ESC); await until(() => view.stdout.frame.includes(MARK), 'status closes');
+    await selectStatus(); await until(() => reads === 2, 'help selection once ready');
+  });
+
   it('/status opens a window, holds the composer, and leaves exactly one system summary line on Esc', async () => {
     const root = await project();
     const view = await open({ info: admin(root, running).info });

@@ -646,7 +646,7 @@ packaged runs include the build tree digest. Local instrumentation and tests do 
 
 **beta.1 model/provider opening reads (B1-PERF-MODEL).** The CLI host gives each window inspection a disposable,
 read-only `model-inspection` snapshot: one effective config and parsed declared catalog per root, one scope/policy
-context per distinct scope, and one authored-layer projection for chat selection. Producers still authorize every
+context per distinct scope (including installation/project identity facts for display checks), and one authored-layer projection for chat selection. Producers still authorize every
 model separately; shared source and target scopes remain separate authorities. The parsed catalog supplies exact
 bindings without parsing or cloning the full catalog per model. Preview credential-presence checks reuse these
 inputs but read credential/grant stores each time; no credential value is stored in the snapshot. Names appear
@@ -656,3 +656,6 @@ reload; late UI results are ignored. Picking, sending, connecting, activation an
 the ordinary fresh producers, including bootstrap/restore/uninstall fences and revocation checks. Optional budget,
 cache, protocol, workspace and custody reads retain their independent ports. This describes source wiring and
 fixture verification, not physical paint, live-installation timings, independent review or release acceptance.
+Local `/help`, `/model`, `/provider` and `/tasks` windows can open during startup. A command selected from help,
+a task-window action or an approval opened after a settings action meets the opening gate under its own command
+name. Progress, final results and errors from an aborted or superseded model/provider inspection cannot change the new view.

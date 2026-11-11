@@ -101,8 +101,8 @@ describe('live windows in the workline', () => {
   it('/tasks Enter opens the selected transcript and x uses the refreshed run cancellation approval; opening a card never cancels', async () => {
     const attempt = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-0', attemptId: 'attempt-a' };
     const cancelled: unknown[][] = [], transcripts: unknown[] = [];
-    let revision = 3;
-    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', listWorkers: async () => ({ schemaVersion: 1, scopeId: 'scope-a', sources: [{
+    let revision = 3, ready!: () => void;
+    const view = mountWorkline({ opening: { ready: new Promise<void>(resolve => { ready = resolve; }), wait: 'OPENING-WAIT' }, pollMs: 20, ledger: { scopeId: 'scope-a', listWorkers: async () => ({ schemaVersion: 1, scopeId: 'scope-a', sources: [{
       workers: [{ taskId: 'task-0', process: 'running', provider: 'docker', authority: 'next-ledger', identity: attempt }] }] }) as never,
       listRunIds: async () => ['run-a'], inspectRun: async () => ({ runId: 'run-a', scopeId: 'scope-a', revision, cancellationRequested: false,
         tasks: [{ id: 'task-0', phase: 'active' }], state: { kind: 'running' } }) as never,
@@ -110,7 +110,9 @@ describe('live windows in the workline', () => {
       cancelRun: async (...args) => { cancelled.push(args); return 'CANCELLED-SELECTED-RUN'; },
     } }); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.frame.includes('Task 1'), 'task rows');
-    view.stdin.write('\r'); await until(() => view.stdout.frame.includes('SELECTED-TRANSCRIPT'), 'selected transcript');
+    view.stdin.write('\r'); await settle(60);
+    expect(transcripts).toEqual([]); expect(cancelled).toEqual([]); expect(view.stdout.text).toContain('OPENING-WAIT');
+    ready(); await until(() => view.stdout.frame.includes('SELECTED-TRANSCRIPT'), 'selected transcript after readiness');
     expect(transcripts).toEqual([attempt]); expect(cancelled).toEqual([]);
     view.stdin.write(ESC); await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks returns');
     revision = 9; view.stdin.write('x'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'existing cancel approval');
