@@ -1,3 +1,6 @@
+import { createNativeCodingTemplate } from '#adapters/index.js';
+import * as workerImage from '#adapters/core/worker-image/index.js';
+import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { DatabaseSync } from 'node:sqlite';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -59,6 +62,44 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(second.messages.map(message => message.role)).toEqual(first.messages.map(message => message.role));
     expect(second.messages.at(-1)!.content.startsWith(first.messages.at(-1)!.content)).toBe(true);
     expect(second.messages.at(-1)!.content).toContain('unregistered task kind invented-kind'); expect(second.messages.at(-1)!.content).toContain('Use only these task kinds: purchase.');
+  });
+  it('a connected kind remains plannable beside a missing image; the Brain never receives or admits the unusable kind', async () => {
+    const images = vi.spyOn(workerImage, 'workerImagePresence').mockResolvedValue('missing');
+    const f = await fixture({ subscription: true, noCharge: true, budget: 0 });
+    const { argv, ...limits } = fixtureDockerRegistry(['unused']).profiles[0]!.parameters; void argv;
+    const missing = createNativeCodingTemplate(limits, { provider: 'codex', cliVersion: '1.0.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' });
+    const registry = f.config.admission.registry;
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    policy.grants.find((row: { id: string }) => row.id === 'pool').actions.push('inspect');
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ ...f.config,
+      execution: { git: { gitExecutable: 'git' }, docker: { executable: 'docker', ...limits } },
+      admission: { ...f.config.admission, registry: { ...registry, profiles: [...registry.profiles, missing],
+        kinds: [...registry.kinds, { kind: 'missing-code', profile: { id: missing.id, version: missing.version } }] } } }));
+    clearConfigCache();
+    const first = await planRun(f.project, command, f.options);
+    expect(first.proposal.status).toBe('pending'); expect(first.run).toBeNull();
+    const prompt = JSON.parse(JSON.parse(f.bodies[0]!).messages[1].content).context.context;
+    expect(prompt.kinds.map((row: { kind: string }) => row.kind)).toEqual(['purchase']);
+    const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
+    f.setOutput(JSON.stringify({ graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'missing-code' }] }, budgetCeiling, requiredPermissions }));
+    const refused = await planRun(f.project, { ...command, commandId: 'missing-plan' }, f.options).then(() => null,
+      (error: { code: string; params: Record<string, unknown>; localize: (l: 'en' | 'tr') => { message: string } }) => error);
+    expect(refused).toMatchObject({ code: 'BRAIN_GRAPH_INVALID', params: { missingKinds: 'missing-code', registered: 'purchase' } });
+    expect(refused!.localize('en').message).toContain('worker image missing): missing-code');
+    expect(refused!.localize('tr').message).toContain('işçi imajı eksik): missing-code');
+    expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
+    const current = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8'));
+    current.admission.registry.kinds = current.admission.registry.kinds.map((row: { kind: string }) => ({ ...row, profile: { id: missing.id, version: missing.version } }));
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify(current)); clearConfigCache();
+    const posts = f.posts;
+    const parked = await planRun(f.project, { ...command, commandId: 'all-missing' }, f.options);
+    expect(parked).toMatchObject({ kind: 'intent', intent: { status: 'parked', fact: { params: { 'image-missing.0': 'purchase', 'image-missing.1': 'missing-code' } } } });
+    expect(f.posts).toBe(posts);
+    // An image lost after preflight still refuses before the Brain call, with the exact kinds named.
+    images.mockResolvedValueOnce('present');
+    await expect(planRun(f.project, { ...command, commandId: 'image-lost' }, f.options)).rejects.toMatchObject({ code: 'WORKER_SETUP_PENDING', params: { 'image-missing.0': 'purchase' } });
+    expect(f.posts).toBe(posts);
   });
   it('Astra R4: the Brain byte bound applies to the corrective request too: refused typed before a second provider call', async () => {
     const answer = `not json ${'x'.repeat(7_900)}`, probe = await fixture({ response: answer });

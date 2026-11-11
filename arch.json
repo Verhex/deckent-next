@@ -2824,7 +2824,11 @@
         "src/engine/core/runtime",
         "src/platform/core/config-fields",
         "src/composition/core/scoped-request",
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/native-coding"
       ],
       "plan": "PROVIDERS"
     },
@@ -3739,7 +3743,6 @@
     },
     "src/composition/core/run-planner": {
       "dependencies": [
-        "src/capabilities/core/native-agent-execution",
         "src/domain/core/run",
         "src/domain/core/model-invocation",
         "src/engine/core/run-planner",
@@ -3764,7 +3767,6 @@
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store",
         "src/platform/core/integrity",
-        "src/engine/core/toolchain-currency",
         "src/engine/core/run-proposal",
         "src/engine/core/policy",
         "src/platform/core/clock",
@@ -3772,7 +3774,6 @@
         "src/adapters/core/run-proposal-store",
         "src/composition/core/policy",
         "src/engine/core/runtime",
-        "src/adapters/core/worker-image",
         "src/adapters/core/provider-siwc",
         "src/engine/core/audit",
         "src/engine/core/authentication",

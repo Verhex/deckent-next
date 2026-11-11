@@ -5,6 +5,10 @@ import { errorTable, plainErrors, type AuthorizationRefusal, type ErrorDefinitio
 import { mergeErrorDefinitions } from './merge.js';
 import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
 export type { ErrorEntry } from './definition.js';
+const workerKindIssues = (p: Params, l: Locale) => (['image-missing', 'image-unverified'] as const).flatMap(reason => {
+  const kinds = p[reason === 'image-missing' ? 'missingKinds' : 'unverifiedKinds'] || Object.entries(p).filter(([key]) => key.startsWith(`${reason}.`)).map(([, value]) => value).join(', ');
+  return kinds ? [reason === 'image-missing' ? t('worker.kinds.image-missing', { kinds }, l) : t('worker.kinds.image-unverified', { kinds }, l)] : [];
+}).join(' ');
 function invocationInputSubject(p: Params, l: Locale): string {
   switch (p['subject']) {
     case 'cli.input.subject.queue': return t('cli.input.subject.queue', {}, l);
@@ -434,7 +438,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   BRAIN_OUTPUT_INVALID: 'error', BRAIN_OUTPUT_TRUNCATED: 'error', BRAIN_CONTEXT_TOO_LARGE: 'error',
 }), {
   // BeUser D-02: an unregistered task kind names the kinds used and the registered ones, with the person's next step.
-  BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: p['rule'] === 'TASK_KIND_NOT_REGISTERED' && typeof p['kinds'] === 'string' ? t('error.BRAIN_GRAPH_INVALID.kind', p, l) : t('error.BRAIN_GRAPH_INVALID', p, l) }) },
+  BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: workerKindIssues(p, l)
+    ? t('error.BRAIN_GRAPH_INVALID.unusableKind', { ...p, detail: workerKindIssues(p, l) }, l)
+    : p['rule'] === 'TASK_KIND_NOT_REGISTERED' && typeof p['kinds'] === 'string' ? t('error.BRAIN_GRAPH_INVALID.kind', p, l) : t('error.BRAIN_GRAPH_INVALID', p, l) }) },
 }, plainErrors('error.', {
   BRAIN_PROVIDER_REJECTED: 'error', BRAIN_OUTCOME_UNKNOWN: 'error', BRAIN_CANCELLED: 'error', RUN_ADMISSION_NOT_CONFIGURED: 'error', RUN_STORE_CORRUPT: 'error',
   RUN_PROPOSAL_BUDGET_SCOPE: 'error', RUN_PROPOSAL_BUDGET_CURRENCY: 'error', RUN_PROPOSAL_VERSION: 'error', RUN_PROPOSAL_GRAPH_INVALID: 'error',
@@ -631,15 +637,15 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   WORKER_IMAGE_CONSENT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONSENT_MISSING', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONSENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONSENT_INVALID', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_PROVIDERS_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_PROVIDERS_READ_ONLY', { detail: '', ...p }, l) }) },
-  WORKER_SETUP_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_SETUP_PENDING', { phase: '-', ...p }, l) }) },
-  WORKER_IMAGE_DECLINED: { category: 'error', render: (_p, l) => ({ message: t('error.WORKER_IMAGE_DECLINED', {}, l) }) },
+  WORKER_SETUP_PENDING: { category: 'error', render: (p, l) => ({ message: [t('error.WORKER_SETUP_PENDING', { phase: '-', ...p }, l), workerKindIssues(p, l)].filter(Boolean).join(' ') }) },
+  WORKER_IMAGE_DECLINED: { category: 'error', render: (p, l) => ({ message: [t('error.WORKER_IMAGE_DECLINED', {}, l), workerKindIssues(p, l)].filter(Boolean).join(' ') }) },
   WORKER_IMAGE_BUILDING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILDING', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_DOCKER_WAITING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_DOCKER_WAITING', { detail: '', ...p }, l) }) },
-  WORKER_IMAGE_BUILD_INTERRUPTED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILD_INTERRUPTED', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_BUILD_INTERRUPTED: { category: 'error', render: (p, l) => ({ message: [t('error.WORKER_IMAGE_BUILD_INTERRUPTED', { detail: '', ...p }, l), workerKindIssues(p, l)].filter(Boolean).join(' ') }) },
   WORKER_IMAGE_SOURCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_SOURCE_INVALID', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONTEXT_EXISTS: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONTEXT_EXISTS', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONTEXT_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONTEXT_UNSAFE', { detail: '', ...p }, l) }) },
-  WORKER_IMAGE_BUILD_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILD_FAILED', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_BUILD_FAILED: { category: 'error', render: (p, l) => ({ message: [t('error.WORKER_IMAGE_BUILD_FAILED', { detail: '', ...p }, l), workerKindIssues(p, l)].filter(Boolean).join(' ') }) },
   WORKER_IMAGE_BUILD_TIMEOUT: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILD_TIMEOUT', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_RECEIPT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_RECEIPT_MISSING', { detail: '', ...p }, l) }) },
   TOOLCHAIN_RECIPE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_RECIPE_INVALID', { detail: '', ...p }, l) }) },

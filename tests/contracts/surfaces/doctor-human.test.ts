@@ -57,6 +57,14 @@ describe('doctor rows (pure)', () => {
     expect(renderDoctorChecks(doctorChecks(report, facts({ egress: { ...egress, models: [] } }), 'tr'), 'tr')).toContain('Yapılandırılmış model bağlantısı yok');
   });
   it('groups rows under Kurulum / Güvenlik / Çalışma / Araçlar with word markers, a summary first and one next step per warning', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const unavailable = doctorChecks(report, facts({ workerKinds: [{ kind: 'missing-code', reason: 'image-missing', rebind: true }, { kind: 'prepared-code', reason: 'image-unverified', rebind: false }] }), locale).filter(row => row.id === 'work.kind');
+      expect(unavailable).toHaveLength(2);
+      expect(unavailable[0]).toMatchObject({ group: 'work', state: 'warning' });
+      expect(unavailable[0]!.text).toContain(locale === 'en' ? 'worker image is missing' : 'işçi imajı eksik');
+      expect(unavailable[0]!.next).toContain('deckent coding template --kind missing-code --connection <id>');
+      expect(unavailable[1]!.next).toContain('deckent coding --json'); expect(unavailable[1]!.next).not.toContain('--connection');
+    }
     const checks = doctorChecks(report, facts(), 'tr');
     for (const check of checks.filter(row => row.state === 'warning' || row.state === 'error')) expect(check.next, check.id).toBeTruthy();
     const budget = doctorChecks(report, facts({ budgetPeriodText: 'No API budget yet' }), 'en').find(row => row.id === 'work.budgetPeriod');

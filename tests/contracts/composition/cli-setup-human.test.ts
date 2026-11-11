@@ -40,9 +40,9 @@ async function run(f: { projectRoot: string; env: Record<string, string> }, args
   return { code, stdout: stdout.join(''), stderr: stderr.join('') };
 }
 /** A bare family reaches its handler once the catalog marks it `bare: 'handler'` (lead delta); the handler's own read is tested here. */
-async function bare(handler: (argv: readonly string[], context: never) => Promise<void>, f: { projectRoot: string; env: Record<string, string> }, args: readonly string[]) {
+async function bare(handler: (argv: readonly string[], context: never) => Promise<void>, f: { projectRoot: string; env: Record<string, string> }, args: readonly string[], extra: Record<string, unknown> = {}) {
   const stdout: string[] = [];
-  await handler(args, { root: f.projectRoot, env: f.env, stdout: { write(value: string) { stdout.push(value); } } } as never);
+  await handler(args, { root: f.projectRoot, env: f.env, stdout: { write(value: string) { stdout.push(value); } }, ...extra } as never);
   return stdout.join('');
 }
 const codingConfig = () => {
@@ -56,7 +56,11 @@ describe.skipIf(process.platform === 'win32')('C-SETUP coding', () => {
   it('bare coding lists the profiles task kinds run on, and says the configured image runs none of them (EN/TR, JSON)', async () => {
     const f = await project(codingConfig());
     for (const [lang, word] of [['en', 'Configured worker image'], ['tr', 'Yapılandırılmış işçi imajı']] as const) {
-      const text = await bare(codingCommand, f, ['coding', '--lang', lang]);
+      const text = await bare(codingCommand, f, ['coding', '--lang', lang], { inspectWorkerKinds: async () => [{ kind: 'claude-coding', reason: 'image-missing', rebind: false }, { kind: 'codex-coding', reason: 'image-missing', rebind: true }] });
+      expect(text).toContain(lang === 'en' ? 'Task kind claude-coding is unusable: its pinned worker image is missing.' : 'claude-coding iş türü kullanılamıyor: sabitlenmiş işçi imajı eksik.');
+      expect(text).toContain('deckent coding template --kind codex-coding --connection <id>');
+      expect(text).not.toContain('--kind claude-coding --connection');
+      expect(text).toContain('deckent coding --json');
       expect(text).toContain('claude-coding'); expect(text).toContain('2.1.303'); expect(text).toContain('b'.repeat(12)); expect(text).toContain(word);
       expect(text).toContain(lang === 'en' ? 'No admitted CLI runs on the configured image' : 'Yapılandırılmış imajda kabul edilmiş bir CLI çalışmıyor');
     }
