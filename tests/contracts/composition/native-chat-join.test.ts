@@ -1,4 +1,4 @@
-import { notifyNativeBuiltinPlugins } from '#composition/core/model-invocation/index.js';
+import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 import { createServer, request, type Server } from 'node:http';
@@ -51,7 +51,7 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -61,7 +61,7 @@ async function fixture(askEdits = true) {
   });
   const call: AgentToolCall = { id: 'unused', name: 'write_file', argumentsJson: JSON.stringify({ path: 'result.txt', content: 'approved business result\n' }) };
   const runtime: NativeChatRuntime = { readiness, limits: { idleMs: 30_000, maxConnections: 4, replayMaxEntries: 8, replayMaxBytes: 16 * entry.bridge.frameMaxBytes }, resolveModelUse,
-    driver: async ({ session }) => ({ port: session, admit: async () => undefined,
+    driver: async ({ session, paidExtraUsage }) => { expect(paidExtraUsage).toBe('continue'); return { port: session, admit: async () => undefined,
       native: (bridge, secrets) => ({ billingAxis: 'subscription', prepare: async (_profile, _definition, request) => { state.prompt = JSON.stringify(request); return {}; },
         async send(_prepared, signal) {
           state.calls++; state.token = bridge.turnToken;
@@ -83,10 +83,10 @@ async function fixture(askEdits = true) {
           state.channels.push(localPrincipalChannel());
           const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: JSON.parse(call.argumentsJson), _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
-          return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
+          return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins, ...(state.paidExtraUsage ? { paidExtraUsage: state.paidExtraUsage } : {}) }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
       refusal: () => null,
-      close: async () => { state.closes++; for (const server of state.servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } } }) };
+      close: async () => { state.closes++; for (const server of state.servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } } }; } };
   const host = createRuntimeChatTurnHost({ ownerId: 'k11-test-service', controllers: new ModelInvocationControllers(2) }, new AbortController().signal,
     undefined, undefined, () => [], undefined, runtime);
   const events: AgentTurnStreamEvent[] = [];
@@ -198,13 +198,16 @@ it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the 
   const h = await fixture(false), driver = h.runtime.driver;
   h.runtime.driver = async input => ({ ...await driver(input), notices: () => ['system/future_notice'] });
   h.state.builtinPlugins = ['cc-plugin-unseen', 'cc-plugin-unseen'];
+  h.state.paidExtraUsage = { kind: 'overage', status: 'rejected', window: 'five_hour', resetsAtMs: 1792773600000 };
   const result = await h.run();
   expect(result).toMatchObject({ finish: 'stop', answer: 'finished', recorded: true });
   expect(result.note).toContain('system/future_notice');
+  expect(result.note).toContain('Paid extra usage of your provider account is in use');
   const message = '[deckent] Claude CLI 2.1.322 loaded a new built-in plugin: cc-plugin-unseen. Nothing was blocked; this observation is recorded with the turn.';
   expect(result.note?.split(message)).toHaveLength(2);
   expect((await h.run()).note).toBe(result.note); // Durable replay; no new invocation.
-  expect((await h.run('builtin-again')).note).not.toContain('cc-plugin-unseen');
+  const again = await h.run('builtin-again');
+  expect(again.note).not.toContain('cc-plugin-unseen'); expect(again.note).not.toContain('Paid extra usage');
   h.state.cliVersion = '2.1.323';
   expect((await h.run('builtin-next-version')).note).toContain('CLI 2.1.323');
   const ledger = openSqliteLedger(h.f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }, 'forbid');
@@ -216,6 +219,7 @@ it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the 
     const observed = records.map(row => JSON.parse(String(row.record))).filter(row => JSON.stringify(row).includes('cc-plugin-unseen'));
     expect(observed).toHaveLength(3);
     expect(JSON.stringify(observed)).toContain('2.1.322');
+    expect(JSON.stringify(observed)).toContain('paidExtraUsage');
     expect(JSON.stringify(observed)).toContain('2.1.323');
   } finally { ledger.close(); }
 
@@ -376,5 +380,35 @@ it('finishes and records a turn with long, many and multiline builtin names with
     expect(result.note).toMatch(/…$/u);
     expect(result.note).not.toMatch(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u);
     expect(await store.claim(claim)).toMatchObject({ status: 'finished', outcome: { note: result.note } });
+  } finally { store.close(); }
+});
+
+it('delivers the paid-usage notice once after successful delivery and records it in the existing turn note', async () => {
+  const f = await brainProviderFixture(); cleanups.push(f.close);
+  const store = await openSqliteAgentTurnStore(f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' });
+  const value = { ...pluginResult([]), response: { native: { headless: { paidExtraUsage: {
+    kind: 'overage', status: 'rejected', window: 'five_hour', resetsAtMs: 1792773600000 } } } } } as unknown as ModelInvocationResult;
+  try {
+    for (const language of ['en', 'tr'] as const) {
+      const session = {}, notes: string[] = [], claim = { scopeId: 's', turnId: `paid-${language}`, principalKey: 'fixture', requestDigest: 'a'.repeat(64), claimedAtMs: 1 };
+      await expect(notifyNativePaidUsage(value, language, session, 'terminal', () => { throw new Error('delivery-failed'); })).rejects.toThrow('delivery-failed');
+      const result = await runDurableAgentTurn({ claim, messages: [], tools: [], signal: new AbortController().signal, emit: () => undefined }, store, {
+        async invokeRound() {
+          const notify = () => notifyNativePaidUsage(value, language, session, 'terminal', async text => { await Promise.resolve(); notes.push(text); });
+          await Promise.all([notify(), notify()]); await notify();
+          return { status: 'responded', content: 'finished', reasoning: '', toolCalls: [], finish: 'stop', usage: null };
+        }, hostNote: () => notes.join(' '), authorize: async () => 'allow', describe: () => null,
+        execute: async () => { throw new Error('no tools'); }, now: () => 2,
+      });
+      expect(notes).toHaveLength(1);
+      expect(result.note).toContain(language === 'en' ? 'Paid extra usage of your provider account is in use' : 'Sağlayıcı hesabınızın ücretli ek kullanımı devrede');
+      expect(result.note).toContain(language === 'en' ? 'deckent cannot see the amount' : 'deckent tutarı göremez');
+      expect(result.note).toContain('deckent config set models.headless.paidExtraUsage stop-at-limit');
+      expect(result.note).not.toMatch(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]|\{\w+\}/u);
+      expect(await store.claim(claim)).toMatchObject({ status: 'finished', outcome: { note: result.note } });
+      await notifyNativePaidUsage({ ...value, replayed: true }, language, {}, 'terminal', () => { throw new Error('replay'); });
+      const malformed = { ...value, response: { native: { headless: { paidExtraUsage: { status: 'allowed', window: 'x\n', resetsAtMs: null } } } } } as unknown as ModelInvocationResult;
+      await notifyNativePaidUsage(malformed, language, {}, 'terminal', () => { throw new Error('unsafe'); });
+    }
   } finally { store.close(); }
 });

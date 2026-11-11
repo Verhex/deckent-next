@@ -7,17 +7,18 @@ import { nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionS
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { parseNativeCliRegistry } from './command-registry.js';
 import { emitDelta, reportedCounters } from './stream.js';
+import { classifyClaudeRateLimit, type ClaudeQuotaPolicy, type ClaudeRateLimit } from './quota.js';
 type StreamExit = Readonly<{ reason: string; exitCode: number | null; stdoutTruncated: boolean; stderrTruncated: boolean }>;
 type Registry = ReturnType<typeof parseNativeCliRegistry>;
 type Command = Registry['adapters'][string];
 type Entry = { id: string; command: Command; headless: NonNullable<Command['headless']>; agent: NonNullable<Command['agent']>; bridge: NonNullable<Registry['agentBridge']> };
 type Call = Parameters<ToolSessionPort['propose']>[0];
 type ToolResult = Awaited<ReturnType<ToolSessionPort['propose']>>;
-type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string }>;
+type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string; limit?: ClaudeRateLimit }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
-  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[] }>;
+  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[]; paidExtraUsage(): ClaudeRateLimit | null }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
 /** R5b: shape facts for a refusal's record. Identifier-shaped names and codes only (never arguments, text or CLI output), at most 64 characters. */
@@ -32,7 +33,7 @@ function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGEN
 /** K4 wraps this ToolSessionPort, K1 remains its delegate. Feed stdout through line; pass signal to the existing isolated process runner.
  * Finish only after process exit. A facade call may precede its assistant tool_use (A0-4); both channels must agree before completion. */
 export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string;
-  outputMaxBytes: number; onDelta?: ModelInvocationDeltaSink }>): ClaudeAgentDriver {
+  outputMaxBytes: number; quotaPolicy: ClaudeQuotaPolicy; paidExtraUsage?: 'continue' | 'stop-at-limit'; onDelta?: ModelInvocationDeltaSink }>): ClaudeAgentDriver {
   const { entry, port, model, cliVersion, runDir } = options, session = toolSessionSchema.parse(port.session), controller = new AbortController();
   if (entry.agent.transport.kind !== 'claude-mcp' || !Number.isSafeInteger(options.outputMaxBytes) || options.outputMaxBytes <= 0) invalid('definition');
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
@@ -48,9 +49,10 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
   };
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
+  let paidUsage: ClaudeRateLimit | null = null;
   let usage: Readonly<Record<string, number>> | null = null;
-  const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string): 'stop' => {
-    failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }) }; controller.abort(); return 'stop';
+  const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string, limit?: ClaudeRateLimit): 'stop' => {
+    failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }), ...(limit ? { limit } : {}) }; controller.abort(); return 'stop';
   };
   const charge = (size: number) => { bytes += size; return Number.isSafeInteger(bytes) && bytes <= options.outputMaxBytes; };
   // A model-chosen name is echoed only when it is a tool Deckent offered: an arbitrary name could carry anything.
@@ -121,8 +123,11 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     }
     if (value.type === 'tool_progress') return typeof value.tool_use_id === 'string' && calls.has(value.tool_use_id) ? undefined : fail('tool-progress');
     if (value.type === 'rate_limit_event') {
-      const info = record(value.rate_limit_info);
-      return info?.status === 'allowed' || info?.status === 'allowed_warning' ? undefined : fail('rate-limit');
+      const guards = entry.headless.guards;
+      const limit = classifyClaudeRateLimit(record(value.rate_limit_info) ?? {}, options.quotaPolicy, 'creditsErrors' in guards ? guards.creditsErrors : [], options.paidExtraUsage);
+      if (limit.kind === 'overage') { paidUsage ??= limit; return; }
+      return limit.kind === 'allowed' ? undefined : fail(limit.kind === 'unknown' ? 'rate-limit-status' : 'rate-limit', undefined,
+        `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, limit);
     }
     if (value.type !== 'result') return notice(value);
     terminal = true;
@@ -168,7 +173,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     });
     return current.promise;
   };
-  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => [...notices], builtinPlugins: () => builtinPlugins,
+  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => [...notices], builtinPlugins: () => builtinPlugins, paidExtraUsage: () => paidUsage,
     async cancel() { ended = true; controller.abort(); return port.cancel(); },
     async revoke() { ended = true; controller.abort(); return port.revoke(); },
     finish(exit: StreamExit): ClaudeAgentResult {

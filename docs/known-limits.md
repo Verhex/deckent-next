@@ -1,5 +1,7 @@
 # Known limits
 
+- **Claude subscription limits and paid extra usage.** Text chat and agent tool turns share the registry classification. Requests refused without available paid extra usage stop with the window, local reset time (unknown when absent), and waiting/login/connection choices. If the provider reports paid extra usage active or available at a rejected plan limit, both paths continue by default. A successful terminal turn shows one notice per session and scope and keeps bounded status/window/reset facts in invocation metadata; agent turns also retain the delivered notice in the existing turn note. deckent cannot see the provider's paid amount. Set `deckent config set models.headless.paidExtraUsage stop-at-limit` to stop both paths instead. Unknown/missing statuses stop agent turns with an explicit message; text chat keeps them informational. Notices follow the existing plugin path: cancelled, failed or timed-out turns do not deliver a success notice. Strict-policy presets are unchanged. Model-side percentages and Codex limit signals remain outside this change.
+
 The shell guard also refuses the single-quoted literal `'$DECKENT_HOME/x'`; this is a conservative false refusal because quote information is lost during parsing.
 
 Patch exclusions also use the workspace read credential floor. Patches now withhold credential paths including `.gnupg`, `.docker`, `.config/gh`, `.git-credentials`, `.pypirc`, `*.pem`, `*.key`, `secrets.json` and `*.jks`. Existing patch exclusions still apply.

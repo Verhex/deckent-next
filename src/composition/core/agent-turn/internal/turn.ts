@@ -17,7 +17,7 @@ import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, age
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
 import { withNativeChatInvocation, nativeChatReasonText, nativeChatPreflightReason, type NativeChatRuntime } from './native.js';
-import type { NativeAgentExecution } from '#capabilities/index.js';
+import { nativeQuotaText, type NativeAgentExecution } from '#capabilities/index.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
@@ -314,7 +314,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
               invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()).catch(() => null);
             const content = inspected?.responseContent;
             const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
-            if (body?.refusal === 'quota') return { status: 'failed', state: cliSubscription ? t('headless.chat.quota', {}, language) : t('siwc.usage.limit', {}, language) };
+            const limitText = cliSubscription && body ? nativeQuotaText(body, language) : null;
+            if (limitText) return { status: 'failed', state: limitText };
+            if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
             if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
             if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
             if (body?.refusal === 'plan-unavailable') return { status: 'failed', state: t('siwc.notEligible', {}, language) };
@@ -354,7 +356,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     const ports: AgentTurnPorts = {
       invokeRound,
       ...(native && runtime ? { invokeAgent: (input: Parameters<NonNullable<AgentTurnPorts['invokeAgent']>>[0],
-        onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], agentSignal: AbortSignal) => withNativeChatInvocation({ runtime, profile: native.profile,
+        onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], agentSignal: AbortSignal) => withNativeChatInvocation({ runtime, profile: native.profile, paidExtraUsage: config.models.headless.paidExtraUsage,
           execution: native.execution, session: input.session, signal: agentSignal, knownSecrets: getConfigKnownSecrets(context.config), recheck: recheckNative },
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'

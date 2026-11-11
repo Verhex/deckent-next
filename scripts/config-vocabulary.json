@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "1a167f4ad7ee8d873e4eb3b247693aa5e464329a00cef8ca1f2f676a152f623d",
-    "src/platform/core/config-fields/internal/fields-models.ts": "ece9d1ec0bd4c87086aae3cdefe56d0e089dbaa825553a46603ffa79a50dbbb9",
+    "src/platform/core/config-fields/internal/fields-models.ts": "579acc8cd802f8bbdb9639768f474b15aa3dc3b523ac1b19a3427f7b2cff91b7",
     "src/platform/core/config-fields/internal/fields-setup.ts": "dc75c669f0370a264b3956322fe3c2bf1580a139b8ce3d5ed796daa7abbf24c5",
     "src/platform/core/config-fields/internal/fields.ts": "b2d3414b81676fb743b8e83bc541b866d1dc24a122ee25f7c7a8294f11c38a24",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
@@ -92,6 +92,9 @@
     ],
     "enforce_principal_assurance": [],
     "beuser": [],
-    "models": []
+    "models": [
+      "continue",
+      "stop-at-limit"
+    ]
   }
 }

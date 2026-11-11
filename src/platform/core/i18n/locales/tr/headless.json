@@ -61,7 +61,7 @@
   "doctor.headless.updated": "CLI {cli} güncellendi: {from} → {to} (kullanmadan önce yeniden denetlendi)",
   "tui.provider.login.ownSubscriptionNote": "Kendi aboneliğin, CLI'ın kendi girişiyle; deckent bu girişi okumaz, kopyalamaz ve paylaşmaz.",
   "tui.model.textChatSubscription": "Abonelikle metin sohbeti; API bütçesi gerekmez. Native araçlar kapalıdır.",
-  "headless.chat.quota": "Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz.",
+  "headless.chat.quota": "Aboneliğinizin kullanım sınırına ulaşıldı ({window}). Sıfırlanma: {reset} (yerel saat). deckent ücret almadı ve bu turu ücretli ek kullanımla sürdürmek yerine durdurdu. Sıfırlanmasını bekleyin, başka bir hesapla giriş yapın (`deckent models login --connection claude-cli-subscription`) veya başka bir bağlantı kullanın.",
   "headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE": "Abonelik CLI’si kullanılamıyor. Ajan araçlarını kullanmadan önce CLI’yi kurun veya yeniden bağlayın.",
   "headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED": "Ajan araçlarını kullanmadan önce terminalinizde CLI’nin kendi girişini tamamlayın.",
   "headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED": "Bu CLI sürümü ve profil için ajan yürütmesi doğrulanmadı. Doğrulama tamamlanana kadar kullanılamaz.",
@@ -121,5 +121,13 @@
   "headless.agent.workspace.containedWorkspaceRefused": "İşçinin çalışma dizini, kurulum durumunun kapalı görünümü olarak açılamıyor.",
   "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} yeni bir yerleşik eklenti yükledi: {name}. Hiçbir şey engellenmedi; bu gözlem turun kanıtına kaydedildi.",
   "headless.agent.builtinPlugins": "[deckent] Claude CLI {version} yeni yerleşik eklentiler yükledi: {name}. Hiçbir şey engellenmedi; bu gözlem turun kanıtına kaydedildi.",
-  "headless.agent.builtinPluginsMore": "+{count} tane daha"
+  "headless.agent.builtinPluginsMore": "+{count} tane daha",
+  "headless.chat.quotaUnknownStatus": "Bilinmeyen limit durumu ({status}); bu tur durduruldu. Aboneliğinizi sağlayıcınızdan denetleyin veya başka bir bağlantı kullanın.",
+  "headless.chat.quotaUnknown": "bilinmiyor",
+  "headless.chat.quotaWindow.five_hour": "beş saatlik pencere",
+  "headless.chat.quotaWindow.seven_day": "haftalık pencere",
+  "headless.chat.quotaWindow.seven_day_opus": "Opus için haftalık pencere",
+  "headless.chat.quotaWindow.seven_day_sonnet": "Sonnet için haftalık pencere",
+  "headless.chat.quotaFallback": "Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz.",
+  "headless.chat.paidExtraUsage": "Planınızın kullanım sınırına ulaşıldı ({window}). Sıfırlanma: {reset} (yerel saat). Sağlayıcı hesabınızın ücretli ek kullanımı devrede; deckent tutarı göremez. Bunun yerine durmak için `deckent config set models.headless.paidExtraUsage stop-at-limit` komutunu çalıştırın."
 }

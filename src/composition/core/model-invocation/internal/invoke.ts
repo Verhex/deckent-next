@@ -1,4 +1,4 @@
-import { notifyNativeBuiltinPlugins } from './plugin-notices.js';
+import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from './plugin-notices.js';
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -56,7 +56,11 @@ export async function invoke({ input, loadContext, options, signal, delivery, ho
       profileGuard: async profile => { await configuredContinuationPin(value)?.(profile); await guard?.profile(profile); } });
     const app = forCommand(input);
     const result = await app.invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
-    if (onNotice) await notifyNativeBuiltinPlugins(result, resolveLocale(undefined, options.env ?? process.env, context.config.language), host ?? options, terminal ?? '', onNotice);
+    if (onNotice) {
+      const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
+      await notifyNativeBuiltinPlugins(result, language, host ?? options, terminal ?? '', onNotice);
+      await notifyNativePaidUsage(result, language, host ?? options, terminal ?? '', onNotice);
+    }
     if (agent || entry !== 'feature' || !onDelta || !onNotice) return result;
     const next = await prepareConfiguredSiwcContinuation(context, options, command, result, value => app.preview(value, undefined, signal),
       reference => onNotice(`${t('siwc.switch.notice', { model: reference.modelId }, context.config.language)}\n`), signal);

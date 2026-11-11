@@ -1,4 +1,5 @@
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
+import { nativePaidUsageText } from '#capabilities/index.js';
 import { z } from 'zod';
 import { type ModelInvocationResult } from '#engine/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
@@ -31,5 +32,26 @@ export async function notifyNativeBuiltinPlugins(result: ModelInvocationResult, 
     for (const item of unseen) seen.add(item.key);
   });
   state.pending = delivered.catch(() => undefined);
+  await delivered;
+}
+
+const paidUsage = z.object({ status: z.string().regex(/^[A-Za-z0-9_.:-]{1,16}$/u), window: z.string().regex(/^[A-Za-z0-9_.:?-]{1,24}$/u),
+  resetsAtMs: z.number().int().nonnegative().refine(value => Number.isFinite(new Date(value).getTime())).nullable() });
+/** Same successful-delivery custody as plugin notices; once per terminal session and scope. Facts remain in native evidence. */
+export async function notifyNativePaidUsage(result: ModelInvocationResult, language: Locale, session: object, terminal: string,
+  notice: (text: string) => void | Promise<void>): Promise<void> {
+  if (result.receipt.profile.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || result.replayed) return;
+  const headless = result.response?.native['headless'] as Record<string, unknown> | undefined;
+  const parsed = paidUsage.safeParse(headless?.['paidExtraUsage']);
+  if (!parsed.success) return;
+  let state = sessions.get(session);
+  if (!state) { state = { seen: new Set(), pending: Promise.resolve() }; sessions.set(session, state); }
+  const current = state, key = JSON.stringify(['paid-extra-usage', terminal, result.receipt.claim.scopeId]);
+  const delivered = current.pending.then(async () => {
+    if (current.seen.has(key)) return;
+    await notice(nativePaidUsageText(parsed.data, language));
+    current.seen.add(key);
+  });
+  current.pending = delivered.catch(() => undefined);
   await delivered;
 }

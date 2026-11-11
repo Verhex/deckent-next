@@ -67,7 +67,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
           (app, caller) => app.lease(id, caller, signal)) });
       }
           // 1b: the call's known secrets also redact a CLI's stderr summary (the evidence of an incomplete turn).
-      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation, knownSecrets: getConfigKnownSecrets(context.config) });
+      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation, knownSecrets: getConfigKnownSecrets(context.config), paidExtraUsage: context.config.models.headless.paidExtraUsage });
       if(profile.adapter.id===decisionHttpAdapter.id&&profile.adapter.version===decisionHttpAdapter.version){
         const definition=parseDecisionHttpDefinition(profile.adapter.definition); return createDecisionHttpNativePort({resolveCredential:scopedInvocationCredentialResolver(context,profile,definition.authentication,options)});
       }
